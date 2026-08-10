@@ -291,7 +291,15 @@ DR_ALIASES = {"rtd", "rsd", "rsd1", "rsd2", "rtd1", "rtd2"}
 # leaves it unset, and writing the resolved value onto every member would
 # freeze that inference rather than reproduce it.
 PROPERTY_FLAGS = ("isBranch", "isTerminator", "isCall", "isBarrier",
-                  "isIndirectBranch", "isReturn", "isNotDuplicable")
+                  "isIndirectBranch", "isReturn", "isNotDuplicable",
+                  # mayLoad/mayStore are inferred by TableGen FROM THE PATTERN,
+                  # and a member has no pattern, so leaving them off does not
+                  # make the member imprecise -- it makes it claim the
+                  # instruction touches no memory. MachineVerifier says so:
+                  # "Missing mayStore flag" on every store member, 1012 times
+                  # across the CodeGen suite. Same argument as the seven above:
+                  # the member's Desc is the one the generic layer reads.
+                  "mayLoad", "mayStore")
 
 
 def load_instruction_flags(path: Path) -> dict[str, dict]:
@@ -905,8 +913,8 @@ def member_operand_shape(placement: dict,
                          roles: dict[str, tuple[set[str], set[str]]],
                          syntax: dict[str, list[str]],
                          tie_positions: dict[str, list[int]] | None = None,
-                         ) -> tuple[list[str], list[str]]:
-    """The member's operand aliases in MCInst order, as (outs, ins).
+                         ) -> tuple[list[str], list[str], list[str]]:
+    """The member's operand aliases in MCInst order, plus its Constraints.
 
     Shared with emit_tablegen so check_operand_agreement cannot drift from
     what the generator actually emits. The previous check MODELLED the
@@ -946,12 +954,24 @@ def member_operand_shape(placement: dict,
     # follows the logical: the two have to match operand for operand, or the
     # encoder reads past the end of the MCInst and llc aborts inside
     # MCOperand::operator[]. Where the logical then contradicts the database
-    # -- 87 accumulating MAC logicals declare no tie at all, so their
-    # accumulator input is not pinned to the register the hardware reads --
+    # -- 87 accumulating MAC logicals declared no tie at all, so their
+    # accumulator input was not pinned to the register the hardware reads --
     # that is reported on its own axis rather than papered over here.
+    #
+    # A tie comes in two shapes and only one of them adds an operand:
+    #
+    #   SPLIT    the database has ONE operand and CodeGen presents two, an out
+    #            and a tied in. Restoring it grows the member by one.
+    #   IN-PLACE the logical ties an out and an in it ALREADY has, as
+    #            SLLI64's `$rtd = $rsd` does. Nothing is added; the member just
+    #            has to say so.
+    #
+    # Missing the in-place shape is not cosmetic. MachineInstr carries the
+    # logical's tie flags, and after materializeMultiOpcodeInstrs the member's
+    # Desc is what MachineVerifier checks them against: "Explicit def tied to
+    # explicit use without tie constraint", 194 times.
     wanted = (tie_positions or {}).get(placement["instruction"], [])
-    if len(wanted) != len(tied_names):
-        tied_names = []
+    in_place = not tied_names and wanted
 
     outs: list[str] = []
     ins: list[str] = []
@@ -964,11 +984,20 @@ def member_operand_shape(placement: dict,
             # taken out.
             ins.append(alias)
 
+    constraints: list[str] = []
     if tied_names:
         ins = [name for name in ins if name not in set(tied_names)]
         for index, name in zip(wanted, tied_names):
             ins.insert(index, name)
-    return outs, ins
+        constraints = [f"${name} = ${name}_wb" for name in tied_names]
+    elif in_place:
+        # Pair the logical's tied ins with the member's outs in order. Only
+        # positions are used: the two sides name the same register differently,
+        # which is what defeated matching by name in the first place.
+        for position, index in enumerate(wanted):
+            if position < len(outs) and index < len(ins):
+                constraints.append(f"${ins[index]} = ${outs[position]}")
+    return outs, ins, constraints
 
 
 def verify_operand_sets(placements: list[dict],
@@ -1081,8 +1110,8 @@ def check_operand_agreement(placements: list[dict], flags_path: Path,
         wanted = want_outs + len(record["InOperandList"]["args"])
         key = (logical, placement["entry_count"], placement["entry_index"],
                placement["unit"])
-        outs, ins = member_operand_shape(placement, roles, syntax,
-                                        tie_positions)
+        outs, ins, _ = member_operand_shape(placement, roles, syntax,
+                                           tie_positions)
 
         # Independent of the position axes below: the database says this
         # register is both read and written, and the logical does not present
@@ -1413,8 +1442,8 @@ def emit_tablegen(geometry: dict, placements: list[dict],
         # database's statement and not this entry's field naming -- see
         # member_operand_shape. The bits<> above stay bound to the alias, which
         # after a tie is the name of the tied IN, so the field still resolves.
-        out_names, in_names = member_operand_shape(p, roles, syntax,
-                                                   tie_positions)
+        out_names, in_names, constraints = member_operand_shape(
+            p, roles, syntax, tie_positions)
 
         def declare(operand_name: str) -> str:
             base_name = (operand_name[:-len("_wb")]
@@ -1423,8 +1452,6 @@ def emit_tablegen(geometry: dict, placements: list[dict],
 
         outs = [declare(n) for n in out_names]
         ins = [declare(n) for n in in_names]
-        constraints = [f"${n[:-len('_wb')]} = ${n}"
-                       for n in out_names if n.endswith("_wb")]
 
         asm_operands = ", ".join(f"${spelling[o['field']]}" for o in used)
         asm = p["instruction"].lower() + (f"\t{asm_operands}" if asm_operands else "")

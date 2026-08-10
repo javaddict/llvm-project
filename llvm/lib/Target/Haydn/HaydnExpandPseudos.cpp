@@ -1098,9 +1098,15 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
     HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(AddrOp.getImm());
     Register Cur = Haydn::R0;
     for (const HaydnMatInt::Inst &MatInst : Seq) {
-      BuildMI(MBB, MI, DL, TII->get(MatInst.Opc), DstReg)
-          .addReg(Cur)
-          .addImm(MatInst.Imm);
+      // LUI takes no source: the database is `LUI rt, imm12` and the
+      // logical was corrected to match in afc345108f57, which missed
+      // these two materialisation loops. Passing the running register
+      // anyway leaves an extra explicit operand and MachineVerifier
+      // rejects the function. FORMAT-E-SWITCH-PLAN.md 5.11.
+      auto B = BuildMI(MBB, MI, DL, TII->get(MatInst.Opc), DstReg);
+      if (MatInst.Opc != Haydn::LUI)
+        B.addReg(Cur);
+      B.addImm(MatInst.Imm);
       Cur = DstReg;
     }
     MI.eraseFromParent();

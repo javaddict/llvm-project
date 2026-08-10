@@ -45,9 +45,15 @@ static void emitMaterializeImm32(MachineBasicBlock &MBB,
   HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Imm);
   Register Current = Haydn::R0;
   for (const HaydnMatInt::Inst &Inst : Seq) {
-    BuildMI(MBB, MBBI, DL, TII->get(Inst.Opc), Dst)
-        .addReg(Current)
-        .addImm(Inst.Imm)
+    // LUI takes no source: the database is `LUI rt, imm12` and the
+    // logical was corrected to match in afc345108f57, which missed
+    // these two materialisation loops. Passing the running register
+    // anyway leaves an extra explicit operand and MachineVerifier
+    // rejects the function. FORMAT-E-SWITCH-PLAN.md 5.11.
+    auto B = BuildMI(MBB, MBBI, DL, TII->get(Inst.Opc), Dst);
+    if (Inst.Opc != Haydn::LUI)
+      B.addReg(Current);
+    B.addImm(Inst.Imm)
         .setMIFlag(FrameFlag);
     Current = Dst;
   }

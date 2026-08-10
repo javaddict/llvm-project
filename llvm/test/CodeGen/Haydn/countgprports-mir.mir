@@ -94,8 +94,8 @@ body:             |
     ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r2 = MOVE32 $r0, $r0, implicit-def dead $sfr
-    $r3 = MOVE32 $r1, $r1, implicit-def dead $sfr
+    $r2 = MOVE32 $r0, implicit-def dead $sfr
+    $r3 = MOVE32 $r1, implicit-def dead $sfr
 
     $r0 = COPY $r2
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

@@ -2897,6 +2897,7 @@ def D_LDW_BREV_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -2916,6 +2917,7 @@ def D_LDW_BREV_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -2935,6 +2937,7 @@ def D_LDW_BREV_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -2953,6 +2956,7 @@ def D_LDW_BREV_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -2971,6 +2975,7 @@ def D_LDW_BREV_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -2989,6 +2994,7 @@ def D_LDW_BREV_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3008,6 +3014,7 @@ def D_LDW_BREV_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3027,6 +3034,7 @@ def D_LDW_BREV_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3045,6 +3053,7 @@ def D_LDW_BREV_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3065,6 +3074,7 @@ def D_LDW_BREV_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3083,6 +3093,7 @@ def D_LDW_CB_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs;
@@ -3104,6 +3115,7 @@ def D_LDW_CB_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs;
@@ -3126,6 +3138,7 @@ def D_LDW_CB_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs1;
@@ -3148,6 +3161,7 @@ def D_LDW_CB_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs1;
@@ -3171,6 +3185,7 @@ def D_LDW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3190,6 +3205,7 @@ def D_LDW_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3209,6 +3225,7 @@ def D_LDW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3227,6 +3244,7 @@ def D_LDW_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3245,6 +3263,7 @@ def D_LDW_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3263,6 +3282,7 @@ def D_LDW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3282,6 +3302,7 @@ def D_LDW_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3301,6 +3322,7 @@ def D_LDW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3319,6 +3341,7 @@ def D_LDW_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3339,6 +3362,7 @@ def D_LDW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3358,6 +3382,7 @@ def D_LDW_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3377,6 +3402,7 @@ def D_LDW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3395,6 +3421,7 @@ def D_LDW_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3413,6 +3440,7 @@ def D_LDW_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3431,6 +3459,7 @@ def D_LDW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3450,6 +3479,7 @@ def D_LDW_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3469,6 +3499,7 @@ def D_LDW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3487,6 +3518,7 @@ def D_LDW_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3507,6 +3539,7 @@ def D_LDW_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3524,6 +3557,7 @@ def D_LDW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "d_ldw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3542,6 +3576,7 @@ def D_LDW_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "d_ldw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3560,6 +3595,7 @@ def D_LDW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "d_ldw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3577,6 +3613,7 @@ def D_LDW_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "d_ldw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3594,6 +3631,7 @@ def D_LDW_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "d_ldw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3611,6 +3649,7 @@ def D_LDW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "d_ldw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3629,6 +3668,7 @@ def D_LDW_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "d_ldw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3647,6 +3687,7 @@ def D_LDW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "d_ldw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3664,6 +3705,7 @@ def D_LDW_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "d_ldw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3683,6 +3725,7 @@ def D_LDW_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "d_ldw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3701,6 +3744,7 @@ def D_LHW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3720,6 +3764,7 @@ def D_LHW_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3739,6 +3784,7 @@ def D_LHW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3757,6 +3803,7 @@ def D_LHW_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3775,6 +3822,7 @@ def D_LHW_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3793,6 +3841,7 @@ def D_LHW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3812,6 +3861,7 @@ def D_LHW_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3831,6 +3881,7 @@ def D_LHW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3849,6 +3900,7 @@ def D_LHW_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3869,6 +3921,7 @@ def D_LHW_POST_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3887,6 +3940,7 @@ def D_LHW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3906,6 +3960,7 @@ def D_LHW_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3925,6 +3980,7 @@ def D_LHW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3943,6 +3999,7 @@ def D_LHW_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3961,6 +4018,7 @@ def D_LHW_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -3979,6 +4037,7 @@ def D_LHW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -3998,6 +4057,7 @@ def D_LHW_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4017,6 +4077,7 @@ def D_LHW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4035,6 +4096,7 @@ def D_LHW_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4055,6 +4117,7 @@ def D_LHW_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4072,6 +4135,7 @@ def D_LHW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "d_lhw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4090,6 +4154,7 @@ def D_LHW_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "d_lhw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4108,6 +4173,7 @@ def D_LHW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "d_lhw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4125,6 +4191,7 @@ def D_LHW_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "d_lhw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4142,6 +4209,7 @@ def D_LHW_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "d_lhw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4159,6 +4227,7 @@ def D_LHW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "d_lhw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4177,6 +4246,7 @@ def D_LHW_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "d_lhw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4195,6 +4265,7 @@ def D_LHW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "d_lhw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4212,6 +4283,7 @@ def D_LHW_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "d_lhw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4231,6 +4303,7 @@ def D_LHW_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "d_lhw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4249,6 +4322,7 @@ def D_LQHWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4269,6 +4343,7 @@ def D_LQHWUA_POST_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4289,6 +4364,7 @@ def D_LQHWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4308,6 +4384,7 @@ def D_LQHWUA_POST_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4329,6 +4406,7 @@ def D_LQHWUA_POST_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4348,6 +4426,7 @@ def D_LTWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4368,6 +4447,7 @@ def D_LTWUA_POST_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4388,6 +4468,7 @@ def D_LTWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4407,6 +4488,7 @@ def D_LTWUA_POST_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4428,6 +4510,7 @@ def D_LTWUA_POST_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -4447,6 +4530,7 @@ def D_LW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4466,6 +4550,7 @@ def D_LW_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4485,6 +4570,7 @@ def D_LW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4503,6 +4589,7 @@ def D_LW_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4521,6 +4608,7 @@ def D_LW_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4539,6 +4627,7 @@ def D_LW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4558,6 +4647,7 @@ def D_LW_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4577,6 +4667,7 @@ def D_LW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4595,6 +4686,7 @@ def D_LW_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4615,6 +4707,7 @@ def D_LW_POST_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4633,6 +4726,7 @@ def D_LW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4652,6 +4746,7 @@ def D_LW_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4671,6 +4766,7 @@ def D_LW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4689,6 +4785,7 @@ def D_LW_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4707,6 +4804,7 @@ def D_LW_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4725,6 +4823,7 @@ def D_LW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4744,6 +4843,7 @@ def D_LW_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4763,6 +4863,7 @@ def D_LW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4781,6 +4882,7 @@ def D_LW_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4801,6 +4903,7 @@ def D_LW_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4818,6 +4921,7 @@ def D_LW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "d_lw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4836,6 +4940,7 @@ def D_LW_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "d_lw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4854,6 +4959,7 @@ def D_LW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "d_lw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4871,6 +4977,7 @@ def D_LW_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "d_lw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4888,6 +4995,7 @@ def D_LW_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "d_lw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -4905,6 +5013,7 @@ def D_LW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "d_lw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4923,6 +5032,7 @@ def D_LW_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "d_lw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4941,6 +5051,7 @@ def D_LW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "d_lw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4958,6 +5069,7 @@ def D_LW_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "d_lw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4977,6 +5089,7 @@ def D_LW_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "d_lw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -4995,6 +5108,7 @@ def D_SDW_BREV_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5014,6 +5128,7 @@ def D_SDW_BREV_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5032,6 +5147,7 @@ def D_SDW_BREV_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5051,6 +5167,7 @@ def D_SDW_BREV_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5069,6 +5186,7 @@ def D_SDW_CB_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs;
@@ -5090,6 +5208,7 @@ def D_SDW_CB_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs;
@@ -5112,6 +5231,7 @@ def D_SDW_CB_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs1;
@@ -5134,6 +5254,7 @@ def D_SDW_CB_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<1> cbr_sel;
   bits<4> rtd;
   bits<4> rs1;
@@ -5157,6 +5278,7 @@ def D_SDW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5176,6 +5298,7 @@ def D_SDW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5194,6 +5317,7 @@ def D_SDW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5213,6 +5337,7 @@ def D_SDW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5231,6 +5356,7 @@ def D_SDW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5250,6 +5376,7 @@ def D_SDW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5268,6 +5395,7 @@ def D_SDW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5287,6 +5415,7 @@ def D_SDW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5304,6 +5433,7 @@ def D_SDW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "d_sdw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5322,6 +5452,7 @@ def D_SDW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "d_sdw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5339,6 +5470,7 @@ def D_SDW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "d_sdw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5357,6 +5489,7 @@ def D_SDW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "d_sdw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5375,6 +5508,7 @@ def D_SHW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5394,6 +5528,7 @@ def D_SHW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5412,6 +5547,7 @@ def D_SHW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5431,6 +5567,7 @@ def D_SHW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5449,6 +5586,7 @@ def D_SHW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5468,6 +5606,7 @@ def D_SHW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5486,6 +5625,7 @@ def D_SHW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5505,6 +5645,7 @@ def D_SHW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5522,6 +5663,7 @@ def D_SHW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "d_shw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5540,6 +5682,7 @@ def D_SHW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "d_shw_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5557,6 +5700,7 @@ def D_SHW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "d_shw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5575,6 +5719,7 @@ def D_SHW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "d_shw_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5593,6 +5738,7 @@ def D_SQHWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -5613,6 +5759,7 @@ def D_SQHWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -5632,6 +5779,7 @@ def D_STWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -5652,6 +5800,7 @@ def D_STWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<2> ar_sel;
   bits<4> rs;
@@ -5671,6 +5820,7 @@ def D_SW_H_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5690,6 +5840,7 @@ def D_SW_H_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5708,6 +5859,7 @@ def D_SW_H_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5727,6 +5879,7 @@ def D_SW_H_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5745,6 +5898,7 @@ def D_SW_H_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5764,6 +5918,7 @@ def D_SW_H_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5782,6 +5937,7 @@ def D_SW_H_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5801,6 +5957,7 @@ def D_SW_H_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5818,6 +5975,7 @@ def D_SW_H_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "d_sw_h_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5836,6 +5994,7 @@ def D_SW_H_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "d_sw_h_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5853,6 +6012,7 @@ def D_SW_H_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "d_sw_h_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5871,6 +6031,7 @@ def D_SW_H_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "d_sw_h_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5889,6 +6050,7 @@ def D_SW_L_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5908,6 +6070,7 @@ def D_SW_L_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5926,6 +6089,7 @@ def D_SW_L_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5945,6 +6109,7 @@ def D_SW_L_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -5963,6 +6128,7 @@ def D_SW_L_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -5982,6 +6148,7 @@ def D_SW_L_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -6000,6 +6167,7 @@ def D_SW_L_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -6019,6 +6187,7 @@ def D_SW_L_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -6036,6 +6205,7 @@ def D_SW_L_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "d_sw_l_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -6054,6 +6224,7 @@ def D_SW_L_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "d_sw_l_with_imm	$rtd, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs;
   bits<6> imm6;
@@ -6071,6 +6242,7 @@ def D_SW_L_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "d_sw_l_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -6089,6 +6261,7 @@ def D_SW_L_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "d_sw_l_with_reg	$rtd, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rtd;
   bits<4> rs1;
   bits<4> rs2;
@@ -33693,6 +33866,7 @@ def PLDWWUA_POST_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<2> ar_sel;
   bits<4> rs;
   let e0{44-32} = 0b0000000000000;  // reserved
@@ -33712,6 +33886,7 @@ def PLDWWUA_POST_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<2> ar_sel;
   bits<4> rs;
   let e1{40-31} = 0b0000000000;  // reserved
@@ -33731,6 +33906,7 @@ def PLDWWUA_POST_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<2> ar_sel;
   bits<4> rs;
   let e0{30-29} = ar_sel;  // ar_sel
@@ -33749,6 +33925,7 @@ def PLDWWUA_POST_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<2> ar_sel;
   bits<4> rs;
   let e1{30-29} = 0b00;  // reserved
@@ -33769,6 +33946,7 @@ def PLDWWUA_POST_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<2> ar_sel;
   bits<4> rs;
   let e2{26-19} = 0b00000000;  // reserved
@@ -35219,6 +35397,7 @@ def SLLI32_P32_ALU2 : HaydnEntryP32<
 def SLLI64_P20_ALU0 : HaydnEntryP20<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "slli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -35238,6 +35417,7 @@ def SLLI64_P20_ALU0 : HaydnEntryP20<
 def SLLI64_P30_ALU0 : HaydnEntryP30<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "slli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -35256,6 +35436,7 @@ def SLLI64_P30_ALU0 : HaydnEntryP30<
 def SLLI64_P30_ALU2 : HaydnEntryP30<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "slli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -35274,6 +35455,7 @@ def SLLI64_P30_ALU2 : HaydnEntryP30<
 def SLLI64_P31_ALU0 : HaydnEntryP31<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "slli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -35292,6 +35474,7 @@ def SLLI64_P31_ALU0 : HaydnEntryP31<
 def SLLI64_P31_ALU1 : HaydnEntryP31<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "slli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -35310,6 +35493,7 @@ def SLLI64_P31_ALU1 : HaydnEntryP31<
 def SLLI64_P32_ALU0 : HaydnEntryP32<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "slli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -35327,6 +35511,7 @@ def SLLI64_P32_ALU0 : HaydnEntryP32<
 def SLLI64_P32_ALU2 : HaydnEntryP32<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "slli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -40121,6 +40306,7 @@ def SRAI32R_P32_ALU2 : HaydnEntryP32<
 def SRAI64_P20_ALU0 : HaydnEntryP20<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srai64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40140,6 +40326,7 @@ def SRAI64_P20_ALU0 : HaydnEntryP20<
 def SRAI64_P30_ALU0 : HaydnEntryP30<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srai64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40158,6 +40345,7 @@ def SRAI64_P30_ALU0 : HaydnEntryP30<
 def SRAI64_P30_ALU2 : HaydnEntryP30<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srai64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -40176,6 +40364,7 @@ def SRAI64_P30_ALU2 : HaydnEntryP30<
 def SRAI64_P31_ALU0 : HaydnEntryP31<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srai64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40194,6 +40383,7 @@ def SRAI64_P31_ALU0 : HaydnEntryP31<
 def SRAI64_P31_ALU1 : HaydnEntryP31<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srai64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -40212,6 +40402,7 @@ def SRAI64_P31_ALU1 : HaydnEntryP31<
 def SRAI64_P32_ALU0 : HaydnEntryP32<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srai64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40229,6 +40420,7 @@ def SRAI64_P32_ALU0 : HaydnEntryP32<
 def SRAI64_P32_ALU2 : HaydnEntryP32<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srai64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -40740,6 +40932,7 @@ def SRLI32_P32_ALU2 : HaydnEntryP32<
 def SRLI64_P20_ALU0 : HaydnEntryP20<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 0;  // ALU0 @ 2-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40759,6 +40952,7 @@ def SRLI64_P20_ALU0 : HaydnEntryP20<
 def SRLI64_P30_ALU0 : HaydnEntryP30<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 6;  // ALU0 @ 3-entry entry0
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40777,6 +40971,7 @@ def SRLI64_P30_ALU0 : HaydnEntryP30<
 def SRLI64_P30_ALU2 : HaydnEntryP30<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 7;  // ALU2 @ 3-entry entry0
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -40795,6 +40990,7 @@ def SRLI64_P30_ALU2 : HaydnEntryP30<
 def SRLI64_P31_ALU0 : HaydnEntryP31<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 10;  // ALU0 @ 3-entry entry1
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40813,6 +41009,7 @@ def SRLI64_P31_ALU0 : HaydnEntryP31<
 def SRLI64_P31_ALU1 : HaydnEntryP31<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 11;  // ALU1 @ 3-entry entry1
   let Itinerary = Unit_ALU1_L1;
   bits<4> rtd;
@@ -40831,6 +41028,7 @@ def SRLI64_P31_ALU1 : HaydnEntryP31<
 def SRLI64_P32_ALU0 : HaydnEntryP32<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 14;  // ALU0 @ 3-entry entry2
   let Itinerary = Unit_ALU0_L1;
   bits<4> rtd;
@@ -40848,6 +41046,7 @@ def SRLI64_P32_ALU0 : HaydnEntryP32<
 def SRLI64_P32_ALU2 : HaydnEntryP32<
     (outs DR64:$rtd), (ins DR64:$rsd, uimm6:$uimm6),
     "srli64	$rtd, $rsd, $uimm6"> {
+  let Constraints = "$rsd = $rtd";
   let PlacementIndex = 15;  // ALU2 @ 3-entry entry2
   let Itinerary = Unit_ALU2_L1;
   bits<4> rtd;
@@ -41890,6 +42089,7 @@ def S_LBS_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -41909,6 +42109,7 @@ def S_LBS_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -41928,6 +42129,7 @@ def S_LBS_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -41946,6 +42148,7 @@ def S_LBS_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -41964,6 +42167,7 @@ def S_LBS_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -41982,6 +42186,7 @@ def S_LBS_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42001,6 +42206,7 @@ def S_LBS_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42020,6 +42226,7 @@ def S_LBS_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42038,6 +42245,7 @@ def S_LBS_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42058,6 +42266,7 @@ def S_LBS_POST_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42076,6 +42285,7 @@ def S_LBS_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42095,6 +42305,7 @@ def S_LBS_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42114,6 +42325,7 @@ def S_LBS_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42132,6 +42344,7 @@ def S_LBS_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42150,6 +42363,7 @@ def S_LBS_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42168,6 +42382,7 @@ def S_LBS_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42187,6 +42402,7 @@ def S_LBS_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42206,6 +42422,7 @@ def S_LBS_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42224,6 +42441,7 @@ def S_LBS_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42244,6 +42462,7 @@ def S_LBS_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42261,6 +42480,7 @@ def S_LBS_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lbs_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42279,6 +42499,7 @@ def S_LBS_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "s_lbs_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42297,6 +42518,7 @@ def S_LBS_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lbs_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42314,6 +42536,7 @@ def S_LBS_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "s_lbs_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42331,6 +42554,7 @@ def S_LBS_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "s_lbs_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42348,6 +42572,7 @@ def S_LBS_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lbs_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42366,6 +42591,7 @@ def S_LBS_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "s_lbs_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42384,6 +42610,7 @@ def S_LBS_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lbs_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42401,6 +42628,7 @@ def S_LBS_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "s_lbs_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42420,6 +42648,7 @@ def S_LBS_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "s_lbs_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42438,6 +42667,7 @@ def S_LBU_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42457,6 +42687,7 @@ def S_LBU_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42476,6 +42707,7 @@ def S_LBU_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42494,6 +42726,7 @@ def S_LBU_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42512,6 +42745,7 @@ def S_LBU_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42530,6 +42764,7 @@ def S_LBU_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42549,6 +42784,7 @@ def S_LBU_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42568,6 +42804,7 @@ def S_LBU_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42586,6 +42823,7 @@ def S_LBU_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42606,6 +42844,7 @@ def S_LBU_POST_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42624,6 +42863,7 @@ def S_LBU_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42643,6 +42883,7 @@ def S_LBU_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42662,6 +42903,7 @@ def S_LBU_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42680,6 +42922,7 @@ def S_LBU_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42698,6 +42941,7 @@ def S_LBU_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42716,6 +42960,7 @@ def S_LBU_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42735,6 +42980,7 @@ def S_LBU_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42754,6 +43000,7 @@ def S_LBU_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42772,6 +43019,7 @@ def S_LBU_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42792,6 +43040,7 @@ def S_LBU_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42809,6 +43058,7 @@ def S_LBU_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lbu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42827,6 +43077,7 @@ def S_LBU_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "s_lbu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42845,6 +43096,7 @@ def S_LBU_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lbu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42862,6 +43114,7 @@ def S_LBU_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "s_lbu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42879,6 +43132,7 @@ def S_LBU_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "s_lbu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -42896,6 +43150,7 @@ def S_LBU_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lbu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42914,6 +43169,7 @@ def S_LBU_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "s_lbu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42932,6 +43188,7 @@ def S_LBU_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lbu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42949,6 +43206,7 @@ def S_LBU_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "s_lbu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42968,6 +43226,7 @@ def S_LBU_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "s_lbu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -42986,6 +43245,7 @@ def S_LHWS_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43005,6 +43265,7 @@ def S_LHWS_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43024,6 +43285,7 @@ def S_LHWS_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43042,6 +43304,7 @@ def S_LHWS_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43060,6 +43323,7 @@ def S_LHWS_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43078,6 +43342,7 @@ def S_LHWS_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43097,6 +43362,7 @@ def S_LHWS_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43116,6 +43382,7 @@ def S_LHWS_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43134,6 +43401,7 @@ def S_LHWS_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43154,6 +43422,7 @@ def S_LHWS_POST_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43172,6 +43441,7 @@ def S_LHWS_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43191,6 +43461,7 @@ def S_LHWS_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43210,6 +43481,7 @@ def S_LHWS_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43228,6 +43500,7 @@ def S_LHWS_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43246,6 +43519,7 @@ def S_LHWS_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43264,6 +43538,7 @@ def S_LHWS_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43283,6 +43558,7 @@ def S_LHWS_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43302,6 +43578,7 @@ def S_LHWS_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43320,6 +43597,7 @@ def S_LHWS_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43340,6 +43618,7 @@ def S_LHWS_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43357,6 +43636,7 @@ def S_LHWS_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lhws_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43375,6 +43655,7 @@ def S_LHWS_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "s_lhws_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43393,6 +43674,7 @@ def S_LHWS_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lhws_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43410,6 +43692,7 @@ def S_LHWS_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "s_lhws_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43427,6 +43710,7 @@ def S_LHWS_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "s_lhws_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43444,6 +43728,7 @@ def S_LHWS_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lhws_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43462,6 +43747,7 @@ def S_LHWS_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "s_lhws_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43480,6 +43766,7 @@ def S_LHWS_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lhws_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43497,6 +43784,7 @@ def S_LHWS_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "s_lhws_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43516,6 +43804,7 @@ def S_LHWS_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "s_lhws_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43534,6 +43823,7 @@ def S_LHWU_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43553,6 +43843,7 @@ def S_LHWU_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43572,6 +43863,7 @@ def S_LHWU_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43590,6 +43882,7 @@ def S_LHWU_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43608,6 +43901,7 @@ def S_LHWU_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43626,6 +43920,7 @@ def S_LHWU_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43645,6 +43940,7 @@ def S_LHWU_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43664,6 +43960,7 @@ def S_LHWU_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43682,6 +43979,7 @@ def S_LHWU_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43702,6 +44000,7 @@ def S_LHWU_POST_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43720,6 +44019,7 @@ def S_LHWU_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43739,6 +44039,7 @@ def S_LHWU_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43758,6 +44059,7 @@ def S_LHWU_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43776,6 +44078,7 @@ def S_LHWU_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43794,6 +44097,7 @@ def S_LHWU_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43812,6 +44116,7 @@ def S_LHWU_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43831,6 +44136,7 @@ def S_LHWU_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43850,6 +44156,7 @@ def S_LHWU_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43868,6 +44175,7 @@ def S_LHWU_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43888,6 +44196,7 @@ def S_LHWU_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -43905,6 +44214,7 @@ def S_LHWU_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lhwu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43923,6 +44233,7 @@ def S_LHWU_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "s_lhwu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43941,6 +44252,7 @@ def S_LHWU_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lhwu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43958,6 +44270,7 @@ def S_LHWU_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "s_lhwu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43975,6 +44288,7 @@ def S_LHWU_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "s_lhwu_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -43992,6 +44306,7 @@ def S_LHWU_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lhwu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44010,6 +44325,7 @@ def S_LHWU_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "s_lhwu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44028,6 +44344,7 @@ def S_LHWU_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lhwu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44045,6 +44362,7 @@ def S_LHWU_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "s_lhwu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44064,6 +44382,7 @@ def S_LHWU_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "s_lhwu_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44082,6 +44401,7 @@ def S_LW_BREV_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44101,6 +44421,7 @@ def S_LW_BREV_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44120,6 +44441,7 @@ def S_LW_BREV_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44138,6 +44460,7 @@ def S_LW_BREV_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44156,6 +44479,7 @@ def S_LW_BREV_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44174,6 +44498,7 @@ def S_LW_BREV_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44193,6 +44518,7 @@ def S_LW_BREV_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44212,6 +44538,7 @@ def S_LW_BREV_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44230,6 +44557,7 @@ def S_LW_BREV_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44250,6 +44578,7 @@ def S_LW_BREV_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44268,6 +44597,7 @@ def S_LW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44287,6 +44617,7 @@ def S_LW_POST_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44306,6 +44637,7 @@ def S_LW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44324,6 +44656,7 @@ def S_LW_POST_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44342,6 +44675,7 @@ def S_LW_POST_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44360,6 +44694,7 @@ def S_LW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44379,6 +44714,7 @@ def S_LW_POST_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44398,6 +44734,7 @@ def S_LW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44416,6 +44753,7 @@ def S_LW_POST_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44436,6 +44774,7 @@ def S_LW_POST_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44454,6 +44793,7 @@ def S_LW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44473,6 +44813,7 @@ def S_LW_PRE_IMM_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44492,6 +44833,7 @@ def S_LW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44510,6 +44852,7 @@ def S_LW_PRE_IMM_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44528,6 +44871,7 @@ def S_LW_PRE_IMM_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44546,6 +44890,7 @@ def S_LW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44565,6 +44910,7 @@ def S_LW_PRE_REG_P21_LOAD1 : HaydnEntryP21<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44584,6 +44930,7 @@ def S_LW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44602,6 +44949,7 @@ def S_LW_PRE_REG_P31_LOAD1 : HaydnEntryP31<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44622,6 +44970,7 @@ def S_LW_PRE_REG_P32_LOAD1 : HaydnEntryP32<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44639,6 +44988,7 @@ def S_LW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44657,6 +45007,7 @@ def S_LW_WITH_IMM_P21_LOAD1 : HaydnEntryP21<
     "s_lw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44675,6 +45026,7 @@ def S_LW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44692,6 +45044,7 @@ def S_LW_WITH_IMM_P31_LOAD1 : HaydnEntryP31<
     "s_lw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44709,6 +45062,7 @@ def S_LW_WITH_IMM_P32_LOAD1 : HaydnEntryP32<
     "s_lw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44726,6 +45080,7 @@ def S_LW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_lw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44744,6 +45099,7 @@ def S_LW_WITH_REG_P21_LOAD1 : HaydnEntryP21<
     "s_lw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 4;  // LOAD1 @ 2-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44762,6 +45118,7 @@ def S_LW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_lw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44779,6 +45136,7 @@ def S_LW_WITH_REG_P31_LOAD1 : HaydnEntryP31<
     "s_lw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 12;  // LOAD1 @ 3-entry entry1
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44798,6 +45156,7 @@ def S_LW_WITH_REG_P32_LOAD1 : HaydnEntryP32<
     "s_lw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 16;  // LOAD1 @ 3-entry entry2
   let Itinerary = Unit_LOAD1_L2;
+  let mayLoad = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44816,6 +45175,7 @@ def S_SB_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44835,6 +45195,7 @@ def S_SB_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44853,6 +45214,7 @@ def S_SB_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44872,6 +45234,7 @@ def S_SB_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44890,6 +45253,7 @@ def S_SB_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44909,6 +45273,7 @@ def S_SB_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44927,6 +45292,7 @@ def S_SB_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44946,6 +45312,7 @@ def S_SB_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -44963,6 +45330,7 @@ def S_SB_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_sb_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44981,6 +45349,7 @@ def S_SB_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_sb_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -44998,6 +45367,7 @@ def S_SB_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_sb_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45016,6 +45386,7 @@ def S_SB_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_sb_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45034,6 +45405,7 @@ def S_SHW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45053,6 +45425,7 @@ def S_SHW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45071,6 +45444,7 @@ def S_SHW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45090,6 +45464,7 @@ def S_SHW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45108,6 +45483,7 @@ def S_SHW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45127,6 +45503,7 @@ def S_SHW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45145,6 +45522,7 @@ def S_SHW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45164,6 +45542,7 @@ def S_SHW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45181,6 +45560,7 @@ def S_SHW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_shw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45199,6 +45579,7 @@ def S_SHW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_shw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45216,6 +45597,7 @@ def S_SHW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_shw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45234,6 +45616,7 @@ def S_SHW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_shw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45252,6 +45635,7 @@ def S_SW_BREV_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45271,6 +45655,7 @@ def S_SW_BREV_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45289,6 +45674,7 @@ def S_SW_BREV_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45308,6 +45694,7 @@ def S_SW_BREV_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45326,6 +45713,7 @@ def S_SW_POST_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45345,6 +45733,7 @@ def S_SW_POST_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45363,6 +45752,7 @@ def S_SW_POST_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45382,6 +45772,7 @@ def S_SW_POST_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45400,6 +45791,7 @@ def S_SW_PRE_IMM_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45419,6 +45811,7 @@ def S_SW_PRE_IMM_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs = $rs_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45437,6 +45830,7 @@ def S_SW_PRE_REG_P20_LOADSTORE0 : HaydnEntryP20<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45456,6 +45850,7 @@ def S_SW_PRE_REG_P30_LOADSTORE0 : HaydnEntryP30<
   let Constraints = "$rs1 = $rs1_wb";
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45473,6 +45868,7 @@ def S_SW_WITH_IMM_P20_LOADSTORE0 : HaydnEntryP20<
     "s_sw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45491,6 +45887,7 @@ def S_SW_WITH_IMM_P30_LOADSTORE0 : HaydnEntryP30<
     "s_sw_with_imm	$rt, $rs, $imm6"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs;
   bits<6> imm6;
@@ -45508,6 +45905,7 @@ def S_SW_WITH_REG_P20_LOADSTORE0 : HaydnEntryP20<
     "s_sw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45526,6 +45924,7 @@ def S_SW_WITH_REG_P30_LOADSTORE0 : HaydnEntryP30<
     "s_sw_with_reg	$rt, $rs1, $rs2"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<4> rt;
   bits<4> rs1;
   bits<4> rs2;
@@ -45971,6 +46370,7 @@ def WBARWUA_P20_LOADSTORE0 : HaydnEntryP20<
     "wbarwua	$ar_sel, $rs"> {
   let PlacementIndex = 1;  // LOADSTORE0 @ 2-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<2> ar_sel;
   bits<4> rs;
   let e0{44-32} = 0b0000000000000;  // reserved
@@ -45989,6 +46389,7 @@ def WBARWUA_P30_LOADSTORE0 : HaydnEntryP30<
     "wbarwua	$ar_sel, $rs"> {
   let PlacementIndex = 8;  // LOADSTORE0 @ 3-entry entry0
   let Itinerary = Unit_LS0_L1;
+  let mayStore = 1;
   bits<2> ar_sel;
   bits<4> rs;
   let e0{30-29} = ar_sel;  // ar_sel
