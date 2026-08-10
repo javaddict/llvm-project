@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `2eba490a051c`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 435/589, `HaydnTests` 142/253, lld 12/24, clang 1299/1331.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves; § 5.4 started. |
+| `llvm-project` | `haydn-formate-switch-mc` | `8e6d05a83648` **local only — `fork/` is still at `2eba490a051c`, 12 commits behind** | **objects emit: 424/430 CodeGen. lit 492/589, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green for the first time since the switch** — § 5.2's geometry port and § 5.7's coverage gap are done. § 5.4 has 81 left, 43 of them held on a decision (see § 5.4). |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -856,14 +856,50 @@ test expects what it expects. Two kinds:
   guessed at: its claim was about slot promotion and does not survive, and
   inventing a replacement would be § 5.6's mistake at one remove.
 
-#### What is left: 138, and none of it is scriptable
+#### What is left: 81, and 15 of the 138 were never assertions at all
 
-~48 assert a retired spelling. **A substitution will not do it**: § 5.6's
-load/store rename is "a rename plus a range collapse", so `LD32` did not become
-one name — it became `s_lw_with_imm rt, rs, imm`, with an operand the old
-spelling did not have and a ÷4 scale on it. The rest assert bundle shapes that
-changed with the packing. Six pipeline tests (`llc -filetype=obj | llvm-objdump`)
-need their RUN lines split before a script can drive them.
+**Correction: this section used to say all 138 were hand-written assertions.
+Fifteen were not, and they had to be done first — regenerating on top of them
+would have frozen a miscompile into the expectations.** Four were live code
+defects and eleven were stale test INPUT, failing before FileCheck ran because
+their source text named a retired logical. Categorising before touching
+anything is what separated them; the split was:
+
+| n | | |
+|---:|---|---|
+| 4 | live code defects | `MOVE32` arity, a packer hoisting a use above its def, the generated `haydn.h` (twice) |
+| 11 | stale INPUT | nine MC `.s` spelling `LD32`/`LD64`/`LD16`/`ADDI32_W`, one `.mir` spelling `ZERO_DR 0`, one Bundle128-only pad test |
+| 6 | script-owned, RUN lines the scripts cannot drive | as this section already recorded |
+| 117 | assertions | 53 a retired spelling, 64 a bundle shape |
+| **138** | | |
+
+Of the 117, **52 are regenerated and script-owned**. The remainder split into
+two problems that are NOT more of the same work:
+
+* **43 carry 162 `CHECK-NOT` assertions and are deliberately held.** The update
+  scripts do not reproduce negative checks, and moving them to a private prefix
+  does not survive either — verified: the script takes over any prefix it finds
+  on a RUN line and generates a full positive block for it. Adopting those 43
+  would silently delete, for example, `hwloop-remat-freereg-dep.mir`'s
+  `CHECK-NOT: $r1 = ADDI32_W $r1, -1`, which is the entire property that test
+  exists to protect. **This needs a decision, not more effort.** Many of those
+  NOTs name retired spellings and are already vacuous, so they need attention
+  either way.
+* **26 cannot be driven at all.** `update_mc_test_checks.py` rewrites `%s` into
+  an `echo | llvm-mc` pipeline and mangles multi-line RUN continuations; two
+  more hit an `output_type` UnboundLocalError in the llc script. Regenerating
+  them mangles the file, so they were restored.
+
+Ten more regenerate cleanly and still disagree — real differences, to be read
+one at a time — and two are the `.c` tests blocked on § 8 Q1.
+
+**A substitution will not do the retired spellings**: § 5.6's load/store rename
+is "a rename plus a range collapse", so `LD32` did not become one name — it
+became `s_lw_with_imm rt, rs, imm`, with an operand the old spelling did not
+have and a ÷4 scale on it. Read the scale from the database's own `Behavior`
+(`rs + (imm6 << N)`, with byte accesses stating the degenerate `rs + imm6`)
+rather than writing a table: doing that is what caught § 5.6's correspondence
+table naming the DR64 pair wrongly.
 
 Be aware of what `--emit roundtrip` cannot see, though: it checks the encoder
 against the decoder, so any defect symmetric across the pair passes. That is how
@@ -923,11 +959,22 @@ for DR64 — and the correspondence is one to one:
 | `ST32 rt, rs, simm16` | `S_SW_WITH_IMM rt, rs, simm6:$scaled_imm` |
 | `LDU8` / `LD8` | `S_LBU_*` / `S_LBS_*` |
 | `LDU16` / `LD16` | `S_LHWU_*` / `S_LHWS_*` |
-| `LD64` / `ST64` | `D_LW_*` / `D_SW_*` (DR64) |
+| `LD64` / `ST64` | `D_LDW_*` / `D_SDW_*` (DR64) |
 
 and each addressing mode is a separate logical — `_WITH_IMM`, `_WITH_REG`,
 `_PRE_IMM`, `_PRE_REG`, `_POST_IMM`, `_POST_REG`, plus `_BREV_*` and `_CB_*`.
 69 of the 110 LOADSTORE0/LOAD1 logicals produce a GPR32.
+
+**Correction: the DR64 row above used to read `D_LW_*` / `D_SW_*`, and both
+halves were wrong in a way that assembles.** `d_lw_with_imm` is a real logical
+— it loads a WORD into a DR64, scaled by 4 — so writing it where a doubleword
+load belongs produces a test that passes and addresses half as far.
+`d_sw_with_imm` does not exist at all; the doubleword store is
+`d_sdw_with_imm`. The names are `D_LDW_*` (load doubleword, `imm6 << 3`) and
+`D_SDW_*`. Confirmed against the database's own `Behavior`
+(`rtd = mem64[rs + (imm6 << 3)]`) rather than against this table, which is how
+the error surfaced; the compiler had it right all along — `llc` selects
+`d_ldw_with_imm` for an `i64` load.
 
 **The hard part is not the rename, it is `simm16` → `simm6` scaled.** Any
 offset outside the scaled 6-bit range stops being an addressing mode and
@@ -1103,12 +1150,38 @@ instruction becomes, and it held a plain `HaydnMCFormats` while owning a
 member was already chosen by then — worth remembering when reasoning about
 this layer.
 
-**Still uncovered:** a caller that passes no MII packs slot-only. That is now
+**Correction: this section used to say `HaydnTests` "cannot currently construct
+an `MCInstrInfo`", and therefore that unit-aware packing had no unit-test
+coverage. It can, and it now does.** `HaydnDesc` was already in the suite's
+`LLVM_LINK_COMPONENTS` and registers one; `HaydnTestMCInstrInfo.h` is that
+constructor, going through the `TargetRegistry` and failing loudly if the
+target is not registered — a null MII would silently revert every such test to
+slot-only, which is the failure this closes. All eleven suites now build
+`HaydnMCFormatsWithMII`, which is what real packing does.
+
+Turning it on paid for itself immediately, and none of it was visible to a
+slot-only object:
+
+* **`DualLoadThenRejectThirdLoad` and `DualMacFillsS1S2` were passing
+  vacuously** — a third load has no unit, since there are exactly two.
+* **Eight tests were asserting bundles the hardware cannot issue**, built from
+  members that all named ALU0. Slot-only packing accepted them: the illegal
+  bundle above, reproduced inside the gate that exists to catch it.
+* **A test that had never checked anything.** `EncodedBytesAlwaysSixteenOnSuccess`
+  iterated over `{ArrayRef<unsigned>{Haydn::NOP}, …}`; `ArrayRef`'s
+  single-element constructor stores a POINTER to a temporary that dies at the
+  end of the full expression, so every opcode it read was stack garbage. It
+  stayed invisible precisely because a formats object with no `MCInstrInfo`
+  never reads an opcode's NAME — garbage simply missed the alternates table.
+* **Two name helpers aborted on an opcode they had never heard of.**
+  `getLogicalBaseOpcode` and `getMemberSlotFromNameLocal` called
+  `MCInstrInfo::getName` unguarded while backing `isSupportedInstruction`,
+  which is a PREDICATE: an unknown opcode has an answer, and it is no.
+
+**Still uncovered:** a caller that passes no MII packs slot-only. That remains
 the documented behaviour of an object that was never told which `MCInstrInfo`
-is in play, rather than an accident — but `HaydnTests` cannot currently
-construct an `MCInstrInfo`, so unit-aware packing has **no unit-test
-coverage** and `DualLoadCanShareCycle` still fails. Fold that into the 111
-triage.
+is in play, rather than an accident — the difference is that the tests no
+longer silently inherit it.
 
 The remaining § 7.1 option — moving the unit onto a generated per-member table
 — is still the better end state, and is the natural companion to § 6.9's
@@ -1605,7 +1678,7 @@ The four shapes, and what each cost:
 | Shape | n | Fixed in | Cost |
 |---|---:|---|---|
 | SFR compares with no destination | 9 | `b6c960be45ee` | intrinsics and builtins become void (§ 7) |
-| an extra dead operand | 5 | `b6c960be45ee` | `.td` only; none was ever in an asm string |
+| an extra dead operand | 5 | `b6c960be45ee` | **NOT `.td` only — see below** |
 | `Behavior` reads a port the database omits | 6 | `fb3fd13bebed` | a database repair, not a `.td` one |
 | an accumulator the logical never declared | 91 | `5185d0634df6`, `91a58cebd7aa`, `1240fd66d030` | 87 intrinsic prototypes gain the accumulator |
 | operand order against the Syntax | 3 | `7cf1079b8505` | `.td` plus four GISel construction sites |
@@ -1615,6 +1688,24 @@ already had the right shape — the generator takes an operand's role from the
 database — so it was the logicals that moved to meet them. That is the shape of
 this whole section: the encoder was reading operands the logical had put
 somewhere else.
+
+**Correction: "an extra dead operand" was recorded as `.td` only, and it was
+not.** `MOVE32` lost its `$rs2` in that commit and has ELEVEN C++ construction
+sites — `copyPhysReg` plus ten in `HaydnBitSimplify`. Three were updated and
+seven were not, so every OR32 / XOR32 / ORI32 / XORI32 identity fold and the
+`AND32 rd, rs, rs` fold kept building a three-operand `MOVE32` against a
+two-operand descriptor. That is not silent — the machine verifier rejects it
+with "Extra explicit operand on non-variadic instruction" and the pass aborts
+— but it survived because the one test that caught it was itself filed under
+§ 5.4 as a stale expectation. Its assertions had been correct all along.
+
+The other four of the five (`ABS32`, `ABS32S`, `CSRR`, `ZERO_DR`) have no C++
+construction sites, which is the only reason the row looked true.
+
+**The rule this adds: when a logical's operand list changes, the sweep is every
+`BuildMI`/`buildInstr` of that opcode, not just the `.td`.** A `.mir` test that
+spells the opcode literally counts too — `ZERO_DR 0` outlived the operand it
+passed.
 
 **The 85 accumulates were a live miscompile, not a modelling gap.** `FMULS16_HS00`
 is `rtd = SAT(rtd - rsd1*rsd2)`; its intrinsic took two arguments, so GISel gave
