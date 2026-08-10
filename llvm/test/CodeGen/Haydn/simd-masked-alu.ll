@@ -174,28 +174,28 @@ define i64 @test_x4clamp16(i64 %a, i64 %b) {
 ;===----------------------------------------------------------------------===
 
 define <2 x i32> @test_x2add32s_masked_eq(<2 x i32> %a, <2 x i32> %b, <2 x i32> %mask_val) {
-  %cmp = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %mask_val)
+  call void @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %mask_val)
   %added = call <2 x i32> @llvm.haydn.x2add32s(<2 x i32> %a,<2 x i32> %b)
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %added)
   ret <2 x i32> %result
 }
 
 define <2 x i32> @test_x2sub32s_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i32> %mask_val) {
-  %cmp = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %mask_val)
+  call void @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %mask_val)
   %subbed = call <2 x i32> @llvm.haydn.x2sub32s(<2 x i32> %a,<2 x i32> %b)
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %subbed)
   ret <2 x i32> %result
 }
 
 define <4 x i16> @test_x4add16s_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16> %mask_val) {
-  %cmp = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %mask_val)
+  call void @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %mask_val)
   %added = call <4 x i16> @llvm.haydn.x4add16s(<4 x i16> %a,<4 x i16> %b)
   %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %a,<4 x i16> %added)
   ret <4 x i16> %result
 }
 
 define <4 x i16> @test_x4sub16s_masked_sle(<4 x i16> %a, <4 x i16> %b, <4 x i16> %mask_val) {
-  %cmp = call <4 x i16> @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %mask_val)
+  call void @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %mask_val)
   %subbed = call <4 x i16> @llvm.haydn.x4sub16s(<4 x i16> %a,<4 x i16> %b)
   %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %a,<4 x i16> %subbed)
   ret <4 x i16> %result
@@ -206,12 +206,12 @@ define <4 x i16> @test_x4sub16s_masked_sle(<4 x i16> %a, <4 x i16> %b, <4 x i16>
 ;===----------------------------------------------------------------------===
 
 ; SFR compare (binary DR64)
-declare <2 x i32> @llvm.haydn.x2seq32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
-declare <4 x i16> @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4slt16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4sle16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x2seq32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4slt16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4sle16(<4 x i16>, <4 x i16>)
 
 ; SFR conditional move (binary DR64)
 declare <2 x i32> @llvm.haydn.x2movf32(<2 x i32>, <2 x i32>)

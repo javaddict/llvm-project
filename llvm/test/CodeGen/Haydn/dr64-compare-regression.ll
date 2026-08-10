@@ -136,12 +136,12 @@
 ; CHECK:                                         // -- End function
 ; CHECK: 	.section	".note.GNU-stack","",@progbits
 
-declare i64 @llvm.haydn.slt64(i64)
+declare void @llvm.haydn.slt64(i64, i64)
 declare i64 @llvm.haydn.movt64(i64)
 
-define dso_local i64 @test_slt64_movt64(i64 %a) {
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
-  %r = call i64 @llvm.haydn.movt64(i64 %cmp)
+define dso_local i64 @test_slt64_movt64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  %r = call i64 @llvm.haydn.movt64(i64 %a)
   ret i64 %r
 }
 
@@ -149,12 +149,12 @@ define dso_local i64 @test_slt64_movt64(i64 %a) {
 ; SLE64 + MOVF64 chain
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.sle64(i64)
+declare void @llvm.haydn.sle64(i64, i64)
 declare i64 @llvm.haydn.movf64(i64)
 
-define dso_local i64 @test_sle64_movf64(i64 %a) {
-  %cmp = call i64 @llvm.haydn.sle64(i64 %a)
-  %r = call i64 @llvm.haydn.movf64(i64 %cmp)
+define dso_local i64 @test_sle64_movf64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
+  %r = call i64 @llvm.haydn.movf64(i64 %a)
   ret i64 %r
 }
 
@@ -162,11 +162,11 @@ define dso_local i64 @test_sle64_movf64(i64 %a) {
 ; SEQ64 standalone (sets SFR, returns passthrough)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.seq64(i64)
+declare void @llvm.haydn.seq64(i64, i64)
 
-define dso_local i64 @test_seq64(i64 %a) {
-  %r = call i64 @llvm.haydn.seq64(i64 %a)
-  ret i64 %r
+define dso_local i64 @test_seq64(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.seq64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
 ;===----------------------------------------------------------------------===;

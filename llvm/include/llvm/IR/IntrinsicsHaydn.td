@@ -52,12 +52,17 @@ class haydn_ternary_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
                        [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 /// SFR-setting compare (Effect=SFR / D215 BUG-1): writes implicit SFR.
-/// If the return value is unused (as in `(void)haydn_x2slt32(a,b)` before a
-/// MOVT32), DCE would delete a pure IntrNoMem call. IntrHasSideEffects keeps
-/// the SFR write so subsequent X2MOVT32/X2MOVF16 see the correct flags.
+/// VOID: the hardware compares two sources and writes SFR, and no register.
+/// It used to return its first operand, which existed only to give the
+/// instruction a destination the ISA does not have -- GISel allocated a dead
+/// vreg for it and every caller either discarded it or read the flags back
+/// through MOVESFR2GPR. Read the result with haydn_movesfr2gpr().
+/// IntrHasSideEffects is what keeps the SFR write alive now that there is no
+/// result at all; a pure IntrNoMem call with no uses would be deleted before
+/// the following X2MOVT32/X2MOVF16 could see the flags.
 /// Clang: BuiltinsHaydn.td Effect=SFR → [NoThrow] (no Const).
-class haydn_sfr_compare_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
-    : Haydn_Intrinsic<name, [res_ty], [op_ty, op_ty],
+class haydn_sfr_compare_intrinsic<string name, LLVMType op_ty>
+    : Haydn_Intrinsic<name, [], [op_ty, op_ty],
                        [IntrHasSideEffects, IntrWillReturn]>;
 
 /// C1.2 ambient SFR cmov (Effect=SFR): x2/x4 movt/movf.
@@ -633,11 +638,11 @@ def int_haydn_x2cmul32s : haydn_simd_mac_2dest_intrinsic<"haydn_x2cmul32s">;
 //===----------------------------------------------------------------------===//
 
 // X2SEQ32 — Dual 32-bit signed equal compare → SFR
-def int_haydn_x2seq32 : haydn_sfr_compare_intrinsic<"haydn_x2seq32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2seq32 : haydn_sfr_compare_intrinsic<"haydn_x2seq32", llvm_v2i32_ty>;
 // X2SLT32 — Dual 32-bit signed less-than compare → SFR
-def int_haydn_x2slt32 : haydn_sfr_compare_intrinsic<"haydn_x2slt32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2slt32 : haydn_sfr_compare_intrinsic<"haydn_x2slt32", llvm_v2i32_ty>;
 // X2SLE32 — Dual 32-bit signed less-or-equal compare → SFR
-def int_haydn_x2sle32 : haydn_sfr_compare_intrinsic<"haydn_x2sle32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2sle32 : haydn_sfr_compare_intrinsic<"haydn_x2sle32", llvm_v2i32_ty>;
 // X2MOVF32 — Dual 32-bit conditional move if SFR false (ambient low-level)
 //   dst[i] = (SFR[i] == 0) ? src2[i] : src1[i]
 //   Takes two DR64 operands: src1 (fallthrough/false value), src2 (true value).
@@ -650,11 +655,11 @@ def int_haydn_x2movf32 : haydn_sfr_cmov_intrinsic<"haydn_x2movf32", llvm_v2i32_t
 def int_haydn_x2movt32 : haydn_sfr_cmov_intrinsic<"haydn_x2movt32", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 // X4SEQ16 — Quad 16-bit signed equal compare → SFR
-def int_haydn_x4seq16 : haydn_sfr_compare_intrinsic<"haydn_x4seq16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4seq16 : haydn_sfr_compare_intrinsic<"haydn_x4seq16", llvm_v4i16_ty>;
 // X4SLT16 — Quad 16-bit signed less-than compare → SFR
-def int_haydn_x4slt16 : haydn_sfr_compare_intrinsic<"haydn_x4slt16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4slt16 : haydn_sfr_compare_intrinsic<"haydn_x4slt16", llvm_v4i16_ty>;
 // X4SLE16 — Quad 16-bit signed less-or-equal compare → SFR
-def int_haydn_x4sle16 : haydn_sfr_compare_intrinsic<"haydn_x4sle16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4sle16 : haydn_sfr_compare_intrinsic<"haydn_x4sle16", llvm_v4i16_ty>;
 // X4MOVF16 — Quad 16-bit conditional move if SFR false (ambient low-level)
 //   dst[i] = (SFR[i] == 0) ? src2[i] : src1[i]
 def int_haydn_x4movf16 : haydn_sfr_cmov_intrinsic<"haydn_x4movf16", llvm_v4i16_ty, llvm_v4i16_ty>;
@@ -921,9 +926,7 @@ def int_haydn_x4cjmula16s_l : Haydn_Intrinsic<"haydn_x4cjmula16s_l", [llvm_v2i32
 
 // Unary DR64: i64 -> i64
 def int_haydn_not64 : haydn_unary_intrinsic<"haydn_not64", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_seq64 : Haydn_Intrinsic<"haydn_seq64",
-    [llvm_i64_ty], [llvm_i64_ty],
-    [IntrHasSideEffects]>;
+def int_haydn_seq64 : haydn_sfr_compare_intrinsic<"haydn_seq64", llvm_i64_ty>;
 
 // Binary DR64: i64, i64 -> i64
 def int_haydn_max64   : haydn_binary_intrinsic<"haydn_max64",   llvm_i64_ty, llvm_i64_ty>;
@@ -1083,12 +1086,8 @@ def int_haydn_sra64r : Haydn_Intrinsic<"haydn_sra64r",
 // Unary DR64 matching the instruction defs: (outs DR64:$rd), (ins DR64:$rs)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_slt64 : Haydn_Intrinsic<"haydn_slt64",
-    [llvm_i64_ty], [llvm_i64_ty],
-    [IntrHasSideEffects]>;
-def int_haydn_sle64 : Haydn_Intrinsic<"haydn_sle64",
-    [llvm_i64_ty], [llvm_i64_ty],
-    [IntrHasSideEffects]>;
+def int_haydn_slt64 : haydn_sfr_compare_intrinsic<"haydn_slt64", llvm_i64_ty>;
+def int_haydn_sle64 : haydn_sfr_compare_intrinsic<"haydn_sle64", llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: Scalar 64-bit SFR Conditional Move

@@ -131,7 +131,7 @@ define i64 @test_neg64(i64 %a) {
 ;===----------------------------------------------------------------------===;
 
 declare i64 @llvm.haydn.not64(i64)
-declare i64 @llvm.haydn.seq64(i64)
+declare void @llvm.haydn.seq64(i64, i64)
 
 define i64 @test_not64(i64 %a) {
 ; CHECK-LABEL: test_not64:
@@ -140,11 +140,11 @@ define i64 @test_not64(i64 %a) {
   ret i64 %r
 }
 
-define i64 @test_seq64(i64 %a) {
+define i64 @test_seq64(i64 %a, i64 %cmp_rhs) {
 ; CHECK-LABEL: test_seq64:
 ; CHECK: seq64
-  %r = call i64 @llvm.haydn.seq64(i64 %a)
-  ret i64 %r
+  call void @llvm.haydn.seq64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
 ;===----------------------------------------------------------------------===;

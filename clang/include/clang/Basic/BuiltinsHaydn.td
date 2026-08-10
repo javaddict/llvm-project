@@ -2330,27 +2330,27 @@ def x4frsst16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVec
   let Mnemonic = "X4FRSST16";
   let Semantics = "performs four parallel symmetrical roundings of four signed Q1.31 fixed-point values packed in rsd1 and rsd2 to the Q1.15 range, with saturation, and writes the four packed Q1.15 results into rtd[6...";
 }
-def x2seq32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
+def x2seq32 : HaydnBuiltin<"void(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2seq32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "void(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SEQ32";
   let Semantics = "performs two parallel 32-bit equality comparisons to update the SFR.";
 }
-def x2slt32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
+def x2slt32 : HaydnBuiltin<"void(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2slt32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "void(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SLT32";
   let Semantics = "performs two parallel 32-bit signed less-than comparisons to update the SFR.";
 }
-def x2sle32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
+def x2sle32 : HaydnBuiltin<"void(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2sle32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "void(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SLE32";
   let Semantics = "performs two parallel 32-bit signed less-than-or-equal comparisons to update the SFR.";
 }
@@ -2370,27 +2370,27 @@ def x2movt32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2
   let Mnemonic = "X2MOVT32";
   let Semantics = "conditionally moves two 32-bit sub-words of rsd into the corresponding lanes of rtd. Each lane is updated independently based on its SFR bits.";
 }
-def x4seq16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
+def x4seq16 : HaydnBuiltin<"void(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4seq16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "void(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SEQ16";
   let Semantics = "performs four parallel 16-bit equality comparisons to update the SFR.";
 }
-def x4slt16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
+def x4slt16 : HaydnBuiltin<"void(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4slt16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "void(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SLT16";
   let Semantics = "performs four parallel 16-bit signed less-than comparisons to update the SFR.";
 }
-def x4sle16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
+def x4sle16 : HaydnBuiltin<"void(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4sle16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "void(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SLE16";
   let Semantics = "performs four parallel 16-bit signed less-than-or-equal comparisons to update the SFR.";
 }
@@ -2472,27 +2472,27 @@ def x4cmpsel16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVe
   let Semantics = "Fused compare-select: quad 16-bit (a < b) ? t : f per lane. Args (a, b, true_val, false_val). Expand X4SLT16+X4MOVT16; SFR local to expansion.";
 }
 
-def slt64 : HaydnBuiltin<"int64_t(int64_t)"> {
+def slt64 : HaydnBuiltin<"void(int64_t, int64_t)"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "slt64";
-  let PublicPrototype = "int64_t(int64_t)";
+  let PublicPrototype = "void(int64_t, int64_t)";
   let Mnemonic = "SLT64";
   let Semantics = "performs a 64-bit signed comparison. If rsd1 is less than rsd2, SFR is set to 4'b1111; otherwise SFR is set to 4'b0000.";
 }
-def sle64 : HaydnBuiltin<"int64_t(int64_t)"> {
+def sle64 : HaydnBuiltin<"void(int64_t, int64_t)"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "sle64";
-  let PublicPrototype = "int64_t(int64_t)";
+  let PublicPrototype = "void(int64_t, int64_t)";
   let Mnemonic = "SLE64";
   let Semantics = "performs a 64-bit signed comparison. If rsd1 is less than or equal to rsd2, SFR is set to 4'b1111; otherwise SFR is set to 4'b0000.";
 }
-def seq64 : HaydnBuiltin<"int64_t(int64_t)"> {
+def seq64 : HaydnBuiltin<"void(int64_t, int64_t)"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "seq64";
-  let PublicPrototype = "int64_t(int64_t)";
+  let PublicPrototype = "void(int64_t, int64_t)";
   let Mnemonic = "SEQ64";
   let Semantics = "performs a 64-bit equality comparison. If rsd1 is equal to rsd2, SFR is set to 4'b1111; otherwise SFR is set to 4'b0000.";
 }

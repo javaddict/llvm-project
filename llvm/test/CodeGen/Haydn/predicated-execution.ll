@@ -28,8 +28,8 @@
 ; CHECK: X2SEQ32
 ; CHECK: X2MOVF32
 define <2 x i32> @test_x2seq_then_movf(<2 x i32> %a, <2 x i32> %b, <2 x i32> %fallthrough) {
-  %cmp = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
-  %result = call <2 x i32> @llvm.haydn.x2movf32(<2 x i32> %fallthrough,<2 x i32> %cmp)
+  call void @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
+  %result = call <2 x i32> @llvm.haydn.x2movf32(<2 x i32> %fallthrough,<2 x i32> %a)
   ret <2 x i32> %result
 }
 
@@ -39,8 +39,8 @@ define <2 x i32> @test_x2seq_then_movf(<2 x i32> %a, <2 x i32> %b, <2 x i32> %fa
 ; CHECK: X2SLT32
 ; CHECK: X2MOVT32
 define <2 x i32> @test_x2slt_then_movt(<2 x i32> %a, <2 x i32> %b, <2 x i32> %fallthrough) {
-  %cmp = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
-  %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %fallthrough,<2 x i32> %cmp)
+  call void @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
+  %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %fallthrough,<2 x i32> %a)
   ret <2 x i32> %result
 }
 
@@ -50,8 +50,8 @@ define <2 x i32> @test_x2slt_then_movt(<2 x i32> %a, <2 x i32> %b, <2 x i32> %fa
 ; CHECK: X2SLE32
 ; CHECK: X2MOVF32
 define <2 x i32> @test_x2sle_then_movf(<2 x i32> %a, <2 x i32> %b, <2 x i32> %fallthrough) {
-  %cmp = call <2 x i32> @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %b)
-  %result = call <2 x i32> @llvm.haydn.x2movf32(<2 x i32> %fallthrough,<2 x i32> %cmp)
+  call void @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %b)
+  %result = call <2 x i32> @llvm.haydn.x2movf32(<2 x i32> %fallthrough,<2 x i32> %a)
   ret <2 x i32> %result
 }
 
@@ -65,8 +65,8 @@ define <2 x i32> @test_x2sle_then_movf(<2 x i32> %a, <2 x i32> %b, <2 x i32> %fa
 ; CHECK: X4SEQ16
 ; CHECK: X4MOVF16
 define <4 x i16> @test_x4seq_then_movf(<4 x i16> %a, <4 x i16> %b, <4 x i16> %fallthrough) {
-  %cmp = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %b)
-  %result = call <4 x i16> @llvm.haydn.x4movf16(<4 x i16> %fallthrough,<4 x i16> %cmp)
+  call void @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %b)
+  %result = call <4 x i16> @llvm.haydn.x4movf16(<4 x i16> %fallthrough,<4 x i16> %a)
   ret <4 x i16> %result
 }
 
@@ -76,8 +76,8 @@ define <4 x i16> @test_x4seq_then_movf(<4 x i16> %a, <4 x i16> %b, <4 x i16> %fa
 ; CHECK: X4SLT16
 ; CHECK: X4MOVT16
 define <4 x i16> @test_x4slt_then_movt(<4 x i16> %a, <4 x i16> %b, <4 x i16> %fallthrough) {
-  %cmp = call <4 x i16> @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %b)
-  %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %fallthrough,<4 x i16> %cmp)
+  call void @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %b)
+  %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %fallthrough,<4 x i16> %a)
   ret <4 x i16> %result
 }
 
@@ -87,8 +87,8 @@ define <4 x i16> @test_x4slt_then_movt(<4 x i16> %a, <4 x i16> %b, <4 x i16> %fa
 ; CHECK: X4SLE16
 ; CHECK: X4MOVT16
 define <4 x i16> @test_x4sle_then_movt(<4 x i16> %a, <4 x i16> %b, <4 x i16> %fallthrough) {
-  %cmp = call <4 x i16> @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %b)
-  %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %fallthrough,<4 x i16> %cmp)
+  call void @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %b)
+  %result = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %fallthrough,<4 x i16> %a)
   ret <4 x i16> %result
 }
 
@@ -101,9 +101,9 @@ define <4 x i16> @test_x4sle_then_movt(<4 x i16> %a, <4 x i16> %b, <4 x i16> %fa
 ; CHECK-LABEL: name: test_scalar_seq_movt
 ; CHECK: SEQ64
 ; CHECK: MOVT64
-define i64 @test_scalar_seq_movt(i64 %a) {
-  %cmp = call i64 @llvm.haydn.seq64(i64 %a)
-  %result = call i64 @llvm.haydn.movt64(i64 %cmp)
+define i64 @test_scalar_seq_movt(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.seq64(i64 %a, i64 %cmp_rhs)
+  %result = call i64 @llvm.haydn.movt64(i64 %a)
   ret i64 %result
 }
 
@@ -112,9 +112,9 @@ define i64 @test_scalar_seq_movt(i64 %a) {
 ; CHECK-LABEL: name: test_scalar_slt_movf
 ; CHECK: SLT64
 ; CHECK: MOVF64
-define i64 @test_scalar_slt_movf(i64 %a) {
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
-  %result = call i64 @llvm.haydn.movf64(i64 %cmp)
+define i64 @test_scalar_slt_movf(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  %result = call i64 @llvm.haydn.movf64(i64 %a)
   ret i64 %result
 }
 
@@ -123,9 +123,9 @@ define i64 @test_scalar_slt_movf(i64 %a) {
 ; CHECK-LABEL: name: test_scalar_sle_movt
 ; CHECK: SLE64
 ; CHECK: MOVT64
-define i64 @test_scalar_sle_movt(i64 %a) {
-  %cmp = call i64 @llvm.haydn.sle64(i64 %a)
-  %result = call i64 @llvm.haydn.movt64(i64 %cmp)
+define i64 @test_scalar_sle_movt(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
+  %result = call i64 @llvm.haydn.movt64(i64 %a)
   ret i64 %result
 }
 
@@ -143,9 +143,9 @@ define i64 @test_scalar_sle_movt(i64 %a) {
 ; CHECK-LABEL: name: test_scalar_max_pattern
 ; CHECK: SLT64
 ; CHECK: MOVT64
-define i64 @test_scalar_max_pattern(i64 %a) {
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
-  %sel = call i64 @llvm.haydn.movt64(i64 %cmp)
+define i64 @test_scalar_max_pattern(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  %sel = call i64 @llvm.haydn.movt64(i64 %a)
   ret i64 %sel
 }
 
@@ -155,8 +155,8 @@ define i64 @test_scalar_max_pattern(i64 %a) {
 ; CHECK: X2SLT32
 ; CHECK: X2MOVT32
 define <2 x i32> @test_x2_conditional_select(<2 x i32> %a, <2 x i32> %b, <2 x i32> %c) {
-  %cmp = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
-  %sel = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %c,<2 x i32> %cmp)
+  call void @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
+  %sel = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %c,<2 x i32> %a)
   ret <2 x i32> %sel
 }
 
@@ -171,10 +171,10 @@ define <2 x i32> @test_x2_conditional_select(<2 x i32> %a, <2 x i32> %b, <2 x i3
 ; CHECK: SEQ64
 ; CHECK: MOVT64
 ; CHECK: MOVEGPR2SFR
-define i64 @test_sfr_save_around_predication(i64 %a, i32 %saved_flags) {
+define i64 @test_sfr_save_around_predication(i64 %a, i32 %saved_flags, i64 %cmp_rhs) {
   %saved = call i32 @llvm.haydn.movesfr2gpr()
-  %cmp = call i64 @llvm.haydn.seq64(i64 %a)
-  %result = call i64 @llvm.haydn.movt64(i64 %cmp)
+  call void @llvm.haydn.seq64(i64 %a, i64 %cmp_rhs)
+  %result = call i64 @llvm.haydn.movt64(i64 %a)
   call void @llvm.haydn.movegpr2sfr(i32 %saved)
   ret i64 %result
 }
@@ -191,13 +191,13 @@ define i64 @test_sfr_save_around_predication(i64 %a, i32 %saved_flags) {
 ; CHECK: SEQ64
 ; CHECK: SLT64
 ; CHECK: SLE64
-define i64 @test_all_scalar_compares(i64 %a) {
-  %c1 = call i64 @llvm.haydn.seq64(i64 %a)
-  %c2 = call i64 @llvm.haydn.slt64(i64 %a)
-  %c3 = call i64 @llvm.haydn.sle64(i64 %a)
-  %r1 = call i64 @llvm.haydn.movt64(i64 %c1)
-  %r2 = call i64 @llvm.haydn.movt64(i64 %c2)
-  %r3 = call i64 @llvm.haydn.movt64(i64 %c3)
+define i64 @test_all_scalar_compares(i64 %a, i64 %cmp_rhs) {
+  call void @llvm.haydn.seq64(i64 %a, i64 %cmp_rhs)
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
+  %r1 = call i64 @llvm.haydn.movt64(i64 %a)
+  %r2 = call i64 @llvm.haydn.movt64(i64 %a)
+  %r3 = call i64 @llvm.haydn.movt64(i64 %a)
   %or1 = or i64 %r1, %r2
   %or2 = or i64 %or1, %r3
   ret i64 %or2
@@ -208,12 +208,12 @@ define i64 @test_all_scalar_compares(i64 %a) {
 ; CHECK: X2SLT32
 ; CHECK: X2SLE32
 define <2 x i32> @test_all_x2_compares(<2 x i32> %a, <2 x i32> %b) {
-  %c1 = call <2 x i32> @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
-  %c2 = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
-  %c3 = call <2 x i32> @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %b)
-  %r1 = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %c1)
-  %r2 = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %b,<2 x i32> %c2)
-  %r3 = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %r1,<2 x i32> %c3)
+  call void @llvm.haydn.x2seq32(<2 x i32> %a,<2 x i32> %b)
+  call void @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %b)
+  call void @llvm.haydn.x2sle32(<2 x i32> %a,<2 x i32> %b)
+  %r1 = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %a)
+  %r2 = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %b,<2 x i32> %a)
+  %r3 = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %r1,<2 x i32> %a)
   %r2_i = bitcast <2 x i32> %r2 to i64
   %r3_i = bitcast <2 x i32> %r3 to i64
   %or1_i = or i64 %r2_i, %r3_i
@@ -226,12 +226,12 @@ define <2 x i32> @test_all_x2_compares(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK: X4SLT16
 ; CHECK: X4SLE16
 define <4 x i16> @test_all_x4_compares(<4 x i16> %a, <4 x i16> %b) {
-  %c1 = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %b)
-  %c2 = call <4 x i16> @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %b)
-  %c3 = call <4 x i16> @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %b)
-  %r1 = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %a,<4 x i16> %c1)
-  %r2 = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %b,<4 x i16> %c2)
-  %r3 = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %r1,<4 x i16> %c3)
+  call void @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %b)
+  call void @llvm.haydn.x4slt16(<4 x i16> %a,<4 x i16> %b)
+  call void @llvm.haydn.x4sle16(<4 x i16> %a,<4 x i16> %b)
+  %r1 = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %a,<4 x i16> %a)
+  %r2 = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %b,<4 x i16> %a)
+  %r3 = call <4 x i16> @llvm.haydn.x4movt16(<4 x i16> %r1,<4 x i16> %a)
   %r2_i = bitcast <4 x i16> %r2 to i64
   %r3_i = bitcast <4 x i16> %r3 to i64
   %or1_i = or i64 %r2_i, %r3_i
@@ -242,23 +242,23 @@ define <4 x i16> @test_all_x4_compares(<4 x i16> %a, <4 x i16> %b) {
 ;Intrinsic declarations
 
 ; Scalar SFR
-declare i64 @llvm.haydn.seq64(i64)
-declare i64 @llvm.haydn.slt64(i64)
-declare i64 @llvm.haydn.sle64(i64)
+declare void @llvm.haydn.seq64(i64, i64)
+declare void @llvm.haydn.slt64(i64, i64)
+declare void @llvm.haydn.sle64(i64, i64)
 declare i64 @llvm.haydn.movt64(i64)
 declare i64 @llvm.haydn.movf64(i64)
 
 ; SIMD X2 SFR
-declare <2 x i32> @llvm.haydn.x2seq32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2seq32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x2sle32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2movf32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2movt32(<2 x i32>, <2 x i32>)
 
 ; SIMD X4 SFR
-declare <4 x i16> @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4slt16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4sle16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4slt16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x4sle16(<4 x i16>, <4 x i16>)
 declare <4 x i16> @llvm.haydn.x4movf16(<4 x i16>, <4 x i16>)
 declare <4 x i16> @llvm.haydn.x4movt16(<4 x i16>, <4 x i16>)
 

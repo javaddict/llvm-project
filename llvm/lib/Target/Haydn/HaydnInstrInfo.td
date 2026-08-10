@@ -325,10 +325,15 @@ def XORI32 : FmtI<0x26, (outs GPR32:$rd), (ins GPR32:$rs, uimm20:$imm),
 // Move / Load Immediate Instructions
 //===----------------------------------------------------------------------===//
 
-def MOVE32 : FmtALU32<0x08, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
+def MOVE32 : FmtALU32<0x08, (outs GPR32:$rd), (ins GPR32:$rs1),
                       "move32\t$rd, $rs1",
                       []> {
   let TSFlags{2-0} = 0b001;
+  // The database is `MOVE32 rt, rs`, and the asm string never named $rs2 --
+  // copyPhysReg passed the source twice to fill it. Bind the field instead:
+  // an operand the logical has and the member does not is a place the encoder
+  // reads the wrong one. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rs2 = 0;
 }
 
 // NOP — canonical no-operation instruction.
@@ -420,15 +425,17 @@ def SLL32 : FmtALU32<0x0C, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 // DSP / Miscellaneous Instructions
 //===----------------------------------------------------------------------===//
 
-def ABS32S : FmtALU32<0x0D, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
+def ABS32S : FmtALU32<0x0D, (outs GPR32:$rd), (ins GPR32:$rs1),
                       "abs32s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b001;
+  let rs2 = 0;  // `ABS32S rt, rs`: $rs2 was never in the asm string
 }
 
-def ABS32 : FmtALU32<0x0E, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
+def ABS32 : FmtALU32<0x0E, (outs GPR32:$rd), (ins GPR32:$rs1),
                      "abs32\t$rd, $rs1",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let rs2 = 0;  // `ABS32 rt, rs`: $rs2 was never in the asm string
 }
 
 def MAX32 : FmtALU32<0x0F, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
@@ -912,13 +919,17 @@ def WFI : HaydnPseudo<(outs), (ins), "wfi", []>;
 // treats them correctly. The one real correctness fix CSRW needs is
 // `hasSideEffects = 1` — without it a dead CSRW (e.g. CBR setup) is DCE'd
 // and the CSR is never programmed (the exact trap WUR_AE_CBEGIN0/CEND0 hit).
-def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
+def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr),
                "csrr\t$rd, $csr_addr", []> {
   let TSFlags{2-0} = 0b001;
-  // $rs is not a real input for CSRR (DB reads only the CSR); it exists for
-  // MC operand-count parity with the shared FmtCSR decoder (case 25 decodes
-  // rd + csr_addr + rs for BOTH CSRR and CSRW). Regalloc ignores an unused
-  // tied input operand; no correctness impact.
+  // The database is `CSRR rt, uimm8` — it reads the CSR and no register.
+  // $rs used to be kept "for MC operand-count parity with the shared FmtCSR
+  // decoder", the same reason CSRW carried a dead $rd until 6e35b4124346
+  // showed it did not hold. It does not hold here either: the decoder names
+  // neither CSRR nor csr_addr any more, and the asm string never spelled $rs,
+  // so no test could see it. What it did do was give CodeGen an operand the
+  // member does not have. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rs = 0;
 }
 
 // CSRW: the destination is a CSR (a side effect), NOT a GPR, so the database
@@ -1204,20 +1215,35 @@ def X2SRA32 : FmtALU64<0x66, 0x000, (outs DR64:$rd), (ins DR64:$rs1, GPR32:$rs2)
 // Schedule Found=0 for all II. Explicit SFR Defs/Uses keep cmp→cmov
 // RAW correct without memory barriers.
 let hasSideEffects = 0, Defs = [SFR] in {
-def SEQ64 : FmtALU64Unary<0x67, 0x187, (outs DR64:$rd), (ins DR64:$rs1),
-                          "seq64\t$rd, $rs1", []> {
+def SEQ64 : FmtALU64Binary<0x67, 0x187, (outs),
+                           (ins DR64:$rs1, DR64:$rs2),
+                           "seq64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // Binary, not unary: the database is `SEQ64 rsd1, rsd2` and both
+  // are read. The old shape called the first a destination, which
+  // no operand-count check could see. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rd = 0;
 }
-def SLT64 : FmtALU64Unary<0x67, 0x188, (outs DR64:$rd), (ins DR64:$rs1),
-                          "slt64\t$rd, $rs1", []> {
+def SLT64 : FmtALU64Binary<0x67, 0x188, (outs),
+                           (ins DR64:$rs1, DR64:$rs2),
+                           "slt64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // Binary, not unary: the database is `SLT64 rsd1, rsd2` and both
+  // are read. The old shape called the first a destination, which
+  // no operand-count check could see. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rd = 0;
 }
-def SLE64 : FmtALU64Unary<0x67, 0x189, (outs DR64:$rd), (ins DR64:$rs1),
-                          "sle64\t$rd, $rs1", []> {
+def SLE64 : FmtALU64Binary<0x67, 0x189, (outs),
+                           (ins DR64:$rs1, DR64:$rs2),
+                           "sle64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // Binary, not unary: the database is `SLE64 rsd1, rsd2` and both
+  // are read. The old shape called the first a destination, which
+  // no operand-count check could see. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rd = 0;
 }
 }  // hasSideEffects = 0, Defs = [SFR]
 
@@ -1386,23 +1412,32 @@ def MOVEI_L : Fmt48_MOVEI<0x20, (outs DR64:$rd), (ins simm32_movei:$imm32),
 
 // X2 SIMD compare → SFR (binary DR64 → sets SFR). Passthrough return.
 let hasSideEffects = 0, Defs = [SFR] in {
-def X2SEQ32 : FmtALU64Binary<0x67, 0x18D, (outs DR64:$rd),
+def X2SEQ32 : FmtALU64Binary<0x67, 0x18D, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x2seq32\t$rd, $rs1, $rs2", []> {
+                             "x2seq32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
 }
-def X2SLT32 : FmtALU64Binary<0x67, 0x18E, (outs DR64:$rd),
+def X2SLT32 : FmtALU64Binary<0x67, 0x18E, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x2slt32\t$rd, $rs1, $rs2", []> {
+                             "x2slt32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
 }
-def X2SLE32 : FmtALU64Binary<0x67, 0x18F, (outs DR64:$rd),
+def X2SLE32 : FmtALU64Binary<0x67, 0x18F, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x2sle32\t$rd, $rs1, $rs2", []> {
+                             "x2sle32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
 }
 }  // hasSideEffects = 0, Defs = [SFR]
 
@@ -1424,23 +1459,32 @@ def X2MOVT32 : FmtALU64Binary<0x67, 0x191, (outs DR64:$rd),
 
 // X4 SIMD compare → SFR (binary DR64 → sets SFR).
 let hasSideEffects = 0, Defs = [SFR] in {
-def X4SEQ16 : FmtALU64Binary<0x67, 0x192, (outs DR64:$rd),
+def X4SEQ16 : FmtALU64Binary<0x67, 0x192, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x4seq16\t$rd, $rs1, $rs2", []> {
+                             "x4seq16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
 }
-def X4SLT16 : FmtALU64Binary<0x67, 0x193, (outs DR64:$rd),
+def X4SLT16 : FmtALU64Binary<0x67, 0x193, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x4slt16\t$rd, $rs1, $rs2", []> {
+                             "x4slt16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
 }
-def X4SLE16 : FmtALU64Binary<0x67, 0x194, (outs DR64:$rd),
+def X4SLE16 : FmtALU64Binary<0x67, 0x194, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x4sle16\t$rd, $rs1, $rs2", []> {
+                             "x4sle16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
 }
 }  // hasSideEffects = 0, Defs = [SFR]
 
