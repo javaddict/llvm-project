@@ -24,6 +24,7 @@
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -51,6 +52,76 @@ bool isResidualCycleFormingPseudo(unsigned Opc) {
   default:
     return false;
   }
+}
+
+bool isRepresentationExpandPseudo(unsigned Opc) {
+  switch (Opc) {
+  case Haydn::B:
+  case Haydn::RET:
+  case Haydn::BR_JT:
+  case Haydn::PseudoCALLIndirect:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool isAllowedLateNoopPseudo(unsigned Opc) {
+  switch (Opc) {
+  case Haydn::ADJCALLSTACKDOWN:
+  case Haydn::ADJCALLSTACKUP:
+  case Haydn::VAEND:
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool isExpandOwnedSemanticPseudo(unsigned Opc) {
+  switch (Opc) {
+  case Haydn::LOAD_ADDR:
+  case Haydn::PseudoCALL:
+  case Haydn::LIBCALL_SDIV:
+  case Haydn::LIBCALL_UDIV:
+  case Haydn::LIBCALL_SREM:
+  case Haydn::LIBCALL_UREM:
+  case Haydn::LIBCALL_MUL64:
+  case Haydn::LD32_POST_INC:
+  case Haydn::ST32_POST_INC:
+  case Haydn::LD64_POST_INC:
+  case Haydn::ST64_POST_INC:
+  case Haydn::VASTART:
+  case Haydn::VACOPY:
+  case Haydn::VAARG_I32:
+  case Haydn::VAARG_I64:
+  case Haydn::VAEND:
+  case Haydn::SETCBR_BEGIN:
+  case Haydn::SETCBR_END:
+  case Haydn::SET_HWLOOP:
+  case Haydn::SET_HWLOOP_REG:
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool isResidualExecutablePseudo(const MachineInstr &MI) {
+  if (MI.isBundle() || !MI.isPseudo())
+    return false;
+  if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isKill() ||
+      MI.isImplicitDef() || MI.isCFIInstruction() || MI.isInlineAsm() ||
+      MI.isPosition())
+    return false;
+  if (isRepresentationExpandPseudo(MI.getOpcode()))
+    return false;
+  if (isAllowedLateNoopPseudo(MI.getOpcode()))
+    return false;
+  unsigned Opc = MI.getOpcode();
+  if (Opc == TargetOpcode::COPY || Opc == TargetOpcode::SUBREG_TO_REG ||
+      Opc == TargetOpcode::INSERT_SUBREG ||
+      Opc == TargetOpcode::EXTRACT_SUBREG || Opc == TargetOpcode::REG_SEQUENCE)
+    return false;
+  return true;
 }
 
 } // namespace bundle

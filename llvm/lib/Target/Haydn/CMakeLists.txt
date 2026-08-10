@@ -54,7 +54,6 @@ add_llvm_target(HaydnCodeGen
   HaydnMCInstLower.cpp
   HaydnMachineFunctionInfo.cpp
   HaydnMachineScheduler.cpp
-  HaydnPostPipeliner.cpp
   HaydnPreRASchedStrategy.cpp
   HaydnSchedMutations.cpp
   HaydnPostRASchedStrategy.cpp

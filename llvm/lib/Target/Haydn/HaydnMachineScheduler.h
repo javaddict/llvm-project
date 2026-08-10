@@ -31,8 +31,7 @@
 
 namespace llvm {
 
-// Post-RA ScheduleDAGMI subclass. Overrides exitRegion to form bundles;
-// optionally tries Stage-0 PostPipeliner before list schedule.
+// Post-RA ScheduleDAGMI subclass. Overrides exitRegion to form bundles.
 class HaydnScheduleDAGMI : public ScheduleDAGMI {
 public:
   HaydnScheduleDAGMI(MachineSchedContext *C,
