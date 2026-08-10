@@ -114,8 +114,9 @@ TEST(HaydnMaterializeMultiOpcode, AltDescRecordsMemberForMaterialize) {
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM));
   ASSERT_EQ(S.Members.size(), 1u);
-  // LD32 sparse alts {LD32_S0, LD32_S1, 0}; prefer high → S1 first.
-  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::S_LW_WITH_IMM_P31_LOAD1);
+  // Prefer-high picks P32, not P31: a load reaches every entry now, and P32 is
+  // the highest. LOAD1 serves it, the same unit P31 would have used.
+  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::S_LW_WITH_IMM_P32_LOAD1);
 
   HaydnAlternateDescriptors AltDescs;
   MachineInstr *MI = fakeMI(0xABCD);
@@ -124,11 +125,11 @@ TEST(HaydnMaterializeMultiOpcode, AltDescRecordsMemberForMaterialize) {
 
   auto MaterializeOpc = selectedMaterializeOpcode(AltDescs, MI);
   ASSERT_TRUE(MaterializeOpc.has_value());
-  EXPECT_EQ(*MaterializeOpc, Haydn::S_LW_WITH_IMM_P31_LOAD1);
+  EXPECT_EQ(*MaterializeOpc, Haydn::S_LW_WITH_IMM_P32_LOAD1);
   // After setDesc, getSlotKind is placement authority
   // (AIEBaseMCFormats.cpp:66-75; no AltDescs slot side-map).
   EXPECT_EQ(Fmts.getSlotKind(*MaterializeOpc),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_P31));
+            MCSlotKind(MCSlotKind::Haydn_SLOT_P32));
 }
 
 TEST(HaydnMaterializeMultiOpcode, ThreeMembersStampIndependentKeys) {
@@ -200,10 +201,12 @@ TEST(HaydnMaterializeMultiOpcode, EnumerateAltsMatchSetDescCandidates) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
-  ASSERT_EQ(Alts.size(), 3u);
-  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::ADD32_P30_ALU0);
-  EXPECT_EQ(Alts[1].MemberOpcode, Haydn::ADD32_P31_ALU0);
-  EXPECT_EQ(Alts[2].MemberOpcode, Haydn::ADD32_P32_ALU0);
+  // Enumerated in placement order, which starts at the 2-entry positions.
+  // The set is what materialize may setDesc to; the order is not a contract.
+  EXPECT_EQ(Alts.size(), 7u);
+  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::ADD32_P20_ALU0);
+  for (const PlacementAlternative &A : Alts)
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
 
   // Any single tryAdd picks one of these three.
   CycleState S = makeProductCycleState();
@@ -230,9 +233,12 @@ TEST(HaydnMaterializeMultiOpcode, GetSlotKindIsPostCommitPlacement) {
   // Multi-slot logical has no fixed slot (alts path until setDesc).
   EXPECT_EQ(Fmts.getSlotKind(Haydn::ADD32), MCSlotKind());
   // Slot index adapter: Haydn_SLOT_S* are sequential 0/1/2.
-  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_P30), 0u);
-  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_P31), 1u);
-  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_P32), 2u);
+  // The slot-kind enum starts at the 2-entry positions, so the 3-entry ones
+  // begin at 2. A slot kind is not an entry index.
+  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_P20), 0u);
+  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_P30), 2u);
+  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_P31), 3u);
+  EXPECT_EQ(static_cast<unsigned>(MCSlotKind::Haydn_SLOT_P32), 4u);
 }
 
 // After setDesc, Bundle canAdd must accept committed members via getSlotKind
@@ -381,6 +387,9 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
   EXPECT_EQ(C->LogicalOpcode, Haydn::ADD32);
   EXPECT_EQ(C->MemberOpcode, Haydn::ADD32_P32_ALU0);
   EXPECT_TRUE(C->NeedsSetDesc);
+  // P32 is a 3-entry slot, so the plan is the 3-entry composite. The FID is
+  // derived from where the op landed; only an EMPTY cycle falls back to the
+  // default row.
   EXPECT_EQ(C->Plan.FID, FormatID::BundleE3);
   EXPECT_EQ(C->Plan.Bytes.Value, ProductEncodedBytesValue);
   EXPECT_TRUE(C->Plan.isProductLegal());
@@ -391,18 +400,20 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNOP) {
-  // FixupHwLoops deficit pad inserts bare NOP — S0-only alt → NOP_S0.
+  // FixupHwLoops deficit pad inserts a bare NOP. NOP has a member at every
+  // placement, so prefer-high puts it at P32 rather than P30.
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto C = commitLateProductCycle(Haydn::NOP, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->LogicalOpcode, Haydn::NOP);
-  EXPECT_EQ(C->MemberOpcode, Haydn::NOP_P30_ALU0);
+  EXPECT_EQ(Fmts.getSlotKind(C->MemberOpcode),
+            MCSlotKind(MCSlotKind::Haydn_SLOT_P32));
   EXPECT_TRUE(C->NeedsSetDesc);
   EXPECT_EQ(C->Plan.FID, FormatID::BundleE3);
 
   auto SetDesc = lateSingletonSetDescOpcode(Haydn::NOP, Fmts);
   ASSERT_TRUE(SetDesc.has_value());
-  EXPECT_EQ(*SetDesc, Haydn::NOP_P30_ALU0);
+  EXPECT_EQ(*SetDesc, C->MemberOpcode);
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleAlreadyMember) {
@@ -424,7 +435,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNoAltWrapOnly) {
     ASSERT_TRUE(C.has_value()) << "opc " << Opc;
     EXPECT_EQ(C->MemberOpcode, Opc);
     EXPECT_FALSE(C->NeedsSetDesc) << "opc " << Opc;
-    EXPECT_EQ(C->Plan.FID, FormatID::BundleE3);
+    EXPECT_EQ(C->Plan.FID, ProductFormatID);
     EXPECT_FALSE(lateSingletonSetDescOpcode(Opc, Fmts).has_value());
   }
 }
@@ -434,7 +445,9 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleBEQZ) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   auto C = commitLateProductCycle(Haydn::BEQZ, Fmts);
   ASSERT_TRUE(C.has_value());
-  EXPECT_EQ(C->MemberOpcode, Haydn::BEQZ_P30_ALU0);
+  // Prefer-high again: BEQZ reaches P32, so a bare branch lands there.
+  EXPECT_EQ(Fmts.getSlotKind(C->MemberOpcode),
+            MCSlotKind(MCSlotKind::Haydn_SLOT_P32));
   EXPECT_TRUE(C->NeedsSetDesc);
 }
 
