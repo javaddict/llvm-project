@@ -625,15 +625,20 @@ TEST(HaydnBundleTest, B41_GetFeasibleFormatMaskAfterAddAndReserve) {
   St.setOpcode(Haydn::S_SW_WITH_IMM);
   A0.setOpcode(Haydn::ADD32);
   A1.setOpcode(Haydn::ADD64);
+  // The frontier NARROWS as soon as a slot is taken: the occupied slot belongs
+  // to one composite and the other row stops covering it. Under Bundle128 the
+  // single row covered everything, so the mask never moved and the frontier
+  // was decorative.
   ASSERT_TRUE(B.canAdd(St.getOpcode()));
   B.add(&St);
-  EXPECT_EQ(B.getFeasibleFormatMask(), ProductFormatMask);
   EXPECT_EQ(B.getFeasibleFormatMask(),
             productFeasibleFormatMask(B.getOccupiedSlots()));
+  EXPECT_NE(B.getFeasibleFormatMask(), 0u);
 
   ASSERT_TRUE(B.canAdd(A0.getOpcode()));
   B.add(&A0);
-  EXPECT_EQ(B.getFeasibleFormatMask(), ProductFormatMask);
+  EXPECT_EQ(B.getFeasibleFormatMask(),
+            productFeasibleFormatMask(B.getOccupiedSlots()));
 
   // SMS reserve path: same frontier vocabulary.
   Bundle<MCInst> R(&Fmts);
@@ -641,8 +646,8 @@ TEST(HaydnBundleTest, B41_GetFeasibleFormatMaskAfterAddAndReserve) {
   R.reserveByOpcode(Haydn::ADD32);
   R.reserveByOpcode(Haydn::ADD32);
   EXPECT_EQ(R.getOccupiedSlots(), SlotBits(Haydn::SLOT_SET_E3));
-  EXPECT_EQ(R.getFeasibleFormatMask(), ProductFormatMask)
-      << "saturated Full still covers SLOT_SET_E3";
+  EXPECT_EQ(R.getFeasibleFormatMask(), formatIDBit(FormatID::BundleE3))
+      << "a saturated 3-entry occupancy can only be the 3-entry composite";
   EXPECT_FALSE(R.canAdd(Haydn::ADD32));
 }
 
@@ -656,12 +661,14 @@ TEST(HaydnBundleTest, B41_ResourceCycleThreeADD32KeepFullFrontier) {
   for (unsigned I = 0; I < 3; ++I) {
     ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32)) << "ADD32 #" << I;
     RC.reserveByOpcode(Haydn::ADD32);
-    EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask) << "after #" << I;
+    EXPECT_EQ(RC.getFeasibleFormatMask(),
+              productFeasibleFormatMask(RC.getOccupiedSlots()))
+        << "after #" << I;
   }
   EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_SET_E3));
   EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32))
-      << "fourth ADD32 must not fit once S0|S1|S2 reserved";
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+      << "fourth ADD32 must not fit once the 3-entry bundle is full";
+  EXPECT_EQ(RC.getFeasibleFormatMask(), formatIDBit(FormatID::BundleE3));
   // ADD64 is S1|S2 only — also saturated.
   EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD64));
 
@@ -673,7 +680,7 @@ TEST(HaydnBundleTest, B41_ResourceCycleThreeADD32KeepFullFrontier) {
   EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
   EXPECT_TRUE(RC.canReserveResources(&Desc));
   RC.reserveResources(&Desc);
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getFeasibleFormatMask(), formatIDBit(FormatID::BundleE3));
   EXPECT_NE(RC.getOccupiedSlots(), 0u);
 }
 
@@ -684,7 +691,7 @@ TEST(HaydnBundleTest, B41_PreRAProductFeasibleFormatMaskMatchesSolver) {
   EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT_SET_E3),
             productFeasibleFormatMask(Haydn::SLOT_SET_E3));
   EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT_P30),
-            ProductFormatMask);
+            formatIDBit(FormatID::BundleE3));
 }
 
 //===----------------------------------------------------------------------===//
@@ -738,7 +745,7 @@ TEST(HaydnBundleTest, B42_ResourceCycleLiveState_ThreeADD32Members) {
   }
   EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_SET_E3));
   // Product size-1: live mask still Full; occupancy rebuild agrees.
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getFeasibleFormatMask(), formatIDBit(FormatID::BundleE3));
   EXPECT_EQ(RC.getFeasibleFormatMask(),
             productFeasibleFormatMask(RC.getOccupiedSlots()));
   // Slot order S2 → S1 → S0 (same as HR tryAdd).
@@ -785,7 +792,7 @@ TEST(HaydnBundleTest, B42_MIDPathAgreesWithOpcodeAndClearResetsMask) {
   EXPECT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
   RC.reserveResources(&Desc);
   EXPECT_EQ(RC.getMemberCount(), 1u);
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getFeasibleFormatMask(), formatIDBit(FormatID::BundleE3));
   EXPECT_EQ(RC.getFeasibleFormatMask(), RC.getCycleState().FeasibleFormatMask);
 
   // Fill remaining two slots via opcode path.
@@ -814,7 +821,7 @@ TEST(HaydnBundleTest, B42_ResourceCycleLDLDMACPacksOneCycle) {
       << RC.getOccupiedSlots();
   RC.reserveByOpcode(Haydn::X2MULA32);
   EXPECT_EQ(RC.getMemberCount(), 3u);
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getFeasibleFormatMask(), formatIDBit(FormatID::BundleE3));
   EXPECT_EQ(RC.getFeasibleFormatMask(), RC.getCycleState().FeasibleFormatMask);
 }
 

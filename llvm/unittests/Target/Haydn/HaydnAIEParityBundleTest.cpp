@@ -73,8 +73,13 @@ TEST(HaydnAIEParityBundleTest, MetaDoesNotConsumeSlots) {
 TEST(HaydnAIEParityBundleTest, FormatAvailableAllSubsetsLikeAIEPacket) {
   // AIE PacketFormats: subsets covered by composite. Bundle128 = all 8.
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
-  for (SlotBits Combo = 0; Combo <= SLOT_SET_E3; ++Combo)
-    EXPECT_TRUE(Fmts.isFormatAvailable(Combo)) << "combo=" << Combo;
+  // AIE's single packet format made every subset available. Format E's two
+  // composites are mutually exclusive, so a mask mixing them is not a bundle.
+  for (SlotBits Combo = 0; Combo <= SLOT_MASK_ANY; ++Combo) {
+    const bool Fits = (Combo & ~SlotBits(SLOT_SET_E2)) == 0 ||
+                      (Combo & ~SlotBits(SLOT_SET_E3)) == 0;
+    EXPECT_EQ(Fmts.isFormatAvailable(Combo), Fits) << "combo=" << Combo;
+  }
 }
 
 TEST(HaydnAIEParityBundleTest, PacketFormatNameAndSizeAIEShape) {
@@ -170,14 +175,19 @@ TEST(HaydnAIEParityBundleTest, EveryPackedCycleIsProductPlan) {
 
 TEST(HaydnAIEParityBundleTest, PlanFromPacketFormatsMatchesLiveRow) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+  // The FID follows the occupancy now. Only the empty one falls back to the
+  // default row, because only then is there nothing to derive it from.
   for (SlotBits Occ :
-       {SlotBits(0), SlotBits(SLOT_P30), SlotBits(SLOT_P31 | SLOT_P32),
+       {SlotBits(SLOT_P30), SlotBits(SLOT_P31 | SLOT_P32),
         SlotBits(SLOT_SET_E3)}) {
     auto P = planFromPacketFormats(Fmts.getPacketFormats(), Occ);
     ASSERT_TRUE(P.has_value()) << "occ=" << Occ;
-    EXPECT_EQ(P->FID, ProductFormatID);
+    EXPECT_EQ(P->FID, FormatID::BundleE3) << "occ=" << Occ;
     EXPECT_EQ(P->Bytes.Value, ProductEncodedBytesValue);
   }
+  auto Empty = planFromPacketFormats(Fmts.getPacketFormats(), 0);
+  ASSERT_TRUE(Empty.has_value());
+  EXPECT_EQ(Empty->FID, ProductFormatID);
 }
 
 //===----------------------------------------------------------------------===//
@@ -276,17 +286,21 @@ TEST(HaydnAIEParityBundleTest, ProductFormatIdIsSingletonEnum) {
   EXPECT_EQ(B->Value, ProductEncodedBytesValue);
 }
 
-TEST(HaydnAIEParityBundleTest, SlotWindowBitsSum128AIEComposite) {
-  // AIE composite size from field geometry; Haydn Full = 48+40+40.
-  EXPECT_EQ(P30EncodedBits.Value + P31EncodedBits.Value +
-                P32EncodedBits.Value,
+TEST(HaydnAIEParityBundleTest, SlotWindowBitsPlusHeaderAndSlackIsTheBundle) {
+  // AIE's composite size is the sum of its field geometry. Haydn's is NOT:
+  // format E's windows leave the header and a spare bit outside them, so the
+  // identity has to name both. Bundle128's 48+40+40 tiled the word exactly,
+  // which is the only reason a bare sum ever worked here.
+  const unsigned Windows = P30EncodedBits.Value + P31EncodedBits.Value +
+                           P32EncodedBits.Value;
+  EXPECT_EQ(Windows + BundleEHeaderBits + BundleE3UnusedBits,
             ProductEncodedBitsValue);
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   unsigned Sum = 0;
   for (auto K : {MCSlotKind::Haydn_SLOT_P30, MCSlotKind::Haydn_SLOT_P31,
                  MCSlotKind::Haydn_SLOT_P32})
     Sum += Fmts.getSlotInfo(K)->getSize();
-  EXPECT_EQ(Sum, 128u);
+  EXPECT_EQ(Sum, Windows);
 }
 
 //===----------------------------------------------------------------------===//
