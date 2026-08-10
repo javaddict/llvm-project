@@ -7,8 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // PacketFormats lookup helpers and the neutral ObjectEncodingProfile /
-// BundleFormatRow registry. Production profile is E96 only; synthetic short
-// families are test-only and never product-selectable.
+// BundleFormatRow registry. Production profile is E96 only. Non-product
+// multi-length fixtures live in HaydnTestEncodingProfileProvider (test
+// support only) and are never product-selectable.
 //
 //===----------------------------------------------------------------------===//
 
@@ -61,7 +62,7 @@ unsigned PacketFormats::getNumFormats() const {
 }
 
 //===----------------------------------------------------------------------===//
-// Neutral registry tables
+// Neutral registry tables (production E96 only)
 //===----------------------------------------------------------------------===//
 //
 // Parcel sizes live only in these row descriptors. Call sites use
@@ -72,27 +73,14 @@ namespace {
 // Header predicate handles (stable IDs for later generated decode tables).
 constexpr HeaderPredicateID HP_E96_TwoEntry = 1;
 constexpr HeaderPredicateID HP_E96_ThreeEntry = 2;
-constexpr HeaderPredicateID HP_SynthA_Wide = 0x8001;
-constexpr HeaderPredicateID HP_SynthA_Narrow = 0x8002;
-constexpr HeaderPredicateID HP_SynthB_Tiny = 0x8003;
 
 // Phase transition handles (E96 reduces to a single alignment phase today).
 constexpr PhaseTransitionID PT_E96_Default = 1;
-constexpr PhaseTransitionID PT_Synth = 0x8001;
 
 // Production E96 row sizes: one fixed Format E family, 96-bit / 12-byte parcel,
 // with two internal entry geometries selected by header entry_num.
 constexpr EncodedBytes E96ParcelBytes{12};
 constexpr EncodedBits E96ParcelBits{96};
-
-// Synthetic test-only sizes (must differ from E96 and from each other so
-// registry iteration cannot hard-code a single parcel width).
-constexpr EncodedBytes SynthAWideBytes{8};
-constexpr EncodedBits SynthAWideBits{64};
-constexpr EncodedBytes SynthANarrowBytes{8};
-constexpr EncodedBits SynthANarrowBits{64};
-constexpr EncodedBytes SynthBTinyBytes{4};
-constexpr EncodedBits SynthBTinyBits{32};
 
 // Product rows (immutable production set).
 const BundleFormatRowDesc ProductRows[] = {
@@ -122,65 +110,12 @@ const ObjectEncodingProfileDesc ProductionProfile = {
     /*PaddingPolicy=*/1,
     /*CostPolicy=*/1,
     /*StreamPhases=*/1,
-    /*ELFFlagsValue=*/0,
+    /*ELFFlagsValue=*/EF_HAYDN_E96,
     /*IsProduct=*/true,
-};
-
-// Synthetic non-product rows / families (unit tests only).
-const BundleFormatRowDesc SyntheticRows[] = {
-    // Two equal-length rows with different entry counts (family SynthShortA).
-    {BundleFormatRowID::SynthA_RowWide, BundleFormatID::SynthShortA,
-     "SynthA_RowWide", SynthAWideBits, SynthAWideBytes, HP_SynthA_Wide, PT_Synth,
-     /*EntryCount=*/2, /*TopPadBits=*/0, /*IsProduct=*/false},
-    {BundleFormatRowID::SynthA_RowNarrow, BundleFormatID::SynthShortA,
-     "SynthA_RowNarrow", SynthANarrowBits, SynthANarrowBytes, HP_SynthA_Narrow,
-     PT_Synth, /*EntryCount=*/1, /*TopPadBits=*/0, /*IsProduct=*/false},
-    // Unequal length vs SynthShortA (family SynthShortB).
-    {BundleFormatRowID::SynthB_RowTiny, BundleFormatID::SynthShortB,
-     "SynthB_RowTiny", SynthBTinyBits, SynthBTinyBytes, HP_SynthB_Tiny, PT_Synth,
-     /*EntryCount=*/1, /*TopPadBits=*/0, /*IsProduct=*/false},
-};
-
-const BundleFormatRowDesc SynthARows[] = {
-    SyntheticRows[0],
-    SyntheticRows[1],
-};
-
-const BundleFormatRowDesc SynthBRows[] = {
-    SyntheticRows[2],
-};
-
-const BundleFormatDesc SyntheticFormats[] = {
-    {BundleFormatID::SynthShortA, "SynthShortA",
-     ArrayRef<BundleFormatRowDesc>(SynthARows),
-     /*IsProduct=*/false, /*StableOrdinal=*/1},
-    {BundleFormatID::SynthShortB, "SynthShortB",
-     ArrayRef<BundleFormatRowDesc>(SynthBRows),
-     /*IsProduct=*/false, /*StableOrdinal=*/2},
-};
-
-const BundleFormatID SyntheticPermittedFamilies[] = {
-    BundleFormatID::SynthShortA,
-    BundleFormatID::SynthShortB,
-};
-
-const ObjectEncodingProfileDesc SyntheticTestProfile = {
-    ObjectEncodingProfileID::TestSyntheticMulti,
-    "TestSyntheticMulti",
-    ArrayRef<BundleFormatID>(SyntheticPermittedFamilies),
-    /*DecodeDispatch=*/0x8001,
-    /*PaddingPolicy=*/0x8001,
-    /*CostPolicy=*/0x8001,
-    /*StreamPhases=*/0x8001,
-    /*ELFFlagsValue=*/0,
-    /*IsProduct=*/false,
 };
 
 const BundleFormatRowDesc *findRow(BundleFormatRowID ID) {
   for (const BundleFormatRowDesc &R : ProductRows)
-    if (R.Row == ID)
-      return &R;
-  for (const BundleFormatRowDesc &R : SyntheticRows)
     if (R.Row == ID)
       return &R;
   return nullptr;
@@ -188,9 +123,6 @@ const BundleFormatRowDesc *findRow(BundleFormatRowID ID) {
 
 const BundleFormatDesc *findFamily(BundleFormatID ID) {
   for (const BundleFormatDesc &F : ProductFormats)
-    if (F.Format == ID)
-      return &F;
-  for (const BundleFormatDesc &F : SyntheticFormats)
     if (F.Format == ID)
       return &F;
   return nullptr;
@@ -210,8 +142,6 @@ const ObjectEncodingProfileDesc *
 getObjectEncodingProfile(ObjectEncodingProfileID ID) {
   if (ID == ObjectEncodingProfileID::E96)
     return &ProductionProfile;
-  if (ID == ObjectEncodingProfileID::TestSyntheticMulti)
-    return &SyntheticTestProfile;
   return nullptr;
 }
 
@@ -229,14 +159,6 @@ ArrayRef<BundleFormatRowDesc> getProductBundleFormatRows() {
 
 ArrayRef<BundleFormatDesc> getProductBundleFormats() {
   return ArrayRef<BundleFormatDesc>(ProductFormats);
-}
-
-ArrayRef<BundleFormatRowDesc> getSyntheticTestBundleFormatRows() {
-  return ArrayRef<BundleFormatRowDesc>(SyntheticRows);
-}
-
-ArrayRef<BundleFormatDesc> getSyntheticTestBundleFormats() {
-  return ArrayRef<BundleFormatDesc>(SyntheticFormats);
 }
 
 std::optional<EncodedBytes> encodedBytesOf(BundleFormatRowID Row) {

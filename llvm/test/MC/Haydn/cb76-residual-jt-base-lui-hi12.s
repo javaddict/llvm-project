@@ -1,6 +1,4 @@
 # REQUIRES: haydn-registered-target
-# Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-# XFAIL: *
 // CHECK: {{.*}}0: 07 0a 32 00 00 00 00 00 00 00 00 00  	{ 		lui	r3, <?>; 	nop }
 // CHECK: {{.*}}c: 07 0f 32 03 00 00 00 00 00 00 00 00  	{ 		addi32	r3, r3, <?>; 	nop }
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
@@ -47,7 +45,7 @@
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
 # RELOCS-NEXT:     0x0 R_HAYDN_HI12 jt_table 0x0
-# RELOCS-NEXT:     0x10 R_HAYDN_LO20 jt_table 0x0
+# RELOCS-NEXT:     0xC R_HAYDN_LO20 jt_table 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 
@@ -68,7 +66,7 @@
 
 # ELF: <_start>:
 # ELF: 10000: {{.*}} lui{{.*}} r3,
-# ELF: 10010: {{.*}} addi32{{(_w)?}}{{.*}} r3, r3,
+# ELF: 1000c: {{.*}} addi32{{(_w)?}}{{.*}} r3, r3,
 
     .section .text
     .globl _start

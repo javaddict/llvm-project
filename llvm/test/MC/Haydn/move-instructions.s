@@ -18,23 +18,23 @@
 // CHECK: { sra32r r2, r3, r4 } // encoding: [0x07,0xab,0x21,0x43,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { sra32 r5, r6, r7 } // encoding: [0x07,0x8b,0x51,0x76,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { sra64 d0, d0, r9 } // encoding: [0x07,0x0b,0x06,0x90,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// ROUNDTRIP: {{.*}}0: 07 44 00 01 00 00 00 00 00 00 00 00 { move32 r0, r1; nop }
-// ROUNDTRIP: {{.*}}c: 07 44 50 06 00 00 00 00 00 00 00 00 { move32 r5, r6; nop }
-// ROUNDTRIP: {{.*}}18: 07 44 c0 00 00 00 00 00 00 00 00 00 { move32 r12, r0; nop }
+// ROUNDTRIP: {{.*}}0: 07 44 00 01 00 00 00 00 00 00 00 00 { nop; move32 r0, r1 }
+// ROUNDTRIP: {{.*}}c: 07 44 50 06 00 00 00 00 00 00 00 00 { nop; move32 r5, r6 }
+// ROUNDTRIP: {{.*}}18: 07 44 c0 00 00 00 00 00 00 00 00 00 { nop; move32 r12, r0 }
 // ROUNDTRIP: {{.*}}24: 07 00 00 00 00 00 00 00 00 00 00 00 { nop }
-// ROUNDTRIP: {{.*}}30: 07 0a 02 00 00 00 00 00 00 00 00 00 { lui r0, 0; nop }
-// ROUNDTRIP: {{.*}}3c: 07 0a 72 00 2a 00 00 00 00 00 00 00 { lui r7, 42; nop }
-// ROUNDTRIP: {{.*}}48: 07 0a 82 00 ff 0f 00 00 00 00 00 00 { lui r8, 4095; nop }
-// ROUNDTRIP: {{.*}}54: 07 0a c2 00 00 08 00 00 00 00 00 00 { lui r12, 2048; nop }
-// ROUNDTRIP: {{.*}}60: 07 4b 01 00 00 00 00 00 00 00 00 00 { xor32 r0, r0, r0; nop }
-// ROUNDTRIP: {{.*}}6c: 07 4b 51 55 00 00 00 00 00 00 00 00 { xor32 r5, r5, r5; nop }
-// ROUNDTRIP: {{.*}}78: 07 4b c1 cc 00 00 00 00 00 00 00 00 { xor32 r12, r12, r12; nop }
-// ROUNDTRIP: {{.*}}84: 07 0f 06 01 32 00 00 00 00 00 00 00 { addi32s r0, r1, 100; nop }
-// ROUNDTRIP: {{.*}}90: 07 0f 2e 03 19 00 00 00 00 00 00 00 { subi32s r2, r3, 50; nop }
-// ROUNDTRIP: {{.*}}9c: 07 06 03 01 01 00 00 00 00 00 00 00 { srai32r r0, r1, 1; nop }
-// ROUNDTRIP: {{.*}}a8: 07 ab 21 43 00 00 00 00 00 00 00 00 { sra32r r2, r3, r4; nop }
-// ROUNDTRIP: {{.*}}b4: 07 8b 51 76 00 00 00 00 00 00 00 00 { sra32 r5, r6, r7; nop }
-// ROUNDTRIP: {{.*}}c0: 07 0b 06 90 00 00 00 00 00 00 00 00 { sra64 d0, d0, r9; nop }
+// ROUNDTRIP: {{.*}}30: 07 0a 02 00 00 00 00 00 00 00 00 00 { nop; lui r0, 0 }
+// ROUNDTRIP: {{.*}}3c: 07 0a 72 00 2a 00 00 00 00 00 00 00 { nop; lui r7, 42 }
+// ROUNDTRIP: {{.*}}48: 07 0a 82 00 ff 0f 00 00 00 00 00 00 { nop; lui r8, 4095 }
+// ROUNDTRIP: {{.*}}54: 07 0a c2 00 00 08 00 00 00 00 00 00 { nop; lui r12, 2048 }
+// ROUNDTRIP: {{.*}}60: 07 4b 01 00 00 00 00 00 00 00 00 00 { nop; xor32 r0, r0, r0 }
+// ROUNDTRIP: {{.*}}6c: 07 4b 51 55 00 00 00 00 00 00 00 00 { nop; xor32 r5, r5, r5 }
+// ROUNDTRIP: {{.*}}78: 07 4b c1 cc 00 00 00 00 00 00 00 00 { nop; xor32 r12, r12, r12 }
+// ROUNDTRIP: {{.*}}84: 07 0f 06 01 32 00 00 00 00 00 00 00 { nop; addi32s r0, r1, 100 }
+// ROUNDTRIP: {{.*}}90: 07 0f 2e 03 19 00 00 00 00 00 00 00 { nop; subi32s r2, r3, 50 }
+// ROUNDTRIP: {{.*}}9c: 07 06 03 01 01 00 00 00 00 00 00 00 { nop; srai32r r0, r1, 1 }
+// ROUNDTRIP: {{.*}}a8: 07 ab 21 43 00 00 00 00 00 00 00 00 { nop; sra32r r2, r3, r4 }
+// ROUNDTRIP: {{.*}}b4: 07 8b 51 76 00 00 00 00 00 00 00 00 { nop; sra32 r5, r6, r7 }
+// ROUNDTRIP: {{.*}}c0: 07 0b 06 90 00 00 00 00 00 00 00 00 { nop; sra64 d0, d0, r9 }
 # Role: object — Decoder bundle-boundary gap CLOSED: the 4-byte SRA64 parcel (encoding [0x35,0x25,0xc0,0x59]) now re-syncs correctly when it lands at an.
 
 # Decoder bundle-boundary gap CLOSED: the 4-byte SRA64 parcel (encoding
@@ -45,7 +45,7 @@
 # Move, immediate, and NOP instruction test.
 # Covers:
 # MOVE32: GPR32 register-to-register move (2-source ALU32 form)
-# NOP: no-operation (all-zeros encoding)
+# NOP: product idle parcel (header 0x07 + zero entries, EncodedBytes=12)
 # LUI: load upper immediate (uimm12 immediate, post-ISA-43)
 # XOR32 rN,rN,rN: zero a GPR register via x^x=0 (-Z canonical;
 # ZERO_GPR : FmtI<0x28> was retired)
@@ -68,8 +68,9 @@ move32 r5, r6
 move32 r12, r0
 
 #===----------------------------------------------------------------------===
-# NOP — no-operation
-# Encoded as all-zeros (ADD32 rd=R0, rs1=R0, rs2=R0).
+# NOP — product idle parcel (Format E EncodedBytes=12).
+# Live encoding is header 0x07 + zero entries (see flex-nop.s).
+# Fail-closed: do not claim all-zero bytes as the product NOP.
 #===----------------------------------------------------------------------===
 
 nop

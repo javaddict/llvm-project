@@ -332,10 +332,33 @@ def build_catalog(data: Dict[str, Any]) -> Catalog:
                         seen_opc[opc] = logical
 
                         active: List[Tuple[str, str]] = []
+                        # Precompute mapping for dual-dest recovery (src1 empty).
+                        map_norm = {
+                            str(k): normalize_name(str(v)) if v is not None else ""
+                            for k, v in mapping.items()
+                        }
+                        dual_dest_mac = (
+                            map_norm.get("dest1", "") == "rtd1"
+                            and map_norm.get("dest2", "") == "rtd2"
+                            and map_norm.get("src2", "") == "rsd2"
+                            and not map_norm.get("src1", "")
+                        )
                         for of in operands:
                             # mapping rows carry role keys with selected alias text
                             raw = mapping.get(of.role, "")
                             active_alias = normalize_name(str(raw)) if raw is not None else ""
+                            # Dual-dest MAC RRR: golden leaves src1 empty but dual-source
+                            # product needs rsd1 on the wire (4 DR print matches catalog).
+                            if (
+                                not active_alias
+                                and dual_dest_mac
+                                and of.role.lower() == "src1"
+                                and of.aliases
+                            ):
+                                for a in of.aliases:
+                                    if str(a).strip().lower() == "rsd1":
+                                        active_alias = normalize_name(str(a))
+                                        break
                             active.append((of.role, active_alias))
 
                         symbol = (
@@ -919,8 +942,11 @@ UIMM20_LOGICALS = frozenset({
     "ANDI32", "ORI32", "XORI32",
 })
 SIMM12_LOGICALS = frozenset({
+    # Cond branches: signed PC-relative imm12.
     "BEQ", "BNE", "BGE", "BGEU", "BGEZ", "BLT", "BLTZ", "BLTU",
     "BEQZ", "BNEZ",
+    # JALR: signed rs-relative byte offset (Shift=0); shared RI12 field.
+    "JALR",
 })
 
 
@@ -985,15 +1011,21 @@ def field_operand_td(
     elif w <= 16:
         ty = "uimm16"
     else:
+        # Full 32-bit immediates (MOVEI_H/L I32 type): residual uses
+        # simm32_movei. Mapping these to uimm20 truncated encode/print to
+        # 20 bits (objdump showed 0x12345678 → 284280) and BundleSim golden
+        # checks failed on movei_h high half.
+        if w >= 32 or logu in ("MOVEI_H", "MOVEI_L"):
+            ty = "simm32_movei"
         # RI20+: ADDI/SUBI/JAL are simm20; AND/OR/XOR are uimm20 (ZEXT).
-        if logu in SIMM20_LOGICALS or "simm" in of.role.lower() or any(
+        elif logu in SIMM20_LOGICALS or "simm" in of.role.lower() or any(
             "simm" in a.lower() for a in of.aliases
         ):
             ty = "simm20"
         elif logu in UIMM20_LOGICALS:
             ty = "uimm20"
         else:
-            # Default unsigned for unknown wide immediates (LUI-style / MOVEI).
+            # Default unsigned for unknown wide immediates (LUI-style).
             ty = "uimm20"
     return name, f"{ty}:${name}", str(w)
 
@@ -1095,7 +1127,23 @@ def emit_members_td_inc(cat: Catalog) -> str:
             else:
                 asm_ops = ", ".join(f"${n}" for n, _, _, _, v in bit_names if v)
         else:
-            asm_ops = ", ".join(f"${n}" for n, _, _, _, v in bit_names if v)
+            # Dual-dest MAC RRR: print catalog/ISA order
+            # rtd1, rtd2, rsd1, rsd2 (not wire field order dest1,src1,src2,dest2).
+            names_active = [(n, i) for i, (n, _, _, _, v) in enumerate(bit_names) if v]
+            by = {n.split("_")[0]: (n, i) for n, i in names_active}
+            dual_order = ["dest1", "dest2", "src1", "src2"]
+            if all(k in by for k in dual_order) and len(names_active) == 4:
+                op_frags = []
+                asm_names = []
+                for role in dual_order:
+                    n, i = by[role]
+                    asm_names.append(n)
+                    # Recover class from existing frag list by role index in bit_names
+                    # Field was classified as DR for these roles.
+                    op_frags.append(f"DR64:${n}")
+                asm_ops = ", ".join(f"${n}" for n in asm_names)
+            else:
+                asm_ops = ", ".join(f"${n}" for n, _, _, _, v in bit_names if v)
 
         ins = ", ".join(op_frags) if op_frags else ""
         asm = rec.logical.lower()

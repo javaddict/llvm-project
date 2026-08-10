@@ -7,7 +7,7 @@
 
 # REGRESSION: `{ add64 d0, d1, d2 }` must assemble to a 12-byte Format E parcel
 # and disassemble back to the same mnemonic + operands.
-// CHECK: {{.*}}0: 07 0b 04 21 00 00 00 00 00 00 00 00 { add64 d0, d1, d2; nop }
+// CHECK: {{.*}}0: 07 0b 04 21 00 00 00 00 00 00 00 00 { nop; add64 d0, d1, d2 }
 #
 // COM: CHECK: %t.o:	file format elf32-unknown
 # Companion flex-bytes-alu64.s is the decoder byte-oracle (hand-derived s1

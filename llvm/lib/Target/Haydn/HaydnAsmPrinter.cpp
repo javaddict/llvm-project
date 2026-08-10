@@ -383,10 +383,19 @@ static MachineInstr *getLastRealInstr(MachineBasicBlock *MBB) {
       continue;
     if (MI.isDebugInstr())
       continue;
-    // Skip CodeGen-only / zero-size pseudos. A BUNDLE header is not a pseudo.
- // : SETCBR/Loop*/LOADI32 residuals are fatal at emit, not last-real.
-    if (!MI.isBundle() && MI.isPseudo())
+    // BUNDLE header is the VLIW unit for inclusive END. Representation
+    // expands emit real bytes — count them. Residual executable pseudos fatal.
+    if (!MI.isBundle() && MI.isPseudo()) {
+      if (haydn::bundle::isResidualCycleFormingPseudo(MI.getOpcode()) ||
+          haydn::bundle::isResidualExecutablePseudo(MI)) {
+        fatalResidualCyclePseudo(
+            &MI, "getLastRealInstr: residual executable pseudo (must be "
+                 "exact-committed before layout; no silent skip for END)");
+      }
+      if (haydn::bundle::isRepresentationExpandPseudo(MI.getOpcode()))
+        return &MI;
       continue;
+    }
     return &MI;
   }
   return nullptr;
@@ -546,9 +555,14 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         ChildInst->addOperand(MCOperand::createReg(Rs));
         ChildInst->addOperand(MCOperand::createImm(0));
       } else if (I->isPseudo()) {
-        // Other CodeGen-only / zero-size pseudos: no composite child.
-        // Residual cycle-forming already failed above.
-        continue;
+        // Residual cycle-forming already failed above. Presentation expands
+        // (B/RET/BR_JT/PseudoCALLIndirect) are handled in the cases above.
+        // Any other bundled isPseudo is an unexpanded executable residual —
+        // never silently drop it from a committed cycle.
+        fatalResidualCyclePseudo(
+            &*I, "bundled residual executable pseudo (must be exact-committed "
+                 "real member or typed representation expand before "
+                 "AsmPrinter; no silent skip)");
       } else {
         // Desc-only lower (AIE serialize-only). Placement is post-setDesc
         // member identity / Bundle SlotMap (AIEBaseMCFormats.cpp:66-75).
@@ -597,38 +611,41 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       report_fatal_error(Twine(OS.str()));
     }
 
-    // Product composite: prefer durable BUNDLE-root row imm, else Format E
-    // PacketFormats opcode. Legacy full-width is never product-selected.
-    unsigned CompositeOpc = Format->Opcode;
+    // Product composite: durable BUNDLE-root BundleFormatRowID is mandatory.
+    // No PacketFormats / member-count invent when the stamp is missing.
+    unsigned CompositeOpc = 0;
     unsigned NumEntries = 2;
-    if (auto Row = haydn::bundle::getBundleRowID(*MI)) {
-      if (*Row == haydn::format::BundleFormatRowID::E96ThreeEntry) {
-        CompositeOpc = Haydn::BUNDLE_E96_THREE_ENTRY;
-        NumEntries = 3;
-      } else if (*Row == haydn::format::BundleFormatRowID::E96TwoEntry) {
-        CompositeOpc = Haydn::BUNDLE_E96_TWO_ENTRY;
-        NumEntries = 2;
-      } else {
-        report_fatal_error(
-            "HaydnAsmPrinter: non-product BundleFormatRowID on BUNDLE root",
-            /*GenCrashDiag=*/false);
-      }
-    } else if (CompositeOpc == Haydn::BUNDLE_E96_THREE_ENTRY) {
+    auto Row = haydn::bundle::getBundleRowID(*MI);
+    if (!Row) {
+      report_fatal_error(
+          "HaydnAsmPrinter: BUNDLE missing BundleFormatRowID — "
+          "refuse member-count / PacketFormats composite reselection",
+          /*GenCrashDiag=*/false);
+    }
+    if (*Row == haydn::format::BundleFormatRowID::E96ThreeEntry) {
+      CompositeOpc = Haydn::BUNDLE_E96_THREE_ENTRY;
       NumEntries = 3;
-    } else if (CompositeOpc == Haydn::BUNDLE_E96_TWO_ENTRY) {
+    } else if (*Row == haydn::format::BundleFormatRowID::E96TwoEntry) {
+      CompositeOpc = Haydn::BUNDLE_E96_TWO_ENTRY;
       NumEntries = 2;
     } else {
-      // Transitional PacketFormats may fall back to a product representative
-      // while residual SLOT occupancy is active — force E2/E3 by member count.
+      report_fatal_error(
+          "HaydnAsmPrinter: non-product BundleFormatRowID on BUNDLE root",
+          /*GenCrashDiag=*/false);
+    }
+    if (auto Comp = haydn::bundle::getBundleCompletionID(*MI)) {
       const unsigned RealMembers =
           static_cast<unsigned>(Bundle.getInstrs().size());
-      if (RealMembers >= 3) {
-        CompositeOpc = Haydn::BUNDLE_E96_THREE_ENTRY;
-        NumEntries = 3;
-      } else {
-        CompositeOpc = Haydn::BUNDLE_E96_TWO_ENTRY;
-        NumEntries = 2;
-      }
+      if (!haydn::bundle::isStubCompletion(*Comp) &&
+          !haydn::bundle::isProductLegalCompletion(*Comp))
+        report_fatal_error(
+            "HaydnAsmPrinter: unknown CompletionStateID on BUNDLE root",
+            /*GenCrashDiag=*/false);
+      if (*Comp != haydn::bundle::selectCompletionFor(*Row, RealMembers))
+        report_fatal_error(
+            "HaydnAsmPrinter: BUNDLE CompletionStateID does not match "
+            "row and real member count — refuse filler reselection",
+            /*GenCrashDiag=*/false);
     }
     assert((CompositeOpc == Haydn::BUNDLE_E96_TWO_ENTRY ||
             CompositeOpc == Haydn::BUNDLE_E96_THREE_ENTRY) &&
@@ -661,15 +678,8 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       }
       if (!Instr) {
         Instr = OutContext.createMCInst();
-        unsigned NopOpc = Haydn::NOP;
-        MCSlotKind Residual =
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(K));
-        if (const MCSlotInfo *SI = Fmts.getSlotInfo(Residual)) {
-          unsigned TableNop = SI->getNOPOpcode();
-          if (TableNop != 0)
-            NopOpc = TableNop;
-        }
-        Instr->setOpcode(NopOpc);
+        // Product pad is logical NOP only — no residual NOP table reselection.
+        Instr->setOpcode(Haydn::NOP);
       }
       MCB.addOperand(MCOperand::createInst(Instr));
     }
@@ -789,7 +799,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // than re-introduce late layout growth.
     report_fatal_error(
         "HaydnAsmPrinter: VASTART/VACOPY must be expanded by "
-        "HaydnExpandPseudos before pack (enable -haydn-enable-expand-pseudos)");
+        "HaydnExpandPseudos before pack (ExpandPseudos is unconditional)");
     return;
   case Haydn::MOV_GPR_TO_DR64:
   case Haydn::MOV_DR64_TO_GPR:
@@ -797,13 +807,14 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   case Haydn::LIBCALL_SDIV:
   case Haydn::LIBCALL_UDIV:
   case Haydn::LIBCALL_SREM:
-  case Haydn::LIBCALL_UREM: {
-    // These pseudo instructions should have been expanded by the legalizer/selector.
-    // For MVB, they're no-ops since DR64/GPR32 transfers are handled by G_MERGE_VALUES
-    // and libcalls are emitted as normal function calls.
-    // Skip them to avoid encoding issues.
-    return;
-  }
+  case Haydn::LIBCALL_UREM:
+    // Semantic multi-MI residuals: ExpandPseudos / selector must own them
+    // before pack. Silent skip turned missing moves/libcalls into idle
+    // (CG-06 / AR0). Fail closed at the late boundary.
+    report_fatal_error(
+        "HaydnAsmPrinter: residual cross-bank or LIBCALL_* pseudo — expand "
+        "before pack (no silent drop)",
+        /*GenCrashDiag=*/false);
   case Haydn::SETCBR_BEGIN:
   case Haydn::SETCBR_END:
  // : ExpandPseudos lowers SETCBR_* → CSRW_W before post-RA pack so the
@@ -844,9 +855,21 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         MI, "must be exact-committed real MIs before AsmPrinter "
             "(shared residual law; missing specific printer case)");
 
-  // Skip remaining pseudo instructions that don't have expansions
+  if (haydn::bundle::isResidualExecutablePseudo(*MI)) {
+    std::string Msg;
+    raw_string_ostream OS(Msg);
+    OS << "HaydnAsmPrinter: residual executable pseudo — expand before "
+          "pack (one-to-one ban; only typed representation/meta allowed). "
+          "MI:\n";
+    MI->print(OS);
+    report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+  }
   if (MI->isPseudo()) {
-    return;
+    std::string Msg;
+    raw_string_ostream OS(Msg);
+    OS << "HaydnAsmPrinter: unhandled pseudo at emit (no silent drop). MI:\n";
+    MI->print(OS);
+    report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
   }
 
   // Regular instruction emission

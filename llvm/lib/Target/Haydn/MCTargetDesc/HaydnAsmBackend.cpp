@@ -9,10 +9,12 @@
 #include "HaydnAsmBackend.h"
 #include "HaydnFixupKinds.h"
 #include "HaydnRelocLayout.h"
+#include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCValue.h"
@@ -145,7 +147,9 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       return;
     }
     // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
-    HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FI.FieldLsb);
+    // WIDE_CallSImm20 FieldLsb is mode/entry-dependent (E2 e0 vs E3 e0/e1).
+    const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, Data);
+    HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FieldLsb);
     return;
   }
 
@@ -212,6 +216,16 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
 std::unique_ptr<MCObjectTargetWriter>
 HaydnAsmBackend::createObjectTargetWriter() const {
   return createHaydnELFObjectWriter();
+}
+
+bool HaydnAsmBackend::finishLayout() const {
+  if (!Asm)
+    return false;
+  const uint32_t Flags =
+      haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
+  assert(Flags != 0 && "E96 product profile must allocate nonzero e_flags");
+  static_cast<ELFObjectWriter &>(Asm->getWriter()).setELFHeaderEFlags(Flags);
+  return false;
 }
 
 bool HaydnAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,

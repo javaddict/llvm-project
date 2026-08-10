@@ -51,6 +51,9 @@ public:
   std::unique_ptr<MCObjectTargetWriter>
   createObjectTargetWriter() const override;
 
+  /// Stamp production E96 ELF e_flags on every object (llvm-mc and llc).
+  bool finishLayout() const override;
+
 private:
   // Map a compressed opcode to its 32-bit equivalent.
   // Returns the original opcode if no relaxation mapping exists.

@@ -1,6 +1,36 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
 # Role: object — Comprehensive branch instruction test.
+# Converted from parse-only to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+
+# CHECK: {{.*}}0: 07 0d 04 01 00 00 00 00 00 00 00 00{{.*}}beq
+# CHECK: {{.*}}c: 07 0d 24 03 06 00 00 00 00 00 00 00{{.*}}beq
+# CHECK: {{.*}}18: 07 0d 46 05 00 00 00 00 00 00 00 00{{.*}}bne
+# CHECK: {{.*}}24: 07 0d 66 07 ee 0f 00 00 00 00 00 00{{.*}}bne
+# CHECK: {{.*}}30: 07 0d 88 09 00 00 00 00 00 00 00 00{{.*}}bge
+# CHECK: {{.*}}3c: 07 0d a8 0b e2 0f 00 00 00 00 00 00{{.*}}bge
+# CHECK: {{.*}}48: 07 0d cc 00 00 00 00 00 00 00 00 00{{.*}}bgeu
+# CHECK: {{.*}}54: 07 0d 1c 02 d6 0f 00 00 00 00 00 00{{.*}}bgeu
+# CHECK: {{.*}}60: 07 0d 3a 04 00 00 00 00 00 00 00 00{{.*}}blt
+# CHECK: {{.*}}6c: 07 0d 5a 06 ca 0f 00 00 00 00 00 00{{.*}}blt
+# CHECK: {{.*}}78: 07 0d 7e 08 00 00 00 00 00 00 00 00{{.*}}bltu
+# CHECK: {{.*}}84: 07 0d 9e 0a be 0f 00 00 00 00 00 00{{.*}}bltu
+# CHECK: {{.*}}90: 07 0a 18 00 00 00 00 00 00 00 00 00{{.*}}beqz
+# CHECK: {{.*}}9c: 07 0a 28 00 b2 0f 00 00 00 00 00 00{{.*}}beqz
+# CHECK: {{.*}}a8: 07 0a 3a 00 00 00 00 00 00 00 00 00{{.*}}bnez
+# CHECK: {{.*}}b4: 07 0a 4a 00 a6 0f 00 00 00 00 00 00{{.*}}bnez
+# CHECK: {{.*}}c0: 07 0a 5c 00 00 00 00 00 00 00 00 00{{.*}}bgez
+# CHECK: {{.*}}cc: 07 0a 6c 00 9a 0f 00 00 00 00 00 00{{.*}}bgez
+# CHECK: {{.*}}d8: 07 0a 7e 00 00 00 00 00 00 00 00 00{{.*}}bltz
+# CHECK: {{.*}}e4: 07 0a 8e 00 8e 0f 00 00 00 00 00 00{{.*}}bltz
+# CHECK: {{.*}}f0: 07 0e 28 00 00 00 00 00 00 00 00 00{{.*}}jal
+# CHECK: {{.*}}fc: 07 0e 38 00 82 ff 07 00 00 00 00 00{{.*}}jal
+# CHECK: {{.*}}108: 07 0d 42 05 06 00 00 00 00 00 00 00{{.*}}jalr
+# CHECK: {{.*}}114: 07 0d 62 07 76 0f 00 00 00 00 00 00{{.*}}jalr
+# CHECK-NOT: <unknown>
 
 # Comprehensive branch instruction test.
 # Only includes instructions actually defined in HaydnInstrInfo.td.
@@ -14,45 +44,33 @@
 #===----------------------------------------------------------------------===#
 
 target1:
-# CHECK: beq r0, r1, target1
 BEQ R0, R1, target1
 
-# CHECK: beq r2, r3, target2
 BEQ R2, R3, target2
 
 target2:
-# CHECK: bne r4, r5, target2
 BNE R4, R5, target2
 
-# CHECK: bne r6, r7, target1
 BNE R6, R7, target1
 
 target3:
-# CHECK: bge r8, r9, target3
 BGE R8, R9, target3
 
-# CHECK: bge r10, r11, target1
 BGE R10, R11, target1
 
 target4:
-# CHECK: bgeu r12, r0, target4
 BGEU R12, R0, target4
 
-# CHECK: bgeu r1, r2, target1
 BGEU R1, R2, target1
 
 target5:
-# CHECK: blt r3, r4, target5
 BLT R3, R4, target5
 
-# CHECK: blt r5, r6, target1
 BLT R5, R6, target1
 
 target6:
-# CHECK: bltu r7, r8, target6
 BLTU R7, R8, target6
 
-# CHECK: bltu r9, r10, target1
 BLTU R9, R10, target1
 
 #===----------------------------------------------------------------------===
@@ -60,31 +78,23 @@ BLTU R9, R10, target1
 #===----------------------------------------------------------------------===#
 
 target11:
-# CHECK: beqz r1, target11
 BEQZ R1, target11
 
-# CHECK: beqz r2, target1
 BEQZ R2, target1
 
 target12:
-# CHECK: bnez r3, target12
 BNEZ R3, target12
 
-# CHECK: bnez r4, target1
 BNEZ R4, target1
 
 target13:
-# CHECK: bgez r5, target13
 BGEZ R5, target13
 
-# CHECK: bgez r6, target1
 BGEZ R6, target1
 
 target14:
-# CHECK: bltz r7, target14
 BLTZ R7, target14
 
-# CHECK: bltz r8, target1
 BLTZ R8, target1
 
 #===----------------------------------------------------------------------===
@@ -92,17 +102,13 @@ BLTZ R8, target1
 #===----------------------------------------------------------------------===#
 
 target18:
-# CHECK: jal r2, target18
 JAL R2, target18
 
-# CHECK: jal r3, target1
 JAL R3, target1
 
-# CHECK: jalr r4, r5, target19
 JALR R4, R5, target19
 
 target19:
-# CHECK: jalr r6, r7, target1
 JALR R6, R7, target1
 
 # NOTE: RET is a pseudo-instruction (HaydnPseudo), not a real MC instruction.

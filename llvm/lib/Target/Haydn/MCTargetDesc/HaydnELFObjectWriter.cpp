@@ -121,13 +121,13 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_BranchSImm16;
 
   case Haydn::FIXUP_HAYDN_HWLoopOff1:
-    // BUG-2: WIDE SET_HWLOOP / SET_HWLOOP_F2 uimm6_offset1 at bits[31:26]
-    // (encoding_manual.md §5.11/§5.12). 4-byte-unit PC-relative. Distinct
-    // relocation so LLD writes the 6-bit field at the correct bit offset.
+    // Format E SET_HWLOOP_F2 uimm6_offset1 @ parcel bits[37:32] (E2 e0 F2).
+    // 4-byte-unit PC-relative (ValueShift=2). Distinct from R_HAYDN_32 so LLD
+    // patches only the offset field (Data32 would clobber the parcel).
     return ELF::R_HAYDN_HWLoopOff1;
 
   case Haydn::FIXUP_HAYDN_HWLoopOff2:
-    // BUG-2: WIDE SET_HWLOOP / SET_HWLOOP_F2 uimm12_offset2 at bits[25:14].
+    // Format E SET_HWLOOP_F2 uimm12_offset2 @ parcel bits[49:38] (E2 e0 F2).
     return ELF::R_HAYDN_HWLoopOff2;
 
   case Haydn::FIXUP_HAYDN_HI12:

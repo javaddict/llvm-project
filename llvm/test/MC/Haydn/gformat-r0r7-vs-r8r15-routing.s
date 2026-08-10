@@ -36,5 +36,5 @@ _start:
     sub32 r1, r2, r3      // r0-r7 -> Mode-0
     sub32 r8, r9, r10     // r8-r15 -> Mode-0 (same routing)
 
-// CHECK: {{.*}}0: 07 cb 10 32 00 00 00 00 00 00 00 00  	{ 		sub32	r1, r2, r3; 	nop }
-// CHECK: c: 07 cb 80 a9 00 00 00 00 00 00 00 00  	{ 		sub32	r8, r9, r10; 	nop }
+// CHECK: {{.*}}0: 07 cb 10 32 00 00 00 00 00 00 00 00  	{ nop; sub32	r1, r2, r3 }
+// CHECK: c: 07 cb 80 a9 00 00 00 00 00 00 00 00  	{ nop; sub32	r8, r9, r10 }

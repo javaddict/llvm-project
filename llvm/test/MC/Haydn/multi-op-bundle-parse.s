@@ -26,22 +26,18 @@
 
 # CHECK-LABEL: <.text>:
 
-# Single-op brace bundle: canAdd/add → SlotMap; emit BUNDLE_E96 with NOPs.
-# Lone ALU64 prefers S2 → `{ nop; nop; add64... }`.
-# CHECK: {{.*}}0: 07 0b 04 21 00 00 00 00 00 00 00 00 { add64 d0, d1, d2; nop }
+# High-entry-first text (CB-142 / #10). Single real → e0 with high nop pad.
+# CHECK: {{.*}}0: 07 0b 04 21 00 00 00 00 00 00 00 00 { nop; add64 d0, d1, d2 }
 { add64 d0, d1, d2 }
 
-# Two-op: add64→S2, add32→S1 → print S0-S1-S2 order.
-# CHECK-NEXT: c: 4f 09 82 10 a0 24 40 08 00 00 00 00 { add64 d0, d1, d2; add32 r0, r1, r2; nop }
+# Two-op high-first: first text → high entry. Encoder may E2→E3-pad.
+# CHECK-NEXT: c: 4f 49 80 10 a0 04 41 08 00 00 00 00 { nop; add64 d0, d1, d2; add32 r0, r1, r2 }
 { add64 d0, d1, d2; add32 r0, r1, r2 }
 
-# Three-op pack-friendly source: add64→S2, add64→S1, add32→S0.
-# CHECK-NEXT: {{.*}}18: 4f 09 82 10 a0 04 0d 15 e0 12 20 04 { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }
+# Three-op: text order is e2;e1;e0 print order (high first).
+# CHECK-NEXT: {{.*}}18: 4f 49 80 10 a0 04 0d 15 e0 82 20 04 { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }
 { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }
 
-# Three-op rematch source (preferred first-fit freezes add32 on S2 then loses
-# the second add64). Exact canAdd/add rematches add32 onto S0 so both add64
-# keep S1|S2. Objdump member order must match the pack-friendly case above
-# (S0 add32; S1 add64; S2 add64) — assembler and post-RA share that order.
-# CHECK-NEXT: {{.*}}24: 4f 49 80 10 a0 04 41 08 e0 82 86 0a { add32 r0, r1, r2; add64 d0, d1, d2; add64 d3, d4, d5 }
+# Three-op rematch source: still high-first print of encoded e2;e1;e0.
+# CHECK-NEXT: {{.*}}24: 4f 09 1a 2a a0 04 41 08 e0 12 20 04 { add32 r0, r1, r2; add64 d0, d1, d2; add64 d3, d4, d5 }
 { add32 r0, r1, r2; add64 d0, d1, d2; add64 d3, d4, d5 }

@@ -2578,7 +2578,7 @@ def BLTU_E2_E0_ALU0_RI12 : HaydnEntryE2E0<(outs), (ins GPR32:$reg_0, GPR32:$src_
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def JALR_E2_E0_ALU0_RI12 : HaydnEntryE2E0<(outs), (ins GPR32:$reg_0, GPR32:$src_1, uimm12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
+def JALR_E2_E0_ALU0_RI12 : HaydnEntryE2E0<(outs), (ins GPR32:$reg_0, GPR32:$src_1, simm12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
   bits<4> reg_0;
   bits<4> src_1;
   bits<12> imm_2;
@@ -2718,7 +2718,7 @@ def SET_HWLOOP_E2_E0_ALU0_HWLRIII : HaydnEntryE2E0<(outs), (ins uimm1:$hwlr_sel_
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def MOVEI_H_E2_E0_ALU0_I32 : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, uimm20:$imm_1), "movei_h\t$dest_0, $imm_1", []> {
+def MOVEI_H_E2_E0_ALU0_I32 : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, simm32_movei:$imm_1), "movei_h\t$dest_0, $imm_1", []> {
   bits<4> dest_0;
   bits<32> imm_1;
   bits<2> c0 = 0x1;
@@ -2729,7 +2729,7 @@ def MOVEI_H_E2_E0_ALU0_I32 : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, uimm20:$i
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def MOVEI_L_E2_E0_ALU0_I32 : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, uimm20:$imm_1), "movei_l\t$dest_0, $imm_1", []> {
+def MOVEI_L_E2_E0_ALU0_I32 : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, simm32_movei:$imm_1), "movei_l\t$dest_0, $imm_1", []> {
   bits<4> dest_0;
   bits<32> imm_1;
   bits<2> c0 = 0x2;
@@ -7523,228 +7523,228 @@ def SMULS16S_11_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MUL32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MUL32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x1;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x1;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULA32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mula32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULA32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mula32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x2;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x2;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULS32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2muls32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULS32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2muls32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x3;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x3;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x4;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x4;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_F2_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_F2_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x5;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x5;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x6;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x6;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_F2_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_F2_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x7;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x7;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MUL16_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mul16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MUL16_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mul16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xc;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xc;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x8;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x8;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x9;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x9;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xa;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xa;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xb;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xb;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MUL16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mul16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MUL16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mul16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xd;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xd;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULA16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULA16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xe;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xe;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULS16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULS16S_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<15> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xf;
-  bits<6> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xf;
+  bits<6> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e0 entry window 45b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
@@ -9378,7 +9378,7 @@ def XORI32_E2_E1_ALU1_RI20 : HaydnEntryE2E1<(outs), (ins GPR32:$dest_0, GPR32:$s
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def MOVEI_H_E2_E1_ALU1_I32 : HaydnEntryE2E1<(outs), (ins DR64:$dest_0, uimm20:$imm_1), "movei_h\t$dest_0, $imm_1", []> {
+def MOVEI_H_E2_E1_ALU1_I32 : HaydnEntryE2E1<(outs), (ins DR64:$dest_0, simm32_movei:$imm_1), "movei_h\t$dest_0, $imm_1", []> {
   bits<4> dest_0;
   bits<32> imm_1;
   bits<2> c0 = 0x2;
@@ -9389,7 +9389,7 @@ def MOVEI_H_E2_E1_ALU1_I32 : HaydnEntryE2E1<(outs), (ins DR64:$dest_0, uimm20:$i
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def MOVEI_L_E2_E1_ALU1_I32 : HaydnEntryE2E1<(outs), (ins DR64:$dest_0, uimm20:$imm_1), "movei_l\t$dest_0, $imm_1", []> {
+def MOVEI_L_E2_E1_ALU1_I32 : HaydnEntryE2E1<(outs), (ins DR64:$dest_0, simm32_movei:$imm_1), "movei_l\t$dest_0, $imm_1", []> {
   bits<4> dest_0;
   bits<32> imm_1;
   bits<2> c0 = 0x1;
@@ -13846,228 +13846,228 @@ def SMULS16S_11_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs), (ins DR64:$dest_0, DR64:$
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MUL32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MUL32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x1;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x1;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULA32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mula32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULA32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mula32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x2;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x2;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULS32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2muls32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULS32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2muls32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x3;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x3;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x4;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x4;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_F2_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_F2_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x5;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x5;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x6;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x6;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_F2_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_F2_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x7;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x7;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MUL16_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mul16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MUL16_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mul16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xc;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xc;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x8;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x8;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x9;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0x9;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xa;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xa;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xb;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xb;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MUL16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mul16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MUL16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mul16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xd;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xd;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULA16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULA16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xe;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xe;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULS16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULS16S_E2_E1_MAC1_RRR : HaydnEntryE2E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<12> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xf;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x1;
+  bits<4> c1 = 0xf;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x1;
   // e1 entry window 41b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
@@ -19305,228 +19305,228 @@ def SMULS16S_11_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MUL32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MUL32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x1;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x1;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULA32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mula32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULA32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mula32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x2;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x2;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULS32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2muls32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULS32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2muls32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x3;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x3;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x4;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x4;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_F2_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_F2_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x5;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x5;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x6;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x6;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_F2_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_F2_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x7;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x7;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MUL16_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mul16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MUL16_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mul16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xc;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xc;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x8;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x8;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x9;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x9;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xa;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xa;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xb;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xb;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MUL16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mul16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MUL16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mul16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xd;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xd;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULA16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULA16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xe;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xe;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULS16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULS16S_E3_E0_MAC0_RRR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xf;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xf;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e0 entry window 31b (MSB-first concat)
-  let e0 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e0 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
@@ -24614,7 +24614,7 @@ def BLTU_E3_E0_ALU0_RI12 : HaydnEntryE3E0<(outs), (ins GPR32:$reg_0, GPR32:$src_
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def JALR_E3_E0_ALU0_RI12 : HaydnEntryE3E0<(outs), (ins GPR32:$reg_0, GPR32:$src_1, uimm12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
+def JALR_E3_E0_ALU0_RI12 : HaydnEntryE3E0<(outs), (ins GPR32:$reg_0, GPR32:$src_1, simm12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
   bits<4> reg_0;
   bits<4> src_1;
   bits<12> imm_2;
@@ -30522,228 +30522,228 @@ def SMULS16S_11_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MUL32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MUL32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x1;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x1;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULA32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mula32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULA32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mula32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x2;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x2;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULS32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2muls32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULS32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2muls32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x3;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x3;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x4;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x4;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_F2_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_F2_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x5;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x5;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x6;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x6;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_F2_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_F2_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x7;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x7;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MUL16_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mul16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MUL16_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mul16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xc;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xc;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x8;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x8;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x9;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0x9;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xa;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xa;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xb;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xb;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MUL16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mul16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MUL16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mul16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xd;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xd;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULA16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULA16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xe;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xe;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULS16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULS16S_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xf;
-  bits<5> c3 = 0x0;
-  bits<2> c4 = 0x2;
-  bits<2> c5 = 0x0;
+  bits<4> c1 = 0xf;
+  bits<5> c2 = 0x0;
+  bits<2> c3 = 0x2;
+  bits<2> c4 = 0x0;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3, c4};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
@@ -35748,7 +35748,7 @@ def BLTU_E3_E1_ALU0_RI12 : HaydnEntryE3E1<(outs), (ins GPR32:$reg_0, GPR32:$src_
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def JALR_E3_E1_ALU0_RI12 : HaydnEntryE3E1<(outs), (ins GPR32:$reg_0, GPR32:$src_1, uimm12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
+def JALR_E3_E1_ALU0_RI12 : HaydnEntryE3E1<(outs), (ins GPR32:$reg_0, GPR32:$src_1, simm12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
   bits<4> reg_0;
   bits<4> src_1;
   bits<12> imm_2;
@@ -40980,213 +40980,213 @@ def SMULS16S_11_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MUL32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MUL32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x1;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x1;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULA32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2mula32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULA32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2mula32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x2;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x2;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2MULS32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2muls32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2MULS32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2muls32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x3;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x3;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x4;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x4;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32_F2_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32_F2_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x5;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x5;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x6;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x6;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X2CMUL32S_F2_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x2cmul32s_f2\t$dest1_0, $src2_2, $dest2_3", []> {
+def X2CMUL32S_F2_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x2cmul32s_f2\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x7;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x7;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MUL16_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mul16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MUL16_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mul16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xc;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0xc;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x8;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x8;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0x9;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0x9;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULA16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULA16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xa;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0xa;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4MULS16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4MULS16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xb;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0xb;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MUL16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mul16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MUL16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mul16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xd;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0xd;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULA16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2mula16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULA16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2mula16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xe;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0xe;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in
-def X4FF2MULS16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$src2_2, DR64:$dest2_3), "x4ff2muls16s\t$dest1_0, $src2_2, $dest2_3", []> {
+def X4FF2MULS16S_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs), (ins DR64:$dest1_0, DR64:$dest2_3, DR64:$src1_1, DR64:$src2_2), "x4ff2muls16s\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> dest2_3;
   bits<3> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<4> c2 = 0xf;
-  bits<2> c3 = 0x2;
-  bits<2> c4 = 0x0;
+  bits<4> c1 = 0xf;
+  bits<2> c2 = 0x2;
+  bits<2> c3 = 0x0;
   // e2 entry window 27b (MSB-first concat)
-  let e2 = {c0, src2_2, c1, dest2_3, dest1_0, c2, c3, c4};
+  let e2 = {c0, src2_2, src1_1, dest2_3, dest1_0, c1, c2, c3};
 }
 
 let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in

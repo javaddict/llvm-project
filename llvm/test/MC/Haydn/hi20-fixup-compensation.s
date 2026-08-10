@@ -25,7 +25,7 @@
 .globl _start
 _start:
 
-# CHECK: {{.*}}0: 07 0a 12 00 23 01 00 00 00 00 00 00 { lui r1, 291; nop }
+# CHECK: {{.*}}0: 07 0a 12 00 23 01 00 00 00 00 00 00 { nop; lui r1, 291 }
 # LUI R1, 0x123 -> upper bits (uimm12, bit 9 set).
 # Post-migration (R10): LUI's uimm12 immediate now passes through the Mode-0
 # s0 path and the decoded immediate renders as the small split value (3) of
@@ -35,27 +35,27 @@ _start:
 # below just pin the MC format layout. Post- the decoder renders the
 # FULL immediate (291 = 0x123, not the stale "split value" of 3 the prior
 # Mode-0 bit layout produced).
-# CHECK: c: 07 0f 12 01 3c 2b 00 00 00 00 00 00 { addi32 r1, r1, 22136; nop }
+# CHECK: c: 07 0f 12 01 3c 2b 00 00 00 00 00 00 { nop; addi32 r1, r1, 22136 }
     LUI R1, 0x123
 
 # ADDI32 R1, R1, 0x5678 -> lower 16 bits. Post- the full immediate
 # (22136 = 0x5678) renders, not the stale split value (24).
-# CHECK: {{.*}}18: 07 0a 22 00 00 00 00 00 00 00 00 00 { lui r2, 0; nop }
+# CHECK: {{.*}}18: 07 0a 22 00 00 00 00 00 00 00 00 00 { nop; lui r2, 0 }
     ADDI32 R1, R1, 0x5678
 
 # LUI with zero upper half
-# CHECK: {{.*}}24: 07 0f 22 02 15 00 00 00 00 00 00 00 { addi32 r2, r2, 42; nop }
+# CHECK: {{.*}}24: 07 0f 22 02 15 00 00 00 00 00 00 00 { nop; addi32 r2, r2, 42 }
     LUI R2, 0x0000
 
 # ADDI32 with positive value (bit 15 not set, no compensation).
 # Post- the full immediate (42) renders, not the stale split value (10).
-# CHECK: {{.*}}30: 07 0a 32 00 ff 0f 00 00 00 00 00 00 { lui r3, 4095; nop }
+# CHECK: {{.*}}30: 07 0a 32 00 ff 0f 00 00 00 00 00 00 { nop; lui r3, 4095 }
     ADDI32 R2, R2, 42
 
 # LUI with max uimm12 (0xFFF, bit 11 set — exercises sign-extension boundary).
 # Post- the full immediate (4095 = 0xFFF) renders, not the stale split
 # value (31).
-# CHECK: 3c: 07 0f 32 03 ce ff 07 00 00 00 00 00 { addi32 r3, r3, -100; nop }
+# CHECK: 3c: 07 0f 32 03 ce ff 07 00 00 00 00 00 { nop; addi32 r3, r3, -100 }
     LUI R3, 0xFFF
 
 # ADDI32 with negative value (tests sign extension in simm16 encoding).

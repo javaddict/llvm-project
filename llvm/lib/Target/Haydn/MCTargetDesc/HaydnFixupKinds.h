@@ -62,13 +62,13 @@ enum Fixups {
   // tag-compensated applyFixup special case in the AsmBackend.
   FIXUP_HAYDN_HWLoopOffset,
 
-  // SET_HWLOOP_W / SET_HWLOOP_F2_W offset fields (unsigned after ÷4).
-  // Historical s0 layout `{FU, opcode, reserved, rs, offset2,
-  // offset1, sel}`:
-  //   offset1 (uimm6)  at LoWord bits[6:1]  (FieldLsb=1, Align=4)
-  //   offset2 (uimm12) at LoWord bits[18:7] (FieldLsb=7, Align=4)
-  // Effective byte windows: Off1 [0, 252], Off2 [0, 16380]. PC base is the
-  // SET_HWLOOP parcel address. Geometry is sole-source in HaydnRelocLayout.
+  // SET_HWLOOP / SET_HWLOOP_F2 offset fields (unsigned after ÷4).
+  // Format E product geometry (r_offset = parcel origin; HaydnRelocLayout):
+  //   Off1 (uimm6)  @ E2 e0 F2 absolute parcel bits[37:32] (FieldLsb=32)
+  //   Off2 (uimm12) @ E2 e0 F2 absolute parcel bits[49:38] (FieldLsb=38)
+  // ValueShift=2, Align=4. Effective byte windows: Off1 [0, 252],
+  // Off2 [0, 16380]. PC base is the SET_HWLOOP parcel address. resolveFieldLsb
+  // covers E2 HWLRIII and E3 e0/e1 F2 windows.
   FIXUP_HAYDN_HWLoopOff1,
   FIXUP_HAYDN_HWLoopOff2,
 

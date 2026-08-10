@@ -1,6 +1,24 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
 # Role: object — GPR R0–R12 and DR64 D0–D15 parse and print via ordinary ops.
+# Converted from parse-only to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 8b 00 21 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}c: 07 cb 40 65 00 00 00 00 00 00 00 00{{.*}}sub32
+# CHECK: {{.*}}18: 07 0b 81 a9 00 00 00 00 00 00 00 00{{.*}}and32
+# CHECK: {{.*}}24: 07 2b b1 0c 00 00 00 00 00 00 00 00{{.*}}or32
+# CHECK: {{.*}}30: 07 0b 04 21 00 00 00 00 00 00 00 00{{.*}}add64
+# CHECK: {{.*}}3c: 07 0b 35 54 00 00 00 00 00 00 00 00{{.*}}sub64
+# CHECK: {{.*}}48: 07 8b 66 87 00 00 00 00 00 00 00 00{{.*}}and64
+# CHECK: {{.*}}54: 07 ab 96 ba 00 00 00 00 00 00 00 00{{.*}}or64
+# CHECK: {{.*}}60: 07 cb c6 ed 00 00 00 00 00 00 00 00{{.*}}xor64
+# CHECK: {{.*}}6c: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}78: 87 43 02 02 00 00 00 00 00 00 00 00{{.*}}d_ldw_with_imm
+# CHECK-NOT: <unknown>
 
 # Immediate-form slli64 is an AsmParser gap exercised elsewhere.
 
@@ -9,42 +27,31 @@
 #===----------------------------------------------------------------------===
 
 ADD32 R0, R1, R2
-# CHECK: add32 r0, r1, r2
 
 SUB32 R4, R5, R6
-# CHECK: sub32 r4, r5, r6
 
 AND32 R8, R9, R10
-# CHECK: and32 r8, r9, r10
 
 OR32 R11, R12, R0
-# CHECK: or32 r11, r12, r0
 
 #===----------------------------------------------------------------------===
 # DR64 registers
 #===----------------------------------------------------------------------===
 
 ADD64 D0, D1, D2
-# CHECK: add64 d0, d1, d2
 
 SUB64 D3, D4, D5
-# CHECK: sub64 d3, d4, d5
 
 AND64 D6, D7, D8
-# CHECK: and64 d6, d7, d8
 
 OR64 D9, D10, D11
-# CHECK: or64 d9, d10, d11
 
 XOR64 D12, D13, D14
-# CHECK: xor64 d12, d13, d14
 
 #===----------------------------------------------------------------------===
 # Mixed GPR / DR loads
 #===----------------------------------------------------------------------===
 
 LD32 R0, R1, 0
-# CHECK: ld32 r0, r1, 0
 
 LD64 D0, R2, 0
-# CHECK: ld64 d0, r2, 0

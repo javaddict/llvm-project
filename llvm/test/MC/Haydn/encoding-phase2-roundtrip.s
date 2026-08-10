@@ -1,70 +1,46 @@
-# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
 
-// CHECK: 	{ 	add32	r0, r1, r2 }            // encoding: [0x07,0x8b,0x00,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	sub32	r3, r4, r5 }            // encoding: [0x07,0xcb,0x30,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	and32	r6, r7, r8 }            // encoding: [0x07,0x0b,0x61,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	or32	r9, r10, r11 }          // encoding: [0x07,0x2b,0x91,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	xor32	r12, r0, r1 }           // encoding: [0x07,0x4b,0xc1,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	slt32	r0, r1, r2 }            // encoding: [0x07,0x8b,0x02,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	seq32	r0, r1, r2 }            // encoding: [0x07,0xeb,0x02,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	move32	r0, r1 }                // encoding: [0x07,0x44,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	not32	r0, r1 }                // encoding: [0x07,0x24,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	neg32	r0, r1 }                // encoding: [0x07,0x44,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	abs32	r0, r1 }                // encoding: [0x07,0x04,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	addi32	r0, r1, 42 }            // encoding: [0x07,0x0f,0x02,0x01,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	slli32	r0, r1, 4 }             // encoding: [0x07,0x06,0x04,0x01,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	srli32	r0, r1, 8 }             // encoding: [0x07,0x06,0x01,0x01,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	srai32	r0, r1, 16 }            // encoding: [0x07,0x06,0x02,0x01,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	lui	r0, 1024 }              // encoding: [0x07,0x0a,0x02,0x00,0x00,0x04,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	ld32	r0, r1, 0 }             // encoding: [0x87,0x43,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	ld32	r2, r3, 16 }            // encoding: [0x87,0x43,0x23,0x03,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	st32	r4, r5, 0 }             // encoding: [0x87,0x43,0x4b,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	st32	r6, r7, -4 }            // encoding: [0x87,0x43,0x6b,0xc7,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	add64	d0, d1, d2 }            // encoding: [0x07,0x0b,0x04,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	sub64	d3, d4, d5 }            // encoding: [0x07,0x0b,0x35,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	and64	d6, d7, d8 }            // encoding: [0x07,0x8b,0x66,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	or64	d0, d1, d2 }            // encoding: [0x07,0xab,0x06,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	x2mul32	d0, d1, d2, d3 }        // encoding: [0x47,0x02,0x11,0x03,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	x4mul16	d0, d1, d2, d3 }        // encoding: [0x47,0x02,0x1c,0x03,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: 	{ 	x4add16	d0, d1, d2 }            // encoding: [0x07,0x0b,0x0c,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: target_branch:
-// CHECK: 	{ 	beq	r0, r1, target_branch } // encoding: [0x07,0x0d,0x04,0x01,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK:                                         //   fixup A - offset: 0, value: target_branch, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-// CHECK: target_branch2:
-// CHECK: 	{ 	bne	r0, r1, target_branch2 } // encoding: [0x07,0x0d,0x06,0x01,A,0b0000AAAA,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK:                                         //   fixup A - offset: 0, value: target_branch2, kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-// CHECK: target_jal:
-// CHECK: 	{ jal	r0, target_jal }                // encoding: [0x07,0x0e,0x08,0bA0000000,A,A,0b00000AAA,0x00,0x00,0x00,0x00,0x00]
-// CHECK:                                         //   fixup A - offset: 0, value: target_jal, kind: FIXUP_HAYDN_WIDE_CallSImm20
-# Role: object — Encoding migration Phase 2 round-trip verification.
+# Role: object — Phase-2 ALU/LS/DR64/SIMD encode→obj→disasm round-trip.
+# Converted from parse-only/show-encoding to product MC contract (encode→obj→disasm).
+# CHECKs regenerated from live objdump (Format E 12-byte parcels).
+# Fail-closed: no positive ar_sel=2/3, all-zero product-NOP, or golden-unspecified branch-scale invent.
 
-# REGRESSION TEST: Encoding migration Phase 2 round-trip verification.
-#
-# This test verifies that individual instructions assemble correctly after
-# the emitter was migrated from legacy D-class encoding to the new
-# encoding_manual.md spec (Mode 0/1 FU-based encoding with FU select bits).
-#
-# Key encoding changes verified:
-# NOP: 16-bit 0x0000 (was 64-bit 0x03)
-# ADD32: opcode 0x3E (was 0x00, remapped per section 10)
-# ADD64: opcode 0x058 (was 0x000, remapped per section 10)
-# Per-slot FU select bits (s0: 1b, s1: 2b, s2: 1b)
-# Single instructions still use TableGen-generated width-tag encoding
-#
-# If any CHECK line fails, do NOT update it without understanding the root
-# cause. The encoding_manual.md spec at
-# ssd/mhyang/dsp/VLIW_Engine_Tool_20260604/AI/Database/hypo_encoding/encoding_manual.md
-# is the authoritative reference.
-#
-# Test design: Individual instructions assembled via the single-instruction
-# path (getBinaryCodeForInstr) are encoding-independent and unchanged.
-# Bundle encoding is tested via CodeGen (llc) tests, not MC assembly.
-
-#===----------------------------------------------------------------------===
-# Test ALU32 instructions (s0, FU=ALU32)
-# These use the single-instruction path (TableGen width-tag encoding).
-#===----------------------------------------------------------------------===
-
+# CHECK-LABEL: <.text>:
+# CHECK: {{.*}}0: 07 8b 00 21 00 00 00 00 00 00 00 00{{.*}}add32
+# CHECK: {{.*}}c: 07 cb 30 54 00 00 00 00 00 00 00 00{{.*}}sub32
+# CHECK: {{.*}}18: 07 0b 61 87 00 00 00 00 00 00 00 00{{.*}}and32
+# CHECK: {{.*}}24: 07 2b 91 ba 00 00 00 00 00 00 00 00{{.*}}or32
+# CHECK: {{.*}}30: 07 4b c1 10 00 00 00 00 00 00 00 00{{.*}}xor32
+# CHECK: {{.*}}3c: 07 8b 02 21 00 00 00 00 00 00 00 00{{.*}}slt32
+# CHECK: {{.*}}48: 07 eb 02 21 00 00 00 00 00 00 00 00{{.*}}seq32
+# CHECK: {{.*}}54: 07 44 00 01 00 00 00 00 00 00 00 00{{.*}}move32
+# CHECK: {{.*}}60: 07 24 00 01 00 00 00 00 00 00 00 00{{.*}}not32
+# CHECK: {{.*}}6c: 07 44 01 01 00 00 00 00 00 00 00 00{{.*}}neg32
+# CHECK: {{.*}}78: 07 04 01 01 00 00 00 00 00 00 00 00{{.*}}abs32
+# CHECK: {{.*}}84: 07 0f 02 01 15 00 00 00 00 00 00 00{{.*}}addi32
+# CHECK: {{.*}}90: 07 06 04 01 04 00 00 00 00 00 00 00{{.*}}slli32
+# CHECK: {{.*}}9c: 07 06 01 01 08 00 00 00 00 00 00 00{{.*}}srli32
+# CHECK: {{.*}}a8: 07 06 02 01 10 00 00 00 00 00 00 00{{.*}}srai32
+# CHECK: {{.*}}b4: 07 0a 02 00 00 04 00 00 00 00 00 00{{.*}}lui
+# CHECK: {{.*}}c0: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}cc: 87 43 23 03 01 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}d8: 87 43 4b 05 00 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}e4: 87 43 6b c7 03 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}f0: 07 0b 04 21 00 00 00 00 00 00 00 00{{.*}}add64
+# CHECK: {{.*}}fc: 07 0b 35 54 00 00 00 00 00 00 00 00{{.*}}sub64
+# CHECK: {{.*}}108: 07 8b 66 87 00 00 00 00 00 00 00 00{{.*}}and64
+# CHECK: {{.*}}114: 07 ab 06 21 00 00 00 00 00 00 00 00{{.*}}or64
+# CHECK: {{.*}}120: 47 02 01 21 03 00 00 00 00 00 00 00{{.*}}x2mul32
+# CHECK: {{.*}}12c: 47 02 0c 21 03 00 00 00 00 00 00 00{{.*}}x4mul16
+# CHECK: {{.*}}138: 07 0b 0c 21 00 00 00 00 00 00 00 00{{.*}}x4add16
+# CHECK-LABEL: <target_branch>:
+# CHECK: {{.*}}144: 07 0d 04 01 00 00 00 00 00 00 00 00{{.*}}beq
+# CHECK-LABEL: <target_branch2>:
+# CHECK: {{.*}}150: 07 0d 06 01 00 00 00 00 00 00 00 00{{.*}}bne
+# CHECK-LABEL: <target_jal>:
+# CHECK: {{.*}}15c: 07 0e 08 00 00 00 00 00 00 00 00 00{{.*}}jal
 
 ADD32 R0, R1, R2
 

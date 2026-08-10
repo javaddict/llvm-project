@@ -70,17 +70,17 @@ test_alu32_rr:
 
 # CHECK-LABEL: <test_alu32_rr>:
 # Format E path: every op is a 12-byte Format E composite `{ op.sN...; nop; nop }`.
-# CHECK: {{.*}}0: 07 ab 10 32 00 00 00 00 00 00 00 00 { add32s r1, r2, r3; nop }
-# CHECK-NEXT: c: 07 8b 42 05 00 00 00 00 00 00 00 00 { slt32 r4, r5, r0; nop }
-# CHECK-NEXT: {{.*}}18: 07 0b 62 17 00 00 00 00 00 00 00 00 { max32 r6, r7, r1; nop }
+# CHECK: {{.*}}0: 07 ab 10 32 00 00 00 00 00 00 00 00 { 	nop; 	add32s	r1, r2, r3 }
+# CHECK-NEXT: c: 07 8b 42 05 00 00 00 00 00 00 00 00 { 	nop; 	slt32	r4, r5, r0 }
+# CHECK-NEXT: {{.*}}18: 07 0b 62 17 00 00 00 00 00 00 00 00 { 	nop; 	max32	r6, r7, r1 }
 # Mode-0 s0 path (also 12-byte Format E under).
-# CHECK: {{.*}}24: 07 ab 90 ba 00 00 00 00 00 00 00 00 { add32s r9, r10, r11; nop }
-# CHECK-NEXT: {{.*}}30: 07 8b 92 ba 00 00 00 00 00 00 00 00 { slt32 r9, r10, r11; nop }
-# CHECK-NEXT: 3c: 07 0b 92 ba 00 00 00 00 00 00 00 00 { max32 r9, r10, r11; nop }
+# CHECK: {{.*}}24: 07 ab 90 ba 00 00 00 00 00 00 00 00 { 	nop; 	add32s	r9, r10, r11 }
+# CHECK-NEXT: {{.*}}30: 07 8b 92 ba 00 00 00 00 00 00 00 00 { 	nop; 	slt32	r9, r10, r11 }
+# CHECK-NEXT: 3c: 07 0b 92 ba 00 00 00 00 00 00 00 00 { 	nop; 	max32	r9, r10, r11 }
 # MAC path (s1 MAC sub-row, not ALU32). The 4-op asm-parse form
 # (x2mula32 d1, d2, d3, d1) encodes via X2MULA32_M0S1 whose asm string is the
 # 3-op form (rd_in is tied to rtd and not printed). So objdump output is 3-op.
-# CHECK: {{.*}}48: 47 02 22 01 03 00 00 00 00 00 00 00 { x2mula32 d2, d3, d1; nop }
+# CHECK: {{.*}}48: 47 02 12 32 01 00 00 00 00 00 00 00 { 	nop; 	x2mula32	d1, d2, d3, d1 }
 
 # NOPH: <test_alu32_rr>:
 # NOPH-NOT: <?>

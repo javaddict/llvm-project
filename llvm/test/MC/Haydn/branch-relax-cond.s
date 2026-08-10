@@ -2,11 +2,12 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s
 
-# Role: object — Format E conditional branches: imm12 (÷2) range is ±4 KiB.
-
-# Format E conditional branches: imm12 (÷2) range is ±4 KiB. Longer gaps
-# must go through LLD thunks (lld/test/ELF/haydn/reloc-long-branch-thunk.s)
-# not MC applyFixup. Keep a mid-range gap that still assembles+disassembles.
+# Role: object — mid-range conditional branch assemble→obj→disasm smoke.
+# Branch PC-rel wire scale is not golden-defined; do not pin ÷2 / halfword field
+# values as product law. This lit only requires the mnemonic to disassemble for
+# a mid-range gap that currently assembles. Longer gaps go through LLD thunks
+# (lld/test/ELF/haydn/reloc-long-branch-thunk.s), not MC applyFixup.
+# Positive in-range scale oracles remain residual (see reloc-range-branch-div2).
 
 .text
 .globl _start

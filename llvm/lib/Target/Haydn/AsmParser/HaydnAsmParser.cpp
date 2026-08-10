@@ -444,6 +444,13 @@ class HaydnAsmParser : public MCTargetAsmParser {
   bool parseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
 
+  // \returns the logical base opcode for a `_S<k>` format-member \p Opc, or
+  // \p Opc itself when it is not a member. Multi-slot members of one logical
+  // share one AsmString, so MatchInstructionImpl always resolves a bundle
+  // mnemonic to the FIRST member. De-materializing back to the logical lets
+  // the textual entry position choose the encode slot (CB-142 / #10).
+  unsigned getLogicalBaseOpcode(unsigned Opc);
+
   // Parse directive
   ParseStatus parseDirective(AsmToken ID) override;
 
@@ -493,6 +500,30 @@ private:
 #include "HaydnGenAsmMatcher.inc"
 
 } // end anonymous namespace
+
+// Strip `_S0`/`_S1`/`_S2` from a matched member opcode so composite entry
+// placement is driven by textual position, not the matcher's first-member pin.
+unsigned HaydnAsmParser::getLogicalBaseOpcode(unsigned Opc) {
+  StringRef Name = MII.getName(Opc);
+  StringRef Base = Name;
+  bool Stripped = false;
+  for (StringRef Suf : {"_S0", "_S1", "_S2"}) {
+    if (Base.ends_with(Suf)) {
+      Base = Base.drop_back(Suf.size());
+      Stripped = true;
+      break;
+    }
+  }
+  if (!Stripped)
+    return Opc;
+  if (Base.empty())
+    return Opc;
+  const unsigned Num = MII.getNumOpcodes();
+  for (unsigned Cand = 0; Cand < Num; ++Cand)
+    if (MII.getName(Cand) == Base)
+      return Cand;
+  return Opc;
+}
 
 bool HaydnAsmParser::parseRegister(MCRegister &Reg, SMLoc &StartLoc,
                                    SMLoc &EndLoc) {
@@ -671,10 +702,16 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
 
     // Hand-assembly placement owner for braced Format E bundles.
     // Product profile is Format E (registry EncodedBytes). Explicit `nop` is
-    // entry fill, not a co-issue resource. Emit selects BUNDLE_E96_TWO_ENTRY
-    // or BUNDLE_E96_THREE_ENTRY from real-op count.
-    // Matched real children (NOP fillers excluded).
-    SmallVector<MCInst *, 3> RealChildren;
+    // entry fill, not a co-issue resource — but it HOLDS a textual entry
+    // position for the real ops around it (CB-142 / #10).
+    //
+    // Bundle text is HIGH entry first, right-aligned on e0 (AsmString
+    // `$e2; $e1; $e0` / `$e1; $e0`). For N textual entries, entry i names
+    // encode-dag position N-1-i: `{ a; b; c }` → e2,e1,e0; `{ a; b }` →
+    // e1,e0; `{ a }` is single-entry (encoder/e0 placement, no reverse).
+    // Matched real children (NOP fillers excluded) with their text index.
+    SmallVector<std::pair<MCInst *, unsigned>, 3> RealChildren;
+    unsigned TextSlot = 0;
 
     while (true) {
       // The next token should be the instruction mnemonic
@@ -722,9 +759,11 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       }
       Child->setLoc(MnemonicLoc);
 
-      // NOP is emit-time slot padding, not a co-issue resource.
+      // NOP is emit-time entry padding, not a co-issue resource — but it does
+      // hold a textual entry position for the children that follow it.
       if (Child->getOpcode() != Haydn::NOP)
-        RealChildren.push_back(Child);
+        RealChildren.push_back({Child, TextSlot});
+      ++TextSlot;
 
       Operands.clear();
 
@@ -763,28 +802,47 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     if (RealChildren.empty())
       return Error(NameLoc,
                    "idle/all-nop bundle has no approved Format E completion");
-    if (RealChildren.size() > 3)
+    if (TextSlot > 3)
       return Error(NameLoc, "Format E bundle supports at most three entries");
 
-    // Select product Format E composite by real-op count (E2: 1–2, E3: 3).
-    // Entry-underfill NOPs are placeholders only; encoder/completion law for
-    // omitted entries remains fail-closed until golden closes idle/underfill.
+    // Select product Format E composite by textual entry count (including nop
+    // fillers): 3 text entries → E3, else E2. Single-entry `{ op }` carries
+    // no positional information (encoder/e0 placement). Two or three entries
+    // DO name entries positionally (high-first → reverse into e0..eN dag).
     using namespace haydn::format;
     const unsigned ProductBytes =
         maxEncodedBytesInProfile(ObjectEncodingProfileID::E96).Value;
     (void)ProductBytes;
-    const bool UseE3 = RealChildren.size() == 3;
+    const unsigned NumEntries = TextSlot;
+    const bool UseE3 = NumEntries == 3;
     const unsigned CompositeOpc =
         UseE3 ? Haydn::BUNDLE_E96_THREE_ENTRY : Haydn::BUNDLE_E96_TWO_ENTRY;
     const unsigned EntryCount = UseE3 ? 3u : 2u;
+    const bool Positional =
+        NumEntries > 1 && NumEntries <= 3;
+
+    SmallVector<MCInst *, 3> Entries(EntryCount, nullptr);
+    for (auto [Child, Index] : RealChildren) {
+      // De-materialize matched `_S<k>` member → logical so position, not the
+      // matcher's first-member pin, owns the entry.
+      unsigned Base = getLogicalBaseOpcode(Child->getOpcode());
+      if (Base != 0)
+        Child->setOpcode(Base);
+      unsigned EntryIdx = 0;
+      if (Positional)
+        EntryIdx = NumEntries - 1 - Index;
+      if (EntryIdx >= EntryCount)
+        return Error(Child->getLoc(), "incorrect bundle");
+      if (Entries[EntryIdx])
+        return Error(Child->getLoc(), "incorrect bundle");
+      Entries[EntryIdx] = Child;
+    }
 
     MCInst MCB;
     MCB.setOpcode(CompositeOpc);
     for (unsigned E = 0; E < EntryCount; ++E) {
-      MCInst *Instr;
-      if (E < RealChildren.size()) {
-        Instr = RealChildren[E];
-      } else {
+      MCInst *Instr = Entries[E];
+      if (!Instr) {
         Instr = Parser.getContext().createMCInst();
         Instr->setOpcode(Haydn::NOP);
       }

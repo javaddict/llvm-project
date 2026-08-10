@@ -1,7 +1,8 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d -z --no-show-raw-insn %t.o | FileCheck %s
-# Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
 # XFAIL: *
+# Residual: FileCheck / idle-pad / reloc geometry still open under Format E cutover.
+# XFAIL-OWNER: branch PC-rel wire scale (golden unspecified) | positive branch-scale claim residual; no golden invent
 
 // CHECK: {{.*}}0: 07 0a 1a c0 00 00 00 00 00 00 00 00  	{ 		bnez	r1, <?>; 	nop }
 // CHECK: {{.*}}c: 07 4b 01 00 00 00 00 00 00 00 00 00  	{ 		xor32	r0, r0, r0; 	nop }

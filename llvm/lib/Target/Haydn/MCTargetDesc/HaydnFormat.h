@@ -12,9 +12,9 @@
 //    ObjectEncodingProfileID → BundleFormatID → BundleFormatRowID with typed
 //    EncodedBytes / EncodedBits / header / entry / phase schema. The sole
 //    production profile is E96 (family FormatE96, rows E96TwoEntry and
-//    E96ThreeEntry). Synthetic short families exist for unit tests only and are
-//    never product-selectable. Production callers query row/profile size APIs;
-//    they must not spell parcel bit/byte widths as bare literals.
+//    E96ThreeEntry). Non-product multi-length fixtures live only in the
+//    test-support provider (HaydnTestEncodingProfileProvider) and are never
+//    product-selectable or linked into shipping tools.
 //
 // 2) AIE-shaped PacketFormats / VLIWFormat tables (CodeGenFormat product
 //    BUNDLE_E96_* composites). FE8 retired the 128-bit composite; product
@@ -138,8 +138,8 @@ private:
 //   BundleFormatRowID
 //     -> one exact header predicate, encoded length, entry geometry
 //
-// Production profile is immutable E96. Synthetic families are test-only
-// (NonProduct) and rejected by product profile selection.
+// Production profile is immutable E96. Unknown IDs resolve to nullptr / empty;
+// non-product multi-length fixtures are not declared here.
 
 namespace haydn {
 namespace format {
@@ -174,28 +174,20 @@ using BundleCostPolicyID = unsigned;
 using StreamPhaseAutomatonID = unsigned;
 
 /// Object encoding profile identity. Production selection is always E96.
+/// Non-product fixture profile IDs are not declared in the shipping surface.
 enum class ObjectEncodingProfileID : unsigned {
   E96 = 0,
-  /// Test-only multi-family profile (synthetic short rows). Never product.
-  TestSyntheticMulti = 0x8000u,
 };
 
-/// Architectural format family.
+/// Architectural format family. Production has FormatE96 only.
 enum class BundleFormatID : unsigned {
   FormatE96 = 0,
-  /// Test-only short families (unequal byte lengths). Never product.
-  SynthShortA = 0x8000u,
-  SynthShortB = 0x8001u,
 };
 
 /// Globally unique layout row. Family/size/phase derive from the descriptor.
 enum class BundleFormatRowID : unsigned {
   E96TwoEntry = 0,
   E96ThreeEntry = 1,
-  /// Synthetic rows: unequal sizes across families; equal-size pair inside A.
-  SynthA_RowWide = 0x8000u,
-  SynthA_RowNarrow = 0x8001u,
-  SynthB_RowTiny = 0x8002u,
 };
 
 /// One exact encoded row (header, size, entry count, phase transition).
@@ -211,7 +203,7 @@ struct BundleFormatRowDesc {
   unsigned EntryCount = 0;
   /// Top-pad width in bits (geometry only; pad value policy is separate).
   unsigned TopPadBits = 0;
-  /// False for synthetic test rows; true only for production E96 rows.
+  /// True only for production E96 rows.
   bool IsProduct = false;
 };
 
@@ -235,12 +227,15 @@ struct ObjectEncodingProfileDesc {
   PaddingPolicyID PaddingPolicy = 0;
   BundleCostPolicyID CostPolicy = 0;
   StreamPhaseAutomatonID StreamPhases = 0;
-  /// ELF e_flags payload for this profile. ABI number allocation is owned
-  /// elsewhere; until allocated this remains 0 and must not alone authorize
-  /// object emission of a non-zero flag.
+  /// ELF e_flags payload for this profile. Production E96 allocates a nonzero
+  /// ABI flag; MC stamps it on every object and LLD enforces exact equality.
   uint32_t ELFFlagsValue = 0;
   bool IsProduct = false;
 };
+
+/// Object ABI e_flags for the sole product Format E 96-bit encoding profile.
+/// Nonzero so E96 objects are distinguishable from unflagged legacy objects.
+inline constexpr uint32_t EF_HAYDN_E96 = 0x1u;
 
 //===----------------------------------------------------------------------===//
 // Registry queries (typed size APIs; no bare parcel-width literals at call sites)
@@ -249,14 +244,14 @@ struct ObjectEncodingProfileDesc {
 /// Sole production object-encoding profile (E96).
 const ObjectEncodingProfileDesc &getProductionObjectEncodingProfile();
 
-/// Profile descriptor, or nullptr if \p ID is unknown.
+/// Profile descriptor, or nullptr if \p ID is unknown / non-product.
 const ObjectEncodingProfileDesc *
 getObjectEncodingProfile(ObjectEncodingProfileID ID);
 
-/// Family descriptor, or nullptr if \p ID is unknown.
+/// Family descriptor, or nullptr if \p ID is unknown / non-product.
 const BundleFormatDesc *getBundleFormat(BundleFormatID ID);
 
-/// Row descriptor, or nullptr if \p ID is unknown.
+/// Row descriptor, or nullptr if \p ID is unknown / non-product.
 const BundleFormatRowDesc *getBundleFormatRow(BundleFormatRowID ID);
 
 /// All product rows (E96TwoEntry, E96ThreeEntry), stable order.
@@ -265,25 +260,19 @@ ArrayRef<BundleFormatRowDesc> getProductBundleFormatRows();
 /// All product families (exactly FormatE96).
 ArrayRef<BundleFormatDesc> getProductBundleFormats();
 
-/// Synthetic non-product rows for unit tests only.
-ArrayRef<BundleFormatRowDesc> getSyntheticTestBundleFormatRows();
-
-/// Synthetic non-product families for unit tests only.
-ArrayRef<BundleFormatDesc> getSyntheticTestBundleFormats();
-
-/// EncodedBytes for a known row; nullopt if unknown.
+/// EncodedBytes for a known product row; nullopt if unknown.
 std::optional<EncodedBytes> encodedBytesOf(BundleFormatRowID Row);
 
-/// EncodedBits for a known row; nullopt if unknown.
+/// EncodedBits for a known product row; nullopt if unknown.
 std::optional<EncodedBits> encodedBitsOf(BundleFormatRowID Row);
 
-/// EncodedBytes of a known row; asserts product/test row is registered.
+/// EncodedBytes of a known product row; asserts the row is registered.
 EncodedBytes encodedBytesOrDie(BundleFormatRowID Row);
 
-/// EncodedBits of a known row; asserts product/test row is registered.
+/// EncodedBits of a known product row; asserts the row is registered.
 EncodedBits encodedBitsOrDie(BundleFormatRowID Row);
 
-/// Maximum EncodedBytes among rows permitted by \p Profile.
+/// Maximum EncodedBytes among rows permitted by \p Profile (product only).
 EncodedBytes maxEncodedBytesInProfile(ObjectEncodingProfileID Profile);
 
 /// True iff \p Row is a production (E96) row.
@@ -306,7 +295,7 @@ bool profilePermitsFamily(ObjectEncodingProfileID Profile,
 /// True iff \p Profile is the immutable production profile.
 bool isProductionProfile(ObjectEncodingProfileID Profile);
 
-/// Rows of a family (empty if unknown).
+/// Rows of a product family (empty if unknown / non-product).
 ArrayRef<BundleFormatRowDesc> rowsOfFamily(BundleFormatID Format);
 
 /// Header indicator bits for Format E (geometry constant on the family).
