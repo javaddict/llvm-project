@@ -382,7 +382,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
   EXPECT_EQ(C->MemberOpcode, Haydn::ADD32_P32_ALU0);
   EXPECT_TRUE(C->NeedsSetDesc);
   EXPECT_EQ(C->Plan.FID, FormatID::BundleE3);
-  EXPECT_EQ(C->Plan.Bytes.Value, 16u);
+  EXPECT_EQ(C->Plan.Bytes.Value, ProductEncodedBytesValue);
   EXPECT_TRUE(C->Plan.isProductLegal());
 
   auto SetDesc = lateSingletonSetDescOpcode(Haydn::ADD32, Fmts);
