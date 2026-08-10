@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `7cf1079b8505`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 290/589, `HaydnTests` 142/253, lld 12/24.** Both § 5.2 generator gaps closed; § 5.11 down to five logicals, all with reasons. |
+| `llvm-project` | `haydn-formate-switch-mc` | `1240fd66d030`, **local only — not pushed** | **objects emit: 424/430 CodeGen. lit 290/589, `HaydnTests` 142/253, lld 12/24, clang 1299/1331.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -1511,8 +1511,8 @@ about names. Two things forced that reading:
 ```sh
 python3 .../haydn_encoding.py --database ~/haydn \
     --emit operand-agreement --flags-from haydn-records.json
-#   operand agreement: 5 logicals, 25 member placements disagree
-#     arity 0   defs 0   kinds 0   ties 25 / 5
+#   operand agreement: 3 logicals, 21 member placements disagree
+#     arity 0   defs 0   kinds 0   ties 21 / 3
 ```
 
 The generator no longer contributes a single disagreement. The first three axes
@@ -1549,7 +1549,7 @@ The four shapes, and what each cost:
 | SFR compares with no destination | 9 | `b6c960be45ee` | intrinsics and builtins become void (§ 7) |
 | an extra dead operand | 5 | `b6c960be45ee` | `.td` only; none was ever in an asm string |
 | `Behavior` reads a port the database omits | 6 | `fb3fd13bebed` | a database repair, not a `.td` one |
-| an accumulator the logical never declared | 89 | `5185d0634df6`, `91a58cebd7aa` | 85 intrinsic prototypes gain the accumulator |
+| an accumulator the logical never declared | 91 | `5185d0634df6`, `91a58cebd7aa`, `1240fd66d030` | 87 intrinsic prototypes gain the accumulator |
 | operand order against the Syntax | 3 | `7cf1079b8505` | `.td` plus four GISel construction sites |
 
 **The first two changed the generated encoding by not one byte.** The members
@@ -1566,18 +1566,23 @@ the tree — `X4CJMULA16S_H` has carried `FmtALU64Acc` + `$rd = $rd_in` + a
 ternary intrinsic + `selectAccMAC` all along — so this was a rename onto an
 existing vocabulary rather than a design.
 
-The five left on `ties` are reasons, not work:
+`MOVEI_H`/`MOVEI_L` turned out to be the same shape and are fixed in
+`1240fd66d030`. They write one half of the destination and preserve the other,
+and with a one-argument intrinsic the preserved half was undefined — so the
+pair could not do the one thing their builtin documentation describes, because
+two independent defs cannot be chained onto one register:
 
-* `SLLI64`/`SRLI64`/`SRAI64` are tied **only** because Bundle128's 48-bit
-  `Fmt48_WideDR_RI6` has room for one register, so an untied `$rsd` has no
-  field to encode into. The database and the members both give the two
-  registers independent homes. It comes off with the Bundle128 formats (§ 5.2);
-  until then it costs a register copy and no correctness.
-* `MOVEI_H`/`MOVEI_L` write one half of the destination and preserve the other,
-  so they read it. Giving them the input is a **constant-materialization**
-  question — the pair has to chain, `MOVEI_L` then `MOVEI_H` on the same
-  register — not an operand-list one, and it is the one piece of § 5.11 that
-  has not been looked at.
+```c
+int64_t v = haydn_movei_l(acc, lo);   /* acc supplies the high half */
+v          = haydn_movei_h(v,   hi);  /* chains onto it            */
+```
+
+**The three left on `ties` are a reason, not work.** `SLLI64`/`SRLI64`/`SRAI64`
+are tied **only** because Bundle128's 48-bit `Fmt48_WideDR_RI6` has room for
+one register, so an untied `$rsd` has no field to encode into. The database and
+the format E members both give the two registers independent homes. It comes
+off with the Bundle128 formats (§ 5.2); until then it costs a register copy and
+no correctness.
 
 Treat every count as a standing hazard, not a fixed list: they should only ever
 shrink, and any new mismatch is a new place the encoder can read the wrong
