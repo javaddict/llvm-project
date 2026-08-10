@@ -511,6 +511,31 @@ static bool usePublicProto(const BuiltinEntry &E, std::string &Ret,
   return parseProto(E.PublicPrototype, Ret, Args);
 }
 
+// On the plain call-through path the wrapper declares PublicPrototype's
+// parameters and forwards them verbatim, so the two arities must agree or the
+// generated header will not compile. PublicPrototype is a second,
+// hand-maintained copy of an arity the builtin already states, and it drifted
+// every time a prototype was reshaped — six store forms and the two clamps
+// that gained an accumulator were all sitting wrong. Refuse rather than
+// quietly realign to the builtin: realigning discards the type spellings that
+// are the whole reason PublicPrototype exists, and says nothing.
+//
+// Pair kinds are exempt and must not reach here: their public form returns
+// what the builtin writes through an out pointer, so it is one parameter
+// shorter by design.
+static void checkPublicProtoArity(const BuiltinEntry &E,
+                                  ArrayRef<std::string> Args) {
+  std::string BRet;
+  SmallVector<std::string, 6> BArgs;
+  if (!parseProto(E.Prototype, BRet, BArgs) || BArgs.size() == Args.size())
+    return;
+  PrintFatalError("HaydnIntrin: " + E.Name + " PublicPrototype takes " +
+                  std::to_string(Args.size()) +
+                  " parameter(s) but the builtin takes " +
+                  std::to_string(BArgs.size()) +
+                  " — the wrapper forwards them verbatim, so they must agree");
+}
+
 static std::string docLine(const BuiltinEntry &E) {
   std::string D;
   if (!E.Mnemonic.empty())
@@ -771,6 +796,7 @@ static void emitOne(raw_ostream &OS, const BuiltinEntry &E,
   if (HasPub && E.K != Kind::PairRR2 && E.K != Kind::PairRRA2 &&
       E.K != Kind::PairLdWb && E.K != Kind::PairBrevLoad &&
       E.K != Kind::PairCbLoad && E.K != Kind::ExtV2 && E.K != Kind::ExtV4) {
+    checkPublicProtoArity(E, Args);
     emitGenericWithNames(Ret, Args);
     Mark();
     return;
@@ -1067,83 +1093,65 @@ static void emitSpecials(raw_ostream &OS) {
           "__haydn_v2_as_i64(acc), __haydn_v2_as_i64(data), "
           "__haydn_v2_as_i64(tw_widened)));"});
 
-  // UA ar_sel/dir_sel are ImmArg encoding fields. Public wrappers accept
-  // runtime ar/dir (NatureDSP ar&=3) but only pass literal 0..3 / 0..1 to
-  // builtins via switch so Sema ImmCheck sees ICE at the builtin call site.
-  OS << "/* ImmArg ar_sel/dir: switch-literal dispatch. */\n";
-  emitFn(OS, "haydn_x4int16", "d_lqhwua_post",
-         "const void *ptr, int ar_sel, int stride, int dir_sel",
-         {"ar_sel &= 3; dir_sel &= 1;",
-          "switch ((ar_sel << 1) | dir_sel) {",
-          "case 0: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 0, stride, 0));",
-          "case 1: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 0, stride, 1));",
-          "case 2: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1, stride, 0));",
-          "case 3: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1, stride, 1));",
-          "case 4: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 2, stride, 0));",
-          "case 5: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 2, stride, 1));",
-          "case 6: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 3, stride, 0));",
-          "default: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 3, stride, 1));",
+  // ar_sel is an ImmArg encoding field. Public wrappers accept a runtime ar
+  // (NatureDSP ar&=3) but only pass literal 0..3 to the builtin via switch so
+  // Sema's ImmCheck sees an ICE at the builtin call site.
+  //
+  // The re-delivered database dropped the direction select and fixed the
+  // post-increment at +8 (FORMAT-E-SWITCH-PLAN.md § 7), so these bodies carry
+  // neither `stride` nor `dir_sel` any more. They are the emitter's own copy
+  // of each builtin's arity and drifted silently when the prototypes moved —
+  // scripts/haydn_builtin_call_arity.py is the standing check.
+  OS << "/* ImmArg ar_sel: switch-literal dispatch. */\n";
+  emitFn(OS, "haydn_x4int16", "d_lqhwua_post", "const void *ptr, int ar_sel",
+         {"switch (ar_sel & 3) {",
+          "case 0: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 0));",
+          "case 1: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 1));",
+          "case 2: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 2));",
+          "default: return __haydn_i64_as_v4(__builtin_haydn_d_lqhwua_post(ptr, 3));",
           "}"});
-  emitFn(OS, "haydn_x2int32", "d_ltwua_post",
-         "const void *ptr, int ar_sel, int stride, int dir_sel",
-         {"ar_sel &= 3; dir_sel &= 1;",
-          "switch ((ar_sel << 1) | dir_sel) {",
-          "case 0: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 0, stride, 0));",
-          "case 1: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 0, stride, 1));",
-          "case 2: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1, stride, 0));",
-          "case 3: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1, stride, 1));",
-          "case 4: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 2, stride, 0));",
-          "case 5: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 2, stride, 1));",
-          "case 6: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 3, stride, 0));",
-          "default: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 3, stride, 1));",
+  emitFn(OS, "haydn_x2int32", "d_ltwua_post", "const void *ptr, int ar_sel",
+         {"switch (ar_sel & 3) {",
+          "case 0: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 0));",
+          "case 1: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 1));",
+          "case 2: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 2));",
+          "default: return __haydn_i64_as_v2(__builtin_haydn_d_ltwua_post(ptr, 3));",
           "}"});
   emitFn(OS, "void", "d_sqhwua_post",
-         "haydn_x4int16 data, void *ptr, int ar_sel, int stride, int dir_sel",
+         "haydn_x4int16 data, void *ptr, int ar_sel",
          {"int64_t d = __haydn_v4_as_i64(data);",
-          "ar_sel &= 3; dir_sel &= 1;",
-          "switch ((ar_sel << 1) | dir_sel) {",
-          "case 0: __builtin_haydn_d_sqhwua_post(d, ptr, 0, stride, 0); break;",
-          "case 1: __builtin_haydn_d_sqhwua_post(d, ptr, 0, stride, 1); break;",
-          "case 2: __builtin_haydn_d_sqhwua_post(d, ptr, 1, stride, 0); break;",
-          "case 3: __builtin_haydn_d_sqhwua_post(d, ptr, 1, stride, 1); break;",
-          "case 4: __builtin_haydn_d_sqhwua_post(d, ptr, 2, stride, 0); break;",
-          "case 5: __builtin_haydn_d_sqhwua_post(d, ptr, 2, stride, 1); break;",
-          "case 6: __builtin_haydn_d_sqhwua_post(d, ptr, 3, stride, 0); break;",
-          "default: __builtin_haydn_d_sqhwua_post(d, ptr, 3, stride, 1); break;",
+          "switch (ar_sel & 3) {",
+          "case 0: __builtin_haydn_d_sqhwua_post(d, ptr, 0); break;",
+          "case 1: __builtin_haydn_d_sqhwua_post(d, ptr, 1); break;",
+          "case 2: __builtin_haydn_d_sqhwua_post(d, ptr, 2); break;",
+          "default: __builtin_haydn_d_sqhwua_post(d, ptr, 3); break;",
           "}"});
   emitFn(OS, "void", "d_stwua_post",
-         "haydn_x2int32 data, void *ptr, int ar_sel, int stride, int dir_sel",
+         "haydn_x2int32 data, void *ptr, int ar_sel",
          {"int64_t d = __haydn_v2_as_i64(data);",
-          "ar_sel &= 3; dir_sel &= 1;",
-          "switch ((ar_sel << 1) | dir_sel) {",
-          "case 0: __builtin_haydn_d_stwua_post(d, ptr, 0, stride, 0); break;",
-          "case 1: __builtin_haydn_d_stwua_post(d, ptr, 0, stride, 1); break;",
-          "case 2: __builtin_haydn_d_stwua_post(d, ptr, 1, stride, 0); break;",
-          "case 3: __builtin_haydn_d_stwua_post(d, ptr, 1, stride, 1); break;",
-          "case 4: __builtin_haydn_d_stwua_post(d, ptr, 2, stride, 0); break;",
-          "case 5: __builtin_haydn_d_stwua_post(d, ptr, 2, stride, 1); break;",
-          "case 6: __builtin_haydn_d_stwua_post(d, ptr, 3, stride, 0); break;",
-          "default: __builtin_haydn_d_stwua_post(d, ptr, 3, stride, 1); break;",
+          "switch (ar_sel & 3) {",
+          "case 0: __builtin_haydn_d_stwua_post(d, ptr, 0); break;",
+          "case 1: __builtin_haydn_d_stwua_post(d, ptr, 1); break;",
+          "case 2: __builtin_haydn_d_stwua_post(d, ptr, 2); break;",
+          "default: __builtin_haydn_d_stwua_post(d, ptr, 3); break;",
           "}"});
 
-  emitFn(OS, "haydn_x4int16", "d_lqhwua_post_ip",
-         "void **pptr, int ar_sel, int stride, int dir_sel",
-         {"haydn_x4int16 v = haydn_d_lqhwua_post(*pptr, ar_sel, stride, dir_sel);",
-          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));",
-          "return v;"});
-  emitFn(OS, "haydn_x2int32", "d_ltwua_post_ip",
-         "void **pptr, int ar_sel, int stride, int dir_sel",
-         {"haydn_x2int32 v = haydn_d_ltwua_post(*pptr, ar_sel, stride, dir_sel);",
-          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));",
-          "return v;"});
+  // The hardware post-increment is a fixed +8, so the _ip wrappers advance by
+  // that rather than by a caller-supplied signed stride.
+  emitFn(OS, "haydn_x4int16", "d_lqhwua_post_ip", "void **pptr, int ar_sel",
+         {"haydn_x4int16 v = haydn_d_lqhwua_post(*pptr, ar_sel);",
+          "*pptr = (void *)((char *)*pptr + 8);", "return v;"});
+  emitFn(OS, "haydn_x2int32", "d_ltwua_post_ip", "void **pptr, int ar_sel",
+         {"haydn_x2int32 v = haydn_d_ltwua_post(*pptr, ar_sel);",
+          "*pptr = (void *)((char *)*pptr + 8);", "return v;"});
   emitFn(OS, "void", "d_sqhwua_post_ip",
-         "haydn_x4int16 data, void **pptr, int ar_sel, int stride, int dir_sel",
-         {"haydn_d_sqhwua_post(data, *pptr, ar_sel, stride, dir_sel);",
-          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));"});
+         "haydn_x4int16 data, void **pptr, int ar_sel",
+         {"haydn_d_sqhwua_post(data, *pptr, ar_sel);",
+          "*pptr = (void *)((char *)*pptr + 8);"});
   emitFn(OS, "void", "d_stwua_post_ip",
-         "haydn_x2int32 data, void **pptr, int ar_sel, int stride, int dir_sel",
-         {"haydn_d_stwua_post(data, *pptr, ar_sel, stride, dir_sel);",
-          "*pptr = (void *)((char *)*pptr + ((dir_sel & 1) ? -stride : stride));"});
+         "haydn_x2int32 data, void **pptr, int ar_sel",
+         {"haydn_d_stwua_post(data, *pptr, ar_sel);",
+          "*pptr = (void *)((char *)*pptr + 8);"});
 
   OS << "#define haydn_movad32_h haydn_movad32_high\n"
         "#define haydn_movad32_l haydn_movad32_low\n\n";

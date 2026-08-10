@@ -1136,7 +1136,7 @@ def mulss32_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
 // Golden MAXABS32S: dual 32-bit abs+max lanes (same shape as X2 abs/max family).
 def maxabs32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "maxabs32s";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MAXABS32S";
 }
 def fmul16_hs00 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
@@ -1506,7 +1506,7 @@ def srli64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
 }
 def x4fcmul16rs : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4fcmul16rs";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FCMUL16RS";
   let Semantics = "performs four parallel complex 16×16-bit fixed-point multiplications on packed Q1.15 operands, with rounding back to Q1.15 and saturation. Each source register rsdX is treated as two complex Q1.15 ...";
 }
@@ -2218,7 +2218,7 @@ def x2subadd32s_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _Ext
 }
 def x2clamp32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2clamp32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2CLAMP32";
   let Semantics = "performs per-lane clamping of two packed 32-bit signed values in rtd. For each 32-bit lane, the value in rtd is first limited to the upper bound from rsd1, then limited to the lower bound from rsd2.";
 }
@@ -2296,7 +2296,7 @@ def x4energy16 : HaydnBuiltin<"int64_t(_ExtVector<4, short>)", "simd"> {
 }
 def x4clamp16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4clamp16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CLAMP16";
   let Semantics = "performs per-lane clamping of four packed 16-bit signed values in rtd. For each 16-bit lane, the value in rtd is first limited to the upper bound from rsd1, then limited to the lower bound from rsd2.";
 }
@@ -4852,14 +4852,14 @@ def s_sb_pre_reg : HaydnBuiltin<"void*(int, void*, int)"> {
 }
 def s_sb_with_imm : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sb_with_imm";
-  let PublicPrototype = "void(int, void*)";
+  let PublicPrototype = "void(int, void*, int)";
   let Mnemonic = "S_SB_WITH_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SB_WITH_IMM.";
 }
 def s_sb_with_reg : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sb_with_reg";
-  let PublicPrototype = "void(int, void*)";
+  let PublicPrototype = "void(int, void*, int)";
   let Mnemonic = "S_SB_WITH_REG";
   let Semantics = "Golden LS S_SB_WITH_REG.";
 }
@@ -4891,14 +4891,14 @@ def s_shw_pre_reg : HaydnBuiltin<"void*(int, void*, int)"> {
 }
 def s_shw_with_imm : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_shw_with_imm";
-  let PublicPrototype = "void(int, void*)";
+  let PublicPrototype = "void(int, void*, int)";
   let Mnemonic = "S_SHW_WITH_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SHW_WITH_IMM.";
 }
 def s_shw_with_reg : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_shw_with_reg";
-  let PublicPrototype = "void(int, void*)";
+  let PublicPrototype = "void(int, void*, int)";
   let Mnemonic = "S_SHW_WITH_REG";
   let Semantics = "Golden LS S_SHW_WITH_REG.";
 }
@@ -4930,14 +4930,14 @@ def s_sw_pre_reg : HaydnBuiltin<"void*(int, void*, int)"> {
 }
 def s_sw_with_imm : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sw_with_imm";
-  let PublicPrototype = "void(int, void*)";
+  let PublicPrototype = "void(int, void*, int)";
   let Mnemonic = "S_SW_WITH_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
   let Semantics = "Golden LS S_SW_WITH_IMM.";
 }
 def s_sw_with_reg : HaydnBuiltin<"void(int, void*, int)"> {
   let PublicName = "s_sw_with_reg";
-  let PublicPrototype = "void(int, void*)";
+  let PublicPrototype = "void(int, void*, int)";
   let Mnemonic = "S_SW_WITH_REG";
   let Semantics = "Golden LS S_SW_WITH_REG.";
 }
