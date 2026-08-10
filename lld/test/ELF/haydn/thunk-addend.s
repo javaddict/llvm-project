@@ -6,7 +6,12 @@
 #
 # Call veneer honors addend (callee+16).
 
-# RELOC: R_HAYDN_WIDE_CallSImm20 callee 0x10
+# The addend is the source addend PLUS the entry byte base, because a
+# branch resolves from the bundle and the relocation offset points at the
+# entry (`14afcf2e79a5`). 16 + 4 = 0x14. For a PC-relative patch the base
+# cancels against the offset; the veneer takes it back out, which is what
+# the disassembly below actually checks.
+# RELOC: R_HAYDN_WIDE_CallSImm20 callee 0x14
 
 .section .text
 .globl _start
