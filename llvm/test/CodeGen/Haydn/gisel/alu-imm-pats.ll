@@ -7,7 +7,7 @@
 ; G_ADD/G_AND/G_OR/G_XOR case, and HaydnGISel.td only had register-register
 ; Pats. So `x & 255` came out as
 ;
-;     addi32_w r5, r0, 255      <- constant materialized, alone in a bundle
+;     addi32 r5, r0, 255      <- constant materialized, alone in a bundle
 ;     and32    r1, r1, r5
 ;
 ; and `andi32` / `ori32` / `slli32` / `srli32` / `srai32` were never emitted at
@@ -24,7 +24,7 @@
 ;   SLLI32 / SRLI32 / SRAI32  uimm5
 ;
 ; Note on CHECK-NOT: every function's prologue/epilogue contains
-; `xor32 r0, r0, r0` (soft-zero R0) and `subi32`/`addi32_w sp`, so a bare
+; `xor32 r0, r0, r0` (soft-zero R0) and `subi32`/`addi32 sp`, so a bare
 ; CHECK-NOT on `or32` would false-match inside `xor32`. Negative checks below
 ; are pinned to the register-register operand shape.
 
@@ -116,9 +116,9 @@ define i32 @add_imm_simm16_max(i32 %x) {
   ret i32 %r
 }
 
-; 32768 does not fit simm16: materialize with ADDI32_W, then ADD32.
+; 32768 does not fit simm16: materialize with ADDI32, then ADD32.
 ; CHECK-LABEL: add_imm_over_simm16:
-; CHECK: addi32_w r{{[0-9]+}}, r0, 32768
+; CHECK: addi32 r{{[0-9]+}}, r0, 32768
 ; CHECK: add32 r{{[0-9]+}}, r{{[0-9]+}}, r{{[0-9]+}}
 define i32 @add_imm_over_simm16(i32 %x) {
   %r = add i32 %x, 32768
@@ -147,7 +147,7 @@ define i32 @and_imm_over_uimm20(i32 %x) {
 ; ANDI32 zero-extends its immediate, so a negative mask must NOT be folded.
 ; CHECK-LABEL: and_imm_negative:
 ; CHECK-NOT: andi32
-; CHECK: addi32_w r{{[0-9]+}}, r0, -16
+; CHECK: addi32 r{{[0-9]+}}, r0, -16
 ; CHECK: and32 r{{[0-9]+}}, r{{[0-9]+}}, r{{[0-9]+}}
 ; CHECK-NOT: andi32
 define i32 @and_imm_negative(i32 %x) {
@@ -183,7 +183,7 @@ define i32 @shl_reg(i32 %x, i32 %y) {
 ;===----------------------------------------------------------------------===;
 
 ; CHECK-LABEL: dhry_proc6_shape:
-; CHECK-NOT: addi32_w r{{[0-9]+}}, r0, 255
+; CHECK-NOT: addi32 r{{[0-9]+}}, r0, 255
 ; CHECK: andi32 r{{[0-9]+}}, r{{[0-9]+}}, 255
 define i32 @dhry_proc6_shape(i32 %v) {
   %m = and i32 %v, 255

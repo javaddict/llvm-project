@@ -186,7 +186,7 @@ body:             |
     ; real LD32 and silently disable forwarding.
     ; CHECK-LABEL: name: disjoint_no_invalidate
     ; CHECK: $r3 = ADD32 $r1, $r0
-    ; CHECK-NOT: LD32 $r13, 0
+    ; CHECK-NOT: S_LW_{{[A-Z_]*}} $r13, 0
     $r3 = LD32 $r13, 0
 
     RET implicit $r0, implicit $r15

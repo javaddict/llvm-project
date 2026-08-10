@@ -17,8 +17,8 @@
 ; i24 bitfield RMW must use byte loads/stores, never word
 define void @bf_rmw_i24(ptr %p) {
 ; CHECK-LABEL: bf_rmw_i24:
-; CHECK-NOT: ld32
-; CHECK-NOT: st32
+; CHECK-NOT: s_lw_
+; CHECK-NOT: s_sw_
 ; CHECK: ldu8
 ; CHECK: st8
   %bf.load = load i24, ptr %p, align 1
@@ -31,7 +31,7 @@ define void @bf_rmw_i24(ptr %p) {
 ; unaligned i32 load at odd address: byte sequence, not ld32
 define i32 @load_i32_align1(ptr %p) {
 ; CHECK-LABEL: load_i32_align1:
-; CHECK-NOT: ld32
+; CHECK-NOT: s_lw_
 ; CHECK: ldu8
   %v = load i32, ptr %p, align 1
   ret i32 %v
@@ -40,7 +40,7 @@ define i32 @load_i32_align1(ptr %p) {
 ; unaligned i32 store: byte stores, not st32
 define void @store_i32_align1(ptr %p, i32 %v) {
 ; CHECK-LABEL: store_i32_align1:
-; CHECK-NOT: st32
+; CHECK-NOT: s_sw_
 ; CHECK: st8
   store i32 %v, ptr %p, align 1
   ret void
@@ -49,8 +49,8 @@ define void @store_i32_align1(ptr %p, i32 %v) {
 ; unaligned i16 (F2b half family): must not use ldu16/ld32 on odd EA
 define i32 @load_i16_align1(ptr %p) {
 ; CHECK-LABEL: load_i16_align1:
-; CHECK-NOT: ldu16
-; CHECK-NOT: ld32
+; CHECK-NOT: s_lhwu_
+; CHECK-NOT: s_lw_
 ; CHECK: ldu8
   %v = load i16, ptr %p, align 1
   %z = zext i16 %v to i32

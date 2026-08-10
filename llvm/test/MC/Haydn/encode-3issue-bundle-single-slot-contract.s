@@ -29,19 +29,25 @@
 # use the legacy-flat fallback; those are tracked for a future mappings
 # addition.
 #
-# The contract: each instruction decodes to its full-width mnemonic, NOT a
-# c.<compressed> alias (c.ldu16/c.ld8/c.add32), which would indicate a
-# mis-decode.
+# The contract: each instruction decodes to its own mnemonic and not to
+# garbage.
+#
+# It used to be spelled "NOT a c.<compressed> alias". That guard could not
+# fire: 16-bit compressed forms were retired before the switch
+# (HaydnInstrInfoC.td is intentionally empty). Under format E a mis-decode
+# does not produce a wrong mnemonic at all — the generated sub-tries check the
+# reserved bits, so it produces `<unknown>` (FORMAT-E-SWITCH-PLAN.md § 5.2).
+# That is what this now forbids.
 
 # CHECK-LABEL: <.text>:
 
-# CHECK: ld32
-# CHECK-NOT: c.ld
+# CHECK: s_lw_with_imm
+# CHECK-NOT: <unknown>
 # CHECK: add64
-# CHECK-NOT: c.add
+# CHECK-NOT: <unknown>
 # CHECK: add32
-# CHECK-NOT: c.add
-{ ld32 r1, r1, 4 }
+# CHECK-NOT: <unknown>
+{ s_lw_with_imm r1, r1, 1 }
 
 { add64 d0, d1, d2 }
 

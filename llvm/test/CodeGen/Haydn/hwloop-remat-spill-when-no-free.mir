@@ -7,8 +7,8 @@
 # CHECK-LABEL: name: remat_spill_no_free
 # Live GPRs force NeedsSpill — ST32 of chosen scratch before ADDI, LD32 after SET.
 # CHECK: ST32
-# CHECK: $r{{[0-9]+}} = ADDI32_W $r1, -1
-# CHECK-NOT: $r1 = ADDI32_W $r1, -1
+# CHECK: $r{{[0-9]+}} = ADDI32 $r1, -1
+# CHECK-NOT: $r1 = ADDI32 $r1, -1
 # CHECK: SET_HWLOOP_F2
 # CHECK: LD32
 

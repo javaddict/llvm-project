@@ -33,4 +33,4 @@ attributes #0 = { nounwind }
 
 ; CHECK-LABEL: store_i64:
 ; CHECK: st64
-; CHECK-NOT: st32 {{d[0-9]}}
+; CHECK-NOT: s_sw_{{[a-z_]*}} {{d[0-9]}}
