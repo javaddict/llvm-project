@@ -44,7 +44,7 @@ define i32 @fixed_alloca(i32 %x) {
 
 define i32 @vla_basic(i32 %n) {
 ; Dynamic stack allocation with SUB32
-; The store-then-load of constant 42 survives as an explicit ld32 in the
+; The store-then-load of constant 42 survives as an explicit load in the
 ; post-schedule output (the fold no longer fires after the Flex cutover).
 ; CHECK-LABEL: vla_basic:
 ; CHECK:       // #<spill-kpi> @vla_basic spills=1 spill-bytes=4 reloads=1 reload-bytes=4

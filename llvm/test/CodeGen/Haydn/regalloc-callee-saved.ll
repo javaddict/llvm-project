@@ -3,7 +3,9 @@
 
 
 ;
-; NOTE: updated for VLIW slot-1 load promotion — independent loads now pack as ld32+ld32.
+; NOTE: independent loads pack because LOADSTORE0 and LOAD1 are two units
+; (§ 7.1). "slot-1 load promotion" was Bundle128's model, where a slot
+; implied its unit.
 ; NOTE: CHECKs reflect post- scheduled output (prologue/epilogue slot order varies per frame).
 ;
 ; REGRESSION TEST: Callee-saved register save/restore stress test.
@@ -44,7 +46,7 @@ declare i64 @use_i64(i64)
 ;Test 1: Minimal callee-save — just one value across a call.
 ;The allocator may use FP (R14) as a callee-saved register or R8-R11.
 ;Either way, a move32 copies the value to a callee-saved register before
-;the call, and no explicit st32 is needed (only a register-to-register move).
+;the call, and no explicit store is needed (only a register-to-register move).
 
 define i32 @test_minimal_callee_save(i32 %x) nounwind {
 ; CHECK-LABEL: test_minimal_callee_save:
@@ -262,7 +264,7 @@ define i64 @test_mixed_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
                                      i64 %e, i64 %f) nounwind {
 entry:
-; Prologue saves both GPR (st32) and DR64 (st64) callee-saves
+; Prologue saves both GPR and DR64 callee-saves
 ; Epilogue restores both
   %v1 = call i32 @use_i32(i32 %a)
   %v2 = call i32 @use_i32(i32 %b)
