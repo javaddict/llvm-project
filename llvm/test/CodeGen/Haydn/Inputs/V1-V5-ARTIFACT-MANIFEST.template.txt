@@ -1,0 +1,85 @@
+Haydn exact V1-V5 artifact manifest template (G-TEST-CONTRACTS / T7)
+====================================================================
+Stamp: 2026-08-10 T7-TEST-CONTRACTS scaffolding
+
+Fill one immutable record per qualification attempt. Broad gate greens without
+this tuple do not advance decision-guard PRODUCT_ON.
+
+Identity
+--------
+feature_id:
+lifecycle_state: EXPERIMENTAL_OFF | CANDIDATE_OFF | QUALIFIED_OFF | PRODUCT_ON
+owner:
+date_utc:
+policy_default_cl_init: true|false
+
+Exact artifact tuple (must be hashed, not "latest")
+---------------------------------------------------
+llvm_git_sha:
+llvm_git_describe:
+haydn_build_path:
+clang_path:
+llc_path:
+sysroot_path:
+sysroot_stamp_hash:
+compiler_rt_hash:
+libc_hash:
+bundlesim_git_sha:
+bundlesim_build_path:
+host_uname:
+golden_json_sha256:
+golden_xlsx_sha256:
+
+Ladder results (each step names commands + exit + log path)
+-----------------------------------------------------------
+V1_unit_generation:
+  commands:
+  exit: 0|N
+  log:
+  notes: generated TD/INC --check, unit tests
+
+V2_focused_lit:
+  commands: llvm-lit -sv llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
+  parse: llvm/utils/haydn/parse_lit_summary.py  # Failed=0 XPASS=0 only
+  exit:
+  log:
+  counts: Failed= XPASS= ExpectedlyFailed= Unsupported= Passed=
+
+V3_clean_toolchain:
+  commands: ninja -C <build>
+  exit:
+  log:
+  binary_hashes:
+
+V4_rebuilt_libc_crt_sysroot:
+  commands:
+  exit:
+  log:
+  artifact_hashes:
+
+V5_bundlesim_iss:
+  commands: BundleSim/scripts/run_full_gate.sh (no SKIP_*)
+  coremark: PASS|FAIL host_crc=
+  dhrystone: PASS|FAIL
+  torture_O2: Failed=
+  torture_O3: Failed=
+  tsvc_int: i16= i32=
+  exit:
+  log:
+
+Focused contracts required (not substituted by V5 alone)
+--------------------------------------------------------
+fault_injection_seats: see FAULT-INJECTION-SEATS.txt
+corruption_matrix: see CORRUPTION-MATRIX.txt
+semantic_object_value_pins:
+xfail_ledger_total:
+owned_blockers_open:
+
+Promotion decision
+------------------
+pre_flip_state:
+post_flip_policy_only_commit:
+post_flip_V1_V5_rerun:
+off_on_semantic_equivalence:
+kpi_measured:
+verdict: hold | QUALIFIED_OFF | PRODUCT_ON

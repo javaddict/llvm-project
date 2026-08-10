@@ -23,22 +23,19 @@
 define i32 @phi_loop_counter(i32 %n) nounwind {
 ; CHECK-LABEL: phi_loop_counter:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, -1; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 2; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, -1 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { add32 r5, r2, r4; add32 r2, r2, r3 }
-; CHECK-NEXT:    { slt32 r5, r5, r1; nop }
-; CHECK-NEXT:    { bnez_w r5, .LBB0_1; nop }
+; CHECK-NEXT:    { addi32 r2, r2, 1; addi32 r3, r2, 2 }
+; CHECK-NEXT:    { nop; slt32 r3, r3, r1 }
+; CHECK-NEXT:    { nop; bnez_w r3, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -54,25 +51,24 @@ exit:
 define i64 @phi_i64_loop(i32 %n, i64 %init) nounwind {
 ; CHECK-LABEL: phi_i64_loop:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { sext32t64 d2, r2; nop }
-; CHECK-NEXT:    { slli64 d2, d2, 32; nop }
-; CHECK-NEXT:    { srli64 d2, d2, 32; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 1 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r2 }
+; CHECK-NEXT:    { nop; slli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; srli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
 ; CHECK-NEXT:  .LBB1_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { add32 r3, r3, r2; or64 d1, d0, d0 }
-; CHECK-NEXT:    { slt32 r4, r3, r1; add64 d0, d1, d2 }
-; CHECK-NEXT:    { bnez_w r4, .LBB1_1; nop }
+; CHECK-NEXT:    { addi32 r2, r2, 1; or64 d1, d0, d0 }
+; CHECK-NEXT:    { add64 d0, d1, d2; slt32 r3, r2, r1 }
+; CHECK-NEXT:    { nop; bnez_w r3, .LBB1_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { or64 d0, d1, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; or64 d0, d1, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -90,23 +86,20 @@ exit:
 define i32 @phi_double(i32 %n) nounwind {
 ; CHECK-LABEL: phi_double:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 3; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, -2; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; move32 r2, r1 }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, -2 }
+; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
 ; CHECK-NEXT:  .LBB2_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { add32 r5, r5, r3; add32 r2, r2, r4 }
-; CHECK-NEXT:    { slt32 r6, r5, r1; nop }
-; CHECK-NEXT:    { bnez_w r6, .LBB2_1; nop }
+; CHECK-NEXT:    { addi32 r1, r1, 3; addi32 r3, r3, 1 }
+; CHECK-NEXT:    { nop; slt32 r4, r3, r2 }
+; CHECK-NEXT:    { nop; bnez_w r4, .LBB2_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -132,23 +125,22 @@ define i32 @phi_const_init(i32 %n) nounwind {
 ; (was a fused blt_w before the Flex cutover).
 ; CHECK-LABEL: phi_const_init:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 0; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 1; nop }
-; CHECK-NEXT:    { move32 r4, r5; nop }
+; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; move32 r3, r4 }
 ; CHECK-NEXT:  .LBB3_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { move32 r2, r5; nop }
-; CHECK-NEXT:    { add32 r5, r4, r2; add32 r4, r4, r3 }
-; CHECK-NEXT:    { slt32 r6, r4, r1; add32 r5, r5, r3 }
-; CHECK-NEXT:    { bnez_w r6, .LBB3_1; nop }
+; CHECK-NEXT:    { nop; move32 r2, r4 }
+; CHECK-NEXT:    { addi32 r3, r3, 1; add32 r4, r3, r2 }
+; CHECK-NEXT:    { addi32 r4, r4, 1; slt32 r5, r3, r1 }
+; CHECK-NEXT:    { nop; bnez_w r5, .LBB3_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { move32 r1, r2; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -166,32 +158,31 @@ exit:
 define i32 @phi_nested_loops(i32 %n, i32 %m) nounwind {
 ; CHECK-LABEL: phi_nested_loops:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 0; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 1; nop }
-; CHECK-NEXT:    { move32 r6, r5; move32 r3, r5 }
+; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { move32 r3, r4; move32 r5, r4 }
 ; CHECK-NEXT:  .LBB4_1: // %outer
 ; CHECK-NEXT:    // =>This Loop Header: Depth=1
 ; CHECK-NEXT:    // Child Loop BB4_2 Depth 2
-; CHECK-NEXT:    { move32 r7, r5; nop }
+; CHECK-NEXT:    { nop; move32 r6, r4 }
 ; CHECK-NEXT:  .LBB4_2: // %inner
 ; CHECK-NEXT:    // Parent Loop BB4_1 Depth=1
 ; CHECK-NEXT:    // => This Inner Loop Header: Depth=2
-; CHECK-NEXT:    { add32 r7, r7, r4; nop }
-; CHECK-NEXT:    { slt32 r12, r7, r2; nop }
-; CHECK-NEXT:    { bnez_w r12, .LBB4_2; nop }
+; CHECK-NEXT:    { nop; addi32 r6, r6, 1 }
+; CHECK-NEXT:    { nop; slt32 r7, r6, r2 }
+; CHECK-NEXT:    { nop; bnez_w r7, .LBB4_2 }
 ; CHECK-NEXT:  // %bb.3: // %outer_latch
 ; CHECK-NEXT:    // in Loop: Header=BB4_1 Depth=1
-; CHECK-NEXT:    { add32 r6, r6, r4; add32 r3, r3, r7 }
-; CHECK-NEXT:    { slt32 r12, r6, r1; nop }
-; CHECK-NEXT:    { bnez_w r12, .LBB4_1; nop }
+; CHECK-NEXT:    { addi32 r5, r5, 1; add32 r3, r3, r6 }
+; CHECK-NEXT:    { nop; slt32 r7, r5, r1 }
+; CHECK-NEXT:    { nop; bnez_w r7, .LBB4_1 }
 ; CHECK-NEXT:  // %bb.4: // %exit
-; CHECK-NEXT:    { move32 r1, r3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; move32 r1, r3 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %outer
 outer:
@@ -218,24 +209,24 @@ exit:
 define i64 @phi_mixed_types(i32 %n) nounwind {
 ; CHECK-LABEL: phi_mixed_types:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 0; nop }
-; CHECK-NEXT:    { sext32t64 d1, r3; nop }
-; CHECK-NEXT:    { slli64 d1, d1, 32; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { srli64 d1, d1, 32; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r2 }
+; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
 ; CHECK-NEXT:  .LBB5_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { or64 d0, d1, d1; sext32t64 d2, r3; add32 r3, r3, r2 }
-; CHECK-NEXT:    { slt32 r4, r3, r1; add64 d1, d0, d2 }
-; CHECK-NEXT:    { bnez_w r4, .LBB5_1; nop }
+; CHECK-NEXT:    { addi32 r2, r2, 1; sext32t64 d2, r2 }
+; CHECK-NEXT:    { slt32 r3, r2, r1; or64 d0, d1, d1 }
+; CHECK-NEXT:    { nop; add64 d1, d0, d2 }
+; CHECK-NEXT:    { nop; bnez_w r3, .LBB5_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -254,26 +245,23 @@ exit:
 define i32 @phi_cond_update(i32 %n, i32 %x) nounwind {
 ; CHECK-LABEL: phi_cond_update:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { st32 r8, sp, 3; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 0; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 1; nop }
-; CHECK-NEXT:    { move32 r6, r5; nop }
+; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; move32 r5, r4 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { move32 r3, r5; slt32 r7, r2, r6 }
-; CHECK-NEXT:    { add32 r6, r6, r4; add32 r12, r3, r4 }
-; CHECK-NEXT:    { slt32 r8, r6, r1; nop }
-; CHECK-NEXT:    { movt32 r5, r12, r7; nop }
-; CHECK-NEXT:    { bnez_w r8, .LBB6_1; nop }
+; CHECK-NEXT:    { slt32 r6, r2, r5; move32 r3, r4 }
+; CHECK-NEXT:    { addi32 r7, r3, 1; addi32 r5, r5, 1 }
+; CHECK-NEXT:    { nop; slt32 r12, r5, r1 }
+; CHECK-NEXT:    { nop; movt32 r4, r7, r6 }
+; CHECK-NEXT:    { nop; bnez_w r12, .LBB6_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { move32 r1, r3; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 3; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 16; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; move32 r1, r3 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 loop:

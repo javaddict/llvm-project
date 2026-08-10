@@ -105,7 +105,7 @@ define i32 @multiple_extloads(ptr %p1, ptr %p2) {
 ; CHECK-LABEL: multiple_extloads:
 ; CHECK-DAG: ld8
 ; CHECK-DAG: ld16
-; CHECK: add32
+; CHECK: {{add32|addi32}}
   %v1 = load i8, ptr %p1
   %e1 = sext i8 %v1 to i32
   %v2 = load i16, ptr %p2
@@ -131,8 +131,8 @@ define i32 @unaligned_sextload(ptr %ptr) {
 ; CHECK-NOT: ldu16
 ; CHECK-NOT: {{[^0-9]}}ld16
 ; CHECK-DAG: {{s_lbu_|ldu8|ld8}}
-; CHECK-DAG: sll32
-; CHECK-DAG: or32
+; CHECK-DAG: {{sll32|slli32}}
+; CHECK-DAG: {{or32|ori32}}
   %v = load i16, ptr %ptr, align 1
   %r = sext i16 %v to i32
   ret i32 %r

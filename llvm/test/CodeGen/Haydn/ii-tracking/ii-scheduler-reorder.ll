@@ -34,33 +34,32 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; We look for two add32 mnemonics separated by `;` (the slot separator).
 ; CHECK-LABEL: ii_scheduler_reorder:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { addi32_w r5, sp, 8; nop }
-; CHECK-NEXT:    { st32 r9, r5, 0; nop }
-; CHECK-NEXT:    { st32 r8, r5, 1; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 r8, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    .cfi_offset r8, 12
-; CHECK-NEXT:    .cfi_offset r9, 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r6, r0, 0; nop }
+; CHECK-NEXT:    .cfi_offset r8, -4
+; CHECK-NEXT:    { nop; addi32_w r5, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r7, r1, 0; ld32 r12, r2, 0 }
-; CHECK-NEXT:    { add32 r9, r7, r12; ld32 r8, r3, 0 }
-; CHECK-NEXT:    { add32 r12, r12, r8; st32 r9, r1, 0 }
-; CHECK-NEXT:    { add32 r7, r7, r8; st32 r12, r2, 0 }
-; CHECK-NEXT:    { add32 r6, r6, r5; st32 r7, r3, 0 }
-; CHECK-NEXT:    { addi32 r3, r3, 4; addi32 r2, r2, 4 }
-; CHECK-NEXT:    { slt32 r7, r6, r4; addi32 r1, r1, 4 }
-; CHECK-NEXT:    { bnez_w r7, .LBB0_1; nop }
+; CHECK-NEXT:    { ld32 r7, r2, 0; ld32 r6, r1, 0 }
+; CHECK-NEXT:    { addi32 r5, r5, 1; ld32 r12, r3, 0 }
+; CHECK-NEXT:    { nop; add32 r8, r6, r7 }
+; CHECK-NEXT:    { st32 r8, r1, 0; add32 r7, r7, r12 }
+; CHECK-NEXT:    { addi32 r1, r1, 4; add32 r6, r6, r12 }
+; CHECK-NEXT:    { nop; st32 r7, r2, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 4 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; st32 r6, r3, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, 4 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; slt32 r6, r5, r4 }
+; CHECK-NEXT:    { nop; bnez_w r6, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { ld32 r9, sp, 2; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 3; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 16; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   br label %loop
 

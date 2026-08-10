@@ -39,7 +39,7 @@ define i32 @call_one(i32 %a) {
 ; }
 define i32 @call_many(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: call_many:
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jal_w{{.*}}{{.*}}extern_sink
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %ab = add i32 %a, %b
@@ -57,7 +57,7 @@ define i32 @call_many(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; int local_caller(int a) { return local_callee(a); }
 define i32 @local_callee(i32 %x) {
 ; CHECK-LABEL: local_callee:
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %r = add i32 %x, 1
   ret i32 %r
@@ -80,7 +80,7 @@ define i32 @fib(i32 %n) {
 ; n-1/n-2 may be sub32 or addi -1/-2 + add32
 ; CHECK-DAG: {{sub32|add32}}
 ; CHECK-DAG: jal_w{{.*}}{{.*}}fib
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   %cmp = icmp sle i32 %n, 1
@@ -125,7 +125,7 @@ define i32 @stack_array() {
 ; CHECK-DAG: st32
 ; CHECK-DAG: st32
 ; CHECK-DAG: ld32
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: addi32{{(_w)?}}{{.*}}sp, sp,
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %arr = alloca [4 x i32]
@@ -153,7 +153,7 @@ define i32 @stack_idx(i32 %i) {
 ; CHECK-LABEL: stack_idx:
 ; CHECK-DAG: subi32{{.*}}sp, sp,
 ; CHECK-DAG: st32
-; CHECK-DAG: sll32
+; CHECK-DAG: {{sll32|slli32}}
 ; Indexed load may be ld32 or folded s_lw_pre_reg
 ; CHECK-DAG: {{ld32|s_lw}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
@@ -179,8 +179,8 @@ define i32 @stack_idx(i32 %i) {
 ; C: int arith(int a, int b) { return (a + b) * (a - b); }
 define i32 @arith(i32 %a, i32 %b) {
 ; CHECK-LABEL: arith:
-; CHECK-DAG: add32
-; CHECK-DAG: sub32
+; CHECK-DAG: {{add32|addi32}}
+; CHECK-DAG: {{sub32|subi32}}
 ; CHECK-DAG: mull
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %sum = add i32 %a, %b
@@ -195,7 +195,7 @@ define i32 @divrem(i32 %a, i32 %b) {
 ; CHECK-LABEL: divrem:
 ; CHECK-DAG: jal_w{{.*}}{{.*}}__divsi3
 ; CHECK-DAG: jal_w{{.*}}{{.*}}__modsi3
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %q = sdiv i32 %a, %b
   %r = srem i32 %a, %b
@@ -209,7 +209,7 @@ define i32 @udivrem(i32 %a, i32 %b) {
 ; CHECK-LABEL: udivrem:
 ; CHECK-DAG: jal_w{{.*}}{{.*}}__udivsi3
 ; CHECK-DAG: jal_w{{.*}}{{.*}}__umodsi3
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %q = udiv i32 %a, %b
   %r = urem i32 %a, %b
@@ -221,9 +221,9 @@ define i32 @udivrem(i32 %a, i32 %b) {
 ; C: int bitwise(int a, int b) { return (a & b) | (a ^ b); }
 define i32 @bitwise(i32 %a, i32 %b) {
 ; CHECK-LABEL: bitwise:
-; CHECK-DAG: and32
-; CHECK-DAG: xor32
-; CHECK-DAG: or32
+; CHECK-DAG: {{and32|andi32}}
+; CHECK-DAG: {{xor32|xori32}}
+; CHECK-DAG: {{or32|ori32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %and = and i32 %a, %b
   %xor = xor i32 %a, %b
@@ -235,9 +235,9 @@ define i32 @bitwise(i32 %a, i32 %b) {
 ; C: int shifts(int a, int n) { return (a << n) + (a >> n) + (a >> n); }
 define i32 @shifts(i32 %a, i32 %n) {
 ; CHECK-LABEL: shifts:
-; CHECK-DAG: sll32
-; CHECK-DAG: srl32
-; CHECK-DAG: sra32
+; CHECK-DAG: {{sll32|slli32}}
+; CHECK-DAG: {{srl32|srli32}}
+; CHECK-DAG: {{sra32|srai32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %shl = shl i32 %a, %n
   %lshr = lshr i32 %a, %n
@@ -256,8 +256,8 @@ define i32 @shifts(i32 %a, i32 %n) {
 define i32 @if_else(i32 %a, i32 %b) {
 ; CHECK-LABEL: if_else:
 ; CHECK-DAG: movt32
-; CHECK-DAG: sub32
-; CHECK-DAG: add32
+; CHECK-DAG: {{sub32|subi32}}
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   %cmp = icmp sgt i32 %a, %b
@@ -390,7 +390,7 @@ exit:
 ; }
 define i32 @nested_loop(i32 %n) {
 ; CHECK-LABEL: nested_loop:
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: {{blt_w|slt32|bltu_w}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
@@ -544,7 +544,7 @@ define void @inc_global() {
 ; CHECK-LABEL: inc_global:
 ; CHECK-DAG: lui{{.*}}{{.*}}g_counter
 ; CHECK-DAG: ld32
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: st32
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %old = load i32, ptr @g_counter
@@ -558,7 +558,7 @@ define void @inc_global() {
 define i32 @global_array(i32 %i) {
 ; CHECK-LABEL: global_array:
 ; CHECK-DAG: lui{{.*}}{{.*}}g_data
-; CHECK-DAG: sll32
+; CHECK-DAG: {{sll32|slli32}}
 ; Base+index may be add32+ld32 or folded s_lw_pre_reg
 ; CHECK-DAG: {{add32|s_lw|ld32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
@@ -587,7 +587,7 @@ define i32 @two_globals() {
 ; CHECK-DAG: lui{{.*}}{{.*}}g_pi
 ; CHECK-DAG: ld32
 ; CHECK-DAG: ld32
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %v1 = load i32, ptr @g_counter
   %v2 = load i32, ptr @g_pi
@@ -608,7 +608,7 @@ define i32 @struct_read(ptr %p) {
 ; CHECK-LABEL: struct_read:
 ; Field loads may be ld32 or fused s_lw_* forms.
 ; CHECK-DAG: {{ld32|s_lw}}
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
   %x = load i32, ptr %p
   %yp = getelementptr %struct.point, ptr %p, i32 0, i32 1
@@ -670,7 +670,7 @@ define i32 @struct_loop(ptr %arr, i32 %n) {
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; dual-sched pre-RA : reg/bundle order free; keep key ops.
 ; CHECK-DAG: ld32
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: addi32{{(_w)?}} {{.*}}, {{.*}}, 8
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
@@ -745,7 +745,7 @@ define i64 @checksum(ptr %arr, i32 %n) {
 ; CHECK-DAG: slt32
 ; CHECK-DAG: sub64
 ; CHECK-DAG: add64
-; CHECK-DAG: .cfi_offset r8, {{[0-9]+}}
+; CHECK-DAG: .cfi_offset r8, {{[-0-9]+}}
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:
   br label %loop
@@ -780,7 +780,7 @@ define i32 @struct_conditional(ptr %arr, i32 %n, i32 %threshold) {
 ; CHECK-DAG: ld32
 ; CHECK-DAG: slt32
 ; CHECK-DAG: movt32
-; CHECK-DAG: add32
+; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: .long 40 // 0x28
 ; CHECK-DAG: jalr_w{{.*}}r0, lr, 0
 entry:

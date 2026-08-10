@@ -29,8 +29,8 @@ define i8 @trunc_i32_to_i8(i32 %val) {
 ;Sign extend i8 to i32
 define i32 @sext_i8_to_i32(i8 %val) {
 ; CHECK-LABEL: sext_i8_to_i32:
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: {{sll32|slli32}}
+; CHECK: {{sra32|srai32}}
   %r = sext i8 %val to i32
   ret i32 %r
 }
@@ -38,8 +38,8 @@ define i32 @sext_i8_to_i32(i8 %val) {
 ;Sign extend i16 to i32
 define i32 @sext_i16_to_i32(i16 %val) {
 ; CHECK-LABEL: sext_i16_to_i32:
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: {{sll32|slli32}}
+; CHECK: {{sra32|srai32}}
   %r = sext i16 %val to i32
   ret i32 %r
 }
@@ -56,7 +56,7 @@ define i64 @sext_i32_to_i64(i32 %val) {
 ;Zero extend i8 to i32
 define i32 @zext_i8_to_i32(i8 %val) {
 ; CHECK-LABEL: zext_i8_to_i32:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
   %r = zext i8 %val to i32
   ret i32 %r
 }
@@ -64,7 +64,7 @@ define i32 @zext_i8_to_i32(i8 %val) {
 ;Zero extend i16 to i32
 define i32 @zext_i16_to_i32(i16 %val) {
 ; CHECK-LABEL: zext_i16_to_i32:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
   %r = zext i16 %val to i32
   ret i32 %r
 }

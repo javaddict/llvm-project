@@ -1,16 +1,6 @@
-# XFAIL: *
-# The POST run (-stop-after=postmisched) hits the hard-root exact-commit
-# fail-closed (commitExactHardRootProductCycle -> report_fatal_error) on one
-# of the synthetic hard BUNDLE roots: exactSolveProductOpcodes cannot prove the
-# members form one Format E cycle because a member (e.g. LD32, not yet carrying
-# a generated Format E row) has no exact product alternative. That is an
-# exactSolve/gap, not a real illegality — the fail-closed is the documented
-# design (see postmisched-hard-root-illegal-fail.mir) and must NOT be weakened
-# to a silent dissolve (that would hide illegal roots). The SCHED/COALESCER/
-# PREGREEDY/GREEDY/VRW/SPILL/PEI runs (hard-bundle through RA) pass
-# individually; only the postmisched exact-commit RUN is blocked. Open residual,
-# owner G-FORMAT-E-96-CUTOVER (hard-root exact-commit / LD32 Format E member
-# migration).
+# Residual unstamped multi-member shells exact-commit at postmisched when
+# jointly legal (dual LD32 → LD32_S0/S1 Format E). True-RAW shells
+# sequentialize; product path does not revive pre-RA SMS freeze.
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=SCHED
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=register-coalescer \
@@ -307,8 +297,9 @@ body:             |
   ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; SCHED-NEXT: }
   ; RC post + data-dependent neighbors stay outside (not inside BUNDLE).
-  ; SCHED: ADD32
-  ; SCHED: ADDI32
+  ; "= ADD32 %" avoids ADDI32 false-match (substring of ADD32).
+  ; SCHED-DAG: = ADD32 %
+  ; SCHED-DAG: = ADDI32 %
   ; Phase identity: logical opcodes only through pre-RA schedule.
   ; SCHED-NOT: ADD32_S
   ; SCHED-NOT: ADDI32_S
@@ -751,10 +742,10 @@ body:             |
   ; PEI-NOT: LD32_S
 
   ; stop-after=postmisched: dual-load hard root exact-commits (private slots);
-  ; large-frame CSR prologue still present; zero member loss.
+  ; large-frame spill of liveins/CSRs still present; zero member loss.
   ; POST-LABEL: name: hard_bundle_dual_ld_large_frame
   ; POST-DAG: frame-setup SUBI32
-  ; POST-DAG: frame-setup ST32 ${{r[89]}}
+  ; POST-DAG: ST32{{.*}}$r{{[89]}}
   ; POST: BUNDLE{{.*}}{
   ; POST-NEXT: ${{r[0-9]+}} = LD32_S{{[01]}}
   ; POST-NEXT: ${{r[0-9]+}} = LD32_S{{[01]}}

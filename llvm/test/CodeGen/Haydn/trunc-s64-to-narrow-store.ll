@@ -28,13 +28,13 @@
 define void @trunc_s64_to_i8_store(i64 %v, ptr %p) nounwind {
 ; CHECK-LABEL: trunc_s64_to_i8_store:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { move32_dr_l r2, d0; nop }
-; CHECK-NEXT:    { st8 r2, r1, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; move32_dr_l r2, d0 }
+; CHECK-NEXT:    { nop; st8 r2, r1, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %t = trunc i64 %v to i8
   store i8 %t, ptr %p
   ret void
@@ -43,13 +43,13 @@ define void @trunc_s64_to_i8_store(i64 %v, ptr %p) nounwind {
 define void @trunc_s64_to_i16_store(i64 %v, ptr %p) nounwind {
 ; CHECK-LABEL: trunc_s64_to_i16_store:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { move32_dr_l r2, d0; nop }
-; CHECK-NEXT:    { st16 r2, r1, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; move32_dr_l r2, d0 }
+; CHECK-NEXT:    { nop; st16 r2, r1, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %t = trunc i64 %v to i16
   store i16 %t, ptr %p
   ret void
@@ -58,14 +58,13 @@ define void @trunc_s64_to_i16_store(i64 %v, ptr %p) nounwind {
 define i8 @trunc_s64_to_i8_arith(i64 %v) nounwind {
 ; CHECK-LABEL: trunc_s64_to_i8_arith:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { move32_dr_l r2, d0; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 1; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %t = trunc i64 %v to i8
   %r = add i8 %t, 1
   ret i8 %r

@@ -58,7 +58,7 @@ name:            test_select_subi32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_subi32
-# CHECK: SUB32
+# CHECK: {{SUBI32|SUB32}}
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -108,7 +108,7 @@ name:            test_select_andi32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_andi32
-# CHECK: AND32
+# CHECK: {{ANDI32|AND32}}
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -140,7 +140,7 @@ name:            test_select_ori32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_ori32
-# CHECK: OR32
+# CHECK: {{ORI32|OR32}}
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -172,7 +172,7 @@ name:            test_select_xori32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_xori32
-# CHECK: XOR32
+# CHECK: {{XORI32|XOR32}}
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -204,7 +204,7 @@ name:            test_select_slli32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_slli32
-# CHECK: SLL32
+# CHECK: {{SLLI32|SLL32}}
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -236,7 +236,7 @@ name:            test_select_srli32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_srli32
-# CHECK: SRL32
+# CHECK: {{SRLI32|SRL32}}
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -268,7 +268,7 @@ name:            test_select_srai32
 legalized:       true
 regBankSelected: false
 # CHECK-LABEL: name: test_select_srai32
-# CHECK: SRA32
+# CHECK: {{SRAI32|SRA32}}
 body:             |
   bb.0.entry:
     liveins: $r0

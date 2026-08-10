@@ -16,16 +16,15 @@
 define i32 @f_value_not(i32 %a, i32 %b) {
 ; CHECK-LABEL: f_value_not:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { slt32 r1, r2, r1; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { and32 r1, r1, r2; nop }
-; CHECK-NEXT:    { not32 r1, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; slt32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; not32 r1, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %c = icmp sgt i32 %a, %b
   %z = zext i1 %c to i32

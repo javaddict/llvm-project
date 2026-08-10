@@ -29,22 +29,22 @@ define dso_local i64 @sext_trunc_low_half() {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: sext_trunc_low_half:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { lui r1, v20; nop }
-; CHECK-NEXT:    { addi32_w r1, r1, v20; nop }
-; CHECK-NEXT:    { ld64 d0, r1, 0; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 32; nop }
-; CHECK-NEXT:    { lui r1, v4; nop }
-; CHECK-NEXT:    { addi32_w r1, r1, v4; nop }
-; CHECK-NEXT:    { sll64 d0, d0, r2; ld64 d1, r1, 0 }
-; CHECK-NEXT:    { sra64 d0, d0, r2; nop }
-; CHECK-NEXT:    { or64 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; lui r1, v20 }
+; CHECK-NEXT:    { nop; addi32_w r1, r1, v20 }
+; CHECK-NEXT:    { nop; ld64 d0, r1, 0 }
+; CHECK-NEXT:    { nop; lui r1, v4 }
+; CHECK-NEXT:    { nop; addi32_w r1, r1, v4 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 32 }
+; CHECK-NEXT:    { ld64 d1, r1, 0; sll64 d0, d0, r2 }
+; CHECK-NEXT:    { nop; sra64 d0, d0, r2 }
+; CHECK-NEXT:    { nop; or64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %a = load i64, ptr @v20, align 8
   %trunc = trunc i64 %a to i32

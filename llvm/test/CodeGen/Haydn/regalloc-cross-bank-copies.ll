@@ -20,17 +20,17 @@ declare void @use_i32(i32)
 define i64 @test_zext_gpr_to_dr64(i32 %x) nounwind {
 ; CHECK-LABEL: test_zext_gpr_to_dr64:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { sext32t64 d1, r1; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 1; nop }
-; CHECK-NEXT:    { slli64 d1, d1, 32; sext32t64 d0, r2 }
-; CHECK-NEXT:    { slli64 d0, d0, 32; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { add64 d0, d1, d0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 1 }
+; CHECK-NEXT:    { sext32t64 d0, r2; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { srli64 d1, d1, 32; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
 ; zext must transfer i32 value from GPR to DR64, zero-extending
   %ext = zext i32 %x to i64
@@ -44,14 +44,13 @@ entry:
 define i32 @test_trunc_dr64_to_gpr(i64 %x) nounwind {
 ; CHECK-LABEL: test_trunc_dr64_to_gpr:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { move32_dr_l r2, d0; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 1; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
 ; trunc must extract low 32 bits from DR64 to GPR
   %trunc = trunc i64 %x to i32
@@ -65,25 +64,24 @@ entry:
 define i64 @test_multiple_cross_bank(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: test_multiple_cross_bank:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { sext32t64 d0, r1; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; sext32t64 d1, r2 }
-; CHECK-NEXT:    { slli64 d1, d1, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { srli64 d1, d1, 32; nop }
-; CHECK-NEXT:    { add64 d0, d0, d1; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, 10; nop }
-; CHECK-NEXT:    { move32_dr_l r2, d0; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 100; nop }
-; CHECK-NEXT:    { sext32t64 d0, r2; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; sext32t64 d1, r1 }
-; CHECK-NEXT:    { slli64 d1, d1, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { srli64 d1, d1, 32; nop }
-; CHECK-NEXT:    { add64 d0, d1, d0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { sext32t64 d1, r2; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 10 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 100 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
+; CHECK-NEXT:    { sext32t64 d1, r1; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %ext_a = zext i32 %a to i64
   %ext_b = zext i32 %b to i64
@@ -101,22 +99,22 @@ entry:
 define i64 @test_cross_bank_under_pressure(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-LABEL: test_cross_bank_under_pressure:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { add32 r1, r1, r2; add32 r2, r3, r4 }
-; CHECK-NEXT:    { add32 r3, r5, r6; add32 r1, r1, r7 }
-; CHECK-NEXT:    { add32 r2, r2, r3; sext32t64 d0, r1 }
-; CHECK-NEXT:    { slli64 d0, d0, 32; sext32t64 d1, r2 }
-; CHECK-NEXT:    { slli64 d1, d1, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { srli64 d1, d1, 32; nop }
-; CHECK-NEXT:    { addi32_w r1, r0, -1; nop }
-; CHECK-NEXT:    { add64 d0, d0, d1; sext32t64 d1, r1 }
-; CHECK-NEXT:    { slli64 d1, d1, 32; nop }
-; CHECK-NEXT:    { srli64 d1, d1, 32; nop }
-; CHECK-NEXT:    { and64 d0, d0, d1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { add32 r2, r3, r4; add32 r1, r1, r2 }
+; CHECK-NEXT:    { add32 r1, r1, r7; add32 r3, r5, r6 }
+; CHECK-NEXT:    { sext32t64 d0, r1; add32 r2, r2, r3 }
+; CHECK-NEXT:    { sext32t64 d1, r2; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; addi32_w r1, r0, -1 }
+; CHECK-NEXT:    { sext32t64 d1, r1; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; and64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
                                             i32 %e, i32 %f, i32 %g) nounwind {
 entry:
 ; Both GPR and DR64 pressure — cross-bank transfers must still work
@@ -142,17 +140,15 @@ entry:
 define i64 @test_zext_return(i32 %x) nounwind {
 ; CHECK-LABEL: test_zext_return:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 6; nop }
-; CHECK-NEXT:    { add32 r1, r1, r2; nop }
-; CHECK-NEXT:    { sext32t64 d0, r1; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { srli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 8; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 6 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
 ; The return value must be in D0 (i64 return register)
   %v1 = add i32 %x, 1

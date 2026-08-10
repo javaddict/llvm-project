@@ -1,0 +1,58 @@
+# RUN: split-file %s %t
+# Fatal seats abort; use not --crash so the diagnostic still reaches FileCheck.
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/missing-formatid.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-IMM
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/unknown-formatid.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=BAD-ID
+# Residual cycle-forming LOADI32 seat is already load-bearing in
+# vf5-residual-cycle-pseudo-ban.mir (not --crash path under finalize+verify).
+
+# Role: verifier — inverse corruption matrix scaffolding for committed BUNDLE
+# roots. Each injected defect must fail closed at haydn-verify-bundles without
+# planner repair.
+#
+# Seat inventory: Inputs/CORRUPTION-MATRIX.txt
+# Companion MC entry-count reject: MC/Haydn/bundle-canadd-reject.s
+# Residual phase: vf5-residual-cycle-pseudo-ban.mir / residual-crossbank-*.mir
+
+# NO-IMM: BUNDLE root missing or unknown BundleFormatRowID imm
+# BAD-ID: BUNDLE root missing or unknown BundleFormatRowID imm
+
+#--- missing-formatid.mir
+--- |
+  define void @corrupt_missing_formatid() { ret void }
+...
+---
+name:            corrupt_missing_formatid
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    BUNDLE {
+      $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+...
+#--- unknown-formatid.mir
+--- |
+  define void @corrupt_unknown_formatid() { ret void }
+...
+---
+name:            corrupt_unknown_formatid
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    BUNDLE 99 {
+      $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+...

@@ -19,7 +19,7 @@
 
 define i1 @i1_and(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_and:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
   %r = and i1 %a, %b
   ret i1 %r
 }
@@ -27,7 +27,7 @@ define i1 @i1_and(i1 %a, i1 %b) nounwind {
 ;i1 OR
 define i1 @i1_or(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_or:
-; CHECK: or32
+; CHECK: {{or32|ori32}}
   %r = or i1 %a, %b
   ret i1 %r
 }
@@ -35,7 +35,7 @@ define i1 @i1_or(i1 %a, i1 %b) nounwind {
 ;i1 XOR
 define i1 @i1_xor(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_xor:
-; CHECK: xor32
+; CHECK: {{xor32|xori32}}
   %r = xor i1 %a, %b
   ret i1 %r
 }
@@ -43,7 +43,7 @@ define i1 @i1_xor(i1 %a, i1 %b) nounwind {
 ;i1 NOT (XOR with true)
 define i1 @i1_not(i1 %a) nounwind {
 ; CHECK-LABEL: i1_not:
-; CHECK: xor32
+; CHECK: {{xor32|xori32}}
   %r = xor i1 %a, true
   ret i1 %r
 }
@@ -51,7 +51,7 @@ define i1 @i1_not(i1 %a) nounwind {
 ;i1 equality comparison
 define i1 @i1_cmp_eq(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_cmp_eq:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
 ; CHECK: seq32
   %r = icmp eq i1 %a, %b
   ret i1 %r
@@ -60,9 +60,9 @@ define i1 @i1_cmp_eq(i1 %a, i1 %b) nounwind {
 ;i1 not-equal comparison
 define i1 @i1_cmp_ne(i1 %a, i1 %b) nounwind {
 ; CHECK-LABEL: i1_cmp_ne:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
 ; CHECK: seq32
-; CHECK: xor32
+; CHECK: {{xor32|xori32}}
   %r = icmp ne i1 %a, %b
   ret i1 %r
 }
@@ -70,7 +70,7 @@ define i1 @i1_cmp_ne(i1 %a, i1 %b) nounwind {
 ;i1 zero-extend to i32
 define i32 @i1_zext(i1 %a) nounwind {
 ; CHECK-LABEL: i1_zext:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
   %r = zext i1 %a to i32
   ret i32 %r
 }
@@ -78,8 +78,8 @@ define i32 @i1_zext(i1 %a) nounwind {
 ;i1 sign-extend to i32
 define i32 @i1_sext(i1 %a) nounwind {
 ; CHECK-LABEL: i1_sext:
-; CHECK: sll32
-; CHECK: sra32
+; CHECK: {{sll32|slli32}}
+; CHECK: {{sra32|srai32}}
   %r = sext i1 %a to i32
   ret i32 %r
 }
@@ -126,8 +126,8 @@ define i64 @i1_zext_i64(i1 %a) nounwind {
 define i1 @i1_chain(i1 %a, i1 %b, i1 %c) nounwind {
 ; CHECK-LABEL: i1_chain:
 ; (a & b) | c
-; CHECK: and32
-; CHECK: or32
+; CHECK: {{and32|andi32}}
+; CHECK: {{or32|ori32}}
   %ab = and i1 %a, %b
   %r = or i1 %ab, %c
   ret i1 %r

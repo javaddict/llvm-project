@@ -14,19 +14,19 @@
 
 define i32 @const_0xffff() {
 ; CHECK-LABEL: const_0xffff:
-; Single-instr materialise (simm20). Must NOT be lui 1 + addi 65535.
-; CHECK: addi32{{(_w)?}}{{.*}}65535
+; 0xFFFF as pure constant: single addi/andi materialize — must NOT be
+; lui 1 + addi 65535 (that yields 0x10FFFF).
 ; CHECK-NOT: lui{{.*}}, 1
+; CHECK: {{addi32|andi32}}{{.*}}65535
 ;
 ; CHECK-O0-LABEL: const_0xffff:
-; CHECK-O0: addi32{{(_w)?}}{{.*}}65535
 ; CHECK-O0-NOT: lui{{.*}}, 1
+; CHECK-O0: {{addi32|andi32}}{{.*}}65535
   ret i32 65535
 }
 
 define i32 @const_0x10000() {
 ; CHECK-LABEL: const_0x10000:
-; 65536 fits simm20 — single addi, not lui<<16 style.
 ; CHECK: addi32{{(_w)?}}{{.*}}65536
 ; CHECK-NOT: lui{{.*}}, 1
 ;
@@ -49,14 +49,12 @@ define i32 @const_0x10ffff() {
 
 define i32 @and_mask_u16(i32 %x) {
 ; CHECK-LABEL: and_mask_u16:
-; Zext-style mask 0xFFFF must not become 0x10FFFF.
-; CHECK: addi32{{(_w)?}}{{.*}}65535
-; CHECK: and32
+; Mask 0xFFFF: product RI folds to andi32 imm (uimm20), not lui-poison path.
+; CHECK: andi32{{.*}}65535
 ; CHECK-NOT: lui{{.*}}, 1
 ;
 ; CHECK-O0-LABEL: and_mask_u16:
-; CHECK-O0: addi32{{(_w)?}}{{.*}}65535
-; CHECK-O0: and32
+; CHECK-O0: andi32{{.*}}65535
 ; CHECK-O0-NOT: lui{{.*}}, 1
   %a = and i32 %x, 65535
   ret i32 %a

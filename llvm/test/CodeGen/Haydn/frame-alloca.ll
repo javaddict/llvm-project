@@ -29,16 +29,17 @@ define i32 @fixed_alloca(i32 %x) {
 ; Single alloca, frame allocated at compile time
 ; CHECK-LABEL: fixed_alloca:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 12; nop }
-; CHECK-NEXT:    { st32 r1, r2, 0; nop }
-; CHECK-NEXT:    { ld32 r1, r2, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 16; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 12 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %p = alloca i32
   store i32 %x, ptr %p
   %v = load i32, ptr %p
@@ -53,29 +54,27 @@ define i32 @vla_basic(i32 %n) {
 ; post-schedule output (the fold no longer fires after the Flex cutover).
 ; CHECK-LABEL: vla_basic:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { st32 fp, sp, 3; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 fp, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    { addi32_w fp, sp, 16; nop }
+; CHECK-NEXT:    { nop; addi32_w fp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
 ; CHECK-NEXT:    .cfi_offset fp, -4
+; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, -8 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 7 }
+; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; sub32 r3, sp, r1 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, 42 }
+; CHECK-NEXT:    { nop; st32 r2, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 2; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 7; nop }
-; CHECK-NEXT:    { sll32 r1, r1, r2; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, -8; nop }
-; CHECK-NEXT:    { add32 r1, r1, r3; nop }
-; CHECK-NEXT:    { and32 r1, r1, r2; nop }
-; CHECK-NEXT:    { sub32 r3, sp, r1; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 42; nop }
-; CHECK-NEXT:    { st32 r2, r3, 0; nop }
-; CHECK-NEXT:    { ld32 r1, r3, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, fp, -16; nop }
-; CHECK-NEXT:    { ld32 fp, sp, 3; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 16; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; ld32 r1, r3, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, fp, -16 }
+; CHECK-NEXT:    { nop; ld32 fp, sp, 3 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %vla = alloca i32, i32 %n
   %p = getelementptr i32, ptr %vla, i32 0
@@ -90,36 +89,34 @@ define ptr @dynamic_alloca_with_call(i32 %size) {
 ; Dynamic stack allocation
 ; CHECK-LABEL: dynamic_alloca_with_call:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 12; nop }
-; CHECK-NEXT:    { st32 lr, r2, 0; nop }
-; CHECK-NEXT:    { st32 fp, r2, 1; nop }
-; CHECK-NEXT:    { st32 r8, r2, 2; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 12 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
+; CHECK-NEXT:    { nop; st32 fp, r2, 1 }
+; CHECK-NEXT:    { nop; st32 r8, r2, 2 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { addi32_w fp, sp, 24; nop }
+; CHECK-NEXT:    { nop; addi32_w fp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset fp, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { addi32_w r2, r0, 2; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 7; nop }
-; CHECK-NEXT:    { sll32 r1, r1, r2; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, -8; nop }
-; CHECK-NEXT:    { add32 r1, r1, r3; nop }
-; CHECK-NEXT:    { and32 r1, r1, r2; nop }
-; CHECK-NEXT:    { sub32 r8, sp, r1; nop }
-; CHECK-NEXT:    { move32 r1, r8; nop }
-; CHECK-NEXT:    { jal_w lr, use_ptr; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { move32 r1, r8; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, fp, -24; nop }
-; CHECK-NEXT:    { ld32 lr, sp, 3; nop }
-; CHECK-NEXT:    { ld32 fp, sp, 4; nop }
-; CHECK-NEXT:    { ld32 r8, sp, 5; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 24; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; addi32_w r2, r0, -8 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 7 }
+; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; sub32 r8, sp, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r8 }
+; CHECK-NEXT:    { nop; jal_w lr, use_ptr }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; move32 r1, r8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, fp, -24 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { nop; ld32 fp, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %p = alloca i32, i32 %size
   call void @use_ptr(ptr %p)
   ret ptr %p
@@ -131,19 +128,19 @@ define void @multi_size_allocas(i32 %a, i64 %b) {
 ; i32 + i64 allocas = 4 + 8 = 12 bytes, rounded to 16
 ; CHECK-LABEL: multi_size_allocas:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 20; nop }
-; CHECK-NEXT:    { st32 r1, r2, 0; nop }
-; CHECK-NEXT:    { addi32_w r3, sp, 12; nop }
-; CHECK-NEXT:    { addi32_w r1, r3, 4; nop }
-; CHECK-NEXT:    { d_sw_l_with_imm d0, r3, 0; nop }
-; CHECK-NEXT:    { d_sw_h_with_imm d0, r1, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 24; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 20 }
+; CHECK-NEXT:    { nop; addi32_w r3, sp, 12 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
+; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r3, 0 }
+; CHECK-NEXT:    { nop; addi32_w r1, r3, 4 }
+; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r1, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %p32 = alloca i32
   %p64 = alloca i64
   store i32 %a, ptr %p32
@@ -157,16 +154,17 @@ define i32 @large_alloca(i32 %a) {
 ; 100 * 4 = 400 bytes, rounded to 400 (already 8-byte aligned)
 ; CHECK-LABEL: large_alloca:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 408; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 408 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 408
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 8; nop }
-; CHECK-NEXT:    { st32 r1, r2, 0; nop }
-; CHECK-NEXT:    { ld32 r1, r2, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 408; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 408 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %arr = alloca [100 x i32], align 8
   %p = getelementptr [100 x i32], ptr %arr, i32 0, i32 0
   store i32 %a, ptr %p
@@ -179,15 +177,15 @@ define i32 @large_alloca(i32 %a) {
 define void @aligned_alloca(i32 %x) {
 ; CHECK-LABEL: aligned_alloca:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, sp, 8; nop }
-; CHECK-NEXT:    { st32 r1, r2, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 16; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
   %p = alloca i32, align 8
   store i32 %x, ptr %p
   ret void
@@ -200,40 +198,37 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; Array access at index %idx
 ; CHECK-LABEL: vla_indexed:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { st32 fp, sp, 3; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 fp, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    { addi32_w fp, sp, 16; nop }
+; CHECK-NEXT:    { nop; addi32_w fp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
 ; CHECK-NEXT:    .cfi_offset fp, -4
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32_w r2, r0, 2; nop }
-; CHECK-NEXT:    { addi32_w r3, r0, 7; nop }
-; CHECK-NEXT:    { sll32 r4, r1, r2; nop }
-; CHECK-NEXT:    { addi32_w r5, r0, -8; nop }
-; CHECK-NEXT:    { add32 r3, r4, r3; nop }
-; CHECK-NEXT:    { and32 r3, r3, r5; nop }
-; CHECK-NEXT:    { sub32 r3, sp, r3; nop }
-; CHECK-NEXT:    { addi32_w r4, r0, 1; nop }
-; CHECK-NEXT:    { addi32_w r6, r0, 0; nop }
-; CHECK-NEXT:    { move32 r5, r3; move32 sp, r3 }
+; CHECK-NEXT:    { nop; slli32 r2, r1, 2 }
+; CHECK-NEXT:    { nop; addi32_w r3, r0, -8 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 7 }
+; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
+; CHECK-NEXT:    { nop; sub32 r2, sp, r2 }
+; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { move32 sp, r2; move32 r3, r2 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { add32 r7, r6, r4; mull r6, r6, r6 }
-; CHECK-NEXT:    { slt32 r12, r7, r1; st32_post r6, r5, 1 }
-; CHECK-NEXT:    { move32 r6, r7; nop }
-; CHECK-NEXT:    { bnez_w r12, .LBB6_1; nop }
+; CHECK-NEXT:    { nop; addi32 r5, r4, 1 }
+; CHECK-NEXT:    { nop; mull r4, r4, r4 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { st32_post r4, r3, 1; slt32 r6, r5, r1 }
+; CHECK-NEXT:    { nop; move32 r4, r5 }
+; CHECK-NEXT:    { nop; bnez_w r6, .LBB6_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { addi32_w r4, r0, -1; nop }
-; CHECK-NEXT:    { add32 r1, r1, r4; nop }
-; CHECK-NEXT:    { sll32 r1, r1, r2; nop }
-; CHECK-NEXT:    { ld32_reg r1, r3, r1; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop }
-; CHECK-NEXT:    { addi32_w sp, fp, -16; nop }
-; CHECK-NEXT:    { ld32 fp, sp, 3; nop }
-; CHECK-NEXT:    { addi32_w sp, sp, 16; nop }
-; CHECK-NEXT:    { jalr_w r0, lr, 0; nop }
+; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
+; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; ld32_reg r1, r2, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32_w sp, fp, -16 }
+; CHECK-NEXT:    { nop; ld32 fp, sp, 3 }
+; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK:    { nop; jalr_w r0, lr, 0 }
 entry:
   %vla = alloca i32, i32 %n
   br label %loop

@@ -1,13 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -filetype=obj %s -o %t.o && llvm-objdump -d %t.o | FileCheck --check-prefix=BUNDLE %s
 ; REQUIRES: haydn-registered-target
-; Format E96 cutover residual: FileCheck/idle-pad/reloc geometry still open (GE96-01/03).
-; XFAIL: *
 
 ; Role: object — NatureDSP-style biquad IIR object dump: stack, 64-bit MAC chain, stores, return.
 
 ; IR to GlobalISel to MC to ELF to objdump. Pins process/main mnemonics, not
 ; printer-only asm. Co-issued members use BUNDLE-DAG (slot order free).
-; Unrelocated JAL targets print as "jal_w lr, 0". -verify-machineinstrs is live.
+; Live Format E objdump names: d_sdw/s_lw/s_sw for memory, jal/jalr (not
+; legacy jal_w/jalr_w/st64/ld32 tokens). -verify-machineinstrs is live.
 ;
 ; E2E test: BiQuad IIR filter (Direct Form 1), 32x32-bit fixed-point.
 ;
@@ -126,25 +125,22 @@ for.end:
 }
 ; BUNDLE-LABEL: <bqriir32x32_df1_process>:
 ; BUNDLE: subi32 sp, sp
-; BUNDLE-DAG: st64
-; BUNDLE-DAG: ld32
-; Back-edge materialized as slt32 + beqz_w/bnez_w (not fused blt_w) — the IIR loop
-; body has enough register pressure that the scheduler separates compare and
-; branch (-blanket-SFR scheduling form).
+; Product memory forms (Format E objdump): d_sdw = 64-bit spill/store,
+; s_lw/s_sw = 32-bit load/store (not legacy st64/ld32/st32 tokens).
+; BUNDLE-DAG: d_sdw_with_imm
+; BUNDLE-DAG: s_lw_with_imm
+; Back-edge: slt32 + bnez (not fused blt_w) under SFR-aware scheduling.
 ; BUNDLE-DAG: {{slt32|set_hwloop}}
 ; BUNDLE-DAG: {{mul64|mula64|add64}}
 ; BUNDLE-DAG: sub64
 ; BUNDLE-DAG: sra64
-; BUNDLE-DAG: st32
-; BUNDLE-DAG: {{beqz_w|set_hwloop}}
-; BUNDLE: jalr_w{{.*}}r0, lr, 0
+; BUNDLE-DAG: s_sw_
+; BUNDLE-DAG: {{bnez|beqz|set_hwloop}}
+; BUNDLE: jalr{{.*}}r0, lr, 0
 ;
-; Note: bqriir32x32_df1_process uses BEQZ (loop-entry guard) and BNEZ (loop
-; back-edge) for control flow — NOT JAL. The original DAG-check for `jal_w` was
-; a stale CHECK from an earlier codegen shape; the IIR loop body contains no
-; function calls, so there is no JAL inside this function (the only JALs are
-; in main, calling this function). The function return is JALR (indirect via
-; lr). Loop control: BEQZ skips the loop when N<=0, BNEZ repeats the loop body.
+; Note: process uses compare+branch loop control (not JAL). The only JALs are
+; in main (calls to process). Return is jalr via lr. Live objdump omits the
+; legacy `_w` suffix on jal/jalr.
 
 ; === Entry point: 2-section cascaded IIR ===;
 ; C: int main(void) { ... filter process ... return r[0]; }
@@ -152,9 +148,10 @@ define i32 @main() {
 ; BUNDLE-LABEL: <main>:
 ; BUNDLE-DAG: lui
 ; BUNDLE-DAG: addi32
-; BUNDLE: jal_w {{.*}}, 0
-; BUNDLE: ld32
-; BUNDLE: jalr_w{{.*}}r0, lr, 0
+; Unrelocated call target prints as "jal lr, 0" under Format E objdump.
+; BUNDLE: jal{{.*}}lr, 0
+; BUNDLE: s_lw_with_imm
+; BUNDLE: jalr{{.*}}r0, lr, 0
 entry:
   ; Allocate 2 sections (36 bytes each) + input/output arrays (32 bytes each)
   ; on the stack. Simplified: use static globals.

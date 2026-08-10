@@ -28,14 +28,11 @@
 define i32 @xor_i1_bool_not(i32 %x) {
 ; O1-LABEL: xor_i1_bool_not:
 ; O2-LABEL: xor_i1_bool_not:
-; The constant `1` for the logical NOT (buggy form used -1).
-; O1: addi32{{(_w)?}} {{r[0-9]+}}, r0, 1
-; O2: addi32{{(_w)?}} {{r[0-9]+}}, r0, 1
-; The mask that cleans anyext upper bits, feeding the XOR.
-; O1: and32
-; O1: xor32
-; O2: and32
-; O2: xor32
+; RI imm path: logical NOT is xori32 ..., 1 after andi32 ..., 1 (no r0,1 mat).
+; O1: xori32 {{.*}}, 1
+; O1: andi32 {{.*}}, 1
+; O2: xori32 {{.*}}, 1
+; O2: andi32 {{.*}}, 1
 entry:
   %c = icmp eq i32 %x, 0
   %n = xor i1 %c, true

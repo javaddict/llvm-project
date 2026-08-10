@@ -1,7 +1,10 @@
 # OPEN Haydn compiler bugs blocking BundleSim
 
-> **STATUS (2026-07-24)** — live tools: `$HAYDN_BIN` / BundleSim `build/`.
-> Product path: `build/BundleSim` + `build/run_c` + `haydn_bsp`.
+> **STATUS (2026-07-24; runtime packaging refresh 2026-08-07)** — live tools:
+> `$HAYDN_BIN` / BundleSim `build/`.
+> Product path: `build/BundleSim` + `build/run_c` + board `haydn_bsp` +
+> toolchain sysroot (`llvm-libc` + `libclang_rt.builtins` from
+> `scripts/build_haydn_llvm_libc.sh` / `build_haydn_compiler_rt.sh`).
 > Torture gate: **`scripts/run_gcc_torture_lit.sh`** (llvm-lit + freestanding
 > link + BundleSim). Upstream clang disables = llvm-testsuite
 > `execute/CMakeLists.txt` `TestsToSkip` (**84**). Lit-enabled = **1430**.
@@ -89,15 +92,32 @@ finishes; still **open compiler** until hangs are fixed or reduced.
 
 ### C. ~~Compiler-rt softfloat (CB-135)~~ FIXED
 
-**Linked:** `libclang_rt.builtins-haydn.a` + `libm.a` when present.  
-**Not libm** — int↔FP helpers live in compiler-rt / BSP RT.
+**Linked:** toolchain `libclang_rt.builtins.a` (+ legacy alias
+`libclang_rt.builtins-haydn.a`) + `libm.a` when present.  
+**Not libm** — int↔FP helpers live in LLVM `compiler-rt/lib/builtins`.
+
+**Ownership (2026-08-07):** soft-int + soft-float are built by BundleSim
+`scripts/build_haydn_compiler_rt.sh` (sources from `LLVM_SRC/compiler-rt`) and
+installed with `scripts/install_haydn_sysroot.sh` next to llvm-libc. They are
+**not** rebuilt by BundleSim `haydn_bsp` (board-only).
 
 | Test | Was | Now |
 |------|-----|-----|
-| `conversion.c` | LINK missing `__floatundi*` / `__floatdi*` | **PASS** (di helpers in BSP RT) |
+| `conversion.c` | LINK missing `__floatundi*` / `__floatdi*` | **PASS** (di helpers in compiler-rt archive) |
 | `930622-2.c` | LINK `__floatdidf` / `__fixdfdi` | **PASS** |
 | `pr49218.c` | LINK `__fixsfdi` | **PASS** |
 | `complex-5.c` | LINK `__divsc3` | **PASS** @ -O3 full lit (GUEST_EXIT 0, bundles=2842) |
+
+### C2. ~~OPEN — soft-int div/mod miscompile at `-O2` (CB-1)~~ FIXED (2026-08-07)
+
+| Field | Detail |
+|-------|--------|
+| **ID** | **CB-1** (closed) |
+| **Was** | Soft-int div/mod TUs miscompiled at `-O2` (e.g. `6u/3u → 0`); product workaround was `-O1` for `{u,}div*`/`{u,}mod*` in `build_haydn_compiler_rt.sh`. Separately, `divdi3`/`moddi3` called missing **`__udivmoddi4`** (not in the curated archive) → link fail on 64-bit div cases. |
+| **Fix** | (1) Backend: product RI Pats + SMS hard-BUNDLE header rebuild (`finalizeBundle` after tied two-addr) closed the densify miscompile path. (2) Runtime packaging: add `udivmoddi4.c` to `scripts/build_haydn_compiler_rt.sh`; build all soft-int at **`-O2`** (opt-out `CB1_FORCE_O1=1`). |
+| **Rebuild / install (product)** | ```bash<br>export HAYDN_BIN=…/haydn-build/bin LLVM_SRC=…/llvm-head<br>export BUILD_DIR=…/llvm-libc-haydn-build   # tree with libc/lib/libc.a<br>scripts/build_haydn_compiler_rt.sh         # or full: build_haydn_llvm_libc.sh<br>scripts/install_haydn_sysroot.sh           # → $HAYDN_BIN/../sysroot + resource-dir<br>``` |
+| **Evidence** | `cb1_div` / `cb1_div64` / `cb1_mod` / `cb62_seed8*` / `cb64_seed8*` / `cb74_min` ctest **PASS**; `cap_softint` / capability matrix **PASS**; nm gate includes `__udivmoddi4`. |
+| **Related** | Do not conflate with CB-135 (di softfloat helpers — already fixed). |
 
 ### D. Timeout / budget (not miscompile)
 

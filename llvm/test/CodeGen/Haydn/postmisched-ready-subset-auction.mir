@@ -53,12 +53,10 @@ body:             |
     ; CHECK-LABEL: name: auction_three_alu
     ; CHECK: liveins: $r0, $r3, $r4, $r5, $r6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit-def $r7, implicit $r0, implicit killed $r3, implicit killed $r4 {
-    ; CHECK-NEXT:   $r2 = ADDI32_S2 $r0, 10, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r7 = ADD32_S1 killed $r3, killed $r4, implicit-def dead $sfr
-    ; CHECK-NEXT: }
-    ; CHECK-NEXT: $r8 = XOR32_S2 killed $r5, killed $r6, implicit-def dead $sfr
+    ; CHECK-NEXT: $r2 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
+    ; CHECK-NEXT: $r7 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
+    ; CHECK-NEXT: $r8 = XOR32_S2 killed $r5, killed $r6, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
@@ -103,12 +101,10 @@ body:             |
     ; CHECK-LABEL: name: auction_add32_2xadd64
     ; CHECK: liveins: $r1, $r2, $d0, $d1, $d2, $d3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 1, 0, implicit-def $d4, implicit-def dead $sfr, implicit-def $d5, implicit-def $r3, implicit killed $d0, implicit killed $d1, implicit killed $d2, implicit killed $d3, implicit killed $r1, implicit killed $r2 {
-    ; CHECK-NEXT:   $d4 = ADD64_S2 killed $d0, killed $d1, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d5 = ADD64_S1 killed $d2, killed $d3, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = ADD32_S0 killed $r1, killed $r2, implicit-def dead $sfr
-    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r3 = ADD32_S2 killed $r1, killed $r2, implicit-def dead $sfr
+    ; CHECK-NEXT: $d4 = ADD64_S2 killed $d0, killed $d1, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r3
+    ; CHECK-NEXT: $d5 = ADD64_S2 killed $d2, killed $d3, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit killed $d4, implicit killed $d5, implicit $r15
     $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
     $d4 = ADD64 $d0, $d1, implicit-def dead $sfr
@@ -149,6 +145,7 @@ body:             |
     ; CHECK: liveins: $r1, $r2, $r3, $r4
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: ST32_S0 killed $r2, killed $r1, 0
+    ; CHECK-NEXT: NOP
     ; CHECK-NEXT: ST32_S0 killed $r4, killed $r3, 4
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ST32 $r2, $r1, 0

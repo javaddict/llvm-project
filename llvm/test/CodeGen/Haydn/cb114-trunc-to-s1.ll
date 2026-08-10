@@ -24,7 +24,7 @@ define i32 @select_trunc_s16(i16 %x, i32 %a, i32 %b) nounwind {
 
 ; s8 → s1
 ; CHECK-LABEL: select_trunc_s8:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
 ; CHECK: movt32
 define i32 @select_trunc_s8(i8 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i8 %x to i1
@@ -34,7 +34,7 @@ define i32 @select_trunc_s8(i8 %x, i32 %a, i32 %b) nounwind {
 
 ; s32 → s1
 ; CHECK-LABEL: select_trunc_s32:
-; CHECK: and32
+; CHECK: {{and32|andi32}}
 ; CHECK: movt32
 define i32 @select_trunc_s32(i32 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i32 %x to i1
@@ -45,7 +45,7 @@ define i32 @select_trunc_s32(i32 %x, i32 %a, i32 %b) nounwind {
 ; s64 → s1
 ; CHECK-LABEL: select_trunc_s64:
 ; CHECK-DAG: move32_dr_l
-; CHECK-DAG: and32
+; CHECK-DAG: {{and32|andi32}}
 ; CHECK: movt32
 define i32 @select_trunc_s64(i64 %x, i32 %a, i32 %b) nounwind {
   %c = trunc i64 %x to i1

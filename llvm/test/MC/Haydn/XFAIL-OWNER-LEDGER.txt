@@ -1,0 +1,4 @@
+See llvm/test/CodeGen/Haydn/Inputs/XFAIL-OWNER-LEDGER.txt for the durable
+Haydn CodeGen+MC XFAIL owner/failure ledger (T4-TEST-CONTRACTS / G-TEST-CONTRACTS).
+Stamp: 2026-08-09 TOTAL=4 (ledger hygiene: hard-root/hwloop/SET demotion closed;
+live XFAIL = 4 blocked branch-scale/ar_sel only; no golden invent)

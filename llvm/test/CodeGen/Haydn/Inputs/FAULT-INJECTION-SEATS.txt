@@ -1,0 +1,38 @@
+Haydn all-seat fault injection inventory (G-TEST-CONTRACTS / T7)
+================================================================
+Stamp: 2026-08-10 T7-TEST-CONTRACTS
+
+Law (decision-guard §6.4 / sms-post-ra-multistage PP5): inject failure at every
+allocation, exact-commit, trip, CFG, liveness, call arg/return, late-recommit,
+and writer seat. Each failure is byte-identical to baseline or restores a
+structural snapshot.
+
+Post-pipeliner product force-fail flag today
+--------------------------------------------
+-haydn-post-pipeliner-force-fail returns BEFORE mutation
+  (HaydnPostPipeliner materialize/schedule pre-mutation seats only).
+Live pin: post-pipeliner-mat-force-fail-unchanged.ll
+  (engine-OFF asm byte-identical to force-on+force-fail; cert reject stats).
+
+That pin proves pre-mutation closed-fail identity. It does NOT cover
+post-mutation degrade seats called out by staff audit / PIPE-03.
+
+Seat table
+----------
+| Seat                         | Owner track | Injection surface              | Test pin / status                          |
+|------------------------------|-------------|--------------------------------|--------------------------------------------|
+| PP pre-mutation cert force   | T2/T7       | -haydn-post-pipeliner-force-fail | post-pipeliner-mat-force-fail-unchanged.ll (landed) |
+| PP after allocate/clone      | T2          | named seat flags (not landed)  | open — needs product seats                 |
+| PP after exact commit fail   | T2          | named seat flags (not landed)  | open — PIPE-03                             |
+| PP after trip update fail    | T2          | named seat flags (not landed)  | open — PIPE-03                             |
+| PP after CFG/liveness update | T2          | named seat flags (not landed)  | open                                       |
+| Call arg/return preflight    | AR2/T7      | call-lowering transaction      | open — CG-04/PR-9                          |
+| Late MC recommit / filler    | AR4         | AsmPrinter/MC writers          | residual ban pins partial                  |
+| Writer/profile ELF           | AR4         | LLD/profile path               | open                                       |
+
+Scaffolding rule
+----------------
+T7 owns lit/docs that *require* seats and pin what exists. Product flags for
+post-mutation seats are T2/AR ownership — do not invent force-fail behavior
+in tests. When seats land, add one lit per seat with OFF/force-fail
+byte-identity + verifier-clean CFG.
