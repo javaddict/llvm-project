@@ -18,8 +18,8 @@ declare { i64, ptr } @llvm.haydn.ldw.brev.imm(ptr, i32)
 declare ptr @llvm.haydn.sdw.brev.imm(i64, ptr, i32)
 declare { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr, i32, i32)
 declare ptr @llvm.haydn.sdw.cb.imm(i64, ptr, i32, i32)
-declare i64 @llvm.haydn.d.lqhwua.post(ptr, i32, i32, i32)
-declare void @llvm.haydn.d.stwua.post(i64, ptr, i32, i32, i32)
+declare i64 @llvm.haydn.d.lqhwua.post(ptr, i32)
+declare void @llvm.haydn.d.stwua.post(i64, ptr, i32)
 
 ; Ordinary MMO prints `load (sN)` / `store (sN)` — not `volatile load` /
 ; `volatile store`. The non-volatile spelling is the policy proof.
@@ -85,14 +85,14 @@ define ptr @stateful_cb_store(i64 %data, ptr %base) {
 ; CHECK-LABEL: name: stateful_ua_load
 ; CHECK: D_LQHWUA_POST{{.*}}:: (volatile load (s64) from %ir.p
 define i64 @stateful_ua_load(ptr %p) {
-  %r = call i64 @llvm.haydn.d.lqhwua.post(ptr %p, i32 0, i32 8, i32 0)
+  %r = call i64 @llvm.haydn.d.lqhwua.post(ptr %p, i32 0)
   ret i64 %r
 }
 
 ; CHECK-LABEL: name: stateful_ua_store
 ; CHECK: D_STWUA_POST{{.*}}:: (volatile store (s64) into %ir.p
 define void @stateful_ua_store(i64 %d, ptr %p) {
-  call void @llvm.haydn.d.stwua.post(i64 %d, ptr %p, i32 0, i32 8, i32 0)
+  call void @llvm.haydn.d.stwua.post(i64 %d, ptr %p, i32 0)
   ret void
 }
 
