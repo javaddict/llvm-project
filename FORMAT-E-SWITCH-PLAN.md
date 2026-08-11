@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `63ff89c2d5e8` **local only — `fork/` is still at `2eba490a051c`, 24 commits behind** | **objects emit: 424/430 CodeGen. lit 556/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 17 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
+| `llvm-project` | `haydn-formate-switch-mc` | `4425c0d4cbb1` **local only — `fork/` is still at `2eba490a051c`, 25 commits behind** | **objects emit: 424/430 CodeGen. lit 560/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 13 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -119,7 +119,7 @@ hashes there are the ones on the pushed branch.
 # llvm-project
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
-#   591 discovered: 556 pass, 10 XFAIL, 8 unsupported, 17 fail — two of the
+#   591 discovered: 560 pass, 10 XFAIL, 8 unsupported, 13 fail — two of the
 #   XFAILs are § 5.12's and § 5.14's, where an XPASS is the alarm
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
@@ -961,6 +961,38 @@ bits zero = NOP". Format E cannot state it that way at all: `bit[2:0] = 0b111`
 is the format indicator, so an all-zero parcel is not a bundle and
 disassembles as `<unknown>`. What survives is one step weaker — every payload
 bit zero, only the indicator set, `07 00 …` — and that is what it pins now.
+
+#### The scale is not observable at MC level
+
+Four failures were the load/store immediate. The category name is misleading:
+the INPUTS had already been converted to the element index and only the CHECKs
+still spelled bytes, so `s_lw_with_imm R2, R3, 4` was asserted to print back as
+`r2, r3, 16`. The database settles it without regenerating anything —
+`S_LW_WITH_IMM rt, rs, imm6` / `rt = mem32[rs + (imm6 << 2)]`.
+
+| instruction | address | scale |
+|---|---|---:|
+| `S_LBS` / `S_LBU` / `S_SB` | `rs + imm6` | 1 |
+| `S_LHWS` / `S_LHWU` / `S_SHW` | `rs + (imm6 << 1)` | 2 |
+| `S_LW` / `S_SW` | `rs + (imm6 << 2)` | 4 |
+| `D_LDW` / `D_SDW` | `rs + (imm6 << 3)` | 8 |
+
+**And no MC test can check the scale itself.** The encoding holds `imm6` and
+nothing else; the shift is what the hardware does with it. An encoder and
+decoder that drifted to the same wrong shift round-trip perfectly, and a
+`-show-encoding` or objdump check just echoes the operand. This was nearly
+recorded wrongly: a "scale ladder" was written into
+`ld16-ld8-bundle128-roundtrip.s` — four widths reaching one byte offset, so
+the immediates are forced to 8/4/2/1 — with a comment claiming it catches
+symmetric drift. It does not. The comment now says what it does catch: an
+operand that quietly goes back to meaning bytes, which would need all four to
+read 8.
+
+The scale is checked where a byte offset must BECOME an element index, which
+is CodeGen. `s64-loadstore.ll` spilling an i64's halves at 0 and 1 rather than
+0 and 4 is the assertion that has teeth, and past that the simulator is the
+only judge — the same shape as § 5.13, where the defect lived between the
+parser and the decoder and the round trip could not see it either.
 
 #### Placement is almost never the property
 
