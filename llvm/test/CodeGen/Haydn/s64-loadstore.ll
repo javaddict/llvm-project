@@ -98,9 +98,9 @@ define i64 @load64_volatile(ptr %p) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { addi32 r2, r1, 4; s_lw_with_imm r1, r1, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r2, r2, 0; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { addi32 r2, r1, 4; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { s_lw_with_imm r1, r1, 0; nop; s_lw_with_imm r2, r2, 0 }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 1 }
 ; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }

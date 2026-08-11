@@ -68,6 +68,7 @@ define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; FP-NEXT:    { add32 r1, r5, r0; nop; s_sw_with_imm r3, r1, 3 }
 ; FP-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; FP-NEXT:  .LBB0_3: // %entry
+; FP-NEXT:    { nop; nop; nop }
 ; FP-NEXT:    { s_lbu_with_imm r2, r2, 0; nop; nop }
 ; FP-NEXT:    { nop; nop; nop }
 ; FP-NEXT:    { add32 r1, r1, r2; nop; nop }
@@ -129,6 +130,7 @@ define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; OMIT-NEXT:    { add32 r1, r5, r0; nop; s_sw_with_imm r3, r1, 3 }
 ; OMIT-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; OMIT-NEXT:  .LBB0_3: // %entry
+; OMIT-NEXT:    { nop; nop; nop }
 ; OMIT-NEXT:    { s_lbu_with_imm r2, r2, 0; nop; nop }
 ; OMIT-NEXT:    { nop; nop; nop }
 ; OMIT-NEXT:    { add32 r1, r1, r2; nop; nop }

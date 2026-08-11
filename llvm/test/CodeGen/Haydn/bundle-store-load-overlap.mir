@@ -1,0 +1,64 @@
+# REQUIRES: asserts
+# RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn -run-pass=postmisched \
+# RUN:     -debug-only=haydn-hazard-rec %s -o /dev/null 2>&1 | FileCheck %s
+#
+# A store and a load may not share a bundle unless the compiler can prove their
+# addresses do not overlap.
+#
+#   VLIW_Engine_Compiler_Constraints.md § Constraints: "Within the same bundle,
+#   a store and a load must not target overlapping memory addresses. If the
+#   compiler cannot statically prove that the addresses are non-overlapping, it
+#   must conservatively place them in separate bundles. If a store and a load
+#   with overlapping addresses are placed in the same bundle, the hardware
+#   detects the conflict and raises an exception."
+#
+# Nothing enforced it. LOADSTORE0 and LOAD1 are different units, so the packer
+# was free to bundle a store with a load and the fault would appear at run time
+# on real silicon — not here, and not in the simulator, which does not model
+# the check.
+#
+# The two functions differ ONLY in the load's offset, so the hazard is the only
+# thing that can distinguish them. `overlap` reads and writes the same word;
+# `disjoint` reads element 8 (byte 32) and writes element 0 (byte 0), which the
+# base+offset comparison settles.
+#
+# The debug line is the assertion because the split itself is not observable
+# here: postmisched records a cycle assignment, and the two functions schedule
+# identically for other reasons. What this pins is the rule firing on one and
+# not the other.
+
+--- |
+  define void @overlap() { ret void }
+  define void @disjoint() { ret void }
+...
+---
+name:            overlap
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r4
+
+    ; CHECK: same-bundle memory overlap hazard for S_SW_WITH_IMM $r4, $r1, 0
+    $r3 = S_LW_WITH_IMM $r1, 0
+    S_SW_WITH_IMM $r4, $r1, 0
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            disjoint
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r4
+
+    $r3 = S_LW_WITH_IMM $r1, 8
+    S_SW_WITH_IMM $r4, $r1, 0
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+
+# Exactly one, from `overlap`. A second would mean the base+offset comparison
+# stopped proving the disjoint case — which is what happens if the immediate is
+# read as a byte offset again: elements 0 and 8 are 32 bytes apart, and 0 and 8
+# bytes apart is an overlap at width 4.
+# CHECK-NOT: same-bundle memory overlap hazard

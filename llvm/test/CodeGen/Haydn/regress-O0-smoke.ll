@@ -170,6 +170,7 @@ define i32 @test_loop(i32 %n) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
@@ -180,10 +181,11 @@ define i32 @test_loop(i32 %n) {
 ; CHECK-NEXT:    { beqz r0, .LBB7_1; nop; nop }
 ; CHECK-NEXT:  .LBB7_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { s_lw_with_imm r2, sp, 5; nop; s_lw_with_imm r4, sp, 4 } // 8-byte Folded Reload
+; CHECK-NEXT:    { s_lw_with_imm r2, sp, 5; nop; s_lw_with_imm r1, sp, 3 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload4-byte Reload
-; CHECK-NEXT:    { s_lw_with_imm r1, sp, 3; nop; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    { s_lw_with_imm r4, sp, 4; nop; nop } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { addi32 r3, r4, 1; add32 r2, r2, r4 }
 ; CHECK-NEXT:    { slt32 r1, r3, r1; nop; s_sw_with_imm r2, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill

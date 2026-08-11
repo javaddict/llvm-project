@@ -51,15 +51,17 @@ define dso_local void @bqriir32x32_df1_process(ptr noundef %st, ptr noundef writ
 ; CHECK-NEXT:  // %bb.1: // %for.body.lr.ph
 ; CHECK-NEXT:    { s_lw_with_imm r11, r9, 4; nop; s_lw_with_imm r12, r9, 3 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, r9, 2; sext32t64 d0, r11; s_sw_with_imm r11, fp, -28 } // 4-byte Folded Spill
+; CHECK-NEXT:    { sext32t64 d0, r11; sext32t64 d1, r12; s_sw_with_imm r11, fp, -28 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { s_lw_with_imm r1, r9, 1; sext32t64 d1, r12; s_sw_with_imm r4, fp, -27 } // 4-byte Folded Spill
+; CHECK-NEXT:    { s_lw_with_imm r10, r9, 2; nop; s_lw_with_imm r1, r9, 1 }
+; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { move32 r11, r12; sext32t64 d2, r10; s_sw_with_imm r4, fp, -27 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { s_lw_with_imm r4, r9, 0; move32 r11, r12; sext32t64 d2, r10 }
-; CHECK-NEXT:    { sext32t64 d3, r1; move32 r12, r1; s_lw_with_imm r1, fp, -27 } // 4-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { sext32t64 d4, r4; nop; d_sdw_with_imm d0, fp, -13 } // 8-byte Folded Spill
-; CHECK-NEXT:    // 8-byte Spill
+; CHECK-NEXT:    { s_lw_with_imm r4, r9, 0; sext32t64 d3, r1; move32 r12, r1 }
+; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r1, fp, -27; sext32t64 d4, r4; d_sdw_with_imm d0, fp, -13 } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload8-byte Spill
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; set_hwloop_f2 1, .LLhwloop_start0, .LLhwloop_end0, r1; nop }
 ; CHECK-NEXT:    { s_lw_with_imm r1, fp, -28; sext32t64 d5, r4; sext32t64 d6, r12 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
