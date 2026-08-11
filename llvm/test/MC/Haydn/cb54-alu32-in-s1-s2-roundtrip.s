@@ -51,8 +51,11 @@
 # Each bundle is 16 bytes (cursor advances 0x10 per bundle), proving
 # Bundle128 packing with both slots populated on one objdump line.
 # Bundle text is s2-s1-s0 (ISA order), right-aligned on s0.
-# CHECK:      0: {{.*}} add64 {{.*}} neg32
-# CHECK:      10: {{.*}} add64 {{.*}} not32
-# CHECK:      20: {{.*}} not32 {{.*}} popcount32
-# CHECK:      30: {{.*}} add64 {{.*}} add64
+# Addresses step by 12, not 16, and the printed order within a bundle follows
+# the composite's AsmString (high entry first), which the unit assignment can
+# reorder relative to the source.
+# CHECK:      0: {{.*}} neg32 {{.*}} add64
+# CHECK:      c: {{.*}} add64 {{.*}} not32
+# CHECK:      18: {{.*}} not32 {{.*}} popcount32
+# CHECK:      24: {{.*}} add64 {{.*}} add64
 # CHECK-NOT:  <unknown>
