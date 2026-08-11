@@ -14,11 +14,11 @@ body: |
     liveins: $r12, $r15
     ; ALLOC-NOT: {{S_SW_|S_LW_}}{{[A-Z_]*}} $r12
     ; ALLOC: $r13 = SUBI32 $r13, 8
-    ; ALLOC: ST32 $r{{[0-9]+}}, $r13, 0
-    ; ALLOC: $d0 = LD64 $r13, 0
-    ; ALLOC: $r13 = ADDI32_W $r13, 8
-    ; ALLOC: $r1 = LDU16 $r12, 32
+    ; ALLOC: S_SW_{{[A-Z_]*}} $r{{[0-9]+}}, $r13, 0
+    ; ALLOC: $d0 = D_LDW_{{[A-Z_]*}} $r13, 0
+    ; ALLOC: $r13 = ADDI32 $r13, 8
+    ; ALLOC: $r1 = S_LHWU_WITH_IMM $r12, 16
     $d0 = LOADI64 9223372036854743039
-    $r1 = LDU16 $r12, 32
+    $r1 = S_LHWU_WITH_IMM $r12, 16
     RET implicit $r1, implicit $r15
 ...

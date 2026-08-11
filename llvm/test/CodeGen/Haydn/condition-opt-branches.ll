@@ -24,7 +24,7 @@ define i32 @self_comparison_slt(i32 %a) nounwind {
 ; CHECK-NOT: slt32
 ; CHECK-NOT: sltu32
 ; CHECK: sub32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %cmp = icmp slt i32 %a, %a
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -37,7 +37,7 @@ define i32 @self_comparison_ult(i32 %a) nounwind {
 ; CHECK-NOT: slt32
 ; CHECK-NOT: sltu32
 ; CHECK: sub32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %cmp = icmp ult i32 %a, %a
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -49,7 +49,7 @@ define i32 @inverse_comparison(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: inverse_comparison:
 ; CHECK: slt32
 ; CHECK: { {{.*}}xor32 r0, r0, r0{{.*}} }
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
   %v1 = zext i1 %cmp1 to i32
@@ -64,7 +64,7 @@ define i32 @unrelated_comparisons(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; CHECK-LABEL: unrelated_comparisons:
 ; CHECK: slt32
 ; CHECK: slt32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %c, %d
   %v1 = zext i1 %cmp1 to i32
@@ -79,7 +79,7 @@ define i32 @inverse_comparison_select(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: inverse_comparison_select:
 ; CHECK: slt32
 ; CHECK: { {{.*}}xor32 r0, r0, r0{{.*}} }
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
   %v1 = zext i1 %cmp1 to i32
@@ -93,7 +93,7 @@ define i32 @inverse_comparison_select(i32 %a, i32 %b, i32 %c) nounwind {
 define i32 @no_fold_cmp_result_used(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: no_fold_cmp_result_used:
 ; CHECK: seq32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
 entry:
   %cmp = icmp eq i32 %a, %b
   %r = zext i1 %cmp to i32
@@ -109,7 +109,7 @@ entry:
 define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_eq:
 ; CHECK: seq32
-; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -125,7 +125,7 @@ else:
 define void @branch_ne(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ne:
 ; CHECK: seq32
-; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp ne i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -141,7 +141,7 @@ else:
 define void @branch_slt(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_slt:
 ; CHECK: slt32
-; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp slt i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -157,7 +157,7 @@ else:
 define void @branch_sge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_sge:
 ; CHECK: slt32
-; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp sge i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -173,7 +173,7 @@ else:
 define void @branch_ult(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ult:
 ; CHECK: sltu32
-; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp ult i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -189,7 +189,7 @@ else:
 define void @branch_uge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_uge:
 ; CHECK: sltu32
-; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp uge i32 %a, %b
   br i1 %cmp, label %then, label %else

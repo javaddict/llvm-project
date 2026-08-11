@@ -96,7 +96,7 @@ exit:
 ;PHI with three incoming values
 define i32 @phi_three_values(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: phi_three_values:
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp1 = icmp sgt i32 %a, 0
   br i1 %cmp1, label %branch1, label %check2

@@ -53,7 +53,7 @@ define i32 @zext_i16_i32(i16 %a) nounwind {
 ;Zero-extend i32 to i64 (no-op: upper 32 bits are already zero)
 define i64 @zext_i32_i64(i32 %a) nounwind {
 ; CHECK-LABEL: zext_i32_i64:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = zext i32 %a to i64
   ret i64 %r
 }
@@ -61,7 +61,7 @@ define i64 @zext_i32_i64(i32 %a) nounwind {
 ;Truncate i32 to i16 (no-op in register)
 define i16 @trunc_i32_i16(i32 %a) nounwind {
 ; CHECK-LABEL: trunc_i32_i16:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = trunc i32 %a to i16
   ret i16 %r
 }
@@ -69,7 +69,7 @@ define i16 @trunc_i32_i16(i32 %a) nounwind {
 ;Truncate i32 to i8 (no-op in register)
 define i8 @trunc_i32_i8(i32 %a) nounwind {
 ; CHECK-LABEL: trunc_i32_i8:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = trunc i32 %a to i8
   ret i8 %r
 }
@@ -77,7 +77,7 @@ define i8 @trunc_i32_i8(i32 %a) nounwind {
 ;Truncate i64 to i32
 define i32 @trunc_i64_i32(i64 %a) nounwind {
 ; CHECK-LABEL: trunc_i64_i32:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = trunc i64 %a to i32
   ret i32 %r
 }

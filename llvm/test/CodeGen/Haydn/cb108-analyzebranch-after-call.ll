@@ -62,4 +62,4 @@ entry:
 ; Soft-div call must be present.
 ; CHECK: jal{{(_w)?}}
 ; Function must compile (no BranchRelaxation assert) and return.
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}

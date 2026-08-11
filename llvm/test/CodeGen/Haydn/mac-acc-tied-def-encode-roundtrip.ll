@@ -39,13 +39,13 @@
 
 declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.muls64.ss.ll(i64, <2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.ff2mula32rs.lh(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.ff2mula32rs_lh(i64, <2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32>, <2 x i32>, <2 x i32>)
 ; MIR-LABEL: test_mula64_ll:
 ; MIR-NOT: or64
-; MIR:     mula64.ll
+; MIR:     mula64_ll
 ; OBJ-LABEL: <test_mula64_ll>:
-; OBJ:     mula64.ll
+; OBJ:     mula64_ll
 define i64 @test_mula64_ll(i64 %acc, i64 %a, i64 %b) {
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>
@@ -55,9 +55,9 @@ define i64 @test_mula64_ll(i64 %acc, i64 %a, i64 %b) {
 
 ; MIR-LABEL: test_muls64_ll:
 ; MIR-NOT: or64
-; MIR:     muls64.ll
+; MIR:     muls64_ll
 ; OBJ-LABEL: <test_muls64_ll>:
-; OBJ:     muls64.ll
+; OBJ:     muls64_ll
 define i64 @test_muls64_ll(i64 %acc, i64 %a, i64 %b) {
   %bc.3 = bitcast i64 %a to <2 x i32>
   %bc.4 = bitcast i64 %b to <2 x i32>
@@ -70,11 +70,11 @@ define i64 @test_muls64_ll(i64 %acc, i64 %a, i64 %b) {
 ; MIR-NOT: f2mulaa32rs
 ; MIR:     ff2mula32rs_lh
 ; OBJ-LABEL: <test_ff2mula32rs_lh>:
-; OBJ:     ff2mula32rs.lh
+; OBJ:     ff2mula32rs_lh
 define i64 @test_ff2mula32rs_lh(i64 %acc, i64 %a, i64 %b) {
   %bc.5 = bitcast i64 %a to <2 x i32>
   %bc.6 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.ff2mula32rs.lh(i64 %acc, <2 x i32> %bc.5, <2 x i32> %bc.6)
+  %r = call i64 @llvm.haydn.ff2mula32rs_lh(i64 %acc, <2 x i32> %bc.5, <2 x i32> %bc.6)
   ret i64 %r
 }
 

@@ -19,8 +19,8 @@ define void @bf_rmw_i24(ptr %p) {
 ; CHECK-LABEL: bf_rmw_i24:
 ; CHECK-NOT: s_lw_
 ; CHECK-NOT: s_sw_
-; CHECK: ldu8
-; CHECK: st8
+; CHECK: s_lbu_{{[a-z_]*}}
+; CHECK: s_sb_{{[a-z_]*}}
   %bf.load = load i24, ptr %p, align 1
   %bf.clear = and i24 %bf.load, -1048576
   %bf.set = or disjoint i24 %bf.clear, 989828
@@ -32,7 +32,7 @@ define void @bf_rmw_i24(ptr %p) {
 define i32 @load_i32_align1(ptr %p) {
 ; CHECK-LABEL: load_i32_align1:
 ; CHECK-NOT: s_lw_
-; CHECK: ldu8
+; CHECK: s_lbu_{{[a-z_]*}}
   %v = load i32, ptr %p, align 1
   ret i32 %v
 }
@@ -41,7 +41,7 @@ define i32 @load_i32_align1(ptr %p) {
 define void @store_i32_align1(ptr %p, i32 %v) {
 ; CHECK-LABEL: store_i32_align1:
 ; CHECK-NOT: s_sw_
-; CHECK: st8
+; CHECK: s_sb_{{[a-z_]*}}
   store i32 %v, ptr %p, align 1
   ret void
 }
@@ -51,7 +51,7 @@ define i32 @load_i16_align1(ptr %p) {
 ; CHECK-LABEL: load_i16_align1:
 ; CHECK-NOT: s_lhwu_
 ; CHECK-NOT: s_lw_
-; CHECK: ldu8
+; CHECK: s_lbu_{{[a-z_]*}}
   %v = load i16, ptr %p, align 1
   %z = zext i16 %v to i32
   ret i32 %z
@@ -60,7 +60,7 @@ define i32 @load_i16_align1(ptr %p) {
 ; naturally aligned i32 still uses ld32
 define i32 @load_i32_align4(ptr %p) {
 ; CHECK-LABEL: load_i32_align4:
-; CHECK: ld32
+; CHECK: s_lw_{{[a-z_]*}}
   %v = load i32, ptr %p, align 4
   ret i32 %v
 }

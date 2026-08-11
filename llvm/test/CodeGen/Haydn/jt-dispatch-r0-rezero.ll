@@ -56,7 +56,7 @@
 ; CHECK:  { addi32{{(_w)?}} r2, r2, .LJTI0_0 }
 ; Fused s_lw_pre_reg or split add32+ld32, then indirect jalr.
 ; CHECK:  {{s_lw_pre_reg|add32}}
-; CHECK:  { jalr{{(\.s[012])?}} r0, r1, 0 }
+; CHECK:  { jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, r1, 0 }
 ; CHECK: .LBB0_2: // %bb0
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} r1, r0, 10 }
@@ -94,7 +94,7 @@
 ; CHECK: .LBB0_11: // %bb0
 ; CHECK:  { xor32 r0, r0, r0 }
 ; CHECK:  { addi32{{(_w)?}} sp, sp, 8 }
-; CHECK:  { jalr{{(\.s[012])?}} r0, lr, 0 }
+; CHECK:  { jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK:  .size cb22_jt_r0_rezero, .Lfunc_end0-cb22_jt_r0_rezero
 ; CHECK:  .section .rodata,"a",@progbits

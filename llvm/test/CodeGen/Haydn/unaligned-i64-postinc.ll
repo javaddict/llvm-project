@@ -12,8 +12,8 @@ define i64 @load_i64_align4_then_byte() {
 ; CHECK: // %bb.0:
 ; CHECK-NOT: d_ldw_post_imm
 ; CHECK-NOT: {{[[:space:]]}}d_ldw_{{[a-z_]*}}{{[[:space:]]}}
-; CHECK: ld32
-; CHECK: ld32
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
 ; CHECK: jalr{{.*}}lr
 entry:
   %p = getelementptr inbounds i8, ptr @s, i32 12
@@ -27,8 +27,8 @@ define i64 @postinc_load_i64_align4(ptr %p) {
 ; CHECK: // %bb.0:
 ; CHECK-NOT: d_ldw_post_imm
 ; CHECK-NOT: {{[[:space:]]}}d_ldw_{{[a-z_]*}}{{[[:space:]]}}
-; CHECK: ld32
-; CHECK: ld32
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
 ; CHECK: jalr{{.*}}lr
 entry:
   %v = load i64, ptr %p, align 4
