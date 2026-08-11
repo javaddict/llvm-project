@@ -87,7 +87,19 @@ void applyFormatOrdering(Haydn::MachineBundle &Bundle, const VLIWFormat &Format,
 // budget is a counting constraint, not an exclusivity constraint. The value
 // must match the number of FuncUnits declared in HaydnSchedule.td
 // ([SLOT0, SLOT1, SLOT2] = 3).
-inline constexpr unsigned HAYDN_NUM_FU_BITS = 3;
+// It was 3, for [SLOT0, SLOT1, SLOT2] alone. HaydnItineraries declares those
+// three AND the seven format E units, in that order, so a Unit_* itinerary
+// sets bits 3..9 -- and the loop over bits 0..2 in HaydnFuncUnitWrapper
+// recorded NOTHING. From the day the members were retargeted onto the unit
+// model the post-RA scheduler had an empty resource set for every instruction
+// and its exclusivity check was inert. It did not show: bundle legality comes
+// from the placement (FORMAT-E-SWITCH-PLAN.md section 7), never from here.
+//
+// Ten, not seven, because SLOT0/1/2 are still declared -- unreferenced by any
+// instruction now, but occupying FuncUnit indices 0..2 ahead of the units.
+// They go once the 31 defs the ISA database does not have are deleted, and
+// those are blocked on the MC tests that still assemble them.
+inline constexpr unsigned HAYDN_NUM_FU_BITS = 10;
 
 // Per-cycle resource container — the RC type parameter of
 // ResourceScoreboard<HaydnFuncUnitWrapper>.
