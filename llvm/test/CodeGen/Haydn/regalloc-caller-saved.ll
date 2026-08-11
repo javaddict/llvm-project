@@ -232,8 +232,7 @@ define i64 @test_both_banks_clobbered(i32 %a, i64 %b) nounwind {
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d8, sp, 1 }
 ; CHECK-NEXT:    { move32 r8, r1; or64 d8, d0, d0; nop }
 ; CHECK-NEXT:    { nop; jal lr, clobber_all; nop }
-; CHECK-NEXT:    { sext32t64 d0, r8; nop; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { sext32t64 d0, r8; xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { slli64 d0, d0, 32; nop; nop }
 ; CHECK-NEXT:    { srli64 d0, d0, 32; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d8, d0; nop; nop }

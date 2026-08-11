@@ -46,15 +46,13 @@ define i64 @mul_i64_with_use(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { move32_dr_h r2, d0; move32_dr_l r3, d1; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { addi32 r1, r0, 0; move32_dr_h r4, d1 }
-; CHECK-NEXT:    { sext32t64 d1, r2; nop; nop }
-; CHECK-NEXT:    { sext32t64 d3, r3; nop; nop }
-; CHECK-NEXT:    { sext32t64 d4, r4; nop; nop }
-; CHECK-NEXT:    { slli64 d1, d1, 32; slli64 d3, d3, 32; s_sw_with_imm r1, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; move32_dr_l r1, d0; slli64 d4, d4, 32 }
-; CHECK-NEXT:    { sext32t64 d0, r1; nop; nop }
-; CHECK-NEXT:    { slli64 d0, d0, 32; srli64 d1, d1, 32; srli64 d3, d3, 32 }
-; CHECK-NEXT:    { srli64 d0, d0, 32; srli64 d4, d4, 32; mul64_ulul d1, d1, d3 }
+; CHECK-NEXT:    { sext32t64 d1, r2; sext32t64 d3, r3; s_sw_with_imm r1, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; move32_dr_l r1, d0; sext32t64 d4, r4 }
+; CHECK-NEXT:    { sext32t64 d0, r1; slli64 d1, d1, 32; slli64 d3, d3, 32 }
+; CHECK-NEXT:    { slli64 d0, d0, 32; slli64 d4, d4, 32; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { srli64 d0, d0, 32; srli64 d3, d3, 32; srli64 d4, d4, 32 }
 ; CHECK-NEXT:    { mul64_ulul d5, d0, d3; mul64_ulul d0, d0, d4; nop }
+; CHECK-NEXT:    { mul64_ulul d1, d1, d3; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { addi32 r1, r0, 32; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { sll64 d0, d0, r1; nop; nop }

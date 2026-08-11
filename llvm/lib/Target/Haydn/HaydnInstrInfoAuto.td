@@ -2940,6 +2940,11 @@ let isPseudo = 1 in {
 // as GPR32 (capstone drift cat 1). Fixed to DR64 source. Inert: no selector
 // case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
 let TSFlags = 14, isCodeGenOnly = 1 in
+// isPseudo = 0: this def has real format E members (<NAME>_P<form><pos>_<UNIT>), so it is a real instruction and the
+// enclosing `let isPseudo = 1 in {` at line 2925 -- Bundle128's "no encoding for this yet" -- no longer describes it. Leaving it
+// pseudo makes HaydnAsmPrinter's `else if (I->isPseudo()) continue;`
+// DROP the instruction from its bundle without a word.
+let isPseudo = 0 in
 def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs, simm16:$imm),
     "arctan	$rd, $rs, $imm", []>;
@@ -3018,6 +3023,7 @@ def D_LDW_POST_IMM : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
 
 let isCodeGenOnly = 1, isAsmParserOnly = 1, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3025,6 +3031,7 @@ def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LHW_POST_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_post_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -3085,6 +3092,7 @@ def D_LDW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -3094,6 +3102,7 @@ def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LHW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -3112,6 +3121,7 @@ def D_LDW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -3121,6 +3131,7 @@ def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LHW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lhw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -3315,16 +3326,19 @@ def D_SHW_WITH_IMM : HaydnInst<4, (outs),
 }
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def EXP2 : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "exp2	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def LOG2 : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "log2	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def MOVE64 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "move64	$rd, $rs", []>;
@@ -3353,31 +3367,37 @@ def MOVE64 : HaydnInst<4, (outs DR64:$rd),
 // Prior stubs modeled GPR32 source (capstone drift); product members are
 // DR64 source. Same shape as POPCOUNT64.
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSA16_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsa16_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSA32_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsa32_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSA64 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsa64	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSAZ16_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsaz16_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSAZ32_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsaz32_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSAZ64 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsaz64	$rd, $rs", []>;
@@ -3386,11 +3406,13 @@ def NSAZ64 : HaydnInst<4, (outs GPR32:$rd),
 // DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
 // as GPR32 (capstone drift cat 1). Fixed to DR64 source (R_GD).
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def POPCOUNT64 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "popcount64	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def RECIP : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "recip	$rd, $rs", []>;
@@ -3421,6 +3443,7 @@ def RECIP : HaydnInst<4, (outs GPR32:$rd),
 // only because CodeGen emitted SEXT_GPR32_TO_DR64 instead. CodeGen now emits
 // THIS, because it is the name the database gave members to.
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def SEXT32T64 : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs),
     "sext32t64	$rtd, $rs", []>;
@@ -3430,6 +3453,7 @@ def SEXT32T64 : HaydnInst<4, (outs DR64:$rtd),
 // as GPR32 (capstone drift cat 2). Fixed to DR64 dest. Inert: no selector
 // case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def SIN_COS : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs, simm16:$imm),
     "sin_cos	$rd, $rs, $imm", []>;
@@ -3437,11 +3461,13 @@ def SIN_COS : HaydnInst<4, (outs DR64:$rd),
 
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def SQRT : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "sqrt	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def SRAI64R : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs, simm16:$imm),
     "srai64r	$rd, $rs, $imm", []>;
@@ -3889,21 +3915,25 @@ def S_SW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // has no case), no intrinsic Pat in HaydnIntrinsics.td. Stays isCodeGenOnly
 // until a real encoding lands (M5).
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64 : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs),
     "transf64	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64F2 : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs),
     "transf64f2	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "transf64_h	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "transf64_l	$rd, $rs", []>;
@@ -3913,21 +3943,25 @@ def TRANSF64_L : HaydnInst<4, (outs DR64:$rd),
 // forms remain in HaydnFormatsALU64.td (golden Mode-0 opcodes 0x51..0x56).
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32S_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32s_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32S_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32s_l	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32_l	$rd, $rs", []>;
@@ -3936,21 +3970,25 @@ def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
 // Prior logical used DR64 dest (R_DD drift); setDesc then aborted
 // '$d0 is not a GPR32'. Match members so alts leaveRegion is legal.
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HMAX32 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x2hmax32	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HMIN32 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x2hmin32	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2MJSWAP32 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2mjswap32	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2MJSWAP32S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2mjswap32s	$rd, $rs", []>;
@@ -3966,6 +4004,7 @@ def X2MJSWAP32S : HaydnInst<4, (outs DR64:$rd),
 // (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2swap32	$rd, $rs", []>;
@@ -3980,47 +4019,56 @@ def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
 // HaydnFormatsMAC.td.
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4CONJ16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4conj16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4CONJ16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4conj16s	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4ENERGY16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4energy16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4HADD16_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4hadd16_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4HADD16_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4hadd16_l	$rd, $rs", []>;
 
 let TSFlags = 14 in
 // X4HMAX/X4HMIN — same R_GD shape as X2HMAX (GPR32 dest, DR64 src).
+let isPseudo = 0 in
 def X4HMAX16 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x4hmax16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4HMIN16 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x4hmin16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4MJSWAP16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4mjswap16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4MJSWAP16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4mjswap16s	$rd, $rs", []>;
@@ -4031,16 +4079,19 @@ def X4MJSWAP16S : HaydnInst<4, (outs DR64:$rd),
 // (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4NEG16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4neg16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4NEG16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4neg16s	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4SWAP16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4swap16	$rd, $rs", []>;
@@ -4048,6 +4099,7 @@ def X4SWAP16 : HaydnInst<4, (outs DR64:$rd),
 let TSFlags = 14 in
 // `ZERO_DR rtd` writes zero and takes no input; the immediate was spurious
 // and gave CodeGen an operand the member does not have (§ 5.11).
+let isPseudo = 0 in
 def ZERO_DR : HaydnInst<4, (outs DR64:$rd), (ins),
     "zero_dr	$rd", []>;
 

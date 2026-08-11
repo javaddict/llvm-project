@@ -31,9 +31,13 @@
 ;
 ; Test design: a single multiply of two sign-extended i32 values producing an
 ; i64, returned in a register. This is the minimal repro of the libcall shape.
-; The CHECK requires mul64.ll to appear and forbids any jal into __muldi3 or
-; __mulsi3. If the LIBCALL_MUL64 regression returns, this test fails on the
-; CHECK-NOT lines.
+; The CHECK requires mul64_ll to appear and forbids any jal into __muldi3 or
+; __mulsi3.
+;
+; Those negatives are the directives at the end of this file. They were prose
+; until now: the sentence claiming them was written, the directives were not,
+; and a file that says "fails on the CHECK-NOT lines" while having none reads
+; as covered to everyone who greps it.
 
 define i64 @ii_mul_native_not_libcall(i32 %a, i32 %b) {
 ; CHECK-LABEL: ii_mul_native_not_libcall:
@@ -42,9 +46,7 @@ define i64 @ii_mul_native_not_libcall(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { sext32t64 d0, r1; nop; nop }
-; CHECK-NEXT:    { sext32t64 d1, r2; nop; nop }
-; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { sext32t64 d0, r1; sext32t64 d1, r2; nop }
 ; CHECK-NEXT:    { mul64_ll d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
@@ -55,3 +57,7 @@ entry:
   %p = mul i64 %aa, %bb
   ret i64 %p
 }
+
+; The point of the file: a native 64-bit multiply, not a libcall.
+; CHECK-NOT: __muldi3
+; CHECK-NOT: __mulsi3
