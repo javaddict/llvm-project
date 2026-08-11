@@ -2,24 +2,31 @@
 # RUN:   -run-pass=finalize-isel -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s
 #
-# B3.exit.4: SLT64_S* members share logical unary shape for AIE setDesc
-# (AIEMachineScheduler.cpp:1126-1132). Golden HW is SFR-only + 2 DR sources;
-# compiler model keeps (outs DR64:$rd),(ins DR64:$rsd)+Defs=[SFR] so materialize
-# does not hit "Explicit operand marked as def" (B1 R_CMP 0-def shape).
+# B3.exit.4: the SFR compares must materialize cleanly through setDesc
+# (AIEMachineScheduler.cpp:1126-1132).
 #
-# MIR: unary SLT64_S1 with Defs=[SFR] must verify clean.
+# This used to pin a WORKAROUND: the compiler model carried
+# (outs DR64:$rd),(ins DR64:$rsd) so materialize would not hit "Explicit
+# operand marked as def". § 5.11 removed it -- golden hardware is SFR-only with
+# two DR sources, and the logical now says so: `(outs), (ins DR64, DR64)`.
+# GISel allocated a dead vreg for that phantom destination, and the intrinsics
+# returned it, so the shape was wrong in three places at once.
+#
+# MIR: a two-source, zero-def SLT64 with Defs=[SFR] must verify clean.
 ---
 name:            test_slt64_unary_setdesc_shape
 tracksRegLiveness: true
 registers:
   - { id: 0, class: dr64 }
+  - { id: 1, class: dr64 }
 body:             |
   bb.0.entry:
     %0 = IMPLICIT_DEF
-    %0 = SLT64_S1 %0, implicit-def $sfr
+    %1 = IMPLICIT_DEF
+    SLT64 %0, %1, implicit-def $sfr
     RET implicit $r0, implicit $r15
 ...
 
 # CHECK-LABEL: name: test_slt64_unary_setdesc_shape
-# CHECK: SLT64_S1 %{{[0-9]+}}{{(:dr64)?}}, implicit-def $sfr
+# CHECK: SLT64 %{{[0-9]+}}{{(:dr64)?}}, %{{[0-9]+}}{{(:dr64)?}}, implicit-def $sfr
 # CHECK-NOT: Explicit operand marked as def
