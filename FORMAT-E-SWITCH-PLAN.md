@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `33a9d51d5d48` **local only — `fork/` is still at `2eba490a051c`, 32 commits behind** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `81a7b7a1c641` **local only — `fork/` is still at `2eba490a051c`, 33 commits behind** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -907,15 +907,20 @@ anything is what separated them; the split was:
 Of the 117, **52 are regenerated and script-owned**. The remainder split into
 two problems that are NOT more of the same work:
 
-* **43 carry 162 `CHECK-NOT` assertions and are deliberately held.** The update
-  scripts do not reproduce negative checks, and moving them to a private prefix
-  does not survive either — verified: the script takes over any prefix it finds
-  on a RUN line and generates a full positive block for it. Adopting those 43
-  would silently delete, for example, `hwloop-remat-freereg-dep.mir`'s
+* **43 carried 162 `CHECK-NOT` assertions and were held — RESOLVED, and the
+  framing was wrong.** The reasoning was that the update scripts cannot
+  reproduce negative checks, which is true and beside the point: nothing
+  required a script. They were rewritten by hand along with everything else in
+  this section, and all 43 pass. The scripts do still take over any prefix they
+  find on a RUN line, so **do not point one at a file carrying negatives** —
+  that would silently delete, for example, `hwloop-remat-freereg-dep.mir`'s
   `CHECK-NOT: $r1 = ADDI32_W $r1, -1`, which is the entire property that test
-  exists to protect. **This needs a decision, not more effort.** Many of those
-  NOTs name retired spellings and are already vacuous, so they need attention
-  either way.
+  exists to protect.
+
+  The half of that note that mattered — "many of those NOTs name retired
+  spellings and are already vacuous" — could not be checked at the time,
+  because the gate that was supposed to answer it was reading zero files. See
+  § 6.15.
 * **26 cannot be driven at all.** `update_mc_test_checks.py` rewrites `%s` into
   an `echo | llvm-mc` pipeline and mangles multi-line RUN continuations; two
   more hit an `output_type` UnboundLocalError in the llc script. Regenerating
@@ -2449,7 +2454,57 @@ This is the fourth member of the family in § 6.6 / § 6.12 / § 6.13: a tool
 answered a slightly different question than the one being asked, and the answer
 looked plausible.
 
-### 6.15 `haydn_vacuous_not.py` does not see the clang tests
+### 6.15 `haydn_vacuous_not.py` was reading ZERO files
+
+Its `ROOT` went up four levels from `llvm/lib/Target/Haydn/utils`, which lands
+on `<repo>/llvm`. `os.walk` of a path that does not exist yields nothing, so
+every run printed **"0 vacuous CHECK-NOT" without opening a file**, and had
+done since the script was written. Every green reading of it — in this
+document, in the session handoffs, in the "gates" block of § 1 — meant nothing.
+
+**A gate whose entire purpose is to catch assertions that pass by not checking
+anything was passing by not checking anything.** It is the § 6.6 / § 6.12 /
+§ 6.13 / § 6.14 family again, and the sharpest instance of it: a tool answered
+a question nobody had asked it, and the answer was the reassuring one.
+
+The tell was available and unread: the number never moved. Not when 62 tests
+were regenerated, not when the load/store family was renamed, not when nine
+`.s` files had their assertions rewritten. **A gate that never moves is either
+perfect or blind, and the second is far more likely.**
+
+#### What it checks now
+
+Two halves. The whitelist of RETIRED spellings survives — it needs no build and
+it is what catches a `_S1` member coming back. Added to it: every mnemonic- or
+opcode-shaped token in a negative assertion is looked up in what the target can
+actually emit (the generated opcode enum, the asm mnemonic table, the intrinsic
+table), by substring, because that is how FileCheck matches — `CHECK-NOT:
+mul32` is live, since `x2mul32` contains it.
+
+That found what the whitelist structurally could not: `HWLOOP_END`, a spelling
+nobody had thought to list. See § 5.4's entry on the 43 held tests.
+
+Scope, decided by measuring rather than guessing:
+
+* `//` directives are seen now. **21 of them, in 6 llvm files, were invisible
+  to the old regex**, which only accepted `;` and `#`.
+* `clang/test/{Headers,CodeGen/Haydn}` are in scope. `clang/test/Sema` is not:
+  thousands of unrelated tests, and one row out of `attr-availability-swift.c`
+  is one row too many for a gate meant to be read every time.
+* `llvm.haydn.*` names that never existed, assembler directives and pass titles
+  are shaped out, with the reasons in the docstring. `x2cmula-isqrt-probe.c`
+  forbids `llvm.haydn.x2cmula32` to say the composed op must not survive as one
+  intrinsic — but it never was one, and the positives beside it already assert
+  the decomposition. A spelling that never existed is a different category from
+  one that was retired.
+
+Verified by putting a defect back rather than by the count being zero: restore
+`CHECK-NOT: HWLOOP_END` and the liveness half reports it; plant
+`CHECK-NOT: ADD32_S1` and the whitelist half does. **The count is 0 because the
+tree is clean, not because the gate cannot look** — which is a sentence that
+now needs saying every time it is quoted.
+
+### 6.15.1 The clang tests were out of scope (subsumed above)
 
 `TESTS = ("llvm/test/CodeGen/Haydn", "llvm/test/MC/Haydn")`. The gate reading
 zero means zero **there**, and that is exactly where it was reading zero while
@@ -2495,9 +2550,10 @@ All four were found in one pass, and none of them fails in a way that says so.
   **UNRESOLVED**, which does not appear in the failure count and reads like a
   harness hiccup. Quote it.
 
-The standing gate `utils/haydn_vacuous_not.py` catches only the fourth kind, a
-`CHECK-NOT` naming a spelling that no longer exists, and only in
-`llvm/test/{CodeGen,MC}/Haydn` (§ 6.15). Nothing catches these four.
+The standing gate `utils/haydn_vacuous_not.py` catches only the fourth kind: a
+negative assertion naming something nothing can emit. Nothing catches these
+four. And note what § 6.15 turned out to be — the gate was reading zero files,
+so for most of this migration nothing caught the fourth kind either.
 
 ### 6.8 Adding a regression case trips the manifest gate
 
@@ -2954,7 +3010,7 @@ already the tested carrier of the member→logical fold.
 | `llvm/lib/Target/Haydn/HaydnCompositeFormats.td` | `BUNDLE128_FULL`, to delete |
 | `llvm/lib/Target/Haydn/utils/haydn_encoding.py` | The generator, its gates, and `--fix-operand-mapping` |
 | `llvm/lib/Target/Haydn/utils/haydn_ae_audit.py` | Which `AE_*` macros still need the AR args format E drops (§ 8 Q2). Since § 8 Q1 the test is arity, read from `haydn_dsp.h`'s own helper definitions |
-| `llvm/lib/Target/Haydn/utils/haydn_vacuous_not.py` | Standing gate: `CHECK-NOT`s that can never match. **llvm tests only** — see § 6.15 |
+| `llvm/lib/Target/Haydn/utils/haydn_vacuous_not.py` | Standing gate: negative assertions that can never match, by retired-spelling whitelist AND liveness against the generated tables. llvm + the two clang Haydn dirs — see § 6.15 |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.{h,cpp}` | `stripHaydnMemberSuffix`, `getHaydnLogicalBaseOpcode`, slot geometry |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp` | Fixup kinds, composite encode |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnRelocGeometry.inc` | Generated `--emit reloc-geometry` (§ 5.8); checked in, shared with lld |
