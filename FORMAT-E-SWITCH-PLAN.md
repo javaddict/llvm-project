@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `f24e9caf213f` **local only — `fork/` is still at `2eba490a051c`, 23 commits behind** | **objects emit: 424/430 CodeGen. lit 550/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 23 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
+| `llvm-project` | `haydn-formate-switch-mc` | `63ff89c2d5e8` **local only — `fork/` is still at `2eba490a051c`, 24 commits behind** | **objects emit: 424/430 CodeGen. lit 556/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 17 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -119,7 +119,7 @@ hashes there are the ones on the pushed branch.
 # llvm-project
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
-#   591 discovered: 550 pass, 10 XFAIL, 8 unsupported, 23 fail — two of the
+#   591 discovered: 556 pass, 10 XFAIL, 8 unsupported, 17 fail — two of the
 #   XFAILs are § 5.12's and § 5.14's, where an XPASS is the alarm
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
@@ -961,6 +961,26 @@ bits zero = NOP". Format E cannot state it that way at all: `bit[2:0] = 0b111`
 is the format indicator, so an all-zero parcel is not a bundle and
 disassembles as `<unknown>`. What survives is one step weaker — every payload
 bit zero, only the indicator set, `07 00 …` — and that is what it pins now.
+
+#### Placement is almost never the property
+
+Six of § 5.4's failures were bundle-order differences, and in every one the
+test's own header said placement was not what it was testing — "must parse
+inside a bundle", "round-trip cleanly", "ONE grouped line, NOT N split lines",
+"DISTINCT slots, zero collisions", "we assert only that BOTH ops appear with
+their original operands". Then each pinned the arrangement anyway, so the
+switch broke them all on something none of them was for.
+
+Rewritten to assert the contract: mnemonic and operands present, one line per
+parcel where that is the point, either print order where two ops must share a
+bundle. That last is the legitimate use of an alternation under § 6.16 — two
+spellings of ONE fact — as against `{{beqz|set_hwloop}}`, which was two facts
+and asserted neither.
+
+**They now survive § 5.12 as well.** Pinning today's arrangement would have
+meant redoing all six the moment the unit axis starts firing and NOP padding
+stops landing on ALU0. If a placement test has to be regenerated, first ask
+whether it should be asserting placement at all.
 
 **A substitution will not do the retired spellings**: § 5.6's load/store rename
 is "a rename plus a range collapse", so `LD32` did not become one name — it
@@ -2300,9 +2320,9 @@ triaged rather than left. It is the same shape as § 6.6 / § 6.12 / § 6.13 /
 § 6.14 — a tool answering a slightly narrower question than the one being
 asked — and it is the fifth member of that family.
 
-### 6.16 Three ways a FileCheck line asserts nothing
+### 6.16 Four ways a FileCheck line asserts nothing
 
-All three were found in one pass, and none of them fails in a way that says so.
+All four were found in one pass, and none of them fails in a way that says so.
 
 * **Nested `{{...}}`.** FileCheck closes the regex at the FIRST `}}`, so
   `{{S_LW_{{[A-Z_]*}}|D_LDW_POST_IMM|...}}` is one broken regex followed by
@@ -2318,10 +2338,14 @@ All three were found in one pass, and none of them fails in a way that says so.
   (§ 5.4), and hit again while WRITING the fix for the first item: quoting the
   broken line verbatim in a comment made FileCheck adopt it. Prose about a
   directive has to break the prefix.
+* **`--implicit-check-not=<unknown>` unquoted.** `<` is a stdin redirect, so
+  the RUN line silently becomes "read from a file named `unknown`". lit reports
+  **UNRESOLVED**, which does not appear in the failure count and reads like a
+  harness hiccup. Quote it.
 
 The standing gate `utils/haydn_vacuous_not.py` catches only the fourth kind, a
 `CHECK-NOT` naming a spelling that no longer exists, and only in
-`llvm/test/{CodeGen,MC}/Haydn` (§ 6.15). Nothing catches these three.
+`llvm/test/{CodeGen,MC}/Haydn` (§ 6.15). Nothing catches these four.
 
 ### 6.8 Adding a regression case trips the manifest gate
 
