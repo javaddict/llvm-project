@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `d7ffecc35465` **local only — `fork/` is still at `2eba490a051c`, 22 commits behind** | **objects emit: 424/430 CodeGen. lit 548/590, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 25 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 is a new OPEN defect, held on a question only the simulator answers. |
+| `llvm-project` | `haydn-formate-switch-mc` | `f24e9caf213f` **local only — `fork/` is still at `2eba490a051c`, 23 commits behind** | **objects emit: 424/430 CodeGen. lit 550/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 23 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -119,8 +119,8 @@ hashes there are the ones on the pushed branch.
 # llvm-project
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
-#   590 discovered: 548 pass, 9 XFAIL, 8 unsupported, 25 fail — the 9th XFAIL
-#   is § 5.12's bundle-unit-collision.s, and an XPASS there is the alarm
+#   591 discovered: 550 pass, 10 XFAIL, 8 unsupported, 23 fail — two of the
+#   XFAILs are § 5.12's and § 5.14's, where an XPASS is the alarm
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
 build/bin/llvm-lit -s lld/test/ELF/haydn \
@@ -1939,6 +1939,68 @@ their assertions being touched**. They asserted `lui r3, 4095` and were right;
 relaxing them would have frozen the defect in. That is the § 5.4 rule in its
 sharpest form: a red gate is not evidence that the expectation is stale.
 
+### 5.14 SET_HWLOOP_F2's label fixups write outside their fields — OPEN
+
+`bqriir32x32_df1_process` compiles to an object containing one bundle that
+disassembles as `<unknown>`. It is the `set_hwloop_f2` that programs the
+hardware loop: llc emits it in the `.s`, and the same bundle is undecodable in
+the `.o`. **The binary contains a hardware loop whose trip count is never
+programmed.**
+
+`SET_HWLOOP_F2_P31_ALU0` lays entry1 out as
+
+```
+e1{29-18} = uimm12_offset2      e1{17-12} = uimm6_offset1
+e1{11}    = hwlr_sel            e1{30}    = reserved, must be 0
+```
+
+and the two label fixups spill across all three. Holding the loop body at 69
+bundles and varying only `N`, the filler bundles between the instruction and
+the START label:
+
+| N | uimm6_offset1 | uimm12_offset2 | reserved e1{30} |
+|---:|---:|---:|---:|
+| 0 | 0 | 105 | 0 |
+| 4 | 0 | 111 | 0 |
+| 5 | 32 | **2160** | 0 |
+| 11 | 32 | 121 | **1** |
+
+The body never changes size, so `offset2` must not move; `offset1` must track
+the start distance and does not. **Below the threshold this is a silent wrong
+value** — a hardware loop with the wrong bounds, which executes. Only when the
+reserved bit finally sets does the disassembler refuse the bundle, and that
+refusal is the entire reason any of it was visible.
+
+The numeric-operand path range-checks correctly — `set_hwloop_f2 1, 0, 4096,
+r4` is rejected — so only the label path is unguarded. Same class as § 5.8, and
+for the same reason no gate saw it: **`--emit roundtrip` never applies a
+fixup**. It round-trips the placement's own bits, and a fixup writes over them
+afterwards.
+
+`llvm/test/MC/Haydn/hwloop-fixup-reserved-bit.s` holds it, `XFAIL`, in 82 lines
+with no `llc` — it reproduces `bqriir`'s twelve bytes exactly
+(`8f 00 00 00 40 4e 01 3c 28 00 00 00`). It flips to XPASS on a fix.
+
+`bqriir32x32_df1-e2e.ll` is deliberately kept **green** rather than left red
+like § 5.4's `f2mulzaa32rs` pair: it carries twenty assertions and a red e2e
+test stops being a signal for the other nineteen. Its comment records what is
+not asserted there and why.
+
+#### How it stayed hidden: an alternation with a dead arm
+
+The check was `BUNDLE-DAG: {{beqz|set_hwloop}}`. An alternation passes on
+EITHER arm. The loop became a hardware loop and the guard's condition got
+inverted to `bnez`, so the `beqz` arm went stale — and the arm that mattered
+was never verified in the first place, because `beqz` had been matching all
+along. The same file had `{{slt32|set_hwloop}}` two lines up, where `slt32`
+still matches and so still hides it.
+
+This is § 5.4's `f2mulzaa32rs` shape exactly — *"a wrong expectation and a
+missing feature covering for each other"* — and it suggests a rule:
+**an alternation over things that are not alternatives is a hiding place.**
+`{{beqz|bnez}}` is fine, they are two spellings of one fact. `{{beqz|set_hwloop}}`
+is two different facts, and it asserts neither.
+
 ### 5.12 The unit axis does not fire on the AsmParser's hinted path — OPEN
 
 `{ beq r1, r2, 8; bnez r3, 16; beqz r4, 24 }` assembles. Three ALU0-only
@@ -2237,6 +2299,29 @@ of a retired spelling, and widening it will surface rows that then have to be
 triaged rather than left. It is the same shape as § 6.6 / § 6.12 / § 6.13 /
 § 6.14 — a tool answering a slightly narrower question than the one being
 asked — and it is the fifth member of that family.
+
+### 6.16 Three ways a FileCheck line asserts nothing
+
+All three were found in one pass, and none of them fails in a way that says so.
+
+* **Nested `{{...}}`.** FileCheck closes the regex at the FIRST `}}`, so
+  `{{S_LW_{{[A-Z_]*}}|D_LDW_POST_IMM|...}}` is one broken regex followed by
+  literal text. It cannot match anything. It was red, which is the lucky case
+  — the same construction with a matchable prefix would be green and empty.
+* **An alternation over things that are not alternatives.**
+  `{{beqz|set_hwloop}}` passes on either arm, so it asserts neither. § 5.14 is
+  what that cost: the `set_hwloop` arm was never verified, and when the
+  `beqz` arm went stale the line failed for the wrong reason.
+  `{{beqz|bnez}}` is fine — two spellings of one fact. Two different facts in
+  one alternation is a hiding place.
+* **A directive prefix inside a comment.** Already in this file's own history
+  (§ 5.4), and hit again while WRITING the fix for the first item: quoting the
+  broken line verbatim in a comment made FileCheck adopt it. Prose about a
+  directive has to break the prefix.
+
+The standing gate `utils/haydn_vacuous_not.py` catches only the fourth kind, a
+`CHECK-NOT` naming a spelling that no longer exists, and only in
+`llvm/test/{CodeGen,MC}/Haydn` (§ 6.15). Nothing catches these three.
 
 ### 6.8 Adding a regression case trips the manifest gate
 
