@@ -1100,8 +1100,13 @@ static void emitSpecials(raw_ostream &OS) {
   // The re-delivered database dropped the direction select and fixed the
   // post-increment at +8 (FORMAT-E-SWITCH-PLAN.md § 7), so these bodies carry
   // neither `stride` nor `dir_sel` any more. They are the emitter's own copy
-  // of each builtin's arity and drifted silently when the prototypes moved —
-  // scripts/haydn_builtin_call_arity.py is the standing check.
+  // of each builtin's arity and drifted silently when the prototypes moved.
+  // Nothing checks these particular bodies: they are literal text, and the
+  // only thing that reads them is a C compiler on the generated haydn.h.
+  // (An earlier revision of this comment named scripts/haydn_builtin_call_
+  // arity.py as the standing check. There is no such script and there never
+  // was — a check that exists only in a comment reads exactly like one that
+  // runs.)
   OS << "/* ImmArg ar_sel: switch-literal dispatch. */\n";
   emitFn(OS, "haydn_x4int16", "d_lqhwua_post", "const void *ptr, int ar_sel",
          {"switch (ar_sel & 3) {",
@@ -1196,8 +1201,8 @@ static bool specialPublicShape(StringRef PN, std::string &Ret,
   }
   // UA wrappers accept a runtime ar (switch-literal ImmArg at the builtin).
   // Format E has no stride and no direction select, so ar_sel is the last
-  // argument — these lists must stay in step with the PublicPrototype in
-  // BuiltinsHaydn.td.
+  // argument — these lists must stay in step with BuiltinsHaydn.td, which
+  // resolvePublicShape() now enforces rather than asks for.
   if (PN == "d_lqhwua_post") {
     Ret = "haydn_x4int16";
     Args.assign({"const void *", "int"});
@@ -1263,8 +1268,28 @@ static void applyBagFriendlyPublic(std::string &Ret,
 /// Must match emitOne / emitThinExt / emitSpecials (not stale TD bags).
 static bool resolvePublicShape(const BuiltinEntry &E, std::string &Ret,
                                SmallVectorImpl<std::string> &Args) {
-  if (specialPublicShape(E.PublicName, Ret, Args))
+  if (specialPublicShape(E.PublicName, Ret, Args)) {
+    // specialPublicShape() is a hand-written restatement of an arity the .td
+    // already carries, and checkPublicProtoArity never saw it because it wins
+    // before PublicPrototype is even parsed. That is how the AR family drifted:
+    // BuiltinsHaydn.td dropped the stride and dir_sel, this table kept handing
+    // them out, and the only thing that noticed was the closure probe failing
+    // to compile — one test, in a directory nobody reads first. Same rule as
+    // checkPublicProtoArity, applied where the shape actually comes from.
+    std::string BRet;
+    SmallVector<std::string, 8> BArgs;
+    unsigned Drop = frexpOutDrop(E);
+    if (parseProto(E.Prototype, BRet, BArgs) && BArgs.size() >= Drop &&
+        Args.size() != BArgs.size() - Drop)
+      PrintFatalError("HaydnIntrin: specialPublicShape(" + E.PublicName +
+                      ") gives " + std::to_string(Args.size()) +
+                      " parameter(s) but the builtin takes " +
+                      std::to_string(BArgs.size()) + " less " +
+                      std::to_string(Drop) +
+                      " frexp out-pointer(s) — update the table in this file "
+                      "when a prototype in BuiltinsHaydn.td moves");
     return true;
+  }
 
   // Prefer PublicPrototype when set (same as emitOne HasPub path).
   bool HasPub = !E.PublicPrototype.empty() &&
