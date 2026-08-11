@@ -165,6 +165,16 @@ bool HaydnPostSelectOptimize::tryCSEConstantDR64(MachineInstr &MovInst,
   if (MovInst.getOpcode() != Haydn::MOV_GPR_TO_DR64)
     return false;
 
+  // Opcode-matching says nothing about operand KINDS. Every getReg/getImm
+  // below has to be guarded, because an opcode can reach this pass carrying a
+  // global address, a frame index or a symbol where the .td declares a plain
+  // register or immediate -- and MachineOperand::getReg() asserts rather than
+  // returning anything a caller could check.
+  if (!MovInst.getOperand(0).isReg() || !MovInst.getOperand(1).isReg() ||
+      !MovInst.getOperand(2).isReg()) {
+    LLVM_DEBUG(dbgs() << "DR64 CSE: non-register operand on " << MovInst);
+    return false;
+  }
   Register DrDst = MovInst.getOperand(0).getReg();
   if (!DrDst.isVirtual())
     return false;
@@ -180,11 +190,27 @@ bool HaydnPostSelectOptimize::tryCSEConstantDR64(MachineInstr &MovInst,
     MachineInstr *Def = MRI.getVRegDef(R);
     if (!Def)
       return false;
-    if (Def->getOpcode() == Haydn::ADDI32 && Def->getOperand(1).getReg() == Haydn::R0) {
+    if (Def->getOpcode() == Haydn::ADDI32) {
+      // `addi32 rd, r0, C` is the constant form. Anything else wearing this
+      // opcode -- an @global in the immediate slot, a frame index in the
+      // source -- is not a constant this pass can fold, and asking it for a
+      // register or an immediate would abort rather than say so.
+      if (!Def->getOperand(1).isReg() || !Def->getOperand(2).isImm()) {
+        LLVM_DEBUG(dbgs() << "DR64 CSE: ADDI32 is not the constant form: "
+                          << *Def);
+        return false;
+      }
+      if (Def->getOperand(1).getReg() != Haydn::R0)
+        return false;
       Val = Def->getOperand(2).getImm();
       return true;
     }
     if (Def->getOpcode() == Haydn::LOADI32) {
+      if (!Def->getOperand(1).isImm()) {
+        LLVM_DEBUG(dbgs() << "DR64 CSE: LOADI32 without an immediate: "
+                          << *Def);
+        return false;
+      }
       Val = Def->getOperand(1).getImm();
       return true;
     }
@@ -201,6 +227,9 @@ bool HaydnPostSelectOptimize::tryCSEConstantDR64(MachineInstr &MovInst,
     if (&MI == &MovInst)
       break;
     if (MI.getOpcode() != Haydn::MOV_GPR_TO_DR64)
+      continue;
+    if (!MI.getOperand(0).isReg() || !MI.getOperand(1).isReg() ||
+        !MI.getOperand(2).isReg())
       continue;
     Register OtherLo = MI.getOperand(1).getReg();
     Register OtherHi = MI.getOperand(2).getReg();

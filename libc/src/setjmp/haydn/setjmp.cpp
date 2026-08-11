@@ -23,23 +23,29 @@ namespace LIBC_NAMESPACE_DECL {
 [[gnu::naked]]
 LLVM_LIBC_FUNCTION(int, setjmp, ([[maybe_unused]] jmp_buf buf)) {
   asm(R"(
-      st32 r8,  r1, 0
-      st32 r9,  r1, 4
-      st32 r10, r1, 8
-      st32 r11, r1, 12
-      st32 sp,  r1, 16
-      st32 lr,  r1, 20
-      st64 d8,  r1, 24
-      st64 d9,  r1, 32
-      st64 d10, r1, 40
-      st64 d11, r1, 48
-      st64 d12, r1, 56
-      st64 d13, r1, 64
-      st64 d14, r1, 72
-      st64 d15, r1, 80
+      // Format E: § 5.6 renamed the load/store family and the immediate is an
+      // ELEMENT index, not a byte offset — S_SW/S_LW are `rs + (imm6 << 2)`
+      // and D_SDW/D_LDW are `rs + (imm6 << 3)`. The byte offsets in the frame
+      // comment above therefore divide by 4 and 8 respectively. Getting that
+      // wrong assembles and addresses the wrong slot, so the two must be read
+      // together. `_w` suffixes are gone with the § 5.1 fold.
+      s_sw_with_imm r8, r1, 0
+      s_sw_with_imm r9, r1, 1
+      s_sw_with_imm r10, r1, 2
+      s_sw_with_imm r11, r1, 3
+      s_sw_with_imm sp, r1, 4
+      s_sw_with_imm lr, r1, 5
+      d_sdw_with_imm d8, r1, 3
+      d_sdw_with_imm d9, r1, 4
+      d_sdw_with_imm d10, r1, 5
+      d_sdw_with_imm d11, r1, 6
+      d_sdw_with_imm d12, r1, 7
+      d_sdw_with_imm d13, r1, 8
+      d_sdw_with_imm d14, r1, 9
+      d_sdw_with_imm d15, r1, 10
       # return 0
-      addi32_w r1, r0, 0
-      jalr_w r0, lr, 0
+      addi32 r1, r0, 0
+      jalr r0, lr, 0
   )");
 }
 
