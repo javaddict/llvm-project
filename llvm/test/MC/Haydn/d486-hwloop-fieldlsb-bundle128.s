@@ -1,12 +1,11 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
-# XFAIL: *
 #
-# KNOWN DEFECT — the assertion is right and the encoder is wrong. Do not
-# "fix" this by relaxing it; see FORMAT-E-SWITCH-PLAN.md § 5.14. This file is
-# the SILENT form of that defect and hwloop-fixup-reserved-bit.s is the loud
-# one; both should go green together.
+# REGRESSION TEST for § 5.14, FIXED. This is the SILENT form of that defect —
+# no reserved bit, no <unknown>, just wrong offsets — and
+# hwloop-fixup-reserved-bit.s is the loud one. They went green together and
+# should stay that way.
 #
 # REGRESSION TEST (RISK-6): the hardware-loop offset fixups must land in the
 # fields the instruction declares. That was the original question here and it
@@ -22,19 +21,19 @@
 #
 #     e1{17-12} = uimm6_offset1     e1{29-18} = uimm12_offset2
 #
-# and with .Lbody 12 bytes ahead and .Lend 24 ahead the encoder produces
+# and with .Lbody 12 bytes ahead and .Lend 24 ahead the encoder used to produce
 #
-#     off1 = 0        off2 = 3 (prints as 12)
+#     off1 = 0        off2 = 3 (printed as 12)
 #
-# off1 is zero for any choice of units, and off2 is carrying the distance to
-# .Lbody — the value that belongs to off1. So the two label fixups are landing
-# in the wrong field, and this time NO reserved bit is set and nothing
-# complains. The disassembler prints `set_hwloop_f2 0, 0, 12, r1` for a loop
-# whose body starts at +12 and ends at +24.
+# off1 was zero for any choice of units, and off2 was carrying the distance to
+# .Lbody — the value that belongs to off1. The two label fixups were landing
+# in the wrong field, NO reserved bit was set, and nothing complained: the
+# disassembler printed `set_hwloop_f2 0, 0, 12, r1` for a loop running +12 to
+# +24. That is what makes this the useful half of the pair to keep.
 #
-# The check below is what a correct encoder produces. Note it needs no byte
-# pattern: asserting the printed operands says the same thing and survives a
-# layout change, which the old byte0 == 0x08 assertion did not.
+# The check needs no byte pattern: asserting the printed operands says the
+# same thing and survives a layout change, which the old byte0 == 0x08
+# assertion did not.
 
 .text
 .globl test_d486_hwloop_fieldlsb
