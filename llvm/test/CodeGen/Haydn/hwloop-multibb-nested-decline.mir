@@ -46,7 +46,7 @@ body:             |
     successors: %bb.4, %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0
-    $r4 = ADDI32_W $r0, 0
+    $r4 = ADDI32 $r0, 0
     $r5 = SEQ32 $r1, $r4
     BNEZ killed $r5, %bb.4
 
@@ -65,9 +65,9 @@ body:             |
     successors: %bb.2, %bb.3
     liveins: $r1, $r2, $r3, $r4, $r15
 
-    $r6 = LD32 $r3, 0
+    $r6 = S_LW_WITH_IMM $r3, 0
     $r6 = ADD32 $r6, $r6
-    ST32 $r6, $r3, 0
+    S_SW_WITH_IMM $r6, $r3, 0
     $r3 = ADDI32 $r3, 4
     PseudoLoopEnd %bb.2
     B %bb.3
@@ -76,7 +76,7 @@ body:             |
     successors: %bb.4, %bb.1
     liveins: $r1, $r2, $r4, $r15
 
-    $r7 = ADDI32_W $r0, 1
+    $r7 = ADDI32 $r0, 1
     $r4 = ADD32 $r4, $r7
     $r5 = SEQ32 $r4, $r1
     ; Soft outer back-edge — must remain after Role B declines multi-BB+nested.

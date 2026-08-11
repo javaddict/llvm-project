@@ -9,7 +9,7 @@
 # CHECK-LABEL: name: shell_store_only
 # CHECK-NOT: LoopStart
 # CHECK-NOT: PseudoLoopEnd
-# CHECK: ST32
+# CHECK: S_SW_WITH_IMM
 
 --- |
   define dso_local void @shell_store_only(ptr %p) {
@@ -43,7 +43,7 @@ body:             |
     liveins: $r1, $r0, $r15
 
     ; Store-only shell (soft-zero r0) — no load/compute.
-    ST32 $r0, $r1, 0
+    S_SW_WITH_IMM $r0, $r1, 0
     PseudoLoopEnd %bb.1
 
   bb.2.exit:

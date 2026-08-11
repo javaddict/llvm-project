@@ -2,7 +2,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=regbankselect,instruction-select %s -o - | FileCheck %s
 #
 # Test G_LOAD/G_STORE selection by memory width (ISA-43 bug 2):
-# s8 -> LDU8/ST8, s16 -> LDU16/ST16, s32 -> LD32/ST32.
+# s8 -> S_LBU_WITH_IMM/S_SB_WITH_IMM, s16 -> S_LHWU_WITH_IMM/S_SHW_WITH_IMM, s32 -> S_LW_WITH_IMM/S_SW_WITH_IMM.
 # Sign/zero extension is separate (G_SEXT/G_ZEXT lowered by the selector).
 
 ---
@@ -51,7 +51,7 @@ body:             |
 name:            test_select_load16
 legalized:       true
 regBankSelected: false
-# ISA-43 bug 2: s16 load selects LDU16 (not LD32)
+# ISA-43 bug 2: s16 load selects S_LHWU_WITH_IMM (not S_LW_WITH_IMM)
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -97,7 +97,7 @@ body:             |
 name:            test_select_load8
 legalized:       true
 regBankSelected: false
-# ISA-43 bug 2: s8 load selects LDU8 (not LD32)
+# ISA-43 bug 2: s8 load selects S_LBU_WITH_IMM (not S_LW_WITH_IMM)
 body:             |
   bb.0.entry:
     liveins: $r0
@@ -185,7 +185,7 @@ body:             |
 name:            test_select_store16
 legalized:       true
 regBankSelected: false
-# ISA-43 bug 2: s16 store selects ST16 (not ST32)
+# ISA-43 bug 2: s16 store selects S_SHW_WITH_IMM (not S_SW_WITH_IMM)
 body:             |
   bb.0.entry:
     liveins: $r0, $r1
@@ -207,7 +207,7 @@ body:             |
 name:            test_select_store8
 legalized:       true
 regBankSelected: false
-# ISA-43 bug 2: s8 store selects ST8 (not ST32)
+# ISA-43 bug 2: s8 store selects S_SB_WITH_IMM (not S_SW_WITH_IMM)
 body:             |
   bb.0.entry:
     liveins: $r0, $r1

@@ -11,7 +11,7 @@
 #
 # root cause: HaydnHazardRecognizer::getHazardType had no RAW check (only
 # WAW,), so the scheduler co-issued a writer and reader in the PROLOGUE
-# constant-init stores (`{ ST8 $r6,$r2,2; $r1=ADDI32 $r0,65; ST8 $r1,$r5,4 }`)
+# constant-init stores (`{ S_SB_WITH_IMM $r6,$r2,2; $r1=ADDI32 $r0,65; S_SB_WITH_IMM $r1,$r5,4 }`)
 # corrupting stored values. adds hasSameBundleRAW (candidate reads a reg in
 # CurrentCycleDefs). This test locks the contract: a RAW pair is forced into
 # SEPARATE bundles (no BUNDLE wraps the writer+reader). The scheduler DAG's RAW

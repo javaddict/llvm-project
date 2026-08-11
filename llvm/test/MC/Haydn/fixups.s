@@ -45,12 +45,12 @@ JAL R0, external_func
 #===----------------------------------------------------------------------===
 
 # Load with symbol reference (requires relocation)
-# CHECK: ld32 r3, r4, symbol_offset
-LD32 R3, R4, symbol_offset
+# CHECK: s_lw_with_imm r3, r4, symbol_offset
+S_LW_WITH_IMM R3, R4, symbol_offset
 
 # Store with symbol reference
-# CHECK: st32 r5, r6, data_location
-ST32 R5, R6, data_location
+# CHECK: s_sw_with_imm r5, r6, data_location
+S_SW_WITH_IMM R5, R6, data_location
 
 #===----------------------------------------------------------------------===
 # Test PC-relative references

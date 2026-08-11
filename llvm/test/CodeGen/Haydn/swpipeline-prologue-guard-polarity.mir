@@ -86,7 +86,7 @@ body:             |
   ; CHECK-NEXT: bb.3.loop:
   ; CHECK-NEXT:   successors: %bb.4(0x80000000), %bb.5(0x00000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[LD32_:%[0-9]+]]:gpr32 = LD32 [[COPY]], 0 :: (load (s32) from %ir.lsr.iv)
+  ; CHECK-NEXT:   [[S_LW_WITH_IMM:%[0-9]+]]:gpr32 = S_LW_WITH_IMM [[COPY]], 0 :: (load (s32) from %ir.lsr.iv)
   ; CHECK-NEXT:   [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[ADDI32_1]], [[ADDI32_]]
   ; CHECK-NEXT:   [[ADDI32_2:%[0-9]+]]:gpr32 = ADDI32 [[COPY]], 4
   ; CHECK-NEXT:   [[SLTU32_:%[0-9]+]]:gpr32 = SLTU32 [[ADD32_]], [[COPY1]]
@@ -101,11 +101,11 @@ body:             |
   ; CHECK-NEXT:   [[PHI:%[0-9]+]]:gpr32 = PHI [[ADDI32_2]], %bb.3, %18, %bb.4
   ; CHECK-NEXT:   [[PHI1:%[0-9]+]]:gpr32 = PHI [[ADD32_]], %bb.3, %19, %bb.4
   ; CHECK-NEXT:   [[PHI2:%[0-9]+]]:gpr32 = PHI [[ADDI32_1]], %bb.3, %20, %bb.4
-  ; CHECK-NEXT:   [[PHI3:%[0-9]+]]:gpr32 = PHI [[LD32_]], %bb.3, %21, %bb.4
+  ; CHECK-NEXT:   [[PHI3:%[0-9]+]]:gpr32 = PHI [[S_LW_WITH_IMM]], %bb.3, %21, %bb.4
   ; CHECK-NEXT:   [[ADDI32_3:%[0-9]+]]:gpr32 = ADDI32 [[PHI]], 4
   ; CHECK-NEXT:   [[ADD32_1:%[0-9]+]]:gpr32 = ADD32 [[PHI1]], [[ADDI32_]]
   ; CHECK-NEXT:   [[ADD32_2:%[0-9]+]]:gpr32 = ADD32 [[PHI2]], [[PHI3]]
-  ; CHECK-NEXT:   [[LD32_1:%[0-9]+]]:gpr32 = LD32 [[PHI]], 0 :: (load unknown-size from %ir.lsr.iv, align 4)
+  ; CHECK-NEXT:   [[S_LW_WITH_IMM1:%[0-9]+]]:gpr32 = S_LW_WITH_IMM [[PHI]], 0 :: (load (s32) from %ir.lsr.iv + 4)
   ; CHECK-NEXT:   [[SLTU32_1:%[0-9]+]]:gpr32 = SLTU32 [[ADD32_1]], [[COPY1]]
   ; CHECK-NEXT:   BNEZ [[SLTU32_1]], %bb.4
   ; CHECK-NEXT:   B %bb.5
@@ -114,7 +114,7 @@ body:             |
   ; CHECK-NEXT:   successors: %bb.2(0x80000000)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI4:%[0-9]+]]:gpr32 = PHI [[ADDI32_1]], %bb.3, [[ADD32_2]], %bb.4
-  ; CHECK-NEXT:   [[PHI5:%[0-9]+]]:gpr32 = PHI [[LD32_]], %bb.3, [[LD32_1]], %bb.4
+  ; CHECK-NEXT:   [[PHI5:%[0-9]+]]:gpr32 = PHI [[S_LW_WITH_IMM]], %bb.3, [[S_LW_WITH_IMM1]], %bb.4
   ; CHECK-NEXT:   [[ADD32_3:%[0-9]+]]:gpr32 = ADD32 [[PHI4]], [[PHI5]]
   ; CHECK-NEXT:   B %bb.2
   ; CHECK-NEXT: {{  $}}
@@ -136,7 +136,7 @@ body:             |
     %2:gpr32 = PHI %10, %bb.2, %0, %bb.1
     %3:gpr32 = PHI %12, %bb.1, %8, %bb.2
     %4:gpr32 = PHI %12, %bb.1, %6, %bb.2
-    %5:gpr32 = LD32 %2, 0 :: (load (s32) from %ir.lsr.iv)
+    %5:gpr32 = S_LW_WITH_IMM %2, 0 :: (load (s32) from %ir.lsr.iv)
     %6:gpr32 = ADD32 %4, %5
     %8:gpr32 = ADD32 %3, %7
     %10:gpr32 = ADDI32 %2, 4

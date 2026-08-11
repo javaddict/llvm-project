@@ -49,7 +49,7 @@ body:             |
     liveins: $r1, $r0
     successors: %bb.2
 
-    ST32 $r0, $r1, 0
+    S_SW_WITH_IMM $r0, $r1, 0
 
   bb.2.exit:
     liveins: $r15
@@ -72,7 +72,7 @@ body:             |
     liveins: $r1, $r0
     successors: %bb.2
 
-    ST32 $r0, $r1, 0
+    S_SW_WITH_IMM $r0, $r1, 0
 
   bb.2.exit:
     liveins: $r15
@@ -83,7 +83,7 @@ body:             |
 # frameInfo.stackSize > 0 (the slot is folded into the frame)
 # a 4-byte stack object exists (the reserved slot, offset -4 from SP)
 # prologue SUBI32 / epilogue ADDI32 materialize the frame so the AsmPrinter
-# spill ST32 r12,[sp,off] / LD32 r12,[sp,off] addresses valid memory above
+# spill S_SW_WITH_IMM r12,[sp,off] / S_LW_WITH_IMM r12,[sp,off] addresses valid memory above
 # the post-prologue SP (interrupt-safe — the fix).
 # CHECK-LABEL: name:            imm_hwloop
 # CHECK:       stackSize:       [[FRAMESIZE:[0-9]+]]

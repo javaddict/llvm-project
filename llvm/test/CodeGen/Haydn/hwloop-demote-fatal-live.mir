@@ -77,7 +77,7 @@ body:             |
     $r10 = XOR32 $r10, $r10
     $r11 = XOR32 $r11, $r11
     $r12 = XOR32 $r12, $r12
-    ST32 $r1, $r2, 0
+    S_SW_WITH_IMM $r1, $r2, 0
     NOP
     NOP
     NOP

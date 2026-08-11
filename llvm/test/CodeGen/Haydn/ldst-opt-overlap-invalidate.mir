@@ -20,26 +20,26 @@
 # KnownContent.erase(L); // <-- erases nothing
 #
 # So an OVERLAPPING or ALIASING store never invalidated any tracked entry.
-# Concrete wrong-code: a 4-byte `ST32 [sp,0]` is tracked, then a 2-byte
-# `ST16 [sp,2]` writes bytes [2,4) of the same word, then a `LD32 [sp,0]`
-# re-reads the full word. The optimizer WRONGLY forwarded the LD32 to the
+# Concrete wrong-code: a 4-byte `S_SW_WITH_IMM [sp,0]` is tracked, then a 2-byte
+# `S_SHW_WITH_IMM [sp,2]` writes bytes [2,4) of the same word, then a `S_LW_WITH_IMM [sp,0]`
+# re-reads the full word. The optimizer WRONGLY forwarded the S_LW_WITH_IMM to the
 # stale stored value register — emitting `$rC = ADD32 $rA, $r0` instead of a
-# real load — silently dropping the ST16 update.
+# real load — silently dropping the S_SHW_WITH_IMM update.
 #
 # Test design (size-aware same-base overlap, NO alias-analysis dependency):
 # We construct three memory ops on the same base with overlapping byte
 # ranges. Only the address-keyed `KnownContent` map matters; no vregs, no
 # AA, no cross-BB. Two sub-tests cover the two overlap shapes:
 #
-# *partial_overlap*: ST32[sp,0] (bytes [0,4)) tracked, then ST16[sp,2]
-# (bytes [2,4)) overlaps the tail. The following LD32[sp,0] MUST remain a
-# real load (not forwarded from the stale ST32 value register).
+# *partial_overlap*: S_SW_WITH_IMM[sp,0] (bytes [0,4)) tracked, then S_SHW_WITH_IMM[sp,2]
+# (bytes [2,4)) overlaps the tail. The following S_LW_WITH_IMM[sp,0] MUST remain a
+# real load (not forwarded from the stale S_SW_WITH_IMM value register).
 #
-# *full_overlap*: ST16[sp,0] (bytes [0,2)) tracked, then ST32[sp,0]
-# (bytes [0,4)) fully covers it. The following LD16[sp,0] MUST remain a
-# real load (not forwarded from the stale ST16 value register).
+# *full_overlap*: S_SHW_WITH_IMM[sp,0] (bytes [0,2)) tracked, then S_SW_WITH_IMM[sp,0]
+# (bytes [0,4)) fully covers it. The following S_LHWS_WITH_IMM[sp,0] MUST remain a
+# real load (not forwarded from the stale S_SHW_WITH_IMM value register).
 #
-# A *disjoint* control case (ST32[r13,0] then ST32[r13,8], disjoint 4-byte
+# A *disjoint* control case (S_SW_WITH_IMM[r13,0] then S_SW_WITH_IMM[r13,8], disjoint 4-byte
 # slots) MUST still forward — confirms we did not over-invalidate (this is
 # what regalloc-gpr-pressure.ll also guards, with disjoint spill slots).
 #
@@ -48,10 +48,10 @@
 #
 # What breaks if this regresses:
 # If the dead `ToErase` no-op returns (or the overlap test is dropped), the
-# `LD32 [sp,0]` in *partial_overlap* becomes `$rC = ADD32 $rA, $r0`
-# silently dropping the intervening `ST16` — i.e. WRONG CODE: a stored value
+# `S_LW_WITH_IMM [sp,0]` in *partial_overlap* becomes `$rC = ADD32 $rA, $r0`
+# silently dropping the intervening `S_SHW_WITH_IMM` — i.e. WRONG CODE: a stored value
 # visible to no later load. The CHECK-LABEL bodies below assert that each
-# post-overlap load survives as a real `LD32` / `LD16`.
+# post-overlap load survives as a real `S_LW_WITH_IMM` / `S_LHWS_WITH_IMM`.
 
 --- |
   define void @partial_overlap() {
@@ -95,18 +95,18 @@ body:             |
   bb.0.entry:
     liveins: $r13, $r1, $r2
 
-    ; ST32 [sp,0] — bytes [0,4). KnownContent[{$r13,0}] = {$r1, size=4}.
-    ST32 $r1, $r13, 0
-    ; ST16 [sp,2] — bytes [2,4). OVERLAPS the tracked [0,4) range. Must drop
-    ; the {$r13,0} entry so the next LD32 cannot be forwarded from $r1.
-    ST16 $r2, $r13, 2
-    ; LD32 [sp,0] — full word. Must remain a REAL load (the [2,4) half was
-    ; overwritten by the ST16). Forwarding would emit ADD32 from $r1 and
-    ; silently drop the ST16 update.
+    ; S_SW_WITH_IMM [sp,0] — bytes [0,4). KnownContent[{$r13,0}] = {$r1, size=4}.
+    S_SW_WITH_IMM $r1, $r13, 0
+    ; S_SHW_WITH_IMM [sp,2] — bytes [2,4). OVERLAPS the tracked [0,4) range. Must drop
+    ; the {$r13,0} entry so the next S_LW_WITH_IMM cannot be forwarded from $r1.
+    S_SHW_WITH_IMM $r2, $r13, 1
+    ; S_LW_WITH_IMM [sp,0] — full word. Must remain a REAL load (the [2,4) half was
+    ; overwritten by the S_SHW_WITH_IMM). Forwarding would emit ADD32 from $r1 and
+    ; silently drop the S_SHW_WITH_IMM update.
     ; CHECK-LABEL: name: partial_overlap
-    ; CHECK: $r3 = LD32 $r13, 0
+    ; CHECK: $r3 = S_LW_WITH_IMM $r13, 0
     ; CHECK-NOT: ADD32
-    $r3 = LD32 $r13, 0
+    $r3 = S_LW_WITH_IMM $r13, 0
 
     RET implicit $r0, implicit $r15
 ...
@@ -136,16 +136,16 @@ body:             |
   bb.0.entry:
     liveins: $r13, $r1, $r2
 
-    ; ST16 [sp,0] — bytes [0,2). KnownContent[{$r13,0}] = {$r1, size=2}.
-    ST16 $r1, $r13, 0
-    ; ST32 [sp,0] — bytes [0,4). FULLY covers [0,2). Must drop {$r13,0}.
-    ST32 $r2, $r13, 0
-    ; LD16 [sp,0] — half word. Must remain a REAL load; the value is now $r2's
+    ; S_SHW_WITH_IMM [sp,0] — bytes [0,2). KnownContent[{$r13,0}] = {$r1, size=2}.
+    S_SHW_WITH_IMM $r1, $r13, 0
+    ; S_SW_WITH_IMM [sp,0] — bytes [0,4). FULLY covers [0,2). Must drop {$r13,0}.
+    S_SW_WITH_IMM $r2, $r13, 0
+    ; S_LHWS_WITH_IMM [sp,0] — half word. Must remain a REAL load; the value is now $r2's
     ; low half, not $r1.
     ; CHECK-LABEL: name: full_overlap
-    ; CHECK: $r3 = LD16 $r13, 0
+    ; CHECK: $r3 = S_LHWS_WITH_IMM $r13, 0
     ; CHECK-NOT: ADD32
-    $r3 = LD16 $r13, 0
+    $r3 = S_LHWS_WITH_IMM $r13, 0
 
     RET implicit $r0, implicit $r15
 ...
@@ -175,19 +175,19 @@ body:             |
   bb.0.entry:
     liveins: $r13, $r1, $r2
 
-    ; ST32 [sp,0] — bytes [0,4). Tracked as {$r13,0} = {$r1, size=4}.
-    ST32 $r1, $r13, 0
-    ; ST32 [sp,8] — bytes [8,12). DISJOINT from [0,4). Must NOT drop {$r13,0}.
-    ST32 $r2, $r13, 8
-    ; LD32 [sp,0] — full word. The {$r13,0} entry survives (disjoint store), so
+    ; S_SW_WITH_IMM [sp,0] — bytes [0,4). Tracked as {$r13,0} = {$r1, size=4}.
+    S_SW_WITH_IMM $r1, $r13, 0
+    ; S_SW_WITH_IMM [sp,8] — bytes [8,12). DISJOINT from [0,4). Must NOT drop {$r13,0}.
+    S_SW_WITH_IMM $r2, $r13, 2
+    ; S_LW_WITH_IMM [sp,0] — full word. The {$r13,0} entry survives (disjoint store), so
     ; store-to-load forwarding MUST still fire: `$r3 = ADD32 $r1, $r0`.
     ; This guards against over-invalidation: if the overlap test were
     ; accidentally widened to "same base => drop all", this would regress to a
-    ; real LD32 and silently disable forwarding.
+    ; real S_LW_WITH_IMM and silently disable forwarding.
     ; CHECK-LABEL: name: disjoint_no_invalidate
     ; CHECK: $r3 = ADD32 $r1, $r0
     ; CHECK-NOT: S_LW_{{[A-Z_]*}} $r13, 0
-    $r3 = LD32 $r13, 0
+    $r3 = S_LW_WITH_IMM $r13, 0
 
     RET implicit $r0, implicit $r15
 ...
