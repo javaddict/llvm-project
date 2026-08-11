@@ -22,14 +22,18 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `81a7b7a1c641` **local only — `fork/` is still at `2eba490a051c`, 33 commits behind** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `81a7b7a1c641` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
 `haydn` is the trunk. Everything on it is green and committed; work from it.
 
-**Check `git log haydn -1` before believing anything in this file.** The
+**Check `git log haydn -1` before believing anything in this file.**
+Both branches are pushed to `fork` as of `81a7b7a1c641` / this commit, so the
+"local only" warnings above are cleared — but the hashes still age, and the
+counts in this table have been wrong before (the last one said 33 where `git
+rev-list --count` said 31). The
 `haydn` row above deliberately carries no hash: a previous revision of this
 table was 13 commits stale, and a session started by re-deriving work that was
 already done. The `-mc` hash is given because that branch moves in deliberate
