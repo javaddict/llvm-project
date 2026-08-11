@@ -14,7 +14,7 @@
 # 3. Exceed 2 writes — should NOT pack
 # 4. DR64 ops don't count toward GPR ports — pack freely
 # 5. Mixed GPR + DR64: only GPR ops consume port budget
-# 6. LD32 + ST32 + ADD32: exactly at 4R2W with memory ops
+# 6. S_LW_WITH_IMM + S_SW_WITH_IMM + ADD32: exactly at 4R2W with memory ops
 #
 
 --- |
@@ -306,26 +306,26 @@ body:             |
 ...
 ---
 # ============================================================================
-# Test 6: LD32 + ST32 + ADD32 — GPR ports with memory operations
+# Test 6: S_LW_WITH_IMM + S_SW_WITH_IMM + ADD32 — GPR ports with memory operations
 # ============================================================================
 #
-# LD32 r2, r0, 0 -> reads r0 (1R), writes r2 (1W), uses SLOT0
-# ST32 r3, r1, 0 -> reads r3, r1 (2R), writes nothing visible (0W), uses SLOT0
-# Wait — both LD32 and ST32 need SLOT0. Can't pack both.
+# S_LW_WITH_IMM r2, r0, 0 -> reads r0 (1R), writes r2 (1W), uses SLOT0
+# S_SW_WITH_IMM r3, r1, 0 -> reads r3, r1 (2R), writes nothing visible (0W), uses SLOT0
+# Wait — both S_LW_WITH_IMM and S_SW_WITH_IMM need SLOT0. Can't pack both.
 #
-# Instead: LD32 + ADD32 (cross-slot). Then ST32 separately.
-# LD32 r2, r0, 0 -> 1R(r0), 1W(r2), SLOT0
+# Instead: S_LW_WITH_IMM + ADD32 (cross-slot). Then S_SW_WITH_IMM separately.
+# S_LW_WITH_IMM r2, r0, 0 -> 1R(r0), 1W(r2), SLOT0
 # ADD32 r3, r4, r5 -> 2R(r4,r5), 1W(r3), SLOT1
 # Total: 3R, 2W. Within 4R2W. DFA: SLOT0 + SLOT1 -> bundle.
-# ST32 r2, r1, 0 -> 2R(r2,r1), 0W, SLOT0. RAW on r2 (written by LD32).
-# Wait — ST32 reads r2, and LD32 writes r2. RAW hazard! Separate bundle.
+# S_SW_WITH_IMM r2, r1, 0 -> 2R(r2,r1), 0W, SLOT0. RAW on r2 (written by S_LW_WITH_IMM).
+# Wait — S_SW_WITH_IMM reads r2, and S_LW_WITH_IMM writes r2. RAW hazard! Separate bundle.
 #
 # Let me redesign: use independent registers.
-# LD32 r2, r0, 0 -> 1R(r0), 1W(r2), SLOT0
+# S_LW_WITH_IMM r2, r0, 0 -> 1R(r0), 1W(r2), SLOT0
 # ADD32 r3, r4, r5 -> 2R(r4,r5), 1W(r3), SLOT1
 # Total: 3R, 2W. Within limits. No RAW (all different regs).
-# ST32 r6, r7, 0 -> 2R(r6,r7), SLOT0. No RAW with above (different regs).
-# But ST32 + LD32 both need SLOT0. And ST32 is a store after load.
+# S_SW_WITH_IMM r6, r7, 0 -> 2R(r6,r7), SLOT0. No RAW with above (different regs).
+# But S_SW_WITH_IMM + S_LW_WITH_IMM both need SLOT0. And S_SW_WITH_IMM is a store after load.
 # This goes into a new bundle.
 #
 name:            test6_ld_st_alu_at_limit
@@ -355,21 +355,23 @@ body:             |
   bb.0:
     liveins: $r0, $r4, $r5, $r6, $r7
 
-    ; LD32 (SLOT0) + ADD32 (SLOT1) bundle: 3R, 2W.
-    ; No RAW hazard: LD32 writes r2, ADD32 reads r4,r5.
-    ; ST32 uses SLOT0. No dependency with above (r6,r7 are independent).
+    ; S_LW_WITH_IMM (SLOT0) + ADD32 (SLOT1) bundle: 3R, 2W.
+    ; No RAW hazard: S_LW_WITH_IMM writes r2, ADD32 reads r4,r5.
+    ; S_SW_WITH_IMM uses SLOT0. No dependency with above (r6,r7 are independent).
 
     ; CHECK-LABEL: name: test6_ld_st_alu_at_limit
     ; CHECK: liveins: $r0, $r4, $r5, $r6, $r7
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r3 = ADD32_P32_ALU0 killed $r4, killed $r5, implicit-def dead $sfr
-    ; CHECK-NEXT: ST32 killed $r6, killed $r7, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 1, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r4, implicit killed $r5 {
+    ; CHECK-NEXT:   $r2 = S_LW_WITH_IMM_P32_LOAD1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = ADD32_P31_ALU0 killed $r4, killed $r5, implicit-def dead $sfr
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r6, killed $r7, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r2 = LD32 $r0, 0, implicit-def dead $sfr
+    $r2 = S_LW_WITH_IMM $r0, 0, implicit-def dead $sfr
     $r3 = ADD32 $r4, $r5, implicit-def dead $sfr
-    ST32 $r6, $r7, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r6, $r7, 0, implicit-def dead $sfr
 
     $r0 = COPY $r2
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

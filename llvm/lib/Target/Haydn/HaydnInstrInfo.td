@@ -607,23 +607,6 @@ def MOVF32 : FmtALU32<0x1E, (outs GPR32:$rd), (ins GPR32:$rd_src, GPR32:$rs1, GP
 // They are aliases that expand to the real instructions above.
 
 let isCodeGenOnly = 1 in {
-def SHL32 : FmtALU32<0x0C, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                     "sll32\t$rd, $rs1, $rs2",
-                     []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LSR32 : FmtALU32<0x09, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                     "srl32\t$rd, $rs1, $rs2",
-                     []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def ASR32 : FmtALU32<0x0A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                     "sra32\t$rd, $rs1, $rs2",
-                     []> {
-  let TSFlags{2-0} = 0b001;
-}
 } // isCodeGenOnly
 
 //===----------------------------------------------------------------------===//
@@ -657,10 +640,6 @@ def ASR32 : FmtALU32<0x0A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 // unary range alongside SEQ64/SLT64/SLE64/MOVT64/MOVF64/X2ABS32S. The
 // GPR32-in / DR64-out operand-type mix is per the ISA spec DB entry
 // (`SEXT32T64 rtd, rs`, behavior `rtd = SEXT32->64(rs)`).
-def SEXT_GPR32_TO_DR64
-    : FmtALU64Unary<0x67, 0x197, (outs DR64:$rd), (ins GPR32:$rs1),
-                    "sext32t64\t$rd, $rs1", []>;
-
 //===----------------------------------------------------------------------===//
 // Branch Instructions
 //===----------------------------------------------------------------------===//
@@ -1040,25 +1019,6 @@ def LD32 : FmtLS<0x3B, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
   let Itinerary = Unit_LS0LOAD1_L2;
 }
 
-def LD16 : FmtLS<0x3C, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                 "ld16\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LD8 : FmtLS<0x3D, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                "ld8\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LDU16 : FmtLS<0x3E, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                  "ldu16\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LDU8 : FmtLS<0x3F, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                 "ldu8\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
 }
 
 // plain 64-bit load — DR64, S0|S1 choice-set (Slot01_LD).
@@ -1070,27 +1030,7 @@ def LD64 : FmtLS<0x45, (outs DR64:$rt), (ins GPR32:$rs, simm16:$offset),
 }
 
 let mayStore = 1 in {
-def ST32 : FmtLS<0x40, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
-                 "st32\t$rt, $rs, $offset",
-                 []> {
-  let TSFlags{2-0} = 0b001;
-}
-
 // 64-bit store — DR64 value, GPR32 base + simm16 offset, slot 1
-def ST64 : FmtLS<0x46, (outs), (ins DR64:$rt, GPR32:$rs, simm16:$offset),
-                 "st64\t$rt, $rs, $offset",
-                 []> {
-}
-
-def ST16 : FmtLS<0x41, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
-                 "st16\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def ST8 : FmtLS<0x42, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
-                "st8\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
 }
 
 //===----------------------------------------------------------------------===//
@@ -1891,20 +1831,10 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 // Spec: Database/haydn_instruction_db.json "D_LDW_POST_IMM".
 // HiFi analog: ae_l64.ip. Two-def: data destination $rt (DR64) and base
 // writeback $rs_wb (tied to $rs via the AGU bypass).
-let mayLoad = 1, Constraints = "$rs = $rs_wb" in
-def LD64_POST : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
-                              (ins GPR32:$rs, simm6:$scaled_imm),
-                              "ld64.post\t$rt, $rs, $scaled_imm", []>;
-
 // S_LW_POST_IMM rt, rs, imm6 — load 32b word from [rs], then rs += (imm6<<2).
 // Spec: Database/haydn_instruction_db.json "S_LW_POST_IMM".
 // HiFi analog: ae_l32.ip / C-language *p++. Two-def: data destination $rt
 // (GPR32) and base writeback $rs_wb (tied to $rs via the AGU bypass).
-let mayLoad = 1, Constraints = "$rs = $rs_wb" in
-def LD32_POST : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
-                              (ins GPR32:$rs, simm6:$scaled_imm),
-                              "ld32.post\t$rt, $rs, $scaled_imm", []>;
-
 //===----------------------------------------------------------------------===//
 // Fused post-increment stores (AGU writeback, spec D_SDW_POST_IMM
 // S_SW_POST_IMM family). Mirrors the load post-inc pair above with mayStore=1:
@@ -1931,18 +1861,8 @@ def LD32_POST : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
 
 // D_SDW_POST_IMM rtd, rs, imm6 — store 64b rtd to [rs], then rs += (imm6<<3).
 // HiFi analog: ae_s64.ip.
-let mayStore = 1, Constraints = "$rs = $rs_wb" in
-def ST64_POST : FmtLSPostInc<0x49, (outs GPR32:$rs_wb),
-                              (ins DR64:$rt, GPR32:$rs, simm6:$scaled_imm),
-                              "st64.post\t$rt, $rs, $scaled_imm", []>;
-
 // S_SW_POST_IMM rt, rs, imm6 — store 32b rt to [rs], then rs += (imm6<<2).
 // HiFi analog: ae_s32.ip / C-language *p++ = x.
-let mayStore = 1, Constraints = "$rs = $rs_wb" in
-def ST32_POST : FmtLSPostInc<0x4A, (outs GPR32:$rs_wb),
-                              (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
-                              "st32.post\t$rt, $rs, $scaled_imm", []>;
-
 //===----------------------------------------------------------------------===//
 // Lane stores: store one 32-bit lane of a DR64 to memory.
 // These eliminate the MOVE32_DR_L/H + ST32 cross-bank round-trip (2 instrs
@@ -2025,13 +1945,6 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // therefore RETAINED (it has live derived defs). Fmt48_* class retirement is
 // blocked until all 21 live Fmt48_* defs migrate to Bundle128 s0/s1/s2
 // projections (see HaydnInstrFormatsC.td note).
-def ADDI32_W  : Fmt48_WideGPRImm<0x01, (outs GPR32:$rt),
-                                 (ins GPR32:$rs, simm20_wide_abs:$imm),
-                                 "addi32_w\t$rt, $rs, $imm", []>;
-def ORI32_W   : Fmt48_WideGPRImm<0x06, (outs GPR32:$rt),
-                                 (ins GPR32:$rs, uimm20_wide_abs:$imm),
-                                 "ori32_w\t$rt, $rs, $imm", []>;
-
 //===----------------------------------------------------------------------===//
 // Class 001 — Branch (§5.5). Offsets in 2-byte units (§5.14, D1).
 //===----------------------------------------------------------------------===//
@@ -2048,52 +1961,16 @@ def ORI32_W   : Fmt48_WideGPRImm<0x06, (outs GPR32:$rt),
 // R14 is a GPR; clobber/preserve via regmask only (not Defs).
 let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
             D0, D1, D2, D3, D4, D5, D6, D7] in {
-let isCall = 1 in
-def JAL_W : Fmt48_WideBR_I20<0x20, (outs GPR32:$rt),
-                             (ins brtarget_wide_i20:$offset),
-                             "jal_w\t$rt, $offset", []>;
-
 // CB-129: isBarrier required so MachineBlockPlacement does not treat an
 // unanalyzable indirect jump/RET as fallthrough (assert in buildCFGChains
 // on computed-goto). PseudoCALLIndirect expands to JALR_W only at print time
 // (post-MBP); pure jumps/RETs are MIR terminators that never fall through.
-let isTerminator = 1, isBarrier = 1, isCall = 1, isIndirectBranch = 1 in
-def JALR_W : Fmt48_WideBR_RI12<0x30, (outs GPR32:$rt),
-                               (ins GPR32:$rs, calltarget_wide_ri12:$offset),
-                               "jalr_w\t$rt, $rs, $offset", []>;
 } // Defs = caller-saved clobbers for calls
 
 // Conditional branches (§5.5). isBranch + isTerminator only — branches have no
 // side effects (the prior hasSideEffects=1/Defs=[SFR] was a CSR-hazard leftover
 // that does not apply to branches).
 let isBranch = 1, isTerminator = 1 in {
-def BEQ_W  : Fmt48_WideBR_RI12<0x24, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "beq_w\t$rs, $rt, $offset", []>;
-def BNE_W  : Fmt48_WideBR_RI12<0x25, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bne_w\t$rs, $rt, $offset", []>;
-def BGE_W  : Fmt48_WideBR_RI12<0x26, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bge_w\t$rs, $rt, $offset", []>;
-def BGEU_W : Fmt48_WideBR_RI12<0x27, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bgeu_w\t$rs, $rt, $offset", []>;
-def BLT_W  : Fmt48_WideBR_RI12<0x28, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "blt_w\t$rs, $rt, $offset", []>;
-def BLTU_W : Fmt48_WideBR_RI12<0x29, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bltu_w\t$rs, $rt, $offset", []>;
-
-def BEQZ_W  : Fmt48_WideBR_I12<0x2C, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "beqz_w\t$rs, $offset", []>;
-def BNEZ_W  : Fmt48_WideBR_I12<0x2D, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "bnez_w\t$rs, $offset", []>;
-def BGEZ_W  : Fmt48_WideBR_I12<0x2E, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "bgez_w\t$rs, $offset", []>;
-def BLTZ_W  : Fmt48_WideBR_I12<0x2F, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "bltz_w\t$rs, $offset", []>;
 } // isBranch, isTerminator
 
 //===----------------------------------------------------------------------===//
@@ -2173,11 +2050,6 @@ def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
 // (MC/Haydn/d465-flex-coverage-completion.s), exactly as JAL_W, BEQ_W and the
 // rest were kept by their folds; it retires with the member files in the
 // format E switch.
-let hasSideEffects = 0, Defs = [SFR] in
-def CSRW_W : Fmt48_WideCSR<0x81, (outs),
-                           (ins uimm8_csr:$uimm8, GPR32:$rt),
-                           "csrw_w\t$uimm8, $rt", []>;
-
 let hasSideEffects = 0, isNotDuplicable = 1, Defs = [SFR] in {
 def SET_HWLOOP : Fmt48_WideSET_HWLOOP<0x88, (outs),
     (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2,
@@ -2241,13 +2113,11 @@ def PLDWWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
                              (ins GPR32:$rs, uimm2:$ar_sel),
                              "pldwwua_post\t$ar_sel, $rs", []> {
   let Constraints = "$rs = $rs_wb";
-  let Itinerary = Slot012_ALU;
   let Itinerary = Unit_LS0LOAD1_L2;
 }
 
 let hasSideEffects = 1 in
 def FLAR : HaydnInst<4, (outs), (ins uimm2:$ar_sel), "flar\t$ar_sel", []> {
-  let Itinerary = Slot012_ALU;
   let Itinerary = Unit_LS0LOAD1_L1;
 }
 
@@ -2256,7 +2126,6 @@ let mayStore = 1, hasSideEffects = 1 in
 // the format E members, so it leads here too (§ 5.11 `kinds`).
 def WBARWUA : HaydnInst<4, (outs), (ins uimm2:$ar_sel, GPR32:$rs),
                         "wbarwua\t$ar_sel, $rs", []> {
-  let Itinerary = Slot012_ALU;
   let Itinerary = Unit_LS0_L1;
 }
 
@@ -2265,14 +2134,12 @@ def D_LTWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
                              (ins GPR32:$rs, uimm2:$ar_sel),
                              "d_ltwua_post\t$rtd, $ar_sel, $rs", []> {
   let Constraints = "$rs = $rs_wb";
-  let Itinerary = Slot012_ALU;
   let Itinerary = Unit_LS0LOAD1_L2;
 }
 def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
                               (ins GPR32:$rs, uimm2:$ar_sel),
                               "d_lqhwua_post\t$rtd, $ar_sel, $rs", []> {
   let Constraints = "$rs = $rs_wb";
-  let Itinerary = Slot012_ALU;
   let Itinerary = Unit_LS0LOAD1_L2;
 }
 }
@@ -2282,14 +2149,12 @@ def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
                              (ins DR64:$rtd, GPR32:$rs, uimm2:$ar_sel),
                              "d_stwua_post\t$rtd, $ar_sel, $rs", []> {
   let Constraints = "$rs = $rs_wb";
-  let Itinerary = Slot012_ALU;
   let Itinerary = Unit_LS0_L1;
 }
 def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
                               (ins DR64:$rtd, GPR32:$rs, uimm2:$ar_sel),
                               "d_sqhwua_post\t$rtd, $ar_sel, $rs", []> {
   let Constraints = "$rs = $rs_wb";
-  let Itinerary = Slot012_ALU;
   let Itinerary = Unit_LS0_L1;
 }
 }

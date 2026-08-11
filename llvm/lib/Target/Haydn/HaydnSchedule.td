@@ -52,19 +52,16 @@
 // source dedup). Packetizer retired; HR is the sole consumer.
 //===----------------------------------------------------------------------===//
 
-def SLOT0 : FuncUnit;   // Slot 0: ALU or LS (one encoding space)
-def SLOT1 : FuncUnit;   // Slot 1: Full ALU or Load
-def SLOT2 : FuncUnit;   // Slot 2: Full ALU
+// The FuncUnits are HaydnFormatEUnits (U_LOADSTORE0 … U_MAC1), declared in the
+// generated HaydnFormatESchedule.td. SLOT0/SLOT1/SLOT2 are gone: format E
+// gives a slot no capability at all — an entry maps to a hardware UNIT, and no
+// two entries of a bundle may map to the same one.
 
 //===----------------------------------------------------------------------===//
 // Itinerary Classes (map instructions to functional units)
 //===----------------------------------------------------------------------===//
 
 def PSEUDO       : InstrItinClass;  // Pseudo instructions (no resources)
-def Slot0_ALU    : InstrItinClass;  // Slot 0 only (branches, calls, CSR)
-def Slot0_LS     : InstrItinClass;  // Slot 0 only (Load/Store — same FU as Slot0_ALU)
-def Slot12_ALU   : InstrItinClass;  // Slot 1 or 2 (ALU64/SIMD, multiply-form MAC)
-def Slot12_ALU_AccLat : InstrItinClass;  // SIMD accumulator-MAC with
                                         // 1-cycle acc-feedback latency (Slot12_ALU
                                         // with [2,1,1,2] OperandCycles). The
                                         // InstrStage<1> avoids ResMII inflation
@@ -73,9 +70,6 @@ def Slot12_ALU_AccLat : InstrItinClass;  // SIMD accumulator-MAC with
                                         // OperandCycles give RecMII the correct
                                         // recurrence depth so SMS produces multi
                                         // stage schedules.
-def Slot012_ALU  : InstrItinClass;  // Any slot (ALU32 — full ALU in all 3 slots)
-def Slot1_LD     : InstrItinClass;  // Slot 1 only (LD32_S1, LD64_S1)
-def Slot2_LS     : InstrItinClass;  // Slot 2 only, MEMORY op — Data_Latency 2.
                                     // The S2 forms of the LS formats are still
                                     // loads/stores: they must NOT borrow
                                     // Slot2_ALU, whose latency is 1. Haydn has
@@ -83,14 +77,12 @@ def Slot2_LS     : InstrItinClass;  // Slot 2 only, MEMORY op — Data_Latency 2
                                     // load makes the scheduler (and the
                                     // HaydnLatencyStalls net) allow a read in
                                     // the very next bundle.
-def Slot01_LD    : InstrItinClass;  // Slot 0 or 1 (plain LD64 — : the spec
                                    // D_LDW_WITH_IMM allows a 64-bit load in slot 0
                                    // (Load/Store unit) OR slot 1 (Load unit). A
                                    // choice-set itinerary lets the DFA/SMS pack two
                                    // such loads (slot0+slot1) in one cycle. Post-RA
                                    // HR tryAddProduct → setDesc materializes
                                    // LD64_S0/S1 (B3.exit.3; no promoteLoads).)
-def Slot1_ALU    : InstrItinClass;  // Slot 1 only (SIMD-multiply the DB restricts
                                    // to slot 1 — capstone-schedule-port-audit
                                    // §(b)-1, : 16 X2/X4 SIMD-MAC ops
                                    // over-promised slot 2 under Slot12_ALU)
@@ -101,12 +93,9 @@ def Slot1_ALU    : InstrItinClass;  // Slot 1 only (SIMD-multiply the DB restric
 // model that SINGLE slot (NOT a choice-set): a choice-set on a FLEX op would
 // let SMS "schedule" a slot the encoder will not emit, producing an un-encodable
 // kernel. See + reviews/haydn-sms-gap-rootcause-.md.
-def Slot2_ALU    : InstrItinClass;  // Slot 2 only — single-slot-2 ALU64/SIMM
                                    // (mirrors Slot1_ALU shape with [SLOT2]).
-def Slot2_MAC    : InstrItinClass;  // Slot 2 only — accumulator-feedback MAC
                                    // slot-2-committed (mirrors Slot1_MAC's
                                    // [InstrStage<1,[SLOT2]>],[2,1,1,2] shape).
-def Slot2_ALU_AccLat : InstrItinClass;  // Slot 2 only — SIMD accumulator-MAC with
                                         // 1-cycle acc-feedback latency (mirrors
                                         // Slot12_ALU_AccLat's OperandCycles on a
                                         // single-slot-2 InstrStage<1>).
@@ -121,13 +110,11 @@ def Slot2_ALU_AccLat : InstrItinClass;  // Slot 2 only — SIMD accumulator-MAC 
 // latency = DefCycle - UseCycle + 1 (MCInstrItineraries.h:222)
 // yields acc->acc = 2-2+1 = 1 (feedback) and result->any-other-use = 2-1+1 = 2
 // (regfile writeback). See D2XX for the full micro-arch rationale.
-def Slot12_MAC   : InstrItinClass;  // Scalar acc-MAC — slot 1/2 (MAC32/MACQ31 phantoms removed)
 // Acc-input-first MAC (FmtALU64Acc: outs rd, ins rd_in, rs1, rs2). Same
 // resources/latencies as Slot12_MAC but OperandCycles ordered for rd_in at
 // operand index 1: [rd=2, ra=2, rs1=1, rs2=1] → acc→acc latency 2-2+1=1.
 // Using Slot12_MAC's [2,1,1,2] mapped ra to rs2 and inflated RecMII (bkfir
 // 4→7) — P3.
-def Slot12_MAC_AccFirst : InstrItinClass;
 // Unit-model peer of Slot12_MAC_AccFirst, and the reason a hand-written
 // schedule file still exists: HaydnFormatESchedule.td is generated from
 // instruction_type_index.json, which gives ONE Data_Latency per instruction
@@ -137,7 +124,6 @@ def Slot12_MAC_AccFirst : InstrItinClass;
 // Generated classes carry what the database states; this one carries what it
 // does not.
 def Unit_MAC0MAC1_L2_AccFirst : InstrItinClass;
-def Slot1_MAC    : InstrItinClass;  // SIMD acc-MAC (X*MULA*/X*MULS*) — slot 1 only
 
 //===----------------------------------------------------------------------===//
 // Processor Itineraries (DFA automaton)
@@ -158,89 +144,24 @@ def Slot1_MAC    : InstrItinClass;  // SIMD acc-MAC (X*MULA*/X*MULS*) — slot 1
 // logical can be retargeted from its Slot* class one family at a time. Until
 // one is, nothing references them and the model is unchanged.
 def HaydnItineraries : ProcessorItineraries<
-  !listconcat([SLOT0, SLOT1, SLOT2], HaydnFormatEUnits),
+  HaydnFormatEUnits,
   [],
   !listconcat(HaydnFormatEItinData, [
     InstrItinData<PSEUDO, []>,
 
-    // Slot 0 only — ALU or LS share the same encoding space. Latency 1.
-    InstrItinData<Slot0_ALU, [InstrStage<1, [SLOT0]>], [1]>,
-    // Slot 0 Load/Store — ISA §55 Data_Latency=2 (result available two
-    // bundles after issue). OperandCycles [2] → use latency 2-1+1=2.
-    // SMS needs packable address bumps (ADDI32 not ADDI32_W) and S2-first
-    // pickSlot so the load's es/ls window is not a single cycle already
-    // saturated by ALU; with those, latency 2 yields multi-stage kernels
-    // (span > II) instead of the StageCount=0 compact schedules latency 1
-    // produced. : keep [2] for post-RA load→consumer gap.
-    InstrItinData<Slot0_LS,  [InstrStage<1, [SLOT0]>], [2]>,
 
-    // Slot 1 or 2 — ALU64/SIMD/MAC. Result latency 1.
-    InstrItinData<Slot12_ALU, [InstrStage<1, [SLOT1, SLOT2]>], [1]>,
 
-    // SIMD accumulator-MAC with acc-feedback latency. Same resource as
-    // Slot12_ALU (InstrStage<1>, no ResMII inflation) but with [2,1,1,2]
-    // OperandCycles so SMS sees the 1-cycle acc->acc recurrence (latency =
-    // 2-2+1=1) and the 2-cycle result->other latency (2-1+1=2). This gives
-    // RecMII the correct depth to produce multi-stage schedules.
-    // MAC acc-feedback latency = 4. The acc->acc edge (rd.DefCycle=4
-    // rd_in.UseCycle=1) gives latency = 4-1+1 = 4. For firdec32x32_D2's
-    // 2-MAC recurrence chain: RecMII = 2×4 = 8 → MII = max(ResMII=5, RecMII=8)
-    // = 8 → matches HiFi3z II=8 → schedule span(9) > II(8) → StageCount=2.
-    // The InstrStage<1> keeps ResMII unchanged (no DFA inflation).
-    InstrItinData<Slot12_ALU_AccLat, [InstrStage<1, [SLOT1, SLOT2]>], [5, 1, 1, 5]>,
 
-    // Any slot — ALU32 can execute in all 3 slots. Result latency 1.
-    InstrItinData<Slot012_ALU, [InstrStage<1, [SLOT0, SLOT1, SLOT2]>], [1]>,
 
-    // Slot 1 load — LD32_S1/LD64_S1 (alternative-slot load promoted by
-    // so two loads pack into one bundle). Load-use latency 2 (see Slot0_LS).
-    InstrItinData<Slot1_LD, [InstrStage<1, [SLOT1]>], [2]>,
 
-    // Slot 0 or 1 load — plain LD64. The spec D_LDW_WITH_IMM allows a
-    // 64-bit load in either slot; the choice-set lets the DFA pack two LD64
-    // (slot0 + slot1) in one cycle, matching HiFi's dual-load FIR kernels.
-    // Load-use latency 2 (see Slot0_LS).
-    InstrItinData<Slot01_LD, [InstrStage<1, [SLOT0, SLOT1]>], [2]>,
 
-    // Slot 1 only — SIMD-MAC the DB restricts to slot 1 (X2CMUL32, X4MUL16
-    // X4SEL16, X4/X2 *MUL* families). Single-stage, latency 1 (same shape as
-    // the other itineraries — capstone-schedule-port-audit §(b)-1).
-    InstrItinData<Slot1_ALU, [InstrStage<1, [SLOT1]>], [1]>,
 
-    // Accumulator-feedback MAC — scalar form (MAC32, MACQ31), slot 1 or 2.
-    //
-    // InstrStage MUST be <1>. SMS ResourceManager counts stage
-    // cycles into ResMII; InstrStage<2> doubled MAC resource cost (8 MACs →
-    // ResMII 10 instead of 4). Latency lives in OperandCycles only:
-    // * OperandCycles = [rd=2, rs1=1, rs2=1, ra=2]. The LLVM formula
-    // latency = DefCycle - UseCycle + 1 yields:
-    // acc->acc (rd->next-MAC ra): 2 - 2 + 1 = 1 (feedback path)
-    // result->any-other-use: 2 - 1 + 1 = 2 (regfile writeback)
-    // OperandCycles take priority over the stage fallback when present.
-    // Shape matches Slot12_ALU_AccLat (InstrStage<1> + multi-cycle operands).
-    InstrItinData<Slot12_MAC, [InstrStage<1, [SLOT1, SLOT2]>], [2, 1, 1, 2]>,
 
-    // FmtALU64Acc operand order (rd, rd_in, rs1, rs2): acc use is index 1.
-    InstrItinData<Slot12_MAC_AccFirst, [InstrStage<1, [SLOT1, SLOT2]>],
-                  [2, 2, 1, 1]>,
     // Same operand cycles on the units the database gives these: MAC0/MAC1.
     InstrItinData<Unit_MAC0MAC1_L2_AccFirst,
                   [InstrStage<1, [U_MAC0, U_MAC1]>], [2, 2, 1, 1]>,
 
-    // Accumulator-feedback MAC — SIMD form (X2MULA32, X4MULA16,...), slot 1
-    // only. Same InstrStage<1> + [2,1,1,2] shape.
-    InstrItinData<Slot1_MAC, [InstrStage<1, [SLOT1]>], [2, 1, 1, 2]>,
 
-    // single-slot-2 mirrors. Identical OperandCycles to the slot-1
-    // counterparts (same datapath micro-architecture in slot 1 and slot 2 per
-    // spec §slot architecture — both slots host a full 32/64-bit ALU + MAC
-    // datapath with the same acc-feedback path). Only the reserved FU changes:
-    // SLOT2 instead of SLOT1. These are the itineraries the FLEX `_S2`
-    // classes attach to.
-    InstrItinData<Slot2_ALU, [InstrStage<1, [SLOT2]>], [1]>,
-    InstrItinData<Slot2_LS,  [InstrStage<1, [SLOT2]>], [2]>,
-    InstrItinData<Slot2_ALU_AccLat, [InstrStage<1, [SLOT2]>], [5, 1, 1, 5]>,
-    InstrItinData<Slot2_MAC, [InstrStage<1, [SLOT2]>], [2, 1, 1, 2]>
   ])>;
 
 //===----------------------------------------------------------------------===//

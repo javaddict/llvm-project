@@ -10,9 +10,9 @@
 # 2. RAW hazard exists (DR64)
 # 3. WAW hazard exists (both write same register)
 # 4. Two stores to potentially-aliasing addresses
-# 5. Two independent LD32 pack as LD32 + LD32_S1 (slot-1 promotion,)
-# 6. Two ST32 cannot share SLOT0 (slot conflict)
-# 7. LD32 + ST32 from same address (memory dependency)
+# 5. Two independent S_LW_WITH_IMM pack as S_LW_WITH_IMM + LD32_S1 (slot-1 promotion,)
+# 6. Two S_SW_WITH_IMM cannot share SLOT0 (slot conflict)
+# 7. S_LW_WITH_IMM + S_SW_WITH_IMM from same address (memory dependency)
 #
 
 --- |
@@ -185,7 +185,7 @@ body:             |
 # Test 4: Two stores to the same address — memory dependency prevents bundle
 # ============================================================================
 #
-# ST32 to [r0+0] then ST32 to [r0+0]. Store-Store alias -> memory dep.
+# S_SW_WITH_IMM to [r0+0] then S_SW_WITH_IMM to [r0+0]. Store-Store alias -> memory dep.
 # They must be in separate bundles.
 #
 name:            test4_store_store_alias
@@ -213,28 +213,28 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r2
 
-    ; Both ST32 store to same address [r0+0]. Memory dependency.
+    ; Both S_SW_WITH_IMM store to same address [r0+0]. Memory dependency.
     ; Additionally, both need SLOT0 (Slot0_LS) — slot conflict too.
 
     ; CHECK-LABEL: name: test4_store_store_alias
     ; CHECK: liveins: $r0, $r1, $r2
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32 killed $r1, $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: ST32 killed $r2, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r1, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r2, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY $r0
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    ST32 $r1, $r0, 0, implicit-def dead $sfr
-    ST32 $r2, $r0, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r1, $r0, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r2, $r0, 0, implicit-def dead $sfr
 
     $r0 = COPY $r0
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...
 ---
 # ============================================================================
-# Test 5: Two LD32 from different addresses — slot conflict (both need SLOT0)
+# Test 5: Two S_LW_WITH_IMM from different addresses — slot conflict (both need SLOT0)
 # ============================================================================
 #
-# LD32 uses Slot0_LS which maps to SLOT0 only. Even though Load-Load has no
+# S_LW_WITH_IMM uses Slot0_LS which maps to SLOT0 only. Even though Load-Load has no
 # memory dependency (parallel reads), the DFA prevents both from reserving
 # SLOT0 simultaneously. Must be separate bundles.
 #
@@ -262,28 +262,30 @@ body:             |
   bb.0:
     liveins: $r0, $r1
 
-    ; Two independent logical LD32 pack into one bundle (Slot01_LD / placement).
+    ; Two independent logical S_LW_WITH_IMM pack into one bundle (Slot01_LD / placement).
     ; Flex S0/S1 windows materialize only at encode.
 
     ; CHECK-LABEL: name: test5_two_ld32_slot_conflict
     ; CHECK: liveins: $r0, $r1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r3 = LD32 killed $r1, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 1, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r1 {
+    ; CHECK-NEXT:   $r2 = S_LW_WITH_IMM_P32_LOAD1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = S_LW_WITH_IMM_P30_LOADSTORE0 killed $r1, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    $r3 = LD32 $r1, 0, implicit-def dead $sfr
+    $r2 = S_LW_WITH_IMM $r0, 0, implicit-def dead $sfr
+    $r3 = S_LW_WITH_IMM $r1, 0, implicit-def dead $sfr
 
     $r0 = COPY $r2
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...
 ---
 # ============================================================================
-# Test 6: Two ST32 to different addresses — slot conflict (both need SLOT0)
+# Test 6: Two S_SW_WITH_IMM to different addresses — slot conflict (both need SLOT0)
 # ============================================================================
 #
-# ST32 uses Slot0_LS -> SLOT0 only. Both need SLOT0. Even if addresses don't
+# S_SW_WITH_IMM uses Slot0_LS -> SLOT0 only. Both need SLOT0. Even if addresses don't
 # alias, the DFA prevents the bundle.
 #
 name:            test6_two_st32_slot_conflict
@@ -312,27 +314,27 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r2, $r3
 
-    ; Both ST32 need SLOT0. DFA slot conflict prevents bundling.
+    ; Both S_SW_WITH_IMM need SLOT0. DFA slot conflict prevents bundling.
 
     ; CHECK-LABEL: name: test6_two_st32_slot_conflict
     ; CHECK: liveins: $r0, $r1, $r2, $r3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32 killed $r2, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r2, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY $r0
-    ; CHECK-NEXT: ST32 killed $r3, killed $r1, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r3, killed $r1, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    ST32 $r2, $r0, 0, implicit-def dead $sfr
-    ST32 $r3, $r1, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r2, $r0, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r3, $r1, 0, implicit-def dead $sfr
 
     $r0 = COPY $r0
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...
 ---
 # ============================================================================
-# Test 7: LD32 + ST32 from same address — memory dependency prevents bundle
+# Test 7: S_LW_WITH_IMM + S_SW_WITH_IMM from same address — memory dependency prevents bundle
 # ============================================================================
 #
-# LD32 reads [r0+0], then ST32 writes [r0+0]. Load-Store alias.
+# S_LW_WITH_IMM reads [r0+0], then S_SW_WITH_IMM writes [r0+0]. Load-Store alias.
 # Additionally, both need SLOT0. Both reasons prevent bundling.
 #
 name:            test7_ld_st_same_addr
@@ -359,17 +361,17 @@ body:             |
   bb.0:
     liveins: $r0, $r2
 
-    ; LD32 then ST32 to same address [r0+0]. Memory dependency + slot conflict.
+    ; S_LW_WITH_IMM then S_SW_WITH_IMM to same address [r0+0]. Memory dependency + slot conflict.
 
     ; CHECK-LABEL: name: test7_ld_st_same_addr
     ; CHECK: liveins: $r0, $r2
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r1 = LD32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: ST32 killed $r2, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: $r1 = S_LW_WITH_IMM_P32_LOAD1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r2, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r1
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r1 = LD32 $r0, 0, implicit-def dead $sfr
-    ST32 $r2, $r0, 0, implicit-def dead $sfr
+    $r1 = S_LW_WITH_IMM $r0, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r2, $r0, 0, implicit-def dead $sfr
 
     $r0 = COPY $r1
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

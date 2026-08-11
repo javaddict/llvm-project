@@ -20,7 +20,14 @@
 # (slot-ordered, architecturally safe parallel writes).
 #
 # This test is structured so that if hasWAWHazard regresses to the old buggy
-# form, the two writes land in ONE BUNDLE and a CHECK-NOT: BUNDLE line fails.
+# form, the two writes land in ONE BUNDLE and the per-instruction CHECK-NEXT
+# lines below stop matching -- they require two separate instructions where a
+# regression would produce one bundle.
+#
+# The sentence that used to be here spelled a negative directive verbatim, and
+# FileCheck reads directives out of comments: it became a live CHECK-NOT for
+# the string BUNDLE, sitting before the first CHECK-LABEL, where it matched
+# nothing and passed vacuously (FORMAT-E-SWITCH-PLAN.md 6.16).
 # The instructions in each WAW pair are otherwise independent (no RAW, no
 # memory alias), so WITHOUT the WAW fix the packetizer WOULD bundle them
 # that is exactly the wrong-code condition being prevented.
@@ -151,11 +158,11 @@ body:             |
 # Test 3: WAW on the 2-def fused post-increment load's data dest ($rt).
 # ============================================================================
 #
-# Two LD32_POST (fused post-inc loads,) that write the SAME data dest $r2
+# Two S_LW_POST_IMM (fused post-inc loads,) that write the SAME data dest $r2
 # but load from DIFFERENT base registers ($r5 vs $r6), so their memory accesses
 # do not alias. The only hazard is the WAW on the shared $rt=$r2 def.
 #
-# LD32_POST has outs (GPR32:$rt, GPR32:$rs_wb) — two defs. The fix must see
+# S_LW_POST_IMM has outs (GPR32:$rt, GPR32:$rs_wb) — two defs. The fix must see
 # BOTH defs: $rt (data) and $rs_wb (tied base writeback). This case WAWs on
 # $rt; $rs_wb differs ($r5_wb vs $r6_wb), so the conflict is solely on $rt.
 # The old equality check (`Reg1 == Reg2`) happened to catch this specific case
@@ -193,12 +200,12 @@ body:             |
     ; CHECK-LABEL: name: test3_waw_postinc_data_dest_no_bundle
     ; CHECK: liveins: $r5, $r6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2, $r5 = LD32_POST killed $r5, 1
-    ; CHECK-NEXT: $r2, $r6 = LD32_POST killed $r6, 1
+    ; CHECK-NEXT: $r2, $r5 = S_LW_POST_IMM_P32_LOAD1 killed $r5, 1
+    ; CHECK-NEXT: $r2, $r6 = S_LW_POST_IMM_P32_LOAD1 killed $r6, 1
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r2, $r5 = LD32_POST $r5, 1
-    $r2, $r6 = LD32_POST $r6, 1
+    $r2, $r5 = S_LW_POST_IMM $r5, 1
+    $r2, $r6 = S_LW_POST_IMM $r6, 1
 
     $r0 = COPY $r2
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

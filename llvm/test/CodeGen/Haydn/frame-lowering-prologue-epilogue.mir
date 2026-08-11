@@ -90,12 +90,12 @@ body:             |
     ; CHECK-NEXT: $r13 = frame-setup SUBI32 $r13, 16
     ; CHECK-NEXT: frame-setup CFI_INSTRUCTION def_cfa_offset 16
     ; CHECK-NEXT: $r1 = ADDI32 $r0, 42, implicit-def dead $sfr
-    ; CHECK-NEXT: ST32 killed $r1, $r13, 12, implicit $r13
+    ; CHECK-NEXT: S_SW_WITH_IMM killed $r1, $r13, 3, implicit $r13
     ; CHECK-NEXT: $r0 = frame-destroy XOR32 $r0, $r0
     ; CHECK-NEXT: $r13 = frame-destroy ADDI32 $r13, 16
     ; CHECK-NEXT: RET implicit killed $r15
     renamable $r1 = ADDI32 $r0, 42, implicit-def dead $sfr
-    ST32 killed renamable $r1, %stack.0, 0, implicit $r13
+    S_SW_WITH_IMM killed renamable $r1, %stack.0, 0, implicit $r13
     RET implicit killed $r15
 ...
 # Prologue: R0 zero (XOR32) + SP decrement (4 bytes rounded to 8).
@@ -126,12 +126,12 @@ body:             |
     ; CHECK-NEXT: $r13 = frame-setup SUBI32 $r13, 72
     ; CHECK-NEXT: frame-setup CFI_INSTRUCTION def_cfa_offset 72
     ; CHECK-NEXT: $r1 = ADDI32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: ST32 killed $r1, $r13, 8, implicit $r13
+    ; CHECK-NEXT: S_SW_WITH_IMM killed $r1, $r13, 2, implicit $r13
     ; CHECK-NEXT: $r0 = frame-destroy XOR32 $r0, $r0
     ; CHECK-NEXT: $r13 = frame-destroy ADDI32 $r13, 72
     ; CHECK-NEXT: RET implicit killed $r15
     renamable $r1 = ADDI32 $r0, 0, implicit-def dead $sfr
-    ST32 killed renamable $r1, %stack.0, 0, implicit $r13
+    S_SW_WITH_IMM killed renamable $r1, %stack.0, 0, implicit $r13
     RET implicit killed $r15
 ...
 # Prologue: SP decrement by 64
@@ -162,15 +162,15 @@ body:             |
     ; CHECK-NEXT: frame-setup CFI_INSTRUCTION def_cfa_offset 16
     ; CHECK-NEXT: $r1 = ADDI32 $r0, 1, implicit-def dead $sfr
     ; CHECK-NEXT: $r2 = ADDI32 $r0, 2, implicit-def dead $sfr
-    ; CHECK-NEXT: ST32 killed $r1, $r13, 12, implicit $r13
-    ; CHECK-NEXT: ST32 killed $r2, $r13, 8, implicit $r13
+    ; CHECK-NEXT: S_SW_WITH_IMM killed $r1, $r13, 3, implicit $r13
+    ; CHECK-NEXT: S_SW_WITH_IMM killed $r2, $r13, 2, implicit $r13
     ; CHECK-NEXT: $r0 = frame-destroy XOR32 $r0, $r0
     ; CHECK-NEXT: $r13 = frame-destroy ADDI32 $r13, 16
     ; CHECK-NEXT: RET implicit killed $r15
     renamable $r1 = ADDI32 $r0, 1, implicit-def dead $sfr
     renamable $r2 = ADDI32 $r0, 2, implicit-def dead $sfr
-    ST32 killed renamable $r1, %stack.0, 0, implicit $r13
-    ST32 killed renamable $r2, %stack.1, 0, implicit $r13
+    S_SW_WITH_IMM killed renamable $r1, %stack.0, 0, implicit $r13
+    S_SW_WITH_IMM killed renamable $r2, %stack.1, 0, implicit $r13
     RET implicit killed $r15
 ...
 # Prologue: SP decrement for 2 locals (8 bytes)

@@ -150,10 +150,10 @@ HaydnFuncUnitWrapper::HaydnFuncUnitWrapper(const InstrStage &IS) {
   // The InstrStage Units_ bitmask bit N is set iff FU index N is in the
   // choice set. The FU indices line up 1:1 with our StaticBitSet bit
   // positions because HAYDN_NUM_FU_BITS covers every FuncUnit
-  // HaydnItineraries declares: the three retired slots at 0..2 and the seven
-  // format E units at 3..9. It covered only the first three until recently,
-  // which made this whole class inert -- see the header. For a Required stage
-  // the whole
+  // HaydnItineraries declares -- the seven format E units, and nothing else.
+  // It covered only three until recently, and the units sat behind them, which
+  // made this whole class inert; see the header. For a Required stage the
+  // whole
   // choice set is recorded as Required (the conflict rule then ensures two
   // single-slot instrs needing the same exclusive slot clash, while a
   // Slot012_ALU instr contributes a 3-bit set that never exclusively clashes

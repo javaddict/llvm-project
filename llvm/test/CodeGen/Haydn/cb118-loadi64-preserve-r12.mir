@@ -3,7 +3,7 @@
 
 # LOADI64 MatInt uses a scavenged post-RA GPR (HaydnPostRAScratch)
 # not fixed free AT / not hardcoded R12. Live R12 must remain available for
-# the subsequent LDU16; expansion must not clobber R12 as MatInt dest.
+# the subsequent S_LHWU_WITH_IMM; expansion must not clobber R12 as MatInt dest.
 # AIE model: R12 is a normal allocatable GPR (no free AT / no +reserve-r12-at).
 
 ---

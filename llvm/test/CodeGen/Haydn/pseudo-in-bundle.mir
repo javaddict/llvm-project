@@ -17,9 +17,9 @@
 # (DB-named fused post-increment load) extended the in-bundle fallback
 # path: an LD32_POST_INC pseudo whose stride is encodable (imm6 in signed
 # range) now expands to a SINGLE real S_LW_POST_IMM with tied base-writeback
-# instead of the LD32 + ADDI32 split. The safety guarantee is unchanged: the
+# instead of the S_LW_WITH_IMM + ADDI32 split. The safety guarantee is unchanged: the
 # pseudo is still fully expanded out of the bundle into a real, encodable
-# instruction. ST32_POST_INC still expands to the 2-instruction ST32 + ADDI32
+# instruction. ST32_POST_INC still expands to the 2-instruction S_SW_WITH_IMM + ADDI32
 # split because the current MC/silicon encoding has no fused store-post form.
 #
 # If this test regresses (a POST_INC pseudo survives inside a BUNDLE), the

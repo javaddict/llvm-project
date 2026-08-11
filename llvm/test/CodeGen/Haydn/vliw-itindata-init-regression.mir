@@ -19,9 +19,9 @@
 # This test verifies that the packetizer correctly uses DFA resource tracking
 # by checking that instructions with conflicting functional units are NOT
 # bundled together. Specifically:
-# Two Slot0_LS instructions (ST32) cannot be in the same bundle because
+# Two Slot0_LS instructions (S_SW_WITH_IMM) cannot be in the same bundle because
 # they both need the SLOT0_LS functional unit (only one SLOT0 in the DFA).
-# An ALU32 (Slot012_ALU) and a ST32 (Slot0_LS) CAN be bundled because
+# An ALU32 (Slot012_ALU) and a S_SW_WITH_IMM (Slot0_LS) CAN be bundled because
 # they use different DFA functional units.
 #
 # If ItinData initialization regresses, the DFA loses resource tracking and
@@ -39,11 +39,11 @@
 # Test 1: Two Slot0_LS instructions -- must NOT bundle (resource conflict)
 # ============================================================================
 #
-# Two ST32 instructions both require the SLOT0_LS functional unit.
+# Two S_SW_WITH_IMM instructions both require the SLOT0_LS functional unit.
 # The DFA has only one SLOT0. If ItinData is initialized, the DFA
-# tracks resource usage and rejects the second ST32 in the same packet.
+# tracks resource usage and rejects the second S_SW_WITH_IMM in the same packet.
 #
-# If ItinData is broken, both ST32 might incorrectly bundle together.
+# If ItinData is broken, both S_SW_WITH_IMM might incorrectly bundle together.
 name:            test_ls_conflict
 alignment:       1
 legalized:       true
@@ -70,27 +70,27 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r2, $r3
 
-    ; Two ST32 both need SLOT0_LS -- cannot share the same packet.
-    ; The first ST32 claims SLOT0_LS. The second ST32 also needs SLOT0_LS
+    ; Two S_SW_WITH_IMM both need SLOT0_LS -- cannot share the same packet.
+    ; The first S_SW_WITH_IMM claims SLOT0_LS. The second S_SW_WITH_IMM also needs SLOT0_LS
     ; which is already occupied. The DFA must reject this.
     ; With Slot012_ALU availability, ADDI32 can go in any slot, so it bundles
-    ; with the first ST32.
-    ; Expected: ST32 + ADDI32 in first bundle, then ST32 in second.
+    ; with the first S_SW_WITH_IMM.
+    ; Expected: S_SW_WITH_IMM + ADDI32 in first bundle, then S_SW_WITH_IMM in second.
     ; (The exact bundle structure depends on ADDI32's Slot012_ALU itinerary
     ; which allows it in any slot including SLOT0. The DFA will try to bundle
-    ; ST32 with ADDI32, then ST32 alone.)
-    ; Key check: the two ST32 instructions must NOT be in the same bundle.
+    ; S_SW_WITH_IMM with ADDI32, then S_SW_WITH_IMM alone.)
+    ; Key check: the two S_SW_WITH_IMM instructions must NOT be in the same bundle.
     ; Since both need SLOT0_LS (only one SLOT0 in DFA), neither can be bundled
     ; with the other. They remain as separate, unbundled instructions.
 
     ; CHECK-LABEL: name: test_ls_conflict
     ; CHECK: liveins: $r0, $r1, $r2, $r3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32 killed $r1, $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: ST32 killed $r3, killed $r2, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r1, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r3, killed $r2, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    ST32 $r1, $r0, 0, implicit-def dead $sfr
-    ST32 $r3, $r2, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r1, $r0, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r3, $r2, 0, implicit-def dead $sfr
 
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...
@@ -99,9 +99,9 @@ body:             |
 # Test 2: ALU32 + Slot0_LS -- CAN bundle (different DFA functional units)
 # ============================================================================
 #
-# ADD32 (Slot012_ALU, can use SLOT0/1/2) + ST32 (Slot0_LS, uses SLOT0_LS).
+# ADD32 (Slot012_ALU, can use SLOT0/1/2) + S_SW_WITH_IMM (Slot0_LS, uses SLOT0_LS).
 # The DFA models these as separate functional units. If ItinData is properly
-# initialized, ADD32 uses SLOT0_ALU and ST32 uses SLOT0_LS -- no conflict.
+# initialized, ADD32 uses SLOT0_ALU and S_SW_WITH_IMM uses SLOT0_LS -- no conflict.
 #
 # If ItinData is broken, the DFA might incorrectly reject this bundle.
 name:            test_alu_ls_compatible
@@ -130,18 +130,20 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r2, $r3
 
-    ; ADD32 (Slot012_ALU) + ST32 (Slot0_LS) -- different DFA FUs.
+    ; ADD32 (Slot012_ALU) + S_SW_WITH_IMM (Slot0_LS) -- different DFA FUs.
     ; The DFA should allow them in the same bundle.
-    ; Note: ADD32 has no register dependency with ST32 here (different regs).
+    ; Note: ADD32 has no register dependency with S_SW_WITH_IMM here (different regs).
 
     ; CHECK-LABEL: name: test_alu_ls_compatible
     ; CHECK: liveins: $r0, $r1, $r2, $r3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32 killed $r3, killed $r2, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r4 = ADD32_P32_ALU0 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 1, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit killed $r1, implicit killed $r3, implicit killed $r2 {
+    ; CHECK-NEXT:   $r4 = ADD32_P32_ALU0 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT:   S_SW_WITH_IMM_P30_LOADSTORE0 killed $r3, killed $r2, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-    ST32 $r3, $r2, 0, implicit-def dead $sfr
+    S_SW_WITH_IMM $r3, $r2, 0, implicit-def dead $sfr
 
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...

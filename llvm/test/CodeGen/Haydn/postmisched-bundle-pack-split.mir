@@ -4,8 +4,8 @@
 #
 # 1. Independent ALU ops may BUNDLE (control — pack works).
 # 2. Dual S0-only stores must NOT share one BUNDLE (HR serializes).
-# 3. Dual LD32 may BUNDLE (dual-load product).
-# 4. ST32 + independent ADD32: both present; co-issue optional.
+# 3. Dual S_LW_WITH_IMM may BUNDLE (dual-load product).
+# 4. S_SW_WITH_IMM + independent ADD32: both present; co-issue optional.
 # 5. ARCTAN stays alone vs independent ALU (issue-alone schedule rule).
 # 6. LD + MAC independent may BUNDLE (DSP density / AIE multi-slot class).
 # 7. Dual MAC may BUNDLE (S1|S2).
@@ -86,7 +86,7 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r3, $r4
 
-    ; Two ST32 are S0-only — must not co-issue in one BUNDLE.
+    ; Two S_SW_WITH_IMM are S0-only — must not co-issue in one BUNDLE.
     ; CHECK-LABEL: name: split_dual_store
     ; CHECK: S_SW_{{[A-Z_]*}}
     ; CHECK: S_SW_{{[A-Z_]*}}
@@ -122,7 +122,7 @@ body:             |
   bb.0:
     liveins: $r1, $r2
 
-    ; Dual LD32 (S0|S1) should pack when independent.
+    ; Dual S_LW_WITH_IMM (S0|S1) should pack when independent.
     ; CHECK-LABEL: name: pack_dual_load
     ; CHECK: BUNDLE 1
     ; CHECK: S_LW_{{[A-Z_]*}}
@@ -161,7 +161,7 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r3, $r4
 
-    ; ST32 + ADD32 both survive; co-issue is QoR (not required for correctness).
+    ; S_SW_WITH_IMM + ADD32 both survive; co-issue is QoR (not required for correctness).
     ; CHECK-LABEL: name: pack_store_alu
     ; CHECK-DAG: S_SW_{{[A-Z_]*}}
     ; CHECK-DAG: ADD32
@@ -236,7 +236,7 @@ body:             |
   bb.0:
     liveins: $r1, $d4, $d5, $d6
 
-    ; LD32 (S0|S1) + F2MULAA32R_HHLL (S1|S2) — AIE-style multi-slot density.
+    ; S_LW_WITH_IMM (S0|S1) + F2MULAA32R_HHLL (S1|S2) — AIE-style multi-slot density.
     ; CHECK-LABEL: name: pack_ld_mac
     ; CHECK: BUNDLE 1
     ; CHECK-DAG: S_LW_{{[A-Z_]*}}
