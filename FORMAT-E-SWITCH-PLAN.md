@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `8b6abdb5704b` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `a570f4fa033d` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -2597,13 +2597,50 @@ that WAS a `CHECK-NOT` — before the first `CHECK-LABEL`, matching nothing,
 passing vacuously. § 6.16 again, and this time in a file whose whole subject is
 a negative.
 
-#### What is left of CB-143
+#### The three packer axes — two were already modelled
 
-Not the schedule — the packer. Unit exclusion is modelled; B4's other axes are
-not: per-entry immediate width, the store/load aliasing rule, and a bundle-wide
-matching for the register-port budget instead of
-`HaydnFuncUnitWrapper::conflict`'s pairwise approximation, which is exact for
-two instructions and permissive for three.
+**Measured before building, and B4 was wrong about two of its three.**
+
+*Per-entry immediate width — modelled by construction.* The generator emits a
+member only where the instruction FITS, so `ADDI32` has `P20_ALU0`/`P21_ALU1`
+and nothing else while `ADD32` has all seven, and the packer searches over
+members. B4's own example is what it does: a 3-entry bundle holding `addi32`
+is rejected, the 2-entry form assembles.
+
+*Register port budget — bundle-wide already.* `HaydnFuncUnitWrapper::operator|=`
+accumulates (`GPRReads += …`) and `conflict()` is called with the running
+cycle, so the sum IS the bundle's demand. **§ 5.18's own commit message called
+this a pairwise approximation and was wrong** — worth correcting rather than
+leaving, because that sentence would send someone to rewrite something that
+works. What *is* pairwise is unit exclusivity, in one direction only: three
+instructions each needing `{ALU1, ALU2}` pass and cannot all issue. The
+placement search decides legality, so that is a wasted pack attempt.
+
+*Store/load overlap — genuinely missing.* `2cddbe292469`.
+
+> § Constraints: "Within the same bundle, a store and a load must not target
+> overlapping memory addresses. … the hardware detects the conflict and raises
+> an exception."
+
+Nothing enforced it, and LOADSTORE0/LOAD1 are different units — so the packer
+could emit a bundle that **faults on real silicon**, with neither lit nor the
+simulator saying so, because BundleSim does not model the check either.
+
+The rule records FACTS about each access, not the `MachineInstr`. Instructions
+are replaced during a region (`setDesc` for the chosen member), and
+dereferencing a dead one's memory operands is a **segfault inside
+`MemOperandsHaveAlias`**, not a wrong answer — that was the first version, and
+it crashed 36 tests. Cost is ~2% bundles.
+
+#### And a pre-existing bug underneath it
+
+`HaydnInstrInfo::getMemOperandsWithOffsetWidth` returned the **element index as
+a byte Offset** — § 5.6's scale trap again, in the routine that everything asks
+about addresses: memory clustering, `areMemAccessesTriviallyDisjoint`, and now
+this. Every distance came out `width` times too small, so two adjacent words
+looked overlapping. The `PreImm` path directly above it already had the shift.
+The byte and halfword forms were absent entirely, so they answered "no
+information" and every caller assumed the worst.
 
 ---
 
