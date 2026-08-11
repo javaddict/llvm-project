@@ -32,8 +32,8 @@
 ; spec: Database/haydn_instruction_db.json F2MULZAA32RS_HHLL / F2MULAA32RS_HHLL
 ; HaydnInstrInfoAuto.td:41 (AA, FmtALU64Acc tied-def), :137 (ZAA, FmtALU64)
 
-declare i64 @llvm.haydn.f2mulzaa32rs_hhll(<2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.f2mulzaa32rs_hllh(<2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulzaa32rs.hhll(<2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.f2mulzaa32rs.hllh(<2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.f2mulzaa32r.hhll(<2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.f2mulzaa32r.hllh(<2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)
@@ -46,7 +46,7 @@ declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}f2mulzaa32rs_hhll	d0, d0, d1{{.*}} }
-; CHECK: 	{ nop; nop; jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}{{.*}}r0, lr, 0{{.*}} }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	test_f2mulzaa32rs_hhll, .Lfunc_end0-test_f2mulzaa32rs_hhll
 ; CHECK: 	.cfi_endproc
@@ -54,7 +54,7 @@ declare i64 @llvm.haydn.f2mulaa32rs.hhll(i64, <2 x i32>, <2 x i32>)
 define i64 @test_f2mulzaa32rs_hhll(i64 %a, i64 %b) {
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulzaa32rs_hhll(<2 x i32> %bc.1, <2 x i32> %bc.2)
+  %r = call i64 @llvm.haydn.f2mulzaa32rs.hhll(<2 x i32> %bc.1, <2 x i32> %bc.2)
   ret i64 %r
 }
 
@@ -65,7 +65,7 @@ define i64 @test_f2mulzaa32rs_hhll(i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}f2mulzaa32rs_hllh	d0, d0, d1{{.*}} }
-; CHECK: 	{ nop; nop; jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}{{.*}}r0, lr, 0{{.*}} }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	test_f2mulzaa32rs_hllh, .Lfunc_end1-test_f2mulzaa32rs_hllh
 ; CHECK: 	.cfi_endproc
@@ -73,7 +73,7 @@ define i64 @test_f2mulzaa32rs_hhll(i64 %a, i64 %b) {
 define i64 @test_f2mulzaa32rs_hllh(i64 %a, i64 %b) {
   %bc.3 = bitcast i64 %a to <2 x i32>
   %bc.4 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.f2mulzaa32rs_hllh(<2 x i32> %bc.3, <2 x i32> %bc.4)
+  %r = call i64 @llvm.haydn.f2mulzaa32rs.hllh(<2 x i32> %bc.3, <2 x i32> %bc.4)
   ret i64 %r
 }
 
@@ -83,8 +83,8 @@ define i64 @test_f2mulzaa32rs_hllh(i64 %a, i64 %b) {
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
-; CHECK: 	{ {{.*}}f2mulzaa32r.hhll	d0, d0, d1{{.*}} }
-; CHECK: 	{ nop; nop; jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}f2mulzaa32r_hhll	d0, d0, d1{{.*}} }
+; CHECK: 	{ {{.*}}jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}{{.*}}r0, lr, 0{{.*}} }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	test_f2mulzaa32r_hhll, .Lfunc_end2-test_f2mulzaa32r_hhll
 ; CHECK: 	.cfi_endproc
@@ -102,8 +102,8 @@ define i64 @test_f2mulzaa32r_hhll(i64 %a, i64 %b) {
 ; CHECK: 	.cfi_startproc
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
-; CHECK: 	{ {{.*}}f2mulzaa32r.hllh	d0, d0, d1{{.*}} }
-; CHECK: 	{ nop; nop; jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}f2mulzaa32r_hllh	d0, d0, d1{{.*}} }
+; CHECK: 	{ {{.*}}jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}{{.*}}r0, lr, 0{{.*}} }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	test_f2mulzaa32r_hllh, .Lfunc_end3-test_f2mulzaa32r_hllh
 ; CHECK: 	.cfi_endproc
@@ -126,7 +126,7 @@ define i64 @test_f2mulzaa32r_hllh(i64 %a, i64 %b) {
 ; CHECK: // %bb.0:
 ; CHECK: 	{ {{.*}}xor32	r0, r0, r0{{.*}} }
 ; CHECK: 	{ {{.*}}f2mulzaa32rs_hhll	d0, d0, d1{{.*}} }
-; CHECK: 	{ nop; nop; jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
+; CHECK: 	{ {{.*}}jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}{{.*}}r0, lr, 0{{.*}} }
 ; CHECK: .Lfunc_end4:
 ; CHECK: 	.size	test_fold_zero_acc, .Lfunc_end4-test_fold_zero_acc
 ; CHECK: 	.cfi_endproc
