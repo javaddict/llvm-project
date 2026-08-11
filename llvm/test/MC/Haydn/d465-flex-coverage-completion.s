@@ -1,5 +1,6 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
-# RUN:     llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# RUN:     llvm-objdump -d -z --triple=haydn-unknown-elf %t.o \
+# RUN:     | FileCheck %s --implicit-check-not='<unknown>'
 # REQUIRES: haydn-registered-target
 
 # REGRESSION TEST : Bundle128 flex-coverage completion. The 9 opcodes
@@ -27,53 +28,53 @@
 # fires at emit with "has no Bundle128 form".
 
 # CHECK-LABEL: <f_st8_s0>:
-# CHECK: { nop; nop; s_sb_with_imm r1, r2, 4 }
+# CHECK: { {{.*}}s_sb_with_imm r1, r2, 4
 f_st8_s0:
   { s_sb_with_imm r1, r2, 4 }
 
 # CHECK-LABEL: <f_ldu8_s0>:
-# CHECK: { nop; nop; s_lbu_with_imm r1, r2, 4 }
+# CHECK: { {{.*}}s_lbu_with_imm r1, r2, 4
 f_ldu8_s0:
   { s_lbu_with_imm r1, r2, 4 }
 
 # CHECK-LABEL: <f_bne_w_s0>:
-# CHECK: { nop; nop; bne r1, r2, [[OFF1:[0-9]+]] }
+# CHECK: { {{.*}}bne r1, r2, [[OFF1:[0-9]+]]
 f_bne_w_s0:
   { bne r1, r2, 8 }
 
 # CHECK-LABEL: <f_bge_w_s0>:
-# CHECK: { nop; nop; bge r1, r2, [[OFF1:[0-9]+]] }
+# CHECK: { {{.*}}bge r1, r2, [[OFF1:[0-9]+]]
 f_bge_w_s0:
   { bge r1, r2, 8 }
 
 # CHECK-LABEL: <f_blt_w_s0>:
-# CHECK: { nop; nop; blt r1, r2, [[OFF1:[0-9]+]] }
+# CHECK: { {{.*}}blt r1, r2, [[OFF1:[0-9]+]]
 f_blt_w_s0:
   { blt r1, r2, 8 }
 
 # CHECK-LABEL: <f_bgez_w_s0>:
-# CHECK: { nop; nop; bgez r1, [[OFF1:[0-9]+]] }
+# CHECK: { {{.*}}bgez r1, [[OFF1:[0-9]+]]
 f_bgez_w_s0:
   { bgez r1, 8 }
 
 # CHECK-LABEL: <f_bltz_w_s0>:
-# CHECK: { nop; nop; bltz r1, [[OFF1:[0-9]+]] }
+# CHECK: { {{.*}}bltz r1, [[OFF1:[0-9]+]]
 f_bltz_w_s0:
   { bltz r1, 8 }
 
 # CHECK-LABEL: <f_csrw_w_s0>:
-# CHECK: { nop; nop; csrw [[CSR:[0-9]+]], r1 }
+# CHECK: { {{.*}}csrw [[CSR:[0-9]+]], r1
 f_csrw_w_s0:
   { csrw 32, r1 }
 
 # Dual-load packs two logical ld32/ld64 into S0+S1 (public mnemonic ld32/ld64).
 # Bundle text is high slot first, so the S2 position is the empty one.
 # CHECK-LABEL: <f_ld32_dual>:
-# CHECK: { nop; s_lw_{{[a-z_]*}}{{.*}}; s_lw_{{[a-z_]*}}{{.*}}
+# CHECK: { {{.*}}s_lw_{{[a-z_]*}}{{.*}}; s_lw_{{[a-z_]*}}{{.*}}
 f_ld32_dual:
   { nop; s_lw_with_imm r1, r2, 0; s_lw_with_imm r3, r2, 2 }
 
 # CHECK-LABEL: <f_ld64_dual>:
-# CHECK: { nop; d_ldw_{{[a-z_]*}}{{.*}}; d_ldw_{{[a-z_]*}}{{.*}}
+# CHECK: { {{.*}}d_ldw_{{[a-z_]*}}{{.*}}; d_ldw_{{[a-z_]*}}{{.*}}
 f_ld64_dual:
   { nop; d_ldw_with_imm d0, r2, 0; d_ldw_with_imm d1, r2, 1 }

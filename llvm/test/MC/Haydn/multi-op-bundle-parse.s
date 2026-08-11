@@ -23,17 +23,19 @@
 
 # CHECK-LABEL: <.text>:
 
-# Single-op brace bundle: canAdd/add → SlotMap; emit BUNDLE128_FULL with NOPs.
-# Lone ALU64 prefers S2; print is s2-s1-s0 → `{ add64...; nop; nop }`.
-# CHECK: { add64 d0, d1, d2; nop; nop }
+# Single-op brace bundle: canAdd/add → SlotMap; emit the padded composite.
+# Format E has no one-entry form, so a lone op is NOP-padded to a full
+# bundle. Which entry it lands in is the packer's choice (§ 5.12), so the
+# check pins the op and the padding, not the arrangement.
+# CHECK: { {{.*}}add64{{.*}}d0, d1, d2{{.*}}nop{{.*}}nop
 { add64 d0, d1, d2 }
 
-# Two-op right-aligned text: add64 names s1 and add32 names s0, both legal
-# where written. (Under the old S0-first spelling this same line packed
-# add64->S2 / add32->S1; the ops are simply written in ISA slot order now.)
-# CHECK-NEXT: { nop; add64 d0, d1, d2; add32 r0, r1, r2 }
+# Two-op: both ops co-issue in one bundle with a NOP filling the third
+# entry. Either print order satisfies the contract — what is being tested is
+# that the two children parse and pack, not where they land.
+# CHECK-NEXT: { {{add64.*d0, d1, d2.*add32.*r0, r1, r2|add32.*r0, r1, r2.*add64.*d0, d1, d2}}
 { add64 d0, d1, d2; add32 r0, r1, r2 }
 
-# Three-op: text is s2-s1-s0, and every op is legal where it is written.
-# CHECK-NEXT: { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }
+# Three-op: a full bundle, no NOP padding left to give.
+# CHECK-NEXT: { {{.*}}add64{{.*}}d0, d1, d2{{.*}}add64{{.*}}d3, d4, d5{{.*}}add32{{.*}}r0, r1, r2
 { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }
