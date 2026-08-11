@@ -449,17 +449,30 @@ def branch_operand_class(classes_raw: dict, logical: str, width: int) -> str | N
     return BRANCH_CLASS_FOR_WIDTH.get((targets[0], width))
 
 
-def operand_type(alias: str, width: int, context: str) -> str:
+def operand_type(alias: str, width: int, context: str,
+                 signed: bool | None = None) -> str:
     if alias in GPR_ALIASES:
         expect, kind = 4, "GPR32"
     elif alias in DR_ALIASES:
         expect, kind = 4, "DR64"
     elif alias.endswith("_sel"):
         return f"uimm{width}"
-    elif alias.startswith("uimm"):
-        return f"uimm{width}"
-    elif alias.startswith("imm"):
-        return f"simm{width}"
+    elif alias.startswith("uimm") or alias.startswith("imm"):
+        # Signedness is the Behavior's statement, not the field name's --
+        # see load_immediate_signedness.
+        if signed is None:
+            raise SystemExit(f"{context}: no signedness for immediate {alias!r}")
+        # A 32-bit field spans the whole value, so simmN and uimmN cover the
+        # same bit patterns and the printer's sign extension is the identity:
+        # `movei_h d0, -1` assembles and disassembles back to `-1`. The only
+        # thing the choice changes there is which spellings the parser takes,
+        # and negative literals are what existing code writes. Below 32 bits
+        # the difference IS observable in the printed text -- `lui r3, 4095`
+        # came back as `lui r3, -1` -- and that is the defect this reader
+        # exists to stop.
+        if width >= 32:
+            return f"simm{width}"
+        return f"{'s' if signed else 'u'}imm{width}"
     else:
         raise SystemExit(f"{context}: unknown operand alias {alias!r}")
     if width != expect:
@@ -774,6 +787,93 @@ def load_syntax_order(database: Path) -> dict[str, list[str]]:
                 raise SystemExit(f"{name}: conflicting Syntax across type groups")
             order[name] = operands
     return order
+
+
+def load_immediate_signedness(database: Path) -> dict[str, dict[str, str]]:
+    r"""Per instruction, whether each immediate its Syntax names is signed.
+
+    This used to be read off the field's NAME -- `uimm...` unsigned, anything
+    else signed -- which is a spelling convention standing in for a semantic
+    fact. It got `ADDI32 rt, rs, imm20` right by luck and `LUI rt, imm12`
+    wrong: the database says `rt = {imm12, 20'b0}`, a bit concatenation, so
+    the member declared `simm12` while the logical declared `uimm12`. Nothing
+    failed. `llvm-mc` printed `lui r3, 4095` (the parser kept what was
+    written) and `llvm-objdump` printed `lui r3, -1` for the same twelve
+    bytes, because the decoder sign-extended a field that is a pattern rather
+    than a number. `--emit roundtrip` cannot see it: the BITS agree, and the
+    disagreement is between the parser and the decoder.
+
+    The Behavior states it, so read it there:
+
+    * `SEXT32(imm20)` / `$signed(imm8)`      -> signed
+    * `ZEXT32(imm20)`                        -> unsigned
+    * the field inside a `{...}` concatenation -> unsigned; it is a bit
+      pattern being spliced, and a negative spelling of it is a lie
+    * a shift amount (`rs << uimm5`)         -> unsigned
+    * an address or arithmetic offset (`rs + (imm6 << 3)`) -> signed
+
+    Anything the Behavior does not place is an ERROR rather than a default.
+    Defaulting is what produced the LUI defect, and a wrong default here is
+    invisible until someone reads disassembly.
+    """
+    data = json.loads((database / INSTRUCTION_INDEX).read_text(encoding="utf-8"))
+    out: dict[str, dict[str, str]] = {}
+    for entries in data.values():
+        for entry in entries:
+            name = str(entry.get("Instruction", "")).strip()
+            if not name or name == "WFI<TBD>":
+                continue
+            syntax = str(entry.get("Syntax", ""))
+            behavior = str(entry.get("Behavior", ""))
+            per: dict[str, str] = {}
+            for field in sorted(set(re.findall(r"\b(u?imm\d*)\b", syntax))):
+                f = re.escape(field)
+                if field.startswith("uimm"):
+                    per[field] = "u"
+                elif (re.search(r"SEXT[\d>\-]*\s*\(\s*" + f + r"\s*\)", behavior)
+                      or re.search(r"\$signed\([^)]*\b" + f + r"\b", behavior)):
+                    per[field] = "s"
+                elif re.search(r"ZEXT[\d>\-]*\s*\(\s*" + f + r"\s*\)", behavior):
+                    per[field] = "u"
+                elif any(re.search(r"\b" + f + r"\b", group)
+                         for group in re.findall(r"\{([^{}]*)\}", behavior)):
+                    per[field] = "u"
+                elif re.search(r"(<<|>>>?)\s*" + f + r"\b", behavior):
+                    per[field] = "u"
+                elif re.search(r"[+\-]\s*\(?\s*" + f + r"\b", behavior):
+                    per[field] = "s"
+                else:
+                    raise SystemExit(
+                        f"{name}: Behavior does not say whether {field} is "
+                        f"signed, and guessing is what this reader exists to "
+                        f"stop.\n  Syntax:   {syntax.strip()}\n"
+                        f"  Behavior: {behavior.strip()}")
+            previous = out.get(name)
+            if previous is not None and previous != per:
+                raise SystemExit(
+                    f"{name}: conflicting immediate signedness across type "
+                    f"groups: {previous} vs {per}")
+            out[name] = per
+    return out
+
+
+def immediate_is_signed(signedness: dict, logical: str, alias: str,
+                        context: str) -> bool:
+    """Whether \\p alias on \\p logical is signed, per the database.
+
+    The member's alias is the Syntax's operand name, sometimes with a suffix
+    (`uimm6_offset1` for `offset1`), so match exactly first and by prefix
+    after -- the same rule `inherited_operand_class` uses.
+    """
+    per = signedness.get(logical)
+    if per:
+        if alias in per:
+            return per[alias] == "s"
+        for name, kind in per.items():
+            if alias.startswith(name):
+                return kind == "s"
+    raise SystemExit(f"{context}: the database states no signedness for "
+                     f"immediate {alias!r} on {logical}")
 
 
 READ_PORTS = ("GPR_Read_Port", "DR_Read_Port", "AR_Read_Port", "SFR_Read_Port")
@@ -1320,6 +1420,7 @@ def emit_tablegen(geometry: dict, placements: list[dict],
                   op_classes: dict, op_classes_raw: dict,
                   roles: dict[str, tuple[set[str], set[str]]],
                   tie_positions: dict[str, list[int]],
+                  signedness: dict[str, dict[str, str]],
                   part: str = "members") -> str:
     """The encoding half. The scheduling half is its own file: it can be
     included while Bundle128 is live and this cannot, so emitting both here
@@ -1513,8 +1614,14 @@ def emit_tablegen(geometry: dict, placements: list[dict],
             kind = (branch_operand_class(op_classes_raw, p["instruction"],
                                          width)
                     or inherited_operand_class(op_classes, p["instruction"],
-                                               alias, width)
-                    or operand_type(alias, width, context))
+                                               alias, width))
+            if kind is None:
+                signed = None
+                if (not alias.endswith("_sel")
+                        and alias.startswith(("imm", "uimm"))):
+                    signed = immediate_is_signed(signedness, p["instruction"],
+                                                 alias, context)
+                kind = operand_type(alias, width, context, signed)
             decls.append(f"  bits<{width}> {alias};")
             classes[alias] = kind
             bit_lines.append(
@@ -1998,6 +2105,7 @@ def main() -> None:
                              load_operand_roles(args.database),
                              load_tie_positions(args.flags_from)
                              if args.flags_from else {},
+                             load_immediate_signedness(args.database),
                              part="composites" if args.emit == "composites"
                              else "members")
     elif args.emit == "operand-agreement":
