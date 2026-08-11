@@ -137,23 +137,42 @@ for.end:
 ; BUNDLE: subi32 sp, sp
 ; BUNDLE-DAG: d_sdw_{{[a-z_]*}}
 ; BUNDLE-DAG: s_lw_{{[a-z_]*}}
-; Back-edge materialized as slt32 + beqz/bnez (not fused blt) — the IIR loop
-; body has enough register pressure that the scheduler separates compare and
-; branch (-blanket-SFR scheduling form).
-; BUNDLE-DAG: {{slt32|set_hwloop}}
+; Loop-entry guard materialized as slt32 + xori32 + bnez (not a fused blt) —
+; the IIR loop body has enough register pressure that the scheduler separates
+; compare and branch (-blanket-SFR scheduling form).
+;
+; These used to read `{{slt32|set_hwloop}}` and `{{beqz|set_hwloop}}`. An
+; alternation passes on EITHER arm, so once the loop became a hardware loop
+; the arms stopped describing one fact: slt32 kept matching and the absence of
+; the SET_HWLOOP setup went unseen. It is not seen here now either, but for a
+; reason worth naming rather than hiding — see the note below the checks.
+; BUNDLE-DAG: slt32
 ; BUNDLE-DAG: {{mul64|mula64|add64}}
 ; BUNDLE-DAG: sub64
 ; BUNDLE-DAG: sra64
 ; BUNDLE-DAG: s_sw_{{[a-z_]*}}
-; BUNDLE-DAG: {{beqz|set_hwloop}}
+; BUNDLE-DAG: bnez
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 ;
-; Note: bqriir32x32_df1_process uses BEQZ (loop-entry guard) and BNEZ (loop
-; back-edge) for control flow — NOT JAL. The original DAG-check for `jal` was
-; a stale CHECK from an earlier codegen shape; the IIR loop body contains no
-; function calls, so there is no JAL inside this function (the only JALs are
-; in main, calling this function). The function return is JALR (indirect via
-; lr). Loop control: BEQZ skips the loop when N<=0, BNEZ repeats the loop body.
+; Note: control flow here is a guard plus a HARDWARE LOOP — NOT JAL. The
+; original DAG-check for `jal` was a stale CHECK from an earlier codegen
+; shape; the IIR loop body contains no function calls, so there is no JAL
+; inside this function (the only JALs are in main, calling this function).
+; The function return is JALR (indirect via lr).
+;
+; Loop control: the recognizer converts the loop, so `slt32; xori32; bnez`
+; is the N<=0 guard and there is NO back-edge branch at all — the body sits
+; between .LLhwloop_start0 and .LLhwloop_end0. The condition is inverted
+; relative to the old shape, which is why this asserts bnez and not beqz.
+;
+; NOT asserted here, deliberately: the SET_HWLOOP_F2 that programs the loop.
+; llc emits it in .s, and in the OBJECT the same bundle disassembles as
+; `<unknown>` — its reserved bit e1{30} is set by the label fixups. That is a
+; live encoder defect, reproduced standalone in
+; llvm/test/MC/Haydn/hwloop-fixup-reserved-bit.s (XFAIL), and this file is
+; kept green so its other twenty assertions stay a usable signal. Do not
+; "restore" a set_hwloop check here by alternating it with something that
+; matches — that is exactly how the defect stayed invisible.
 
 ; === Entry point: 2-section cascaded IIR ===;
 ; C: int main(void) { ... filter process ... return r[0]; }
