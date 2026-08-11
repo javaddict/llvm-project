@@ -451,9 +451,7 @@ define i64 @test_mul64_ll(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { sext32t64 d0, r1; nop; nop }
-; CHECK-NEXT:    { sext32t64 d1, r2; nop; nop }
-; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { sext32t64 d0, r1; sext32t64 d1, r2; nop }
 ; CHECK-NEXT:    { mul64_ll d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }

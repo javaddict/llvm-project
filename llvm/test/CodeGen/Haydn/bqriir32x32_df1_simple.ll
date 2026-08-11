@@ -51,27 +51,20 @@ define dso_local void @bqriir32x32_df1_process(ptr noundef %st, ptr noundef writ
 ; CHECK-NEXT:  // %bb.1: // %for.body.lr.ph
 ; CHECK-NEXT:    { s_lw_with_imm r11, r9, 4; nop; s_lw_with_imm r12, r9, 3 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, r9, 2; nop; s_sw_with_imm r11, fp, -28 } // 4-byte Folded Spill
+; CHECK-NEXT:    { s_lw_with_imm r10, r9, 2; sext32t64 d0, r11; s_sw_with_imm r11, fp, -28 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { sext32t64 d0, r11; nop; nop }
-; CHECK-NEXT:    { sext32t64 d1, r12; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r1, r9, 1; move32 r11, r12; s_sw_with_imm r4, fp, -27 } // 4-byte Folded Spill
+; CHECK-NEXT:    { s_lw_with_imm r1, r9, 1; sext32t64 d1, r12; s_sw_with_imm r4, fp, -27 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { sext32t64 d2, r10; nop; nop }
-; CHECK-NEXT:    { sext32t64 d3, r1; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r4, r9, 0; move32 r12, r1; d_sdw_with_imm d0, fp, -13 } // 8-byte Folded Spill
+; CHECK-NEXT:    { s_lw_with_imm r4, r9, 0; move32 r11, r12; sext32t64 d2, r10 }
+; CHECK-NEXT:    { sext32t64 d3, r1; move32 r12, r1; s_lw_with_imm r1, fp, -27 } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { sext32t64 d4, r4; nop; d_sdw_with_imm d0, fp, -13 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { s_lw_with_imm r1, fp, -27; nop; nop } // 4-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { sext32t64 d4, r4; nop; nop }
 ; CHECK-NEXT:    { nop; set_hwloop_f2 1, .LLhwloop_start0, .LLhwloop_end0, r1; nop }
-; CHECK-NEXT:    { s_lw_with_imm r1, fp, -28; nop; nop } // 4-byte Folded Reload
+; CHECK-NEXT:    { s_lw_with_imm r1, fp, -28; sext32t64 d5, r4; sext32t64 d6, r12 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { sext32t64 d5, r4; nop; nop }
-; CHECK-NEXT:    { sext32t64 d6, r12; nop; nop }
-; CHECK-NEXT:    { sext32t64 d7, r10; nop; nop }
-; CHECK-NEXT:    { sext32t64 d9, r11; nop; nop }
-; CHECK-NEXT:    { sext32t64 d8, r1; nop; nop }
+; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { sext32t64 d7, r10; sext32t64 d8, r1; sext32t64 d9, r11 }
 ; CHECK-NEXT:    { slli64 d5, d5, 32; slli64 d6, d6, 32; slli64 d7, d7, 32 }
 ; CHECK-NEXT:    { slli64 d8, d8, 32; slli64 d9, d9, 32; srli64 d5, d5, 32 }
 ; CHECK-NEXT:    { addi32 r4, r0, 32; srli64 d6, d6, 32 }
@@ -82,77 +75,48 @@ define dso_local void @bqriir32x32_df1_process(ptr noundef %st, ptr noundef writ
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { sext32t64 d11, r6; nop; nop }
-; CHECK-NEXT:    { sext32t64 d12, r6; nop; nop }
-; CHECK-NEXT:    { move32 r6, r5; s_lw_with_imm r5, r3, 0; nop }
-; CHECK-NEXT:    { sext32t64 d0, r7; nop; nop }
-; CHECK-NEXT:    { sext32t64 d13, r5; nop; nop }
-; CHECK-NEXT:    { sext32t64 d10, r5; nop; nop }
-; CHECK-NEXT:    { move32_dr_h r1, d4; slli64 d12, d12, 32; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { sext32t64 d14, r1; nop; nop }
+; CHECK-NEXT:    { sext32t64 d11, r6; sext32t64 d12, r6; move32 r6, r5 }
+; CHECK-NEXT:    { s_lw_with_imm r5, r3, 0; move32_dr_h r1, d4; slli64 d12, d12, 32 }
+; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { sext32t64 d13, r5; sext32t64 d14, r1; sext32t64 d10, r5 }
 ; CHECK-NEXT:    { slli64 d13, d13, 32; slli64 d14, d14, 32; move32_dr_h r1, d10 }
 ; CHECK-NEXT:    { srli64 d13, d13, 32; srli64 d14, d14, 32; srli64 d12, d12, 32 }
-; CHECK-NEXT:    { mul64_ulul d15, d13, d5; nop; nop }
-; CHECK-NEXT:    { nop; mul64_ulul d10, d13, d14; nop }
-; CHECK-NEXT:    { sext32t64 d13, r1; nop; nop }
-; CHECK-NEXT:    { nop; nop; move32_dr_h r1, d3 }
-; CHECK-NEXT:    { sext32t64 d14, r6; nop; nop }
-; CHECK-NEXT:    { slli64 d13, d13, 32; srli64 d0, d0, 32; nop }
-; CHECK-NEXT:    { srli64 d13, d13, 32; slli64 d14, d14, 32; nop }
-; CHECK-NEXT:    { mul64_ulul d13, d13, d5; srli64 d14, d14, 32; nop }
-; CHECK-NEXT:    { add64 d10, d10, d13; nop; nop }
-; CHECK-NEXT:    { sext32t64 d13, r6; nop; nop }
+; CHECK-NEXT:    { mul64_ulul d15, d13, d5; mul64_ulul d10, d13, d14; sext32t64 d13, r1 }
+; CHECK-NEXT:    { slli64 d13, d13, 32; move32_dr_h r1, d3; sext32t64 d14, r6 }
+; CHECK-NEXT:    { srli64 d13, d13, 32; slli64 d14, d14, 32; sext32t64 d0, r7 }
+; CHECK-NEXT:    { mul64_ulul d13, d13, d5; srli64 d14, d14, 32; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { add64 d10, d10, d13; sext32t64 d13, r6; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { sll64 d10, d10, r4; nop; nop }
-; CHECK-NEXT:    { add64 d10, d15, d10; nop; nop }
-; CHECK-NEXT:    { sext32t64 d15, r1; nop; nop }
-; CHECK-NEXT:    { nop; move32_dr_h r1, d13; nop }
+; CHECK-NEXT:    { add64 d10, d15, d10; sext32t64 d15, r1; move32_dr_h r1, d13 }
 ; CHECK-NEXT:    { slli64 d15, d15, 32; nop; nop }
 ; CHECK-NEXT:    { srli64 d15, d15, 32; nop; nop }
-; CHECK-NEXT:    { mul64_ulul d13, d14, d15; nop; nop }
-; CHECK-NEXT:    { sext32t64 d15, r1; nop; nop }
-; CHECK-NEXT:    { nop; mul64_ulul d14, d14, d6; nop }
-; CHECK-NEXT:    { nop; nop; move32_dr_h r1, d2 }
-; CHECK-NEXT:    { slli64 d15, d15, 32; nop; nop }
+; CHECK-NEXT:    { mul64_ulul d13, d14, d15; sext32t64 d15, r1; mul64_ulul d14, d14, d6 }
+; CHECK-NEXT:    { slli64 d15, d15, 32; move32_dr_h r1, d2; nop }
 ; CHECK-NEXT:    { srli64 d15, d15, 32; nop; nop }
 ; CHECK-NEXT:    { mul64_ulul d15, d15, d6; nop; nop }
-; CHECK-NEXT:    { add64 d13, d13, d15; nop; nop }
-; CHECK-NEXT:    { sext32t64 d15, r7; nop; nop }
-; CHECK-NEXT:    { nop; move32 r7, r8; nop }
+; CHECK-NEXT:    { add64 d13, d13, d15; sext32t64 d15, r7; move32 r7, r8 }
 ; CHECK-NEXT:    { sll64 d13, d13, r4; nop; nop }
-; CHECK-NEXT:    { add64 d13, d14, d13; nop; nop }
-; CHECK-NEXT:    { sext32t64 d14, r1; nop; nop }
-; CHECK-NEXT:    { nop; move32_dr_h r1, d11; nop }
-; CHECK-NEXT:    { nop; nop; mul64_ulul d11, d12, d7 }
-; CHECK-NEXT:    { slli64 d14, d14, 32; nop; nop }
+; CHECK-NEXT:    { add64 d13, d14, d13; sext32t64 d14, r1; move32_dr_h r1, d11 }
+; CHECK-NEXT:    { slli64 d14, d14, 32; mul64_ulul d11, d12, d7; nop }
 ; CHECK-NEXT:    { srli64 d14, d14, 32; nop; nop }
-; CHECK-NEXT:    { mul64_ulul d12, d12, d14; nop; nop }
-; CHECK-NEXT:    { sext32t64 d14, r1; nop; nop }
-; CHECK-NEXT:    { nop; move32_dr_h r1, d15; nop }
-; CHECK-NEXT:    { nop; nop; mul64_ulul d15, d8, d0 }
-; CHECK-NEXT:    { slli64 d14, d14, 32; nop; nop }
+; CHECK-NEXT:    { mul64_ulul d12, d12, d14; sext32t64 d14, r1; move32_dr_h r1, d15 }
+; CHECK-NEXT:    { slli64 d14, d14, 32; mul64_ulul d15, d8, d0; nop }
 ; CHECK-NEXT:    { srli64 d14, d14, 32; nop; nop }
 ; CHECK-NEXT:    { mul64_ulul d14, d14, d7; nop; nop }
 ; CHECK-NEXT:    { add64 d12, d12, d14; d_ldw_with_imm d14, fp, -13; nop } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { sll64 d12, d12, r4; nop; nop }
-; CHECK-NEXT:    { add64 d11, d11, d12; nop; nop }
-; CHECK-NEXT:    { sext32t64 d12, r1; nop; nop }
-; CHECK-NEXT:    { nop; move32_dr_h r1, d14; nop }
-; CHECK-NEXT:    { sext32t64 d14, r1; nop; nop }
-; CHECK-NEXT:    { slli64 d12, d12, 32; slli64 d14, d14, 32; add64 d11, d13, d11 }
-; CHECK-NEXT:    { srli64 d12, d12, 32; srli64 d14, d14, 32; nop }
-; CHECK-NEXT:    { mul64_ulul d12, d8, d12; mul64_ulul d0, d14, d0; nop }
-; CHECK-NEXT:    { add64 d0, d12, d0; nop; nop }
-; CHECK-NEXT:    { sext32t64 d12, r7; nop; nop }
-; CHECK-NEXT:    { nop; move32_dr_h r1, d12; nop }
-; CHECK-NEXT:    { sext32t64 d12, r1; nop; nop }
-; CHECK-NEXT:    { sll64 d0, d0, r4; move32_dr_h r1, d1; nop }
-; CHECK-NEXT:    { sext32t64 d14, r1; nop; nop }
-; CHECK-NEXT:    { slli64 d12, d12, 32; add64 d0, d15, d0; slli64 d14, d14, 32 }
-; CHECK-NEXT:    { sext32t64 d15, r7; nop; nop }
-; CHECK-NEXT:    { srli64 d12, d12, 32; srli64 d14, d14, 32; nop }
-; CHECK-NEXT:    { mul64_ulul d12, d9, d12; slli64 d15, d15, 32; nop }
-; CHECK-NEXT:    { srli64 d15, d15, 32; nop; nop }
+; CHECK-NEXT:    { add64 d11, d11, d12; sext32t64 d12, r1; move32_dr_h r1, d14 }
+; CHECK-NEXT:    { slli64 d12, d12, 32; sext32t64 d14, r1; add64 d11, d13, d11 }
+; CHECK-NEXT:    { srli64 d12, d12, 32; slli64 d14, d14, 32; nop }
+; CHECK-NEXT:    { mul64_ulul d12, d8, d12; srli64 d14, d14, 32; nop }
+; CHECK-NEXT:    { mul64_ulul d0, d14, d0; nop; nop }
+; CHECK-NEXT:    { add64 d0, d12, d0; sext32t64 d12, r7; nop }
+; CHECK-NEXT:    { move32_dr_h r1, d12; sll64 d0, d0, r4; nop }
+; CHECK-NEXT:    { sext32t64 d12, r1; move32_dr_h r1, d1; add64 d0, d15, d0 }
+; CHECK-NEXT:    { slli64 d12, d12, 32; sext32t64 d14, r1; sext32t64 d15, r7 }
+; CHECK-NEXT:    { srli64 d12, d12, 32; slli64 d14, d14, 32; slli64 d15, d15, 32 }
+; CHECK-NEXT:    { mul64_ulul d12, d9, d12; srli64 d14, d14, 32; srli64 d15, d15, 32 }
 ; CHECK-NEXT:    { mul64_ulul d14, d14, d15; nop; nop }
 ; CHECK-NEXT:    { add64 d12, d12, d14; mul64_ulul d14, d9, d15; nop }
 ; CHECK-NEXT:    { sll64 d12, d12, r4; nop; nop }

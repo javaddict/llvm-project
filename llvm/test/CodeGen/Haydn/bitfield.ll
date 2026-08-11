@@ -325,10 +325,9 @@ define i64 @insert_bits_into_i64(i64 %value, i32 %new_field) {
 ; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; addi32 r2, r0, -65536 }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; and64 d0, d0, d1 }
-; CHECK-NEXT:    { sext32t64 d1, r1; nop; nop }
-; CHECK-NEXT:    { slli64 d1, d1, 32; nop; s_sw_with_imm r2, sp, 0 }
-; CHECK-NEXT:    { addi32 r2, r0, 0; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 1 }
+; CHECK-NEXT:    { sext32t64 d1, r1; nop; s_sw_with_imm r2, sp, 0 }
+; CHECK-NEXT:    { addi32 r2, r0, 0; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { srli64 d1, d1, 32; nop; s_sw_with_imm r2, sp, 1 }
 ; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; nop; nop }
 ; CHECK-NEXT:    { addi32 r1, r0, 16; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { sll64 d1, d1, r1; nop; nop }
