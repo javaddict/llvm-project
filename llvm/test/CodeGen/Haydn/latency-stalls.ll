@@ -74,11 +74,10 @@ define i32 @postinc_walk(ptr %p, i32 %n) nounwind {
 ; O0-NEXT:    { beqz r0, .LBB1_1; nop; nop }
 ; O0-NEXT:  .LBB1_1: // %loop
 ; O0-NEXT:    // =>This Inner Loop Header: Depth=1
-; O0-NEXT:    { s_lw_with_imm r2, sp, 7; nop; s_lw_with_imm r3, sp, 6 } // 8-byte Folded Reload
+; O0-NEXT:    { s_lw_with_imm r2, sp, 7; nop; s_lw_with_imm r4, sp, 5 } // 8-byte Folded Reload
 ; O0-NEXT:    // 4-byte Reload4-byte Reload
-; O0-NEXT:    { s_lw_with_imm r4, sp, 5; nop; s_lw_with_imm r1, sp, 4 } // 8-byte Folded Reload
+; O0-NEXT:    { s_lw_with_imm r3, sp, 6; nop; s_lw_with_imm r1, sp, 4 } // 8-byte Folded Reload
 ; O0-NEXT:    // 4-byte Reload4-byte Reload
-; O0-NEXT:    { nop; nop; nop }
 ; O0-NEXT:    { s_lbu_with_imm r5, r4, 0; nop; nop }
 ; O0-NEXT:    { nop; nop; nop }
 ; O0-NEXT:    { add32 r3, r3, r5; nop; nop }

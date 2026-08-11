@@ -137,10 +137,8 @@ body:             |
     ; CHECK-LABEL: name: test_alu_ls_compatible
     ; CHECK: liveins: $r0, $r1, $r2, $r3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 1, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit killed $r1, implicit killed $r3, implicit killed $r2 {
-    ; CHECK-NEXT:   $r4 = ADD32_P32_ALU0 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT:   S_SW_WITH_IMM_P30_LOADSTORE0 killed $r3, killed $r2, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r4 = ADD32_P32_ALU0 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_P30_LOADSTORE0 killed $r3, killed $r2, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
     S_SW_WITH_IMM $r3, $r2, 0, implicit-def dead $sfr

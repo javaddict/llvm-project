@@ -31,8 +31,8 @@ define void @two_allocas() nounwind {
 ; CHECK-NEXT:    { addi32 r1, r0, 1; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { addi32 r3, sp, 16; addi32 r4, sp, 12 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; s_sw_with_imm r2, r4, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r2, r4, 0; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r4, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; s_lw_with_imm r2, r4, 0 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, use_pair; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -62,11 +62,12 @@ define void @three_allocas() nounwind {
 ; CHECK-NEXT:    { addi32 r2, r0, 20; addi32 r5, sp, 12 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r4, 0 }
 ; CHECK-NEXT:    { addi32 r3, r0, 30; addi32 r6, sp, 8 }
-; CHECK-NEXT:    { s_lw_with_imm r1, r4, 0; nop; s_sw_with_imm r2, r5, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r2, r5, 0; nop; s_sw_with_imm r3, r6, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r1, r4, 0; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r5, 0 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, r6, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r2, r5, 0; nop; s_lw_with_imm r3, r6, 0 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r3, r6, 0; add32 r1, r1, r2; nop }
-; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r1, r3; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, use_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -147,8 +148,8 @@ define void @nested_alloca() nounwind {
 ; CHECK-NEXT:    { addi32 r1, r0, 100; addi32 r3, sp, 16 }
 ; CHECK-NEXT:    { addi32 r2, r0, 200; addi32 r4, sp, 12 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; s_sw_with_imm r2, r4, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r2, r4, 0; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r4, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; s_lw_with_imm r2, r4, 0 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, use_i32; nop }

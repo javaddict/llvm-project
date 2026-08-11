@@ -80,7 +80,8 @@ define void @test_3slot_bundle(i32* %ptr, i32 %a, i32 %b, i64 %c, i64 %d,
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { s_lw_with_imm r1, r1, 0; add32 r2, r2, r3; add64 d0, d0, d1 }
+; CHECK-NEXT:    { add32 r2, r2, r3; add64 d0, d0, d1; nop }
+; CHECK-NEXT:    { s_lw_with_imm r1, r1, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r4, 0 }
@@ -151,6 +152,7 @@ define i32 @test_memory_dependency(i32* %ptr, i32 %val) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 0 }
 ; CHECK-NEXT:    { s_lw_with_imm r1, r1, 0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }

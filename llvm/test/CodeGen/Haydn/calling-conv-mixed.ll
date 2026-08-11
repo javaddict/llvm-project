@@ -119,9 +119,9 @@ define void @mixed_7gpr_4dr64(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i3
 ; CHECK-NEXT:    .cfi_offset d9, 32
 ; CHECK-NEXT:    .cfi_offset d10, 24
 ; CHECK-NEXT:    .cfi_offset d11, 16
-; CHECK-NEXT:    { move32 r10, r2; move32 r11, r3; s_sw_with_imm r7, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { move32 r10, r2; move32 r11, r3; or64 d11, d0, d0 }
+; CHECK-NEXT:    { move32 fp, r4; move32 r8, r5; s_sw_with_imm r7, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { move32 fp, r4; move32 r8, r5; or64 d11, d0, d0 }
 ; CHECK-NEXT:    { move32 r9, r6; or64 d10, d1, d1; or64 d9, d2, d2 }
 ; CHECK-NEXT:    { or64 d8, d3, d3; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, sink_i32; nop }

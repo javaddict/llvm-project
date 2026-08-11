@@ -155,6 +155,7 @@ define void @test_struct_init(ptr %p, i32 %a, i32 %b) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_post_imm r2, r1, 1 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, r1, 0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }

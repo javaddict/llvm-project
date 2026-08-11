@@ -237,8 +237,8 @@ define i32 @caller_10_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %
 ; CHECK-NEXT:    { addi32 r12, sp, 64; addi32 r8, sp, 48 }
 ; CHECK-NEXT:    { s_lw_with_imm r8, r8, 0; nop; s_lw_with_imm r12, r12, 0 }
 ; CHECK-NEXT:    { addi32 r9, sp, 56; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { s_lw_with_imm r9, r9, 0; move32 r10, sp; s_sw_with_imm r8, sp, 0 }
-; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, r9, 0; move32 r10, sp; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r9, sp, 2 }
 ; CHECK-NEXT:    { nop; nop; s_sw_pre_imm r12, r10, 4 }
 ; CHECK-NEXT:    { nop; jal lr, add10; nop }

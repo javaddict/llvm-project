@@ -22,14 +22,15 @@ define i64 @varargs_five_i64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, ...) nounwi
 ; CHECK-NEXT:    { subi32 sp, sp, 48; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, sp, 4 }
 ; CHECK-NEXT:    { addi32 r8, sp, 20; addi32 r12, sp, 48 }
-; CHECK-NEXT:    { d_ldw_with_imm d4, r12, 0; nop; s_sw_with_imm r1, r8, 0 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r8, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r8, 1 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, r8, 2 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r8, 3 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r8, 4 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r6, r8, 5 }
-; CHECK-NEXT:    { nop; nop; s_sw_pre_imm r7, r8, 6 }
 ; CHECK-NEXT:    { addi32 r1, sp, 12; addi32 r2, sp, 56 }
+; CHECK-NEXT:    { d_ldw_with_imm d4, r12, 0; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_pre_imm r7, r8, 6 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 0 }
 ; CHECK-NEXT:    { addi32 r2, sp, 48; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 1 }
