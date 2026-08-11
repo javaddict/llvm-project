@@ -116,13 +116,20 @@ static void splitHiLo(uint64_t TargetVA, uint32_t &Hi12, uint32_t &Lo20) {
 /// points at the entry. For a PC-relative patch the two cancel: S + A - P has
 /// the base in both A and P. A veneer does not cancel anything — it
 /// materializes an ABSOLUTE address — so the base has to come back out, or
-/// every far call lands that many bytes past its target, mid-bundle. The base
-/// is recovered from the image exactly as § 5.8 recovers a placement: it is
-/// the relocation's offset within its own bundle.
+/// every far call lands that many bytes past its target, mid-bundle.
+///
+/// It comes back out in writeTo(), NOT in the addend, and the difference
+/// matters. `Thunk::addend` is what `ThunkCreator::normalizeExistingThunk()`
+/// writes back into the relocation when a veneer goes out of range and the
+/// call has to be re-thunked, so it has to stay equal to the addend the
+/// relocation arrived with. Subtracting the base here — which is what this
+/// class used to do — makes that round trip lossy, and the second veneer
+/// subtracts a base that is already gone. Hexagon keeps `relOffset` as a
+/// member for the same reason.
 class HaydnLongThunk : public Thunk {
 public:
   HaydnLongThunk(Ctx &ctx, Relocation &rel, Symbol &dest)
-      : Thunk(ctx, dest, rel.addend - int64_t(rel.offset % HaydnBundleBytes)) {
+      : Thunk(ctx, dest, rel.addend), RelOffset(rel.offset) {
     // Align(4), not the parcel size. 12 is not a power of two and so cannot be
     // requested at all; every bundle boundary sits at 12k from the section
     // start and is therefore already 4-aligned, so the contract is satisfied
@@ -131,6 +138,7 @@ public:
     // tests to 134.
     alignment = 4;
   }
+  uint64_t RelOffset;
   uint32_t size() override { return 3 * HaydnBundleBytes; }
   void writeTo(uint8_t *buf) override;
   void addSymbols(ThunkSection &isec) override;
@@ -138,7 +146,8 @@ public:
 
 void HaydnLongThunk::writeTo(uint8_t *Buf) {
   uint32_t Hi12, Lo20;
-  splitHiLo(destination.getVA(ctx, addend), Hi12, Lo20);
+  int64_t EntryBase = int64_t(RelOffset % HaydnBundleBytes);
+  splitHiLo(destination.getVA(ctx, addend - EntryBase), Hi12, Lo20);
   writeThunkInsn(Buf + 0 * HaydnBundleBytes, InsnLUI, Hi12);
   writeThunkInsn(Buf + 1 * HaydnBundleBytes, InsnADDI32, Lo20);
   writeThunkInsn(Buf + 2 * HaydnBundleBytes, InsnJALR, 0);
@@ -150,6 +159,10 @@ void HaydnLongThunk::addSymbols(ThunkSection &Isec) {
 }
 
 } // namespace
+
+int64_t lld::elf::haydnBundleOffset(const Relocation &Rel) {
+  return int64_t(Rel.offset % HaydnBundleBytes);
+}
 
 std::unique_ptr<Thunk> lld::elf::addThunkHaydn(Ctx &ctx,
                                                const InputSection &Isec,
