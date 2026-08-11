@@ -65,9 +65,9 @@ void probe_pldwwua_ptr(const void *base) {
 }
 
 // IR-LABEL: @probe_d_ltwua_post_ptr
-// IR: call i64 @llvm.haydn.d.ltwua.post(ptr {{%.*}}, i32 0, i32 {{%.*}}, i32 0)
-haydn_x2int32 probe_d_ltwua_post_ptr(const void *base, int stride) {
-  return haydn_d_ltwua_post(base, /*ar=*/0, stride, /*dir=*/0);
+// IR: call i64 @llvm.haydn.d.ltwua.post(ptr {{%.*}}, i32 0)
+haydn_x2int32 probe_d_ltwua_post_ptr(const void *base) {
+  return haydn_d_ltwua_post(base, /*ar=*/0);
 }
 
 // Frexp out-arg shape at the builtin level: void ** for new_ptr.

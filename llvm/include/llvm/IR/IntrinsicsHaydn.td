@@ -1282,17 +1282,19 @@ def int_haydn_pldwwua : Haydn_Intrinsic<"haydn_pldwwua",
     [], [llvm_i32_ty, llvm_ptr_ty],
     [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 
-// i64 d_lqhwua_post(i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
-// ar_sel uimm2 + dir_sel uimm1 are ImmArg; stride stays variable GPR.
+// i64 d_lqhwua_post(i32 ptr, i32 ar_sel)
+// ar_sel uimm2 is ImmArg. Format E dropped the stride and the direction
+// select: the post-increment is a fixed +8 forwards, so the operands the
+// caller used to supply are gone rather than defaulted.
 def int_haydn_d_lqhwua_post : Haydn_Intrinsic<"haydn_d_lqhwua_post",
-    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>, IntrReadMem, IntrHasSideEffects,
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
-// i64 d_ltwua_post(i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
+// i64 d_ltwua_post(i32 ptr, i32 ar_sel)
 def int_haydn_d_ltwua_post : Haydn_Intrinsic<"haydn_d_ltwua_post",
-    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>, IntrReadMem, IntrHasSideEffects,
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
 // void flar(i32 ar_sel) — AR-only state clear; ar_sel ImmArg uimm2.
@@ -1300,22 +1302,22 @@ def int_haydn_flar : Haydn_Intrinsic<"haydn_flar",
     [], [llvm_i32_ty],
     [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 
-// void wbarwua(i32 ar_sel, i32 ptr, i32 dir_sel)
+// void wbarwua(i32 ar_sel, i32 ptr)
 def int_haydn_wbarwua : Haydn_Intrinsic<"haydn_wbarwua",
-    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects,
+    [], [llvm_i32_ty, llvm_ptr_ty],
+    [ImmArg<ArgIndex<0>>, IntrWriteMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
-// void d_sqhwua_post(i64 data, i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
+// void d_sqhwua_post(i64 data, i32 ptr, i32 ar_sel)
 def int_haydn_d_sqhwua_post : Haydn_Intrinsic<"haydn_d_sqhwua_post",
-    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<4>>, IntrWriteMem, IntrHasSideEffects,
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
-// void d_stwua_post(i64 data, i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
+// void d_stwua_post(i64 data, i32 ptr, i32 ar_sel)
 def int_haydn_d_stwua_post : Haydn_Intrinsic<"haydn_d_stwua_post",
-    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<4>>, IntrWriteMem, IntrHasSideEffects,
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//

@@ -6146,7 +6146,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // C next-ptr is IR GEP (haydn_dsp.h); HW base writeback stays Dead for MC
     // shape. BundleSim also writes AR[ar_sel] — implicit Def so PostRA cannot
     // pack two same-stream UA/FLAR ops (B6 AR WRITE_CONFLICT).
-    // ar_sel/dir ImmArg bare Imm after legalize (C0.4).
+    // ar_sel ImmArg bare Imm after legalize (C0.4).
     unsigned Opc = (IntrID == haydn_d_lqhwua_post) ? D_LQHWUA_POST
                                                    : D_LTWUA_POST;
     Register PtrReg = I.getOperand(2).getReg();
