@@ -25,7 +25,7 @@ define i64 @test_dr64_copy_regression(i64 %a0, i64 %a1, i64 %a2, i64 %a3,
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 32; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 28 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 7 }
 ; CHECK-NEXT:    { addi32 r1, sp, 8; nop }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d9, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d8, r1, 1 }
@@ -48,9 +48,9 @@ define i64 @test_dr64_copy_regression(i64 %a0, i64 %a1, i64 %a2, i64 %a3,
 ; CHECK-NEXT:    { add64 d0, d0, d9; xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d8; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 8; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 28; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 1; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 7; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 32; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
                                        i64 %a4, i64 %a5, i64 %a6, i64 %a7) {

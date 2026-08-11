@@ -30,12 +30,12 @@ define void @caller() {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, callee; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   call void @callee()

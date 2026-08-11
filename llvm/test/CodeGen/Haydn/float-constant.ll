@@ -165,14 +165,14 @@ define float @const_plus_arg(float %a) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { lui r2, 1026; nop; nop }
 ; CHECK-NEXT:    { addi32 r2, r2, 0; nop }
 ; CHECK-NEXT:    { nop; jal lr, __addsf3; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = fadd float %a, 2.500000e+00

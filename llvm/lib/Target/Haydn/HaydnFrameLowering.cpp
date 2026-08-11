@@ -170,9 +170,9 @@ static void emitMaterializeOffset(MachineBasicBlock &MBB,
 }
 
 // Emit a callee-saved register store at an arbitrary byte offset from
-// BaseReg. When the offset fits the s0 LS imm4 scaled range
-// ([0,60]/4-aligned for ST32, [0,120]/8-aligned for ST64) the plain
-// immediate-offset ST32/ST64 is emitted (migrates to ST32_M0S0LS via the
+// BaseReg. When the offset is width-aligned and fits format E's scaled simm6
+// ([-128,124]/4-aligned for S_SW, [-256,248]/8-aligned for D_SDW) the plain
+// immediate-offset store is emitted (migrates to ST32_M0S0LS via the
 // finalizer). When the offset is out of range (negative or large CSR slots)
 // the offset is materialized into a PEI scratch (\c getPEIScratchReg: ABI
 // call-clobbered / reserved R12 — same contract as EFI scavenger) and the
@@ -184,15 +184,16 @@ static void emitCSRStore(MachineBasicBlock &MBB,
                          const HaydnInstrInfo *TII, unsigned StoreOpc,
                          Register SrcReg, Register BaseReg, int Offset,
                          MachineInstr::MIFlag FrameFlag) {
+  // Mirror of emitCSRLoad: golden scaled simm6, EA = base + (simm6 << Shift).
   unsigned Shift = (StoreOpc == Haydn::D_SDW_WITH_IMM) ? 3 : 2;
-  int64_t MaxOff = static_cast<int64_t>(15) << Shift;
-  bool InImm4Range = (Offset >= 0 && Offset <= MaxOff &&
-                      (Offset & ((1 << Shift) - 1)) == 0);
-  if (InImm4Range) {
+  unsigned Width = 1u << Shift;
+  bool Aligned = (Offset & (static_cast<int>(Width) - 1)) == 0;
+  bool InSimm6Range = Aligned && isInt<6>(Offset >> Shift);
+  if (InSimm6Range) {
     BuildMI(MBB, MBBI, DL, TII->get(StoreOpc))
         .addReg(SrcReg)
         .addReg(BaseReg)
-        .addImm(Offset)
+        .addImm(haydnScaledLSImm(Offset, Width))
         .setMIFlag(FrameFlag);
     return;
   }
@@ -247,7 +248,7 @@ static void emitCSRLoad(MachineBasicBlock &MBB,
   if (InSimm6Range) {
     BuildMI(MBB, MBBI, DL, TII->get(LoadOpc), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset)
+        .addImm(haydnScaledLSImm(Offset, 1u << Shift))
         .setMIFlag(FrameFlag);
     return;
   }

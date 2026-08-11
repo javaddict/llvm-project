@@ -76,8 +76,8 @@ define i32 @save_across_call(i32 %a) {
 ; CHECK-NEXT:    { nop; jal lr, use_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r1, r8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %v = call i32 @use_i32(i32 %a)
@@ -130,12 +130,12 @@ define i32 @save_many_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r2, r1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 12; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 20; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 28; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 5; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 6; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 7; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 32; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %v1 = call i32 @use_i32(i32 %a)
@@ -161,7 +161,7 @@ define i64 @save_dr64(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 40; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 36 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 9 }
 ; CHECK-NEXT:    { addi32 r1, sp, 8; nop }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d10, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d9, r1, 1 }
@@ -180,10 +180,10 @@ define i64 @save_dr64(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add64 d1, d10, d8; nop }
 ; CHECK-NEXT:    { add64 d0, d1, d0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 8; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 16; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 36; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 1; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 2; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 9; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 40; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %v1 = call i64 @use_i64(i64 %a)
@@ -203,8 +203,8 @@ define i64 @save_mixed_gpr_dr64(i32 %a, i64 %b) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 20 }
-; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d8, sp, 8 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 5 }
+; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d8, sp, 1 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset lr, 20
 ; CHECK-NEXT:    .cfi_offset d8, 8
@@ -212,8 +212,8 @@ define i64 @save_mixed_gpr_dr64(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; jal lr, use_i64; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add64 d0, d0, d8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 20; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 1; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 5; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %ext = sext i32 %a to i64
@@ -243,9 +243,9 @@ define i32 @clobber_test(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; jal lr, clobber_all; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r8, r9; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 20; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 5; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   call void @clobber_all()
@@ -273,8 +273,8 @@ define i32 @nested_calls(i32 %a) {
 ; CHECK-NEXT:    { nop; jal lr, use_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r8, r1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %v1 = call i32 @use_i32(i32 %a)
@@ -341,12 +341,12 @@ define i32 @deep_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r2, r1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 20; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 28; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 32; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 36; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 5; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 6; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 7; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 8; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 9; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 40; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
                           i32 %a4, i32 %a5, i32 %a6) {
@@ -374,7 +374,7 @@ define i64 @dr64_deep_pressure(i64 %a0, i64 %a1, i64 %a2) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 40; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 36 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 9 }
 ; CHECK-NEXT:    { addi32 r1, sp, 8; nop }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d10, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d9, r1, 1 }
@@ -393,10 +393,10 @@ define i64 @dr64_deep_pressure(i64 %a0, i64 %a1, i64 %a2) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add64 d1, d10, d8; nop }
 ; CHECK-NEXT:    { add64 d0, d1, d0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 8; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 16; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 36; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 1; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 2; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 9; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 40; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %v0 = call i64 @use_i64(i64 %a0)

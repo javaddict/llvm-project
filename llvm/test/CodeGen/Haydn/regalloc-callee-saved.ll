@@ -61,8 +61,8 @@ define i32 @test_minimal_callee_save(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; jal lr, use_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r8, r1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
@@ -111,12 +111,12 @@ define i32 @test_all_gpr_callee_saved(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK-NEXT:    { add32 r2, r2, r10; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r2, r1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 12; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 20; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 28; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 5; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 6; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 7; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 32; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
@@ -144,9 +144,7 @@ define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind 
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 72; nop }
-; CHECK-NEXT:    { addi32 r0, r0, 68; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg lr, sp, r0 }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 17 }
 ; CHECK-NEXT:    { addi32 r1, sp, 8; nop }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d14, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d13, r1, 1 }
@@ -179,14 +177,14 @@ define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind 
 ; CHECK-NEXT:    { add64 d1, d1, d14; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d1, d0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d14, sp, 8; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d13, sp, 16; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d12, sp, 24; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d11, sp, 32; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 40; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 48; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 56; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 68; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d14, sp, 1; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d13, sp, 2; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d12, sp, 3; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d11, sp, 4; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 5; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 6; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 7; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 17; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 72; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
@@ -253,13 +251,13 @@ define i64 @test_mixed_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    { srli64 d1, d1, 32; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 8; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 28; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 32; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 36; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 40; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 44; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 1; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 7; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 8; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 9; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 10; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 11; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 48; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
                                      i64 %e, i64 %f) nounwind {

@@ -134,11 +134,11 @@ define void @biquad_process_block(ptr nocapture %input, ptr nocapture %output,
 ; ASM-NEXT:    { bnez r1, .LBB2_1; nop; nop }
 ; ASM-NEXT:  // %bb.2: // %exit
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; ASM-NEXT:    { s_lw_with_imm fp, sp, 20; nop; nop }
-; ASM-NEXT:    { s_lw_with_imm r11, sp, 24; nop; nop }
-; ASM-NEXT:    { s_lw_with_imm r10, sp, 28; nop; nop }
-; ASM-NEXT:    { s_lw_with_imm r9, sp, 32; nop; nop }
-; ASM-NEXT:    { s_lw_with_imm r8, sp, 36; nop; nop }
+; ASM-NEXT:    { s_lw_with_imm fp, sp, 5; nop; nop }
+; ASM-NEXT:    { s_lw_with_imm r11, sp, 6; nop; nop }
+; ASM-NEXT:    { s_lw_with_imm r10, sp, 7; nop; nop }
+; ASM-NEXT:    { s_lw_with_imm r9, sp, 8; nop; nop }
+; ASM-NEXT:    { s_lw_with_imm r8, sp, 9; nop; nop }
 ; ASM-NEXT:    { addi32 sp, sp, 40; nop }
 ; ASM-NEXT:    { nop; jalr r0, lr, 0; nop }
                                   i32 %N, i32 %b0, i32 %b1, i32 %b2,

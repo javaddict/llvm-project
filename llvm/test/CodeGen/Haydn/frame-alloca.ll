@@ -51,7 +51,7 @@ define i32 @vla_basic(i32 %n) {
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm fp, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm fp, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { addi32 fp, sp, 16; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
@@ -64,7 +64,7 @@ define i32 @vla_basic(i32 %n) {
 ; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, fp, -16; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
@@ -103,9 +103,9 @@ define ptr @dynamic_alloca_with_call(i32 %size) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; move32 r1, r8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, fp, -24; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 20; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 5; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %p = alloca i32, i32 %size
@@ -189,7 +189,7 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm fp, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm fp, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { addi32 fp, sp, 16; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
@@ -220,7 +220,7 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    { s_lw_pre_reg r1, r2, r1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, fp, -16; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:

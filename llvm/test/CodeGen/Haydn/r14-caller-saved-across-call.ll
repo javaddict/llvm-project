@@ -35,8 +35,8 @@ define i32 @r14_spill_across_call(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; jal lr, extern_leaf; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r1, r8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %call = call i32 @extern_leaf(i32 %x)
@@ -69,8 +69,8 @@ define i32 @r14_recursive_survives_call(i32 %n) nounwind {
 ; CHECK-NEXT:    { add32 r1, r8, r1; xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:  .LBB1_2: // %base
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
