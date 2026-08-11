@@ -178,12 +178,16 @@ public:
         isHintSlotLegal(Opcode, HintSlot) &&
         FormatInterface->isFormatAvailable(OccupiedSlots |
                                            HintSI->getSlotSet())) {
-      // The hint names a slot, and the unit follows from whichever member
-      // ends up there. For a committed member that is the member's own unit;
-      // for a logical the member is picked later, so nothing is claimed here
-      // and the axis stays permissive. Under Bundle128 both are 0.
-      const Haydn::UnitBits HintUnits = unitBitsForMember(MII, Opcode);
-      if (!(OccupiedUnits & HintUnits)) {
+      // The hint names a slot; the unit still has to be decided and CLAIMED,
+      // or the axis never accumulates and every check downstream sees an
+      // empty bundle. That is what § 5.12 was: this read the unit with
+      // unitBitsForMember, which answers 0 for a LOGICAL because it reads a
+      // member-name suffix that a logical does not have — so the hint was
+      // taken without claiming anything, `{ beq; bnez; beqz }` assembled with
+      // three control transfers on ALU0, and the comment here said the axis
+      // "stays permissive" as though that were a decision.
+      Haydn::UnitBits HintUnits = 0;
+      if (unitsForHintSlot(Opcode, HintSlot, HintUnits)) {
         Chosen = HintSlot;
         ChosenUnits = HintUnits;
       }
@@ -305,6 +309,44 @@ private:
   // True iff \p HintSlot is a legal field for \p Opcode under placement
   // alternatives (alts-only; no getLegalSlots fallback).
   // Committed format-members accept only their fixed getSlotKind.
+  // The unit a placement at \p HintSlot would claim, or false when no
+  // placement there has a free one.
+  //
+  // For a committed member the unit is the member's own. For a LOGICAL the
+  // member is chosen later, so the unit has to come from the alternatives AT
+  // THIS SLOT — several members can serve one slot and differ only in unit,
+  // which is why the slot alone cannot answer. NOP claims nothing and is
+  // never blocked (§ 5.12).
+  //
+  // Note the MII argument to enumeratePlacementAlternatives: without it the
+  // rows come back with Units == 0 and this would answer "free" for
+  // everything, which is the same silence it exists to end.
+  bool unitsForHintSlot(unsigned Opcode, MCSlotKind HintSlot,
+                        Haydn::UnitBits &Out) const {
+    Out = 0;
+    if (!opcodeClaimsUnit(MII, Opcode))
+      return true;
+    MCSlotKind Fixed = FormatInterface->getSlotKind(Opcode);
+    if (Fixed != MCSlotKind()) {
+      const Haydn::UnitBits U = unitBitsForMember(MII, Opcode);
+      if (OccupiedUnits & U)
+        return false;
+      Out = U;
+      return true;
+    }
+    const SlotBits HintBit = SlotBits(1) << static_cast<unsigned>(HintSlot);
+    HaydnMCFormats SolverFmts;
+    SmallVector<PlacementAlternative, 4> Alts;
+    if (!enumeratePlacementAlternatives(SolverFmts, Opcode, Alts, MII))
+      return false;
+    for (const PlacementAlternative &A : Alts)
+      if (A.FieldSlots == HintBit && !(OccupiedUnits & A.Units)) {
+        Out = A.Units;
+        return true;
+      }
+    return false;
+  }
+
   bool isHintSlotLegal(unsigned Opcode, MCSlotKind HintSlot) const {
     MCSlotKind Fixed = FormatInterface->getSlotKind(Opcode);
     if (Fixed != MCSlotKind())
@@ -360,8 +402,10 @@ private:
         return std::nullopt;
       // A committed member has no choice of unit either — it is whatever the
       // member names — so a taken unit rejects it outright rather than
-      // sending it to another alternative.
-      const Haydn::UnitBits FixedUnits = unitBitsForMember(MII, Opcode);
+      // sending it to another alternative. NOP is exempt: it occupies no unit
+      // (§ 5.12), so it neither conflicts nor claims.
+      const Haydn::UnitBits FixedUnits =
+          opcodeClaimsUnit(MII, Opcode) ? unitBitsForMember(MII, Opcode) : 0;
       if (OccupiedUnits & FixedUnits)
         return std::nullopt;
       if (PickedUnits)
@@ -382,15 +426,20 @@ private:
         haydn::bundle::makeProductCycleStateFromOccupied(Occ);
     // Seed the probe with the units already claimed, or it would re-offer an
     // alternative on a unit this bundle has taken. Slots come in via \p Occ;
-    // units are the second axis and have to travel the same way.
-    Probe.OccupiedUnits = OccupiedUnits;
+    // units are the second axis and have to travel the same way. A NOP is
+    // seeded with nothing: it occupies no unit, so no unit can exclude it
+    // and it must not be pushed onto a different alternative than it would
+    // have taken (§ 5.12).
+    Probe.OccupiedUnits = opcodeClaimsUnit(MII, Opcode) ? OccupiedUnits : 0;
     if (Probe.FeasibleFormatMask == 0)
       return std::nullopt;
     if (!haydn::bundle::tryAddProduct(Probe, SolverFmts, Opcode, MII))
       return std::nullopt;
     assert(!Probe.Members.empty());
     if (PickedUnits)
-      *PickedUnits = Probe.Members.back().Units;
+      *PickedUnits = opcodeClaimsUnit(MII, Opcode)
+                         ? Probe.Members.back().Units
+                         : Haydn::UnitBits(0);
     return haydnSlotMaskToKind(Probe.Members.back().FieldSlots);
   }
 
