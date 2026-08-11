@@ -22,8 +22,8 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `81a7b7a1c641` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
-| `simulator` | `master` | `55bc61b` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
+| `llvm-project` | `haydn-formate-switch-mc` | `eaea29043bb9` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `simulator` | `master` | `e87e487` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -2344,6 +2344,85 @@ against format E, and its previous 220/221 was against a Bundle128 toolchain.
 The golden database pin was verified intact before and after: all eight inputs
 match `GOLDEN_INPUTS.sha256`.
 
+### 5.16 The BAD_PC was never the executor — four compiler defects were
+
+§ 5.15 stopped at `stop=BAD_PC after 73 bundles` and repeated the plan's own
+attribution: the un-ported executor. **That was wrong, and the wrongness has a
+shape worth keeping.** BundleSim reports a wrong return address as BAD_PC, so a
+compiler that corrupts `lr` and a simulator that cannot execute look identical
+from the outside. The suite went 41/221 → **220/221** without touching the
+executor. The one remaining failure is CB-130, which is what failed before the
+switch too.
+
+**Diagnose the BAD_PC before believing what it is attributed to.** All four
+defects below were reachable only by running a program; every one of them was
+invisible to lit, and two were invisible because the test that covered them
+checked a shape instead of a number.
+
+#### 1. PEI put byte offsets in a scaled field — `a62c08e148e4`
+
+`emitCSRStore` / `emitCSRLoad` handed the raw byte offset to a
+`simm6:$scaled_imm`, whose field holds ELEMENTS. `emitCSRLoad` is the one that
+shows how: its range test had already been migrated to `isInt<6>(Offset >>
+Shift)` and the value below it had not. On a 40-byte frame, 12..28 encoded as
+elements (four times too far) and 32/36 truncated to −32/−28. `lr` came back
+garbage and the program died at its first return — 73 bundles into `return 7`.
+
+`haydnScaledLSImm()` existed the whole time and its comment predicted exactly
+this. A sweep of every `BuildMI` of a scaled LS opcode says these two were the
+last unconverted sites.
+
+#### 2. lld dropped the entry base at a thunk — `954e14c86add`
+
+A branch resolves from the BUNDLE; the relocation points at the ENTRY. The
+emitter puts the entry's byte base in the addend so `S + A − P` cancels it.
+lld clears the addend on thunk redirection (`rel.addend = -getPCBias(...)`),
+and `getPCBias` returned 0 for Haydn, so far calls landed `base` bytes short:
+0 for entry 2, **4 for entries 0 and 1**. BundleSim refuses such an image
+outright, which is the only reason it surfaced.
+
+Hexagon already uses `getPCBias` for the identical problem — packets, not
+parcels — so the fix is the seam that exists rather than a new one.
+`thunk-addend.s` should have caught this and did not: `lui{{.*}}r0,` matches
+any immediate, and the file never compares an address to anything.
+
+#### 3. Every DWARF line address rounded down to 16 — `6de296c0ac37`
+
+`MinInstAlignment = 16` reaches exactly one place: the line program's
+`minimum_instruction_length`, the unit MCDwarf DIVIDES address advances by.
+A `.loc` three bundles in reported 0x20 for an instruction at 0x24. It is 1
+now, not 12 — functions align to 4, so not every advance is a whole parcel and
+12 would bring the truncation back for exactly those cases.
+
+#### 4. 48 real instructions were still `isPseudo` — `eaea29043bb9`
+
+`let isPseudo = 1 in {` at `HaydnInstrInfoAuto.td:2925` covers everything after
+it that does not opt out. Format E generates members for 48 of those logicals,
+so they are real instructions and the flag is the last thing saying otherwise.
+
+The consequence is worse than a missed optimization, and **intermittent**,
+which is why it survived. The packer skips pseudos, so each issued alone. The
+AsmPrinter's BUNDLE-child loop has `else if (I->isPseudo()) continue;` and
+**drops** it — but only for an instruction that ended up inside a bundle. A
+standalone one is lowered normally. The same opcode was therefore emitted
+correctly in one function and deleted silently in the next.
+
+`$d0 = SEXT32T64 $r7` vanished, leaving `{ nop }`, and the `D_SDW` below it
+stored whatever `d0` held before. Nothing warned — not the verifier, not the
+bundle checker, not `-verify-machineinstrs`.
+
+Keep the audit; it is a one-line invariant. Intersect the `MCID::Pseudo` bit in
+`HaydnGenInstrInfo.inc` with the logicals having `_P<form><pos>_<UNIT>` members
+in `HaydnFormatEEncoding.td`. **48 before, 0 after, and it must stay 0.**
+
+#### What actually found it
+
+Nothing in the compiler. yarpgen seed 2 returned a wrong checksum at −O0 and
+only at −O0; bisecting five test functions to one, then its 38 globals to
+five, gave five `signed char`s whose widening was wrong, and the minimal case
+was three adjacent one-byte globals all reading back the same byte. § 5.15's
+lesson generalises: **run a program.**
+
 ### 5.5 BundleSim side
 
 Must land in the **same commit** as § 5.2, because it is what keeps the two
@@ -2361,8 +2440,16 @@ trees agreeing. See `simulator/TODO.md` for the full reasoning.
   `PLDWWUA` → `PLDWWUA_POST` rename alone would drop it on the floor.
 * Regenerate `isa/dispatch/semantic_family_map.inc`, re-pin
   `isa/SEMANTIC_SNAPSHOT.sha256`.
-* `generate_catalog.py` cannot run today, so do **not** unfreeze the catalog
-  early: it would desync BundleSim from the compiler that exists.
+* `generate_catalog.py` cannot run today. The freeze that went with that is
+  **over**: § 5.2 has landed, the Bundle128 format files are gone, and the
+  catalog now matches a compiler that no longer exists — continuing to freeze
+  it is what causes the desync it was meant to prevent.
+* **None of this blocks the suite.** With § 5.16's four compiler fixes,
+  BundleSim runs 220 of 221 without the port; the residual is CB-130. The
+  catalog's six stale AR entries are a correctness debt against the database,
+  not a gate. Read the "must land in the same commit" above as a statement
+  about keeping the two trees consistent, not as a claim that anything is
+  waiting on it.
 
 ---
 
