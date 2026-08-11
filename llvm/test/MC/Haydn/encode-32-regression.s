@@ -95,16 +95,16 @@ SLLI32 R1, R2, 16
 # finalizer emit targets for CodeGen, not asm-parse targets)
 #===----------------------------------------------------------------------===
 
-# CHECK: { ld32	r0, r1, 0 }
-# ROUNDTRIP: { ld32	r0, r1, 0 }
+# CHECK: { s_lw_{{[a-z_]*}}	r0, r1, 0 }
+# ROUNDTRIP: { s_lw_{{[a-z_]*}}	r0, r1, 0 }
 s_lw_with_imm R0, R1, 0
 
-# CHECK: { ld32	r2, r3, 16 }
-# ROUNDTRIP: { ld32	r2, r3, 16 }
+# CHECK: { s_lw_{{[a-z_]*}}	r2, r3, 16 }
+# ROUNDTRIP: { s_lw_{{[a-z_]*}}	r2, r3, 16 }
 s_lw_with_imm R2, R3, 4
 
-# CHECK: { st32 r4, r5, 0 }
-# ROUNDTRIP: { st32	r4, r5, 0 }
+# CHECK: { s_sw_{{[a-z_]*}} r4, r5, 0 }
+# ROUNDTRIP: { s_sw_{{[a-z_]*}}	r4, r5, 0 }
 s_sw_with_imm R4, R5, 0
 
 #===----------------------------------------------------------------------===

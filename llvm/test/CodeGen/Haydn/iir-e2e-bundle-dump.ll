@@ -86,12 +86,12 @@ entry:
 
 ; Prologue: stack frame setup and callee-save using R12 (not R7!)
 ; ASM: subi32{{.*}}sp, sp
-; ASM: { {{.*}}addi32_w r12, sp, {{[0-9]+}}{{.*}} }
+; ASM: { {{.*}}addi32 r12, sp, {{[0-9]+}}{{.*}} }
 ; Saved vars are R8-R11 only (R12 is reserved AT, never saved —).
-; ASM: st32{{.*}}{{r[89]|r1[01]}}, r12
+; ASM: s_sw_{{[a-z_]*}}{{.*}}{{r[89]|r1[01]}}, r12
 
 ; Load state values from struct pointer via R7 (7th arg, preserved)
-; ASM: ld32{{.*}}{{r[0-9]+|fp}}, r7, 0
+; ASM: s_lw_{{[a-z_]*}}{{.*}}{{r[0-9]+|fp}}, r7, 0
 
 ; Coefficient multiplies (mull).
 ; ASM: mull
@@ -109,8 +109,8 @@ entry:
 ; State update stores (still using R7 as base — the regression guard).
 ; The selector interleaves state stores with multiplies, so we use CHECK-DAG
 ; to verify r7-based stores exist regardless of ordering.
-; ASM-DAG: st32{{.*}}{{r[0-9]+|fp}}, r7,
-; ASM-DAG: st32{{.*}}{{r[0-9]+|fp}}, r7,
+; ASM-DAG: s_sw_{{[a-z_]*}}{{.*}}{{r[0-9]+|fp}}, r7,
+; ASM-DAG: s_sw_{{[a-z_]*}}{{.*}}{{r[0-9]+|fp}}, r7,
 
 ; Return value: the final sub32 leaves the result directly in r1 (no separate
 ; move needed). Epilogue returns via jalr.
