@@ -9,6 +9,7 @@ would be a second copy of a fact the header already states, which is the shape
 of drift that let the builtins and the emitter's specialPublicShape() disagree
 until the header stopped compiling."""
 import re
+import sys
 
 H = '/home/ckchen/haydn/llvm-project/clang/lib/Headers/haydn_dsp.h'
 src = open(H).read().split('\n')
@@ -111,3 +112,14 @@ for name, verdict, where in flagged:
         print(f'{"":18} via {", ".join(where)}')
 if not flagged:
     print('  (none — every macro calls the AR helpers at their real arity)')
+
+# Exit status, and the distinction it draws. WITHDRAWN is the ACCEPTED state
+# (§ 8 Q2 decided it for eleven macros), so those rows report without failing.
+# An arity row is a defect and fails. Until now everything exited 0, so a real
+# fault -- a macro handing an AR helper a stride again -- was reported to a
+# human and passed to a script; that is the same shape as the vacuous-CHECK-NOT
+# gate reading zero files (plan § 6.15).
+defects = [r for r in flagged if 'WITHDRAWN' not in r[1]]
+if defects:
+    print(f'\n{len(defects)} of them are arity defects, not withdrawals.')
+sys.exit(1 if defects else 0)
