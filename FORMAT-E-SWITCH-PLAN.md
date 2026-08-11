@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `81a7b7a1c641` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `81a7b7a1c641` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -124,7 +124,7 @@ hashes there are the ones on the pushed branch.
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
 #   591 discovered: 573 pass, 8 XFAIL, 8 unsupported, 2 fail — the 2 are the
-#   deliberate f2mulzaa32rs pair
+#   nothing — zero failures
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
 build/bin/llvm-lit -s lld/test/ELF/haydn \
@@ -971,6 +971,44 @@ is the format indicator, so an all-zero parcel is not a bundle and
 disassembles as `<unknown>`. What survives is one step weaker — every payload
 bit zero, only the indicator set, `07 00 …` — and that is what it pins now.
 
+#### The two "deliberate reds" were stale INPUT too
+
+They are green, and the diagnosis they carried was wrong in a way worth
+recording, because it was believed for several sessions and it reads
+convincingly.
+
+`f2mulzaa32rs-binary-mac.ll` and `mac-acc-tied-def-encode-roundtrip.ll`
+declared and called `@llvm.haydn.f2mulzaa32rs_hhll` and
+`@llvm.haydn.ff2mula32rs_lh` — with **underscores**. The intrinsics are
+`llvm.haydn.f2mulzaa32rs.hhll` and `llvm.haydn.ff2mula32rs.lh`, with dots, and
+each file spells a sibling correctly two lines away
+(`llvm.haydn.f2mulzaa32r.hhll`). An unrecognised `llvm.*` name is not an
+intrinsic at all, so it became an ordinary external call:
+
+```
+{ nop; jal lr, llvm.haydn.f2mulzaa32rs_hhll; nop }
+```
+
+That is the "falls through to a call to a nonexistent symbol" this section
+recorded — and it is what a misspelt intrinsic ALWAYS does, whether or not the
+target can select the real one.
+
+The conclusion drawn from it was that `HaydnInstructionSelector.cpp` and
+`HaydnGISel.td` never mention the intrinsic, which is true, and that this is
+why it is not selected, which is not. **Neither file mentions it because
+neither needs to**: the generic matcher selects it from the instruction's own
+definition. Measured rather than argued — a probe was built for every
+intrinsic with no selector mention and compiled: **56 of 56 select**. The grep
+was the evidence and the evidence was wrong.
+
+The other half of the old note — *"the test asserted a spelling this
+instruction never had"* — was correct, and about the ASM checks
+(`f2mulzaa32r.hhll` where members use `_`). Two true observations about
+spelling, one about the IR name and one about the mnemonic, were fused into a
+missing-feature story. **When a symptom has a mundane explanation and an
+alarming one, the mundane one needs excluding first, and a name is cheap to
+check.**
+
 #### Closing it out: what the 138 actually were
 
 The backlog is empty apart from the two deliberate reds, so the final split is
@@ -987,7 +1025,7 @@ nothing was "regenerate the expectation":
 | mnemonic spelling | 2 | member `_` against logical `.` |
 | genuinely regenerate the bytes | 4 | `encoding.s` and the gformat/mode0 three |
 | stale premise that was a live defect | 1 | `d486` — § 5.14 |
-| deliberate reds | 2 | f2mulzaa32rs GISel gap |
+| ~~deliberate reds~~ | 2 | not a GISel gap at all — a misspelt intrinsic name, see below |
 
 **Four of the failures were compiler defects, not expectations**: § 5.13's
 `lui`, § 5.12's unit axis, and § 5.14's two. Each was found by taking a red
