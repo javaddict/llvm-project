@@ -909,13 +909,24 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder(G_BUILD_VECTOR)
       .legalFor({{V2I32, S32}})
       .customFor({{V4I16, S16}, {V8I8, S8}, {V4I8, S8}, {V2I16, S16}})
-      // Residual SLP builds (v4s32/v16s32/v16s1/…): fewer-elements down to a
-      // legal native shape. Bare .lower() is UnableToLegalize for BUILD_VECTOR
-      // and the artifact-retry loop hangs the legalizer (pr28982a @ -O2).
+      // Residual SLP builds (v4s32, v16s32, …): fewer-elements down to a legal
+      // native shape.
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
+      // There is deliberately NO clamp for S1, and one element is not a
+      // smaller vector. clampMaxNumElements builds its target with
+      // LLT::scalarOrVector(), which returns a SCALAR for a count of one, so
+      // `.clampMaxNumElements(0, S1, 1)` asked fewerElementsVector to narrow
+      // <2 x s1> to plain s1 — and fewerElementsVectorMerge asserts
+      // "Expected vector types". That was the whole of CB-130.
+      //
+      // A <N x s1> build is an ARTIFACT here, not something to legalize: it
+      // appears when a vector G_ICMP is scalarized, and the matching unmerge
+      // arrives when its users (G_ZEXT, G_SELECT) are scalarized in turn.
+      // Falling through to .lower() below reports UnableToLegalize, the
+      // legalizer defers the instruction to the artifact combiner, and the
+      // pair cancels. Haydn has no vector-of-i1 shape for it to become.
       .lower();
 
   //===--------------------------------------------------------------------===
