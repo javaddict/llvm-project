@@ -17,14 +17,15 @@
 
 # CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r0, r1, 0
 s_lw_with_imm r0, r1, 0
-# CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r2, r3, 4
+# ELEMENT index throughout: S_LW is rs + (imm6 << 2), S_LHWS is << 1.
+# CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r2, r3, 1
 s_lw_with_imm r2, r3, 1
-# CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r4, r5, -4
+# CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r4, r5, -1
 s_lw_with_imm r4, r5, -1
 
 # CHECK: {{.*}} s_lhws_{{[a-z_]*}}{{.*}} r3, r4, 0
 s_lhws_with_imm r3, r4, 0
-# CHECK: {{.*}} s_lhws_{{[a-z_]*}}{{.*}} r5, r6, 2
+# CHECK: {{.*}} s_lhws_{{[a-z_]*}}{{.*}} r5, r6, 1
 s_lhws_with_imm r5, r6, 1
 # CHECK: {{.*}} s_lhwu_{{[a-z_]*}}{{.*}} r11, r12, 0
 s_lhwu_with_imm r11, r12, 0
