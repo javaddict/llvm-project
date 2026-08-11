@@ -146,7 +146,8 @@ define i32 @call_large_struct() {
 ; CHECK-NEXT:    { addi32 r8, sp, 8; nop }
 ; CHECK-NEXT:    { move32 r1, r8; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, return_large_struct; nop }
-; CHECK-NEXT:    { s_lw_with_imm r1, r8, 0; xor32 r0, r0, r0; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r1, r8, 0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm r8, sp, 9; nop; nop }

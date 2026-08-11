@@ -1073,6 +1073,7 @@ define void @struct_copy(ptr %dst, ptr %src) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm r3, r2, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, r1, 0 }
@@ -1201,8 +1202,8 @@ define i32 @accumulate_global(i32 %n) {
 ; CHECK-NEXT:  // #<swps> MII=max(res,rec)=3
 ; CHECK-NEXT:  // #<swps> AchievedII=6 (kernel parcels)
 ; CHECK-NEXT:  // #<swps> verdict=schedule-limited
-; CHECK-NEXT:    { s_lw_with_imm r6, r5, 0; nop; s_sw_with_imm r1, r3, 0 }
-; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r6, r5, 0; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
 ; CHECK-NEXT:    { add32 r1, r1, r6; nop; nop }
 ; CHECK-NEXT:    { addi32 r5, r5, 4; addi32 r4, r4, 1 }
 ; CHECK-NEXT:    { slt32 r6, r4, r2; nop; nop }

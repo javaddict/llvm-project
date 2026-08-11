@@ -46,13 +46,13 @@ define void @triple_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { s_lw_with_imm r4, r1, 0; nop; nop }
 ; CHECK-NEXT:    { addi32 r3, r1, 4; addi32 r5, r1, 8 }
+; CHECK-NEXT:    { s_lw_with_imm r4, r1, 0; nop; s_lw_with_imm r3, r3, 0 }
 ; CHECK-NEXT:    { addi32 r6, r5, 4; s_lw_with_imm r5, r5, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r3, r3, 0; nop; s_lw_with_imm r6, r6, 0 }
-; CHECK-NEXT:    { addi32 r1, r1, 16; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { addi32 r1, r1, 16; s_lw_with_imm r6, r6, 0 }
 ; CHECK-NEXT:    { addi32 r7, r1, 4; s_lw_with_imm r1, r1, 0 }
 ; CHECK-NEXT:    { s_lw_with_imm r7, r7, 0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 1 }
 ; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }

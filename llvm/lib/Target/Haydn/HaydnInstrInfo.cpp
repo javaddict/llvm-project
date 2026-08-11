@@ -2997,25 +2997,50 @@ bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
   }
 
   // Plain LD/ST base+imm.
+  // Plain `<base> + imm` forms. Offset is returned in BYTES, and the
+  // immediate is an ELEMENT INDEX -- `simm6:$scaled_imm`, EA = rs + (imm <<
+  // log2(width)) -- so it has to be scaled on the way out. It was not, which
+  // shrank every distance by the access width: two words at elements 0 and 1
+  // are 4 bytes apart and looked 1 apart, i.e. overlapping. The PreImm path
+  // above already had the shift; this one never did.
+  //
+  // The byte and halfword forms were missing entirely, so they reported "no
+  // information" and every consumer had to assume the worst about them.
+  {
+    unsigned W = 0;
+    switch (Opc) {
+    case Haydn::S_LBS_WITH_IMM:
+    case Haydn::S_LBU_WITH_IMM:
+    case Haydn::S_SB_WITH_IMM:
+      W = 1;
+      break;
+    case Haydn::S_LHWS_WITH_IMM:
+    case Haydn::S_LHWU_WITH_IMM:
+    case Haydn::S_SHW_WITH_IMM:
+      W = 2;
+      break;
+    case Haydn::S_LW_WITH_IMM:
+    case Haydn::S_SW_WITH_IMM:
+      W = 4;
+      break;
+    case Haydn::D_LDW_WITH_IMM:
+    case Haydn::D_SDW_WITH_IMM:
+      W = 8;
+      break;
+    default:
+      break;
+    }
+    if (W) {
+      if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
+          !MI.getOperand(2).isImm())
+        return false;
+      BaseOps.push_back(&MI.getOperand(1));
+      Offset = MI.getOperand(2).getImm() * (int64_t)W;
+      Width = LocationSize::precise(W);
+      return true;
+    }
+  }
   switch (Opc) {
-  case Haydn::S_LW_WITH_IMM:
-  case Haydn::D_LDW_WITH_IMM:
-    if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
-        !MI.getOperand(2).isImm())
-      return false;
-    BaseOps.push_back(&MI.getOperand(1));
-    Offset = MI.getOperand(2).getImm();
-    Width = LocationSize::precise(Opc == Haydn::D_LDW_WITH_IMM ? 8 : 4);
-    return true;
-  case Haydn::S_SW_WITH_IMM:
-  case Haydn::D_SDW_WITH_IMM:
-    if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
-        !MI.getOperand(2).isImm())
-      return false;
-    BaseOps.push_back(&MI.getOperand(1));
-    Offset = MI.getOperand(2).getImm();
-    Width = LocationSize::precise(Opc == Haydn::D_SDW_WITH_IMM ? 8 : 4);
-    return true;
   default:
     return false;
   }

@@ -116,9 +116,10 @@ define i64 @mixed_locals(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { addi32 r3, sp, 12; addi32 r2, sp, 20 }
 ; CHECK-NEXT:    { addi32 r4, r3, 4; d_sw_l_with_imm d0, r3, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r2, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r1, r2, 0; nop; d_sw_h_with_imm d0, r4, 0 }
+; CHECK-NEXT:    { nop; nop; d_sw_h_with_imm d0, r4, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r1, r2, 0; nop; s_lw_with_imm r2, r3, 0 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r2, r3, 0; sext32t64 d0, r1; s_lw_with_imm r3, r4, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r3, r4, 0; sext32t64 d0, r1; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 1 }

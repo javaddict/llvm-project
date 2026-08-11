@@ -17,7 +17,9 @@
 #include "HaydnInstrInfo.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
@@ -139,6 +141,78 @@ int getHwloopCsrAddr(const MachineInstr &MI) {
 // @{
 bool CurrentCycleHasHwloopSetup = false;
 bool CurrentCycleHasHwloopCsrw = false;
+// Memory-touching instructions issued THIS cycle, for the store/load overlap
+// rule (VLIW_Engine_Compiler_Constraints.md § Constraints: "Within the same
+// bundle, a store and a load must not target overlapping memory addresses. If
+// the compiler cannot statically prove that the addresses are non-overlapping,
+// it must conservatively place them in separate bundles. If a store and a load
+// with overlapping addresses are placed in the same bundle, the hardware
+// detects the conflict and raises an exception.")
+//
+// Nothing enforced this. A store and a load CAN share a bundle -- LOADSTORE0
+// and LOAD1 -- so the packer was free to emit one the hardware faults on, and
+// the fault is at run time on real silicon, not here.
+//
+// The FACTS are recorded, not the MachineInstr. Holding pointers here crashes:
+// instructions issued this cycle are replaced during the region (setDesc for
+// the chosen member, among others), and dereferencing a dead one's memory
+// operands is a segfault inside MemOperandsHaveAlias, not a wrong answer.
+struct CycleMemAccess {
+  // The base REGISTER, not the MachineOperand it came from: an operand pointer
+  // is a pointer into an instruction, which is the thing that dies. A register
+  // number also compares the way this needs -- the same base carrying a kill
+  // flag on one access and not the other is still the same base.
+  Register Base;                // invalid == unknown, be conservative
+  unsigned SubReg = 0;
+  int64_t Offset = 0;
+  LocationSize Width = LocationSize::precise(0);
+  bool IsStore = false;
+  // Frame index the access lands in, or -1. Two accesses in DIFFERENT stack
+  // objects never overlap however their base registers are spelled, and that
+  // is most of the traffic here -- spills and locals reached through whatever
+  // register the allocator happened to leave the frame address in. Without it
+  // the base-register comparison alone calls them "may overlap" and splits
+  // every one.
+  int FrameIdx = -1;
+};
+
+// The stack object an access lands in, or -1. Only single-MMO accesses with a
+// fixed-stack pseudo value qualify; anything else is unknown, not "no".
+int memFrameIndex(const MachineInstr &MI) {
+  if (MI.memoperands_empty() || std::next(MI.memoperands_begin()) !=
+                                    MI.memoperands_end())
+    return -1;
+  const MachineMemOperand *MMO = *MI.memoperands_begin();
+  if (const PseudoSourceValue *PSV = MMO->getPseudoValue())
+    if (const auto *FS = dyn_cast<FixedStackPseudoSourceValue>(PSV))
+      return FS->getFrameIndex();
+  return -1;
+}
+SmallVector<CycleMemAccess, 4> CurrentCycleMemOps;
+
+// Describe MI's access for the overlap rule. Returns false when the base or
+// the width cannot be pinned down, which the caller reads as "assume overlap".
+bool describeMemAccess(const MachineInstr &MI, const TargetInstrInfo &TII,
+                       const TargetRegisterInfo *TRI, CycleMemAccess &Out) {
+  SmallVector<const MachineOperand *, 2> BaseOps;
+  int64_t Offset = 0;
+  bool OffsetIsScalable = false;
+  LocationSize Width = LocationSize::precise(0);
+  if (!TII.getMemOperandsWithOffsetWidth(MI, BaseOps, Offset, OffsetIsScalable,
+                                         Width, TRI))
+    return false;
+  if (BaseOps.size() != 1 || OffsetIsScalable || !Width.hasValue())
+    return false;
+  if (!BaseOps[0]->isReg() || !BaseOps[0]->getReg())
+    return false;
+  Out.Base = BaseOps[0]->getReg();
+  Out.SubReg = BaseOps[0]->getSubReg();
+  Out.Offset = Offset;
+  Out.Width = Width;
+  Out.IsStore = MI.mayStore();
+  Out.FrameIdx = memFrameIndex(MI);
+  return true;
+}
 // @}
 } // namespace
 
@@ -313,6 +387,7 @@ void HaydnHazardRecognizer::Reset() {
   CurrentCycleHasLockedSlotOp = false;
   CurrentCycleHasHwloopSetup = false;
   CurrentCycleHasHwloopCsrw = false;
+  CurrentCycleMemOps.clear();
   CurrentCycleState = makeProductCycleState();
   TRI = nullptr;
 }
@@ -584,6 +659,49 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
   // hazard fires regardless of which side was issued first. Only meaningful
   // at DeltaCycles == 0 (the flags record instrs issued THIS cycle). See
   // isHwloopSetupOp / getHwloopCsrAddr in the anonymous namespace above.
+  // Same-bundle store/load memory overlap. The ISA requires the COMPILER to
+  // prove disjointness and to split the bundle when it cannot; the hardware
+  // raises an exception otherwise. MachineInstr::mayAlias is conservative in
+  // exactly that direction -- an instruction with no memory operand, or a pair
+  // whose bases cannot be compared, comes back "may alias" and gets split.
+  //
+  // A null AAResults is deliberate: this runs post-RA where the recognizer has
+  // no alias analysis to hand, and the base+offset path through
+  // HaydnInstrInfo::getMemOperandsWithOffsetWidth is what decides the case the
+  // compiler can actually prove -- same base register, different offsets.
+  // Passing nothing costs precision on the cases it could never prove anyway.
+  if (DeltaCycles == 0 && MI->mayLoadOrStore() &&
+      !CurrentCycleMemOps.empty()) {
+    CycleMemAccess Cand;
+    const bool CandKnown =
+        describeMemAccess(*MI, *MI->getMF()->getSubtarget().getInstrInfo(),
+                          getTRI(*MI), Cand);
+    for (const CycleMemAccess &Other : CurrentCycleMemOps) {
+      if (!Other.IsStore && !MI->mayStore())
+        continue; // two loads cannot conflict
+      bool Disjoint = false;
+      if (CandKnown && Cand.FrameIdx >= 0 && Other.FrameIdx >= 0 &&
+          Cand.FrameIdx != Other.FrameIdx) {
+        // Different stack objects: disjoint whatever the base registers say.
+        Disjoint = true;
+      } else if (CandKnown && Other.Base && Cand.Base == Other.Base &&
+                 Cand.SubReg == Other.SubReg) {
+        // Same base register: the one case the compiler can genuinely prove.
+        int64_t LoA = Cand.Offset, HiA = LoA + (int64_t)Cand.Width.getValue();
+        int64_t LoB = Other.Offset, HiB = LoB + (int64_t)Other.Width.getValue();
+        Disjoint = HiA <= LoB || HiB <= LoA;
+      }
+      if (Disjoint)
+        continue;
+      LLVM_DEBUG({
+        dbgs() << "same-bundle memory overlap hazard for ";
+        MI->print(dbgs());
+        dbgs() << " (cycle already holds an access that may overlap)\n";
+      });
+      return Hazard;
+    }
+  }
+
   if (DeltaCycles == 0) {
     bool IsHwloopSetup = isHwloopSetupOp(MI->getOpcode());
     bool IsHwloopCsrw = getHwloopCsrAddr(*MI) >= 0;
@@ -670,6 +788,15 @@ void HaydnHazardRecognizer::emitInstruction(SUnit *SU, int DeltaCycles) {
       CurrentCycleHasHwloopSetup = true;
     if (getHwloopCsrAddr(*MI) >= 0)
       CurrentCycleHasHwloopCsrw = true;
+    // track same-bundle store/load overlap (spec § Constraints).
+    if (MI->mayLoadOrStore()) {
+      CycleMemAccess A;
+      if (!describeMemAccess(*MI, *MI->getMF()->getSubtarget().getInstrInfo(),
+                             getTRI(*MI), A))
+        A.Base = Register(); // unknown base: everything after this must split
+      A.IsStore = MI->mayStore();
+      CurrentCycleMemOps.push_back(A);
+    }
   }
   LLVM_DEBUG({
     dbgs() << "Emit ";
@@ -707,6 +834,15 @@ void HaydnHazardRecognizer::EmitInstruction(MachineInstr *MI) {
     CurrentCycleHasHwloopSetup = true;
   if (getHwloopCsrAddr(*MI) >= 0)
     CurrentCycleHasHwloopCsrw = true;
+  // track same-bundle store/load overlap (spec § Constraints).
+  if (MI->mayLoadOrStore()) {
+    CycleMemAccess A;
+    if (!describeMemAccess(*MI, *MI->getMF()->getSubtarget().getInstrInfo(),
+                           getTRI(*MI), A))
+      A.Base = Register();
+    A.IsStore = MI->mayStore();
+    CurrentCycleMemOps.push_back(A);
+  }
 }
 
 void HaydnHazardRecognizer::AdvanceCycle() {
@@ -715,6 +851,7 @@ void HaydnHazardRecognizer::AdvanceCycle() {
   CurrentCycleHasLockedSlotOp = false;
   CurrentCycleHasHwloopSetup = false;
   CurrentCycleHasHwloopCsrw = false;
+  CurrentCycleMemOps.clear();
   CurrentCycleState = makeProductCycleState();
   Scoreboard.advance();
 }
@@ -725,6 +862,7 @@ void HaydnHazardRecognizer::RecedeCycle() {
   CurrentCycleHasLockedSlotOp = false;
   CurrentCycleHasHwloopSetup = false;
   CurrentCycleHasHwloopCsrw = false;
+  CurrentCycleMemOps.clear();
   CurrentCycleState = makeProductCycleState();
   Scoreboard.recede();
 }
