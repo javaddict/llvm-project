@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `909715a0c654` **local only — `fork/` is still at `2eba490a051c`, 18 commits behind** | **objects emit: 424/430 CodeGen. lit 537/589, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 36 lit failures left, 43 assertions held on a decision (see § 5.4). |
+| `llvm-project` | `haydn-formate-switch-mc` | `7787f99809e6` **local only — `fork/` is still at `2eba490a051c`, 21 commits behind** | **objects emit: 424/430 CodeGen. lit 541/590, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 32 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 is a new OPEN defect, held on a question only the simulator answers. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -119,7 +119,8 @@ hashes there are the ones on the pushed branch.
 # llvm-project
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
-#   589 discovered: 573 pass, 8 XFAIL, 8 unsupported, 0 fail
+#   590 discovered: 541 pass, 9 XFAIL, 8 unsupported, 32 fail — the 9th XFAIL
+#   is § 5.12's bundle-unit-collision.s, and an XPASS there is the alarm
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
 build/bin/llvm-lit -s lld/test/ELF/haydn \
@@ -923,7 +924,7 @@ two problems that are NOT more of the same work:
 Ten more regenerate cleanly and still disagree — real differences, to be read
 one at a time — and two were the `.c` tests blocked on § 8 Q1, now unblocked.
 
-**Update after § 8 Q1: 36, not 38.** `ar-unaligned-roundtrip.s` was one of the
+**Update after § 8 Q1, § 5.13 and § 5.12: 32, not 38.** `ar-unaligned-roundtrip.s` was one of the
 byte-level group and is regenerated; the two `.ll` tests the intrinsic arity
 change broke were fixed in the same pass. The categories the rest fall into are
 unchanged, and the tooling problem under the eight `.s` files
@@ -1855,6 +1856,124 @@ decoder agreed with each other because both were reading the member. Only a
 relocation — an outside reference — could expose it, which is § 5.4's point
 again.
 
+### 5.13 Immediate signedness was read off the field's NAME — CLOSED
+
+A fifth axis of § 5.11's shape, found by triaging § 5.4's remaining failures.
+
+```
+llvm-mc:      { lui r3, 4095 }   ->  a0 66 fe 1f
+llvm-objdump: a0 66 fe 1f        ->  { lui r3, -1 }
+```
+
+Same twelve bytes both ways, so **`--emit roundtrip` was green** — it checks
+the encoder against the decoder and the bits were never in dispute. The
+disagreement was between the parser, which kept what was written, and the
+decoder, which sign-extended a field the database defines as a bit pattern.
+`operand-agreement` was green too: its `kinds` axis compares operand KIND, and
+`simm20` and `uimm20` are the same kind.
+
+The generator chose the class from the field's NAME — `uimm...` unsigned,
+anything starting `imm` signed. A spelling convention standing in for a
+semantic fact. It got `ADDI32 rt, rs, imm20` right by luck
+(`rt = rs + SEXT32(imm20)`) and four instructions wrong, and the LOGICAL had
+the right class all along, so the `.td` disagreed with itself.
+
+**The Behavior states it.** Read it there, the same way § 5.4 says to read the
+load/store scale there:
+
+| Behavior | signedness |
+|---|---|
+| `SEXT32(imm20)`, `$signed(imm8)` | signed |
+| `ZEXT32(imm20)` | unsigned |
+| the field inside a `{...}` concatenation | unsigned — a pattern, not a number |
+| a shift amount, `rs << uimm5` | unsigned |
+| an address offset, `rs + (imm6 << 3)` | signed |
+
+Anything the Behavior does not place is a hard error rather than a default;
+defaulting is what produced this. Over 683 instructions it classifies 77
+immediate fields with nothing left over.
+
+Fixed in `97032fac576b`: `LUI` (`{imm12, 20'b0}`) and `ANDI32` / `ORI32` /
+`XORI32` (`ZEXT32(imm20)`), 13 member defs. `andi32 r1, r2, 1048575` printed
+as `-1`, which reads as `rs & 0xFFFFFFFF` rather than `rs & 0xFFFFF`.
+
+**`MOVEI_H` / `MOVEI_L` are deliberately NOT changed** although their Behavior
+splices `imm32` the same way. At 32 bits `simm` and `uimm` cover the same bit
+patterns and the printer's sign extension is the identity — `movei_h d0, -1`
+already round-trips exactly — so the only thing the class would change is which
+spellings the parser accepts, and negative literals are what existing code
+writes. The carve-out is on width and is stated where the width is known.
+
+`hi20-fixup-compensation.s` and `move-instructions.s` went green **without
+their assertions being touched**. They asserted `lui r3, 4095` and were right;
+relaxing them would have frozen the defect in. That is the § 5.4 rule in its
+sharpest form: a red gate is not evidence that the expectation is stale.
+
+### 5.12 The unit axis does not fire on the AsmParser's hinted path — OPEN
+
+`{ beq r1, r2, 8; bnez r3, 16; beqz r4, 24 }` assembles. Three ALU0-only
+branches, three control transfers on one branch unit, and llvm-mc emits a
+parcel: `BEQ_P30_ALU0` / `BNEZ_P31_ALU0` / `BEQZ_P32_ALU0`, three positions and
+one unit. § 3's rule is unqualified — "an entry maps to exactly one unit; no
+two entries in a bundle may share a unit" — and 16 logicals are ALU0-only, all
+of them branches, `JAL`/`JALR` and the `SET_HWLOOP` family.
+
+**Every rejection the assembler currently produces is placement exhaustion,
+not a unit conflict.** That is what makes this easy to miss: the cases that
+look like the unit check working are all explained without it.
+
+| bundle | rejected? | why |
+|---|---|---|
+| four `add32` | yes | no four-entry composite exists |
+| `beq` + `bne` + `blt` | yes | all three exist only at P30/P31 — no third **position** |
+| two `d_*wua_post` stores | yes | both exist only at position 0 |
+| `beq` + `bnez` + `beqz` | **no** | all three positions exist; only the unit is left, and it is not checked |
+
+#### Mechanism
+
+`HaydnBundle.h`'s `add(I *Instr, MCSlotKind HintSlot)` resolves the unit with
+`unitBitsForMember(MII, Opcode)`, which derives it from the member NAME. On the
+hinted path the AsmParser has already folded the opcode to its LOGICAL
+(`getLogicalBaseOpcode`), and a logical name carries no
+`_P<form><pos>_<UNIT>` suffix, so the call returns 0, the hint is taken, and
+nothing is claimed. `OccupiedUnits` therefore never accumulates, and the
+`pickSlot` fallback — which *does* seed `Probe.OccupiedUnits` correctly — is
+never reached for well-formed positional text.
+
+The code says so, and was right when it was written:
+
+> for a logical the member is picked later, so nothing is claimed here and the
+> axis stays permissive. Under Bundle128 both are 0.
+
+§ 7.1 predicted exactly this: *"treat it as untested against real packing until
+the switch lands, and expect the first real bundles to be where it earns or
+loses trust."* This is that moment, and the hinted path loses.
+
+#### Why it is recorded rather than fixed
+
+Two reasons, and the second is the blocking one.
+
+1. Resolving the unit for a logical at a hinted slot changes which member the
+   packer picks, which changes **bytes in every NOP-padded bundle**. That is a
+   mass re-baseline of § 5.4's expectations, and it should be done once, on
+   purpose, not as a side effect.
+2. **NOP padding always lands on ALU0 today**, so `{ add32 r0, r1, r2 }` on its
+   own is three ALU0 entries (`NOP_P30_ALU0`, `NOP_P31_ALU0`,
+   `ADD32_P32_ALU0`). Whether a NOP occupies its unit at all is a hardware
+   question. If it does, the toolchain has been emitting invalid bundles for
+   every short bundle it has ever produced; if it does not, NOP is exempt and
+   the fix is only about real instructions. **The simulator is the only thing
+   here that can answer it**, and the sysroot has not been rebuilt on this
+   branch (§ 2). Do not guess: `NOP` has members on all 18 (unit, position)
+   pairs, so a unit-aware padding is expressible either way, and picking one
+   without the answer is choosing a hardware model by accident.
+
+`llvm/test/MC/Haydn/bundle-unit-collision.s` holds the case, `XFAIL`, and
+contains **no NOP** precisely so it does not depend on question 2. It flips to
+XPASS — which lit reports as a failure — the moment the packer is fixed.
+`bundle-canadd-reject.s` holds the placement cases and says in its own header
+that a rejection there is not evidence about units.
+
 ### 5.5 BundleSim side
 
 Must land in the **same commit** as § 5.2, because it is what keeps the two
@@ -2287,6 +2406,13 @@ already the tested carrier of the member→logical fold.
   spellings directly. **Treat it as untested against real packing until the
   switch lands**, and expect the first real bundles to be where it earns or
   loses trust.
+
+  **It lost — see § 5.12.** The first real bundles showed the axis never fires
+  on the AsmParser's hinted path, because the unit is read off a member name
+  and that path holds the LOGICAL. `{ beq r1, r2, 8; bnez r3, 16; beqz r4, 24 }`
+  assembles: three control transfers on ALU0. The unit test passing and the
+  assembler accepting the bundle are both true, which is what the sentence
+  above was warning about.
 * **`MCInstrInfo` is optional** on `Bundle` / `tryAdd` / `enumeratePlacementAlternatives`.
   Without it no unit is claimed. Pre-RA scheduler paths that have no
   `MCInstrInfo` therefore keep slot-only behaviour — which is right today and
