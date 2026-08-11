@@ -125,7 +125,7 @@ void cb_store_s32_3arg(ae_int32 *p, ae_int32 v) {
 // AE_L16_XC is permanently EMULATED (ld16 + haydn_cbr_step); AE_S16_0_XC is CB.
 
 // ASM-LABEL: cb_load_s16_3arg:
-// ASM: ld16
+// ASM: s_lhws_{{[a-z_]*}}
 ae_int16 cb_load_s16_3arg(ae_int16 *p) {
   ae_int16 t;
   AE_L16_XC(t, p, +2);

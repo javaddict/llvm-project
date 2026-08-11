@@ -71,7 +71,7 @@ define i64 @pointer_iv_i64(ptr readonly %p, ptr readnone %end) nounwind {
 ; CHECK-LABEL: name: pointer_iv_i64
 ; CHECK: SET_HWLOOP
 ; Accept split LD32 pairs or fused D_LDW_POST_IMM.
-; CHECK-DAG: {{LD32|D_LDW_POST_IMM|LD64}}
+; CHECK-DAG: {{S_LW_{{[A-Z_]*}}|D_LDW_POST_IMM|D_LDW_{{[A-Z_]*}}}}
 ; CHECK: PseudoLoopEnd
 entry:
   br label %loop

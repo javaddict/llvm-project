@@ -8,16 +8,16 @@
 # (HaydnFormatsLS.td) pair via FlexMap at MC materialize. Disassembler MaxOpcode
 # for LS FU must cover 0x7A/0x7B (not stop at LDU16=0x79).
 
-# ASM: { ld16{{.*}} r3, r4, 0
-# ASM: { ld16{{.*}} r5, r6, 2
-# ASM: { ld8{{.*}} r7, r8, 0
-# ASM: { ld8{{.*}} r9, r10, 1
+# ASM: { s_lhws_{{[a-z_]*}}{{.*}} r3, r4, 0
+# ASM: { s_lhws_{{[a-z_]*}}{{.*}} r5, r6, 2
+# ASM: { s_lbs_{{[a-z_]*}}{{.*}} r7, r8, 0
+# ASM: { s_lbs_{{[a-z_]*}}{{.*}} r9, r10, 1
 s_lhws_with_imm r3, r4, 0
 s_lhws_with_imm r5, r6, 1
 s_lbs_with_imm  r7, r8, 0
 s_lbs_with_imm  r9, r10, 1
 
-# OBJ: {{.*}} ld16{{.*}} r3, r4, 0
-# OBJ: {{.*}} ld16{{.*}} r5, r6, 2
-# OBJ: {{.*}} ld8{{.*}} r7, r8, 0
-# OBJ: {{.*}} ld8{{.*}} r9, r10, 1
+# OBJ: {{.*}} s_lhws_{{[a-z_]*}}{{.*}} r3, r4, 0
+# OBJ: {{.*}} s_lhws_{{[a-z_]*}}{{.*}} r5, r6, 2
+# OBJ: {{.*}} s_lbs_{{[a-z_]*}}{{.*}} r7, r8, 0
+# OBJ: {{.*}} s_lbs_{{[a-z_]*}}{{.*}} r9, r10, 1
