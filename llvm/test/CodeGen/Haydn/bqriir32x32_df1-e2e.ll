@@ -135,8 +135,8 @@ for.end:
 }
 ; BUNDLE-LABEL: <bqriir32x32_df1_process>:
 ; BUNDLE: subi32 sp, sp
-; BUNDLE-DAG: st64
-; BUNDLE-DAG: ld32
+; BUNDLE-DAG: d_sdw_{{[a-z_]*}}
+; BUNDLE-DAG: s_lw_{{[a-z_]*}}
 ; Back-edge materialized as slt32 + beqz/bnez (not fused blt) — the IIR loop
 ; body has enough register pressure that the scheduler separates compare and
 ; branch (-blanket-SFR scheduling form).
@@ -144,7 +144,7 @@ for.end:
 ; BUNDLE-DAG: {{mul64|mula64|add64}}
 ; BUNDLE-DAG: sub64
 ; BUNDLE-DAG: sra64
-; BUNDLE-DAG: st32
+; BUNDLE-DAG: s_sw_{{[a-z_]*}}
 ; BUNDLE-DAG: {{beqz|set_hwloop}}
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 ;
@@ -162,7 +162,7 @@ define i32 @main() {
 ; BUNDLE-DAG: lui
 ; BUNDLE-DAG: addi32
 ; BUNDLE: jal {{.*}}, 0
-; BUNDLE: ld32
+; BUNDLE: s_lw_{{[a-z_]*}}
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 entry:
   ; Allocate 2 sections (36 bytes each) + input/output arrays (32 bytes each)

@@ -86,16 +86,16 @@ LUI R0, 1024
 # Test Load/Store instructions (s0, FU=LS)
 #===----------------------------------------------------------------------===
 
-# CHECK: ld32 r0, r1, 0
+# CHECK: s_lw_{{[a-z_]*}} r0, r1, 0
 s_lw_with_imm R0, R1, 0
 
-# CHECK: ld32 r2, r3, 16
+# CHECK: s_lw_{{[a-z_]*}} r2, r3, 16
 s_lw_with_imm R2, R3, 4
 
-# CHECK: st32 r4, r5, 0
+# CHECK: s_sw_{{[a-z_]*}} r4, r5, 0
 s_sw_with_imm R4, R5, 0
 
-# CHECK: st32 r6, r7, -4
+# CHECK: s_sw_{{[a-z_]*}} r6, r7, -4
 s_sw_with_imm R6, R7, -1
 
 #===----------------------------------------------------------------------===
