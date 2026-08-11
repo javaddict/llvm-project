@@ -27,8 +27,8 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_MULZAAFD16SS_33_22 == HAYDN_COMPAT_EXACT,
 // IR: call {{.*}}@llvm.haydn.fmulaa16.hs.33.22
 // IR-NOT: fmulaa16.hs.11.00
 // ASM-LABEL: mul33_2arg_zero_acc
-// ASM: fmulaa16.hs.33.22
-// ASM-NOT: fmulaa16.hs.11.00
+// ASM: fmulaa16_hs_33_22
+// ASM-NOT: fmulaa16_hs_11_00
 ae_int64 mul33_2arg_zero_acc(ae_int16x4 a, ae_int16x4 b) {
   return AE_MULZAAFD16SS_33_22(a, b);
 }
@@ -37,8 +37,8 @@ ae_int64 mul33_2arg_zero_acc(ae_int16x4 a, ae_int16x4 b) {
 // IR: call {{.*}}@llvm.haydn.fmulaa16.hs.33.22
 // IR-NOT: fmulaa16.hs.11.00
 // ASM-LABEL: mul33_3arg_acc
-// ASM: fmulaa16.hs.33.22
-// ASM-NOT: fmulaa16.hs.11.00
+// ASM: fmulaa16_hs_33_22
+// ASM-NOT: fmulaa16_hs_11_00
 ae_int64 mul33_3arg_acc(ae_int64 acc, ae_int16x4 a, ae_int16x4 b) {
   AE_MULZAAFD16SS_33_22(acc, a, b);
   return acc;
@@ -58,8 +58,8 @@ ae_int64 mul33_expr_return(ae_int64 acc, ae_int16x4 a, ae_int16x4 b) {
 // IR-SAME: <4 x i16> <i16 0, i16 0, i16 5, i16 3>
 // IR-NOT: fmulaa16.hs.11.00
 // ASM-LABEL: mul33_known_vector
-// ASM: fmulaa16.hs.33.22
-// ASM-NOT: fmulaa16.hs.11.00
+// ASM: fmulaa16_hs_33_22
+// ASM-NOT: fmulaa16_hs_11_00
 ae_int64 mul33_known_vector(void) {
   ae_int16x4 a = {0, 0, 4, 2};
   ae_int16x4 b = {0, 0, 5, 3};

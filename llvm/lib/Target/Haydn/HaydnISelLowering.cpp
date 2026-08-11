@@ -349,7 +349,7 @@ bool HaydnTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
   //===--------------------------------------------------------------------===//
   // AR unaligned stream (StateMem) — mem through ptr + AR sticky state.
   // pldwwua(ar_sel, ptr): ptr at arg1; UA post loads: ptr at arg0
-  // UA stores: data, ptr, ... → ptr at arg1; wbarwua(ar, ptr, dir) → arg1
+  // UA stores: data, ptr, ar_sel → ptr at arg1; wbarwua(ar, ptr) → arg1
   // Volatile MMO: AR state is not IR-visible; order vs other mem.
   //===--------------------------------------------------------------------===//
   case Intrinsic::haydn_pldwwua:

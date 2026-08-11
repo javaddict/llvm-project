@@ -38,11 +38,12 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_LA16X4_RIC == HAYDN_COMPAT_UNSUPPORTED,
 _Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2_RIC == HAYDN_COMPAT_UNSUPPORTED,
                "LA32X2_RIC is withdrawn, not exact (§ 8 Q2)");
 
-// Forward IC is UNAFFECTED — it passes dir = 0 and stride 8, which the
-// hardware still has. This is the contrast case the old test carried, and it
-// is the reason the withdrawal has to be loud rather than an alias.
+// Forward IC is UNAFFECTED — it needed neither the direction select nor a
+// stride, so the two operands format E removed cost it nothing. This is the
+// contrast case the old test carried, and it is the reason the withdrawal
+// has to be loud rather than an alias.
 // IR-LABEL: @la16x4_ic_contrast
-// IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 0)
+// IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}})
 ae_int16x4 la16x4_ic_contrast(ae_int16x4 *p) {
   ae_int16x4 d = {0};
   ae_valign al = AE_ZALIGN64();

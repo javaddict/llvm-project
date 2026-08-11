@@ -17,7 +17,8 @@
 // They are WITHDRAWN (§ 8 Q2) — the AR direction select is gone — so there is
 // no value/ref bar left to meet and their probes are removed. Their forward
 // _IC contrast probes STAY: those are what prove the remaining forward path
-// still passes dir = 0, which is the property the withdrawal must not blur.
+// still reaches the AR helper at all, and that it does so with the arity
+// format E left it — which is the property the withdrawal must not blur.
 // haydn-compat-la-ric.c asserts the withdrawal itself.
 //
 // Style: addbrba32 known-value probe (intr-addbrba32.ll) — host-documented
@@ -70,8 +71,8 @@ _Static_assert(__HAYDN_AE_COMPAT_STRICT == 1, "default fail-closed");
 // IR-SAME: <4 x i16> <i16 0, i16 0, i16 5, i16 3>
 // IR-NOT: fmulaa16.hs.11.00
 // ASM-LABEL: mul33_known_high_only_zero_acc
-// ASM: fmulaa16.hs.33.22
-// ASM-NOT: fmulaa16.hs.11.00
+// ASM: fmulaa16_hs_33_22
+// ASM-NOT: fmulaa16_hs_11_00
 ae_int64 mul33_known_high_only_zero_acc(void) {
   /* lane0=0, lane1=0, lane2=4, lane3=2  /  lane2=5, lane3=3 */
   ae_int16x4 a = {0, 0, 4, 2};
@@ -91,7 +92,7 @@ ae_int64 mul33_known_high_only_zero_acc(void) {
 // IR-SAME: <4 x i16> <i16 0, i16 0, i16 5, i16 3>
 // IR-NOT: fmulaa16.hs.11.00
 // ASM-LABEL: mul33_known_high_only_with_acc
-// ASM: fmulaa16.hs.33.22
+// ASM: fmulaa16_hs_33_22
 ae_int64 mul33_known_high_only_with_acc(void) {
   ae_int16x4 a = {0, 0, 4, 2};
   ae_int16x4 b = {0, 0, 5, 3};
@@ -109,8 +110,8 @@ ae_int64 mul33_known_high_only_with_acc(void) {
 // IR-SAME: <4 x i16> <i16 5, i16 3, i16 0, i16 0>
 // IR-NOT: fmulaa16.hs.33.22
 // ASM-LABEL: mul11_known_low_only_contrast
-// ASM: fmulaa16.hs.11.00
-// ASM-NOT: fmulaa16.hs.33.22
+// ASM: fmulaa16_hs_11_00
+// ASM-NOT: fmulaa16_hs_33_22
 ae_int64 mul11_known_low_only_contrast(void) {
   ae_int16x4 a = {4, 2, 0, 0}; /* lanes 0+1 */
   ae_int16x4 b = {5, 3, 0, 0};
@@ -124,7 +125,7 @@ ae_int64 mul11_known_low_only_contrast(void) {
 // IR-SAME: <4 x i16> <i16 0, i16 0, i16 4, i16 2>,
 // IR-SAME: <4 x i16> <i16 0, i16 0, i16 5, i16 3>
 // ASM-LABEL: mul11_high_only_would_zero
-// ASM: fmulaa16.hs.11.00
+// ASM: fmulaa16_hs_11_00
 ae_int64 mul11_high_only_would_zero(void) {
   ae_int16x4 a = {0, 0, 4, 2};
   ae_int16x4 b = {0, 0, 5, 3};
@@ -169,13 +170,15 @@ ae_int16x4 *l16x4_xc_forward_contrast(ae_int16x4 *p) {
 // via haydn_cbr_step(ptr, -8, cbr_sel). Forward IC is dir=0 and soft +8.
 
 // The O0 checks moved here from the withdrawn la16x4_ric_known_dir1 probe.
-// They are what keeps the -O0 RUN line meaningful, and the operand they pin —
-// the trailing dir argument — is exactly the one whose other value (1) no
-// longer has hardware.
+// They are what keeps the -O0 RUN line meaningful. They used to pin the
+// trailing dir argument, whose other value (1) had no hardware; format E
+// removed dir and the stride outright, so what they pin now is the ARITY —
+// (ar, ptr) and nothing after it. Same property, stated where it still
+// exists: a stride or a direction reappearing here is the regression.
 // IR-LABEL: @la16x4_ic_forward_contrast
-// IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 0
+// IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}})
 // O0-LABEL: @la16x4_ic_forward_contrast
-// O0: call {{.*}}@haydn_ae_la16x4_step({{.*}}i32 noundef 8, i32 noundef 0)
+// O0: call {{.*}}@haydn_ae_la16x4_step(i32 noundef {{[^,]+}}, ptr noundef {{[^,)]+}})
 // ASM-LABEL: la16x4_ic_forward_contrast
 // ASM: d_lqhwua_post
 ae_int16x4 la16x4_ic_forward_contrast(ae_int16x4 *p) {
