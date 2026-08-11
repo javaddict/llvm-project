@@ -17,24 +17,31 @@
 # 3-issue: add32 + add64 + add64
 # 1-issue control: bare add32 still one line (no false multi-issue)
 #
-# What breaks if the bug returns:
-# CHECK-NEXT between consecutive 16-byte offsets fails (split lines).
-# Do NOT update CHECKs to match split output — fix the disassembler.
+# What breaks if the bug returns: the NEXT-chain between consecutive parcel
+# offsets fails, because a split parcel puts extra lines between them.
+# Do NOT update the checks to match split output — fix the disassembler.
+#
+# The offsets are the load-bearing part and they now step by 12, not 16: one
+# format E parcel per line is the same contract one bundle format later.
+# The ORDER of the ops inside the braces is NOT part of the contract — it is
+# whichever entry the packer chose — so each line accepts either order rather
+# than pinning today's. § 5.12's fix will move those choices.
 
 .text
 
-# 2-issue Bundle128: right-aligned text names s1,s0; add64 has no s0 field
-# so it spreads to s2 (add64->S2, add32->S1, unchanged from before).
+# 2-issue: two ops, one bundle. Under Bundle128 this was a slot-capability
+# story (add64 had no s0 field and spread to s2); under format E both simply
+# take a free unit, so only the co-issue itself is asserted.
 { add32 r0, r1, r2 ; add64 d0, d1, d2 }
 
-# 3-issue Bundle128 — pack-friendly source order (two add64 then add32)
+# 3-issue — pack-friendly source order (two add64 then add32)
 { add64 d0, d1, d2 ; add64 d3, d4, d5 ; add32 r0, r1, r2 }
 
 # Single-issue control (solitary residual prefers S0)
 add32 r1, r2, r3
 
-# FileCheck: each parcel is exactly one objdump line at +0x10.
+# FileCheck: each parcel is exactly one objdump line, at +0xc.
 # Printer spacing between mnemonic and operands may vary; use {{.*}}.
-# CHECK:        0: {{.*}}{ add64{{.*}}d0, d1, d2; add32{{.*}}r0, r1, r2; nop }
-# CHECK-NEXT:  10: {{.*}}{ add64{{.*}}d0, d1, d2; add64{{.*}}d3, d4, d5; add32{{.*}}r0, r1, r2 }
-# CHECK-NEXT:  20: {{.*}}{ nop; nop; add32{{.*}}r1, r2, r3 }
+# CHECK:       0: {{.*}}{ {{add64.*d0, d1, d2.*add32.*r0, r1, r2|add32.*r0, r1, r2.*add64.*d0, d1, d2}}
+# CHECK-NEXT:  c: {{.*}}{ {{.*}}add64{{.*}}d0, d1, d2{{.*}}add64{{.*}}d3, d4, d5{{.*}}add32{{.*}}r0, r1, r2
+# CHECK-NEXT: 18: {{.*}}{ {{.*}}add32{{.*}}r1, r2, r3

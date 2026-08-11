@@ -21,11 +21,13 @@
 // Test design: `{ xor32 r0,r0,r0; add32 r1,r2,r3; nop }` — two bare ALU32 ops
 // (both legal S0|S1|S2) + a NOP. The shuffler must place xor32 in S0 and add32
 // in S1 (distinct slots — no collision). If the shuffler regresses, the two
-// ops collide on S0 and the encoder either aborts or emits a corrupt
-// Bundle128 that round-trips with <?>/<unknown>.
+// ops collide and the encoder either aborts or emits a corrupt parcel that
+// round-trips with <?>/<unknown>.
 //
-// Contract: both ops round-trip by name (placed in distinct, valid slots).
-// Zero placeholders. 16-byte parcel width (Bundle128, not legacy 8-byte).
+// Contract: both ops round-trip by name, in distinct valid placements, with
+// zero placeholders. WHICH placement each gets is the packer's choice and is
+// not asserted — that is § 5.12's territory and it will move. What has to
+// hold is that there are two of them and neither turned into a placeholder.
 
 .text
 .globl test_cb88_shuffler_bare
@@ -33,13 +35,10 @@ test_cb88_shuffler_bare:
   { xor32 r0, r0, r0 ; add32 r1, r2, r3 ; nop }
 
 // CHECK-LABEL: <test_cb88_shuffler_bare>:
-// 16-byte Bundle128 parcel (two real slots + one NOP slot). Both ops round-trip
-// in DISTINCT slots (xor32 + add32 — no collision). The wire-Bundle
-// render is single-line `{ op.sN...; op.sN...; op.sN }`, so both ops are
-// matched with independent CHECK directives on the same objdump line.
-// Text is s2-s1-s0: xor32 names s2, add32 names s1, s0 is the nop.
-// CHECK: xor32 r0, r0, r0
-// CHECK-SAME: add32 r1, r2, r3
+// One 12-byte parcel holding both ops plus a NOP. Both round-trip, in
+// distinct placements, on the same objdump line — either print order
+// satisfies that, so the check takes both.
+// CHECK: { {{xor32 r0, r0, r0.*add32 r1, r2, r3|add32 r1, r2, r3.*xor32 r0, r0, r0}}
 // Hard bar: zero placeholders (the load-bearing no-misencode contract).
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>
@@ -55,9 +54,8 @@ test_cb88_shuffler_hint_collision:
   { lui sp, 1 ; xor32 r0, r0, r0 ; nop }
 
 // CHECK-LABEL: <test_cb88_shuffler_hint_collision>:
-// lui names s2 but is S0-only, so it falls back to s0; xor32 keeps s1.
-// Print is s2-s1-s0, so xor32 comes out before lui.
-// CHECK: xor32 r0, r0, r0
-// CHECK-SAME: lui sp, 1
+// The hint collides, the shuffler spreads rather than aborting, and both ops
+// survive in one bundle. Order is not the contract.
+// CHECK: { {{xor32 r0, r0, r0.*lui sp, 1|lui sp, 1.*xor32 r0, r0, r0}}
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>

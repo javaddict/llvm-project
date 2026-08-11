@@ -1,5 +1,6 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
-# RUN:     llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# RUN:     llvm-objdump -d -z --triple=haydn-unknown-elf %t.o \
+# RUN:     | FileCheck %s --implicit-check-not='<unknown>'
 # REQUIRES: haydn-registered-target
 
 # REGRESSION TEST : `{ s_sw_with_imm lr, sp, 3 }` and the LD32/ST32/LD64/ST64
@@ -29,31 +30,31 @@
 # accidental breakage of the non-suffixed path.
 
 # CHECK-LABEL: <f_st32_s0>:
-# CHECK: { nop; nop; s_sw_with_imm lr, sp, 3 }
+# CHECK: { {{.*}}s_sw_with_imm lr, sp, 3
 f_st32_s0:
   { s_sw_with_imm lr, sp, 3 }
 
 # CHECK-LABEL: <f_st32_legacy>:
-# CHECK: { nop; nop; s_sw_with_imm lr, sp, 3 }
+# CHECK: { {{.*}}s_sw_with_imm lr, sp, 3
 f_st32_legacy:
   { s_sw_with_imm lr, sp, 3 }
 
 # CHECK-LABEL: <f_ld32_s0>:
-# CHECK: { nop; nop; s_lw_with_imm r1, sp, 8 }
+# CHECK: { {{.*}}s_lw_with_imm r1, sp, 8
 f_ld32_s0:
   { s_lw_with_imm r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld32_legacy>:
-# CHECK: { nop; nop; s_lw_with_imm r1, sp, 8 }
+# CHECK: { {{.*}}s_lw_with_imm r1, sp, 8
 f_ld32_legacy:
   { s_lw_with_imm r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld64_s0>:
-# CHECK: { nop; nop; d_ldw_with_imm d0, sp, 2 }
+# CHECK: { {{.*}}d_ldw_with_imm d0, sp, 2
 f_ld64_s0:
   { d_ldw_with_imm d0, sp, 2 }
 
 # CHECK-LABEL: <f_st64_s0>:
-# CHECK: { nop; nop; d_sdw_with_imm d0, sp, 2 }
+# CHECK: { {{.*}}d_sdw_with_imm d0, sp, 2
 f_st64_s0:
   { d_sdw_with_imm d0, sp, 2 }
