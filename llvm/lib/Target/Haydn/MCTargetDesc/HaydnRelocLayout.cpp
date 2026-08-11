@@ -99,21 +99,20 @@ constexpr Row Table[] = {
     // clobbering the discriminators and producing <unknown> on disassembly.
     {RelocKind::LO20, {6, 20, 18, 0, 1, false, false, RelocTrans::Lo20}},
     {RelocKind::PC_LO20, {6, 20, 18, 0, 1, false, true, RelocTrans::Lo20}},
-    // RISK-6 (real root): the OLD FieldLsb values (26 for Off1
-    // 14 for Off2) were transcribed from the LEGACY 48-bit parcel geometry
-    // (HWLoopOff1@bits[31:26], Off2@bits[25:14]) and never updated when
-    // routed all emission through Bundle128. The.td HaydnFU_ALU32_S0_HWLOOP
-    // _W / _F2_W classes (`s0 = {FU, opcode, reserved, cnt/rs, offset2
-    // offset1, sel}`) place offset1 at s0 bits[6:1] (FieldLsb=1) and offset2
-    // at s0 bits[18:7] (FieldLsb=7). With the stale FieldLsb=26, the patcher
-    // wrote the 6-bit offset1 field into bits[31:26] of the LoWord — i.e. the
-    // opcode+FU discriminator bits — so `set_hwloop_f2` overflows the field
-    // for any offset > 0 (the encoding silently corrupts the opcode and
-    // disassembles as `<unknown>`). The agent's IsSigned=false fix alone
-    // was incomplete: the field RANGE was correct but the field POSITION was
-    // wrong. ValueShift=2 (÷4 per §5.11/5.12 + haydn_instruction_db.json) and
-    // IsSigned=false (uimm6/uimm12 per the.td UImmAsmOperand class) are both
-    // retained; only FieldLsb changes.
+    // The hardware-loop offsets. RISK-6 was that FieldLsb had been transcribed
+    // from the legacy 48-bit parcel and never updated for Bundle128, so the
+    // patcher wrote offset1 into the opcode discriminator bits. Under format E
+    // the FieldLsb here is NOT USED for these at all: they are instruction
+    // fields, so patchRelocFieldInBundle resolves the position from the bundle
+    // image via the generated geometry table, and the position depends on the
+    // placement — no single number can be right (§ 5.8). The values below are
+    // kept only because RelocFieldInfo has the member; they are read solely by
+    // readRelocAddend, which is REL-only and therefore dead for Haydn (§ 5.14).
+    //
+    // What IS live here: FieldSize (6 and 12, the widths the geometry lookup
+    // keys on), ValueShift=2 (÷4, per the database) and IsSigned=false
+    // (uimm6/uimm12). § 5.14 was a geometry-table key defect, not a FieldLsb
+    // one — do not "fix" these numbers again.
     {RelocKind::HWLoopOff1, {6, 6, 1, 2, 4, false, true, RelocTrans::None}},
     {RelocKind::HWLoopOff2, {6, 12, 7, 2, 4, false, true, RelocTrans::None}},
     // I12 WIDE zero-compare branches (BEQZ/BNEZ/…):
@@ -168,17 +167,43 @@ const Row &rowFor(RelocKind R) {
 } // namespace
 
 namespace {
-// The generated geometry, as a flat table. See HaydnRelocGeometry.inc.
+// The generated geometry, as two flat tables. See HaydnRelocGeometry.inc.
+//
+// The type code is part of the key because the other four parts do not
+// identify a field: SET_HWLOOP_F2 carries a 6-bit and a 12-bit offset in one
+// entry, and a different instruction has a 6-bit immediate at the same
+// (entry, mapping). Keying without it patched off1 thirteen bits away from
+// its field — see § 5.14. The type code's own position depends on
+// (entry, mapping), so it takes a table of its own to find.
 struct RelocGeomRow {
-  uint8_t FieldSize, EntryCount, EntryIndex, Mapping, BundleLsb;
+  uint8_t FieldSize, EntryCount, EntryIndex, Mapping, TypeCode, BundleLsb;
+};
+struct RelocTypePos {
+  uint8_t EntryCount, EntryIndex, Mapping, TypeLsb, TypeWidth;
 };
 #define HAYDN_RELOC_GEOM_ROW_LIST(...) __VA_ARGS__
-#define HAYDN_RELOC_GEOM_ROW(FS, EC, EI, MP, LSB) {FS, EC, EI, MP, LSB},
+#define HAYDN_RELOC_GEOM_ROW(FS, EC, EI, MP, TC, LSB) {FS, EC, EI, MP, TC, LSB},
+#define HAYDN_RELOC_TYPE_POS_LIST(...)
+#define HAYDN_RELOC_TYPE_POS(EC, EI, MP, TL, TW)
 constexpr RelocGeomRow RelocGeom[] = {
 #include "HaydnRelocGeometry.inc"
 };
 #undef HAYDN_RELOC_GEOM_ROW
 #undef HAYDN_RELOC_GEOM_ROW_LIST
+#undef HAYDN_RELOC_TYPE_POS
+#undef HAYDN_RELOC_TYPE_POS_LIST
+
+#define HAYDN_RELOC_GEOM_ROW_LIST(...)
+#define HAYDN_RELOC_GEOM_ROW(FS, EC, EI, MP, TC, LSB)
+#define HAYDN_RELOC_TYPE_POS_LIST(...) __VA_ARGS__
+#define HAYDN_RELOC_TYPE_POS(EC, EI, MP, TL, TW) {EC, EI, MP, TL, TW},
+constexpr RelocTypePos RelocTypePositions[] = {
+#include "HaydnRelocGeometry.inc"
+};
+#undef HAYDN_RELOC_GEOM_ROW
+#undef HAYDN_RELOC_GEOM_ROW_LIST
+#undef HAYDN_RELOC_TYPE_POS
+#undef HAYDN_RELOC_TYPE_POS_LIST
 
 // Entry byte base and entry LSB bit, per composite. From the generated
 // composites: BUNDLE_E2 entries start at bundle bits 6 and 51, BUNDLE_E3 at
@@ -226,9 +251,27 @@ bool relocFieldBundleLsb(unsigned FieldSize, const uint8_t *BundleBase,
   const unsigned Mapping =
       (unsigned)readBundleBits(BundleBase, Entries[Index].LsbBit, 2);
   const unsigned EntryCount = IsThreeEntry ? 3 : 2;
+
+  // The type code distinguishes fields the other four parts cannot. Its
+  // position is itself per (entry, mapping), so find it before reading it.
+  // A mapping with no row is the reserved one (11 in a 2-entry bundle, whose
+  // payload is all zero); refusing is right, guessing would patch it.
+  const RelocTypePos *TP = nullptr;
+  for (const RelocTypePos &T : RelocTypePositions)
+    if (T.EntryCount == EntryCount && T.EntryIndex == Index &&
+        T.Mapping == Mapping) {
+      TP = &T;
+      break;
+    }
+  if (!TP)
+    return false;
+  const unsigned TypeCode =
+      (unsigned)readBundleBits(BundleBase, TP->TypeLsb, TP->TypeWidth);
+
   for (const RelocGeomRow &R : RelocGeom)
     if (R.FieldSize == FieldSize && R.EntryCount == EntryCount &&
-        R.EntryIndex == Index && R.Mapping == Mapping) {
+        R.EntryIndex == Index && R.Mapping == Mapping &&
+        R.TypeCode == TypeCode) {
       OutBundleLsb = R.BundleLsb;
       return true;
     }
@@ -407,6 +450,13 @@ RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
   return Out;
 }
 
+// REL only, and Haydn emits RELA (MCELFObjectTargetWriter's HasRelocationAddend
+// is true), so nothing reaches this for a Haydn object. That matters because
+// the read below uses the kind's nominal FieldLsb, which for an INSTRUCTION
+// field is the thing § 5.8 and § 5.14 are both about: the position depends on
+// the placement and is only knowable from the bundle image. If an implicit
+// addend ever has to be read for an instruction reloc, this needs the bundle
+// base and relocFieldBundleLsb, not FieldLsb.
 int64_t readRelocAddend(RelocKind R, const uint8_t *Loc) {
   const RelocFieldInfo &I = getRelocFieldInfo(R);
   uint64_t Field = readField(Loc, I.NBytes, I.FieldSize, I.FieldLsb);

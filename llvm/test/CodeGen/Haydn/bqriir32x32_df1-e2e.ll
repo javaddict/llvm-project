@@ -152,6 +152,19 @@ for.end:
 ; BUNDLE-DAG: sra64
 ; BUNDLE-DAG: s_sw_{{[a-z_]*}}
 ; BUNDLE-DAG: bnez
+; The SET_HWLOOP_F2 that programs the loop, asserted on its own and NOT
+; alternated with anything — alternating it with something that matches is
+; exactly how its absence stayed invisible (§ 5.14). It was `<unknown>` in the
+; object until the reloc geometry table gained the type code in its key; the
+; standalone reproductions are hwloop-fixup-reserved-bit.s and
+; d486-hwloop-fieldlsb-bundle128.s.
+;
+; 132 and 960 are the distances from the instruction to .LLhwloop_start0 and
+; .LLhwloop_end0 in bytes — 11 and 80 parcels. They will move if the function's
+; schedule changes; the invariant is that they are the real distances and that
+; neither is 0.
+; BUNDLE-DAG: set_hwloop_f2{{.*}}1, 132, 960, r4
+; BUNDLE-NOT: <unknown>
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 ;
 ; Note: control flow here is a guard plus a HARDWARE LOOP — NOT JAL. The
@@ -165,14 +178,6 @@ for.end:
 ; between .LLhwloop_start0 and .LLhwloop_end0. The condition is inverted
 ; relative to the old shape, which is why this asserts bnez and not beqz.
 ;
-; NOT asserted here, deliberately: the SET_HWLOOP_F2 that programs the loop.
-; llc emits it in .s, and in the OBJECT the same bundle disassembles as
-; `<unknown>` — its reserved bit e1{30} is set by the label fixups. That is a
-; live encoder defect, reproduced standalone in
-; llvm/test/MC/Haydn/hwloop-fixup-reserved-bit.s (XFAIL), and this file is
-; kept green so its other twenty assertions stay a usable signal. Do not
-; "restore" a set_hwloop check here by alternating it with something that
-; matches — that is exactly how the defect stayed invisible.
 
 ; === Entry point: 2-section cascaded IIR ===;
 ; C: int main(void) { ... filter process ... return r[0]; }
