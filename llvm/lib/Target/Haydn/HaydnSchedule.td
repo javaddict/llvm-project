@@ -128,6 +128,15 @@ def Slot12_MAC   : InstrItinClass;  // Scalar acc-MAC — slot 1/2 (MAC32/MACQ31
 // Using Slot12_MAC's [2,1,1,2] mapped ra to rs2 and inflated RecMII (bkfir
 // 4→7) — P3.
 def Slot12_MAC_AccFirst : InstrItinClass;
+// Unit-model peer of Slot12_MAC_AccFirst, and the reason a hand-written
+// schedule file still exists: HaydnFormatESchedule.td is generated from
+// instruction_type_index.json, which gives ONE Data_Latency per instruction
+// and cannot say which operand is read when. The [2, 2, 1, 1] below is the
+// FmtALU64Acc operand order (rd, rd_in, rs1, rs2) and it is load-bearing —
+// mapping the accumulator to rs2 instead inflated bkfir's RecMII from 4 to 7.
+// Generated classes carry what the database states; this one carries what it
+// does not.
+def Unit_MAC0MAC1_L2_AccFirst : InstrItinClass;
 def Slot1_MAC    : InstrItinClass;  // SIMD acc-MAC (X*MULA*/X*MULS*) — slot 1 only
 
 //===----------------------------------------------------------------------===//
@@ -214,6 +223,9 @@ def HaydnItineraries : ProcessorItineraries<
     // FmtALU64Acc operand order (rd, rd_in, rs1, rs2): acc use is index 1.
     InstrItinData<Slot12_MAC_AccFirst, [InstrStage<1, [SLOT1, SLOT2]>],
                   [2, 2, 1, 1]>,
+    // Same operand cycles on the units the database gives these: MAC0/MAC1.
+    InstrItinData<Unit_MAC0MAC1_L2_AccFirst,
+                  [InstrStage<1, [U_MAC0, U_MAC1]>], [2, 2, 1, 1]>,
 
     // Accumulator-feedback MAC — SIMD form (X2MULA32, X4MULA16,...), slot 1
     // only. Same InstrStage<1> + [2,1,1,2] shape.
