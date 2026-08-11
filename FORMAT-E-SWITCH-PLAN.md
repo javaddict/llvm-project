@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `fb21d8a6ce36` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `51b9c3911a50` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -2520,6 +2520,58 @@ trade.
 The original CB-44 symptom — a stale condition register leaving `mxIdx` at 1
 instead of 14 — is gone **with** the crash rather than merely uncovered by it:
 the case exits 145 and MATCHes the host oracle.
+
+---
+
+### 5.18 CB-143 — two pieces landed, and one of them had been inert for weeks
+
+**The logicals were still on the slot machine.** The members were retargeted
+when format E landed; the logicals inherit an itinerary from their format
+class, and every one of those still named `SLOT0/1/2` — 543 of 4677 defs, and
+the ones the pre-RA scheduler reads. It cannot be done by editing the format
+classes: **a format is an encoding shape and `Available` is a machine fact, and
+they are not the same partition.** `Slot12_ALU` alone covered defs belonging to
+`Unit_ALU0ALU1ALU2_L1` (104), `Unit_MAC0MAC1_L2` (70) and `Unit_MAC0MAC1_L1`
+(38). Derived per def from the database, 512 retargeted (`6f37a306084f`).
+
+One fact the database cannot state, and it is load-bearing:
+`Slot12_MAC_AccFirst` carries per-operand cycles `[2, 2, 1, 1]` — the
+`FmtALU64Acc` order with the accumulator at index 1. The generated classes
+carry a single `Data_Latency`, so retargeting the 225 acc-MACs onto plain
+`Unit_MAC0MAC1_L2` dropped it, and `postmisched-stall-idle-nop.mir` caught the
+loss. Hence a hand-written `Unit_MAC0MAC1_L2_AccFirst`. **That is the division
+the two schedule files should keep**: generated classes carry what the database
+states, hand-written ones carry what it does not.
+
+#### The post-RA scheduler could not see a single unit
+
+`HAYDN_NUM_FU_BITS` was **3**, for the retired slots. `HaydnItineraries`
+declares those three *and* the seven units, in that order, so a `Unit_*`
+itinerary sets bits 3..9 and `HaydnFuncUnitWrapper`'s loop over 0..2 recorded
+**nothing**. Every instruction reached the scoreboard with an empty Required
+set from the day the members were retargeted.
+
+It produced no wrong answers, and that is why it lasted: legality comes from
+the placement search (§ 7), so the packer kept rejecting what the hardware
+rejects. What was lost is the scheduler's ability to stop proposing those
+cycles — B4's "at most one store per bundle" was invisible to it.
+`83959145aafd`.
+
+#### Where it stops, and how it nearly went unnoticed
+
+Deleting `SLOT0/1/2` was tried and reverted. Nothing references them from an
+instruction now, but the **31 defs the ISA database does not have** still carry
+slot itineraries — twelve `_W` peers, eleven retired load/store spellings,
+`ASR32`/`LSR32`/`SHL32`, `SEXT_GPR32_TO_DR64` — and deleting those breaks **21
+tests that assemble the retired mnemonics**: 62 live directives across
+`loadstore-all.s`, `roundtrip-loadstore.s`, `basic.s`, `comprehensive.s`,
+`fixups.s`, plus sixteen `.mir`. They pin an instruction set that no longer
+exists and pass only because the dead defs survive as parse-only shells. That
+is § 5.6 residue.
+
+**A whole-word grep for the retired spellings across the `.ll` tests returned
+only comments, and I took that for the answer.** The `.s` tests are where they
+are live. Sampling one file type is not sampling the suite.
 
 ---
 
