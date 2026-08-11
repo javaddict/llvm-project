@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from itertools import permutations
 from pathlib import Path
 
@@ -738,7 +739,12 @@ def roundtrip(geometry: dict, placements: list[dict]) -> str:
     else:
         lines.append("  every placement encodes and decodes back to itself,"
                      " operands included")
-    return "\n".join(lines) + "\n"
+    # The count travels with the text so main() can EXIT on it. It used not
+    # to: this printed "FAILURES: n" and the process still returned 0, so
+    # anything using it as a gate through $? saw a pass. Same shape as the
+    # vacuous-CHECK-NOT gate reading zero files (plan 6.15) -- a check that
+    # cannot fail is not a check.
+    return "\n".join(lines) + "\n", len(failures)
 
 
 def emit_schedule_file(pipeline: dict, placements: list[dict]) -> str:
@@ -1244,7 +1250,7 @@ def check_operand_agreement(placements: list[dict], flags_path: Path,
                 flagged.add(key)
 
     if not arity and not defs and not kinds and not ties:
-        return "operand agreement: every member matches its logical\n"
+        return "operand agreement: every member matches its logical\n", 0
 
     lines = [f"operand agreement:"
              f" {len(set(arity) | set(defs) | set(kinds) | set(ties))} logicals,"
@@ -1262,7 +1268,14 @@ def check_operand_agreement(placements: list[dict], flags_path: Path,
         for logical, count in sorted(counted.items()):
             lines.append(f"    {logical:32} {count} placements")
         lines.append("")
-    return "\n".join(lines).rstrip("\n") + "\n"
+    # Blocking axes only. Plan 5.4: "do not regenerate while 5.11's first three
+    # axes are non-zero" -- so arity, defs and kinds fail the process. `ties` is
+    # a register-allocation defect rather than an encoding one and is held by
+    # 5.2, so it reports without failing; that is a deliberate difference, not
+    # an oversight, and it is why this returns a count of the first three
+    # rather than of everything it printed.
+    blocking = sum(arity.values()) + sum(defs.values()) + sum(kinds.values())
+    return "\n".join(lines).rstrip("\n") + "\n", blocking
 
 
 def emit_reloc_geometry(placements: list[dict]) -> str:
@@ -2075,7 +2088,7 @@ def fix_operand_mapping(database: Path, write: bool) -> str:
     return summary + f"\nwrote {path}"
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", type=Path, required=True,
                         help="directory holding the read-only ISA database JSON")
@@ -2105,11 +2118,14 @@ def main() -> None:
 
     if args.fix_operand_mapping:
         print(fix_operand_mapping(args.database, args.write))
-        return
+        return 0
     if args.fix_read_ports:
         print(fix_read_ports(args.database, args.write))
-        return
+        return 0
 
+    # 0 unless a CHECK mode says otherwise. Generation modes either produce
+    # their file or raise; only roundtrip and operand-agreement have a verdict.
+    status = 0
     geometry, placements = load_placements(args.database)
     verify_decodable(placements)
     verify_operand_sets(placements, load_syntax_order(args.database))
@@ -2121,7 +2137,7 @@ def main() -> None:
         return
 
     if args.emit == "roundtrip":
-        text = roundtrip(geometry, placements)
+        text, status = roundtrip(geometry, placements)
     elif args.emit == "schedule":
         text = emit_schedule_file(load_pipeline(args.database),
                                   canonical_members(placements))
@@ -2155,10 +2171,11 @@ def main() -> None:
         if args.flags_from is None:
             raise SystemExit("--emit operand-agreement needs --flags-from:"
                              " the logicals' operand lists come from tblgen")
-        text = check_operand_agreement(placements, args.flags_from,
-                                       load_operand_roles(args.database),
-                                       load_syntax_order(args.database),
-                                       load_tie_positions(args.flags_from))
+        text, status = check_operand_agreement(
+            placements, args.flags_from,
+            load_operand_roles(args.database),
+            load_syntax_order(args.database),
+            load_tie_positions(args.flags_from))
     elif args.emit == "reloc-geometry":
         text = emit_reloc_geometry(placements)
     elif args.emit == "thunk-encoding":
@@ -2174,7 +2191,10 @@ def main() -> None:
     else:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(text, encoding="utf-8")
+    # Clamp: `status` is a COUNT, and an exit status is a byte — 256 findings
+    # would exit 0 and read as a pass.
+    return 1 if status else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
