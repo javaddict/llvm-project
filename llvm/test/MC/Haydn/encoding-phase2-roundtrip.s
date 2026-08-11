@@ -89,13 +89,15 @@ LUI R0, 1024
 # CHECK: s_lw_{{[a-z_]*}} r0, r1, 0
 s_lw_with_imm R0, R1, 0
 
-# CHECK: s_lw_{{[a-z_]*}} r2, r3, 16
+# ELEMENT index, not a byte offset: rs + (imm6 << 2), so 4 is byte 16.
+# CHECK: s_lw_{{[a-z_]*}} r2, r3, 4
 s_lw_with_imm R2, R3, 4
 
 # CHECK: s_sw_{{[a-z_]*}} r4, r5, 0
 s_sw_with_imm R4, R5, 0
 
-# CHECK: s_sw_{{[a-z_]*}} r6, r7, -4
+# Likewise negative: -1 element is byte -4.
+# CHECK: s_sw_{{[a-z_]*}} r6, r7, -1
 s_sw_with_imm R6, R7, -1
 
 #===----------------------------------------------------------------------===
