@@ -210,11 +210,14 @@ haydn_cb_ld_t pub_d_lw_post_imm(const void *base) {
   return haydn_d_lw_post_imm(base, 0);
 }
 
-// Soft-move immediates (ImmArg)
+// Soft-move immediates (ImmArg). Two operands, not one: the database is
+// `MOVEI_L rtd, imm32` with `rtd = {rtd[63:32], imm32}`, so rtd is READ as
+// well as written — the instruction splices the immediate into one half and
+// leaves the other alone. Building a value from nothing passes 0 for it.
 // IR-LABEL: @pub_movei_l
 // IR: call {{.*}}@llvm.haydn.movei
 long long pub_movei_l(void) {
-  return haydn_movei_l(0x1234);
+  return haydn_movei_l(0, 0x1234);
 }
 
 // Absolute / saturate samples
@@ -228,15 +231,17 @@ int pub_abs32s(int a) { return haydn_abs32s(a); }
 // IR-LABEL: @pub_sin_cos
 long long pub_sin_cos(int phase) { return haydn_sin_cos(phase, 1); }
 
-// UA post vector wrappers (switch-literal ar_sel/dir in haydn.h specials)
+// UA post vector wrappers (switch-literal ar_sel in haydn.h specials).
+// Format E dropped the stride and the direction select (§ 8 Q1), so ar_sel is
+// the only thing after the pointer.
 // IR-LABEL: @pub_d_ltwua_post
-haydn_x2int32 pub_d_ltwua_post(const void *ptr, int stride) {
-  return haydn_d_ltwua_post(ptr, 0, stride, 0);
+haydn_x2int32 pub_d_ltwua_post(const void *ptr) {
+  return haydn_d_ltwua_post(ptr, 0);
 }
 
 // IR-LABEL: @pub_d_stwua_post
-void pub_d_stwua_post(haydn_x2int32 data, void *ptr, int stride) {
-  haydn_d_stwua_post(data, ptr, 1, stride, 0);
+void pub_d_stwua_post(haydn_x2int32 data, void *ptr) {
+  haydn_d_stwua_post(data, ptr, 1);
 }
 
 // Golden D-ALU / bitwise samples

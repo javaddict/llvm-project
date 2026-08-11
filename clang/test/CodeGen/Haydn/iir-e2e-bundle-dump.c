@@ -80,20 +80,22 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 
 // ASM-LABEL: biquad_df1:
 // ASM-DAG: subi32
-// 64-bit mul may be mul64.ll or widened mul64.ulul + add64 (legalization).
-// ASM-DAG: {{mul64\.ll|mul64\.ulul}}
-// ASM-DAG: mula64.ll
+// 64-bit mul may be mul64_ll or widened mul64_ulul + add64 (legalization).
+// Format E member AsmStrings use `_`, not `.` — both spellings assemble but
+// only the underscore one is printed.
+// ASM-DAG: {{mul64_ll|mul64_ulul}}
+// ASM-DAG: mula64_ll
 // ASM-DAG: {{sub64|add64}}
-// ASM-DAG: ld32
-// ASM-DAG: st32
+// ASM-DAG: s_lw_{{[a-z_]*}}
+// ASM-DAG: s_sw_{{[a-z_]*}}
 // ASM: jalr
 
 // ASM-LABEL: biquad_df1_32bit:
 // ASM-DAG: subi32
 // ASM-DAG: mull
 // ASM-DAG: sub32
-// ASM-DAG: ld32
-// ASM-DAG: st32
+// ASM-DAG: s_lw_{{[a-z_]*}}
+// ASM-DAG: s_sw_{{[a-z_]*}}
 // ASM: jalr
 
 // ASM-LABEL: biquad_process_block:
@@ -115,18 +117,18 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // === Objdump checks ===
 
 // BUNDLE-LABEL: <biquad_df1>:
-// BUNDLE-DAG: {{mul64\.ll|mul64\.ulul}}
-// BUNDLE-DAG: mula64.ll
+// BUNDLE-DAG: {{mul64_ll|mul64_ulul}}
+// BUNDLE-DAG: mula64_ll
 // BUNDLE-DAG: sub64
-// BUNDLE-DAG: st32
-// BUNDLE-DAG: ld32
+// BUNDLE-DAG: s_sw_{{[a-z_]*}}
+// BUNDLE-DAG: s_lw_{{[a-z_]*}}
 // BUNDLE: jalr
 
 // BUNDLE-LABEL: <biquad_df1_32bit>:
 // BUNDLE-DAG: mull
 // BUNDLE-DAG: sub32
-// BUNDLE-DAG: ld32
-// BUNDLE-DAG: st32
+// BUNDLE-DAG: s_lw_{{[a-z_]*}}
+// BUNDLE-DAG: s_sw_{{[a-z_]*}}
 // BUNDLE: jalr
 
 // BUNDLE-LABEL: <biquad_process_block>:

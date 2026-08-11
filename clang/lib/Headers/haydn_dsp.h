@@ -1417,11 +1417,16 @@ int haydn_recip_q31(int x) {
 #define __AE_MOVT64_GET(_1, _2, _3, NAME, ...) NAME
 #define __AE_MOVT64_OVERLOAD(...) \
   __AE_MOVT64_GET(__VA_ARGS__, __AE_MOVT64_3, __AE_MOVT64_2, )(__VA_ARGS__)
-#define __AE_MOVT64_2(dst, src)     ((dst) = (ae_int64)haydn_movt64((src)))
+// Two operands, not one. The database is `MOVT64 rtd, rsd` with
+// `rtd = (SFR == 4'b1111) ? rsd : rtd` — rtd is READ as well as written,
+// because the instruction leaves it alone when the condition is false. A
+// one-argument call cannot express that, and it did not compile.
+#define __AE_MOVT64_2(dst, src)     ((dst) = (ae_int64)haydn_movt64((dst), (src)))
 #define __AE_MOVT64_3(dst, src, cf) ((void)((cf) && ((dst) = (src)), 0))
 
-/// 64-bit conditional move if SFR false
-#define AE_MOVF64(dst, src) ((dst) = (ae_int64)haydn_movf64((src)))
+/// 64-bit conditional move if SFR false. Same read-modify-write shape:
+/// `MOVF64 rtd, rsd` / `rtd = (SFR == 4'b0000) ? rsd : rtd`.
+#define AE_MOVF64(dst, src) ((dst) = (ae_int64)haydn_movf64((dst), (src)))
 
 //===----------------------------------------------------------------------===//
 // Compare (LT via pure cmplt; EQ/LE/SEQ/SLE ambient compare + movesfr2gpr)
