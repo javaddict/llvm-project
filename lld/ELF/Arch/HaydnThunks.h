@@ -33,6 +33,16 @@ class Thunk;
 std::unique_ptr<Thunk> addThunkHaydn(Ctx &ctx, const InputSection &isec,
                                      Relocation &rel, Symbol &s);
 
+// Distance from the start of the bundle a relocation sits in to the entry it
+// points at. A branch resolves from the BUNDLE, so the emitter puts the
+// entry's byte base into the addend and the relocation's offset points at the
+// entry; the two cancel in S + A - P. Anything that rewrites the addend has to
+// put that base back, which is why `getPCBias()` needs this too. Format E
+// parcels are a fixed 12 bytes and every input section starts on a bundle
+// boundary, so unlike Hexagon's variable-length packets there is nothing to
+// search for.
+int64_t haydnBundleOffset(const Relocation &rel);
+
 } // namespace lld::elf
 
 #endif // LLD_ELF_ARCH_HAYDN_THUNKS_H

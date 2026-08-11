@@ -26,6 +26,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Relocations.h"
+#include "Arch/HaydnThunks.h"
 #include "Config.h"
 #include "InputFiles.h"
 #include "LinkerScript.h"
@@ -1850,6 +1851,15 @@ static int64_t getPCBias(Ctx &ctx, const InputSection &isec,
   }
   if (ctx.arg.emachine == EM_HEXAGON)
     return -getHexagonPacketOffset(isec, rel);
+  // Same shape as Hexagon, and for the same reason: a Haydn branch resolves
+  // from the start of its bundle while the relocation points at the entry
+  // inside it, so the emitter puts the entry's byte base into the addend and
+  // the two cancel in S + A - P. Redirecting to a thunk overwrites the addend
+  // with -getPCBias() below, which is the only place that base can come back.
+  // Without it a far call lands `base` bytes short of the veneer — mid-bundle,
+  // which the loader rejects outright rather than mis-executing.
+  if (ctx.arg.emachine == EM_HAYDN)
+    return -haydnBundleOffset(rel);
   return 0;
 }
 
