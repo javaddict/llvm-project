@@ -84,7 +84,7 @@ define i32 @i1_sext(i1 %a) nounwind {
 ;Truncate i32 to i1
 define i1 @trunc_i32_to_i1(i32 %a) nounwind {
 ; CHECK-LABEL: trunc_i32_to_i1:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = trunc i32 %a to i1
   ret i1 %r
 }
@@ -92,7 +92,7 @@ define i1 @trunc_i32_to_i1(i32 %a) nounwind {
 ;i1 used in branch
 define i32 @i1_branch(i1 %cond, i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: i1_branch:
-; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   br i1 %cond, label %t, label %f
 t:

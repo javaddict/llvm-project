@@ -15,14 +15,14 @@
 ;Simple return with constant
 define i32 @simple_ret() nounwind {
 ; CHECK-LABEL: simple_ret:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   ret i32 42
 }
 
 ;Void return
 define void @void_ret() nounwind {
 ; CHECK-LABEL: void_ret:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   ret void
 }
 
@@ -30,7 +30,7 @@ define void @void_ret() nounwind {
 define i32 @ret_after_arith(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: ret_after_arith:
 ; CHECK: add32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = add i32 %a, %b
   ret i32 %r
 }
@@ -39,8 +39,8 @@ define i32 @ret_after_arith(i32 %a, i32 %b) nounwind {
 declare i32 @helper_fn(i32)
 define i32 @ret_after_call(i32 %a) nounwind {
 ; CHECK-LABEL: ret_after_call:
-; CHECK: jal{{(\.s[012])?}} {{.*}}, helper_fn
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}, helper_fn
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = call i32 @helper_fn(i32 %a)
   ret i32 %r
 }
@@ -48,7 +48,7 @@ define i32 @ret_after_call(i32 %a) nounwind {
 ;Return with conditional branch (multiple return points)
 define i32 @multi_ret(i32 %x) nounwind {
 ; CHECK-LABEL: multi_ret:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
 entry:
   %cmp = icmp sgt i32 %x, 0
   br i1 %cmp, label %pos, label %neg
@@ -62,6 +62,6 @@ neg:
 ;Return i64
 define i64 @ret_i64(i64 %a) nounwind {
 ; CHECK-LABEL: ret_i64:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   ret i64 %a
 }

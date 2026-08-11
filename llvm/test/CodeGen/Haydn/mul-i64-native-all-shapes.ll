@@ -50,9 +50,9 @@
 ; Schoolbook path: three MUL64_ULUL (unsigned x unsigned) partials (fix).
 define i64 @mul_s64_full(i64 %a, i64 %b) {
 ; CHECK-LABEL: mul_s64_full:
-; CHECK-COUNT-3: mul64.ulul
+; CHECK-COUNT-3: mul64_ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %r = mul i64 %a, %b
   ret i64 %r
 }
@@ -66,9 +66,9 @@ define i64 @mul_s64_full(i64 %a, i64 %b) {
 ; corrupt the high half; only MUL64_ULUL is unsigned x unsigned.)
 define i64 @mul_u64_full(i64 %a, i64 %b) {
 ; CHECK-LABEL: mul_u64_full:
-; CHECK-COUNT-3: mul64.ulul
+; CHECK-COUNT-3: mul64_ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %r = mul i64 %a, %b
   ret i64 %r
 }
@@ -77,9 +77,9 @@ define i64 @mul_u64_full(i64 %a, i64 %b) {
 ; Schoolbook path: three MUL64_ULUL partials.
 define i64 @mul_s64_const(i64 %a) {
 ; CHECK-LABEL: mul_s64_const:
-; CHECK-COUNT-3: mul64.ulul
+; CHECK-COUNT-3: mul64_ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %r = mul i64 %a, 4294967297 ; 0x100000001
   ret i64 %r
 }
@@ -88,9 +88,9 @@ define i64 @mul_s64_const(i64 %a) {
 ; Schoolbook path: three MUL64_ULUL partials. The trunc is selected after.
 define i32 @mul_s64_trunc(i64 %a, i64 %b) {
 ; CHECK-LABEL: mul_s64_trunc:
-; CHECK-COUNT-3: mul64.ulul
+; CHECK-COUNT-3: mul64_ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %m = mul i64 %a, %b
   %r = trunc i64 %m to i32
   ret i32 %r
@@ -100,9 +100,9 @@ define i32 @mul_s64_trunc(i64 %a, i64 %b) {
 ; Only one operand traces to a widened s32 -> schoolbook path -> MUL64_ULUL.
 define i64 @mul_mixed_full_ext(i64 %a, i32 %b) {
 ; CHECK-LABEL: mul_mixed_full_ext:
-; CHECK-COUNT-3: mul64.ulul
+; CHECK-COUNT-3: mul64_ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %bb = sext i32 %b to i64
   %r = mul i64 %a, %bb
   ret i64 %r
@@ -112,10 +112,10 @@ define i64 @mul_mixed_full_ext(i64 %a, i32 %b) {
 ; 32x32->64 SIGNED case. Lowers to a single MUL64_LL (signed x signed).
 define i64 @mul_sext_i32_widen(i32 %a, i32 %b) {
 ; CHECK-LABEL: mul_sext_i32_widen:
-; CHECK-COUNT-1: mul64.ll
-; CHECK-NOT: mul64.ulul
+; CHECK-COUNT-1: mul64_ll
+; CHECK-NOT: mul64_ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
   %r = mul i64 %aa, %bb
@@ -132,10 +132,10 @@ define i64 @mul_sext_i32_widen(i32 %a, i32 %b) {
 ; is MUL64_ULUL.)
 define i64 @mul_zext_i32_widen(i32 %a, i32 %b) {
 ; CHECK-LABEL: mul_zext_i32_widen:
-; CHECK-COUNT-1: mul64.ulul
-; CHECK-NOT: mul64.ll.
+; CHECK-COUNT-1: mul64_ulul
+; CHECK-NOT: mul64_ll.
 ; CHECK-NOT: __muldi3
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64
   %r = mul i64 %aa, %bb

@@ -12,7 +12,7 @@
 ; REGRESSION TEST : a streaming FIR-style inner loop must lower the
 ; G_LOAD + G_ADD (post-increment pointer bump) to a SINGLE fused DB-named
 ; post-increment load `d_ldw_post_imm` (NOT the 2-instruction `ld64` +
-; `addi32` split). : streaming stores fuse to ST64_POST.
+; `addi32` split). : streaming stores fuse to D_SDW_POST.
 ;
 ; Bug being fixed: the DB names for fused post-increment loads are correct, but
 ; the MC layer did not encode the DB-named opcodes. The standalone path had no
@@ -22,7 +22,7 @@
 ; writeback store-post field.
 ;
 ; Fix: make D_LDW_POST_IMM / S_LW_POST_IMM real codegen-only FmtLSPostInc
-; instructions mapped to the existing LD64_POST / LD32_POST encodings, and keep
+; instructions mapped to the existing D_LDW_POST / S_LW_POST encodings, and keep
 ; stores as ST32/ST64 + ADDI32.
 ;
 ; Test design:
@@ -52,7 +52,7 @@ declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; D_LDW_POST_IMM). Contract: both streams load + bump, MAC present.
 define i64 @fir_paired32_stream(ptr readonly %a, ptr readonly %b, i32 %n) nounwind {
 ; MIR-LABEL: name: fir_paired32_stream
-; MIR-DAG: LD64
+; MIR-DAG: D_LDW_{{[A-Z_]*}}
 ; MIR-DAG: {{ADDI32|S_.*POST|G_PTR_ADD}}
 ; MIR: MULA64_LL
 entry:
@@ -80,11 +80,11 @@ exit:
   ret i64 %result
 }
 
-; Streaming i64 STORE loop (stride 8). Product form: ST64_POST.
+; Streaming i64 STORE loop (stride 8). Product form: D_SDW_POST.
 ; No unencodable D_SDW_POST_IMM DB name.
 define void @stream_store_i64(ptr %out, i32 %n) nounwind {
 ; MIR-LABEL: name: stream_store_i64
-; MIR: ST64_POST
+; MIR: D_SDW_POST
 ; MIR-NOT: D_SDW_POST_IMM
 entry:
   %cmp0 = icmp sgt i32 %n, 0
@@ -107,7 +107,7 @@ exit:
 }
 
 ; ASM-LABEL: fir_paired32_stream:
-; ASM: {{d_ldw_post_imm|ld64}}
-; ASM: mula64.ll
+; ASM: {{d_ldw_post_imm|d_ldw_[a-z_]*}}
+; ASM: mula64_ll
 ; ASM-LABEL: stream_store_i64:
-; ASM: st64_post
+; ASM: d_sdw_post

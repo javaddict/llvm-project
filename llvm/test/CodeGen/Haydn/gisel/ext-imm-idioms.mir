@@ -148,7 +148,7 @@ regBankSelected: false
 # CHECK-LABEL: name: sext_s24_to_s64
 # CHECK: SLLI32 %{{[0-9]+}}, 8
 # CHECK: SRAI32 %{{[0-9]+}}, 8
-# CHECK: SEXT_GPR32_TO_DR64
+# CHECK: SEXT32T64
 # CHECK-NOT: LOADI32
 body:             |
   bb.0.entry:

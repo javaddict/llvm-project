@@ -43,68 +43,68 @@ muluuh r9, r10, r9
 # 64-bit Multiply (DR64 result) — halfword select variants
 #===----------------------------------------------------------------------===
 
-# CHECK: mul64.hh d0, d1, d2
-# ROUNDTRIP: mul64.hh	d0, d1, d2
+# CHECK: mul64_hh d0, d1, d2
+# ROUNDTRIP: mul64_hh	d0, d1, d2
 mul64.hh d0, d1, d2
 
-# CHECK: mul64.hl d3, d4, d5
-# ROUNDTRIP: mul64.hl	d3, d4, d5
+# CHECK: mul64_hl d3, d4, d5
+# ROUNDTRIP: mul64_hl	d3, d4, d5
 mul64.hl d3, d4, d5
 
-# CHECK: mul64.lh d6, d7, d8
-# ROUNDTRIP: mul64.lh	d6, d7, d8
+# CHECK: mul64_lh d6, d7, d8
+# ROUNDTRIP: mul64_lh	d6, d7, d8
 mul64.lh d6, d7, d8
 
-# CHECK: mul64.ll d9, d10, d11
-# ROUNDTRIP: mul64.ll	d9, d10, d11
+# CHECK: mul64_ll d9, d10, d11
+# ROUNDTRIP: mul64_ll	d9, d10, d11
 mul64.ll d9, d10, d11
 
-# CHECK: mul64.uhh d12, d13, d14
-# ROUNDTRIP: mul64.uhh	d12, d13, d14
+# CHECK: mul64_uhh d12, d13, d14
+# ROUNDTRIP: mul64_uhh	d12, d13, d14
 mul64.uhh d12, d13, d14
 
-# CHECK: mul64.uhl d15, d0, d1
-# ROUNDTRIP: mul64.uhl	d15, d0, d1
+# CHECK: mul64_uhl d15, d0, d1
+# ROUNDTRIP: mul64_uhl	d15, d0, d1
 mul64.uhl d15, d0, d1
 
-# CHECK: mul64.ulh d2, d3, d4
-# ROUNDTRIP: mul64.ulh	d2, d3, d4
+# CHECK: mul64_ulh d2, d3, d4
+# ROUNDTRIP: mul64_ulh	d2, d3, d4
 mul64.ulh d2, d3, d4
 
-# CHECK: mul64.ull d5, d6, d7
-# ROUNDTRIP: mul64.ull	d5, d6, d7
+# CHECK: mul64_ull d5, d6, d7
+# ROUNDTRIP: mul64_ull	d5, d6, d7
 mul64.ull d5, d6, d7
 
 #===----------------------------------------------------------------------===
 # 64-bit Multiply-Accumulate (MULA64)
 #===----------------------------------------------------------------------===
 
-# CHECK: mula64.hh d0, d1, d2
-# ROUNDTRIP: mula64.hh	d0, d1, d2
+# CHECK: mula64_hh d0, d1, d2
+# ROUNDTRIP: mula64_hh	d0, d1, d2
 mula64.hh d0, d1, d2
 
-# CHECK: mula64.ll d3, d4, d5
-# ROUNDTRIP: mula64.ll	d3, d4, d5
+# CHECK: mula64_ll d3, d4, d5
+# ROUNDTRIP: mula64_ll	d3, d4, d5
 mula64.ll d3, d4, d5
 
-# CHECK: mula64.uhh d6, d7, d8
-# ROUNDTRIP: mula64.uhh	d6, d7, d8
+# CHECK: mula64_uhh d6, d7, d8
+# ROUNDTRIP: mula64_uhh	d6, d7, d8
 mula64.uhh d6, d7, d8
 
-# CHECK: mula64.ull d9, d10, d11
-# ROUNDTRIP: mula64.ull	d9, d10, d11
+# CHECK: mula64_ull d9, d10, d11
+# ROUNDTRIP: mula64_ull	d9, d10, d11
 mula64.ull d9, d10, d11
 
 #===----------------------------------------------------------------------===
 # 64-bit Multiply-Subtract (MULS64 / MULSS64)
 #===----------------------------------------------------------------------===
 
-# CHECK: muls64.hh d0, d1, d2
-# ROUNDTRIP: muls64.hh	d0, d1, d2
+# CHECK: muls64_hh d0, d1, d2
+# ROUNDTRIP: muls64_hh	d0, d1, d2
 muls64.hh d0, d1, d2
 
-# CHECK: muls64.ll d3, d4, d5
-# ROUNDTRIP: muls64.ll	d3, d4, d5
+# CHECK: muls64_ll d3, d4, d5
+# ROUNDTRIP: muls64_ll	d3, d4, d5
 muls64.ll d3, d4, d5
 
 # CHECK: mulss64_hh d6, d7, d8

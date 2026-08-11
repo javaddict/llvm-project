@@ -40,12 +40,12 @@ declare void @llvm.va_copy(ptr, ptr)
 define i32 @va_int(i32 %fixed, ...) {
 ; CHECK-LABEL: va_int:
 ; VASTART initializes the structured va_list: several st32 into [va_list].
-; CHECK: st32
-; CHECK: st32
-; CHECK: st32
+; CHECK: s_sw_{{[a-z_]*}}
+; CHECK: s_sw_{{[a-z_]*}}
+; CHECK: s_sw_{{[a-z_]*}}
 ; 32-bit va_arg reads via the GPR cursor -> LD32 (not LD64_S1).
-; CHECK: ld32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %v = va_arg ptr %ap, i32
@@ -59,10 +59,10 @@ define i32 @va_int(i32 %fixed, ...) {
 ;bank was never spilled and va_arg read a GPR slot.
 define i64 @va_i64(i32 %fixed, ...) {
 ; CHECK-LABEL: va_i64:
-; CHECK: st32
+; CHECK: s_sw_{{[a-z_]*}}
 ; 64-bit va_arg via DR cursor: ld64 or dual ld32 pair.
-; CHECK: {{ld64|ld32}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: {{d_ldw_[a-z_]*|s_lw_[a-z_]*}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %v = va_arg ptr %ap, i64
@@ -76,10 +76,10 @@ define i64 @va_i64(i32 %fixed, ...) {
 ;(CC bit-converts f32->i32; f64 -> D0-D3). Reading it back must use LD64_S1.
 define double @va_f64(i32 %fixed, ...) {
 ; CHECK-LABEL: va_f64:
-; CHECK: st32
+; CHECK: s_sw_{{[a-z_]*}}
 ; f64 va_arg via DR cursor: ld64 or dual ld32 pair.
-; CHECK: {{ld64|ld32}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: {{d_ldw_[a-z_]*|s_lw_[a-z_]*}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %v = va_arg ptr %ap, double
@@ -94,10 +94,10 @@ define double @va_f64(i32 %fixed, ...) {
 ;interfere. Before the i64 read corrupted the GPR walk.
 define i64 @va_mixed(i32 %fixed, ...) {
 ; CHECK-LABEL: va_mixed:
-; CHECK: st32
+; CHECK: s_sw_{{[a-z_]*}}
 ; i32 / i64 / i32 via banked cursors (i64 may be dual ld32).
-; CHECK: ld32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %a = va_arg ptr %ap, i32
@@ -155,8 +155,8 @@ define i64 @va_order_init_offsets(i32 %fixed, ...) {
 ; i64 va_arg: DR-cursor upward walk -> ADD32 again (independent cursor).
 ; CHECK: add32
 ; The 64-bit read uses the DR cursor (ld64), the 32-bit read uses ld32.
-; CHECK: {{ld64|ld32}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: {{d_ldw_[a-z_]*|s_lw_[a-z_]*}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %a = va_arg ptr %ap, i32
@@ -183,15 +183,15 @@ define i64 @va_order_init_offsets(i32 %fixed, ...) {
 ;broken output it emitted -- codex-review DEBATE 1, Medium.)
 define i32 @va_overflow(i32 %fixed, ...) {
 ; CHECK-LABEL: va_overflow:
-; CHECK: st32
+; CHECK: s_sw_{{[a-z_]*}}
 ; 6 register-bank va_args -> 6 ld32 data reads via the GPR cursor.
-; CHECK: ld32
-; CHECK: ld32
-; CHECK: ld32
-; CHECK: ld32
-; CHECK: ld32
-; CHECK: ld32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
   %a1 = va_arg ptr %ap, i32
@@ -215,14 +215,14 @@ define i32 @va_overflow(i32 %fixed, ...) {
 ;(structured va_list), not alias a single pointer.
 define i64 @va_copy_independent(i32 %fixed, ...) {
 ; CHECK-LABEL: va_copy_independent:
-; CHECK: st32
+; CHECK: s_sw_{{[a-z_]*}}
 ; Both va_arg reads use the DR cursor (LD64_S1) on independent copies. The two
 ; i64 va_args must each emit an `ld64` read; this is the core of the
 ; independent-cursor assertion. (The loose st32/ld32 VACOPY word-copies interleave
 ; with the cursor reads, so we assert only on the two ld64 reads + the return.)
-; CHECK: {{ld64|ld32}}
-; CHECK: {{ld64|ld32}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: {{d_ldw_[a-z_]*|s_lw_[a-z_]*}}
+; CHECK: {{d_ldw_[a-z_]*|s_lw_[a-z_]*}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %ap1 = alloca ptr
   %ap2 = alloca ptr
   call void @llvm.va_start(ptr %ap1)

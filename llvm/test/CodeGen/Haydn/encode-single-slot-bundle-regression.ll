@@ -42,7 +42,7 @@
 ; (coremark matrix_sum/matrix_add): `llvm-objdump -d` showed garbage like
 ; `c.add32 r8, r2` and `c.ldu16 r0, r0` instead of the real instruction.
 ;
-; Example: `{ ld32 r1, r1, 4; nop; nop }` emitted by CodeGen as the Mode-0
+; Example: `{ s_lw_{{[a-z_]*}} r1, r1, 4; nop; nop }` emitted by CodeGen as the Mode-0
 ; word 0x0000000000822243 (low nibble 0x3), which objdump rendered as
 ; `c.add32 r8, r2`. llvm-mc emits the same bundle as the standalone 32-bit
 ; G-format encoding of LD32 (`40 40 c4 4e`) + zero padding, which round-trips
@@ -70,7 +70,7 @@
 ; ends up in a single-child bundle.
 define i32 @single_load(i32 %a) nounwind {
 ; CHECK-LABEL: <single_load>:
-; CHECK: ld32
+; CHECK: s_lw_{{[a-z_]*}}
 ; Post-R10 migration: the encoder uses Mode-0 bundles (one-child-per
 ; window) instead of 's legacy-flat path, but the load-bearing assertion
 ; is unchanged — a single-child bundle must decode to its REAL mnemonic and

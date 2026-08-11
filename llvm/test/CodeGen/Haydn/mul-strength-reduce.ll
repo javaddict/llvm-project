@@ -21,7 +21,7 @@ define i32 @mul_pow2_plus1_9(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: add32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 9
   ret i32 %r
 }
@@ -33,7 +33,7 @@ define i32 @mul_pow2_minus1_7(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: sub32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 7
   ret i32 %r
 }
@@ -46,7 +46,7 @@ define i32 @mul_3_shift_sub(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: sub32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 3
   ret i32 %r
 }
@@ -58,7 +58,7 @@ define i32 @mul_5_shift_add(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: add32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 5
   ret i32 %r
 }
@@ -70,7 +70,7 @@ define i32 @mul_15_shift_sub(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: sub32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 15
   ret i32 %r
 }
@@ -82,7 +82,7 @@ define i32 @mul_17_shift_add(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: add32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 17
   ret i32 %r
 }
@@ -94,7 +94,7 @@ define i32 @mul_31_shift_sub(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: sub32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 31
   ret i32 %r
 }
@@ -106,7 +106,7 @@ define i32 @mul_pow2_plus1_commuted(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: add32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 9, %x
   ret i32 %r
 }
@@ -118,7 +118,7 @@ define i32 @mul_pow2_minus1_commuted(i32 %x) nounwind {
 ; CHECK-NOT: mull
 ; CHECK: slli32
 ; CHECK: sub32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 7, %x
   ret i32 %r
 }
@@ -129,7 +129,7 @@ define i32 @mul_6_no_combine(i32 %x) nounwind {
 ; CHECK-LABEL: mul_6_no_combine:
 ; CHECK: mull
 ; CHECK-NOT: sll32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 6
   ret i32 %r
 }
@@ -139,7 +139,7 @@ define i32 @mul_6_no_combine(i32 %x) nounwind {
 define i32 @mul_11_no_combine(i32 %x) nounwind {
 ; CHECK-LABEL: mul_11_no_combine:
 ; CHECK: mull
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 11
   ret i32 %r
 }
@@ -155,7 +155,7 @@ define i32 @mul_11_no_combine(i32 %x) nounwind {
 define i64 @mul_s64_no_shift(i64 %x) nounwind {
 ; CHECK-LABEL: mul_s64_no_shift:
 ; CHECK-NOT: __muldi3
-; CHECK: mul64.ulul{{.*}}
+; CHECK: mul64_ulul{{.*}}
   %r = mul i64 %x, 9
   ret i64 %r
 }
@@ -166,7 +166,7 @@ define i32 @mul_1_identity(i32 %x) nounwind {
 ; CHECK-LABEL: mul_1_identity:
 ; CHECK-NOT: mull
 ; CHECK-NOT: sll32
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = mul i32 %x, 1
   ret i32 %r
 }
