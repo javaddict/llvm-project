@@ -182,9 +182,7 @@ define i64 @extend_arith_s64(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { sext32t64 d0, r1; nop; nop }
-; CHECK-NEXT:    { sext32t64 d1, r2; nop; nop }
-; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { sext32t64 d0, r1; sext32t64 d1, r2; nop }
 ; CHECK-NEXT:    { slli64 d0, d0, 32; slli64 d1, d1, 32; nop }
 ; CHECK-NEXT:    { srli64 d0, d0, 32; srli64 d1, d1, 32; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }

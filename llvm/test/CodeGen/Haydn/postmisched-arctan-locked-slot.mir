@@ -49,7 +49,7 @@ body:             |
     ; CHECK-LABEL: name: test_arctan_forced_alone
     ; CHECK: liveins: $d0, $r0
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r1 = ARCTAN killed $d0, 2
+    ; CHECK-NEXT: $r1 = ARCTAN_P32_ALU2 killed $d0, 2
     ; CHECK-NEXT: $r5 = ADDI32_P21_ALU1 $r0, 10, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r1
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

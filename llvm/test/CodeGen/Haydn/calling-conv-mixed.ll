@@ -261,9 +261,8 @@ define i64 @interleaved_args(i32 %a, i64 %b, i32 %c, i64 %d) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { sext32t64 d2, r1; nop; nop }
+; CHECK-NEXT:    { sext32t64 d2, r1; sext32t64 d3, r2; nop }
 ; CHECK-NEXT:    { add64 d0, d2, d0; nop; nop }
-; CHECK-NEXT:    { sext32t64 d3, r2; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d3; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -288,9 +287,8 @@ define i64 @call_mixed(i32 %a, i64 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
-; CHECK-NEXT:    { sext32t64 d1, r1; nop; nop }
-; CHECK-NEXT:    { or64 d2, d0, d0; or64 d0, d1, d1; nop }
-; CHECK-NEXT:    { or64 d1, d2, d2; nop; nop }
+; CHECK-NEXT:    { sext32t64 d1, r1; or64 d2, d0, d0; nop }
+; CHECK-NEXT:    { or64 d0, d1, d1; or64 d1, d2, d2; nop }
 ; CHECK-NEXT:    { nop; jal lr, add2_i64; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
