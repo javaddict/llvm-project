@@ -23,7 +23,7 @@ Companion documents:
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
 | `llvm-project` | `haydn-formate-switch-mc` | `14561e08a6f5` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
-| `simulator` | `master` | `e87e487` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
+| `simulator` | `master` | `0767a9b` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -2423,33 +2423,67 @@ five, gave five `signed char`s whose widening was wrong, and the minimal case
 was three adjacent one-byte globals all reading back the same byte. § 5.15's
 lesson generalises: **run a program.**
 
-### 5.5 BundleSim side
+### 5.5 BundleSim side — DONE, `simulator 0767a9b`
 
-Must land in the **same commit** as § 5.2, because it is what keeps the two
-trees agreeing. See `simulator/TODO.md` for the full reasoning.
+Landed after § 5.2, not with it. The "same commit" requirement was about the
+two trees agreeing; § 5.2 had already landed and the catalog was the half left
+behind, so the freeze had inverted — see § 5.16.
 
-* `bundlesim/isa/database/generate_catalog.py` still reads the seven retired
-  `slot*_instruction_list.json`. Port it to `instruction_type_index.json`, which
-  carries the same `Syntax`/`Behavior` fields; its 682 instructions line up with
-  the committed `.inc` one for one. `legal_slots` has no source in the new
-  database — it came from the filename — and retires with the slot model.
-* The AR family's six changed entries need their hand-written model and dispatch
-  updated to the new arity: `isa/model/Slot0/slot0_ls.h`,
-  `isa/model/Slot1/slot1_load.h`, `isa/dispatch/dispatch_slot0_ls.c`,
-  `dispatch_slot1_load.c`. The dispatchers match on the literal mnemonic, so the
-  `PLDWWUA` → `PLDWWUA_POST` rename alone would drop it on the floor.
-* Regenerate `isa/dispatch/semantic_family_map.inc`, re-pin
-  `isa/SEMANTIC_SNAPSHOT.sha256`.
-* `generate_catalog.py` cannot run today. The freeze that went with that is
-  **over**: § 5.2 has landed, the Bundle128 format files are gone, and the
-  catalog now matches a compiler that no longer exists — continuing to freeze
-  it is what causes the desync it was meant to prevent.
-* **None of this blocks the suite.** With § 5.16's four compiler fixes,
-  BundleSim runs 220 of 221 without the port; the residual is CB-130. The
-  catalog's six stale AR entries are a correctness debt against the database,
-  not a gate. Read the "must land in the same commit" above as a statement
-  about keeping the two trees consistent, not as a claim that anything is
-  waiting on it.
+* **`generate_catalog.py` is ported.** `instruction_type_index.json` carries the
+  same `Syntax`/`Behavior`, so most of it was a change of container: 682
+  mnemonics, and **the only rows that move are the six predicted below**.
+  Nothing else in 682 differs, which is what says the port is faithful rather
+  than merely green. `operands_info.md` had also changed shape (the leading
+  index column is gone) and its own emptiness check is what turned that into a
+  stop rather than a catalog of zero-width immediates.
+* **`legal_slots` and `cfg_only_s0` are gone**, and the catalog has no slot
+  column at all. The first came from the FILENAME of the per-slot list; the
+  second was a hardcoded mnemonic set. Format E gives a slot no capability, and
+  the rule that replaced them — no two entries of one bundle map to the same
+  unit — is a property of a BUNDLE, so it cannot live in a per-instruction row.
+  `--enforce-slots` therefore decides nothing per instruction. **The units are
+  real data and already have an owner**, `generate_unit_model.py`; do not
+  re-derive them in the catalog.
+* **The six AR entries were transcribed, not adapted.** The operands did not
+  merely disappear — the behaviour changed. Every UA form post-increments `rs`
+  by a fixed +8, so there is no reverse funnel and no second memory line: a
+  load step reads ONE aligned line, hands out a window over `{line, ar}` and
+  leaves the line in `ar`, with the offset coming from the address (`rs[2]` for
+  TW, `rs[2:1]` for QHW). `WBARWUA` writes 2, 4 or 6 bytes by `rs[2:1]` and
+  **nothing** when those bits are `00`; it used to write the whole aligned line
+  over the top of whatever followed the stream.
+* `semantic_family_map.inc` regenerated, `SEMANTIC_SNAPSHOT.sha256` re-pinned
+  (two model bodies), documented in `SEMANTIC_BASELINE.md` the way the previous
+  re-pins were. `BUNDLESIM_SEMANTIC_BASELINE_SHA256` is unchanged, following
+  precedent — **and that is worth a decision rather than a precedent**, since
+  it is what a saved `.bsci` is keyed on and six instructions just changed
+  meaning underneath it.
+
+#### `cb100_ar_unaligned` — what the freeze was protecting
+
+The AR family is the one shape that touches both trees at once, and **neither
+tree's own tests can see them disagree**: the assembler will happily encode a
+spelling BundleSim will not bind, and BundleSim will happily bind one the
+assembler will never emit. There was no test that ran a real AR sequence
+through the compiler and executed it. There is now; perturbing its cursor by
+four bytes moves it from exit 42 to exit 2.
+
+#### Three freshness gates were not running
+
+Found while arming the catalog check, and the more useful half of this step.
+
+* `bundlesim_new_catalog_generated` was conditioned on
+  `slot0_alu_instruction_list.json`, which stopped being shipped. The guard did
+  its job — no check with missing inputs — and then the check never armed again
+  after the generator was ported to the file that replaced it.
+* Worse: `_BUNDLESIM_GOLDEN_DIR` was recomputed from the environment on **every**
+  configure, including the implicit re-run cmake does when a `CMakeLists.txt`
+  changes and has no environment. Editing an unrelated build rule silently
+  disarmed the golden pin, the catalog check and the unit-model check together.
+  They report that as `Skipped`, or by not existing. It is cached now.
+
+`ctest` goes 220/221 → **224/225**: three gates that were absent now run, the
+golden pin no longer skips, and `cb100` is new. The one failure is CB-130.
 
 ---
 
