@@ -20,8 +20,8 @@ define void @mixed_1gpr_1dr64(i32 %a, i64 %b) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 20 }
-; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d8, sp, 8 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 5 }
+; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d8, sp, 1 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset lr, 20
 ; CHECK-NEXT:    .cfi_offset d8, 8
@@ -30,8 +30,8 @@ define void @mixed_1gpr_1dr64(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { or64 d0, d8, d8; xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { nop; jal lr, sink_i64; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 20; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 1; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 5; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   call void @sink_i32(i32 %a)
@@ -58,8 +58,8 @@ define void @mixed_1dr64_1gpr(i64 %a, i32 %b) {
 ; CHECK-NEXT:    { move32 r1, r8; xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { nop; jal lr, sink_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   call void @sink_i64(i64 %a)
@@ -148,16 +148,16 @@ define void @mixed_7gpr_4dr64(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i3
 ; CHECK-NEXT:    { or64 d0, d8, d8; xor32 r0, r0, r0; nop }
 ; CHECK-NEXT:    { nop; jal lr, sink_i64; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d11, sp, 16; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 24; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 32; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 40; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 48; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 52; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 56; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 60; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 64; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 68; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d11, sp, 2; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 3; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 4; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 5; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 13; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 14; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 15; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 16; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 17; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 72; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
                                i64 %h, i64 %i, i64 %j, i64 %k) {
@@ -205,9 +205,9 @@ define void @mixed_overflow(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 28; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 32; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 36; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 7; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 8; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 9; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 40; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
                             i64 %i, i64 %j, i64 %k, i64 %l, i64 %m) {
@@ -285,7 +285,7 @@ define i64 @call_mixed(i32 %a, i64 %b, i32 %c) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { sext32t64 d1, r1; nop; nop }
@@ -293,7 +293,7 @@ define i64 @call_mixed(i32 %a, i64 %b, i32 %c) {
 ; CHECK-NEXT:    { or64 d1, d2, d2; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, add2_i64; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %ext_a = sext i32 %a to i64

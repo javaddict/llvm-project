@@ -177,12 +177,12 @@ define i32 @test_forces_callee_saved() nounwind {
 ; CHECK-NEXT:    { add32 r2, r2, r9; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r2, r1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 20; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 28; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 32; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 36; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 5; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 6; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 7; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 8; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 9; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 40; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
