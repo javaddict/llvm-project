@@ -23,7 +23,7 @@ Companion documents:
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
 | `llvm-project` | `haydn-formate-switch-mc` | `81a7b7a1c641` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
-| `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
+| `simulator` | `master` | `06616dd`, **local only — not pushed** | § 5.11's re-pin, plus § 5.15's BSP fixes. Links and executes; 180/221 fail in the executor, which is § 5.5 |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -177,9 +177,17 @@ simulator/scripts/build_haydn_llvm_libc.sh
 simulator/scripts/install_haydn_sysroot.sh
 
 cd simulator
-rm -rf build/bsp-stage                  # REQUIRED — see § 6.6
+rm -rf build/bsp-obj build/bsp-stage    # REQUIRED — see § 6.6, § 6.6.1
+mkdir -p build/bsp-obj/{compiler_rt,libc,plat,softfloat,sys} \
+         build/bsp-stage/lib/bundlesim
 cmake --build build --target haydn_bsp
 ```
+
+`bsp-obj` is not a typo for `bsp-stage`: the stage is an archive of the objects,
+and removing only the stage re-archives the OLD objects (§ 6.6.1). The `mkdir`
+is required — neither the compile rule nor `llvm-ar` creates its output
+directory, and the failure arrives minutes later as `unable to open output
+file`.
 
 ---
 
@@ -2285,6 +2293,57 @@ keeps its warning the other way round: the unit half IS enforced, but none of
 ITS cases needs it — each is explained by placement exhaustion alone, which is
 exactly why the axis being inert went unnoticed.
 
+### 5.15 The sysroot rebuild — how far the simulator gets, and where it stops
+
+**Run before § 5.5 is done, deliberately**, because § 2's rebuild is the only
+thing that compiles libc and links a real image, and it found defects no lit
+test reaches. The suite does not pass and cannot until § 5.5 lands; what it
+gives is a list of things that were broken before the executor ever mattered.
+
+#### Compiler defects it found (fixed, `ab6edfc93755`)
+
+* **`HaydnPostSelectOptimize::tryCSEConstantDR64` aborted on a frame index.**
+  It matches an OPCODE and then reads operand kinds, and `ADDI32
+  %stack.7.new_char.addr.i, 0` is a perfectly ordinary `ADDI32` whose source
+  is a frame index until PEI rewrites it. Ten crashes, every printf
+  translation unit. **Opcode-matching says nothing about operand kinds** —
+  the guards are on every `getReg`/`getImm` on that path now.
+* **libc's `setjmp`/`longjmp` inline asm** used `ld32`/`st32`/`ld64`/`st64`
+  with BYTE offsets and the `_w` suffixes. § 5.6's rename is "a rename plus a
+  range collapse": the immediate is an element index, so the frame's byte
+  offsets divide by 4 and 8. This is the case § 5.4 warned assembles and
+  addresses the wrong slot.
+
+#### BSP defects it found (fixed, `simulator 06616dd`)
+
+* `crt0.s` used `ld32`, which still PARSES (the logical survives) and then
+  fails at emit with "no Bundle128 form".
+* **The linker script padded the instruction stream with zeros.** It aligned
+  the END of `.text` to 16 and asserted `__text_end & 15 == 0`. A parcel is 12
+  bytes; 12 does not divide 16; the fill is zeros; and **an all-zero parcel is
+  not a bundle** (bit[2:0] must be `0b111`). Every image ended with one
+  `<unknown>` and the harness failed the run before execution started —
+  **182 of 221 tests, from one twelve-byte hole**. The end alignment is
+  `ALIGN(4)` now and the assertion says what it always meant: a whole number
+  of 12-byte parcels.
+* `.p2align 4` in `crt0.s` and `hostcall_haydn.S`, same arithmetic as § 5.9.
+
+#### Where it stops
+
+```
+run_c: FAIL stop expected GUEST_EXIT got BAD_PC
+stop=BAD_PC guest_exit=0 bundles=73
+```
+
+The image links, disassembles clean and **executes** — 73 bundles before a bad
+PC. That is the executor: the model, the dispatchers and the catalog, which is
+exactly § 5.5's list and which § 7 freezes until § 5.2 lands. 180 of 221 fail
+there. **Do not read that number as a regression** — the suite has never run
+against format E, and its previous 220/221 was against a Bundle128 toolchain.
+
+The golden database pin was verified intact before and after: all eight inputs
+match `GOLDEN_INPUTS.sha256`.
+
 ### 5.5 BundleSim side
 
 Must land in the **same commit** as § 5.2, because it is what keeps the two
@@ -2388,12 +2447,42 @@ The tell is in the disassembly: `llvm-objdump -d program.elf` shows
 (`jal_w`, `jalr_w`) while `main` and `abort` use the new ones. Fix:
 
 ```sh
-rm -rf build/bsp-stage && cmake --build build --target haydn_bsp
+rm -rf build/bsp-obj build/bsp-stage && cmake --build build --target haydn_bsp
 ```
+
+**That command is corrected — the original said `bsp-stage` alone, which
+rebuilds nothing (§ 6.6.1).** It appeared to work during the JAL fold because
+`crt0.s` *is* rebuilt by its own rule, and crt0 was where the JAL spelling
+showed.
 
 This cost most of an hour during the JAL fold and mimicked a real regression
 convincingly enough to be worth checking *first* whenever the simulator suite
 goes from green to broadly red.
+
+### 6.6.1 `rm -rf build/bsp-stage` rebuilds nothing
+
+§ 2 says to remove `build/bsp-stage` before rebuilding the BSP. That is the
+STAGE. The objects live in **`build/bsp-obj`**, which survives it, so the
+stage is re-archived from whatever was compiled last time and only `crt0.s`
+— which the rule happens to rebuild — is current.
+
+The symptom is not a stale-object message. It is:
+
+```
+ld.lld: error: ...libbundlesim_plat.a(exit_llvm_libc.o):
+  relocation R_HAYDN_WIDE_CallSImm20: no format E geometry for this placement
+```
+
+a complaint about the relocation, pointing at nothing wrong with the
+relocation: those objects were Bundle128, ten days old, and the geometry lookup
+was being asked about a bundle that was not one. **Check the object's section
+alignment before believing a relocation error** — `Al 16` on a `.text.*` is a
+Bundle128 build.
+
+`rm -rf build/bsp-obj build/bsp-stage` recompiles all 72. Its subdirectories
+(`compiler_rt libc plat softfloat sys`) then have to be recreated by hand:
+neither the compile rule nor `llvm-ar` creates its output directory, and the
+failure for that is `unable to open output file`, several minutes later.
 
 ### 6.7 `lldb_feature_matrix` fails under load
 
