@@ -47,13 +47,17 @@ body:             |
     successors: %bb.1
 
     ; CHECK-LABEL: name: late_bare_recommit
-    ; Empty-cycle tryAdd: ADD32 → ADD32_S2, NOP → NOP_S0, BEQZ → BEQZ_S0
+    ; Empty-cycle tryAdd promotes each bare logical to one of its format E
+    ; members. WHICH member is the packer's choice and not this test's
+    ; property — it is ALU0 at position 2 for all three today, and § 5.12's
+    ; fix will move it — so the checks pin the _P<form><pos>_<UNIT> SHAPE.
+    ; A bare `ADD32` with no suffix is the regression they catch.
     ; CHECK: BUNDLE 0
-    ; CHECK: ADD32_S2
+    ; CHECK: ADD32_P{{[0-9]+}}_{{[A-Z0-9]+}}
     ; CHECK: BUNDLE 0
-    ; CHECK: NOP_S0
+    ; CHECK: NOP_P{{[0-9]+}}_{{[A-Z0-9]+}}
     ; CHECK: BUNDLE 0
-    ; CHECK: BEQZ_S0
+    ; CHECK: BEQZ_P{{[0-9]+}}_{{[A-Z0-9]+}}
     ; CHECK: BUNDLE 0
     ; CHECK: B %bb.1
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
@@ -100,7 +104,7 @@ body:             |
     ; CHECK: BUNDLE 0
     ; CHECK: JALR
     BUNDLE 0 {
-      $r2 = ADDI32_S2 $r0, 10, implicit-def dead $sfr
+      $r2 = ADDI32_P21_ALU1 $r0, 10, implicit-def dead $sfr
     }
     BUNDLE 0 {
       $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
