@@ -25,7 +25,11 @@
 // GEN-DAG: imm_audit_ldw_cb_imm_pair_nc_a2
 // GEN-DAG: imm_audit_ldw_cb_imm_pair_hi_a3
 // GEN-DAG: imm_audit_wbarwua_nc_a0
-// GEN-DAG: imm_audit_movei_l_nc_a0
+// movei_l's ImmArg is argument 1, not 0: the database is `MOVEI_L rtd, imm32`
+// with `rtd = {rtd[63:32], imm32}`, so rtd is read as well as written and takes
+// the first slot. The probe name carries the argument index, which is why this
+// moved when MOVEI was reshaped.
+// GEN-DAG: imm_audit_movei_l_nc_a1
 // GEN-NOT: FormatID
 // GEN-NOT: AltDesc
 // GEN-NOT: haydn_dsp

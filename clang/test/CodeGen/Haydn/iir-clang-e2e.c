@@ -72,8 +72,10 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // Prologue — Haydn emits either subi32 sp, sp, -N or addi32 sp, sp, -N.
 // ASM: subi32{{[ 	]}}sp,{{[ 	]}}sp
 
-// State loads from struct pointer (x1, x2, y1, y2 fields).
-// ASM: ld32
+// State loads from struct pointer (x1, x2, y1, y2 fields). § 5.6 renamed the
+// load/store family: LD32 became `s_lw_*`, and it is a rename plus a range
+// collapse, so the operand shape changed with the spelling.
+// ASM: s_lw_{{[a-z_]*}}
 
 // Coefficient multiplies (mul32 or 64-bit product form mull).
 // ASM: mull
@@ -82,11 +84,12 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // Feedback subtraction
 // ASM: sub32
 
-// State update stores
-// ASM: st32
+// State update stores — likewise ST32 -> `s_sw_*`.
+// ASM: s_sw_{{[a-z_]*}}
 
-// Return via jalr (plain or _w suffix depending on bundling)
-// ASM: jalr{{(_w)?}} {{r0, lr, 0|lr}}
+// Return via jalr. The `_w` alternative is gone with the § 5.1 fold — the
+// wide form survives under the base name — so this no longer offers it.
+// ASM: jalr {{r0, lr, 0|lr}}
 
 // ASM-LABEL: biquad_cascade:
 
