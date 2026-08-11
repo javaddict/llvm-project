@@ -99,8 +99,10 @@ SLLI32 R1, R2, 16
 # ROUNDTRIP: { s_lw_{{[a-z_]*}}	r0, r1, 0 }
 s_lw_with_imm R0, R1, 0
 
-# CHECK: { s_lw_{{[a-z_]*}}	r2, r3, 16 }
-# ROUNDTRIP: { s_lw_{{[a-z_]*}}	r2, r3, 16 }
+# The immediate is an ELEMENT index: S_LW_WITH_IMM is rs + (imm6 << 2),
+# so 4 here addresses byte 16. The old spelling was the byte offset.
+# CHECK: { s_lw_{{[a-z_]*}}	r2, r3, 4 }
+# ROUNDTRIP: { s_lw_{{[a-z_]*}}	r2, r3, 4 }
 s_lw_with_imm R2, R3, 4
 
 # CHECK: { s_sw_{{[a-z_]*}} r4, r5, 0 }
