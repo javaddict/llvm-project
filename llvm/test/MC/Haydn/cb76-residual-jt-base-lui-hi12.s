@@ -38,10 +38,24 @@
 # to the default again.
 #===----------------------------------------------------------------------===
 
+# The relocation OFFSET is not an invariant and must not be read as one: it
+# is `bundle_start + the entry's byte base`, so it moves whenever the packer
+# puts the instruction in a different entry (§ 5.4, § 5.12). What IS invariant
+# and what these two numbers are checked against:
+#
+#   3-entry entry0 = bit[36:6]  -> byte 0    entry1 = bit[67:37] -> byte 4
+#                    entry2 = bit[94:68] -> byte 8
+#   2-entry entry0 = bit[50:6]  -> byte 0    entry1 = bit[91:51] -> byte 6
+#
+# lui sits in the 3-entry bundle at 0x0, entry2  -> 0x0 + 8  = 0x8
+# addi32 sits in the 2-entry bundle at 0xc, entry1 -> 0xc + 6 = 0x12
+#
+# If these move, check the disassembly for which entry each landed in before
+# assuming the relocation is wrong.
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-NEXT:     0x0 R_HAYDN_HI12 jt_table 0x0
-# RELOCS-NEXT:     0x10 R_HAYDN_LO20 jt_table 0x0
+# RELOCS-NEXT:     0x8 R_HAYDN_HI12 jt_table 0x0
+# RELOCS-NEXT:     0x12 R_HAYDN_LO20 jt_table 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 
@@ -54,15 +68,20 @@
 # Address math (--section-start.text=0x10000,.rodata begins after the 22-byte
 # text: 16-byte lui Bundle128 + 6-byte addi32{{(_w)?}} WIDE = 22 bytes, padded to
 # the next.rodata alignment):
-# jt_table address = 0x11016.
-# HI12 = (0x11016 + 0x80000) >> 20 = 0x91016 >> 20 = 0 (address < 1 MB)
-# LO20 = 0x11016 - 0 = 0x11016 (= 69664)
-# So the linked pair is `lui r3, 0` + `addi32{{(_w)?}} r3, r3, 69664`.
+# .text is two 12-byte parcels, so it ends at 0x10018 and jt_table lands
+# there (it was 0x11016 when the parcels were 16 bytes — the address moved
+# because the CODE got shorter, not because anything about the relocation
+# changed). Verified against llvm-nm: jt_table = 0x11018.
+#
+# HI12 = (0x11018 + 0x80000) >> 20 = 0x91018 >> 20 = 0 (address < 1 MB)
+# LO20 = 0x11018 - (0 << 20) = 0x11018 = 69656
+# So the linked pair is `lui r3, 0` + `addi32 r3, r3, 69656`, and the second
+# parcel starts at 0x1000c rather than 0x10010.
 #===----------------------------------------------------------------------===
 
 # ELF: <_start>:
-# ELF: 10000: {{.*}} lui{{.*}} r3,
-# ELF: 10010: {{.*}} addi32{{(_w)?}}{{.*}} r3, r3,
+# ELF: 10000: {{.*}} lui{{.*}} r3, 0
+# ELF: 1000c: {{.*}} addi32{{.*}} r3, r3, 69656
 
     .section .text
     .globl _start

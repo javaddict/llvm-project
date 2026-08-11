@@ -21,16 +21,34 @@
 # 0x7BC sets bits[10:2] of imm12 — needs FieldSize>=11, so FieldSize=5 cannot
 # pass even by partial truncation luck.
 
+# The relocation OFFSET is not an invariant and must not be read as one: it
+# is `bundle_start + the entry's byte base`, so it moves whenever the packer
+# puts the instruction in a different entry (§ 5.4, § 5.12). What IS invariant
+# and what these two numbers are checked against:
+#
+#   3-entry entry0 = bit[36:6]  -> byte 0    entry1 = bit[67:37] -> byte 4
+#                    entry2 = bit[94:68] -> byte 8
+#   2-entry entry0 = bit[50:6]  -> byte 0    entry1 = bit[91:51] -> byte 6
+#
+# lui sits in the 3-entry bundle at 0x0, entry2  -> 0x0 + 8  = 0x8
+# addi32 sits in the 2-entry bundle at 0xc, entry1 -> 0xc + 6 = 0x12
+#
+# If these move, check the disassembly for which entry each landed in before
+# assuming the relocation is wrong.
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-NEXT:     0x0 R_HAYDN_HI12 high_sym 0x0
-# RELOCS-NEXT:     0x10 R_HAYDN_LO20 high_sym 0x0
+# RELOCS-NEXT:     0x8 R_HAYDN_HI12 high_sym 0x0
+# RELOCS-NEXT:     0x12 R_HAYDN_LO20 high_sym 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 
+# .rodata is pinned by the RUN line, so the linked VALUES are unaffected by
+# the parcel width: HI12 = (0x7BC00000 + 0x80000) >> 20 = 0x7BC = 1980 and
+# LO20 = 0x7BC00000 - (1980 << 20) = 0. Only the address of the second parcel
+# moves, 0x10010 -> 0x1000c, because a bundle is 12 bytes now.
 # ELF: <_start>:
 # ELF: 10000: {{.*}} lui{{.*}} r3, 1980
-# ELF: 10010: {{.*}} addi32{{(_w)?}}{{.*}} r3, r3,
+# ELF: 1000c: {{.*}} addi32{{.*}} r3, r3, 0
 
     .section .text
     .globl _start

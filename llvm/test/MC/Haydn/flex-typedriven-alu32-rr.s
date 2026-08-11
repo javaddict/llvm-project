@@ -22,18 +22,23 @@
 // NO XFAIL — type-driven scale covers all ALU32 RR ops.
 
 // CHECK-LABEL: <.text>:
-// Each op renders as `<offset>: <16 bytes> { mnemonic }` (bytes + mnemonic
-// on one objdump line). Loose CHECK (not CHECK-NEXT) since the offset line
-// and the mnemonic line are the SAME line in objdump output.
-// The byte offset (0x10, 0x20, 0x30 — not 0x08, 0x18, 0x28) is the width
-// assertion: 16 bytes per parcel, not the legacy 8.
+// Each op renders as `<offset>: <12 bytes> { mnemonic; nop; nop }` (bytes and
+// mnemonic on one objdump line). Loose CHECK (not CHECK-NEXT) since the
+// offset and the mnemonic are the SAME line in objdump output.
+//
+// The offsets ARE the width assertion, and that is why they are pinned
+// individually rather than wildcarded: 0xc / 0x18 / 0x24 is one 12-byte
+// parcel per op. The legacy 8-byte stride would give 0x8 / 0x10 / 0x18 and
+// Bundle128's 16 would give 0x10 / 0x20 / 0x30, so this line distinguishes
+// all three. Which entry the op lands in is NOT asserted — only how far
+// apart the parcels are.
 // CHECK: 0:
 // CHECK: sub32 r1, r2, r3
-// CHECK: 10:
+// CHECK: c:
 // CHECK: and32 r4, r5, r6
-// CHECK: 20:
+// CHECK: 18:
 // CHECK: or32 r7, r8, r9
-// CHECK: 30:
+// CHECK: 24:
 // CHECK: xor32 r10, r11, r0
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>
