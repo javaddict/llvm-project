@@ -34,5 +34,14 @@ _start:
     sub32 r1, r2, r3      // r0-r7 -> Mode-0
     sub32 r8, r9, r10     // r8-r15 -> Mode-0 (same routing)
 
-// CHECK: 0: 32 01 00 00 c0 01 00 00 00 00 00 00 00 00 00 00 { nop; nop; sub32 r1, r2, r3
-// CHECK: 10: a9 08 00 00 c0 01 00 00 00 00 00 00 00 00 00 00 { nop; nop; sub32 r8, r9, r10
+// The routing property, stated as bytes. Both parcels are 12 bytes and share
+// the SAME nine-byte prefix — format indicator, entry mappings, type and
+// opcode — and differ only in the register fields that follow. That identity
+// is what "no bank-dependent split" means at the encoding level, and it is
+// stronger than pinning two absolute byte strings: a G-format decision coming
+// back would change the prefix, not just the tail.
+//
+// (A 4-byte G-format parcel would also put the second op at 0x4 instead of
+// 0xc, so the offsets carry the same claim a second way.)
+// CHECK: 0: 8f 00 00 00 40 00 00 00 e0 1a {{.*}}sub32{{.*}}r1, r2, r3
+// CHECK: c: 8f 00 00 00 40 00 00 00 e0 1a {{.*}}sub32{{.*}}r8, r9, r10

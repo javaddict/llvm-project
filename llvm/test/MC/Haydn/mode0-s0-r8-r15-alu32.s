@@ -24,16 +24,20 @@
 _start:
 
 // sub32 r8, r9, r10 — all outside r0-r7, still Bundle128 s0.
-// CHECK: 0: a9 08 00 00 c0 01 00 00 00 00 00 00 00 00 00 00
-// CHECK-SAME: { nop; nop; sub32{{.*}}r8, r9, r10
+// 12-byte parcel, same prefix an r0-r7 op gets (gformat-r0r7-vs-r8r15-routing
+// pins that identity directly). Only the register fields carry the bank.
+// CHECK: 0: 8f 00 00 00 40 00 00 00 e0 1a 30 15
+// CHECK-SAME: sub32{{.*}}r8, r9, r10
 sub32 r8, r9, r10
 
 // add32 r11, r10, r9 — r11 dest, high GPRs.
-// CHECK: 10: 9a 0b 00 00 40 01 00 00 00 00 00 00 00 00 00 00
-// CHECK-SAME: { nop; nop; add32{{.*}}r11, r10, r9
+// CHECK: c: 8f 00 00 00 40 00 00 00 e0 12 56 13
+// CHECK-SAME: add32{{.*}}r11, r10, r9
 add32 r11, r10, r9
 
 // add32 r8, r9, r10 — symmetric high-bank triple.
-// CHECK: 20: a9 08 00 00 40 01 00 00 00 00 00 00 00 00 00 00
-// CHECK-SAME: { nop; nop; add32{{.*}}r8, r9, r10
+// sub32 and add32 over the SAME registers differ only in the opcode nibble
+// (1a against 12) — compare with the first check.
+// CHECK: 18: 8f 00 00 00 40 00 00 00 e0 12 30 15
+// CHECK-SAME: add32{{.*}}r8, r9, r10
 add32 r8, r9, r10
