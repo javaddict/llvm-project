@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `4425c0d4cbb1` **local only — `fork/` is still at `2eba490a051c`, 25 commits behind** | **objects emit: 424/430 CodeGen. lit 560/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4 has 13 lit failures left, 43 assertions held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
+| `llvm-project` | `haydn-formate-switch-mc` | `6c928d770850` **local only — `fork/` is still at `2eba490a051c`, 30 commits behind** | **objects emit: 424/430 CodeGen. lit 570/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -119,8 +119,9 @@ hashes there are the ones on the pushed branch.
 # llvm-project
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
-#   591 discovered: 560 pass, 10 XFAIL, 8 unsupported, 13 fail — two of the
-#   XFAILs are § 5.12's and § 5.14's, where an XPASS is the alarm
+#   591 discovered: 570 pass, 11 XFAIL, 8 unsupported, 2 fail — the 2 are the
+#   deliberate f2mulzaa32rs pair; three XFAILs are § 5.12's and § 5.14's two,
+#   where an XPASS is the alarm
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
 build/bin/llvm-lit -s lld/test/ELF/haydn \
@@ -961,6 +962,32 @@ bits zero = NOP". Format E cannot state it that way at all: `bit[2:0] = 0b111`
 is the format indicator, so an all-zero parcel is not a bundle and
 disassembles as `<unknown>`. What survives is one step weaker — every payload
 bit zero, only the indicator set, `07 00 …` — and that is what it pins now.
+
+#### Closing it out: what the 138 actually were
+
+The backlog is empty apart from the two deliberate reds, so the final split is
+worth recording against the categorisation this section started with. Almost
+nothing was "regenerate the expectation":
+
+| | n | |
+|---|---:|---|
+| the property was never placement / bytes | 6 | asserted the packer's choice; rewritten to assert the contract |
+| stale INPUT | 7 | source text named something retired |
+| assertions that could not fail | 2 | nested `{{...}}`, an alternation with a dead arm |
+| numbers that are consequences | 4 | relocation offsets, parcel addresses |
+| immediate spelling | 4 + 1 | element index, not bytes |
+| mnemonic spelling | 2 | member `_` against logical `.` |
+| genuinely regenerate the bytes | 4 | `encoding.s` and the gformat/mode0 three |
+| stale premise that was a live defect | 1 | `d486` — § 5.14 |
+| deliberate reds | 2 | f2mulzaa32rs GISel gap |
+
+**Four of the failures were compiler defects, not expectations**: § 5.13's
+`lui`, § 5.12's unit axis, and § 5.14's two. Each was found by taking a red
+test's assertion seriously rather than regenerating it. That ratio is the
+argument for the rule at the top of this section — categorise before touching
+anything — and the sharper form of it is: *a test that is red because the
+compiler changed and a test that is red because the compiler broke look
+identical from the failure output.*
 
 #### The scale is not observable at MC level
 
@@ -2032,6 +2059,33 @@ afterwards.
 `llvm/test/MC/Haydn/hwloop-fixup-reserved-bit.s` holds it, `XFAIL`, in 82 lines
 with no `llc` — it reproduces `bqriir`'s twelve bytes exactly
 (`8f 00 00 00 40 4e 01 3c 28 00 00 00`). It flips to XPASS on a fix.
+
+#### A second instance, and this one is silent
+
+`d486-hwloop-fieldlsb-bundle128.s` was in § 5.4's stale-premise pile because
+it asserted a Bundle128 byte position. Its QUESTION was never stale: "do the
+hardware-loop offset fixups land in the fields the instruction declares." The
+Bundle128 answer was no, because `FieldLsb` had been transcribed from the
+legacy 48-bit parcel. The format E answer is also no, for a different reason,
+and the numbers are worse than the loud case:
+
+```
+.Lbody at +12, .Lend at +24   ->   off1 = 0, off2 = 3
+                                   printed: set_hwloop_f2 0, 0, 12, r1
+```
+
+`off1` is zero under any choice of units, and `off2` is carrying the distance
+that belongs to `off1`. **No reserved bit is set**, so nothing refuses the
+bundle and no disassembly shows `<unknown>`. The only reason this is visible
+at all is that the test asks about the fields rather than about a byte.
+
+It is now `XFAIL` asserting `0, 12, 24, r1`, and it needs no byte pattern:
+the printed operands say the same thing and survive a layout change, which
+`byte0 == 0x08` did not. The two XFAILs should go green together.
+
+Read the pair together before fixing: the loud one shows the spill reaching
+the reserved bit, the quiet one shows what the spill is — one operand's value
+in the other's field.
 
 `bqriir32x32_df1-e2e.ll` is deliberately kept **green** rather than left red
 like § 5.4's `f2mulzaa32rs` pair: it carries twenty assertions and a red e2e
