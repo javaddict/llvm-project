@@ -39,7 +39,7 @@
 
 declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.muls64.ss.ll(i64, <2 x i32>, <2 x i32>)
-declare i64 @llvm.haydn.ff2mula32rs_lh(i64, <2 x i32>, <2 x i32>)
+declare i64 @llvm.haydn.ff2mula32rs.lh(i64, <2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32>, <2 x i32>, <2 x i32>)
 ; MIR-LABEL: test_mula64_ll:
 ; MIR-NOT: or64
@@ -74,7 +74,7 @@ define i64 @test_muls64_ll(i64 %acc, i64 %a, i64 %b) {
 define i64 @test_ff2mula32rs_lh(i64 %acc, i64 %a, i64 %b) {
   %bc.5 = bitcast i64 %a to <2 x i32>
   %bc.6 = bitcast i64 %b to <2 x i32>
-  %r = call i64 @llvm.haydn.ff2mula32rs_lh(i64 %acc, <2 x i32> %bc.5, <2 x i32> %bc.6)
+  %r = call i64 @llvm.haydn.ff2mula32rs.lh(i64 %acc, <2 x i32> %bc.5, <2 x i32> %bc.6)
   ret i64 %r
 }
 
