@@ -847,8 +847,7 @@ define i64 @loadstore64(ptr %p, i64 %v) {
 ; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sw_h_with_imm d0, r2, 0 }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { or64 d0, d1, d1; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 8; or64 d0, d1, d1 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }

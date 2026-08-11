@@ -65,8 +65,8 @@ define void @arith_store_s64(ptr %p, i64 %a, i64 %b) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { addi32 r2, r1, 4; add64 d0, d0, d1 }
-; CHECK-NEXT:    { nop; nop; d_sw_l_with_imm d0, r1, 0 }
+; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }
+; CHECK-NEXT:    { addi32 r2, r1, 4; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
