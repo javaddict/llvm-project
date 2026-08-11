@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `00c3cb33aa65` **local only — `fork/` is still at `2eba490a051c`, 31 commits behind** | **objects emit: 424/430 CodeGen. lit 572/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.14 is CLOSED; § 5.12 stays OPEN, held on a question only the simulator answers. |
+| `llvm-project` | `haydn-formate-switch-mc` | `33a9d51d5d48` **local only — `fork/` is still at `2eba490a051c`, 32 commits behind** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -119,9 +119,8 @@ hashes there are the ones on the pushed branch.
 # llvm-project
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
-#   591 discovered: 572 pass, 9 XFAIL, 8 unsupported, 2 fail — the 2 are the
-#   deliberate f2mulzaa32rs pair; one XFAIL is § 5.12's, where an XPASS is the
-#   alarm
+#   591 discovered: 573 pass, 8 XFAIL, 8 unsupported, 2 fail — the 2 are the
+#   deliberate f2mulzaa32rs pair
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
 build/bin/llvm-lit -s lld/test/ELF/haydn \
@@ -2150,7 +2149,7 @@ missing feature covering for each other"* — and it suggests a rule:
 `{{beqz|bnez}}` is fine, they are two spellings of one fact. `{{beqz|set_hwloop}}`
 is two different facts, and it asserts neither.
 
-### 5.12 The unit axis does not fire on the AsmParser's hinted path — OPEN
+### 5.12 The unit axis did not fire on the AsmParser's hinted path — CLOSED
 
 `{ beq r1, r2, 8; bnez r3, 16; beqz r4, 24 }` assembles. Three ALU0-only
 branches, three control transfers on one branch unit, and llvm-mc emits a
@@ -2190,30 +2189,54 @@ The code says so, and was right when it was written:
 the switch lands, and expect the first real bundles to be where it earns or
 loses trust."* This is that moment, and the hinted path loses.
 
-#### Why it is recorded rather than fixed
+#### Fixed in `33a9d51d5d48`, on the answer it was held for
 
-Two reasons, and the second is the blocking one.
+**A NOP occupies no unit.** That was the open hardware question and it is
+decided. It is also what makes the fix cheap: padding stays wherever it lands,
+so **no NOP-padded bundle's bytes change** and § 5.4's expectations did not
+need re-basing.
 
-1. Resolving the unit for a logical at a hinted slot changes which member the
-   packer picks, which changes **bytes in every NOP-padded bundle**. That is a
-   mass re-baseline of § 5.4's expectations, and it should be done once, on
-   purpose, not as a side effect.
-2. **NOP padding always lands on ALU0 today**, so `{ add32 r0, r1, r2 }` on its
-   own is three ALU0 entries (`NOP_P30_ALU0`, `NOP_P31_ALU0`,
-   `ADD32_P32_ALU0`). Whether a NOP occupies its unit at all is a hardware
-   question. If it does, the toolchain has been emitting invalid bundles for
-   every short bundle it has ever produced; if it does not, NOP is exempt and
-   the fix is only about real instructions. **The simulator is the only thing
-   here that can answer it**, and the sysroot has not been rebuilt on this
-   branch (§ 2). Do not guess: `NOP` has members on all 18 (unit, position)
-   pairs, so a unit-aware padding is expressible either way, and picking one
-   without the answer is choosing a hardware model by accident.
+Two causes, and either one alone leaves the axis silent — fixing one and
+stopping would have looked like progress and changed nothing.
 
-`llvm/test/MC/Haydn/bundle-unit-collision.s` holds the case, `XFAIL`, and
-contains **no NOP** precisely so it does not depend on question 2. It flips to
-XPASS — which lit reports as a failure — the moment the packer is fixed.
-`bundle-canadd-reject.s` holds the placement cases and says in its own header
-that a rejection there is not evidence about units.
+1. **The AsmParser built a plain `HaydnMCFormats`, with no `MCInstrInfo`.** A
+   unit is read off a member's name and the name comes from `MII`, so nothing
+   was ever claimed regardless of what the rest of the code did. § 7.1 named
+   this hazard before the switch landed; it was live on the one path that
+   matters for hand-written asm.
+2. **`add(I*, MCSlotKind HintSlot)` asked `unitBitsForMember`, which answers 0
+   for a LOGICAL** — it reads a `_P<form><pos>_<UNIT>` suffix a logical does
+   not have. The hinted path holds logicals, because the parser folds them
+   deliberately, so the hint was taken while claiming nothing. It now asks the
+   placement alternatives AT THAT SLOT for a free unit — the same question
+   `isHintSlotLegal` already asked about slots.
+
+`opcodeClaimsUnit` carries the NOP decision, read off the name like the unit
+itself so a logical and its members answer alike. **It has to be asked rather
+than inferred**: every NOP member still NAMES a unit — there is one at all 18
+(unit, position) pairs — so `haydnMemberUnitBits` answers for a NOP exactly as
+it does for a real op. The exemption applies on both sides: a NOP claims
+nothing AND is never excluded, including inside the solver, where seeding it
+with the occupied units would have moved it to another alternative and
+re-based every padded bundle for no reason.
+
+Rejected now, each for the unit and nothing else:
+
+```
+{ beq r1, r2, 8; bnez r3, 16; beqz r4, 24 }   three ALU0, three positions
+{ beq r1, r2, 8; bne r3, r4, 16 }             two ALU0
+```
+
+**The CodeGen path was already correct**, and that is verified rather than
+assumed: `encodeBundleE` builds its bundle `WithMII` and uses the no-hint
+`add`, which goes through the solver where the units were seeded properly. A
+scan of 159 bundles from a compiled `bqriir` object found zero unit collisions
+among non-NOP entries.
+
+`bundle-unit-collision.s` is a regression test now. `bundle-canadd-reject.s`
+keeps its warning the other way round: the unit half IS enforced, but none of
+ITS cases needs it — each is explained by placement exhaustion alone, which is
+exactly why the axis being inert went unnoticed.
 
 ### 5.5 BundleSim side
 
@@ -2675,12 +2698,21 @@ already the tested carrier of the member→logical fold.
   switch lands**, and expect the first real bundles to be where it earns or
   loses trust.
 
-  **It lost — see § 5.12.** The first real bundles showed the axis never fires
-  on the AsmParser's hinted path, because the unit is read off a member name
-  and that path holds the LOGICAL. `{ beq r1, r2, 8; bnez r3, 16; beqz r4, 24 }`
-  assembles: three control transfers on ALU0. The unit test passing and the
-  assembler accepting the bundle are both true, which is what the sentence
-  above was warning about.
+  **It lost, then earned it — see § 5.12.** The first real bundles showed the
+  axis never fired on the AsmParser's hinted path: that path had no
+  `MCInstrInfo` at all, and even with one it read the unit off a member-name
+  suffix that a LOGICAL does not have. `{ beq; bnez; beqz }` assembled — three
+  control transfers on ALU0. The unit test passing and the assembler accepting
+  that bundle were both true at once, which is exactly what the sentence above
+  was warning about. Both halves are fixed and the axis is enforced now; the
+  CodeGen path never had the defect, because it builds its bundle `WithMII`
+  and goes through the solver rather than the hint.
+
+  **NOP occupies no unit** (§ 5.12). The hardware answer arrived and is now
+  encoded in `opcodeClaimsUnit`. If a re-delivered model changes it, that
+  function is the one place to change — but note the consequence it currently
+  buys: NOP padding is unconstrained, so no padded bundle's encoding depends
+  on the unit axis at all.
 * **`MCInstrInfo` is optional** on `Bundle` / `tryAdd` / `enumeratePlacementAlternatives`.
   Without it no unit is claimed. Pre-RA scheduler paths that have no
   `MCInstrInfo` therefore keep slot-only behaviour — which is right today and
