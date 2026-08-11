@@ -7,7 +7,7 @@
 ;
 ; Test jump table switch lowering for Haydn.
 ; Dense switches with 4+ consecutive cases are lowered via jump tables
-; (G_BRJT → SHL32 + ADD32 + LD32 + BR_JT → JALR).
+; (G_BRJT → SLL32 + ADD32 + S_LW_WITH_IMM + BR_JT → JALR).
 ; Sparse switches with fewer cases still use comparison + branch chains.
 ;
 ; REGRESSION TEST: Jump table lowering (G_BRJT → BR_JT → JALR).

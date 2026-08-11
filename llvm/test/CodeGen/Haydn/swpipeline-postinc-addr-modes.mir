@@ -318,7 +318,7 @@ body:             |
 
     %bp:gpr32 = PHI %p, %bb.0, %bp_n, %bb.1
     %i:gpr32 = PHI %zero, %bb.0, %i_n, %bb.1
-    %bp_n:gpr32 = ST32_POST %v, %bp, 1 :: (store (s32))
+    %bp_n:gpr32 = S_SW_POST_IMM %v, %bp, 1 :: (store (s32))
     %i_n:gpr32 = ADD32 %i, %one
     %cmp:gpr32 = SLTU32 %i_n, %n
     BNEZ %cmp, %bb.1

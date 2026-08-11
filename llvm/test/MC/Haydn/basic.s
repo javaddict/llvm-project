@@ -83,37 +83,38 @@ SLTU32 R5, R6, R7
 SEQ32 R8, R9, R10
 # CHECK: seq32 r8, r9, r10
 
-# Load/store instructions
-LD32 R0, R1, 0
-# CHECK: ld32 r0, r1, 0
+# Load/store instructions. The § 5.6 spellings, and the immediate is an
+# element index in a simm6 field rather than a byte offset.
+S_LW_WITH_IMM R0, R1, 0
+# CHECK: s_lw_with_imm r0, r1, 0
 
-LD32 R2, R3, 16
-# CHECK: ld32 r2, r3, 16
+S_LW_WITH_IMM R2, R3, 4
+# CHECK: s_lw_with_imm r2, r3, 4
 
-ST32 R4, R5, 0
-# CHECK: st32 r4, r5, 0
+S_SW_WITH_IMM R4, R5, 0
+# CHECK: s_sw_with_imm r4, r5, 0
 
-ST32 R6, R7, -4
-# CHECK: st32 r6, r7, -4
+S_SW_WITH_IMM R6, R7, -1
+# CHECK: s_sw_with_imm r6, r7, -1
 
 # Load/store size variants
-LD16 R8, R9, 0
-# CHECK: ld16 r8, r9, 0
+S_LHWS_WITH_IMM R8, R9, 0
+# CHECK: s_lhws_with_imm r8, r9, 0
 
-LD8 R10, R11, 0
-# CHECK: ld8 r10, r11, 0
+S_LBS_WITH_IMM R10, R11, 0
+# CHECK: s_lbs_with_imm r10, r11, 0
 
-LDU16 R12, R0, 0
-# CHECK: ldu16 r12, r0, 0
+S_LHWU_WITH_IMM R12, R0, 0
+# CHECK: s_lhwu_with_imm r12, r0, 0
 
-LDU8 R1, R2, 0
-# CHECK: ldu8 r1, r2, 0
+S_LBU_WITH_IMM R1, R2, 0
+# CHECK: s_lbu_with_imm r1, r2, 0
 
-ST16 R3, R4, 0
-# CHECK: st16 r3, r4, 0
+S_SHW_WITH_IMM R3, R4, 0
+# CHECK: s_shw_with_imm r3, r4, 0
 
-ST8 R5, R6, 0
-# CHECK: st8 r5, r6, 0
+S_SB_WITH_IMM R5, R6, 0
+# CHECK: s_sb_with_imm r5, r6, 0
 
 # Branch instructions
 BEQ R7, R8, .Ltarget

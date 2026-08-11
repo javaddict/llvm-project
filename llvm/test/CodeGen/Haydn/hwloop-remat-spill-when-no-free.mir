@@ -5,7 +5,7 @@
 # (never silent clobber). Src $r1 stays un-redefined in-place.
 #
 # CHECK-LABEL: name: remat_spill_no_free
-# Live GPRs force NeedsSpill — ST32 of chosen scratch before ADDI, LD32 after SET.
+# Live GPRs force NeedsSpill — S_SW_WITH_IMM of chosen scratch before ADDI, S_LW_WITH_IMM after SET.
 # CHECK: S_SW_{{[A-Z_]*}}
 # CHECK: $r{{[0-9]+}} = ADDI32 $r1, -1
 # CHECK-NOT: $r1 = ADDI32 $r1, -1

@@ -10,8 +10,8 @@
 # Covers:
 # 1. Three ALU32 (Slot012_ALU) — all can go to different slots
 # 2. ALU32 + two ALU64 (Slot12_ALU) — mixed GPR32/DR64, all independent
-# 3. LD32 (Slot0_LS) + ALU32 (Slot012_ALU) + ALU64 (Slot12_ALU) — cross-slot
-# 4. LD32_S1 (Slot1_LD) + LD32 (Slot0_LS) + ALU32 (Slot012_ALU) — dual-load
+# 3. S_LW_WITH_IMM (Slot0_LS) + ALU32 (Slot012_ALU) + ALU64 (Slot12_ALU) — cross-slot
+# 4. LD32_S1 (Slot1_LD) + S_LW_WITH_IMM (Slot0_LS) + ALU32 (Slot012_ALU) — dual-load
 # 5. DR64-only: three ALU64 (Slot12_ALU) — all DR64, no GPR port concerns
 #
 
@@ -173,14 +173,14 @@ body:             |
 ...
 ---
 # ============================================================================
-# Test 3: LD32 (Slot0_LS) + ALU32 (Slot012_ALU) + ALU64 (Slot12_ALU)
+# Test 3: S_LW_WITH_IMM (Slot0_LS) + ALU32 (Slot012_ALU) + ALU64 (Slot12_ALU)
 # ============================================================================
 #
-# LD32 uses Slot0_LS -> SLOT0.
+# S_LW_WITH_IMM uses Slot0_LS -> SLOT0.
 # ADD32 uses Slot012_ALU -> SLOT1 (since SLOT0 taken).
 # ADD64 uses Slot12_ALU -> SLOT2 (since SLOT1 taken).
 # No register dependencies (all different registers).
-# GPR ports: LD32 reads r0, writes r2 (1R, 1W).
+# GPR ports: S_LW_WITH_IMM reads r0, writes r2 (1R, 1W).
 # ADD32 reads r4,r5, writes r3 (2R, 1W).
 # ADD64 reads d0,d1, writes d2 (0 GPR R, 0 GPR W).
 # Total: 3 GPR reads, 2 GPR writes. Within 4R2W.
@@ -214,21 +214,21 @@ body:             |
 
     ; Post-: the GPR-port-FuncUnits model is reverted; the DFA uses
     ; the slot-only itinerary. DR64-only ops in Slot12_ALU are NOT charged
-    ; against GPR ports, so LD32 + ADD32 + ADD64 all pack into one bundle
-    ; (2 GPR writes from LD32/ADD32 + 0 from ADD64 — within the 4R2W GPR gate
+    ; against GPR ports, so S_LW_WITH_IMM + ADD32 + ADD64 all pack into one bundle
+    ; (2 GPR writes from S_LW_WITH_IMM/ADD32 + 0 from ADD64 — within the 4R2W GPR gate
     ; enforced by countGPRPorts).
 
     ; CHECK-LABEL: name: test3_ld_alu32_alu64
     ; CHECK: liveins: $r0, $r4, $r5, $d0, $d1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: BUNDLE 1, implicit-def $r3, implicit-def dead $sfr, implicit-def $d2, implicit killed $r4, implicit killed $r5, implicit killed $d0, implicit killed $d1 {
-    ; CHECK-NEXT:   $r3 = ADD32_P32_ALU0 killed $r4, killed $r5, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d2 = ADD64_P31_ALU1 killed $d0, killed $d1, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 1, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit-def $d2, implicit $r0, implicit killed $r4, implicit killed $r5, implicit killed $d0, implicit killed $d1 {
+    ; CHECK-NEXT:   $r2 = S_LW_WITH_IMM_P32_LOAD1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = ADD32_P31_ALU0 killed $r4, killed $r5, implicit-def dead $sfr
+    ; CHECK-NEXT:   $d2 = ADD64_P30_ALU2 killed $d0, killed $d1, implicit-def dead $sfr
     ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r2 = LD32 $r0, 0, implicit-def dead $sfr
+    $r2 = S_LW_WITH_IMM $r0, 0, implicit-def dead $sfr
     $r3 = ADD32 $r4, $r5, implicit-def dead $sfr
     $d2 = ADD64 $d0, $d1, implicit-def dead $sfr
 
@@ -237,17 +237,17 @@ body:             |
 ...
 ---
 # ============================================================================
-# Test 4: LD32_S1 (Slot1_LD) + LD32 (Slot0_LS) + ALU32 (Slot012_ALU)
+# Test 4: LD32_S1 (Slot1_LD) + S_LW_WITH_IMM (Slot0_LS) + ALU32 (Slot012_ALU)
 # ============================================================================
 #
-# LD32 uses Slot0_LS -> SLOT0 (only slot for Slot0 loads).
+# S_LW_WITH_IMM uses Slot0_LS -> SLOT0 (only slot for Slot0 loads).
 # LD32_S1 uses Slot1_LD -> SLOT1 (only slot for Slot1 loads).
 # ADD32 uses Slot012_ALU -> SLOT2 (since SLOT0 and SLOT1 taken).
 # All different registers, no hazards.
-# GPR ports: LD32 1R(r0), 1W(r2). LD32_S1 1R(r4), 1W(r3). ADD32 2R(r5,r6), 1W(r7).
+# GPR ports: S_LW_WITH_IMM 1R(r0), 1W(r2). LD32_S1 1R(r4), 1W(r3). ADD32 2R(r5,r6), 1W(r7).
 # Total: 4R, 3W. 3 writes exceeds 2W -> CANNOT pack all three.
 #
-# Expected: LD32 + LD32_S1 in one bundle (2R, 2W), ADD32 in separate bundle.
+# Expected: S_LW_WITH_IMM + LD32_S1 in one bundle (2R, 2W), ADD32 in separate bundle.
 #
 name:            test4_dual_load_alu
 alignment:       1
@@ -275,19 +275,21 @@ body:             |
   bb.0:
     liveins: $r0, $r4, $r5, $r6
 
-    ; Two logical LD32 pack (Slot01_LD); Flex S0/S1 materialize at encode only.
+    ; Two logical S_LW_WITH_IMM pack (Slot01_LD); Flex S0/S1 materialize at encode only.
     ; ADD32 separate (2W budget).
 
     ; CHECK-LABEL: name: test4_dual_load_alu
     ; CHECK: liveins: $r0, $r4, $r5, $r6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r3 = LD32 killed $r4, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 1, implicit-def $r2, implicit-def dead $sfr, implicit-def $r3, implicit $r0, implicit killed $r4 {
+    ; CHECK-NEXT:   $r2 = S_LW_WITH_IMM_P32_LOAD1 $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r3 = S_LW_WITH_IMM_P30_LOADSTORE0 killed $r4, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: }
     ; CHECK-NEXT: $r7 = ADD32_P32_ALU0 killed $r5, killed $r6, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r2 = LD32 $r0, 0, implicit-def dead $sfr
-    $r3 = LD32 $r4, 0, implicit-def dead $sfr
+    $r2 = S_LW_WITH_IMM $r0, 0, implicit-def dead $sfr
+    $r3 = S_LW_WITH_IMM $r4, 0, implicit-def dead $sfr
     $r7 = ADD32 $r5, $r6, implicit-def dead $sfr
 
     $r0 = COPY $r2
