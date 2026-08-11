@@ -38,7 +38,7 @@ xtbool4 test_ae_slt16x4(ae_int16x4 a, ae_int16x4 b) {
 }
 
 // IR-LABEL: @test_ae_eq32
-// IR: call <2 x i32> @llvm.haydn.x2seq32
+// IR: call void @llvm.haydn.x2seq32
 // IR: call i32 @llvm.haydn.movesfr2gpr
 xtbool2 test_ae_eq32(ae_int32x2 a, ae_int32x2 b) {
   xtbool2 p = AE_EQ32(a, b);
@@ -47,7 +47,7 @@ xtbool2 test_ae_eq32(ae_int32x2 a, ae_int32x2 b) {
 }
 
 // IR-LABEL: @test_ae_le32
-// IR: call <2 x i32> @llvm.haydn.x2sle32
+// IR: call void @llvm.haydn.x2sle32
 // IR: call i32 @llvm.haydn.movesfr2gpr
 xtbool2 test_ae_le32(ae_int32x2 a, ae_int32x2 b) {
   xtbool2 p = AE_LE32(a, b);
@@ -101,9 +101,9 @@ ae_int64 test_ae_movt64_2arg(ae_int64 dst, ae_int64 src) {
 // Ambient two-epoch reverse-order: two slt + two movt must remain distinct
 // ordered side-effecting calls (cannot CSE pure-movt at O0 or O2).
 // IR-LABEL: @ambient_two_epoch_reverse
-// IR: call <2 x i32> @llvm.haydn.x2slt32
+// IR: call void @llvm.haydn.x2slt32
 // IR: call <2 x i32> @llvm.haydn.x2movt32
-// IR: call <2 x i32> @llvm.haydn.x2slt32
+// IR: call void @llvm.haydn.x2slt32
 // IR: call <2 x i32> @llvm.haydn.x2movt32
 // x2movt32 must share side-effect attrs with x2slt32 (not pure #memory(none)).
 // IR: declare {{.*}} @llvm.haydn.x2slt32{{.*}} #[[SFRATTR:[0-9]+]]
