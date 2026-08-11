@@ -239,7 +239,7 @@ declare i64 @llvm.haydn.fmul32s.lh(<2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.fmul32s.hh(<2 x i32>, <2 x i32>)
 define i64 @test_fmul32s_ll(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_fmul32s_ll>:
-; CHECK: fmul32s.ll
+; CHECK: fmul32s_ll
   %bc.19 = bitcast i64 %a to <2 x i32>
   %bc.20 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.ll(<2 x i32> %bc.19, <2 x i32> %bc.20)
@@ -248,7 +248,7 @@ define i64 @test_fmul32s_ll(i64 %a, i64 %b) {
 
 define i64 @test_fmul32s_lh(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_fmul32s_lh>:
-; CHECK: fmul32s.lh
+; CHECK: fmul32s_lh
   %bc.21 = bitcast i64 %a to <2 x i32>
   %bc.22 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.lh(<2 x i32> %bc.21, <2 x i32> %bc.22)
@@ -257,7 +257,7 @@ define i64 @test_fmul32s_lh(i64 %a, i64 %b) {
 
 define i64 @test_fmul32s_hh(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_fmul32s_hh>:
-; CHECK: fmul32s.hh
+; CHECK: fmul32s_hh
   %bc.23 = bitcast i64 %a to <2 x i32>
   %bc.24 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.hh(<2 x i32> %bc.23, <2 x i32> %bc.24)
