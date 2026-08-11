@@ -1,5 +1,13 @@
 """For each AE_* macro, find its FINAL definition and whether it still needs
-the AR arguments format E drops (a stride other than 8, or dir = 1)."""
+the AR arguments format E drops (a stride, or a direction select).
+
+Those two arguments are gone from the helpers rather than defaulted, so the
+question is now one of arity: a macro that still needs them is one that hands
+an AR helper more arguments than the helper takes. The expected arity is read
+back out of haydn_dsp.h's own `static inline` definitions — hardcoding it here
+would be a second copy of a fact the header already states, which is the shape
+of drift that let the builtins and the emitter's specialPublicShape() disagree
+until the header stopped compiling."""
 import re
 
 H = '/home/ckchen/haydn/llvm-project/clang/lib/Headers/haydn_dsp.h'
@@ -18,9 +26,20 @@ while i < len(src):
         defs.setdefault(m.group(1), []).append((start + 1, ' '.join(text.split())))
     i += 1
 
-# the AR helpers whose prototypes change; last arg is dir, second-to-last stride
-STEP = re.compile(r'haydn_ae_(la16x4|la64|sa16x4|sa64)_step\s*\(')
-POS = re.compile(r'haydn_ae_sa64pos\s*\(')
+# The AR helpers whose prototypes changed, with the arity each one actually
+# has, read from its definition in the header.
+HELPER_DEF = re.compile(
+    r'^static inline \S+ (haydn_ae_(?:la16x4_step|la64_step|sa16x4_step|'
+    r'sa64_step|sa64pos))\((.*?)\)\s*\{', re.M | re.S)
+HELPERS = {}
+_joined = '\n'.join(src)
+for m in HELPER_DEF.finditer(_joined):
+    HELPERS[m.group(1)] = len([p for p in m.group(2).split(',') if p.strip()])
+if len(HELPERS) != 5:
+    raise SystemExit('haydn_ae_audit: expected 5 AR helper definitions in '
+                     f'{H}, found {sorted(HELPERS)}')
+
+CALL = re.compile(r'(' + '|'.join(sorted(HELPERS)) + r')\s*\(')
 
 
 def resolve(name, depth=0, seen=None):
@@ -60,7 +79,8 @@ for name in CANDIDATES:
     needs = set()
     where = []
     for who, line, text in chain:
-        for call in re.finditer(STEP, text):
+        for call in re.finditer(CALL, text):
+            helper = call.group(1)
             args = text[call.end():]
             depth, cur, parts = 1, '', []
             for ch in args:
@@ -76,21 +96,13 @@ for name in CANDIDATES:
                     cur = ''
                 else:
                     cur += ch
-            if len(parts) >= 2:
-                stride, dr = parts[-2].strip(), parts[-1].strip()
-                if stride != '8':
-                    needs.add(f'stride={stride}')
-                if dr != '0':
-                    needs.add(f'dir={dr}')
+            want = HELPERS[helper]
+            if len(parts) > want:
+                extra = ', '.join(p.strip() for p in parts[want:])
+                needs.add(f'{helper} takes {want}, given {len(parts)}: {extra}')
                 where.append(f'{who}:{line}')
-        if POS.search(text):
-            tail = text.split('haydn_ae_sa64pos')[1]
-            dr = tail.rsplit(',', 1)[1].split(')')[0].strip()
-            if dr != '0':
-                needs.add(f'dir={dr}')
-            where.append(f'{who}:{line}')
     if needs:
-        flagged.append((name, ', '.join(sorted(needs)), sorted(set(where))))
+        flagged.append((name, '; '.join(sorted(needs)), sorted(set(where))))
 
 print(f'{len(CANDIDATES)} AE_* macros scanned; {len(flagged)} need attention.\n')
 for name, verdict, where in flagged:
@@ -98,4 +110,4 @@ for name, verdict, where in flagged:
     if where:
         print(f'{"":18} via {", ".join(where)}')
 if not flagged:
-    print('  (none — every macro passes stride = 8, dir = 0)')
+    print('  (none — every macro calls the AR helpers at their real arity)')
