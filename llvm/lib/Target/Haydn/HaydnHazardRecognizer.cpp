@@ -149,8 +149,11 @@ bool CurrentCycleHasHwloopCsrw = false;
 HaydnFuncUnitWrapper::HaydnFuncUnitWrapper(const InstrStage &IS) {
   // The InstrStage Units_ bitmask bit N is set iff FU index N is in the
   // choice set. The FU indices line up 1:1 with our StaticBitSet bit
-  // positions because HaydnSchedule.td declares exactly HAYDN_NUM_FU_BITS
-  // FuncUnits (SLOT0=0, SLOT1=1, SLOT2=2). For a Required stage the whole
+  // positions because HAYDN_NUM_FU_BITS covers every FuncUnit
+  // HaydnItineraries declares: the three retired slots at 0..2 and the seven
+  // format E units at 3..9. It covered only the first three until recently,
+  // which made this whole class inert -- see the header. For a Required stage
+  // the whole
   // choice set is recorded as Required (the conflict rule then ensures two
   // single-slot instrs needing the same exclusive slot clash, while a
   // Slot012_ALU instr contributes a 3-bit set that never exclusively clashes
@@ -171,14 +174,21 @@ HaydnFuncUnitWrapper::HaydnFuncUnitWrapper(const InstrStage &IS) {
 }
 
 bool HaydnFuncUnitWrapper::conflict(const HaydnFuncUnitWrapper &Other) const {
-  // Slot exclusivity. On a 3-slot VLIW, the ONLY real slot conflict between
-  // two instructions is: BOTH require the SAME single exclusive slot (both
-  // have |Required| == 1 and it's the same bit). In that case the DFA cannot
-  // assign them to different slots.
+  // Unit exclusivity, and it is a pairwise approximation of a matching
+  // problem: no two entries of a bundle may map to the same unit, so a set of
+  // instructions is legal iff their Available sets admit a system of distinct
+  // representatives. What is checked here is the pair case — BOTH require the
+  // same single unit — which is exact for two and conservative-in-the-wrong-
+  // direction for three (three instructions each needing {ALU1, ALU2} pass
+  // pairwise and cannot all issue). The packer's PlacementAlternative search
+  // is what decides legality (FORMAT-E-SWITCH-PLAN.md section 7); this only
+  // has to stop the scheduler proposing cycles the packer will reject, and
+  // the single-unit case is the one that matters — two stores both needing
+  // LOADSTORE0 is the common one.
   //
-  // A multi-slot instruction (e.g. Slot012_ALU, Required={S0,S1,S2}) NEVER
-  // slot-conflicts with any other single instruction — it can always find a
-  // free slot (the issue-count cap below limits how many can coexist). This
+  // A multi-unit instruction (e.g. Unit_ALU0ALU1ALU2_L1) NEVER conflicts with
+  // any other single instruction — it can always find a free unit (the
+  // issue-count cap below limits how many can coexist). This
   // was the root cause of the B2 IPC regression : the old logic rejected
   // a Slot012_ALU candidate whenever the cycle already had a single-slot
   // occupant, because InterSize < ThisSize was true (1 < 3). That serialized
