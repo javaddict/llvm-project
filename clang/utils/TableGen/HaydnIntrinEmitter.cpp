@@ -1194,25 +1194,28 @@ static bool specialPublicShape(StringRef PN, std::string &Ret,
     Args.assign({"haydn_x2fract32", "haydn_x2fract32", "haydn_x4fract16"});
     return true;
   }
-  // UA wrappers accept runtime ar/dir (switch-literal ImmArg at builtin).
+  // UA wrappers accept a runtime ar (switch-literal ImmArg at the builtin).
+  // Format E has no stride and no direction select, so ar_sel is the last
+  // argument — these lists must stay in step with the PublicPrototype in
+  // BuiltinsHaydn.td.
   if (PN == "d_lqhwua_post") {
     Ret = "haydn_x4int16";
-    Args.assign({"const void *", "int", "int", "int"});
+    Args.assign({"const void *", "int"});
     return true;
   }
   if (PN == "d_ltwua_post") {
     Ret = "haydn_x2int32";
-    Args.assign({"const void *", "int", "int", "int"});
+    Args.assign({"const void *", "int"});
     return true;
   }
   if (PN == "d_sqhwua_post") {
     Ret = "void";
-    Args.assign({"haydn_x4int16", "void *", "int", "int", "int"});
+    Args.assign({"haydn_x4int16", "void *", "int"});
     return true;
   }
   if (PN == "d_stwua_post") {
     Ret = "void";
-    Args.assign({"haydn_x2int32", "void *", "int", "int", "int"});
+    Args.assign({"haydn_x2int32", "void *", "int"});
     return true;
   }
   return false;

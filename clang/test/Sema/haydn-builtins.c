@@ -139,9 +139,11 @@ void test_pldwwua_runtime_bad(int ar, const void *p) {
   // expected-error@+1 {{argument to '__builtin_haydn_pldwwua' must be a constant integer}}
   __builtin_haydn_pldwwua(ar, p);
 }
-long long test_ltwua_dir_bad(const void *p, int stride) {
-  // expected-error@+1 {{argument value 2 is outside the valid range [0, 1]}}
-  return __builtin_haydn_d_ltwua_post(p, 0, stride, 2);
+// Format E dropped dir_sel and the stride, so ar_sel is the only ImmArg this
+// builtin still has and the out-of-range case moves onto it.
+long long test_ltwua_ar_bad(const void *p) {
+  // expected-error@+1 {{argument value 4 is outside the valid range [0, 3]}}
+  return __builtin_haydn_d_ltwua_post(p, 4);
 }
 void test_setcbr_runtime_bad(int sel, int base) {
   // expected-error@+1 {{argument to '__builtin_haydn_setcbr_begin' must be a constant integer}}
