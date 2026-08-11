@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `14561e08a6f5` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `fb21d8a6ce36` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -2489,6 +2489,37 @@ Found while arming the catalog check, and the more useful half of this step.
 
 `ctest` goes 220/221 → **224/225**: three gates that were absent now run, the
 golden pin no longer skips, and `cb100` is new. The one failure is CB-130.
+
+---
+
+### 5.17 CB-130 — the last failure, and it was one line
+
+`bundlesim_reg_cb44_o2_stale_cond_max_reduce` was the sole remaining ctest
+failure and predated the switch. **`simulator ctest is now 225/225.**
+
+`.clampMaxNumElements(0, S1, 1)` on `G_BUILD_VECTOR` could not have worked.
+`clampMaxNumElements` builds its target with `LLT::scalarOrVector()`, which
+returns a **scalar** for a count of one, so the rule asked
+`fewerElementsVector` to narrow `<2 x s1>` to plain `s1` and
+`fewerElementsVectorMerge` asserted. **One element is not a smaller vector.**
+
+Deleted rather than repaired, because there is nothing for a `<N x s1>` build
+to legalize INTO. It is an artifact — a scalarized vector `G_ICMP` builds it,
+and the matching unmerge arrives when its `G_ZEXT`/`G_SELECT` users are
+scalarized in turn. Falling to `.lower()` reports UnableToLegalize, the
+legalizer defers to the artifact combiner, and the pair cancels.
+
+**The comment defending the clamps was wrong about this one.** It says a bare
+`.lower()` hangs the legalizer on `pr28982a` at -O2. Measured: **pr28982a
+hangs with the clamp present too**, and its loop is in `G_EXTRACT_VECTOR_ELT`
+on `<16 x s32>` with a variable index, growing a chain past register `%300000`
+— a separate open bug, and not evidence for anything here. Checking that cost
+two rebuilds and was worth both: without it the fix looks like a regression
+trade.
+
+The original CB-44 symptom — a stale condition register leaving `mxIdx` at 1
+instead of 14 — is gone **with** the crash rather than merely uncovered by it:
+the case exits 145 and MATCHes the host oracle.
 
 ---
 
