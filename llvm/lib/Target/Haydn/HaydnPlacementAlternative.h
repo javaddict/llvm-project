@@ -134,6 +134,30 @@ inline Haydn::UnitBits unitBitsForMember(const MCInstrInfo *MII,
   return haydnMemberUnitBits(MII->getName(MemberOpc));
 }
 
+/// Whether \p Opcode occupies a hardware unit at all.
+///
+/// NOP does not. Format E has no one-entry bundle, so a single instruction is
+/// NOP-filled to two or three entries; the hardware issues nothing for those,
+/// so two entries holding NOPs on one unit is not a conflict and must not be
+/// rejected as one. **This is a hardware statement, not an implementation
+/// convenience** — see FORMAT-E-SWITCH-PLAN.md § 5.12, where it was the open
+/// question that held the unit axis back.
+///
+/// It has to be asked rather than inferred, because every NOP member still
+/// NAMES a unit: there is one at all 18 (unit, position) pairs, so
+/// `haydnMemberUnitBits` answers for a NOP exactly as it does for a real op.
+///
+/// Read off the NAME, like the unit itself, so a logical and any of its
+/// members give the same answer.
+inline bool opcodeClaimsUnit(const MCInstrInfo *MII, unsigned MemberOpc) {
+  if (!MII)
+    return false;
+  StringRef Name = MII->getName(MemberOpc);
+  if (std::optional<StringRef> Logical = stripHaydnMemberSuffix(Name))
+    Name = *Logical;
+  return Name != "NOP";
+}
+
 /// Fill \p Out with PlacementAlternative rows for \p LogicalOpc (non-zero
 /// sparse members only). Each row stamps CompatibleFormatMask =
 /// ProductFormatMask, FieldSlots = the member's own slot bit, and — when \p MII

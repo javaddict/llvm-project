@@ -7,10 +7,10 @@
 #
 # Every rejection below is PLACEMENT exhaustion: the instructions in the
 # bundle have no assignment of (entry position) left that a composite covers.
-# That is the only half of format E's rule the assembler currently enforces —
-# the unit half does not fire on this path, and bundle-unit-collision.s is
-# the XFAIL that records it. Do not read a rejection here as evidence that
-# units are checked.
+# The unit half of format E's rule is enforced too (§ 5.12), but NOT by any
+# of these cases — each one is explained without it, which is why the unit
+# axis being inert went unnoticed for so long. bundle-unit-collision.s is the
+# one that needs it. Do not read a rejection here as evidence about units.
 #
 # The case this test USED to open with was three ADD64: under Bundle128 only
 # S1|S2 could take one, so the third saturated and failed canAdd. Format E

@@ -733,7 +733,13 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     // `clang -c` — the printer emits the same layout (BUNDLE128_FULL
     // AsmString "$s2; $s1; $s0"). An illegal hint falls back to solver
     // pickSlot, keeping short hand-written forms working.
-    HaydnMCFormats Fmts;
+    // WithMII, not the plain formats object: without an MCInstrInfo the
+    // Bundle's unit axis is inert, because a unit is read off a member's name
+    // and the name comes from MII. That is half of § 5.12 — the parser
+    // accepted `{ beq r1, r2, 8; bnez r3, 16; beqz r4, 24 }`, three control
+    // transfers on ALU0, because nothing was ever claimed. § 7.1 named this
+    // exact hazard ("without it no unit is claimed") before the switch landed.
+    HaydnMCFormatsWithMII Fmts(MII);
     // Matched real children (NOP fillers excluded) with the textual slot index
     // they appeared at, before Bundle pack.
     SmallVector<std::pair<MCInst *, unsigned>, Haydn::ISSUE_SLOT_COUNT>
