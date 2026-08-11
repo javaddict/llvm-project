@@ -10,7 +10,7 @@
 ; float add -> __addsf3
 define float @fadd(float %a, float %b) {
 ; CHECK-LABEL: fadd:
-; CHECK: jal{{(\.s[012])?}}	lr, __addsf3
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, __addsf3
   %r = fadd float %a, %b
   ret float %r
 }
@@ -18,7 +18,7 @@ define float @fadd(float %a, float %b) {
 ; double mul -> __muldf3
 define double @dmul(double %a, double %b) {
 ; CHECK-LABEL: dmul:
-; CHECK: jal{{(\.s[012])?}}	lr, __muldf3
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, __muldf3
   %r = fmul double %a, %b
   ret double %r
 }
@@ -26,7 +26,7 @@ define double @dmul(double %a, double %b) {
 ; double->float trunc -> __truncdfsf2
 define float @d2f(double %a) {
 ; CHECK-LABEL: d2f:
-; CHECK: jal{{(\.s[012])?}}	lr, __truncdfsf2
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, __truncdfsf2
   %r = fptrunc double %a to float
   ret float %r
 }
@@ -34,7 +34,7 @@ define float @d2f(double %a) {
 ; float->int -> __fixsfsi
 define i32 @f2i(float %a) {
 ; CHECK-LABEL: f2i:
-; CHECK: jal{{(\.s[012])?}}	lr, __fixsfsi
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, __fixsfsi
   %r = fptosi float %a to i32
   ret i32 %r
 }
@@ -42,7 +42,7 @@ define i32 @f2i(float %a) {
 ; float compare eq -> __eqsf2
 define i1 @feq(float %a, float %b) {
 ; CHECK-LABEL: feq:
-; CHECK: jal{{(\.s[012])?}}	lr, __eqsf2
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, __eqsf2
   %r = fcmp oeq float %a, %b
   ret i1 %r
 }
@@ -50,8 +50,8 @@ define i1 @feq(float %a, float %b) {
 ; copysign: bit-trick (AND + OR), NO copysign libcall
 define float @fcopysign(float %a, float %b) {
 ; CHECK-LABEL: fcopysign:
-; CHECK-NOT: jal{{(\.s[012])?}}	lr, copysign
-; CHECK-NOT: jal{{(\.s[012])?}}	lr, __copysign
+; CHECK-NOT: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, copysign
+; CHECK-NOT: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, __copysign
 ; CHECK: and32
 ; CHECK: or32
   %r = call float @llvm.copysign.f32(float %a, float %b)
@@ -61,7 +61,7 @@ define float @fcopysign(float %a, float %b) {
 ; floor: floorf libcall
 define float @ffloor(float %a) {
 ; CHECK-LABEL: ffloor:
-; CHECK: jal{{(\.s[012])?}}	lr, floorf
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, floorf
   %r = call float @llvm.floor.f32(float %a)
   ret float %r
 }
@@ -69,7 +69,7 @@ define float @ffloor(float %a) {
 ; fminnum: fminf libcall
 define float @fmin(float %a, float %b) {
 ; CHECK-LABEL: fmin:
-; CHECK: jal{{(\.s[012])?}}	lr, fminf
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, fminf
   %r = call float @llvm.minnum.f32(float %a, float %b)
   ret float %r
 }
@@ -77,7 +77,7 @@ define float @fmin(float %a, float %b) {
 ; fmaxnum: fmaxf libcall
 define float @fmax(float %a, float %b) {
 ; CHECK-LABEL: fmax:
-; CHECK: jal{{(\.s[012])?}}	lr, fmaxf
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, fmaxf
   %r = call float @llvm.maxnum.f32(float %a, float %b)
   ret float %r
 }
@@ -85,7 +85,7 @@ define float @fmax(float %a, float %b) {
 ; llvm.minimum → fminnum path → fminf (no legalizer crash)
 define float @fminimum(float %a, float %b) {
 ; CHECK-LABEL: fminimum:
-; CHECK: jal{{(\.s[012])?}}	lr, fminf
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, fminf
   %r = call float @llvm.minimum.f32(float %a, float %b)
   ret float %r
 }
@@ -93,7 +93,7 @@ define float @fminimum(float %a, float %b) {
 ; llvm.maximum → fmaxf
 define float @fmaximum(float %a, float %b) {
 ; CHECK-LABEL: fmaximum:
-; CHECK: jal{{(\.s[012])?}}	lr, fmaxf
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, fmaxf
   %r = call float @llvm.maximum.f32(float %a, float %b)
   ret float %r
 }
@@ -101,8 +101,8 @@ define float @fmaximum(float %a, float %b) {
 ; is.fpclass: integer bit tests, no runtime call
 define i1 @fisnan(float %a) {
 ; CHECK-LABEL: fisnan:
-; CHECK-NOT: jal{{(\.s[012])?}}	lr, __
-; CHECK-NOT: jal{{(\.s[012])?}}	lr, isnan
+; CHECK-NOT: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, __
+; CHECK-NOT: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, isnan
 ; CHECK: jalr
   %r = call i1 @llvm.is.fpclass.f32(float %a, i32 3)
   ret i1 %r
@@ -111,7 +111,7 @@ define i1 @fisnan(float %a) {
 ; double copysign: AND64/OR64, no libcall
 define double @dcopysign(double %a, double %b) {
 ; CHECK-LABEL: dcopysign:
-; CHECK-NOT: jal{{(\.s[012])?}}	lr, copysign
+; CHECK-NOT: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	lr, copysign
 ; CHECK: and64
 ; CHECK: or64
   %r = call double @llvm.copysign.f64(double %a, double %b)

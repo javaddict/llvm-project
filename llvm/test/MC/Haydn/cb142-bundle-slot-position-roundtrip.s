@@ -29,7 +29,7 @@
 # In ISA order the store sits in s2 and addi32_w in s0.
 #===----------------------------------------------------------------------===#
 # CHECK-LABEL: <f_cb142_dhry_bundle>:
-# CHECK: { s_sb_post_imm r4, r1, 1; nop; addi32_w r4, r0, 66 }
+# CHECK: { s_sb_post_imm r4, r1, 1; nop; addi32 r4, r0, 66 }
 f_cb142_dhry_bundle:
   { s_sb_post_imm r4, r1, 1; nop; addi32_w r4, r0, 66 }
 
@@ -86,7 +86,7 @@ f_cb142_legacy_post_names:
 # `-S` round trip depends on. move32 names s2, addi32 s1, st32 s0.
 #===----------------------------------------------------------------------===#
 # CHECK-LABEL: <f_cb142_full_layout>:
-# CHECK: { move32 r6, r3; addi32 r4, r3, 4; st32 r3, r1, 0 }
+# CHECK: { move32 r6, r3; addi32 r4, r3, 4; s_sw_{{[a-z_]*}} r3, r1, 0 }
 f_cb142_full_layout:
   { move32 r6, r3; addi32 r4, r3, 4; st32 r3, r1, 0 }
 

@@ -33,7 +33,7 @@ while.body:
   ; (Track A): seq32 + bnez (branch if SEQ==1). With fold on: beq.
   ; Never invert equality to take the false edge first.
   ; CHECK-DAG: seq32
-  ; CHECK-DAG: {{beq|bnez}}{{(\.s[012])?}}
+  ; CHECK-DAG: {{beq|bnez}}{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   br i1 %cmp.eq, label %cleanup, label %if.else
 
 if.else:

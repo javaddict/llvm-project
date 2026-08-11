@@ -54,5 +54,5 @@ late_path:
 ; The first callee-save store and SP decrement should appear in the late path
 ; (the block after the branch to early_exit).
 ; CHECK: subi32{{.*}}sp{{.*}}sp
-; CHECK: st32{{.*}}r{{(8|9|10|11|12)}}
+; CHECK: s_sw_{{[a-z_]*}}{{.*}}r{{(8|9|10|11|12)}}
 ; CHECK: jal{{.*}}getValue

@@ -92,7 +92,7 @@ ret_mid:
 ;Void function with multiple returns
 define void @void_multi_ret(i32 %x) nounwind {
 ; CHECK-LABEL: void_multi_ret:
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp eq i32 %x, 0
   br i1 %cmp, label %early, label %late

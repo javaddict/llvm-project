@@ -19,7 +19,7 @@
 define void @computed_goto(i32 %idx) {
 ; CHECK-LABEL: computed_goto:
 ; Check that JALR is emitted for the indirect branch
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %target = alloca ptr
   store ptr blockaddress(@computed_goto, %label1), ptr %target
@@ -44,7 +44,7 @@ label2:
 ; Simpler test: direct computed goto with a single target.
 define void @simple_indirect_br(ptr %target) {
 ; CHECK-LABEL: simple_indirect_br:
-; CHECK: jalr{{(\.s[012])?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   indirectbr ptr %target, [label %dst]
 

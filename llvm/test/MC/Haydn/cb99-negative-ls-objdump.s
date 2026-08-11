@@ -16,11 +16,11 @@ cb99_negative_ls_objdump:
     { jalr r0, lr, 0; nop; nop }
     .size cb99_negative_ls_objdump, .-cb99_negative_ls_objdump
 
-# CHECK: ld32{{.*}}r1,{{.*}}r10,{{.*}}-4
-# CHECK: ld64{{.*}}d1,{{.*}}r10,{{.*}}-8
-# CHECK: st32{{.*}}r1,{{.*}}r10,{{.*}}-4
-# CHECK: ldu8{{.*}}r1,{{.*}}r10,{{.*}}-1
-# CHECK: st8{{.*}}r1,{{.*}}r10,{{.*}}-1
+# CHECK: s_lw_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-4
+# CHECK: d_ldw_{{[a-z_]*}}{{.*}}d1,{{.*}}r10,{{.*}}-8
+# CHECK: s_sw_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-4
+# CHECK: s_lbu_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-1
+# CHECK: s_sb_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-1
 # CHECK-NOT: 65532
 # CHECK-NOT: 65528
 # CHECK-NOT: 65535

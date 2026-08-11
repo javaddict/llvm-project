@@ -27,12 +27,12 @@
 ; then branches on that result with BNEZ — the test asserts that the final
 ; branch is a single-register zero-test form, not a 2-register BEQ/BNE.
 ; CHECK-LABEL: fold_eq_zero:
-; CHECK-NOT: beq{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
+; CHECK-NOT: beq{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r{{[0-9]+}}, r{{[0-9]+}}
 ; SEQ32 + XORI invert + BEQZ (T7.5 exact polarity).
 ; CHECK: seq32
 ; CHECK: xori32
-; CHECK: beqz{{(\.s[012])?}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
 define void @fold_eq_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp eq i32 %a, 0
@@ -52,11 +52,11 @@ else:
 ; test asserts that the final branch is a single-register zero-test form
 ; not a 2-register BNE.
 ; CHECK-LABEL: fold_ne_zero:
-; CHECK-NOT: bne{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
+; CHECK-NOT: bne{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r{{[0-9]+}}, r{{[0-9]+}}
 ; SEQ32 + BNEZ to else (eq → else; fallthrough = then). Not BEQZ-primary.
 ; CHECK: seq32
-; CHECK: bnez{{(\.s[012])?}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
 define void @fold_ne_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp ne i32 %a, 0
@@ -77,8 +77,8 @@ else:
 ; CHECK-NOT: blt r{{[0-9]+}}, r{{[0-9]+}}
 ; CHECK: slt32
 ; CHECK: xori32
-; CHECK: beqz{{(\.s[012])?}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
 define void @fold_slt_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp slt i32 %a, 0

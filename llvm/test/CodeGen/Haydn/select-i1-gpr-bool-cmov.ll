@@ -32,8 +32,8 @@
 define i32 @select_icmp_slt(i32 %a, i32 %b, i32 %x, i32 %y) nounwind {
 ; CHECK-LABEL: select_icmp_slt:
 ; CHECK:       slt32
-; CHECK-NOT:   bnez{{(\.s[012])?}}
-; CHECK-NOT:   beqz{{(\.s[012])?}}
+; CHECK-NOT:   bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK-NOT:   beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 ; CHECK-NOT:   neg32
 ; CHECK-NOT:   not32
 ; CHECK:       movt32
@@ -48,8 +48,8 @@ entry:
 define i32 @select_icmp_eq(i32 %a, i32 %b, i32 %x, i32 %y) nounwind {
 ; CHECK-LABEL: select_icmp_eq:
 ; CHECK:       seq32
-; CHECK-NOT:   bnez{{(\.s[012])?}}
-; CHECK-NOT:   beqz{{(\.s[012])?}}
+; CHECK-NOT:   bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK-NOT:   beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 ; CHECK-NOT:   neg32
 ; CHECK-NOT:   not32
 ; CHECK:       movt32
@@ -66,8 +66,8 @@ define i32 @select_icmp_sge(i32 %a, i32 %b, i32 %x, i32 %y) nounwind {
 ; CHECK-LABEL: select_icmp_sge:
 ; CHECK:       slt32
 ; CHECK:       xori32
-; CHECK-NOT:   bnez{{(\.s[012])?}}
-; CHECK-NOT:   beqz{{(\.s[012])?}}
+; CHECK-NOT:   bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK-NOT:   beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 ; CHECK-NOT:   neg32
 ; CHECK-NOT:   not32
 ; CHECK:       movt32

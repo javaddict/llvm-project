@@ -5,16 +5,16 @@
 ; trap → RET with no abort call at all.
 
 ; CHECK-LABEL: t_trap:
-; CHECK: jal{{(\.s[012])?}} {{.*}}abort
-; CHECK: jal{{(\.s[012])?}} {{.*}}abort
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}abort
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}abort
 define void @t_trap() noreturn {
   call void @llvm.trap()
   unreachable
 }
 
 ; CHECK-LABEL: t_ubsantrap:
-; CHECK: jal{{(\.s[012])?}} {{.*}}abort
-; CHECK: jal{{(\.s[012])?}} {{.*}}abort
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}abort
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}abort
 define void @t_ubsantrap() noreturn {
   call void @llvm.ubsantrap(i8 1)
   unreachable

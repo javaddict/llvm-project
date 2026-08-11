@@ -3023,7 +3023,7 @@ pad:
   br label %far
 
 far:
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   ret void
 }
 

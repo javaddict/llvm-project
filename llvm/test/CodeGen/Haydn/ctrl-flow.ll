@@ -3,7 +3,7 @@
 define i32 @cond_br(i32 %a, i32 %b) {
 ; CHECK-LABEL: cond_br:
 ; CHECK-DAG: seq32
-; CHECK-DAG: b{{eq|ne}}z{{(\.s[012])?}}
+; CHECK-DAG: b{{eq|ne}}z{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 ; This shape (br i1 %cmp; then: ret; else: ret) has NO Join block, so
 ; HaydnGenMux Phase 2 (tryConvertBranchCMOV) correctly bails — it requires
 ; Join->pred_size==2. The backend emits seq32+beqz+branch, which is valid

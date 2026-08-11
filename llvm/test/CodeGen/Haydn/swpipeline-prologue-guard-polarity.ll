@@ -85,6 +85,6 @@ exitbb:
 ; CHECK-LABEL: test_prologue_guard_polarity:
 ; Product may emit single-stage SMS (no multi-stage prologue SLT guard).
 ; Contract: reduction body survives (max32 present).
-; CHECK: max32{{(_m0|\.s[0-9])?}}
+; CHECK: max32{{(_m0|_s[0-9])?}}
 
 attributes #0 = { nofree norecurse nosync nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" }

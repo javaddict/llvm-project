@@ -29,8 +29,8 @@ declare { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr, i32, i32)
 ; Setup CBR set 0, then a CB load on set 0. The setup must survive.
 ; CSR addresses: CBR_BEGIN[0]=0x2C=44, CBR_END[0]=0x2D=45.
 ; CHECK-LABEL: test_cb_setup_set0:
-; CHECK:       {{.*}}csrw{{(\.s[012])?}} 44, {{r[0-9]+}}{{.*}}
-; CHECK:       {{.*}}csrw{{(\.s[012])?}} 45, {{r[0-9]+}}{{.*}}
+; CHECK:       {{.*}}csrw{{(_[pP][23][0-9]_[A-Z0-9]+)?}} 44, {{r[0-9]+}}{{.*}}
+; CHECK:       {{.*}}csrw{{(_[pP][23][0-9]_[A-Z0-9]+)?}} 45, {{r[0-9]+}}{{.*}}
 ; CHECK:       d_ldw_cb_imm
 define i64 @test_cb_setup_set0(i32 %begin, i32 %end, ptr %ptr) {
   call void @llvm.haydn.setcbr.begin(i32 0, i32 %begin)
@@ -42,8 +42,8 @@ define i64 @test_cb_setup_set0(i32 %begin, i32 %end, ptr %ptr) {
 
 ; Setup CBR set 1 — must use the set-1 CSR addresses 0x2E=46/0x2F=47.
 ; CHECK-LABEL: test_cb_setup_set1:
-; CHECK:       {{.*}}csrw{{(\.s[012])?}} 46, {{r[0-9]+}}{{.*}}
-; CHECK:       {{.*}}csrw{{(\.s[012])?}} 47, {{r[0-9]+}}{{.*}}
+; CHECK:       {{.*}}csrw{{(_[pP][23][0-9]_[A-Z0-9]+)?}} 46, {{r[0-9]+}}{{.*}}
+; CHECK:       {{.*}}csrw{{(_[pP][23][0-9]_[A-Z0-9]+)?}} 47, {{r[0-9]+}}{{.*}}
 define void @test_cb_setup_set1(i32 %begin, i32 %end) {
   call void @llvm.haydn.setcbr.begin(i32 1, i32 %begin)
   call void @llvm.haydn.setcbr.end(i32 1, i32 %end)

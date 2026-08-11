@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 ;
-; REGRESSION: i64 = sext(i32) * sext(i32) ISel-packs as sext32t64 x2 + mul64.ll
+; REGRESSION: i64 = sext(i32) * sext(i32) ISel-packs as sext32t64 x2 + mul64_ll
 ; (not loadi32/sra32 sign-mask chain, not __muldi3 libcall).
 
 define i64 @mul64_ll_isel_pack_sext_sext(i32 %a, i32 %b) {
@@ -10,7 +10,7 @@ define i64 @mul64_ll_isel_pack_sext_sext(i32 %a, i32 %b) {
 ; CHECK-NOT: sra32
 ; CHECK-DAG: sext32t64
 ; CHECK-DAG: sext32t64
-; CHECK: mul64.ll
+; CHECK: mul64_ll
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
   %m = mul i64 %aa, %bb
@@ -22,7 +22,7 @@ define i64 @mul64_ll_isel_pack_in_loop(i32 %n, i32* nocapture readonly %p, i32 %
 ; CHECK-DAG: sext32t64
 ; PostLegalizer formMACs burn-down: loop MAC may lower as mul64.ll / mula64.ll
 ; or the widened mul64.ulul expansion (still no __muldi3 / sra sign-mask).
-; CHECK: mul{{a?64\.(ll|ulul)}}
+; CHECK: mul{{a?64_(ll|ulul)}}
 ; CHECK-NOT: sra32
 ; CHECK-NOT: loadi32
 entry:
