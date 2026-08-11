@@ -23,7 +23,7 @@ Companion documents:
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
 | `llvm-project` | `haydn-formate-switch-mc` | `14561e08a6f5` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
-| `simulator` | `master` | `0767a9b` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
+| `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -2454,10 +2454,15 @@ behind, so the freeze had inverted — see § 5.16.
   over the top of whatever followed the stream.
 * `semantic_family_map.inc` regenerated, `SEMANTIC_SNAPSHOT.sha256` re-pinned
   (two model bodies), documented in `SEMANTIC_BASELINE.md` the way the previous
-  re-pins were. `BUNDLESIM_SEMANTIC_BASELINE_SHA256` is unchanged, following
-  precedent — **and that is worth a decision rather than a precedent**, since
-  it is what a saved `.bsci` is keyed on and six instructions just changed
-  meaning underneath it.
+  re-pins were.
+* **`BUNDLESIM_SEMANTIC_BASELINE_SHA256` moves, and gains a definition**
+  (`simulator 2ede2a6`). It is what a saved `.bsci` is keyed on, and it was a
+  hand-picked value unchanged since the repository's second commit — through
+  two model re-pins, one of them behavioural. Nothing checked it, so it sat
+  still while the eighteen bodies it identifies moved underneath. It is now the
+  SHA-256 **of `SEMANTIC_SNAPSHOT.sha256`** and `verify_baseline.sh` asserts
+  the equality, so re-pinning is: regenerate the snapshot, copy its digest.
+  A value with no derivation is one nobody can be wrong about.
 
 #### `cb100_ar_unaligned` — what the freeze was protecting
 
