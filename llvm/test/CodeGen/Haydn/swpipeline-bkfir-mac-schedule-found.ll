@@ -108,10 +108,10 @@ define void @bkfir_mac_hot(
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d7, r4, 2 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_pre_imm d1, r4, 3 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 8; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 28; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 1; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 6; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 7; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 32; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
     ptr nocapture readonly %C,

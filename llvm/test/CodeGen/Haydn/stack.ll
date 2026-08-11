@@ -51,10 +51,10 @@ define i32 @test_callee_save() {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r2, r10, r8; nop }
 ; CHECK-NEXT:    { add32 r1, r2, r1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 12; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 20; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 5; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %v1 = call i32 @extern_func(i32 1)

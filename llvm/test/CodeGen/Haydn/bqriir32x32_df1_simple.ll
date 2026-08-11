@@ -172,19 +172,19 @@ define dso_local void @bqriir32x32_df1_process(ptr noundef %st, ptr noundef writ
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, r9, 7 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r7, r9, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d15, sp, 32; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d14, sp, 40; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d13, sp, 48; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d12, sp, 56; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d11, sp, 64; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 72; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 80; nop; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 88; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 100; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 104; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 108; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 112; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 116; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d15, sp, 4; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d14, sp, 5; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d13, sp, 6; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d12, sp, 7; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d11, sp, 8; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d10, sp, 9; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d9, sp, 10; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d8, sp, 11; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 25; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 26; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 27; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 28; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 29; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 120; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
@@ -304,12 +304,12 @@ define dso_local void @bqriir32x32_df1_cascade(ptr noundef %sections, ptr nounde
 ; CHECK-NEXT:    { beqz r1, .LBB1_3; nop; nop }
 ; CHECK-NEXT:  .LBB1_4: // %for.cond.cleanup
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm fp, sp, 12; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r11, sp, 16; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 20; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 24; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 28; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm fp, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r11, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 5; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 6; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 7; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 32; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:

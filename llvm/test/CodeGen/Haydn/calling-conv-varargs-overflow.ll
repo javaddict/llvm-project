@@ -20,7 +20,7 @@ define i64 @varargs_five_i64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, ...) nounwi
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 48; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, sp, 16 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, sp, 4 }
 ; CHECK-NEXT:    { addi32 r8, sp, 20; addi32 r12, sp, 48 }
 ; CHECK-NEXT:    { d_ldw_with_imm d4, r12, 0; nop; s_sw_with_imm r1, r8, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r8, 1 }
@@ -67,7 +67,7 @@ define i64 @varargs_five_i64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, ...) nounwi
 ; CHECK-NEXT:    { add64 d0, d0, d4; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d5; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 16; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 4; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 48; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
@@ -153,7 +153,7 @@ define i64 @call_five_i64_overflow() nounwind {
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 40; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 36 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 9 }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
@@ -204,7 +204,7 @@ define i64 @call_five_i64_overflow() nounwind {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 36; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 9; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 40; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:

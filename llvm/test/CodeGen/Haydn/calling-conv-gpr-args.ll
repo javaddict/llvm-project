@@ -19,13 +19,13 @@ define void @caller_0_args() {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
 ; CHECK-NEXT:    { nop; jal lr, sink_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   call void @sink_i32(i32 0)
@@ -40,12 +40,12 @@ define i32 @caller_1_arg(i32 %a) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, identity_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @identity_i32(i32 %a)
@@ -62,12 +62,12 @@ define i32 @caller_2_args(i32 %a, i32 %b) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, add2; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add2(i32 %a, i32 %b)
@@ -84,12 +84,12 @@ define i32 @caller_3_args(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, add3; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add3(i32 %a, i32 %b, i32 %c)
@@ -106,12 +106,12 @@ define i32 @caller_4_args(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, add4; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add4(i32 %a, i32 %b, i32 %c, i32 %d)
@@ -128,12 +128,12 @@ define i32 @caller_5_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, add5; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add5(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e)
@@ -150,12 +150,12 @@ define i32 @caller_6_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, add6; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add6(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f)
@@ -172,12 +172,12 @@ define i32 @caller_7_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, add7; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add7(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g)
@@ -196,7 +196,7 @@ define i32 @caller_8_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 20 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 5 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset lr, 20
 ; CHECK-NEXT:    { addi32 r12, sp, 24; subi32 sp, sp, 8 }
@@ -207,7 +207,7 @@ define i32 @caller_8_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 20; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 5; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add8(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g, i32 %h)
@@ -245,10 +245,10 @@ define i32 @caller_10_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 32; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r10, sp, 36; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 40; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 44; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 8; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 9; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 10; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 11; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 48; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   %r = call i32 @add10(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g, i32 %h, i32 %i, i32 %j)
@@ -348,12 +348,12 @@ define void @ptr_arg(ptr %p) {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 12 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, use_ptr; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm lr, sp, 12; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
   call void @use_ptr(ptr %p)
