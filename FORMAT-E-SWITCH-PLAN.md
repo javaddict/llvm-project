@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `6c928d770850` **local only — `fork/` is still at `2eba490a051c`, 30 commits behind** | **objects emit: 424/430 CodeGen. lit 570/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.12 and § 5.14 are OPEN defects, both recorded as XFAIL regression tests. |
+| `llvm-project` | `haydn-formate-switch-mc` | `00c3cb33aa65` **local only — `fork/` is still at `2eba490a051c`, 31 commits behind** | **objects emit: 424/430 CodeGen. lit 572/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY apart from the two deliberate f2mulzaa32rs reds; 43 assertions remain held on a decision (see § 5.4). § 5.14 is CLOSED; § 5.12 stays OPEN, held on a question only the simulator answers. |
 | `simulator` | `master` | `dfd2078`, **local only — not pushed** | the § 5.11 database re-pin |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -119,9 +119,9 @@ hashes there are the ones on the pushed branch.
 # llvm-project
 cmake --build build -j"$(nproc)" -- -k 0             # 0 errors; -k 0, see § 5.2
 build/bin/llvm-lit -s llvm/test/CodeGen/Haydn llvm/test/MC/Haydn
-#   591 discovered: 570 pass, 11 XFAIL, 8 unsupported, 2 fail — the 2 are the
-#   deliberate f2mulzaa32rs pair; three XFAILs are § 5.12's and § 5.14's two,
-#   where an XPASS is the alarm
+#   591 discovered: 572 pass, 9 XFAIL, 8 unsupported, 2 fail — the 2 are the
+#   deliberate f2mulzaa32rs pair; one XFAIL is § 5.12's, where an XPASS is the
+#   alarm
 cmake --build build -j"$(nproc)" --target HaydnTests  # REQUIRED — see § 6.12
 build/unittests/Target/Haydn/HaydnTests               # 253/253 (248 + 5 unit-axis)
 build/bin/llvm-lit -s lld/test/ELF/haydn \
@@ -2018,7 +2018,7 @@ their assertions being touched**. They asserted `lui r3, 4095` and were right;
 relaxing them would have frozen the defect in. That is the § 5.4 rule in its
 sharpest form: a red gate is not evidence that the expectation is stale.
 
-### 5.14 SET_HWLOOP_F2's label fixups write outside their fields — OPEN
+### 5.14 SET_HWLOOP_F2's label fixups wrote outside their fields — CLOSED
 
 `bqriir32x32_df1_process` compiles to an object containing one bundle that
 disassembles as `<unknown>`. It is the `set_hwloop_f2` that programs the
@@ -2056,11 +2056,54 @@ for the same reason no gate saw it: **`--emit roundtrip` never applies a
 fixup**. It round-trips the placement's own bits, and a fixup writes over them
 afterwards.
 
-`llvm/test/MC/Haydn/hwloop-fixup-reserved-bit.s` holds it, `XFAIL`, in 82 lines
-with no `llc` — it reproduces `bqriir`'s twelve bytes exactly
-(`8f 00 00 00 40 4e 01 3c 28 00 00 00`). It flips to XPASS on a fix.
+#### Fixed in `00c3cb33aa65` — the key could not tell two fields apart
 
-#### A second instance, and this one is silent
+§ 5.8's table is keyed on `(FieldSize, entry count, entry index, mapping)`.
+**That does not identify a field.** `SET_HWLOOP_F2` carries a 6-bit and a
+12-bit offset in ONE entry, and another instruction has a 6-bit immediate at
+the same `(entry, mapping)`, so the lookup answered with whichever the
+generator had seen:
+
+| field | needs bundle bit | table said |
+|---|---:|---:|
+| off1, 6-bit | **49** | 62 |
+| off2, 12-bit | **55** | 54 |
+
+One mis-key explains both halves. off1 written at 62 lands **inside** off2's
+field (55..66) — off2 reads back carrying off1's distance and off1 reads back
+zero, the silent form. And 62 + 5 = **67**, the reserved bit, which is why a
+large enough start distance made the disassembler refuse the bundle.
+
+Two omissions, both the same one. The generator scanned only operands literally
+named `imm`; `SET_HWLOOP_F2`'s are **`imm1` and `imm2`**, so they were never in
+the table and the lookup fell through to someone else's row. And the key was
+missing the **type code** — which the generator's own docstring already said
+"would" be needed, for the narrow fields it was dropping. It was needed for
+more than that.
+
+The key is now `(FieldSize, entry count, entry index, mapping, type code)`, and
+because the type code's own position depends on `(entry, mapping)`, the `.inc`
+emits a second table to locate it: read the mapping, find the type code, read
+it, match a row. Every part still comes from the bundle image alone — neither
+MC nor lld knows the member, which was § 5.8's constraint and is kept.
+
+Measured before writing code: adding `imm1`/`imm2`/`imm3` under the old key
+gives **8 colliding keys**; adding the type code gives **68 rows and zero**.
+The generator now refuses outright if a type code ever sits at two positions
+for one `(entry, mapping)`.
+
+**`FieldLsb` was not what was wrong, and did not change.** For an instruction
+field it is unused — `patchRelocFieldInBundle` resolves the position from the
+image — and its only reader is `readRelocAddend`, which is REL-only and so dead
+for Haydn (RELA). Both places say so in comments now, because "fix the
+FieldLsb" is the wrong instinct here and is exactly what RISK-6 was.
+
+`hwloop-fixup-reserved-bit.s` and `d486-hwloop-fieldlsb-bundle128.s` are
+regression tests rather than XFAILs now; keep both, because one shows the loud
+symptom and the other the silent one. `bqriir32x32_df1-e2e.ll` gets its
+`set_hwloop` check back — asserted alone, never alternated.
+
+#### The second instance, and why it is the one to keep
 
 `d486-hwloop-fieldlsb-bundle128.s` was in § 5.4's stale-premise pile because
 it asserted a Bundle128 byte position. Its QUESTION was never stale: "do the
@@ -2079,13 +2122,13 @@ that belongs to `off1`. **No reserved bit is set**, so nothing refuses the
 bundle and no disassembly shows `<unknown>`. The only reason this is visible
 at all is that the test asks about the fields rather than about a byte.
 
-It is now `XFAIL` asserting `0, 12, 24, r1`, and it needs no byte pattern:
-the printed operands say the same thing and survive a layout change, which
-`byte0 == 0x08` did not. The two XFAILs should go green together.
+It asserts `0, 12, 24, r1` and needs no byte pattern: the printed operands say
+the same thing and survive a layout change, which `byte0 == 0x08` did not.
 
-Read the pair together before fixing: the loud one shows the spill reaching
-the reserved bit, the quiet one shows what the spill is — one operand's value
-in the other's field.
+**This is the half that would have found the defect on its own.** The loud one
+depends on a distance large enough to reach the reserved bit; this one shows
+the spill for any distance at all, because it asks what the fields contain
+rather than whether the bundle decodes.
 
 `bqriir32x32_df1-e2e.ll` is deliberately kept **green** rather than left red
 like § 5.4's `f2mulzaa32rs` pair: it carries twenty assertions and a red e2e
