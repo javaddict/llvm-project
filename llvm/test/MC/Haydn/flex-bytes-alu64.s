@@ -1,54 +1,47 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:     llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
-//
-// REGRESSION TEST (// Stage-1 Bundle128 Flex encoding):
-// BYTE-PINNED + WIDTH-PINNED oracle. The hand-computed 16 LE bytes for
-// `add64 d0, d1, d2` (per encoding_manual_flex.md §1/§2 + s1_encoding.md
-// §4.3 ALU64-RR + byte table) MUST:
-// (a) round-trip through the disassembler as `add64 d0, d1, d2`
-// (b) occupy EXACTLY 16 bytes in.text (not 8 — the width assertion is
-// the trap that hid the transitional-form bug for the whole arc).
-//
-// Harness note: earlier `--disassemble --hex %s` form read the WHOLE file
-// as hex (including the lit-directive line) and failed with "invalid input
-// token". This test assembles `.byte` directives the normal way, then
-// disassembles via objdump — the bytes are pinned BOTH as input (here in
-// the source) AND as output (the objdump -d listing).
-//
-// === BYTE DERIVATION (hand-computed per) ===
-//
-// Bundle layout (MSB-indexed offsets per HaydnMCFormatDesc):
-// s0 window = MSB-offsets [80,127] (48b), FU at MSB-off 80 -> bundle[47:45]
-// s1 window = MSB-offsets [40,79] (40b), FU at MSB-off 40 -> bundle[87:85]
-// s2 window = MSB-offsets [0,39] (40b), FU at MSB-off 0 -> bundle[127:125]
-//
-// For `add64 d0, d1, d2` placed in s1 (encoder native slot for ADD64):
-// FU(3b) = ALU64 = 010 @ MSB-off [40,42] -> bundle[87:85]
-// opcode(8b)= 0x3E @ MSB-off [43,50] -> bundle[84:77]
-// rsd1(4b) = D1 = 1 @ MSB-off [51,54] -> bundle[76:73]
-// rsd2(4b) = D2 = 2 @ MSB-off [55,58] -> bundle[72:69]
-// rtd(4b) = D0 = 0 @ MSB-off [59,62] -> bundle[68:65]
-// spare(17b)= 0 @ MSB-off [63,79] -> bundle[64:48]
-// s0, s2 = NOP (all-zero).
-//
-// Encoder places sources BEFORE dest (per s1_encoding.md RR convention);
-// the encoder reorders from the MCInst dag `(rd, rs1, rs2)` to (rs1, rs2, rd).
-//
-// Result 128-bit word, LE 16 bytes (R2-dense Bundle128):
-// 00 00 00 00 00 00 21 00 00 20 40 00 00 00 00 00
-//
-// NO XFAIL — Stage-1 ADD64 is shipped and round-trips today (verified).
+#
+# REGRESSION TEST: BYTE-PINNED + WIDTH-PINNED oracle. Hand-computed bytes for
+# `add64 d0, d1, d2` MUST:
+#   (a) round-trip through the disassembler as `add64 d0, d1, d2`
+#   (b) occupy EXACTLY 12 bytes in .text — the width assertion is the trap
+#       that hid the transitional-form bug for the whole Bundle128 arc, and
+#       12-vs-16 is the same assertion one format later.
+#
+# The bytes are derived from format_e_bit_layout_v2.json by hand, not copied
+# from `-show-encoding`. That independence is the whole point: the round trip
+# gate checks the encoder against the decoder and cannot see a defect the two
+# share.
+#
+# === BYTE DERIVATION (hand-computed from format_e_bit_layout_v2.json) ===
+#
+#   bit[2:0]   = 0b111    format indicator
+#   bit[3]     = 0        entry_num: 2 entries
+#   bit[5:4]   = 0        reserved
+#   entry0 = bit[50:6]:
+#     mapping   bit[7:6]   = 0b00      -> ALU0
+#     type_code bit[12:8]  = 0b01011   -> RR
+#     opcode    bit[19:13] = 0x20      -> ADD64
+#     dest rtd  bit[23:20] = 0         -> d0
+#     src1 rsd1 bit[27:24] = 1         -> d1
+#     src2 rsd2 bit[31:28] = 2         -> d2
+#     reserved  bit[50:32] = 0
+#   entry1 = bit[91:51]:
+#     mapping   bit[52:51] = 0b00      -> ALU1
+#     type_code bit[53]    = 0         -> NOP
+#
+#   ADD64 shares the ALU0 RR type with ADD32 and differs only in the 7-bit
+#   opcode (0x20 against 0x04), which is what makes the pair worth pinning
+#   side by side: a decoder that lost the opcode width would confuse them.
+#
+#   Little-endian 12 bytes: 07 0b 04 21 00 00 00 00 00 00 00 00
 
-// CHECK-LABEL: <.text>:
-// The byte-CHECK asserts BOTH the exact 16 bytes AND the width (16 bytes
-// shown, not 8 — a regression to legacy 8-byte slot-OR would show 8 bytes
-// at this offset and a different op at 0x08).
-// CHECK: 0: 00 00 00 00 00 00 21 00 00 20 40 00 00 00 00 00
-// CHECK: add64 d0, d1, d2
-// CHECK-NOT: <?>
-// CHECK-NOT: <unknown>
-// CHECK-NOT: add64
+# CHECK-LABEL: <.text>:
+# CHECK: 0: 07 0b 04 21 00 00 00 00 00 00 00 00 {{.*}}add64{{.*}}d0, d1, d2
+# CHECK-NOT: <?>
+# CHECK-NOT: <unknown>
+# CHECK-NOT: add32
 
-.byte 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00
-.byte 0x00, 0x20, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00
+.byte 0x07, 0x0b, 0x04, 0x21, 0x00, 0x00
+.byte 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
