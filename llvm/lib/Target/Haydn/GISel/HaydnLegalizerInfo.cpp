@@ -812,7 +812,28 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .maxScalar(0, S64);
 
   // G_FREEZE is a no-op — always legal for any type.
-  getActionDefinitionsBuilder(G_FREEZE).alwaysLegal();
+  // G_FREEZE narrows with its type before it is anything else. It was
+  // `alwaysLegal()`, which let a <16 x s32> exist as a VALUE — and nothing
+  // else in the target can hold one, so every consumer narrowed it locally
+  // and something re-merged the pieces to feed the next consumer. That is a
+  // loop the legalizer has no reason to leave: gcc-c-torture pr28982a and
+  // pr28982b at -O2 reached 356505 legalizations and register numbers past
+  // %300000 without finishing, and clang hung.
+  //
+  // The wide vector has to stop existing at its PRODUCER. Chasing it at the
+  // consumers does not converge, and two attempts at that are worth recording
+  // because both looked right: capping the custom vector→vector unmerge at a
+  // 128-bit source moved the loop one level down (to <4 x s32>), and lowering
+  // that unmerge through a scalar bitcast instead of element extracts moved it
+  // to G_CONCAT_VECTORS re-forming the <16 x s32>. Neither is needed once the
+  // freeze narrows, and neither is kept.
+  //
+  // No S1 clamp: one element is not a smaller vector (CB-130).
+  getActionDefinitionsBuilder(G_FREEZE)
+      .clampMaxNumElements(0, S32, 2)
+      .clampMaxNumElements(0, S16, 4)
+      .clampMaxNumElements(0, S8, 8)
+      .alwaysLegal();
 
   // 1 type idx, 1 imm idx (scale/width)
   getActionDefinitionsBuilder({
