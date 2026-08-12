@@ -545,4 +545,75 @@ TEST(HaydnBundleFormatSolver, B42_ComputeProductResMII_SixADD32) {
   EXPECT_EQ(computeProductResMII(Ops), 2u);
 }
 
+//===----------------------------------------------------------------------===//
+// Unit exclusivity is exact here, and CB-143's residual said otherwise
+//===----------------------------------------------------------------------===//
+
+// Three ADD32 fit because [ALU0, ALU1, ALU2] is three units (above). A MAC
+// is the case that cannot: X2MUL32's five placements are P20/MAC0, P21/MAC1,
+// P30/MAC0, P31/MAC0, P32/MAC1, so the machine offers it exactly two units
+// and a third one has nowhere to go.
+//
+// CB-143's residual line claimed the opposite — that three instructions
+// sharing a two-unit Available set "pass and cannot all issue". They do not
+// pass: tryAdd tracks OccupiedUnits per member, so this is exact. The claim
+// described HaydnFuncUnitWrapper::conflict, whose Required bits are entry
+// POSITIONS (PlacementAlternative::FieldSlots), not units.
+TEST(HaydnBundleFormatSolver, TwoMACUnitsRejectThird) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+  CycleState S = makeProductCycleState();
+
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  EXPECT_EQ(S.memberCount(), 2u);
+  EXPECT_EQ(llvm::popcount(S.OccupiedUnits), 2)
+      << "two MACs must hold two distinct units";
+
+  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::X2MUL32))
+      << "the machine has MAC0 and MAC1 only — a third MAC cannot issue even "
+         "though a third entry slot is free";
+  EXPECT_EQ(S.memberCount(), 2u) << "reject must leave state unchanged";
+}
+
+//===----------------------------------------------------------------------===//
+// CB-147 — the first placement chooses the format, and E2-only ops lose
+//===----------------------------------------------------------------------===//
+
+// The two product rows have disjoint slot sets ({P20,P21} vs {P30,P31,P32}),
+// so no occupancy is covered by both and the FIRST member placed decides the
+// format for the whole cycle. tryAdd walks alternatives by descending slot bit,
+// so anything holding a P3x placement takes E3 at once.
+//
+// ADDI32 has no P3x placement at all — a wide immediate only fits a 2-entry
+// entry — so after ADD32 has taken P32 it can never join, even though
+// {ADDI32, ADD32} is a legal 2-entry bundle. This is a density loss, not an
+// illegal bundle, and it is the reproducer for CB-147.
+TEST(HaydnBundleFormatSolver, CB147_E3FirstLocksOutE2OnlyADDI32) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+
+  // Order that loses: the flexible op goes first and takes E3.
+  {
+    CycleState S = makeProductCycleState();
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
+    EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P32))
+        << "descending walk takes the highest slot, which is E3-only";
+    EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ADDI32))
+        << "ADDI32 is E2-only; the cycle is already committed to E3";
+    EXPECT_EQ(S.memberCount(), 1u);
+  }
+
+  // Same two instructions, other order: both fit, in E2. The pair is legal —
+  // only the placement order made it look otherwise.
+  {
+    CycleState S = makeProductCycleState();
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADDI32));
+    EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P21))
+        << "ADDI32's highest placement is P21, which commits the cycle to E2";
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32))
+        << "ADD32 has a P20 placement, so it can still join an E2 cycle";
+    EXPECT_EQ(S.memberCount(), 2u);
+    EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E2));
+  }
+}
+
 } // namespace
