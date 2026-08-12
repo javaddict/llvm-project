@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `ca844f893770` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `ca9f1c7ce9cf` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -2691,6 +2691,45 @@ moves, which is the expected result and also the reason not to have left them.
 Behind them is a real gap, visible now instead of disguised:
 `extractelement <2 x i1> %c, i32 %i` reports *"unable to legalize"*. Opened as
 CB-144.
+
+---
+
+### 5.20 CB-136 — a header you cannot include is not an API
+
+`#include <haydn.h>` alone emitted **159** *"needs target feature"* errors and
+stopped. The default set is `-bit-reversed,-circular-buffer,-simd`, and 168
+wrapper BODIES call builtins needing one of the absent three, so the include
+failed before the user had written any code. It had been worked around
+consumer-side: BundleSim's `run_c` passes `-mcpu=haydn`, which turns the
+features on and hides it. `6197e624fce4`.
+
+**The per-op feature expression was already parsed into `Entry::Features` and
+simply not used at emission.** It is now an `__attribute__((target(...)))` per
+wrapper, the way `immintrin.h` does it, so the diagnostic lands on the CALL —
+the only place a user can act on it:
+
+```
+error: always_inline function 'haydn_x2abs32' requires target feature 'simd',
+but would be inlined into function 'f' that is compiled without support for
+'simd'
+```
+
+Every Haydn op names exactly ONE feature. **Checked rather than assumed**, via
+the emitter's own `-gen-haydn-op-feature-audit`: `simd` 159, `bit-reversed` 9,
+`agu` 7, `circular-buffer` 6, no ANDs and no ORs. The emitter now rejects an OR
+instead of dropping it — a target attribute cannot express one, and a silently
+weaker guard is worse than none.
+
+The count went 159 → 25 → 6 → 0, not straight to zero, because each round found
+another emission path: the generic wrapper builder, then the SIMD one, then the
+pair/load-writeback ones, and finally six wrappers that are hand-written rather
+than built from an `Entry` and name their feature literally.
+
+**And the § 6.16 trap, in the test written to explain the fix.** The file
+carried a sentence saying it deliberately does not use a blanket
+"no diagnostics" marker — and `-verify` reads directives out of comments, so
+writing the marker's name in a sentence ABOUT it made it real. Third instance
+in this document; the rule is simply **never spell a directive inside prose**.
 
 ---
 
