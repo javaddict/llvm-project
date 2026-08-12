@@ -974,7 +974,12 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .clampMaxNumElements(1, S32, 2)
       .clampMaxNumElements(1, S16, 4)
       .clampMaxNumElements(1, S8, 8)
-      .clampMaxNumElements(1, S1, 1)
+      // No S1 clamp here either: one element is not a smaller vector, and
+      // clampMaxNumElements builds its target with LLT::scalarOrVector(),
+      // which returns a SCALAR for a count of one. It is the construct that
+      // asserted "Expected vector types" in CB-130, sitting unreached rather
+      // than working. A <N x s1> reaching these rules is unlegalizable today
+      // and says so; that is a gap, not something a clamp can close.
       .lower();
 
   // G_INSERT_VECTOR_ELT: custom for v2i32 and v4i16.
@@ -984,7 +989,6 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
       .lower();
 
   //===--------------------------------------------------------------------===
@@ -1014,7 +1018,6 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
       .lower();
 
   getActionDefinitionsBuilder({
