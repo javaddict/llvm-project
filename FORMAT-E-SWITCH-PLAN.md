@@ -771,7 +771,7 @@ there — harmless only because nothing includes that file any more, so it must 
 in the same commit or the defs collide. That relocation was never tied to the
 encoding and could have been done at any point.
 
-### 5.3 Database correction — done, but the `.xlsx` disagrees
+### 5.3 Database correction — done; provenance is what is still open
 
 `format_e_bit_layout_v2.json` left an operand unspelled for the four-register
 MAC family. 76 mapping rows were corrected on this host (commit `8c3a9a9d241c`
@@ -790,9 +790,29 @@ and every gate passed. The new check in `haydn_encoding.py::verify_operand_sets`
 compares against the `Syntax` in `instruction_type_index.json` and refuses to
 emit on mismatch.
 
-**Outstanding:** `format_e_bit_layout_v2.xlsx` was not touched and now disagrees
-with the JSON on those 76 rows. If the spreadsheet generates the JSON, the fix
-must be made there and redelivered, or the next delivery silently reverts it.
+**Outstanding — and the earlier statement of it here was wrong.** This section
+used to say the untouched `format_e_bit_layout_v2.xlsx` "now disagrees with the
+JSON on those 76 rows". **It cannot.** The `.xlsx` holds bit geometry only —
+three sheets, 346 distinct strings, and not one instruction mnemonic or register
+alias in the file — so it does not carry mapping rows at all, and it was never a
+place the fix could have been made. Measured, not assumed: all 446 field
+geometries it *does* describe were compared against the corrected JSON and none
+disagreed, so the spreadsheet reads as a rendering of the JSON's geometry with
+the instruction tables left out.
+
+The real risk is unchanged but the question is different: **nothing we hold
+produces the `mapping` arrays**, so we cannot tell whether the next delivery
+reverts them. One data point points at the JSON being the master —
+`generate_instruction_to_entry.py`, delivered alongside, reads
+`instruction_type_index.json` and *writes* `instruction_to_entry.xlsx`, so for
+that pair the JSON is the source and the spreadsheet the rendering. That is
+suggestive, not an answer, and it is the ISA owner's to give. Written up for
+them at `~/haydn/ISA-QUESTION-format-e-mapping-provenance.md` (§ 8 Q3).
+
+Also worth knowing: the delivery was **internally inconsistent**, and the half we
+did not have to touch is the correct one. `instruction_type_index.json`'s
+`Syntax` and `instruction_to_entry.xlsx`'s *Operands* column both spell all four
+operands of `X2MULA32`; only the bit layout's mapping row named three.
 
 #### The correction does not travel — check the pin first on any new host
 
@@ -3587,11 +3607,26 @@ already the tested carrier of the member→logical fold.
    # ground truth, when the answer matters: expand everything and look
    cmake --build build --target clang-resource-headers   # REQUIRED — see § 6.13
    ```
-3. **The `.xlsx` twin of the bit layout** — see § 5.3.
-4. **CB-130** (`bundlesim_reg_cb44_o2_stale_cond_max_reduce`) is the sole
+3. **What produces the `mapping` arrays in `format_e_bit_layout_v2.json`?** —
+   see § 5.3. Written up as a question for the ISA owner at
+   `~/haydn/ISA-QUESTION-format-e-mapping-provenance.md`; it needs an answer
+   from them, not a decision here. **Not** the `.xlsx` question this line used
+   to ask — the bit-layout spreadsheet carries no mapping rows and cannot
+   disagree with the correction.
+
+   This is the **only** item in this section still waiting on a human.
+4. **~~CB-130~~ — DONE, and it was never a question for a human.**
+   `bundlesim_reg_cb44_o2_stale_cond_max_reduce` was the sole remaining
    simulator ctest failure, a GISel legalizer assert on
-   `<2 x s1> = G_BUILD_VECTOR` at `LegalizerHelper.cpp:5246`. Unrelated to this
-   migration; tracked separately.
+   `<2 x s1> = G_BUILD_VECTOR`. Closed by deleting a `clampMaxNumElements(0,
+   S1, 1)` that could only ever assert — § 5.17. **Standing rule, because that
+   construct was in four rules and not one:** the other three
+   (`G_EXTRACT_VECTOR_ELT`, `G_INSERT_VECTOR_ELT`, `G_CONCAT_VECTORS`) went in
+   § 5.20, and `clampMaxNumElements(…, S1, 1)` is not to be reintroduced
+   anywhere — `LLT::scalarOrVector(1, T)` returns a **scalar**, and
+   `fewerElementsVectorMerge` asserts that NarrowTy is a vector. One element is
+   not a smaller vector. Both of the last two entries it hid (CB-130, CB-144)
+   were real bugs it disguised as coverage.
 5. **Only format E's bit layout exists on this host.** The constraints document
    lists five bundle sizes (96/64/48/32/16-bit); the other four have no layout
    and cannot be invented.
