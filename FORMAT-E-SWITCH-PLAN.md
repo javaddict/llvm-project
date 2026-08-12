@@ -22,8 +22,8 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `303f216d6e26` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
-| `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
+| `llvm-project` | `haydn-formate-switch-mc` | `6b0d3a53c165` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `simulator` | `master` | `5403d94` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -2758,6 +2758,55 @@ lanes of both operand orders through the lowered extract and the answers are
 exact. Reading `andi32 r1, r1, 1; slli32 r1, r1, 2` and believing it is not the
 same thing, and this document has enough entries that begin with someone
 believing an assembly listing.
+
+---
+
+### 5.22 The torture run — 1416/1, and the one failure is mine
+
+`gcc-c-torture` had **not** run since the switch. The last one is 2026-08-05:
+1417 PASS, 0 FAIL, -O3. Everything since — PEI displacement scaling, the lld
+thunk addend, 48 `isPseudo` opcodes, DWARF line addresses, the itinerary
+retarget, the store/load overlap rule, three legalizer fixes — was unmeasured
+against the largest independent corpus here, the one that found CB-137.
+
+Run: **1514 discovered, 97 unsupported, 1416 PASS, 1 FAIL.** Exactly one
+regression, and it is § 5.15's own linker-script assertion.
+
+#### First, a correction to § 5.19
+
+That section presented the `pr28982a` hang as a long-standing bug found by
+probing. **It is a regression.** The 2026-08-05 artifact for it is a clean
+`GUEST_EXIT` 0 at -O3, 17102 bundles. The obvious defence — "the harness runs
+-O3 and I found it at -O2" — does not hold either: reverting the fix shows it
+hangs at **both**. It broke somewhere in the format E work; not bisected,
+which would need a full LLVM build per step.
+
+#### `align-3.c`, and why relaxing the assertion does not help
+
+```c
+void func(void) __attribute__((aligned(256)));
+```
+
+The linker pads BETWEEN functions, and that padding is not a whole number of
+parcels, so the assertion fires with a message about a case it was not written
+for. Relaxing it is the instructive part: the image then links and **BundleSim
+rejects it with `DISASSEMBLER_FAILURE` over 13 `<unknown>` bundles**, because
+the fill is zeros and an all-zero parcel is not a bundle.
+
+**Two Bundle128 properties made this work before, and format E has neither:**
+
+* a 16-byte parcel divides every power-of-two alignment; **12 divides none**
+* **all-zero WAS a valid Bundle128 NOP** — `MC/Haydn/flex-nop.s` pinned exactly
+  that, and § 5.9's note that the rule "is one step weaker" in format E is
+  where the consequence was already written down without anyone following it
+  this far
+
+So fill padding cannot be made decodable at an arbitrary offset. That is a
+**decision** — compiler-side alignment policy, or BundleSim tolerating
+inter-function padding — not an oversight, and it is CB-146.
+
+The assertion stays. It is catching something real, and failing at link time
+beats failing in the loader.
 
 ---
 
