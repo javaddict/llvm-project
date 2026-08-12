@@ -22,8 +22,8 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `6b0d3a53c165` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
-| `simulator` | `master` | `5403d94` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
+| `llvm-project` | `haydn-formate-switch-mc` | `1ae07be5dde6` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
 
@@ -2801,12 +2801,38 @@ the fill is zeros and an all-zero parcel is not a bundle.
   where the consequence was already written down without anyone following it
   this far
 
-So fill padding cannot be made decodable at an arbitrary offset. That is a
-**decision** — compiler-side alignment policy, or BundleSim tolerating
-inter-function padding — not an oversight, and it is CB-146.
+So fill padding cannot be made decodable at an arbitrary offset — which means
+the only place it can be handled is the loader. **BundleSim accepts it now**
+(`simulator 417b0c2`), and the way it does is the point.
 
-The assertion stays. It is catching something real, and failing at link time
-beats failing in the loader.
+#### Four refusals, one assumption
+
+```
+objdump_runner       strstr(stdout, "<unknown>")
+haydn_dump_parser    reject on the first <unknown> line
+code_image_builder   records must tile the section exactly
+bundlesim.ld         section size must be a whole number of parcels
+```
+
+Every one was true under Bundle128 for the same two reasons, and neither
+survived: a 16-byte parcel **divides every power-of-two alignment**, so there
+was never padding to tile around, and **all-zero was a valid Bundle128 NOP**,
+so fill decoded cleanly.
+
+**The replacement looks at the bytes rather than at an arithmetic consequence
+of them**: an uncovered gap passes only when every byte of it is ZERO. That is
+*stronger* than what it replaced, not a relaxation — a decoder that has lost
+the frame leaves REAL INSTRUCTION BYTES uncovered, and those are not zero.
+Nothing is given up, because an all-zero parcel could not have been a bundle
+anyway. And a branch INTO the gap is still refused by "direct control target is
+not an exact code record": **coverage and reachability are different questions,
+and only the first one moved.**
+
+Checked in both directions, which is the part worth insisting on: `align-3.c`
+runs (`GUEST_EXIT` 0), and corrupting one format-indicator byte in a working
+image is refused with *"uncovered bytes that are not alignment fill"*.
+
+`gcc-c-torture -O3`: **1417 PASS / 0 FAIL**, the 2026-08-05 baseline exactly.
 
 ---
 
