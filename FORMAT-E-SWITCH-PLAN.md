@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `ca9f1c7ce9cf` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `303f216d6e26` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -2730,6 +2730,34 @@ carried a sentence saying it deliberately does not use a blanket
 "no diagnostics" marker — and `-verify` reads directives out of comments, so
 writing the marker's name in a sentence ABOUT it made it real. Third instance
 in this document; the rule is simply **never spell a directive inside prose**.
+
+---
+
+### 5.21 CB-144 — widen the element out of i1, do not teach anything to hold one
+
+`extractelement <2 x i1> %c, i32 %i` reported *"unable to legalize"*. Haydn has
+no vector-of-i1, and the generic lowering could not help: with a variable index
+it spills the vector to a stack slot, and `lowerExtractInsertVectorElt` gives
+up on an element that is **not byte-sized**. Reachable from ordinary C — a
+vector `icmp` feeding a variable-indexed read is all it takes.
+
+**It had been hidden behind `clampMaxNumElements(…, S1, 1)`**, which could only
+ever have asserted (§ 5.19). What looked like coverage was a different crash
+waiting.
+
+Fixed by moving the type, not by representing it: `widenScalar` on type index 0
+anyexts the source vector to match and truncates the result back, so an `s1`
+extract from a `<N x s1>` becomes an `s32` extract from a `<N x s32>` — a shape
+the existing rules already handle, and byte-sized, so the stack lowering
+applies. `G_INSERT_VECTOR_ELT` takes the same treatment, where type index 0 is
+the result VECTOR and carries the source and the inserted value with it.
+`5237bc54de12`.
+
+**Verified by execution, not by reading the schedule.** The simulator runs both
+lanes of both operand orders through the lowered extract and the answers are
+exact. Reading `andi32 r1, r1, 1; slli32 r1, r1, 2` and believing it is not the
+same thing, and this document has enough entries that begin with someone
+believing an assembly listing.
 
 ---
 
