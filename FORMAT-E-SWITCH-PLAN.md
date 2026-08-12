@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `a570f4fa033d` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `ca844f893770` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `2ede2a6` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -2641,6 +2641,56 @@ this. Every distance came out `width` times too small, so two adjacent words
 looked overlapping. The `PreImm` path directly above it already had the shift.
 The byte and halfword forms were absent entirely, so they answered "no
 information" and every caller assumed the worst.
+
+---
+
+### 5.19 The wide vector had to stop existing at its producer
+
+`clang` **hung** at -O2 on gcc-c-torture `pr28982a`/`pr28982b`: 356505
+legalizations, register numbers past `%300000`, no end. Recorded in § 5.17 as a
+separate open bug when it turned out not to be evidence for keeping CB-130's
+clamp; this is it. `d8801579a60c`.
+
+`G_FREEZE` was **`alwaysLegal()`**, so a `<16 x i32>` was allowed to exist as a
+VALUE — and nothing else in the target can hold one. Every consumer narrowed it
+locally and something re-merged the pieces to feed the next. **That is a loop
+the legalizer has no reason to leave.**
+
+#### Two attempts at the consumers, both reverted
+
+Worth recording because each looked like the answer and each only moved the
+loop:
+
+* The custom vector→vector unmerge lowers by extracting elements **from the
+  source**, which is a reduction only while the source is one step above legal
+  — a `<16 x s32>` extract is itself illegal and fewer-elements it back into an
+  unmerge of that same vector. Capping the rule at a 128-bit source moved the
+  loop one level down, to `<4 x s32>`.
+* Lowering that unmerge through a scalar bitcast instead — which the code's own
+  comment had rejected as "bitcast-to-s512 thrash" — moved it again, to
+  `G_CONCAT_VECTORS` re-forming the `<16 x s32>`.
+
+**Neither is kept.** Narrowing `G_FREEZE` alone is sufficient, and churning a
+deliberate lowering choice for no gain would have been the worse commit. The
+lesson generalises past this bug: **when a type keeps reappearing, the fix is
+at whatever is allowed to produce it, not at the consumers that keep meeting
+it.**
+
+Reduced to one function — load a wide vector, freeze it, index it with a
+variable — and the difference is not subtle: without the fix `llc` does not
+terminate, with it the whole thing legalizes in 119 steps.
+`gisel/freeze-wide-vector-no-hang.ll`.
+
+#### And the three CB-130s still sitting there
+
+`clampMaxNumElements(…, S1, 1)` was still in `G_EXTRACT_VECTOR_ELT`,
+`G_INSERT_VECTOR_ELT` and `G_CONCAT_VECTORS` — the construct that **can only
+assert**, unreached rather than working. Removed (`f1ce318e671d`); no test
+moves, which is the expected result and also the reason not to have left them.
+
+Behind them is a real gap, visible now instead of disguised:
+`extractelement <2 x i1> %c, i32 %i` reports *"unable to legalize"*. Opened as
+CB-144.
 
 ---
 
