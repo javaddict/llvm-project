@@ -968,6 +968,27 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // (it produced `MOVE32 <GPR>, $d0`, an illegal cross-bank move, and never
   // read the high half, so EVERY lane returned lane 0's low byte).
   getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
+      // A vector of i1 has no representation at all, and the generic lowering
+      // cannot help: with a variable index it spills the vector to the stack,
+      // and lowerExtractInsertVectorElt gives up on an element that is not
+      // byte-sized. So `extractelement <2 x i1> %c, i32 %i` reported "unable
+      // to legalize" (CB-144) — reachable from ordinary C, since a vector
+      // icmp feeding a variable-indexed read is all it takes.
+      //
+      // Widening the RESULT is enough. widenScalar on type index 0 anyexts the
+      // source vector's elements to match and truncates the result back, so
+      // the whole thing becomes an s32 extract from a <N x s32> — a shape the
+      // rules below already handle — and the i1 disappears before anything
+      // has to represent it.
+      .widenScalarIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0] == S1 && Query.Types[1].isFixedVector() &&
+                   Query.Types[1].getElementType() == S1;
+          },
+          [=](const LegalityQuery &Query) {
+            (void)Query;
+            return std::make_pair(0, S32);
+          })
       .customFor({{S32, V2I32}, {S16, V4I16}, {S8, V8I8}})
       // Residual SLP: fewer-elements on the source vector first so generic
       // lower does not unmerge a v16 and re-create extracts (legalizer hang).
@@ -985,6 +1006,18 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // G_INSERT_VECTOR_ELT: custom for v2i32 and v4i16.
   // Expanded in legalizeCustom to G_UNMERGE_VALUES + shift/mask/merge.
   getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+      // Same as the extract above: widen the element type out of i1 first.
+      // Type index 0 is the RESULT VECTOR here, so widening it carries the
+      // source vector and the inserted value with it.
+      .widenScalarIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0].isFixedVector() &&
+                   Query.Types[0].getElementType() == S1;
+          },
+          [=](const LegalityQuery &Query) {
+            return std::make_pair(
+                0, LLT::fixed_vector(Query.Types[0].getNumElements(), S32));
+          })
       .customFor({{V2I32, S32}, {V4I16, S16}})
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
