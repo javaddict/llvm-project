@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `1ae07be5dde6` **pushed** | **objects emit: 424/430 CodeGen. lit 573/591, `HaydnTests` 253/253, lld 24/24, round trip 3686/3686, clang/test/Headers 143/143.** Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `252293cfcae8` — **local only, the two before it are pushed** | **Re-measured 2026-08-12 on this head: llvm lit 603/619 with ZERO failures (8 XFAIL, 8 unsupported), `HaydnTests` 255/255, clang 1428/1475 zero failures, `--check` and round-trip 3686/3686 both green.** The older counts this row used to carry (lit 573/591, `HaydnTests` 253/253) were real but stale — re-run rather than believed. Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -2632,9 +2632,13 @@ accumulates (`GPRReads += …`) and `conflict()` is called with the running
 cycle, so the sum IS the bundle's demand. **§ 5.18's own commit message called
 this a pairwise approximation and was wrong** — worth correcting rather than
 leaving, because that sentence would send someone to rewrite something that
-works. What *is* pairwise is unit exclusivity, in one direction only: three
-instructions each needing `{ALU1, ALU2}` pass and cannot all issue. The
-placement search decides legality, so that is a wasted pack attempt.
+works. **And then this paragraph did the same thing again**, one sentence later:
+it said "what *is* pairwise is unit exclusivity, in one direction only: three
+instructions each needing `{ALU1, ALU2}` pass and cannot all issue". Measured,
+and that mechanism is not there either — see § 5.23. Twice in one paragraph is
+the pattern worth naming: **a claim about which check is approximate is not
+cheaper to guess than to measure**, and both guesses here pointed at code that
+was already right.
 
 *Store/load overlap — genuinely missing.* `2cddbe292469`.
 
@@ -2853,6 +2857,97 @@ runs (`GUEST_EXIT` 0), and corrupting one format-indicator byte in a working
 image is refused with *"uncovered bytes that are not alignment fill"*.
 
 `gcc-c-torture -O3`: **1417 PASS / 0 FAIL**, the 2026-08-05 baseline exactly.
+
+---
+
+### 5.23 CB-143's residual was not there; the real one is greedy, not permissive
+
+Going to fix the residual § 5.18 recorded found no such gap, and a larger one
+next to it pointing the opposite way. **Both of § 5.18's guesses about which
+check was approximate were wrong, and both named code that already worked** —
+the port budget (already corrected there) and then unit exclusivity.
+
+**Where unit exclusivity actually lives.** Not in
+`HaydnFuncUnitWrapper::conflict`. `buildCandidate` fills `Required` from
+`PlacementAlternative::FieldSlots`, and that is an **entry position**, not a
+unit — `SlotBits` says WHERE in the bundle and `UnitBits` says WHICH hardware
+serves it, separate spaces by construction (`HaydnBaseInfo.h`). The
+itinerary-unit path in `buildCandidate` is the **no-alts fallback only**, so the
+two meanings share one bitset and only the position one is normally live. The
+real check is `CycleState::OccupiedUnits`, one unit per member, reached from
+`getHazardType` via `canTryAddProduct` — and it is **exact**, so the "three
+instructions each needing two units pass and cannot all issue" case does not
+exist. Pinned by execution as `TwoMACUnitsRejectThird`: three `X2MUL32` are
+refused, because its five placements offer MAC0/MAC1 and nothing else.
+
+What is genuinely unmodelled is much narrower than the old wording claimed:
+`conflict()` **alone** decides lookahead cycles (`DeltaCycles != 0`) and
+`checkConflict` for the PostPipeliner, and neither of those sees units.
+
+#### CB-147 — the first instruction placed chooses the format for the whole cycle
+
+The two `ProductFormatRows` have **disjoint** slot sets (`{P20,P21}` vs
+`{P30,P31,P32}`), and `HaydnBundlePlan.h` states it already: *"no occupancy is
+covered by both rows"*. `tryAdd` walks alternatives by **descending slot bit**
+(P32>P31>P30>P21>P20) and commits the first that fits, with no backtracking. So
+whichever instruction lands first decides the format, and anything holding a P3x
+placement takes the 3-entry form immediately.
+
+**10 logicals have no P3x placement at all** — `ADDI32`, `ADDI32S`, `ANDI32`,
+`MOVEI_H`, `MOVEI_L`, `ORI32`, `SET_HWLOOP`, `SUBI32`, `SUBI32S`, `XORI32`,
+because a wide immediate only fits a 2-entry entry. That is the
+immediate-arithmetic family and both halves of a constant materialisation. They
+can share a bundle **only when placed first in their cycle**; otherwise they get
+one of their own. `{addi32, add32}` is a legal 2-entry bundle that the packer
+emits as two bundles if `add32` is offered first — `CB147_E3FirstLocksOutE2OnlyADDI32`
+asserts both orders.
+
+Measured, not reasoned about: **150 instruction sequences pack fewer ops than a
+valid assignment admits**, over 3578 members / 684 logicals / 11 distinct
+placement signatures.
+
+```sh
+python3 llvm/lib/Target/Haydn/utils/haydn_pack_probe.py
+#   684 logicals, 3578 members, 11 distinct placement signatures
+#   10 logicals have no 3-entry placement at all
+#   150 instruction sequences pack fewer ops under the greedy walk
+```
+
+It re-reads the generated members rather than restating them, so regenerating
+the layout re-measures instead of going stale. It also caught an error in the
+first draft of the ledger entry, which had named `D_LDW_CB_IMM` among the
+locked-out families — it has a `P30` placement. **The probe was written to check
+a claim and immediately earned itself.**
+
+Emitted density for scale, 250 torture files: **1.1126 ops/bundle**, 10784
+3-entry vs 3838 2-entry bundles, and **11988 of 14622 bundles hold exactly one
+real op**. Most of that is dependency-bound rather than packing-bound — Haydn
+has no intra-bundle forwarding, so a reader cannot share a bundle with its
+writer — so do not read the whole gap as recoverable.
+
+**Every bundle emitted is legal.** The cost is density and the accuracy of the
+scheduler's cost model, which is why this is P3 and not a correctness item.
+
+#### Why it was recorded instead of fixed, and what the trap is
+
+The obvious fix — make `tryAdd` re-solve the cycle instead of appending greedily
+— **is unsafe as stated**, and the reason is worth carrying: `tryAdd` accepting
+instruction N is not the end of the transaction.
+`HaydnHazardRecognizer::commitPlacementForEmit` stamps
+`AltDescs->setAlternateDescriptor(MI, Member.MemberOpcode, *TII)` for **each
+instruction as it is accepted**. A re-solve that relocated an earlier member
+would leave that member's stamp naming the old slot and unit, and
+`materializeMultiOpcodeInstrs` would `setDesc` it there — **a genuinely wrong
+bundle**, which is a strictly worse failure than the lost density it was meant
+to buy back. Re-stamping requires `CycleState` to know each member's
+`MachineInstr`, and holding those is the thing § 6 says not to do.
+
+The contained alternative is a **scheduler preference, not a solver change**:
+when the cycle is empty, issue the most format-constrained ready instruction
+first, since whichever goes first sets the family and the constrained one has
+fewer options. That is `HaydnPostRASchedStrategy`, it moves every schedule, and
+it needs the full suite plus torture behind it — a piece of work, not a
+drive-by.
 
 ---
 
@@ -3647,6 +3742,7 @@ already the tested carrier of the member→logical fold.
 | `llvm/lib/Target/Haydn/utils/haydn_encoding.py` | The generator, its gates, and `--fix-operand-mapping` |
 | `llvm/lib/Target/Haydn/utils/haydn_ae_audit.py` | Which `AE_*` macros still need the AR args format E drops (§ 8 Q2). Since § 8 Q1 the test is arity, read from `haydn_dsp.h`'s own helper definitions |
 | `llvm/lib/Target/Haydn/utils/haydn_vacuous_not.py` | Standing gate: negative assertions that can never match, by retired-spelling whitelist AND liveness against the generated tables. llvm + the two clang Haydn dirs — see § 6.15 |
+| `llvm/lib/Target/Haydn/utils/haydn_pack_probe.py` | Whether the packer's greedy placement packs fewer ops than a valid assignment admits — the measurement behind CB-147 (§ 5.23). Reads the generated members, so a regenerated layout re-measures |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.{h,cpp}` | `stripHaydnMemberSuffix`, `getHaydnLogicalBaseOpcode`, slot geometry |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp` | Fixup kinds, composite encode |
 | `llvm/lib/Target/Haydn/MCTargetDesc/HaydnRelocGeometry.inc` | Generated `--emit reloc-geometry` (§ 5.8); checked in, shared with lld |
