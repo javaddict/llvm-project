@@ -777,6 +777,12 @@ encoding and could have been done at any point.
 MAC family. 76 mapping rows were corrected on this host (commit `8c3a9a9d241c`
 regenerated from it; `simulator` re-pinned in `b8da0eb`).
 
+**Two database files diverge from the delivery, not one**, and this section said
+otherwise for a long time. The second is `instruction_type_index.json`, where six
+accumulating MACs had `rtd` added to `DR_Read_Port`. Both divergences are
+mechanically reproducible from the as-delivered files — see *the correction does
+not travel* below for the two commands and the byte-for-byte verification.
+
 Why nothing else caught it, which is worth understanding before trusting the
 other gates:
 
@@ -914,27 +920,53 @@ re-pinned `GOLDEN_INPUTS.sha256` **paired with an uncorrected database**. This
 happened: on this host `--check` refused to emit and named 16 instructions,
 while `HaydnFormatEEncoding.td` in the tree was already the corrected one.
 
-Diagnose it in one command — every other database file will match and only the
-bit layout will not:
+Diagnose it in one command. **TWO files will fail, not one** — this block used to
+say "every other database file will match and only the bit layout will not",
+which was wrong and would have left whoever followed it stuck after the first
+repair:
 
 ```sh
 cd ~/haydn && sha256sum -c --ignore-missing \
     simulator/bundlesim/isa/database/generated/GOLDEN_INPUTS.sha256
+#   format_e_bit_layout_v2.json: FAILED
+#   instruction_type_index.json: FAILED      <-- the one that used to go unmentioned
 ```
 
-Repair is now mechanical, and the assignment is forced rather than guessed:
+Repair is mechanical for both, and each assignment is forced rather than
+guessed. **Run both; either alone leaves the pin failing:**
 
 ```sh
 python3 llvm/lib/Target/Haydn/utils/haydn_encoding.py \
     --database ~/haydn --fix-operand-mapping --write
 #   "76 mapping row(s) repaired, 77 field(s) rewritten"
+
+python3 llvm/lib/Target/Haydn/utils/haydn_encoding.py \
+    --database ~/haydn --fix-read-ports --write
+#   "6 read port(s) repaired over 6 row(s)"
+#   FMULA32S_{HH,LH,LL} / FMULS32S_{HH,LH,LL}: DR_Read_Port += rtd
 ```
 
-It solves, per row, the matching between the operands the Syntax names and the
-fields whose alias list admits them, and refuses to write unless every row's
-matching is unique. Verified: run against the uncorrected layout it reproduces
-the pinned `8465132c…` **byte for byte**, and the three generated `.td` files
-then come back identical to the committed ones. Re-running it is a no-op.
+The first solves, per row, the matching between the operands the Syntax names
+and the fields whose alias list admits them, and refuses to write unless every
+row's matching is unique. The second adds the accumulator that six accumulating
+MACs read and their `DR_Read_Port` omitted — the § 5.3 class again, a
+disagreement between two things the database says about itself (`Behavior` reads
+`rtdQ1.63`; the port list stopped at `rsd1, rsd2`), and it matters because that
+list is the DR read-port budget the packer enforces.
+
+**Verified against the pristine delivery, not from memory.** Copying the
+as-delivered eight files and applying both fixers reproduces **both** pinned
+files byte for byte — `format_e_bit_layout_v2.json` → `8465132c…` and
+`instruction_type_index.json` → `e77908e9…` — and the generated `.td` files then
+come back identical to the committed ones. Re-running either is a no-op. So the
+entire divergence between the delivered database and the pinned one is exactly
+these two repairs; nothing was hand-edited.
+
+A structural diff of the layout against the delivery confirms the blast radius:
+**77 leaf changes, every one of them a `src1`/`src2` value inside a `mapping`
+row** — 75 rows filling one blank, plus the one transposed `X4SEL16` row that
+takes two — and **no** change to any bit range, opcode, `type_code_bin`,
+`operand_fields` or reserved statement.
 
 Note the alias lists differ **per (entry, unit, type)**. `X4SEL16` is the
 example — six of its seven placements declare `src3(rs, rtd2)` and the seventh
