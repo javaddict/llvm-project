@@ -783,6 +783,37 @@ accumulating MACs had `rtd` added to `DR_Read_Port`. Both divergences are
 mechanically reproducible from the as-delivered files — see *the correction does
 not travel* below for the two commands and the byte-for-byte verification.
 
+**And note where the error actually was: this document already knew.** § 5.11
+documents the six read ports in detail, down to "+42 bytes, six lines" — which is
+exactly the size difference between the delivered index and the pinned one. What
+was wrong was **this** section, the procedural one that tells you how to repair a
+fresh host, and it is the one people follow. **Two sections of the same document
+disagreeing is worse than neither knowing**, because the wrong one carried the
+commands.
+
+#### The row accounting, verified against the delivery
+
+The scale of defect 1, computed against the as-delivered file rather than quoted
+from notes — an earlier write-up of this said 3556 rows and 3480 agreeing, and
+both numbers were wrong:
+
+| | rows |
+|---|---:|
+| `mapping` rows in the file | **3686** |
+| of those, the per-shape `NOP` row | 126 |
+| real instruction rows | **3560** |
+| operand set already agreed with `Syntax` | 3484 |
+| **disagreed** | **76** |
+
+126 is not a coincidence: there is exactly one `NOP` row per (entry, unit, type)
+shape, and there are 126 shapes — the same 126 `--check` reports. Every one of
+the 3560 real rows names an instruction the index knows, so nothing is skipped
+for being unrecognised.
+
+The 76 were **every** placement of the 15 affected mnemonics (15 × 5), not a
+subset — which is why an intra-layout self-consistency check finds nothing, and
+why the comparison against `Syntax` is the only thing that can catch this class.
+
 Why nothing else caught it, which is worth understanding before trusting the
 other gates:
 
@@ -904,8 +935,35 @@ reverts them. One data point points at the JSON being the master —
 `generate_instruction_to_entry.py`, delivered alongside, reads
 `instruction_type_index.json` and *writes* `instruction_to_entry.xlsx`, so for
 that pair the JSON is the source and the spreadsheet the rendering. That is
-suggestive, not an answer, and it is the ISA owner's to give. Written up for
-them at `~/haydn/ISA-QUESTION-format-e-mapping-provenance.md` (§ 8 Q3).
+suggestive, not an answer, and it is the ISA owner's to give. **Answered on
+2026-08-12 — see the § 8 Q3 entry above for the chain.**
+
+`~/haydn/ISA-QUESTION-format-e-mapping-provenance.md` has since been rewritten as
+an **outgoing** document rather than a question, and it is what the owner is being
+sent: both defects as body sections (76 mapping rows, six read ports), the
+provenance answer folded in as context, and **one** ask — make each pair of
+self-agreement checks part of the generation step (`mapping` vs `Syntax`,
+`*_Read_Port` vs what `Behavior` reads). Redelivery is explicitly optional there,
+because both repairs are one command each. Every figure and quote in it was
+re-verified against the as-delivered files rather than carried over from these
+notes, which is how the 3556/3480 error was found.
+
+**Verifying a claim about an `.xlsx` needs a tool this host does not have.**
+`openpyxl` is not installed, so the row-and-column claims in that document could
+not be checked the obvious way. Read the sheet as what it is — a zip of XML:
+
+```python
+import zipfile, re
+z = zipfile.ZipFile("instruction_to_entry.xlsx")
+vals = re.findall(r"<t[^>]*>(.*?)</t>",
+                  z.read("xl/sharedStrings.xml").decode("utf-8", "replace"), re.S)
+```
+
+That confirmed the *content* claim (`X2MULA32` is a cell, and
+`rtd1, rtd2, rsd1, rsd2` occurs exactly once among the 773 shared strings) but
+not the row number the document used to cite, so **the row number was removed
+rather than shipped unverified**. A specific that cannot be checked is worth less
+than the general claim it decorates.
 
 Also worth knowing: the delivery was **internally inconsistent**, and the half we
 did not have to touch is the correct one. `instruction_type_index.json`'s
@@ -2145,6 +2203,14 @@ the database makes about itself, which no gate that checks the database against
 the *encoder* can see. `--check` now refuses on it, and the repair is forced
 rather than chosen — the Behavior assigns the register from an expression
 containing itself, so it is read, and the register file follows from the alias:
+
+**And it is an inconsistency inside the port data, not a convention we misread.**
+`X2MULA32` — the § 5.3 instruction — *does* list its accumulators in
+`DR_Read_Port` (`rtd1, rtd2, rsd1, rsd2`), and that is partly how the layout was
+shown wrong. So the database states the accumulator-is-also-read rule correctly
+for the four-register MACs and breaks it for these six. Worth saying out loud to
+whoever owns the database, because the obvious first reply is "the ports only
+list explicit source operands", and the delivery itself refutes that.
 
 ```sh
 python3 .../haydn_encoding.py --database ~/haydn --fix-read-ports --write
