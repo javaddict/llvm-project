@@ -815,48 +815,45 @@ already hold. So the 76-row defect was not a transcription slip from some master
   risk of it.** A prompt is not deterministic and there is nothing upstream to
   repair, so "fix it at the source and redeliver" — what § 5 of the question
   document asked for — is not actionable as written.
-* **Our repair is mechanical and idempotent either way.**
-  `--fix-operand-mapping` re-derives the mapping rows from `Syntax`;
-  `verify_operand_sets` refuses to emit on mismatch. That turns a silent revert
-  into a loud refusal plus a repair.
+* **Our repair is therefore the right long-term shape, not a patch.**
+  `--fix-operand-mapping` re-derives the mapping rows from `Syntax`, i.e. from
+  the generator's own master input; `verify_operand_sets` refuses to emit on
+  mismatch. Treat the `mapping` arrays as a **derived cache we re-derive on
+  every delivery**, not as data to be trusted. That turns a silent revert into
+  a loud refusal plus a mechanical, idempotent repair.
 
-#### Superseded the next day: the bit layout is the source of truth (2026-08-13)
+#### Why the `Syntax` cross-check cannot be replaced by a self-check
 
-**Owner's direction:** ignore the other `.json` and `.xlsx` files, treat
-`format_e_bit_layout_v2.json` as the source of truth, and changes made to it get
-propagated upstream by the owner rather than by us. That **inverts** the posture
-in the bullets above, and two things follow that are easy to get wrong.
+Worth having measured, because the obvious alternative — give the bit layout a
+self-consistency gate and stop depending on a second file — **cannot work**, and
+the numbers say so rather than an argument.
 
-**`instruction_type_index.json` cannot actually be ignored, and the generator
-would stop working if it were.** The layout carries bit geometry and `mapping`
-rows and nothing else. The index is where `Available` (every unit itinerary),
-`Behavior` (immediate signedness and the load/store scale — § 5.6), `Syntax`
-(operand ORDER, which the layout's bit-order fields do not give — § 5.10) and
-the four `*_Read_Port`/`*_Write_Port` lists come from. So read the direction as
-being about **authority where the two overlap** — the mapping rows and the
-geometry — not as a change to which files are read.
+An intra-layout agreement check has nothing to report: the same instruction's
+operand *set* is identical across every one of its placements for all **684**
+instructions in the file. And the original defect was not partial — the 75
+blank-`src1` rows were **exactly** the 15 affected mnemonics × 5 placements
+each, **75 of 75, every placement, uniformly**.
 
-**`--fix-operand-mapping` now points the wrong way. Do not run it.** It rewrites
-the layout *from* the index. Under the old posture that recomputed a derived
-cache from its master; under this one it overwrites the source of truth from a
-file with no authority. It stays in the tree because it is the reproducer for the
-original finding and because it is how a *delivered* file gets diagnosed, but the
-`--write` half is now a footgun.
+**The file was internally consistent while being wrong.** So
+`verify_operand_sets` — each mapping row against the index's `Syntax` — is the
+only check that has ever caught a defect here, and there is no self-contained
+substitute for it. That is the argument for the bullets above, and it is why the
+refusal is a refusal and not a warning.
 
-**And the cost of the inversion, measured, because it is not free.**
-`verify_operand_sets` — comparing each mapping row against the index's `Syntax` —
-is the **only** check that has ever caught a defect in this file, and it cannot
-be replaced by a self-consistency check on the layout alone. Proof rather than
-assertion: the same instruction's operand *set* is identical across every one of
-its placements for all **684** instructions in the file, so an intra-layout
-agreement check reports nothing; and the 75 blank-`src1` rows were **exactly**
-the 15 affected mnemonics × 5 placements each — **75 of 75, every placement, 100%
-uniform**. The layout was **internally consistent while being wrong**, which is
-the one thing a source of truth is not allowed to be checked as.
+This was tried the other way round on 2026-08-13 — treat the layout as the sole
+source of truth and ignore the other files — and withdrawn the same day. Two
+things it ran into, kept because they are facts about the files rather than about
+the decision:
 
-So the standing rule under this posture: **a `Syntax` disagreement is now a
-report, not a refusal — but it is still the signal, and it is the owner's to
-propagate.** Silencing it would leave the file with no external check at all.
+* **`instruction_type_index.json` cannot be ignored even in principle.** The
+  layout carries bit geometry and `mapping` rows and nothing else. `Available`
+  (every unit itinerary), `Behavior` (immediate signedness and the load/store
+  scale — § 5.6), `Syntax` **operand order** (the layout's fields are in bit
+  order, which does not give it — § 5.10) and the four
+  `*_Read_Port`/`*_Write_Port` lists all live only in the index.
+* **`--fix-operand-mapping --write` is direction-sensitive.** It rewrites the
+  layout *from* the index, which is the repair under the posture above and would
+  have been a footgun under the inverted one.
 
 **How much of the rest of the file should we distrust?** Measured rather than
 assumed, because "it is LLM-generated" is an argument for checking, not for
@@ -3805,15 +3802,13 @@ already the tested carrier of the member→logical fold.
    `instruction_to_entry.xlsx` is `generate_instruction_to_entry.py` over the
    index. **Both spreadsheets are renderings and neither is a master.**
 
-   **Superseded 2026-08-13 by the owner's direction: the bit layout IS the
-   source of truth**, changes to it are propagated upstream by the owner, and
-   `--fix-operand-mapping --write` must not be run because it rewrites the
-   source of truth from a file with no authority. The index is still read for
-   `Available`, `Behavior`, `Syntax` order and the port lists, which the layout
-   does not carry. A `Syntax` disagreement becomes a report to hand over rather
-   than a refusal — and it is still the only external check this file has, which
-   § 5.3 measures: the layout was internally consistent at 75 of 75 placements
-   while being wrong.
+   The operational consequence, in one line: **the `mapping` arrays are a
+   derived cache, so re-derive them on every delivery rather than trusting
+   them** — `--fix-operand-mapping` recomputes them from the same `Syntax` the
+   generator was given, and `verify_operand_sets` refuses to emit on mismatch.
+   There is no upstream table to ask anyone to repair. Full reasoning, and the
+   measurement showing why no self-contained check can replace that comparison,
+   in § 5.3.
 
    **With this answered, § 8 has nothing left waiting on a human.**
 4. **~~CB-130~~ — DONE, and it was never a question for a human.**
