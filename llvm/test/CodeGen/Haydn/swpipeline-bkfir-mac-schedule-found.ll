@@ -30,7 +30,7 @@
 ; SWP-NOT: Unable to analyzeLoop, can NOT pipeline Loop
 
 ; ASM-LABEL: bkfir_mac_hot:
-; ASM: jalr_w
+; ASM: jalr
 
 define void @bkfir_mac_hot(
     ptr nocapture readonly %C,

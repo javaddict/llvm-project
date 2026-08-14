@@ -65,11 +65,17 @@
 #include "HaydnPreRASchedStrategy.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnSchedMutations.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
 #include "llvm/CodeGen/RegisterPressure.h"
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -77,6 +83,19 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "haydn-prera-sched"
+
+// Release-visible phase-firewall counter: every pre-RA region leave is audited
+// for new BUNDLE invent. Product expects invent count 0; invent is fatal.
+STATISTIC(NumPreRAPhaseFirewallChecked,
+          "Number of pre-RA regions phase-firewall-checked for BUNDLE invent");
+STATISTIC(NumPreRABUNDLEInvent,
+          "Number of pre-RA regions that invented new BUNDLE roots (must be 0)");
+STATISTIC(NumPreRAPrivateMemberInvent,
+          "Number of pre-RA regions that invented bundled private members "
+          "(must be 0)");
+STATISTIC(NumPreRAPlacementOpcodeInvent,
+          "Number of pre-RA regions that invented private placement opcodes "
+          "(must be 0)");
 
 // Product defaults pinned by HaydnPreRASchedStrategy::product*Default and
 // dual-run lits prera-format-generic-baseline.ll / scheduler-ilp.ll /
@@ -211,19 +230,115 @@ void HaydnPreRASchedStrategy::initialize(ScheduleDAGMI *DAGIn) {
   }
 }
 
+namespace {
+
+bool looksLikePrivatePlacementOpcodeName(StringRef Name) {
+  if (Name.empty())
+    return false;
+  if (Name.contains("_E2_") || Name.contains("_E3_"))
+    return true;
+  return Name.ends_with("_S0") || Name.ends_with("_S1") || Name.ends_with("_S2");
+}
+
+void snapshotPreRAPhaseFirewall(const MachineBasicBlock &MBB,
+                                const TargetInstrInfo *TII,
+                                unsigned &BundleRoots,
+                                unsigned &BundledMembers,
+                                unsigned &PrivatePlacementOps) {
+  BundleRoots = 0;
+  BundledMembers = 0;
+  PrivatePlacementOps = 0;
+  for (const MachineInstr &MI : MBB.instrs()) {
+    if (MI.isBundle() && !MI.isBundledWithPred())
+      ++BundleRoots;
+    if (MI.isBundledWithPred())
+      ++BundledMembers;
+    if (!TII)
+      continue;
+    if (looksLikePrivatePlacementOpcodeName(TII->getName(MI.getOpcode())))
+      ++PrivatePlacementOps;
+  }
+}
+
+} // end anonymous namespace
+
 void HaydnPreRASchedStrategy::enterRegion(MachineBasicBlock *BB,
                                           MachineBasicBlock::iterator /*Begin*/,
                                           MachineBasicBlock::iterator /*End*/,
                                           unsigned NumRegionInstrs) {
   CurMBB = BB;
-  // AIE resizes to region MI count; NodeNum indexes SUnits (can differ).
-  // Over-allocate to max(region, later SUnits) — grow again in isAvailableNode.
+  PreRAEnterBundleRoots = 0;
+  PreRAEnterBundledMembers = 0;
+  PreRAEnterPrivatePlacementOps = 0;
+  if (CurMBB) {
+    const TargetInstrInfo *TII =
+        CurMBB->getParent()->getSubtarget().getInstrInfo();
+    snapshotPreRAPhaseFirewall(*CurMBB, TII, PreRAEnterBundleRoots,
+                               PreRAEnterBundledMembers,
+                               PreRAEnterPrivatePlacementOps);
+  }
   SUDelayerMap.assign(std::max(NumRegionInstrs, 1u), UnknownSUNum);
 }
 
 void HaydnPreRASchedStrategy::leaveRegion(const SUnit & /*ExitSU*/) {
+  // Phase firewall: no BUNDLE / private-member / placement invent pre-RA.
+  if (CurMBB) {
+    ++NumPreRAPhaseFirewallChecked;
+    static bool ResourcePinsChecked = false;
+    if (!ResourcePinsChecked) {
+      ResourcePinsChecked = true;
+      if (!productPeriodicCertificatePins() ||
+          !haydnAvailabilityAwareConsumePinsHold())
+        report_fatal_error(
+            "Haydn pre-RA product resource admission / certificate pins failed",
+            /*GenCrashDiag=*/false);
+      // Product StageCount1 containment pin (soft StageCount == 1 only).
+      if (productSMSContainmentMaxStageCount != 1u ||
+          !smsProductStageCountExceedsContainment(/*StageCount=*/2) ||
+          smsProductStageCountExceedsContainment(/*StageCount=*/1) ||
+          !smsProductShouldUseScheduleFailsClosed(
+              /*IsZOL=*/false, /*PrologueCount=*/1, /*MinTripCount=*/0,
+              /*PressureExcess=*/false) ||
+          !smsProductShouldUseScheduleAccepts(
+              /*IsZOL=*/false, /*PrologueCount=*/0, /*MinTripCount=*/0,
+              /*PressureExcess=*/false))
+        report_fatal_error(
+            "Haydn pre-RA product StageCount1 SMS containment pins failed",
+            /*GenCrashDiag=*/false);
+      LLVM_DEBUG(dbgs() << "HaydnPreRASched: product StageCount1 containment "
+                           "max_stages=1 resource_admission_closed=1\n");
+    }
+    const TargetInstrInfo *TII =
+        CurMBB->getParent()->getSubtarget().getInstrInfo();
+    unsigned BundleRoots = 0;
+    unsigned BundledMembers = 0;
+    unsigned PrivatePlacementOps = 0;
+    snapshotPreRAPhaseFirewall(*CurMBB, TII, BundleRoots, BundledMembers,
+                               PrivatePlacementOps);
+    if (BundleRoots > PreRAEnterBundleRoots) {
+      ++NumPreRABUNDLEInvent;
+      report_fatal_error(
+          "pre-RA Haydn schedule must not invent BUNDLE identity",
+          /*GenCrashDiag=*/false);
+    }
+    if (BundledMembers > PreRAEnterBundledMembers) {
+      ++NumPreRAPrivateMemberInvent;
+      report_fatal_error(
+          "pre-RA Haydn schedule must not invent bundled private members",
+          /*GenCrashDiag=*/false);
+    }
+    if (PrivatePlacementOps > PreRAEnterPrivatePlacementOps) {
+      ++NumPreRAPlacementOpcodeInvent;
+      report_fatal_error(
+          "pre-RA Haydn schedule must not invent private placement opcodes",
+          /*GenCrashDiag=*/false);
+    }
+  }
   CurMBB = nullptr;
   SUDelayerMap.clear();
+  PreRAEnterBundleRoots = 0;
+  PreRAEnterBundledMembers = 0;
+  PreRAEnterPrivatePlacementOps = 0;
 }
 
 bool HaydnPreRASchedStrategy::canBeDelayed(const SUnit &DelayedSU,

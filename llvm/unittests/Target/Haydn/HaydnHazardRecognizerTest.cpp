@@ -22,6 +22,8 @@
 #include "HaydnBundle.h"
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnBundleMaterialize.h"
+#include "HaydnBundleVerify.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnPackLegality.h"
@@ -61,11 +63,18 @@ extern "C" void LLVMInitializeHaydnTargetMC();
 
 using namespace llvm;
 
+#define GET_FORMAT_E_MEMBER_OPCODES
+#include "HaydnGenFormatEMemberOpcodes.inc"
+
 namespace {
 
 using UnitSet = StaticBitSet<HAYDN_NUM_FU_BITS>;
 // Historical alias used by older Req/Res matrix tests.
 using SlotSet = UnitSet;
+
+// Three occupied issue bits drop E96TwoEntry. Not a retired Full mask=3.
+constexpr uint64_t E3OnlyFormatMask = haydn::bundle::formatRowBit(
+    haydn::bundle::BundleFormatRowID::E96ThreeEntry);
 
 /// Single-unit set: {unit N} (Required.count() == 1).
 static UnitSet singleUnit(unsigned N) { return UnitSet(static_cast<int>(N)); }
@@ -363,6 +372,75 @@ TEST(HaydnPackLegalityTest, ProductRulesDocumentedInHeader) {
   // lock yet) is owned by isLockedSlotDspOp — not a second opcode table.
 }
 
+TEST(HaydnHazardRecognizerTest, AloneLawClosedUnderMemberIdentity) {
+  // T-SM3 / SM-H2: alone-law is logical + AlternateInsts members + generated
+  // Format E member Logical. Not slot-suffix parse (ADD32_S2 is not alone).
+  // Golden units: FormatEUnitCount == 7 (Constraints.md Shared Unit).
+  using namespace llvm::haydn::format_e;
+
+  EXPECT_EQ(FormatEUnitCount, 7u);
+  EXPECT_EQ(HAYDN_GPR_READ_PORTS, 4u);
+  EXPECT_EQ(HAYDN_GPR_WRITE_PORTS, 2u);
+  EXPECT_EQ(HAYDN_DR_READ_PORTS, 7u);
+  EXPECT_EQ(HAYDN_DR_WRITE_PORTS, 3u);
+  EXPECT_EQ(HAYDN_AR_READ_PORTS, 2u);
+  EXPECT_EQ(HAYDN_AR_WRITE_PORTS, 2u);
+  EXPECT_EQ(HAYDN_SFR_READ_PORTS, 2u);
+  EXPECT_EQ(HAYDN_SFR_WRITE_PORTS, 1u);
+
+  EXPECT_TRUE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(Haydn::ARCTAN));
+  EXPECT_TRUE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(Haydn::SIN_COS));
+  EXPECT_FALSE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(Haydn::ADD32));
+  EXPECT_FALSE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(
+      Haydn::ADD32_E2_E0_ALU0_RR));
+  EXPECT_FALSE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(
+      Haydn::ADD32_E3_E1_ALU1_RR));
+  EXPECT_FALSE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(
+      Haydn::ADD32_E3_E2_ALU2_RR));
+  EXPECT_FALSE(
+      HaydnHazardRecognizer::opcodeIssuesAloneInCycle(Haydn::ADDI32));
+
+  // PortModel stays logical-only; HR closes the member/recommit hole.
+  // PortModel is logical-only: FieldSlot / member names are not alone here.
+  // HR opcodeIssuesAloneInCycle closes the member hole (loop below).
+  EXPECT_FALSE(haydnOpcodeIssuesAloneInCycle(Haydn::ADD32_E3_E2_ALU2_RR));
+
+  HaydnMCFormats Fmts;
+  unsigned PlacementMembers = 0;
+  for (unsigned Logical : {Haydn::ARCTAN, Haydn::SIN_COS}) {
+    const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(Logical);
+    ASSERT_NE(Alts, nullptr) << Logical;
+    for (unsigned Member : *Alts) {
+      if (Member == 0)
+        continue;
+      EXPECT_TRUE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(Member))
+          << "placement member of logical " << Logical << " opc=" << Member;
+      ++PlacementMembers;
+    }
+  }
+  EXPECT_GE(PlacementMembers, 4u); // ARCTAN/S2 + SIN_COS/S2
+
+  ASSERT_EQ(FormatEMemberOpcodeCount, FormatEMemberCount);
+  unsigned FeAlone = 0;
+  for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+    const FormatEMemberRec &M = FormatEMembers[I];
+    if (M.IsNop)
+      continue;
+    const StringRef Log(M.Logical);
+    if (Log != "ARCTAN" && Log != "SIN_COS")
+      continue;
+    EXPECT_LT(M.Unit, FormatEUnitCount)
+        << M.MemberSymbol << " unit is not a golden Shared Unit";
+    EXPECT_LT(M.EntryIdx, 3u) << M.MemberSymbol
+                              << " entry is not a Format E entry index";
+    EXPECT_TRUE(HaydnHazardRecognizer::opcodeIssuesAloneInCycle(
+        FormatEMemberOpcodes[I]))
+        << M.MemberSymbol;
+    ++FeAlone;
+  }
+  EXPECT_EQ(FeAlone, 6u); // 3 ARCTAN + 3 SIN_COS E3 members
+}
+
 //===----------------------------------------------------------------------===//
 // Extended port / issue matrix
 //===----------------------------------------------------------------------===//
@@ -633,18 +711,14 @@ TEST(HaydnPortModelTest, OneBelowAtOneAboveCapacityMatrix) {
 }
 
 TEST(HaydnPortModelTest, PreRAProductFeasibleFormatMaskFullOnly) {
-  // Full-only product: empty and Full-covering occupancy keep ProductFormatMask.
-  // Pre-RA never freezes FormatID / setDesc — mask is feasibility frontier only.
+  // Empty occupancy keeps ProductFormatMask (E2|E3). SLOT_ALL is three
+  // entries → E3-only (coveringFormatMaskFromPackets OccCount>2).
   using namespace llvm::haydn::bundle;
   EXPECT_EQ(HaydnPreRASchedStrategy::productFeasibleFormatMask(/*Occupied=*/0),
             ProductFormatMask);
-  // SLOT_ALL covering under size-1 Full still returns ProductFormatMask when
-  // the generated Full row covers the occupancy (productFeasibleFormatMask).
   const uint64_t MaskAll =
       HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT_ALL);
-  // Either Full covers SLOT_ALL (mask == ProductFormatMask) or reports 0
-  // if occupancy is infeasible — never a private compact bit.
-  EXPECT_TRUE(MaskAll == 0 || MaskAll == ProductFormatMask);
+  EXPECT_EQ(MaskAll, E3OnlyFormatMask);
 }
 
 //===----------------------------------------------------------------------===//
@@ -756,7 +830,7 @@ TEST(HaydnHazardRecognizerTest, MatchingFrontierThreeReadyRematchADD32_2xADD64) 
       << "matching frontier must rematch so second ADD64 stays feasible";
   EXPECT_GE(Add64Second.SuccessorMatchings, 1u);
   EXPECT_EQ(Add64Second.FreeSlotsPreferred, 0u);
-  EXPECT_EQ(Add64Second.FeasibleFormatMask, ProductFormatMask);
+  EXPECT_EQ(Add64Second.FeasibleFormatMask, E3OnlyFormatMask);
 
   // Commit the third: preferred survivor has 3 members; ADD32 rematched to S0.
   ASSERT_TRUE(exactTryAddProduct(AfterTwo, Fmts, Haydn::ADD64));
@@ -915,12 +989,13 @@ TEST(HaydnPortModelTest, PreRASMSHandoffPackabilityOracleSurface) {
     EXPECT_GE(HaydnPreRASchedStrategy::productExhaustiveResMII(Ops), 2u);
   }
 
-  // Greedy order-trap body fails qualification packability (overestimate).
+  // Greedy order-trap: overestimate fail-closes qualification; exact-pack
+  // remains true (finite exhaustive cover).
   {
     unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
                       Haydn::ADD32};
     EXPECT_TRUE(HaydnPreRASchedStrategy::productResMIIFailsQualification(Ops));
-    EXPECT_FALSE(HaydnPreRASchedStrategy::productQualKernelExactlyPackable(Ops));
+    EXPECT_TRUE(HaydnPreRASchedStrategy::productQualKernelExactlyPackable(Ops));
   }
 
   // N > MaxExhaustiveProductResMIIOps: exhaustive falls back to greedy.
@@ -1195,13 +1270,13 @@ TEST(HaydnPortModelTest, PreRASoftExitQoRFloorsAndExactPack) {
   // Empty body: both floors 0.
   EXPECT_EQ(S::productSoftExitIIFloor(ArrayRef<unsigned>(), 0, 0), 0u);
 
-  // Greedy order-trap: fail-close qualification; soft-exit still reports the
-  // exact format bound (exhaustive), not inventing a HANDOFF escape hatch.
+  // Greedy order-trap: qualification fail-closes on overestimate; exact-pack
+  // stays true (cover exists; overestimate is an II floor).
   {
     unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
                       Haydn::ADD32};
     EXPECT_TRUE(S::productResMIIFailsQualification(Ops));
-    EXPECT_FALSE(S::productQualKernelExactlyPackable(Ops));
+    EXPECT_TRUE(S::productQualKernelExactlyPackable(Ops));
     EXPECT_EQ(S::productExhaustiveResMII(Ops), 2u);
     EXPECT_EQ(S::productSoftExitIIFloor(Ops, 0, 0), 2u);
   }
@@ -1755,10 +1830,14 @@ TEST(HaydnHazardRecognizerTest, VF23_MultiSlotPseudoPlacementBooksLikeADD32) {
   using namespace llvm::haydn::bundle;
   HaydnMCFormats Fmts;
   ASSERT_TRUE(hasPlacementAlternatives(Fmts, Haydn::ADD32_MSP));
+  const std::vector<unsigned> *Alts =
+      Fmts.getAlternateInstsOpcode(Haydn::ADD32_MSP);
+  ASSERT_NE(Alts, nullptr);
+  ASSERT_EQ(Alts->size(), 3u);
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32_MSP));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT2));
-  EXPECT_EQ(S.Members.back().MemberOpcode, Haydn::ADD32_S2);
+  EXPECT_EQ(S.Members.back().MemberOpcode, (*Alts)[2]);
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32_MSP));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32_MSP));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_ALL));
@@ -1980,6 +2059,28 @@ protected:
 // (no callback-local BUNDLE — may run pre-postmisched). removeBranch on a
 // committed solo BUNDLE root charges the same EncodedBytes via lateLayoutBytes.
 // Pins BranchRelaxation BytesAdded/BytesRemoved vs getInstSizeInBytes.
+// REGRESSION: logical WFI is one product parcel, not a 0-byte meta pseudo.
+// F33: HaydnPseudo + getInstSizeInBytes==0 made BranchRelaxation treat a
+// real HINT as free. Encode stays occupancy WFI_S0 (no Format E member).
+// REGRESSION: SIN_COS/ARCTAN OperandCycles 17 must not size the scoreboard
+// while ProductDraftArctanMultiCycleLockEnabled is false (F6).
+TEST_F(HaydnBundleBoundaryTest, SinCosScaffoldDoesNotInflateScoreboard) {
+  const InstrItineraryData *II = ST->getInstrItineraryData();
+  HaydnHazardRecognizer HR(&TII(), II, /*IsPreRA=*/false, /*AltDescs=*/nullptr);
+  EXPECT_LE(HR.getMaxLatency(), 2);
+  EXPECT_LT(HR.getMaxLatency(), 17);
+}
+
+TEST_F(HaydnBundleBoundaryTest, WFIIsOneProductParcel) {
+  using namespace llvm::haydn::bundle;
+  const unsigned FullBytes = productParcelBytes().Value;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+  MachineInstr &WFI =
+      *BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(Haydn::WFI));
+  EXPECT_EQ(TII().getInstSizeInBytes(WFI), FullBytes);
+}
+
 TEST_F(HaydnBundleBoundaryTest, InsertRemoveBranchExactCommittedSize) {
   using namespace llvm::haydn::bundle;
   const HaydnInstrInfo &II = TII();
@@ -2093,8 +2194,11 @@ TEST_F(HaydnBundleBoundaryTest, RemoveBranchCoissuePreservesSibling) {
 
   // Branch gone; ADD32 still present (as remaining BUNDLE child or bare).
   auto isAdd32 = [](unsigned Opc) {
-    return Opc == Haydn::ADD32 || Opc == Haydn::ADD32_S0 ||
-           Opc == Haydn::ADD32_S1 || Opc == Haydn::ADD32_S2;
+    if (Opc == Haydn::ADD32)
+      return true;
+    return haydn::format_e::peelLogicalOpcodeName(
+               haydn::bundle::haydnOpcodeName(Opc), /*StripWide=*/false) ==
+           "ADD32";
   };
   bool SawAdd = false;
   bool SawBranch = false;
@@ -2202,6 +2306,60 @@ TEST_F(HaydnBundleBoundaryTest, VF4_LiveHRGetHazardTypeNoHazardForBundle) {
       << "emitting BUNDLE root must not clear the saturated cycle";
 }
 
+// T-SM3: already-member ARCTAN keeps the alone-law on getHazardType
+// (recommit / post-setDesc identity). Logical-only PortModel would miss it.
+TEST_F(HaydnBundleBoundaryTest, AloneLawHazardOnSMemberAndFormatEMember) {
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *ArctanS2 =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ARCTAN_E3_E2_ALU2_RI4),
+              Haydn::R1)
+          .addReg(Haydn::D0)
+          .addImm(2)
+          .getInstr();
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R5)
+          .addReg(Haydn::R3)
+          .addReg(Haydn::R4)
+          .getInstr();
+  MachineInstr *ArctanE3 =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ARCTAN_E3_E0_ALU2_RI4),
+              Haydn::R6)
+          .addReg(Haydn::D1)
+          .addImm(3)
+          .getInstr();
+
+  HaydnHazardRecognizer HR(&II, /*ItinData=*/nullptr, /*IsPreRA=*/false,
+                           /*AltDescs=*/nullptr);
+  HR.Reset();
+  SUnit SUArc(ArctanS2, /*NodeNum=*/0);
+  SUnit SUAdd(Add, /*NodeNum=*/1);
+  EXPECT_EQ(HR.getHazardType(&SUArc, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+  HR.EmitInstruction(ArctanS2);
+  EXPECT_EQ(HR.getHazardType(&SUAdd, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard)
+      << "ADD32 must not co-issue with already-member ARCTAN";
+
+  HR.Reset();
+  SUnit SUE3(ArctanE3, /*NodeNum=*/2);
+  EXPECT_EQ(HR.getHazardType(&SUE3, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+  HR.EmitInstruction(ArctanE3);
+  EXPECT_EQ(HR.getHazardType(&SUAdd, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard)
+      << "ADD32 must not co-issue with Format E ARCTAN member";
+
+  HR.Reset();
+  HR.EmitInstruction(Add);
+  EXPECT_EQ(HR.getHazardType(&SUArc, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard)
+      << "ARCTAN must refuse a non-empty cycle";
+}
+
 // Multi-child hard root via finalizeBundle: isSchedulingBoundary is true on
 // the root only (not on children). Empty-root pin above never exercises real
 // membership; this is the production shape machine-scheduler fences.
@@ -2241,9 +2399,9 @@ TEST_F(HaydnBundleBoundaryTest, MultiChildFinalizeBundleIsSchedulingBoundary) {
     EXPECT_FALSE(II.isSchedulingBoundary(*I, MBB, *MF))
         << "bundled child must not be a region boundary";
     EXPECT_TRUE(I->getOpcode() == Haydn::ADD32 ||
-                I->getOpcode() == Haydn::ADD32_S0 ||
-                I->getOpcode() == Haydn::ADD32_S1 ||
-                I->getOpcode() == Haydn::ADD32_S2);
+                haydn::format_e::peelLogicalOpcodeName(
+                    haydn::bundle::haydnOpcodeName(I->getOpcode()),
+                    /*StripWide=*/false) == "ADD32");
     ++ChildCount;
   }
   EXPECT_EQ(ChildCount, 3u);
@@ -2371,9 +2529,9 @@ TEST_F(HaydnBundleBoundaryTest, WP2_DualLoadHardRootIsSchedulingBoundary) {
   for (MachineBasicBlock::instr_iterator I = std::next(Root.getIterator());
        I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
     EXPECT_FALSE(II.isSchedulingBoundary(*I, MBB, *MF));
+    const StringRef Name = haydn::bundle::haydnOpcodeName(I->getOpcode());
     EXPECT_TRUE(I->getOpcode() == Haydn::LD32 ||
-                I->getOpcode() == Haydn::LD32_S0 ||
-                I->getOpcode() == Haydn::LD32_S1);
+                Name.contains("S_LW_WITH_IMM"));
     ++ChildCount;
   }
   EXPECT_EQ(ChildCount, 2u);
@@ -2526,9 +2684,6 @@ TEST_F(HaydnBundleBoundaryTest, PreRAMove32MiVsDescPortsAndIsPreRAHR) {
 
   // Logical opcode only — never a private member descriptor (pre-RA law).
   EXPECT_EQ(MoveRepeated->getOpcode(), Haydn::MOVE32);
-  EXPECT_NE(MoveRepeated->getOpcode(), Haydn::MOVE32_S0);
-  EXPECT_NE(MoveRepeated->getOpcode(), Haydn::MOVE32_S1);
-  EXPECT_NE(MoveRepeated->getOpcode(), Haydn::MOVE32_S2);
 }
 
 // Live pre-RA HR format acceptance ≡ pure exactTryAddProduct (plan §8.4 #7).
@@ -2657,7 +2812,8 @@ TEST_F(HaydnBundleBoundaryTest, PreRARCHrLiveFormatAcceptanceAgreesWithPureExact
 // surface. Emit three ADD32_MSP through the live HR (same pattern as the
 // three-ADD32 BUNDLE root pin); a fourth Hazards; IMPLICIT_DEF/KILL stay
 // zero-resource on the saturated cycle; post-RA AltDesc stamps preferred
-// members ADD32_S2/S1/S0 (no setDesc here — leaveRegion materialize only).
+// members from occupancy residual 2/1/0 (no setDesc here — leaveRegion
+// materialize only).
 // Note: GPR 2W can reject a third 1W ALU on getHazardType alone; Emit still
 // runs commitPlacement (scheduler-prechecked path) so rematch/AltDesc are
 // observable for the three-member format fill.
@@ -2743,9 +2899,14 @@ TEST_F(HaydnBundleBoundaryTest, LiveHRBooksMultiSlotPseudoEmitAndAltDesc) {
       haydn::bundle::selectPreferredCandidate(HR.getCurrentCycleCandidates());
   EXPECT_EQ(Pref.memberCount(), 3u);
   EXPECT_EQ(Pref.OccupiedSlots, SlotBits(Haydn::SLOT_ALL));
-  EXPECT_EQ(Pref.Members[0].MemberOpcode, Haydn::ADD32_S2);
-  EXPECT_EQ(Pref.Members[1].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(Pref.Members[2].MemberOpcode, Haydn::ADD32_S0);
+  HaydnMCFormats Fmts;
+  const std::vector<unsigned> *Alts =
+      Fmts.getAlternateInstsOpcode(Haydn::ADD32_MSP);
+  ASSERT_NE(Alts, nullptr);
+  ASSERT_EQ(Alts->size(), 3u);
+  EXPECT_EQ(Pref.Members[0].MemberOpcode, (*Alts)[2]);
+  EXPECT_EQ(Pref.Members[1].MemberOpcode, (*Alts)[1]);
+  EXPECT_EQ(Pref.Members[2].MemberOpcode, (*Alts)[0]);
 
   // Post-RA AltDesc stamp on Emit (leaveRegion setDesc target only — MI
   // opcode remains the logical MultiSlot_Pseudo).
@@ -2755,9 +2916,9 @@ TEST_F(HaydnBundleBoundaryTest, LiveHRBooksMultiSlotPseudoEmitAndAltDesc) {
   ASSERT_TRUE(Sel0.has_value());
   ASSERT_TRUE(Sel1.has_value());
   ASSERT_TRUE(Sel2.has_value());
-  EXPECT_EQ(*Sel0, Haydn::ADD32_S2);
-  EXPECT_EQ(*Sel1, Haydn::ADD32_S1);
-  EXPECT_EQ(*Sel2, Haydn::ADD32_S0);
+  EXPECT_EQ(*Sel0, (*Alts)[2]);
+  EXPECT_EQ(*Sel1, (*Alts)[1]);
+  EXPECT_EQ(*Sel2, (*Alts)[0]);
   EXPECT_EQ(M0->getOpcode(), Haydn::ADD32_MSP);
   EXPECT_EQ(M1->getOpcode(), Haydn::ADD32_MSP);
   EXPECT_EQ(M2->getOpcode(), Haydn::ADD32_MSP);
@@ -3124,7 +3285,7 @@ TEST_F(HaydnBundleBoundaryTest, InstrsFormOneLegalCycleRejectsTrueRAW) {
           .addReg(Haydn::D0)
           .getInstr();
   MachineInstr *Sext =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT32T64_S1), Haydn::D1)
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT_GPR32_TO_DR64), Haydn::D1)
           .addReg(Haydn::R2)
           .getInstr();
 
@@ -3140,15 +3301,15 @@ TEST_F(HaydnBundleBoundaryTest, InstrsFormOneLegalCycleRejectsTrueRAW) {
           .addReg(Haydn::D2)
           .getInstr();
   MachineInstr *SextB =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT32T64_S1), Haydn::D3)
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT_GPR32_TO_DR64), Haydn::D3)
           .addReg(Haydn::R4)
           .getInstr();
   MachineInstr *Indep[] = {MoveB, SextB};
   EXPECT_FALSE(cycleMembersHaveTrueRAW(Indep, TRI()));
 }
 
-// Production soft-float densify class: already-member MOVE32_DR_L_S2 +
-// SEXT_GPR32_TO_DR64_S1 + filler (muldf3 O2 postmisched shape). Must reject.
+// Production soft-float densify class: already-member MOVE32_DR_L +
+// SEXT_GPR32_TO_DR64 + filler (muldf3 O2 postmisched shape). Must reject.
 TEST_F(HaydnBundleBoundaryTest, RejectsMuldfMoveSextProductShape) {
   using namespace llvm::haydn::bundle;
   const HaydnInstrInfo &II = TII();
@@ -3157,16 +3318,16 @@ TEST_F(HaydnBundleBoundaryTest, RejectsMuldfMoveSextProductShape) {
   MF->push_back(MBB);
 
   MachineInstr *Move =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MOVE32_DR_L_S2), Haydn::R1)
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MOVE32_DR_L), Haydn::R1)
           .addReg(Haydn::D12)
           .getInstr();
   MachineInstr *Sext =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT_GPR32_TO_DR64_S1),
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT_GPR32_TO_DR64),
               Haydn::D10)
           .addReg(Haydn::R1)
           .getInstr();
   MachineInstr *Fill =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SUBI32_S0), Haydn::R13)
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SUBI32), Haydn::R13)
           .addReg(Haydn::R13)
           .addImm(8)
           .getInstr();
@@ -3230,7 +3391,7 @@ TEST_F(HaydnBundleBoundaryTest, CycleMembersRejectLiveUseDefAnyOrder) {
           .addReg(Haydn::D0)
           .getInstr();
   MachineInstr *Sext =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT32T64_S1), Haydn::D1)
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SEXT_GPR32_TO_DR64), Haydn::D1)
           .addReg(Haydn::R7)
           .getInstr();
   MachineOperand *SextUse = Sext->findRegisterUseOperand(Haydn::R7, TRI());

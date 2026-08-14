@@ -42,9 +42,9 @@ body:             |
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r15
     ; COMMIT-NEXT: {{  $}}
     ; COMMIT-NEXT: $r6 = ADDI32 $r0, 1, implicit-def dead $sfr
-    ; COMMIT-NEXT: BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-    ; COMMIT-NEXT:   $r4 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; COMMIT-NEXT:   $r5 = ADD32_S1 killed $r2, killed $r3, implicit-def dead $sfr
+    ; COMMIT-NEXT: BUNDLE 1, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
+    ; COMMIT-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; COMMIT-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
     ; COMMIT-NEXT: }
     ; COMMIT-NEXT: $r7 = XOR32 killed $r4, killed $r5, implicit-def dead $sfr
     ; COMMIT-NEXT: RET implicit $r15
@@ -53,9 +53,9 @@ body:             |
     ; OPS: liveins: $r0, $r1, $r2, $r3, $r15
     ; OPS-NEXT: {{  $}}
     ; OPS-NEXT: $r6 = ADDI32 $r0, 1, implicit-def dead $sfr
-    ; OPS-NEXT: BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-    ; OPS-NEXT:   $r4 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; OPS-NEXT:   $r5 = ADD32_S1 killed $r2, killed $r3, implicit-def dead $sfr
+    ; OPS-NEXT: BUNDLE 1, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
+    ; OPS-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; OPS-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
     ; OPS-NEXT: }
     ; OPS-NEXT: $r7 = XOR32 killed $r4, killed $r5, implicit-def dead $sfr
     ; OPS-NEXT: RET implicit $r15
@@ -81,23 +81,20 @@ body:             |
     liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
 
     ; COMMIT-LABEL: name: hard_root_three_alu
+    ; Three GPR writes exceed the 2W cap, so leaveMBB sequentializes.
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
     ; COMMIT-NEXT: {{  $}}
-    ; COMMIT-NEXT: BUNDLE 1, 0, implicit-def $r6, implicit-def dead $sfr, implicit-def $r7, implicit-def $r8, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3, implicit killed $r4, implicit killed $r5 {
-    ; COMMIT-NEXT:   $r6 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; COMMIT-NEXT:   $r7 = ADD32_S1 killed $r2, killed $r3, implicit-def dead $sfr
-    ; COMMIT-NEXT:   $r8 = ADD32_S0 killed $r4, killed $r5, implicit-def dead $sfr
-    ; COMMIT-NEXT: }
+    ; COMMIT-NEXT: $r6 = ADD32 $r0, killed $r1, implicit-def dead $sfr
+    ; COMMIT-NEXT: $r7 = ADD32 killed $r2, killed $r3, implicit-def dead $sfr
+    ; COMMIT-NEXT: $r8 = ADD32 killed $r4, killed $r5, implicit-def dead $sfr
     ; COMMIT-NEXT: RET implicit $r15
     ;
     ; OPS-LABEL: name: hard_root_three_alu
     ; OPS: liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
     ; OPS-NEXT: {{  $}}
-    ; OPS-NEXT: BUNDLE 1, 0, implicit-def $r6, implicit-def dead $sfr, implicit-def $r7, implicit-def $r8, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3, implicit killed $r4, implicit killed $r5 {
-    ; OPS-NEXT:   $r6 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; OPS-NEXT:   $r7 = ADD32_S1 killed $r2, killed $r3, implicit-def dead $sfr
-    ; OPS-NEXT:   $r8 = ADD32_S0 killed $r4, killed $r5, implicit-def dead $sfr
-    ; OPS-NEXT: }
+    ; OPS-NEXT: $r6 = ADD32 $r0, killed $r1, implicit-def dead $sfr
+    ; OPS-NEXT: $r7 = ADD32 killed $r2, killed $r3, implicit-def dead $sfr
+    ; OPS-NEXT: $r8 = ADD32 killed $r4, killed $r5, implicit-def dead $sfr
     ; OPS-NEXT: RET implicit $r15
     BUNDLE implicit-def $r6, implicit-def $r7, implicit-def $r8, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5 {
       $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
@@ -199,7 +196,8 @@ body:             |
   bb.1:
     RET implicit $r15
 
-# STATS: 2 {{.*}} multi-MI cycles finalized as BUNDLE
+# STATS: 1 {{.*}} multi-MI cycles finalized as BUNDLE
 # STATS: 5 {{.*}} multi-member hard BUNDLE roots at post-RA MBB entry
-# STATS: 2 {{.*}} multi-member hard BUNDLE roots transactionally exact-committed
-# STATS: 3 {{.*}} multi-member hard BUNDLE roots dissolved to sequential parcels
+# STATS: 4 {{.*}} residual multi-member shells rejected by the product coissue probe
+# STATS: 1 {{.*}} multi-member hard BUNDLE roots transactionally exact-committed
+# STATS: 4 {{.*}} multi-member shells recovered by schedule-order sequentialize

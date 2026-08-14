@@ -28,6 +28,8 @@
 //      (uimm4+2) unit lock is product-enabled.
 //   5. Issue ≤ 3 entries; seven-unit injectivity; GPR 4R2W; DR 7R3W; AR 2R2W;
 //      SFR 2R1W (every SFR def counts as a write, dead or live).
+//      Stores (D_SW_L_WITH_IMM, S_SB_WITH_IMM / ST8, ST32, ST64, …) exist
+//      only at LOADSTORE0 e0 — two stores in one issue cycle are illegal.
 //   6. Format placement: no two ops forced onto an illegal entry/unit pair
 //      (exact tryAdd / generated alternatives — entry ≠ unit resource).
 //   7. CSRW CSR 0x20–0x25 must not share a cycle with SET_HWLOOP family.

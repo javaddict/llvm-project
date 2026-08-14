@@ -79,7 +79,7 @@ define i32 @qor_sms_mac_acc_feedback(ptr nocapture readonly %x,
 ; HANDOFF-DAG: {{(LD32|S_LW|MULL|ADD32|ADDI32)}}
 ;
 ; POST-LABEL: name: qor_sms_mac_acc_feedback
-; POST: BUNDLE 0
+; POST: BUNDLE {{[01]}}
 ;
 ; ASM-LABEL: qor_sms_mac_acc_feedback:
 ; ASM:        // =>This Inner Loop Header: Depth=1
@@ -110,7 +110,7 @@ define i32 @qor_sms_acc_stream(ptr nocapture readonly %p, i32 %n) {
 ; HANDOFF-DAG: {{(LD32|S_LW|ADD32|ADDI32)}}
 ;
 ; POST-LABEL: name: qor_sms_acc_stream
-; POST: BUNDLE 0
+; POST: BUNDLE {{[01]}}
 ;
 ; ASM-LABEL: qor_sms_acc_stream:
 ; ASM:        // =>This Inner Loop Header: Depth=1

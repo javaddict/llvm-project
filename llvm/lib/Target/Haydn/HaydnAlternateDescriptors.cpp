@@ -7,7 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // Anchors HaydnAlternateDescriptors.h and hosts residual Format E placement
-// mask helpers declared in HaydnPlacementAlternative.h (E2-only golden list).
+// mask helpers declared in HaydnPlacementAlternative.h (E2-only and E3-only
+// golden Mode clamps for residualAltCompatibleFormatMask).
 //
 //===----------------------------------------------------------------------===//
 
@@ -45,9 +46,28 @@ bool llvm::isFormatEE2OnlyOpcodeName(StringRef OpcodeName) {
   return false;
 }
 
+bool llvm::isFormatEE3OnlyOpcodeName(StringRef OpcodeName) {
+  // Keep in sync with FormatEE3OnlyNames (HaydnGenFormatERecords.inc = 6).
+  static constexpr StringRef E3Only[] = {
+      "ARCTAN", "EXP2", "LOG2", "RECIP", "SIN_COS", "SQRT",
+  };
+  for (StringRef Log : E3Only) {
+    if (OpcodeName == Log)
+      return true;
+    if (!OpcodeName.starts_with(Log))
+      continue;
+    StringRef Rest = OpcodeName.drop_front(Log.size());
+    if (Rest.starts_with("_S") || Rest.starts_with("_E3_") ||
+        Rest.starts_with("_W"))
+      return true;
+  }
+  return false;
+}
+
 uint64_t llvm::residualAltCompatibleFormatMask(unsigned LogicalOpc,
                                                unsigned AltIndex) {
-  // Golden Format E members with Mode=E2 only (no E3 row).
+  // Golden Format E members with Mode=E2 only (no E3 row): drop residual S2
+  // and stamp E96TwoEntry only.
   switch (LogicalOpc) {
   case Haydn::ADDI32:
   case Haydn::ADDI32S:
@@ -62,6 +82,15 @@ uint64_t llvm::residualAltCompatibleFormatMask(unsigned LogicalOpc,
     if (AltIndex >= 2)
       return 0;
     return formatRowBit(BundleFormatRowID::E96TwoEntry);
+  // Golden Format E members with Mode=E3 only (no E2 row): stamp
+  // E96ThreeEntry only so FeasibleFormatMask cannot collapse to E2.
+  case Haydn::ARCTAN:
+  case Haydn::EXP2:
+  case Haydn::LOG2:
+  case Haydn::RECIP:
+  case Haydn::SIN_COS:
+  case Haydn::SQRT:
+    return formatRowBit(BundleFormatRowID::E96ThreeEntry);
   default:
     return ProductFormatMask;
   }

@@ -61,7 +61,7 @@
 ;
 ; Frozen format-SMS KPIs (identical PROD/GEN/RP — unexplained delta blocks wave):
 ;   * ILP triple-load stream: soft_exit_ii_floor=6, format_resmii=4, port=6,
-;     Res MII/II=6, rec=1, overestimate=0, exact_packable=1, body_ops=10
+;     Res MII/II=6, rec=1, greedy may overestimate exhaustive by 1, exact_packable=1, body_ops=10
 ;   * critical chain + side: soft_exit_ii_floor=4, format_resmii=3, port=4,
 ;     Res MII/II=4, rec=2, overestimate=0, exact_packable=1, body_ops=6
 ;     (E2 entry-capacity / residual alt mask raises format ResMII 2→3)
@@ -85,11 +85,13 @@
 ; BASE-NOT: SMS-HOOK: reject
 ; BASE-NOT: unsupported SMS-HOOK resource class
 ; BASE-NOT: Unable to analyzeLoop
-; BASE-NOT: SMS-RESMII: reject
+; Dual LOADSTORE0 injectivity: greedy ResMII may overestimate exhaustive by 1
+; (metrics-only reject is pinned on PROD/GEN/RP; not a hook/handoff reject).
 ; BASE-NOT: SMS-HANDOFF: reject
 
 ; --- PROD frozen ResMII/II/soft-exit (product ranking) ---
-; PROD-DAG: SMS-RESMII: body_ops=10 greedy=4 exhaustive=4 overestimate=0
+; PROD-DAG: SMS-RESMII: body_ops=10 greedy=5 exhaustive=4 overestimate=1
+; PROD-DAG: SMS-RESMII: reject — greedy overestimates exhaustive oracle by 1
 ; PROD-DAG: SMS-HANDOFF: metrics-only freeze
 ; PROD-DAG: SMS-HANDOFF: qual-kernel body_ops=10 coissue_packable=0 exact_packable=1 exhaustive=4
 ; PROD-DAG: SMS-QOR: soft_exit_ii_floor=6 format_resmii=4 port_resmii=6 exact_packable=1 body_ops=10
@@ -110,7 +112,8 @@
 ; PROD-DAG: Schedule Found? 1 (II=4)
 
 ; --- GEN frozen ResMII/II/soft-exit (matching-frontier OFF residual) ---
-; GEN-DAG: SMS-RESMII: body_ops=10 greedy=4 exhaustive=4 overestimate=0
+; GEN-DAG: SMS-RESMII: body_ops=10 greedy=5 exhaustive=4 overestimate=1
+; GEN-DAG: SMS-RESMII: reject — greedy overestimates exhaustive oracle by 1
 ; GEN-DAG: SMS-HANDOFF: metrics-only freeze
 ; GEN-DAG: SMS-HANDOFF: qual-kernel body_ops=10 coissue_packable=0 exact_packable=1 exhaustive=4
 ; GEN-DAG: SMS-QOR: soft_exit_ii_floor=6 format_resmii=4 port_resmii=6 exact_packable=1 body_ops=10
@@ -131,7 +134,8 @@
 ; GEN-DAG: Schedule Found? 1 (II=4)
 
 ; --- RP frozen ResMII/II/soft-exit (finer-rp OFF residual) ---
-; RP-DAG: SMS-RESMII: body_ops=10 greedy=4 exhaustive=4 overestimate=0
+; RP-DAG: SMS-RESMII: body_ops=10 greedy=5 exhaustive=4 overestimate=1
+; RP-DAG: SMS-RESMII: reject — greedy overestimates exhaustive oracle by 1
 ; RP-DAG: SMS-HANDOFF: metrics-only freeze
 ; RP-DAG: SMS-HANDOFF: qual-kernel body_ops=10 coissue_packable=0 exact_packable=1 exhaustive=4
 ; RP-DAG: SMS-QOR: soft_exit_ii_floor=6 format_resmii=4 port_resmii=6 exact_packable=1 body_ops=10
@@ -191,24 +195,26 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; PROD-NEXT:    { nop; st32 r8, sp, 3 }
 ; PROD-NEXT:    .cfi_def_cfa_offset 16
 ; PROD-NEXT:    .cfi_offset r8, -4
-; PROD-NEXT:    { nop; nop }
-; PROD-NEXT:    { nop; addi32_w r5, r0, 0 }
+; PROD-NEXT:    { nop; addi32 r5, r0, 0 }
 ; PROD-NEXT:    { nop; move32 r6, r5 }
 ; PROD-NEXT:  .LBB0_1: // %loop
 ; PROD-NEXT:    // =>This Inner Loop Header: Depth=1
 ; PROD-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; PROD-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; PROD-NEXT:    { addi32 r6, r6, 1; add32 r7, r7, r12 }
-; PROD-NEXT:    { addi32 r2, r2, 4; add32 r7, r7, r8 }
-; PROD-NEXT:    { addi32 r1, r1, 4; slt32 r12, r6, r4 }
+; PROD-NEXT:    { nop; add32 r7, r7, r12 }
+; PROD-NEXT:    { nop; addi32 r6, r6, 1 }
+; PROD-NEXT:    { nop; add32 r7, r7, r8 }
+; PROD-NEXT:    { nop; addi32 r2, r2, 4 }
+; PROD-NEXT:    { nop; slt32 r12, r6, r4 }
+; PROD-NEXT:    { nop; addi32 r1, r1, 4 }
 ; PROD-NEXT:    { nop; add32 r5, r5, r7 }
-; PROD-NEXT:    { nop; bnez_w r12, .LBB0_1 }
+; PROD-NEXT:    { nop; bnez r12, .LBB0_1 }
 ; PROD-NEXT:  // %bb.2: // %exit
 ; PROD-NEXT:    { nop; move32 r1, r5 }
 ; PROD-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PROD-NEXT:    { nop; ld32 r8, sp, 3 }
-; PROD-NEXT:    { nop; addi32_w sp, sp, 16 }
-; PROD:    { nop; jalr_w r0, lr, 0 }
+; PROD-NEXT:    { nop; addi32 sp, sp, 16 }
+; PROD:    { nop; jalr r0, lr, 0 }
 ;
 ; GEN-LABEL: sms_ilp_independent_loads:
 ; GEN:       // %bb.0: // %entry
@@ -217,24 +223,25 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; GEN-NEXT:    { nop; st32 r8, sp, 3 }
 ; GEN-NEXT:    .cfi_def_cfa_offset 16
 ; GEN-NEXT:    .cfi_offset r8, -4
-; GEN-NEXT:    { nop; nop }
-; GEN-NEXT:    { nop; addi32_w r5, r0, 0 }
+; GEN-NEXT:    { nop; addi32 r5, r0, 0 }
 ; GEN-NEXT:    { nop; move32 r6, r5 }
 ; GEN-NEXT:  .LBB0_1: // %loop
 ; GEN-NEXT:    // =>This Inner Loop Header: Depth=1
 ; GEN-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; GEN-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; GEN-NEXT:    { addi32 r6, r6, 1; add32 r7, r7, r12 }
-; GEN-NEXT:    { addi32 r2, r2, 4; add32 r7, r7, r8 }
+; GEN-NEXT:    { nop; add32 r7, r7, r12 }
+; GEN-NEXT:    { nop; addi32 r6, r6, 1 }
+; GEN-NEXT:    { nop; add32 r7, r7, r8 }
+; GEN-NEXT:    { nop; addi32 r2, r2, 4 }
 ; GEN-NEXT:    { slt32 r7, r6, r4; add32 r5, r5, r7 }
 ; GEN-NEXT:    { nop; addi32 r1, r1, 4 }
-; GEN-NEXT:    { nop; bnez_w r7, .LBB0_1 }
+; GEN-NEXT:    { nop; bnez r7, .LBB0_1 }
 ; GEN-NEXT:  // %bb.2: // %exit
 ; GEN-NEXT:    { nop; move32 r1, r5 }
 ; GEN-NEXT:    { nop; xor32 r0, r0, r0 }
 ; GEN-NEXT:    { nop; ld32 r8, sp, 3 }
-; GEN-NEXT:    { nop; addi32_w sp, sp, 16 }
-; GEN:    { nop; jalr_w r0, lr, 0 }
+; GEN-NEXT:    { nop; addi32 sp, sp, 16 }
+; GEN:    { nop; jalr r0, lr, 0 }
 ;
 ; RP-LABEL: sms_ilp_independent_loads:
 ; RP:       // %bb.0: // %entry
@@ -243,24 +250,25 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; RP-NEXT:    { nop; st32 r8, sp, 3 }
 ; RP-NEXT:    .cfi_def_cfa_offset 16
 ; RP-NEXT:    .cfi_offset r8, -4
-; RP-NEXT:    { nop; nop }
-; RP-NEXT:    { nop; addi32_w r5, r0, 0 }
+; RP-NEXT:    { nop; addi32 r5, r0, 0 }
 ; RP-NEXT:    { nop; move32 r6, r5 }
 ; RP-NEXT:  .LBB0_1: // %loop
 ; RP-NEXT:    // =>This Inner Loop Header: Depth=1
 ; RP-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; RP-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; RP-NEXT:    { addi32 r6, r6, 1; add32 r7, r7, r12 }
-; RP-NEXT:    { addi32 r2, r2, 4; add32 r7, r7, r8 }
+; RP-NEXT:    { nop; add32 r7, r7, r12 }
+; RP-NEXT:    { nop; addi32 r6, r6, 1 }
+; RP-NEXT:    { nop; add32 r7, r7, r8 }
+; RP-NEXT:    { nop; addi32 r2, r2, 4 }
 ; RP-NEXT:    { slt32 r7, r6, r4; add32 r5, r5, r7 }
 ; RP-NEXT:    { nop; addi32 r1, r1, 4 }
-; RP-NEXT:    { nop; bnez_w r7, .LBB0_1 }
+; RP-NEXT:    { nop; bnez r7, .LBB0_1 }
 ; RP-NEXT:  // %bb.2: // %exit
 ; RP-NEXT:    { nop; move32 r1, r5 }
 ; RP-NEXT:    { nop; xor32 r0, r0, r0 }
 ; RP-NEXT:    { nop; ld32 r8, sp, 3 }
-; RP-NEXT:    { nop; addi32_w sp, sp, 16 }
-; RP:    { nop; jalr_w r0, lr, 0 }
+; RP-NEXT:    { nop; addi32 sp, sp, 16 }
+; RP:    { nop; jalr r0, lr, 0 }
 ;
 ; ASM-LABEL: sms_ilp_independent_loads:
 ; ASM:       // %bb.0: // %entry
@@ -269,24 +277,26 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; ASM-NEXT:    { nop; st32 r8, sp, 3 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 16
 ; ASM-NEXT:    .cfi_offset r8, -4
-; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { nop; addi32_w r5, r0, 0 }
+; ASM-NEXT:    { nop; addi32 r5, r0, 0 }
 ; ASM-NEXT:    { nop; move32 r6, r5 }
 ; ASM-NEXT:  .LBB0_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; ASM-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; ASM-NEXT:    { addi32 r6, r6, 1; add32 r7, r7, r12 }
-; ASM-NEXT:    { addi32 r2, r2, 4; add32 r7, r7, r8 }
-; ASM-NEXT:    { addi32 r1, r1, 4; slt32 r12, r6, r4 }
+; ASM-NEXT:    { nop; add32 r7, r7, r12 }
+; ASM-NEXT:    { nop; addi32 r6, r6, 1 }
+; ASM-NEXT:    { nop; add32 r7, r7, r8 }
+; ASM-NEXT:    { nop; addi32 r2, r2, 4 }
+; ASM-NEXT:    { nop; slt32 r12, r6, r4 }
+; ASM-NEXT:    { nop; addi32 r1, r1, 4 }
 ; ASM-NEXT:    { nop; add32 r5, r5, r7 }
-; ASM-NEXT:    { nop; bnez_w r12, .LBB0_1 }
+; ASM-NEXT:    { nop; bnez r12, .LBB0_1 }
 ; ASM-NEXT:  // %bb.2: // %exit
 ; ASM-NEXT:    { nop; move32 r1, r5 }
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; ld32 r8, sp, 3 }
-; ASM-NEXT:    { nop; addi32_w sp, sp, 16 }
-; ASM:    { nop; jalr_w r0, lr, 0 }
+; ASM-NEXT:    { nop; addi32 sp, sp, 16 }
+; ASM:    { nop; jalr r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_ilp_independent_loads
 ; HANDOFF: bb.1.entry:
 ; HANDOFF-NEXT:   successors: %bb.2(0x80000000)
@@ -354,42 +364,42 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; BASE-NEXT:    { nop; xor32 r0, r0, r0 }
 ; BASE-NEXT:    { nop; subi32 sp, sp, 8 }
 ; BASE-NEXT:    .cfi_def_cfa_offset 8
-; BASE-NEXT:    { nop; nop }
-; BASE-NEXT:    { nop; addi32_w r3, r0, 0 }
+; BASE-NEXT:    { nop; addi32 r3, r0, 0 }
 ; BASE-NEXT:    { move32 r4, r3; move32 r5, r3 }
 ; BASE-NEXT:  .LBB1_1: // %loop
 ; BASE-NEXT:    // =>This Inner Loop Header: Depth=1
 ; BASE-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
-; BASE-NEXT:    { addi32 r3, r3, 1; xor32 r4, r4, r3 }
+; BASE-NEXT:    { nop; xor32 r4, r4, r3 }
+; BASE-NEXT:    { nop; addi32 r3, r3, 1 }
 ; BASE-NEXT:    { slt32 r6, r3, r2; add32 r5, r6, r5 }
 ; BASE-NEXT:    { nop; addi32 r5, r5, 6 }
-; BASE-NEXT:    { nop; bnez_w r6, .LBB1_1 }
+; BASE-NEXT:    { nop; bnez r6, .LBB1_1 }
 ; BASE-NEXT:  // %bb.2: // %exit
 ; BASE-NEXT:    { nop; add32 r1, r5, r4 }
 ; BASE-NEXT:    { nop; xor32 r0, r0, r0 }
-; BASE-NEXT:    { nop; addi32_w sp, sp, 8 }
-; BASE:    { nop; jalr_w r0, lr, 0 }
+; BASE-NEXT:    { nop; addi32 sp, sp, 8 }
+; BASE:    { nop; jalr r0, lr, 0 }
 ;
 ; ASM-LABEL: sms_critical_path_chain:
 ; ASM:       // %bb.0: // %entry
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { nop; addi32_w r3, r0, 0 }
+; ASM-NEXT:    { nop; addi32 r3, r0, 0 }
 ; ASM-NEXT:    { move32 r4, r3; move32 r5, r3 }
 ; ASM-NEXT:  .LBB1_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
-; ASM-NEXT:    { addi32 r3, r3, 1; xor32 r4, r4, r3 }
+; ASM-NEXT:    { nop; xor32 r4, r4, r3 }
+; ASM-NEXT:    { nop; addi32 r3, r3, 1 }
 ; ASM-NEXT:    { slt32 r6, r3, r2; add32 r5, r6, r5 }
 ; ASM-NEXT:    { nop; addi32 r5, r5, 6 }
-; ASM-NEXT:    { nop; bnez_w r6, .LBB1_1 }
+; ASM-NEXT:    { nop; bnez r6, .LBB1_1 }
 ; ASM-NEXT:  // %bb.2: // %exit
 ; ASM-NEXT:    { nop; add32 r1, r5, r4 }
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
-; ASM-NEXT:    { nop; addi32_w sp, sp, 8 }
-; ASM:    { nop; jalr_w r0, lr, 0 }
+; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
+; ASM:    { nop; jalr r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_critical_path_chain
 ; HANDOFF: bb.1.entry:
 ; HANDOFF-NEXT:   successors: %bb.2(0x80000000)
@@ -428,28 +438,23 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; POST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
-; POST-NEXT:   NOP
 ; POST-NEXT:   $r3 = ADDI32_W_S0 $r0, 0
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r5, implicit-def $r4, implicit $r3 {
-; POST-NEXT:     $r5 = MOVE32_S2 $r3, $r3
-; POST-NEXT:     $r4 = MOVE32_S1 $r3, $r3
+; POST-NEXT:   BUNDLE {{[01]}}, 0, implicit-def $r5, implicit-def $r4, implicit $r3 {
+; POST-NEXT:     $r5 = MOVE32{{.*}} $r3
+; POST-NEXT:     $r4 = MOVE32{{.*}} $r3
 ; POST-NEXT:   }
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.1.loop:
 ; POST-NEXT:   successors: %bb.1(0x7c000000), %bb.2(0x04000000)
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r4, $r5
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   $r6, $r1 = S_LW_POST_IMM_S2 killed $r1, 1 :: (load (s32) from %ir.lsr.iv)
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r4, implicit-def $r3, implicit killed $r4, implicit killed $r3 {
-; POST-NEXT:     $r4 = XOR32_S2 killed $r4, $r3
-; POST-NEXT:     $r3 = ADDI32_S1 killed $r3, 1
-; POST-NEXT:   }
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r5, implicit-def $r6, implicit killed $r6, implicit killed $r5, implicit $r3, implicit $r2 {
-; POST-NEXT:     $r5 = ADD32_S2 killed $r6, killed $r5
-; POST-NEXT:     $r6 = SLT32_S1 $r3, $r2
-; POST-NEXT:   }
-; POST-NEXT:   $r5 = ADDI32_S1 killed $r5, 6
-; POST-NEXT:   BNEZ_W killed $r6, %bb.1
+; POST:        $r6, $r1 = S_LW_POST_IMM{{.*}} killed $r1, 1
+; POST:        XOR32{{.*}}
+; POST:        ADDI32{{.*}}
+; POST:        ADD32{{.*}}
+; POST:        SLT32{{.*}}
+; POST:        ADDI32{{.*}}
+; POST:        BNEZ{{.*}} %bb.1
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.2.exit:
 ; POST-NEXT:   liveins: $r4, $r5
@@ -487,8 +492,7 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; BASE-NEXT:    { nop; xor32 r0, r0, r0 }
 ; BASE-NEXT:    { nop; subi32 sp, sp, 8 }
 ; BASE-NEXT:    .cfi_def_cfa_offset 8
-; BASE-NEXT:    { nop; nop }
-; BASE-NEXT:    { nop; addi32_w r3, r0, 0 }
+; BASE-NEXT:    { nop; addi32 r3, r0, 0 }
 ; BASE-NEXT:    { move32 r5, r3; move32 r4, r3 }
 ; BASE-NEXT:  .LBB2_1: // %loop
 ; BASE-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -496,20 +500,19 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; BASE-NEXT:    { nop; addi32 r3, r3, 1 }
 ; BASE-NEXT:    { add32 r4, r4, r6; slt32 r7, r3, r2 }
 ; BASE-NEXT:    { nop; xor32 r5, r5, r6 }
-; BASE-NEXT:    { nop; bnez_w r7, .LBB2_1 }
+; BASE-NEXT:    { nop; bnez r7, .LBB2_1 }
 ; BASE-NEXT:  // %bb.2: // %exit
 ; BASE-NEXT:    { nop; add32 r1, r4, r5 }
 ; BASE-NEXT:    { nop; xor32 r0, r0, r0 }
-; BASE-NEXT:    { nop; addi32_w sp, sp, 8 }
-; BASE:    { nop; jalr_w r0, lr, 0 }
+; BASE-NEXT:    { nop; addi32 sp, sp, 8 }
+; BASE:    { nop; jalr r0, lr, 0 }
 ;
 ; ASM-LABEL: sms_ilp_dual_acc:
 ; ASM:       // %bb.0: // %entry
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { nop; addi32_w r3, r0, 0 }
+; ASM-NEXT:    { nop; addi32 r3, r0, 0 }
 ; ASM-NEXT:    { move32 r5, r3; move32 r4, r3 }
 ; ASM-NEXT:  .LBB2_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -517,12 +520,12 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; ASM-NEXT:    { nop; addi32 r3, r3, 1 }
 ; ASM-NEXT:    { add32 r4, r4, r6; slt32 r7, r3, r2 }
 ; ASM-NEXT:    { nop; xor32 r5, r5, r6 }
-; ASM-NEXT:    { nop; bnez_w r7, .LBB2_1 }
+; ASM-NEXT:    { nop; bnez r7, .LBB2_1 }
 ; ASM-NEXT:  // %bb.2: // %exit
 ; ASM-NEXT:    { nop; add32 r1, r4, r5 }
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
-; ASM-NEXT:    { nop; addi32_w sp, sp, 8 }
-; ASM:    { nop; jalr_w r0, lr, 0 }
+; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
+; ASM:    { nop; jalr r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_ilp_dual_acc
 ; HANDOFF: bb.1.entry:
 ; HANDOFF-NEXT:   successors: %bb.2(0x80000000)
@@ -560,25 +563,22 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; POST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
-; POST-NEXT:   NOP
 ; POST-NEXT:   $r3 = ADDI32_W_S0 $r0, 0
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r3 {
-; POST-NEXT:     $r4 = MOVE32_S2 $r3, $r3
-; POST-NEXT:     $r5 = MOVE32_S1 $r3, $r3
+; POST-NEXT:   BUNDLE {{[01]}}, 0, implicit-def $r4, implicit-def $r5, implicit $r3 {
+; POST-NEXT:     $r4 = MOVE32{{.*}} $r3
+; POST-NEXT:     $r5 = MOVE32{{.*}} $r3
 ; POST-NEXT:   }
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.1.loop:
 ; POST-NEXT:   successors: %bb.1(0x7c000000), %bb.2(0x04000000)
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r4, $r5
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   $r6, $r1 = S_LW_POST_IMM_S2 killed $r1, 1 :: (load (s32) from %ir.lsr.iv)
-; POST-NEXT:   $r3 = ADDI32_S1 killed $r3, 1
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r7, implicit-def $r4, implicit $r3, implicit $r2, implicit killed $r4, implicit $r6 {
-; POST-NEXT:     $r7 = SLT32_S2 $r3, $r2
-; POST-NEXT:     $r4 = ADD32_S1 killed $r4, $r6
-; POST-NEXT:   }
-; POST-NEXT:   $r5 = XOR32_S2 killed $r5, killed $r6
-; POST-NEXT:   BNEZ_W killed $r7, %bb.1
+; POST:        $r6, $r1 = S_LW_POST_IMM{{.*}} killed $r1, 1
+; POST:        ADDI32{{.*}}
+; POST:        SLT32{{.*}}
+; POST:        ADD32{{.*}}
+; POST:        XOR32{{.*}}
+; POST:        BNEZ{{.*}} %bb.1
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.2.exit:
 ; POST-NEXT:   liveins: $r4, $r5

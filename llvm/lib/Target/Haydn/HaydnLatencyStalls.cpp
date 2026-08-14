@@ -13,6 +13,8 @@
 #include "HaydnLatencyStalls.h"
 #include "Haydn.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnResourceRestrictionClasses.h"
+#include "HaydnPortModel.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/DenseMap.h"
@@ -26,6 +28,7 @@
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 
@@ -36,11 +39,15 @@ using namespace llvm;
 STATISTIC(NumStallBundles, "Number of NOP stall bundles inserted");
 STATISTIC(NumUnexpectedOptStallBundles,
           "NOP stall bundles inserted at -O1+ (scheduler/late-mutation gap)");
+STATISTIC(NumLatencyStallResourceAdmissionPinsHeld,
+          "Number of latency-stall functions that held fail-closed per-op "
+          "resource admission (product closed until golden import)");
 
 namespace {
 
 /// One "cycle" of the exposed pipeline: either a BUNDLE root plus its children
-/// or a single standalone MI (the -O0 shape, where no MI bundles are formed).
+/// or a single standalone MI (pre-finalize residual, or mid-PreEmit bare inserts
+/// before the late Finalize re-commit).
 struct Cycle {
   MachineBasicBlock::iterator Boundary; // insertion point for a stall
   SmallVector<MachineInstr *, 4> Members;
@@ -87,7 +94,7 @@ static unsigned classDataLatency(const InstrItineraryData *Itin,
   int LastOp = Itin->Itineraries[SchedClass].LastOperandCycle;
   for (int OpIdx = FirstOp; OpIdx < LastOp; ++OpIdx)
     Max = std::max(Max, Itin->OperandCycles[OpIdx]);
-  return Max;
+  return haydn::restriction::clampPublishedDataLatency(Max);
 }
 
 /// Architectural Data_Latency of \p MI's def at \p DefOpIdx, straight from the
@@ -125,8 +132,26 @@ void HaydnLatencyStalls::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
-  // No skipFunction: -O0 is exactly the case that needs this most, because
-  // nothing schedules there at all.
+  // No skipFunction: latency is correctness, not quality. Plain O0 without
+  // optnone still runs postmisched (and may hold multi-MI packs); optnone
+  // quality-skips postmisched only. Both need this net so Data_Latency
+  // windows never leak into the next issue cycle. Inserted bare stall NOPs
+  // are re-committed by late Finalize (no MC uncommitted escape).
+  //
+  // Consume the same availability-aware record as pre-RA / ordinary post-RA /
+  // SMS / hazard recognizer. Itinerary Data_Latency stays the stall authority;
+  // the record only binds the admitted aggregate scaffold (CompleteModel
+  // closed, no competitive per-op invent).
+  static bool ResourceAdmissionPinned = false;
+  if (!ResourceAdmissionPinned) {
+    ResourceAdmissionPinned = true;
+    if (!haydnAvailabilityAwareConsumePinsHold())
+      report_fatal_error(
+          "Haydn latency-stall resource admission pins failed",
+          /*GenCrashDiag=*/false);
+  }
+  ++NumLatencyStallResourceAdmissionPinsHeld;
+
   const HaydnSubtarget &STI = MF.getSubtarget<HaydnSubtarget>();
   const HaydnInstrInfo &TII = *STI.getInstrInfo();
   const TargetRegisterInfo &TRI = *STI.getRegisterInfo();

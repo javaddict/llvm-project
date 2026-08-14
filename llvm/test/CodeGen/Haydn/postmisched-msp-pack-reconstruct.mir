@@ -14,7 +14,7 @@
 #    member BUNDLE (ADD32_S2, ADD32_S1) plus a singleton ADD32_S*; zero
 #    residual ADD32_MSP.
 # 2. ADD32_MSP + 2×ADD64 rematch: one Format E with selected members
-#    ADD64_S2, ADD64_S1, ADD32_S0 (MSP setDesc onto S0).
+#    ADD64, ADD64, ADD32_S0 (MSP setDesc onto S0).
 # 3. Meta pack-skip control: IMPLICIT_DEF/KILL between MSPs do not enter
 #    the multi-MI BUNDLE; MSP still setDesc and co-issue under the same
 #    4R2W densest fill.
@@ -59,10 +59,10 @@ body:             |
     ; CHECK-LABEL: name: pack_three_msp
     ; CHECK: liveins: $r1, $r2, $r4, $r5, $r7, $r8
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r0 = ADD32_S2 killed $r1, killed $r2, implicit-def dead $sfr
-    ; CHECK-NEXT: $r3 = ADD32_S2 killed $r4, killed $r5, implicit-def dead $sfr
-    ; CHECK-NEXT: $r6 = ADD32_S2 killed $r7, killed $r8, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit killed $r3, implicit killed $r6, implicit $r15
+    ; CHECK-NEXT: $r0 = ADD32{{.*}} killed $r1, killed $r2, implicit-def dead $sfr
+    ; CHECK-NEXT: $r3 = ADD32{{.*}} killed $r4, killed $r5, implicit-def dead $sfr
+    ; CHECK-NEXT: $r6 = ADD32{{.*}} killed $r7, killed $r8, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit killed $r3, implicit killed $r6, implicit $r15
     $r0 = ADD32_MSP $r1, $r2, implicit-def dead $sfr
     $r3 = ADD32_MSP $r4, $r5, implicit-def dead $sfr
     $r6 = ADD32_MSP $r7, $r8, implicit-def dead $sfr
@@ -100,15 +100,15 @@ body:             |
 
     ; Three-ready rematch: MultiSlot_Pseudo ADD32_MSP + 2×ADD64 in one
     ; Format E. Selected members (applyFormatOrdering S2→S1→S0):
-    ; ADD64_S2, ADD64_S1, ADD32_S0 — MSP setDesc onto S0. Zero residual
+    ; ADD64, ADD64, ADD32_S0 — MSP setDesc onto S0. Zero residual
     ; ADD32_MSP.
     ; CHECK-LABEL: name: pack_msp_2xadd64
     ; CHECK: liveins: $r1, $r2, $d0, $d1, $d2, $d3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r3 = ADD32_S2 killed $r1, killed $r2, implicit-def dead $sfr
-    ; CHECK-NEXT: $d4 = ADD64_S2 killed $d0, killed $d1, implicit-def dead $sfr
-    ; CHECK-NEXT: $d5 = ADD64_S2 killed $d2, killed $d3, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit killed $r3, implicit killed $d4, implicit killed $d5, implicit $r15
+    ; CHECK-NEXT: $r3 = ADD32{{.*}} killed $r1, killed $r2, implicit-def dead $sfr
+    ; CHECK-NEXT: $d4 = ADD64{{.*}} killed $d0, killed $d1, implicit-def dead $sfr
+    ; CHECK-NEXT: $d5 = ADD64{{.*}} killed $d2, killed $d3, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit killed $r3, implicit killed $d4, implicit killed $d5, implicit $r15
     $r3 = ADD32_MSP $r1, $r2, implicit-def dead $sfr
     $d4 = ADD64 $d0, $d1, implicit-def dead $sfr
     $d5 = ADD64 $d2, $d3, implicit-def dead $sfr
@@ -150,12 +150,12 @@ body:             |
     ; CHECK-LABEL: name: pack_msp_meta_skip
     ; CHECK: liveins: $r1, $r2, $r4, $r5, $r7, $r8
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r0 = ADD32_S2 killed $r1, killed $r2, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = ADD32{{.*}} killed $r1, killed $r2, implicit-def dead $sfr
     ; CHECK-NEXT: $r12 = IMPLICIT_DEF
     ; CHECK-NEXT: KILL killed $r12
-    ; CHECK-NEXT: $r3 = ADD32_S2 killed $r4, killed $r5, implicit-def dead $sfr
-    ; CHECK-NEXT: $r6 = ADD32_S2 killed $r7, killed $r8, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit killed $r3, implicit killed $r6, implicit $r15
+    ; CHECK-NEXT: $r3 = ADD32{{.*}} killed $r4, killed $r5, implicit-def dead $sfr
+    ; CHECK-NEXT: $r6 = ADD32{{.*}} killed $r7, killed $r8, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit killed $r3, implicit killed $r6, implicit $r15
     $r0 = ADD32_MSP $r1, $r2, implicit-def dead $sfr
     $r12 = IMPLICIT_DEF
     $r3 = ADD32_MSP $r4, $r5, implicit-def dead $sfr

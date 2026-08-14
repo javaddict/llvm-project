@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnMachineScheduler.h"
+#include "HaydnPostRAMultiStage.h"
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSchedMutations.h"
 #include "llvm/CodeGen/MachineScheduler.h"
@@ -24,8 +25,13 @@ using namespace llvm;
 #define DEBUG_TYPE "haydn-machine-scheduler"
 
 void HaydnScheduleDAGMI::schedule() {
-  // PostPipeliner removed from product path. Post-RA list schedule only.
+  // Shared post-RA host: ordinary list schedule first (rollback baseline),
+  // then optional transactional multi-stage mode (product default OFF).
   ScheduleDAGMI::schedule();
+  if (EnableHaydnMultiStageSMS) {
+    HaydnMultiStageSMS Host;
+    (void)Host.tryAfterOrdinarySchedule(*this);
+  }
 }
 
 void HaydnScheduleDAGMI::exitRegion() {

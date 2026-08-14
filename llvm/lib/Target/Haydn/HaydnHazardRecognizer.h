@@ -377,6 +377,13 @@ public:
     return CurrentCycleCandidates;
   }
 
+  /// True when \p Opcode is SIN_COS/ARCTAN or a placement / Format E member of
+  /// those logicals. Identity is AIE canAdd AlternateInsts membership
+  /// (AIEHazardRecognizer.cpp:188-202) plus generated member Logical — never
+  /// `_S*` suffix parse. Class-1 issue-alone only (Constraints.md Shared Unit
+  /// + §Special; uimm4+2 occupancy is T-SM2, not this predicate).
+  static bool opcodeIssuesAloneInCycle(unsigned Opcode);
+
   // PostPipeliner / external scoreboard helpers. Issue-cycle footprint is
   // ports + issue + stage-0 FUs; multi-cycle stages are booked via
   // checkConflict/enterResources (AIE anyStage peer).
@@ -447,6 +454,12 @@ private:
  // ARCTAN/SIN_COS ( current design): force alone in the issue
   // bundle only. No multi-cycle slot lock / (uimm4+2) scoreboard reservation.
   bool CurrentCycleHasLockedSlotOp = false;
+  // Per-issue-cycle flags, cleared on Reset/AdvanceCycle/RecedeCycle.
+  // CSRW↔SET_HWLOOP same-bundle (spec §5.10) and LUI/ADDI32_W e0-alone.
+  bool CurrentCycleHasHwloopSetup = false;
+  bool CurrentCycleHasHwloopCsrw = false;
+  bool CurrentCycleHasAbsMaterialize = false;
+  bool CurrentCycleHasNonAbsReal = false;
   const TargetRegisterInfo *TRI = nullptr;
 
  // : product CycleCandidateSet for the CURRENT cycle — placement
@@ -515,9 +528,9 @@ private:
   // record MI's destination registers into CurrentCycleDefs.
   void appendDefs(const MachineInstr &MI);
 
-  // true iff MI is ARCTAN or SIN_COS (DSP math ops that lock their
-  // issue alone this cycle only — no multi-cycle slot lock). Used by
-  // the minimal single-instruction-bundle guard.
+  // true iff MI's opcode or selected AltDesc member is a SIN_COS/ARCTAN
+  // logical, residual placement member, or generated Format E member.
+  // Survives post-setDesc recommit (SM-H2). Class-1 issue-alone only.
   bool isLockedSlotDspOp(const MachineInstr &MI) const;
 
  // –B3.exit.3 / : exact-expand CurrentCycleCandidates via

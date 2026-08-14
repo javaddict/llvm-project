@@ -6,103 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Haydn SMS-facing resource model. A `ResourceCycle` subclass backed by a
-// *live* nondominated `haydn::bundle::CycleCandidateSet` — the software
-// pipeliner (MachinePipeliner) queries `canReserveResources`/`reserveResources`
-// to decide whether an instruction can issue in the current cycle, so SMS
-// ResMII uses the same pure exactTryAddProduct depth as post-RA HR
-// `CurrentCycleCandidates` / `commitPlacementForEmit` (not a weaker
-// OccupiedSlots-only Bundle rebuild, not first-fit freeze of one slot/alt).
-//
-// Matching frontier (durable-rules 8a / plan §3.2): a FormatID mask alone is
-// not the frontier. Different partial field/member assignments under one
-// FormatID leave different future choices. With issue width three, retain and
-// transactionally prune complete partial matchings in `Candidates`; probes use
-// canExactTryAddProduct (expand all alts × all survivors) and commits use
-// exactTryAddProduct. Preferred materialize order (S2→S1→S0) is only a
-// representative view for OccupiedSlots / FeasibleFormatMask inspection — it
-// must not freeze the live set during canReserve. The three-ready rematch
-// triple (ADD32 + 2×ADD64) is the product pin: preferred freeze dead-ends on
-// the second ADD64; live expand rematches ADD32 onto S0 so all three pack.
-//
-// Same-issue-cycle capacity also includes descriptor-derived pooled port
-// demand (GPR 4R2W / DR 7R3W / AR 2R2W) and ARCTAN/SIN_COS issue-alone.
-// MachinePipeliner placement calls the MCInstrDesc overload (no MI operands);
-// ResMII packing (`calculateResMIIDFA`) calls the MachineInstr overload, which
-// uses MRI-correct `count*Ports` (vreg regclass → bank). Descriptor-only port
-// estimates do not dedupe repeated sources (MOVE32 rd,rs,rs → desc 2R1W vs MI
-// 1R1W; see HaydnMove32Class* helpers) — exact operand identity is MI-only.
-// Placement is intentionally conservative. SMS-HOOK fail-closes class-3 /
-// operand-dependent format cases that this adapter cannot represent (see
-// analyzeLoopForPipelining and HaydnResourceRestrictionClasses.h);
-// MOVE32-class overcount is SMS-PORT metrics only. Product class-3 inventory
-// is empty (ProductCrossCycleCapacityEnabled=false; InstrStage cycles==1).
-// II-wrap: independent per-phase ResourceCycle booking is issue-time-only and
-// would false-accept multi-cycle occupancy wrapping under II — SMS-HOOK
-// fail-closes those stages (issueTimeOnlyFalseAcceptsIIWrapAloneConflict).
-// FE5B / WP4 whole-kernel periodic certificate (G-SMS-PRE-RA-HEXAGON):
-// prove II/phase pack + II-wrap/long-occupancy + same-bank simultaneous defs
-// before rewrite; retain the original loop until final accept; recoverable
-// rollback on fail. Never half-enable multi-stage product without this path.
-//
-// SMS-RESMII is a *qualification* gate outside this adapter's packing walk:
-// ResourceManager::calculateResMIIDFA still owns the SMS starting estimate and
-// cannot be replaced here. Compare left-to-right greedy (exactTryAddProduct
-// depth) with haydn::bundle::computeExhaustiveProductResMII (≤3 format set
-// oracle) via productResMIIOverestimate. analyzeLoopForPipelining fail-closes
-// when greedy overestimates the exhaustive bound on small bodies (inflated II
-// is not a format lower bound). Descriptor/MI port demand in this adapter can
-// force ResMII above format-only packing (e.g. 3×1W under GPR 2W → ≥2 cycles
-// while Full slots alone pack in one). Soft-exit QoR (format-SMS corpus):
-// softExitIIFloor = max(exhaustive format ResMII, haydnPortLowerBoundResMII)
-// so qualification pins II floors when ports bind above format-only packing;
-// RecMII remains DDG/itinerary ownership (acc→acc feedback) and is never
-// invented here. VF3-G2 Generic-pass freeze (§8.4 #11): Full-only product
-// ranking must match frozen ResMII/II/soft-exit dual-run baselines under
-// matching-frontier OFF and finer-rp OFF residual arms
-// (sms-format-generic-baseline.ll) — unexplained KPI deltas block the wave.
-// VF3-G3 ILP/critical dual-run residual attribution: the same PROD/GEN/RP
-// KPI parity holds on dedicated ILP multi-load / dual-acc and critical-path
-// chain SMS kernels (sms-format-ilp-crit-dual-run.ll) — ranking residual must
-// not invent ResMII/II/soft-exit deltas on those bodies either.
-// Outside this packing walk, SMS metrics are remark-only (no generic
-// post-expand virtual). Expansion never invents durable BUNDLE cycle groups
-// from ResourceCycle membership; pre-RA SMS stays bare logical MIs
-// (StageCount>1 rejected). Qualification-kernel post-RA packability is proven
-// via pure product oracles (qualKernel* helpers / analyzeLoop logs) so accepted
-// bodies remain exact-packable by post-RA no-split commit once regs are
-// physical. Product multi-stage + exact E96 commit live only in the post-RA
-// engine — not this adapter.
-//
-// Format-acceptance differential (plan §8.4 #7, SMS surface): descriptor-
-// derived per-cycle format legality is pure exactTryAddProduct depth. Live
-// canReserveByOpcode / reserveByOpcode walks the same matching frontier as
-// post-RA HR CurrentCycleCandidates / commitPlacementForEmit. Format is
-// opcode-keyed so MI and descriptor forms of the same logical multiset have
-// identical format accept/reject polarity; MOVE32-class port overcount is
-// orthogonal (SMS-PORT metrics). Sibling pre-RA owns list-sched pure-exact
-// polarity (PreRASchedStrategy productExact*); this adapter owns live
-// ResourceCycle packing differential + analyzeLoop SMS-FORMAT metrics.
-//
-// AIE peers (port structure; do not invent a parallel packing theory):
-//
-//   * AIEHazardRecognizer.h:315-328  AIEResourceCycle Bundle-backed
-//   * AIEHazardRecognizer.cpp:173-214 canReserve/reserve —
-//       getAlternateInstsOpcode + any_of / first canAdd AltOpcode
-//   * Haydn maps that alt-try to canExactTryAddProduct / exactTryAddProduct on
-//     a live CycleCandidateSet (SMS = post-RA HR depth; multi-candidate, not
-//     AIE first-legal-alt freeze).
-//
-// Head-LLVM's SMS ResourceManager calls the MCInstrDesc overload for placement,
-// so MID is the primary placement path; the MI overload is preferred for
-// ResMII (exact ports) and still falls back to MID shape for format tryAdd.
-//
-// getFeasibleFormatMask exposes the preferred candidate's FeasibleFormatMask
-// (member Compatible intersections accumulate across the nondominated set
-// during exactTryAdd). productFeasibleFormatMask(Packets, Occupied) remains the
-// occupancy-only Pre-RA rebuild. Logical ops only — no FormatID freeze, no
-// setDesc. Product size-1 Full keeps ProductFormatMask while the generated
-// Full row covers slots.
+// Haydn SMS ResourceCycle: live CycleCandidateSet + exactTryAddProduct, same
+// depth as post-RA HR CurrentCycleCandidates. AIE peer AIEResourceCycle
+// (AIEHazardRecognizer.h:315-328, AIEHazardRecognizer.cpp:173-214). Design
+// authority: topics/scheduling/TOPIC.md (matching frontier, ResMII oracles,
+// SMS-HOOK/PORT, pre-RA StageCount>1 containment). Do not duplicate that
+// topic here. This header stays implementation-bearing (move residual).
 //
 //===----------------------------------------------------------------------===//
 
@@ -116,7 +25,9 @@
 #include "HaydnPortModel.h" // PortModel → MCTargetDesc (opcode + regclass enums)
 #include "HaydnResourceRestrictionClasses.h" // II-wrap SMS-HOOK polarity
 #include "MCTargetDesc/HaydnMCFormats.h"
-#include "llvm/ADT/SetVector.h" // SmallSetVector for CurrentCycleLiveDefs
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallVector.h" // SmallSetVector for CurrentCycleLiveDefs
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/Register.h"
@@ -125,6 +36,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h" // getSubtarget().getRegisterInfo()
+#include <algorithm>
 #include <cstdint>
 
 namespace llvm {
@@ -421,14 +333,116 @@ struct SMSPeriodicCertificate {
   }
 };
 
+/// Two-iteration LCD / RecMII math for the post-RA multi-stage host.
+struct SMSTwoCopyEdge { int Src = 0; int Dst = 0; int Latency = 1; bool LoopCarried = false; };
+struct SMSLCDEdge { int Def = 0; int Use = 0; int Latency = 1; int Distance = 1; };
+struct SMSLCDTwoIteration {
+  static int recMIIFromEdges(ArrayRef<SMSLCDEdge> Edges) {
+    int Best = 0;
+    for (const SMSLCDEdge &E : Edges) {
+      int Dist = std::max(1, E.Distance), Lat = std::max(0, E.Latency);
+      Best = std::max(Best, (Lat + Dist - 1) / Dist);
+    }
+    return Best;
+  }
+  static int recMIIFromTwoCopy(int N, ArrayRef<SMSTwoCopyEdge> Edges) {
+    if (N <= 0)
+      return 0;
+    const int Unset = -1000000;
+    int Best = 0;
+    for (int Src = 0; Src < N; ++Src) {
+      SmallVector<int, 32> Dist(static_cast<size_t>(2 * N), Unset);
+      Dist[Src] = 0;
+      bool Changed = true;
+      int Guard = 2 * N + 4;
+      while (Changed && Guard--) {
+        Changed = false;
+        for (const SMSTwoCopyEdge &E : Edges) {
+          if (E.Src < 0 || E.Dst < 0 || E.Src >= N || E.Dst >= N)
+            continue;
+          const int Lat = std::max(0, E.Latency);
+          if (E.LoopCarried) {
+            if (Dist[E.Src] > Unset && Dist[E.Src] + Lat > Dist[E.Dst + N]) {
+              Dist[E.Dst + N] = Dist[E.Src] + Lat;
+              Changed = true;
+            }
+          } else {
+            if (Dist[E.Src] > Unset && Dist[E.Src] + Lat > Dist[E.Dst]) {
+              Dist[E.Dst] = Dist[E.Src] + Lat;
+              Changed = true;
+            }
+            if (Dist[E.Src + N] > Unset &&
+                Dist[E.Src + N] + Lat > Dist[E.Dst + N]) {
+              Dist[E.Dst + N] = Dist[E.Src + N] + Lat;
+              Changed = true;
+            }
+          }
+        }
+      }
+      if (Guard < 0)
+        return std::max(Best, N);
+      if (Dist[Src + N] > 0)
+        Best = std::max(Best, Dist[Src + N]);
+    }
+    return Best;
+  }
+  static bool scheduleHolds(int II, ArrayRef<int> Cycle, ArrayRef<SMSLCDEdge> Edges) {
+    if (II < 1) return false;
+    for (const SMSLCDEdge &E : Edges) {
+      if (E.Def < 0 || E.Use < 0 || size_t(E.Def) >= Cycle.size() || size_t(E.Use) >= Cycle.size())
+        return false;
+      int Dist = std::max(1, E.Distance);
+      if (Cycle[E.Use] + Dist * II < Cycle[E.Def] + std::max(0, E.Latency))
+        return false;
+    }
+    return true;
+  }
+};
+
+
 /// ARCTAN / SIN_COS issue alone in their cycle (PackLegality rule 4 / HR peer).
-/// Descriptor-derived (opcode only) — same-cycle class-1 capacity, not class-3
-/// (draft multi-cycle lock is not product-enabled; see restriction catalog).
+/// Thin wrapper: the opcode list lives only in PortModel
+/// haydnOpcodeIssuesAloneInCycle. Descriptor-derived (opcode only) —
+/// same-cycle class-1 capacity, not class-3 (draft multi-cycle lock is not
+/// product-enabled; see restriction catalog).
 inline bool isHaydnSMSAloneOpcode(unsigned Opcode) {
-  return Opcode == Haydn::ARCTAN || Opcode == Haydn::SIN_COS;
+  return haydnOpcodeIssuesAloneInCycle(Opcode);
 }
 
 class HaydnResourceCycle : public ResourceCycle {
+public:
+  /// Shared admission gate with PortModel: competitive per-op resource
+  /// claims stay closed until golden publishes the complete table into
+  /// generated records. Aggregate pooled ceilings remain enforceable now.
+  /// One authority with pre-RA / ordinary post-RA — no local callback mirror.
+  static constexpr bool hasAdmittedPerOpRecords() {
+    return haydnHasAdmittedPerOpResourceRecords();
+  }
+
+  static constexpr unsigned completeModelPin() {
+    return haydnSchedCompleteModelPin();
+  }
+
+  static const HaydnAdmittedPerOpResourceRecord *
+  lookupAdmittedPerOpRecord(unsigned Opcode) {
+    return haydnLookupAdmittedPerOpResourceRecord(Opcode);
+  }
+
+  static bool competitivePerOpClaimsAllowed(unsigned Opcode) {
+    return haydnCompetitivePerOpResourceClaimsAllowed(Opcode);
+  }
+
+  /// Availability-aware record from the current golden (PortModel authority).
+  static HaydnAvailabilityAwareResourceRecord
+  availabilityAwareRecord(unsigned Opcode) {
+    return haydnMakeAvailabilityAwareResourceRecord(Opcode);
+  }
+
+  static HaydnGoldenAggregateResourceSurface aggregateResourceSurface() {
+    return haydnCurrentGoldenAggregateResourceSurface();
+  }
+
+private:
   HaydnMCFormats Fmts;
   /// Live nondominated packing states — peer of
   /// HaydnHazardRecognizer::CurrentCycleCandidates (matching frontier).
@@ -678,7 +692,7 @@ public:
   static bool qualKernelFormsOneExactCycle(ArrayRef<unsigned> Opcodes) {
     if (Opcodes.empty())
       return true;
-    HaydnMCFormats LocalFmts;
+    const HaydnMCFormats &LocalFmts = haydnDefaultMCFormats();
     return haydn::bundle::exactCanFormOneProductCycle(LocalFmts, Opcodes);
   }
 
@@ -787,7 +801,7 @@ public:
   static bool formatPureExactCanPackSequence(ArrayRef<unsigned> Opcodes) {
     if (Opcodes.empty())
       return true;
-    HaydnMCFormats LocalFmts;
+    const HaydnMCFormats &LocalFmts = haydnDefaultMCFormats();
     return haydn::bundle::exactCanPackProductSequence(LocalFmts, Opcodes);
   }
 
@@ -797,7 +811,7 @@ public:
       return true;
     if (Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
       return false;
-    HaydnMCFormats LocalFmts;
+    const HaydnMCFormats &LocalFmts = haydnDefaultMCFormats();
     return haydn::bundle::exactCanPackProductSet(LocalFmts, Opcodes);
   }
 
@@ -842,7 +856,7 @@ public:
         !formatPureExactCanPackSequence(Opcodes))
       return false;
     HaydnResourceCycle RC;
-    HaydnMCFormats LocalFmts;
+    const HaydnMCFormats &LocalFmts = haydnDefaultMCFormats();
     haydn::bundle::CycleCandidateSet Pure =
         haydn::bundle::makeProductCandidateSet(LocalFmts.getPacketFormats());
     for (unsigned Opc : Opcodes) {
@@ -1021,7 +1035,7 @@ public:
   }
 
   //===--------------------------------------------------------------------===
-  // FE5B whole-kernel periodic certificate (WP4 — G-SMS-PRE-RA-HEXAGON)
+  // FE5B whole-kernel periodic certificate (WP4)
   //===--------------------------------------------------------------------===
   // MI-aware periodic proof over II independent phase ResourceCycles before
   // rewrite; lifecycle retains the original loop until Accepted; Rejected
@@ -1245,6 +1259,30 @@ public:
     // product multi-stage ON; class-3 remains empty.
     if (ProductCrossCycleCapacityEnabled || ProductClass3RestrictionCount != 0u)
       return false;
+
+    // Per-op resource import remains closed until golden admits the complete
+    // table. Aggregate PortModel ceilings stay product-safe; competitive
+    // per-op claims must not open early. Availability-aware record must
+    // report AggregateCeilingsOnly for a representative opcode.
+    if (!haydnProductResourceAdmissionPinsHold() || hasAdmittedPerOpRecords() ||
+        completeModelPin() != 0u ||
+        lookupAdmittedPerOpRecord(Haydn::ADD32) != nullptr ||
+        competitivePerOpClaimsAllowed(Haydn::ADD32))
+      return false;
+    {
+      const HaydnAvailabilityAwareResourceRecord Rec =
+          availabilityAwareRecord(Haydn::ADD32);
+      if (Rec.CompetitiveClaimsAllowed ||
+          Rec.Availability == HaydnResourceRecordAvailability::PerOpAdmitted)
+        return false;
+      const HaydnGoldenAggregateResourceSurface Surf =
+          aggregateResourceSurface();
+      if (Surf.PerOpRecordsAdmitted || Surf.CompleteModel != 0u)
+        return false;
+      if (Surf.GPRWritePorts != HAYDN_GPR_WRITE_PORTS ||
+          Surf.GPRReadPorts != HAYDN_GPR_READ_PORTS)
+        return false;
+    }
 
     return true;
   }

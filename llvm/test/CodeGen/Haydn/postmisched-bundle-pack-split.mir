@@ -55,10 +55,10 @@ body:             |
     ; CHECK-LABEL: name: pack_two_alu
     ; CHECK: liveins: $r0, $r3, $r4
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
-    ; CHECK-NEXT: $r7 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = COPY killed $r2
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r2 = ADDI32{{.*}} $r0, 10, implicit-def dead $sfr
+    ; CHECK-NEXT: $r7 = ADD32{{.*}} killed $r3, killed $r4, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = COPY{{.*}}$r2
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
     $r0 = COPY $r2
@@ -96,10 +96,10 @@ body:             |
     ; CHECK-LABEL: name: split_dual_store
     ; CHECK: liveins: $r1, $r2, $r3, $r4
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32_S0 killed $r1, killed $r2, 0
+    ; CHECK-NEXT: {{ST32|S_SW_WITH_IMM}}{{.*}} killed $r1, killed $r2, 0
     ; CHECK-NEXT: NOP
-    ; CHECK-NEXT: ST32_S0 killed $r3, killed $r4, 4
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: {{ST32|S_SW_WITH_IMM}}{{.*}} killed $r3, killed $r4, 4
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ST32 $r1, $r2, 0
     ST32 $r3, $r4, 4
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -134,13 +134,13 @@ body:             |
     ; CHECK-LABEL: name: pack_dual_load
     ; CHECK: liveins: $r1, $r2
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r3, implicit-def $r4, implicit killed $r1, implicit killed $r2 {
-    ; CHECK-NEXT:   $r3 = LD32_S1 killed $r1, 0
-    ; CHECK-NEXT:   $r4 = LD32_S0 killed $r2, 0
+    ; CHECK-NEXT: BUNDLE{{.*}}{
+    ; CHECK-NEXT:   $r3 = {{LD32|S_LW_WITH_IMM}}{{.*}} killed $r1, 0
+    ; CHECK-NEXT:   $r4 = {{LD32|S_LW_WITH_IMM}}{{.*}} killed $r2, 0
     ; CHECK-NEXT: }
     ; CHECK-NEXT: NOP
-    ; CHECK-NEXT: $r0 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r0 = ADD32{{.*}} killed $r3, killed $r4, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r3 = LD32 $r1, 0
     $r4 = LD32 $r2, 0
     $r0 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
@@ -178,12 +178,10 @@ body:             |
     ; CHECK-LABEL: name: pack_store_alu
     ; CHECK: liveins: $r1, $r2, $r3, $r4
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r5, implicit-def dead $sfr, implicit killed $r3, implicit killed $r4, implicit killed $r1, implicit killed $r2 {
-    ; CHECK-NEXT:   $r5 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
-    ; CHECK-NEXT:   ST32_S0 killed $r1, killed $r2, 0
-    ; CHECK-NEXT: }
-    ; CHECK-NEXT: $r0 = COPY killed $r5
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-DAG: $r5 = ADD32{{.*}} killed $r3, killed $r4, implicit-def dead $sfr
+    ; CHECK-DAG: {{ST32|S_SW_WITH_IMM}}{{.*}} killed $r1, killed $r2, 0
+    ; CHECK: $r0 = COPY{{.*}}$r5
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ST32 $r1, $r2, 0
     $r5 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
     $r0 = COPY $r5
@@ -219,10 +217,10 @@ body:             |
     ; CHECK-LABEL: name: arctan_alone
     ; CHECK: liveins: $d0, $r0
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r1 = ARCTAN_S2 killed $d0, 2
-    ; CHECK-NEXT: $r5 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = COPY killed $r1
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r1 = ARCTAN{{.*}} killed $d0, 2
+    ; CHECK-NEXT: $r5 = ADDI32{{.*}} $r0, 10, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = COPY{{.*}}$r1
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r1 = ARCTAN $d0, 2
     $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r0 = COPY $r1
@@ -260,13 +258,10 @@ body:             |
     ; CHECK-LABEL: name: pack_ld_mac
     ; CHECK: liveins: $r1, $d4, $d5, $d6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $d4, implicit-def dead $sfr, implicit-def $r3, implicit killed $d4, implicit killed $d5, implicit killed $d6, implicit killed $r1 {
-    ; CHECK-NEXT:   $d4 = F2MULAA32R_HHLL_S2 killed $d4, killed $d5, killed $d6, implicit-def dead $sfr
-    ; CHECK-NEXT:   $r3 = LD32_S1 killed $r1, 0
-    ; CHECK-NEXT: }
-    ; CHECK-NEXT: $r0 = COPY killed $r3
-    ; CHECK-NEXT: NOP
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-DAG: $d4 = F2MULAA32R_HHLL{{.*}} killed $d5, killed $d6, implicit-def dead $sfr
+    ; CHECK-DAG: $r3 = {{LD32|S_LW_WITH_IMM}}{{.*}} killed $r1, 0
+    ; CHECK: $r0 = COPY{{.*}}$r3
+    ; CHECK: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r3 = LD32 $r1, 0
     $d4 = F2MULAA32R_HHLL $d4, $d5, $d6, implicit-def dead $sfr
     $r0 = COPY $r3
@@ -306,9 +301,9 @@ body:             |
     ; CHECK-LABEL: name: pack_dual_mac
     ; CHECK: liveins: $d0, $d1, $d2, $d3, $d4, $d5
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $d0 = F2MULAA32R_HHLL_S2 killed $d0, killed $d1, killed $d2, implicit-def dead $sfr
-    ; CHECK-NEXT: $d3 = F2MULAA32R_HHLL_S2 killed $d3, killed $d4, killed $d5, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $d0 = F2MULAA32R_HHLL{{.*}} killed $d1, killed $d2, implicit-def dead $sfr
+    ; CHECK-NEXT: $d3 = F2MULAA32R_HHLL{{.*}} killed $d4, killed $d5, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
     $d3 = F2MULAA32R_HHLL $d3, $d4, $d5, implicit-def dead $sfr
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

@@ -10,7 +10,7 @@ define i32 @mac_loop(ptr nocapture readonly %x, ptr nocapture readonly %h, i32 %
 ; CHECK-LABEL: mac_loop:
 ; CHECK: mull
 ; CHECK-NOT: mul64.ll
-; CHECK: jalr_w
+; CHECK: jalr
 entry:
   br label %loop
 

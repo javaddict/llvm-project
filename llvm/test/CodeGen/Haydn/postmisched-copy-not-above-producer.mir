@@ -1,0 +1,33 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: spliceSkippablesForCycle must not hoist COPY above a
+# same-cycle member that defines its source.
+#
+# Bug: the skippable conflict loop checked only skippable DEFS. A COPY
+# that reads a member-def'd reg was spliced above its producer and
+# copied the stale value. AIE never moves COPY across a def boundary.
+# Fix: reject when a skippable use overlaps a member def.
+#
+# Test design: ADD32 defs $r3, COPY $r4 = $r3, independent ADD32. If the
+# COPY is hoisted above the first ADD32, the CHECK order fails.
+
+--- |
+  define void @copy_stays_after_producer() { ret void }
+...
+---
+name:            copy_stays_after_producer
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r5, $r7, $r15
+    ; CHECK-LABEL: name: copy_stays_after_producer
+    ; CHECK: $r3 = ADD32
+    ; CHECK: $r4 = COPY $r3
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    $r4 = COPY $r3
+    $r6 = ADD32 $r5, $r7, implicit-def dead $sfr
+    RET implicit $r15, implicit $r3, implicit $r4, implicit $r6
+...

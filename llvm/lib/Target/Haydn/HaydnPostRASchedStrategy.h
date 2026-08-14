@@ -23,8 +23,10 @@
 // merges. leaveMBB free-packs scheduled multi-MI via
 // commitExactMultiMIProductCycle (sole scheduled multi-MI producer), commits
 // residual unstamped multi-member shells with the same ordinary multi-MI
-// path when jointly legal (else sequentializes), and replays multi-member
-// parcel seam latency. No hard-root dissolve identity and no force-coissue.
+// path when the product coissue probe says they are jointly legal. Illegal
+// shells sequentialize in schedule order as recovery only — sequentialize
+// is not a packing legality authority. Replays multi-member parcel seam
+// latency. No hard-root dissolve identity and no force-coissue.
 // Dual-load packing is HR exactTryAddProduct → setDesc members.
 //
 //===----------------------------------------------------------------------===//
@@ -160,10 +162,11 @@ private:
   void materializeBundles(MachineBasicBlock &MBB,
                           SmallVector<CycleBundle> &Bundles);
 
-  // Residual multi-member shells: ordinary multi-MI commit when jointly
-  // legal; sequentialize when not. Format-E stamped multi-member is kept only
-  // when coissue probe still passes (SET trip/Off + true RAW + field order);
-  // illegal stamped peels sequentialize. Not a hard-root freeze path.
+  // Residual multi-member shells: ordinary multi-MI commit when the product
+  // coissue probe accepts; sequentialize in schedule order as recovery when
+  // it rejects. Sequentialize is not a packing legality authority. Format-E
+  // stamped multi-member is kept only when the probe still passes (SET
+  // trip/Off + true RAW + field order). Not a hard-root freeze path.
   void commitOrSequentializeUnstampedMultiMemberBundles(MachineBasicBlock &MBB);
 
   // Residual multi-member seam replay (pre-free-pack shells only).

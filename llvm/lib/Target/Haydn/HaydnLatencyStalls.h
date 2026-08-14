@@ -16,9 +16,10 @@
 // see architectural load→use latency (no soften); this pass remains the
 // pre-emit correctness net and O1+ auditor:
 //
-//   * at -O0 functions are `optnone`, so PostMachineScheduler and
-//     HaydnFinalizeBundle both skipFunction and no scheduler ever runs — the
-//     pass is the primary stall inserter (O0 net)
+//   * Never calls skipFunction: latency is correctness, not quality.
+//   * PostMachineScheduler may skip `optnone` (no reorder). FinalizeBundle
+//     still forms singleton Format E commits; this pass is the latency net
+//     for both plain O0 and optnone (standalone or BUNDLE cycles).
 //   * at -O1+ the schedule should already leave empty cycles; insertions are
 //     counted as unexpected and still applied if a later mutation reopens a
 //     latency window (zero-unexpected is the product goal, not a hard fail)

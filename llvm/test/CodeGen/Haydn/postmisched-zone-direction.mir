@@ -61,25 +61,25 @@ body:             |
     ; TOP-LABEL: name: independent_alu_pair
     ; TOP: liveins: $r0, $r3, $r4
     ; TOP-NEXT: {{  $}}
-    ; TOP-NEXT: $r2 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
-    ; TOP-NEXT: $r7 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
+    ; TOP-NEXT: $r2 = ADDI32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, 10, implicit-def dead $sfr
+    ; TOP-NEXT: $r7 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r3, killed $r4, implicit-def dead $sfr
     ; TOP-NEXT: $r0 = COPY killed $r2
     ; TOP-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ;
     ; BOT-LABEL: name: independent_alu_pair
     ; BOT: liveins: $r0, $r3, $r4
     ; BOT-NEXT: {{  $}}
-    ; BOT-NEXT: $r2 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
-    ; BOT-NEXT: $r7 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
+    ; BOT-NEXT: $r2 = ADDI32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, 10, implicit-def dead $sfr
+    ; BOT-NEXT: $r7 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r3, killed $r4, implicit-def dead $sfr
     ; BOT-NEXT: $r0 = COPY killed $r2
     ; BOT-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ;
     ; BI-LABEL: name: independent_alu_pair
     ; BI: liveins: $r0, $r3, $r4
     ; BI-NEXT: {{  $}}
-    ; BI-NEXT: $r2 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
+    ; BI-NEXT: $r2 = ADDI32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, 10, implicit-def dead $sfr
     ; BI-NEXT: $r0 = COPY killed $r2
-    ; BI-NEXT: $r7 = ADD32_S2 killed $r3, killed $r4, implicit-def dead $sfr
+    ; BI-NEXT: $r7 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r3, killed $r4, implicit-def dead $sfr
     ; BI-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
@@ -119,9 +119,9 @@ body:             |
     ; CHECK-LABEL: name: mac_wb_stall_idle
     ; CHECK: liveins: $d0, $d1, $d2, $d3, $d4
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $d0 = F2MULAA32R_HHLL_S2 killed $d0, killed $d1, killed $d2, implicit-def dead $sfr
+    ; CHECK-NEXT: $d0 = F2MULAA32R_HHLL_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $d1, killed $d2, implicit-def dead $sfr
     ; CHECK-NEXT: NOP
-    ; CHECK-NEXT: $d3 = F2MULAA32R_HHLL_S2 killed $d3, killed $d0, killed $d4, implicit-def dead $sfr
+    ; CHECK-NEXT: $d3 = F2MULAA32R_HHLL_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $d0, killed $d4, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
     $d3 = F2MULAA32R_HHLL $d3, $d0, $d4, implicit-def dead $sfr

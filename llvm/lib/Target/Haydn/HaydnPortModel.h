@@ -73,6 +73,7 @@
 #include "llvm/MC/MCRegister.h"
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 
 namespace llvm {
 
@@ -98,6 +99,310 @@ inline constexpr unsigned HAYDN_AR_WRITE_PORTS = 2;
 // require at most one SFR writer per bundle (write budget 1 encodes that).
 inline constexpr unsigned HAYDN_SFR_READ_PORTS = 2;
 inline constexpr unsigned HAYDN_SFR_WRITE_PORTS = 1;
+
+/// True only when the complete per-operation port / latency / pipeline /
+/// required-alignment table has been admitted from the golden authority into
+/// generated records consumed by ResourceCycle, pre/post-RA hazard
+/// recognizers, exact commit, and the inverse verifier.
+///
+/// Remains false while only aggregate pooled ceilings (above) and common
+/// latency scaffolds are golden-admitted. Do not invent per-op numbers, peer
+/// II/density thresholds, or competitive scheduling quality claims while this
+/// is false. Flip to true only together with a generated import of the
+/// complete admitted table and differential positive/negative tests.
+inline constexpr bool haydnHasAdmittedPerOpResourceRecords() { return false; }
+
+/// SchedMachineModel CompleteModel polarity consumed by measurement and
+/// release-visible pins. Mirrors HaydnSchedModel.CompleteModel: 0 while the
+/// per-op table is not admitted; never invent a complete model early.
+inline constexpr unsigned haydnSchedCompleteModelPin() {
+  return haydnHasAdmittedPerOpResourceRecords() ? 1u : 0u;
+}
+
+/// Room for an OperandCycles-style vector on the reserved per-op seat.
+/// Overlay of AIE InstrItinData OperandCycles
+/// (llvm-aie llvm/include/llvm/Target/TargetItinerary.td:109-116) and
+/// Hexagon LD/ST lists (HexagonScheduleV55.td:24-26). Count stays 0 until
+/// a generated import fills it; not a filled latency table.
+inline constexpr unsigned HAYDN_ADMITTED_OPERAND_CYCLE_ROOM = 8;
+
+/// Format E unit bits for an admitted per-op UnitMask. Order matches
+/// HaydnSchedule.td ProcessorItineraries FuncUnit list (bit 0 LOADSTORE0
+/// ... bit 6 MAC1) and HaydnHazardRecognizer HaydnExecUnit. Overlay of AIE
+/// InstrStage Units (TargetItinerary.td:56-62) / Hexagon SLOT* choice sets
+/// (HexagonScheduleV55.td:24) onto Haydn's seven shared units — not
+/// Hexagon packet-slot identity.
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_LOADSTORE0 = 1u << 0;
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_LOAD1 = 1u << 1;
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_ALU0 = 1u << 2;
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_ALU1 = 1u << 3;
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_ALU2 = 1u << 4;
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_MAC0 = 1u << 5;
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_MAC1 = 1u << 6;
+inline constexpr uint32_t HAYDN_ADMITTED_UNIT_MASK_ALL =
+    HAYDN_ADMITTED_UNIT_LOADSTORE0 | HAYDN_ADMITTED_UNIT_LOAD1 |
+    HAYDN_ADMITTED_UNIT_ALU0 | HAYDN_ADMITTED_UNIT_ALU1 |
+    HAYDN_ADMITTED_UNIT_ALU2 | HAYDN_ADMITTED_UNIT_MAC0 |
+    HAYDN_ADMITTED_UNIT_MAC1;
+
+/// Structural seat for one admitted per-operation resource record once golden
+/// publishes the complete table. Fields stay reserved (defaults 0 / empty)
+/// until the generated import lands; aggregate PortModel ceilings remain the
+/// only product-safe demand model while haydnHasAdmittedPerOpResourceRecords
+/// is false. Zero-init is an empty seat, not a competitive scheduling claim.
+struct HaydnAdmittedPerOpResourceRecord {
+  unsigned Opcode = 0;
+  /// Pooled bank port demand (Haydn GPR/DR/AR/SFR overlay of AIE itinerary
+  /// operand traffic; not exclusive named-port FuncUnits).
+  unsigned GPRReadPorts = 0;
+  unsigned GPRWritePorts = 0;
+  unsigned DRReadPorts = 0;
+  unsigned DRWritePorts = 0;
+  unsigned ARReadPorts = 0;
+  unsigned ARWritePorts = 0;
+  unsigned SFRReadPorts = 0;
+  unsigned SFRWritePorts = 0;
+  /// InstrStage Units bitmask over the seven execution units.
+  uint32_t UnitMask = 0;
+  /// Scalar max Data_Latency (AIE dest OperandCycle / Hexagon LD first
+  /// OperandCycles entry). Not a filled special-op table.
+  unsigned DataLatency = 0;
+  /// Occupied OperandCycles entries in OperandCycles[0, Count).
+  unsigned OperandCycleCount = 0;
+  unsigned OperandCycles[HAYDN_ADMITTED_OPERAND_CYCLE_ROOM] = {};
+  /// InstrStage Cycles occupancy (TargetItinerary.td:59; AIE SimpleCycle /
+  /// Hexagon InstrStage<1, ...>). Reserved 0 — not an invented 1-cycle claim.
+  unsigned PipelineOccupancy = 0;
+  /// Required memory alignment in bytes. Reserved 0 until import.
+  unsigned RequiredAlignment = 0;
+};
+
+/// Fail-closed import lookup. Always returns nullptr until admission is true
+/// and a generated table is wired.
+inline const HaydnAdmittedPerOpResourceRecord *
+haydnLookupAdmittedPerOpResourceRecord(unsigned /*Opcode*/) {
+  if (!haydnHasAdmittedPerOpResourceRecords())
+    return nullptr;
+  return nullptr;
+}
+
+inline bool haydnCompetitivePerOpResourceClaimsAllowed(unsigned Opcode) {
+  return haydnLookupAdmittedPerOpResourceRecord(Opcode) != nullptr;
+}
+
+/// Availability of resource data for one opcode under the current golden.
+/// Aggregate ceilings are always product-safe for structural packing legality.
+/// Per-op competitive claims stay unavailable until a generated import lands.
+enum class HaydnResourceRecordAvailability : uint8_t {
+  /// No competitive per-op record; only pooled ceilings apply.
+  AggregateCeilingsOnly = 0,
+  /// Full per-op port/latency/pipeline/alignment record is admitted.
+  PerOpAdmitted = 1,
+};
+
+/// Issue-cycle capacity constants that match HaydnSchedModel / itineraries.
+/// These are aggregate structural facts, not competitive per-op invent.
+inline constexpr unsigned HAYDN_ISSUE_WIDTH = 3;
+inline constexpr unsigned HAYDN_NUM_EXEC_UNITS = 7;
+inline constexpr unsigned HAYDN_LOAD_LATENCY_SCAFFOLD = 2;
+static_assert(HAYDN_NUM_EXEC_UNITS == 7,
+              "seven Format E units in the admitted UnitMask");
+static_assert(HAYDN_ADMITTED_UNIT_MASK_ALL ==
+                  ((1u << HAYDN_NUM_EXEC_UNITS) - 1u),
+              "UnitMask bits cover exactly the seven execution units");
+
+/// Current golden aggregate resource surface (pooled ceilings + model pins).
+/// One shared authority for every ordinary-scheduler consumer; not a local
+/// post-RA / callback mirror.
+struct HaydnGoldenAggregateResourceSurface {
+  unsigned GPRReadPorts = HAYDN_GPR_READ_PORTS;
+  unsigned GPRWritePorts = HAYDN_GPR_WRITE_PORTS;
+  unsigned DRReadPorts = HAYDN_DR_READ_PORTS;
+  unsigned DRWritePorts = HAYDN_DR_WRITE_PORTS;
+  unsigned ARReadPorts = HAYDN_AR_READ_PORTS;
+  unsigned ARWritePorts = HAYDN_AR_WRITE_PORTS;
+  unsigned SFRReadPorts = HAYDN_SFR_READ_PORTS;
+  unsigned SFRWritePorts = HAYDN_SFR_WRITE_PORTS;
+  unsigned IssueWidth = HAYDN_ISSUE_WIDTH;
+  unsigned NumExecUnits = HAYDN_NUM_EXEC_UNITS;
+  unsigned LoadLatencyScaffold = HAYDN_LOAD_LATENCY_SCAFFOLD;
+  bool PerOpRecordsAdmitted = false;
+  unsigned CompleteModel = 0;
+};
+
+inline HaydnGoldenAggregateResourceSurface
+haydnCurrentGoldenAggregateResourceSurface() {
+  HaydnGoldenAggregateResourceSurface S;
+  S.PerOpRecordsAdmitted = haydnHasAdmittedPerOpResourceRecords();
+  S.CompleteModel = haydnSchedCompleteModelPin();
+  return S;
+}
+
+/// Class-1 issue-alone capacity (PackLegality rule 4 / HR peer). Not a
+/// multi-cycle invent and not a competitive latency claim.
+/// Single opcode list: ResourceCycle isHaydnSMSAloneOpcode and HR
+/// opcodeIssuesAloneInCycle call this. Do not re-list ARCTAN/SIN_COS
+/// elsewhere. Member / _S* identity is the HR predicate, not this list.
+inline bool haydnOpcodeIssuesAloneInCycle(unsigned Opcode) {
+  return Opcode == Haydn::ARCTAN || Opcode == Haydn::SIN_COS;
+}
+
+/// Availability-aware resource record generated from the current golden
+/// surface. Shared by pre-RA, ordinary post-RA, hazard recognizer, exact
+/// commit, verification, and measurement. Carries the admitted aggregate
+/// ceilings on every opcode so consumers never re-declare local budgets.
+/// Not a competitive invent: when the per-op table is closed, Availability is
+/// AggregateCeilingsOnly and CompetitiveClaimsAllowed is false.
+struct HaydnAvailabilityAwareResourceRecord {
+  unsigned Opcode = 0;
+  HaydnResourceRecordAvailability Availability =
+      HaydnResourceRecordAvailability::AggregateCeilingsOnly;
+  bool CompetitiveClaimsAllowed = false;
+  /// Aggregate surface binding (always filled from current golden ceilings).
+  HaydnGoldenAggregateResourceSurface Aggregate;
+  /// True for ARCTAN/SIN_COS class-1 alone-in-cycle capacity.
+  bool IssuesAloneInCycle = false;
+};
+
+/// Build the availability-aware record for \p Opcode from the single PortModel
+/// authority. Missing per-op records make only competitive claims for that
+/// opcode unavailable; aggregate packing ceilings remain enforceable.
+inline HaydnAvailabilityAwareResourceRecord
+haydnMakeAvailabilityAwareResourceRecord(unsigned Opcode) {
+  HaydnAvailabilityAwareResourceRecord R;
+  R.Opcode = Opcode;
+  R.Aggregate = haydnCurrentGoldenAggregateResourceSurface();
+  R.IssuesAloneInCycle = haydnOpcodeIssuesAloneInCycle(Opcode);
+  if (haydnLookupAdmittedPerOpResourceRecord(Opcode) != nullptr) {
+    R.Availability = HaydnResourceRecordAvailability::PerOpAdmitted;
+    R.CompetitiveClaimsAllowed = true;
+  } else {
+    R.Availability = HaydnResourceRecordAvailability::AggregateCeilingsOnly;
+    R.CompetitiveClaimsAllowed = false;
+  }
+  return R;
+}
+
+/// True when \p Rec binds the product aggregate surface and respects the
+/// current admission polarity (no competitive invent while closed).
+inline bool haydnAvailabilityAwareRecordBindsAggregateSurface(
+    const HaydnAvailabilityAwareResourceRecord &Rec) {
+  const HaydnGoldenAggregateResourceSurface Surf =
+      haydnCurrentGoldenAggregateResourceSurface();
+  if (Rec.Aggregate.GPRReadPorts != Surf.GPRReadPorts ||
+      Rec.Aggregate.GPRWritePorts != Surf.GPRWritePorts ||
+      Rec.Aggregate.DRReadPorts != Surf.DRReadPorts ||
+      Rec.Aggregate.DRWritePorts != Surf.DRWritePorts ||
+      Rec.Aggregate.ARReadPorts != Surf.ARReadPorts ||
+      Rec.Aggregate.ARWritePorts != Surf.ARWritePorts ||
+      Rec.Aggregate.SFRReadPorts != Surf.SFRReadPorts ||
+      Rec.Aggregate.SFRWritePorts != Surf.SFRWritePorts ||
+      Rec.Aggregate.IssueWidth != Surf.IssueWidth ||
+      Rec.Aggregate.NumExecUnits != Surf.NumExecUnits ||
+      Rec.Aggregate.LoadLatencyScaffold != Surf.LoadLatencyScaffold)
+    return false;
+  if (Rec.IssuesAloneInCycle != haydnOpcodeIssuesAloneInCycle(Rec.Opcode))
+    return false;
+  if (haydnHasAdmittedPerOpResourceRecords())
+    return false;
+  if (Rec.CompetitiveClaimsAllowed ||
+      Rec.Availability == HaydnResourceRecordAvailability::PerOpAdmitted)
+    return false;
+  if (Rec.Aggregate.PerOpRecordsAdmitted || Rec.Aggregate.CompleteModel != 0u)
+    return false;
+  return true;
+}
+
+/// Closed-admission pin with explicit Admitted / TableHead so a unit test can
+/// prove that flipping admission without a generated table fails. Product
+/// callers keep using haydnProductResourceAdmissionPinsHold(), which forwards
+/// the live constexpr and lookup. When Admitted is true and TableHead is
+/// null, this returns false.
+inline bool haydnProductResourceAdmissionPinsHoldAssuming(
+    bool Admitted, const HaydnAdmittedPerOpResourceRecord *TableHead) {
+  if (Admitted && TableHead == nullptr)
+    return false;
+  if (Admitted)
+    return false;
+  if (TableHead != nullptr)
+    return false;
+  if (haydnCompetitivePerOpResourceClaimsAllowed(/*Opcode=*/0))
+    return false;
+  if (haydnSchedCompleteModelPin() != 0u)
+    return false;
+  const HaydnGoldenAggregateResourceSurface Surf =
+      haydnCurrentGoldenAggregateResourceSurface();
+  if (Surf.PerOpRecordsAdmitted || Surf.CompleteModel != 0u)
+    return false;
+  if (Surf.GPRWritePorts != HAYDN_GPR_WRITE_PORTS ||
+      Surf.IssueWidth != HAYDN_ISSUE_WIDTH ||
+      Surf.NumExecUnits != HAYDN_NUM_EXEC_UNITS)
+    return false;
+  const HaydnAvailabilityAwareResourceRecord Rec0 =
+      haydnMakeAvailabilityAwareResourceRecord(/*Opcode=*/0);
+  if (!haydnAvailabilityAwareRecordBindsAggregateSurface(Rec0))
+    return false;
+  const HaydnAvailabilityAwareResourceRecord RecAdd =
+      haydnMakeAvailabilityAwareResourceRecord(Haydn::ADD32);
+  if (!haydnAvailabilityAwareRecordBindsAggregateSurface(RecAdd) ||
+      RecAdd.IssuesAloneInCycle)
+    return false;
+  const HaydnAvailabilityAwareResourceRecord RecAlone =
+      haydnMakeAvailabilityAwareResourceRecord(Haydn::ARCTAN);
+  if (!haydnAvailabilityAwareRecordBindsAggregateSurface(RecAlone) ||
+      !RecAlone.IssuesAloneInCycle)
+    return false;
+  return true;
+}
+
+/// Release-visible fail-closed pin: true while per-op admission stays closed
+/// and competitive per-op claims remain disallowed. Flip only with generated
+/// import + differential tests when golden admits the complete table.
+/// Shared by pre-RA leaveRegion, post-RA enterMBB, hazard recognizer,
+/// ResourceCycle certificate, and measurement polarity — one gate, no local
+/// mirrors.
+inline bool haydnProductResourceAdmissionPinsHold() {
+  return haydnProductResourceAdmissionPinsHoldAssuming(
+      haydnHasAdmittedPerOpResourceRecords(),
+      haydnLookupAdmittedPerOpResourceRecord(/*Opcode=*/0));
+}
+
+/// Structural polarity for measurement / release-visible seats: competitive
+/// II/density claims remain closed while the availability-aware record is not
+/// PerOpAdmitted for the complete table.
+inline bool haydnCompetitiveIIDensityClaimsAllowed() {
+  return haydnHasAdmittedPerOpResourceRecords() &&
+         !haydnProductResourceAdmissionPinsHold();
+}
+
+/// One consume pin for pre-RA, ordinary post-RA, SMS/shouldUseSchedule,
+/// hazard-recognizer Reset, exact commit, and late latency verify. True only
+/// while the shared availability-aware record binds the current aggregate
+/// surface and the complete per-op table stays closed.
+inline bool haydnAvailabilityAwareConsumePinsHold(
+    unsigned Opcode = Haydn::ADD32) {
+  const HaydnAvailabilityAwareResourceRecord Rec =
+      haydnMakeAvailabilityAwareResourceRecord(Opcode);
+  if (!haydnProductResourceAdmissionPinsHold())
+    return false;
+  if (!haydnAvailabilityAwareRecordBindsAggregateSurface(Rec))
+    return false;
+  if (haydnHasAdmittedPerOpResourceRecords() ||
+      haydnSchedCompleteModelPin() != 0u ||
+      haydnCompetitiveIIDensityClaimsAllowed())
+    return false;
+  if (Rec.CompetitiveClaimsAllowed ||
+      Rec.Availability == HaydnResourceRecordAvailability::PerOpAdmitted)
+    return false;
+  if (Rec.Aggregate.PerOpRecordsAdmitted || Rec.Aggregate.CompleteModel != 0u)
+    return false;
+  if (Rec.Aggregate.IssueWidth != HAYDN_ISSUE_WIDTH ||
+      Rec.Aggregate.NumExecUnits != HAYDN_NUM_EXEC_UNITS ||
+      Rec.Aggregate.LoadLatencyScaffold != HAYDN_LOAD_LATENCY_SCAFFOLD ||
+      Rec.Aggregate.GPRWritePorts != HAYDN_GPR_WRITE_PORTS)
+    return false;
+  return true;
+}
 
 /// Ceiling division (N/D), 0 when N==0. D must be > 0.
 inline unsigned haydnCeilDivPorts(unsigned N, unsigned D) {

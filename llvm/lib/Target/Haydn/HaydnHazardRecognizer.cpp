@@ -15,10 +15,15 @@
 #include "HaydnHazardRecognizer.h"
 #include "HaydnAlternateDescriptors.h"
 #include "HaydnBundle.h"
+#include "HaydnBundleVerify.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnIntraCycleRAW.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
+#include "HaydnResourceRestrictionClasses.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineOperand.h"
@@ -27,6 +32,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include <functional>
@@ -97,13 +103,16 @@ void llvm::applyFormatOrdering(Haydn::MachineBundle &Bundle,
     return;
 
   // Post-RA only (phase firewall / PIPE-31): format ordering finalizes BUNDLE
-  // identity. Physreg proxy for !IsPreRA.
-  assert(llvm::all_of(Bundle.getInstrs(), [](const MachineInstr *MI) {
-           return llvm::none_of(MI->operands(), [](const MachineOperand &MO) {
-             return MO.isReg() && MO.getReg().isVirtual();
-           });
-         }) &&
-         "applyFormatOrdering is post-RA only (no virtual registers)");
+  // identity. Release-visible: virtual register operands prove a pre-RA call
+  // site; product must not form durable BUNDLE order before physical allocation.
+  for (const MachineInstr *MI : Bundle.getInstrs()) {
+    for (const MachineOperand &MO : MI->operands()) {
+      if (MO.isReg() && MO.getReg().isVirtual())
+        report_fatal_error(
+            "applyFormatOrdering is post-RA only (virtual register operand)",
+            /*GenCrashDiag=*/false);
+    }
+  }
 
   MachineBasicBlock &MBB = *Bundle.getInstrs()[0]->getParent();
 
@@ -130,23 +139,21 @@ void llvm::applyFormatOrdering(Haydn::MachineBundle &Bundle,
 #define DEBUG_TYPE "haydn-hazard-rec"
 
 namespace {
-// CSRW↔SET_HWLOOP same-bundle hazard (spec §5.10, line 365 of
-// Database/hypo_encoding/encoding_manual.md):
-// "Also must not target CSR addresses 0x20-0x25 (HWLR_BEGIN/END/COUNT) in
-// the same bundle as SET_HWLOOP, SET_HWLOOP_F2, or SET_HWLOOP_REG."
-// CSRs 0x20-0x25 are the hardware-loop registers (HWLR_BEGIN/END/COUNT for
-// the two loop slots — golden source: VLIW_Engine_Compiler_Constraints.md).
-// Writing them via CSRW in the same cycle as a SET_HWLOOP variant would race
-// the implicit HWLR update; the spec forbids it and the packetizer must put
-// the two in separate bundles (cycles).
-// These helpers identify both sides of the hazard. They cover ALL six
-// SET_HWLOOP opcode variants the spec names (narrow pseudos SET_HWLOOP
-// SET_HWLOOP_REG today lowered by AsmPrinter, plus the wide real forms
-// SET_HWLOOP_W / SET_HWLOOP_F2_W / SET_HWLOOP_REG_W that the encoding
-// migration is wiring onto the post-RA path). : HR no longer blank-
-// skips MI.isPseudo(), so a residual SET_HWLOOP pseudo that reaches the
-// scoreboard is subject to the same CSRW↔SET_HWLOOP gate as the real
-// wide forms.
+// CSRW↔SET_HWLOOP same-bundle hazard (golden
+// VLIW_Engine_Compiler_Constraints.md):
+// CSRW must not target CSR addresses 0x20-0x25 (HWLR_BEGIN, HWLR_END,
+// HWLR_COUNT for loop 0 and loop 1) within the same bundle as a SET_HWLOOP,
+// SET_HWLOOP_F2, or SET_HWLOOP_REG instruction.
+// Writing those CSRs via CSRW in the same cycle as a SET_HWLOOP variant
+// would race the implicit HWLR update; the packetizer must put the two in
+// separate bundles (cycles).
+// These helpers identify both sides of the hazard. They cover the
+// SET_HWLOOP opcode variants Constraints.md names, including logical
+// SET_HWLOOP_W / SET_HWLOOP_F2_W / SET_HWLOOP_REG_W (Format E encode)
+// and residual SET_HWLOOP / SET_HWLOOP_REG pseudos lowered by AsmPrinter.
+// HR no longer blank-skips MI.isPseudo(), so a residual SET_HWLOOP
+// pseudo that reaches the scoreboard is subject to the same
+// CSRW↔SET_HWLOOP gate as the real *_W forms.
 
 // AIE peer (AIEHazardRecognizer.cpp:365-368; AIEBundle.h:206-213):
 // true zero-resource meta is hazard-exempt. Never use MI.isPseudo() as a
@@ -163,28 +170,18 @@ bool isNoHazardMeta(const MachineInstr &MI) {
   return MI.isMetaInstruction();
 }
 
-// True iff MI is any SET_HWLOOP variant (the writer side of the hazard).
-bool isHwloopSetupOp(unsigned Opcode) {
-  return Opcode == Haydn::SET_HWLOOP || Opcode == Haydn::SET_HWLOOP_REG ||
-         Opcode == Haydn::SET_HWLOOP_W || Opcode == Haydn::SET_HWLOOP_F2_W ||
-         Opcode == Haydn::SET_HWLOOP_REG_W;
-}
-
-// If MI is a CSRW / CSRW_W whose CSR operand is in the HWLR range
-// 0x20-0x25, return that CSR address; otherwise return -1.
-// Operand layout (HaydnInstrInfo.td):
-// CSRW (3 operands, 1 def): op0=$rd (dead def for MC parity), op1=$csr_addr
-// CSRW_W (2 operands, 0 defs): op0=$uimm8 (the CSR address)
-// The CSR operand is a uimm8 immediate; we read getImm directly. The.td
-// marks it uimm8 so a well-formed MI always carries an immediate here; we
-// still guard isImm against malformed/MIR test input.
+// If MI is a CSRW whose CSR operand is in the HWLR range 0x20-0x25,
+// return that CSR address; otherwise return -1.
+// Operand layout: CSRW / CSRW_W / CSRW_S0 / CSRW_W_S0 are 2-op
+// (uimm8, rs); $uimm8 is operand 0. The CSR operand is a uimm8
+// immediate; we read getImm directly. The .td marks it uimm8 so a
+// well-formed MI always carries an immediate here; we still guard
+// isImm against malformed/MIR test input.
 int getHwloopCsrAddr(const MachineInstr &MI) {
-  unsigned Opc = MI.getOpcode();
+  unsigned Opc = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
   unsigned CsrOpIdx;
-  if (Opc == Haydn::CSRW)
-    CsrOpIdx = 1; // $csr_addr after the dead $rd def
-  else if (Opc == Haydn::CSRW_W)
-    CsrOpIdx = 0; // $uimm8 is the first operand
+  if (Opc == Haydn::CSRW || Opc == Haydn::CSRW_W)
+    CsrOpIdx = 0;
   else
     return -1;
   if (CsrOpIdx >= MI.getNumOperands())
@@ -198,26 +195,12 @@ int getHwloopCsrAddr(const MachineInstr &MI) {
   return -1;
 }
 
-// Per-cycle hazard state for the check. The recognizer is constructed
-// once per scheduling region and regions are scheduled sequentially on a
-// single thread, so file-scope state keyed to the current cycle is safe; it
-// is cleared on every Reset/AdvanceCycle/RecedeCycle (all defined in this
-//cpp) and on each emit that crosses a cycle. This mirrors the
-// CurrentCycleHasLockedSlotOp member pattern without requiring a
-// header change (this.cpp is the sole owned file for the change).
-// @{
-bool CurrentCycleHasHwloopSetup = false;
-bool CurrentCycleHasHwloopCsrw = false;
 // Product Format E HI12/LO20 FieldLsb assumes e0 alone. LUI / ADDI32_W must
 // not share a cycle with any other real op or LLD patches the wrong entry
 // (null function pointers, e.g. atexit stdc_at_exit_func).
-bool CurrentCycleHasAbsMaterialize = false;
-bool CurrentCycleHasNonAbsReal = false;
-// @}
-
 bool isAbsMaterializeOp(unsigned Opcode) {
-  return Opcode == Haydn::LUI || Opcode == Haydn::LUI_S0 ||
-         Opcode == Haydn::ADDI32_W || Opcode == Haydn::ADDI32_W_S0;
+  const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(Opcode);
+  return Log == Haydn::LUI || Log == Haydn::ADDI32_W;
 }
 } // namespace
 
@@ -430,7 +413,10 @@ void HaydnHazardRecognizer::computeMaxLatency() {
       for (int OpIdx = FirstOp; OpIdx < LastOp; ++OpIdx) {
         const unsigned Lat = ItinData->OperandCycles[OpIdx];
         if (Lat > 0)
-          MaxOpLatency = std::max(MaxOpLatency, static_cast<int>(Lat));
+          MaxOpLatency = std::max(
+              MaxOpLatency,
+              static_cast<int>(haydn::restriction::clampPublishedDataLatency(
+                  Lat)));
       }
     }
   }
@@ -448,9 +434,23 @@ void HaydnHazardRecognizer::reenterCurrentCycleScoreboard() {
   Scoreboard = ScoreboardAtCycleStart;
   for (MachineInstr *Placed : CurrentCyclePlacedMIs)
     enterResources(Scoreboard, *Placed, /*DeltaCycles=*/0);
+  assert(Scoreboard[0].getIssueCount() == CurrentCyclePlacedMIs.size() &&
+         "reenterCurrentCycleScoreboard IssueCount must match placed MIs");
 }
 
 void HaydnHazardRecognizer::Reset() {
+  // Shared PortModel availability-aware record pin (one authority with
+  // pre-RA / ordinary post-RA). Aggregate ceilings only while the complete
+  // per-op table is closed; competitive claims stay fail-closed.
+  static bool ResourceAdmissionPinned = false;
+  if (!ResourceAdmissionPinned) {
+    ResourceAdmissionPinned = true;
+    if (!haydnAvailabilityAwareConsumePinsHold())
+      report_fatal_error(
+          "Haydn hazard recognizer resource admission pins failed",
+          /*GenCrashDiag=*/false);
+  }
+
   Scoreboard.clear();
   captureCycleStartScoreboard();
   CurrentCycleDefs.clear();
@@ -736,13 +736,26 @@ void HaydnHazardRecognizer::appendDefs(const MachineInstr &MI) {
   haydnAppendLiveDefs(MI, CurrentCycleLiveDefs);
 }
 
+bool HaydnHazardRecognizer::opcodeIssuesAloneInCycle(unsigned Opcode) {
+  // Logical class-1 (PortModel). Post-setDesc members do not hit this arm.
+  if (haydnOpcodeIssuesAloneInCycle(Opcode))
+    return true;
+
+  // Class-1 alone identity is the golden logical (ARCTAN / SIN_COS), not
+  // AlternateInsts membership. Covers the public logical, residual FieldSlot,
+  // and generated Format E member via one peel (earliest `_E2_`/`_E3_`).
+  const std::string Log = haydn::format_e::peelLogicalOpcodeName(
+      haydn::bundle::haydnOpcodeName(Opcode), /*StripWide=*/false);
+  return Log == "ARCTAN" || Log == "SIN_COS";
+}
+
 bool HaydnHazardRecognizer::isLockedSlotDspOp(const MachineInstr &MI) const {
- // product law: ARCTAN/SIN_COS issue alone this cycle
-  // only. No multi-cycle (uimm4+2) scoreboard reservation is enabled
-  // (AdvanceCycle clears CurrentCycleHasLockedSlotOp). Spec §Special draft
-  // multi-cycle lock remains deferred. Opcode-keyed (enum, no magic numbers).
-  unsigned Opc = MI.getOpcode();
-  return Opc == Haydn::ARCTAN || Opc == Haydn::SIN_COS;
+  // Class-1 alone-in-cycle (PackLegality rule 4). Check the MI opcode and the
+  // selected AltDesc member so post-setDesc recommit keeps the law.
+  if (opcodeIssuesAloneInCycle(MI.getOpcode()))
+    return true;
+  const unsigned Booked = resolveBookingOpcode(MI);
+  return Booked != MI.getOpcode() && opcodeIssuesAloneInCycle(Booked);
 }
 
 void HaydnHazardRecognizer::commitPlacementForEmit(MachineInstr *MI) {
@@ -765,11 +778,13 @@ void HaydnHazardRecognizer::commitPlacementForEmit(MachineInstr *MI) {
     return;
   }
   if (!exactTryAddProduct(CurrentCycleCandidates, Fmts, Opc)) {
-    // getHazardType should have rejected; still tolerate empty-escape /
-    // race by leaving state unchanged (do not track a failed place).
-    LLVM_DEBUG(dbgs() << "commitPlacementForEmit: exactTryAdd failed for opc "
-                      << Opc << "\n");
-    return;
+    // AIE ResourceCycle::reserveResources llvm_unreachable on alt miss.
+    // Silent return left MI issued with zero occupancy; later same-cycle
+    // ops saw a phantom-free cycle. getHazardType must reject first.
+    report_fatal_error(
+        "HaydnHazardRecognizer: commitPlacementForEmit exactTryAddProduct "
+        "failed (getHazardType must reject; no unbooked issue)",
+        /*GenCrashDiag=*/false);
   }
   CurrentCyclePlacedMIs.push_back(MI);
   // Post-RA only: re-stamp every *alts-bearing* placed MI from the preferred
@@ -857,8 +872,9 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
   // SET_HWLOOP variant — they race the implicit HWLR update). The two sides
   // are tracked bidirectionally in CurrentCycleHasHwloop{Setup,Csrw} so the
   // hazard fires regardless of which side was issued first. Only meaningful
-  // at DeltaCycles == 0 (the flags record instrs issued THIS cycle). See
-  // isHwloopSetupOp / getHwloopCsrAddr in the anonymous namespace above.
+  // at DeltaCycles == 0 (the flags record instrs issued THIS cycle). Setup
+  // identity is TII isHardwareLoopSetupOpcode (sole opcode list); CSR
+  // address is getHwloopCsrAddr in the anonymous namespace above.
   if (DeltaCycles == 0) {
     bool IsAbsMat = isAbsMaterializeOp(MI->getOpcode());
     if ((IsAbsMat &&
@@ -871,7 +887,8 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
       });
       return Hazard;
     }
-    bool IsHwloopSetup = isHwloopSetupOp(MI->getOpcode());
+    bool IsHwloopSetup = static_cast<const HaydnInstrInfo *>(TII)
+                             ->isHardwareLoopSetupOpcode(MI->getOpcode());
     bool IsHwloopCsrw = getHwloopCsrAddr(*MI) >= 0;
     if ((IsHwloopSetup && CurrentCycleHasHwloopCsrw) ||
         (IsHwloopCsrw && CurrentCycleHasHwloopSetup)) {
@@ -953,7 +970,8 @@ void HaydnHazardRecognizer::emitInstruction(SUnit *SU, int DeltaCycles) {
     if (isLockedSlotDspOp(*MI))
       CurrentCycleHasLockedSlotOp = true;
     // track CSRW↔SET_HWLOOP same-bundle hazard (spec §5.10).
-    if (isHwloopSetupOp(MI->getOpcode()))
+    if (static_cast<const HaydnInstrInfo *>(TII)->isHardwareLoopSetupOpcode(
+            MI->getOpcode()))
       CurrentCycleHasHwloopSetup = true;
     if (getHwloopCsrAddr(*MI) >= 0)
       CurrentCycleHasHwloopCsrw = true;
@@ -993,7 +1011,8 @@ void HaydnHazardRecognizer::EmitInstruction(MachineInstr *MI) {
   reenterCurrentCycleScoreboard();
   if (isLockedSlotDspOp(*MI))
     CurrentCycleHasLockedSlotOp = true;
-  if (isHwloopSetupOp(MI->getOpcode()))
+  if (static_cast<const HaydnInstrInfo *>(TII)->isHardwareLoopSetupOpcode(
+          MI->getOpcode()))
     CurrentCycleHasHwloopSetup = true;
   if (getHwloopCsrAddr(*MI) >= 0)
     CurrentCycleHasHwloopCsrw = true;
