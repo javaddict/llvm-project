@@ -4333,3 +4333,26 @@ finalize-mid-stream hand tests, including a BUNDLE-row-vs-
 ProductDefaultRowID contradiction and the tied-MAC member Desc verifier
 trip — owner's calls, deliberately not re-pinned to current behavior),
 CB-150 (one AE compat test), CB-151 unchanged.
+
+### Round-two gates (addendum)
+
+Execution gates against the round-2 toolchain, after two convention fixes
+on the simulator side (dump parser accepts objdump's new `<sym>` branch
+annotations; the legacy ld/st mnemonic aliases stop dividing an
+immediate that is already an element index) and one on the toolchain
+side (LLD's fixed 4-byte trap filler back to ISA-inert zero — the
+idle-parcel seed planted 0b111 indicators in sub-parcel residues that
+cannot hold a bundle, and aligned(N) functions then produced dumps with
+overlapping PCs; gcc-torture align-3 was red end-to-end and is green
+again; `trap-fill-not-zero.s` is re-pinned as `trap-fill-zero-inert.s`
+with both directions of the history in its header):
+
+* BundleSim ctest: 219/223 — red are cb100 (CB-151 tracking, by
+  design) and three yarpgen seeds that now exceed their 300 s budget
+  (CB-153b; seed8 solo-passes given time).
+* gcc-torture -O3: 1416 pass / 0 fail / 1 timeout (the timeout is the
+  CB-153 compile/runtime class; round 1 scored 1417/0).
+* CoreMark: PASS, 563,224 committed bundles vs round 1's 517,586
+  (+8.8%, CB-153b).
+* Haydn lit battery: 880 discovered, 9 red — the eight CB-152
+  finalize-cohort tests plus CB-150. HaydnTests 437/437.
