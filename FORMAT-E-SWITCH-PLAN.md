@@ -4363,3 +4363,24 @@ with both directions of the history in its header):
   8465132c... everywhere else) sat red unnoticed. Pin re-pointed with
   the repair rationale; suite now 459/459 (count from the gtest tail,
   not a grep). Read the tail, don't pattern-match victory.
+
+### Round-two follow-up sweep (2026-08-15, same session)
+
+CB-153a fixed (post-RA auction ranking memoized three ways, decision-
+identical, 30.5s -> 1.38s llc on strlen-5; corpus byte-identical, twin
+pinned by unit test). CB-152c fixed (members mirror the logical's tied
+accumulator; tie set = golden Write∩Read ports ∩ TD-modeled ties; the
+87 golden-accumulating-but-TD-untied logicals are CB-154). CB-152b
+settled for the documented E2 singleton default (doc + owner MIR test
+outvote two mechanism-derived unit pins); CB-152a done — five cohort
+tests self-healed, three re-pinned to committed member names. CB-153b
+diagnosed: the seed timeouts were 153a's compile time in disguise; the
+real +8.8% is co-issue density halved in the wave's post-RA (same op
+counts, half the multi-issue bundles; auction not the lever) — handed
+to the owner with per-object numbers and a minimal example.
+
+Battery: 880 discovered / ONE red (CB-150, plans machine). HaydnTests
+459/459. torture -O3 1417/0/0 — full house, back to the round-1 mark.
+ctest 222/223 (cb100 = CB-151 by design; the bsp_smoke 2000-bundle
+leash moved to 2500 after CB-152c's hazard-correct stalls +72 bundles).
+CoreMark PASS, 563,224 bundles (unchanged by this sweep).
