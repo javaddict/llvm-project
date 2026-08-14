@@ -171,11 +171,29 @@ bool HaydnPostSelectOptimize::tryCSEConstantDR64(MachineInstr &MovInst,
     MachineInstr *Def = MRI.getVRegDef(R);
     if (!Def)
       return false;
-    if (Def->getOpcode() == Haydn::ADDI32 && Def->getOperand(1).getReg() == Haydn::R0) {
+    if (Def->getOpcode() == Haydn::ADDI32) {
+      // `addi32 rd, r0, C` is the constant form. Anything else wearing this
+      // opcode — an @global in the immediate slot, a frame index in the
+      // source (legitimate until PEI rewrites it) — is not a constant this
+      // pass can fold, and asking it for a register or an immediate would
+      // abort rather than say so (it did, ten times per printf TU, on the
+      // first libc build of the pre-merge line).
+      if (!Def->getOperand(1).isReg() || !Def->getOperand(2).isImm()) {
+        LLVM_DEBUG(dbgs() << "DR64 CSE: ADDI32 is not the constant form: "
+                          << *Def);
+        return false;
+      }
+      if (Def->getOperand(1).getReg() != Haydn::R0)
+        return false;
       Val = Def->getOperand(2).getImm();
       return true;
     }
     if (Def->getOpcode() == Haydn::LOADI32) {
+      if (!Def->getOperand(1).isImm()) {
+        LLVM_DEBUG(dbgs() << "DR64 CSE: LOADI32 without an immediate: "
+                          << *Def);
+        return false;
+      }
       Val = Def->getOperand(1).getImm();
       return true;
     }

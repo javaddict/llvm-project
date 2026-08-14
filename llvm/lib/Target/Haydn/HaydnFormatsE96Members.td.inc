@@ -34460,18 +34460,18 @@ def X4SELI16_E3_E1_ALU1_RRI4 : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$sr
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def X4SEL16_E3_E1_ALU1_RRR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src2_2, DR64:$src3_3), "x4sel16\t$dest_0, $src2_2, $src3_3", []> {
+def X4SEL16_E3_E1_ALU1_RRR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src3_3, DR64:$src1_1, GPR32:$src2_2), "x4sel16\t$dest_0, $src3_3, $src1_1, $src2_2", []> {
   bits<4> dest_0;
+  bits<4> src1_1;
   bits<4> src2_2;
   bits<4> src3_3;
   bits<2> c0 = 0x0;
-  bits<4> c1 = 0x0;
-  bits<1> c2 = 0x1;
-  bits<6> c3 = 0x0;
-  bits<4> c4 = 0x8;
-  bits<2> c5 = 0x1;
+  bits<1> c1 = 0x1;
+  bits<6> c2 = 0x0;
+  bits<4> c3 = 0x8;
+  bits<2> c4 = 0x1;
   // e1 entry window 31b (MSB-first concat)
-  let e1 = {c0, src2_2, c1, src3_3, dest_0, c2, c3, c4, c5};
+  let e1 = {c0, src2_2, src1_1, src3_3, dest_0, c1, c2, c3, c4};
 }
 }
 
@@ -50409,5 +50409,6 @@ def S_LW_BREV_REG_E3_E2_LOAD1_RR : HaydnEntryE3E2<(outs GPR32:$dest1_0, GPR32:$d
 }
 }
 
+// Members emitted in canonical alias order (same-class permutation vs majority signature): 1
 // Live non-NOP Format E members: 3560
 

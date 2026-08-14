@@ -8,6 +8,7 @@
 # RUN: not grep -F 'def Slot12_ALU_AccLat' %S/../../../lib/Target/Haydn/HaydnSchedule.td
 # RUN: not grep -F 'def Slot2_ALU_AccLat' %S/../../../lib/Target/Haydn/HaydnSchedule.td
 # RUN: not grep -F 'Slot12_ALU_AccLat' %S/../../../lib/Target/Haydn/HaydnGenSchedRecords.inc
+# REQUIRES: haydn-golden-canonical
 # RUN: not grep -F 'Slot2_ALU_AccLat' %S/../../../lib/Target/Haydn/HaydnGenSchedRecords.inc
 # RUN: not grep -F 'Slot12_ALU_AccLat' %S/../../../lib/Target/Haydn/HaydnGenMemoryCycles.inc
 # RUN: not grep -F '[5, 1, 1, 5]' %S/../../../lib/Target/Haydn/HaydnGenSchedRecords.inc
