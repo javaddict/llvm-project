@@ -31,10 +31,37 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-134** | **P1** | compile hang | `20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1` (lit UNSUPPORTED hang skip) |
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
 >
 > 
+### Closed — CB-134 compile hang (verified fixed, 2026-08-14 merge audit)
+
+The five hang files (`20001111-1`, `20170401-1`, `20180921-1`, `950809-1`,
+`960312-1`) all compile cleanly at -O2 AND -O3 (`-std=gnu89
+-Wno-everything -ffreestanding`, 90 s budget, exit 0 each). The fixes were
+already on this line: the 2026-08-07 picks of the GISel legalizer
+sub-byte-store livelock fix and the 64-bit vector MMO alignment fix are
+exactly the pair that closed CB-134 on the haydn line. This entry had
+simply never been re-verified after the picks.
+
+### Merged from the haydn line (2026-08-14) — haydn-on-mhyang
+
+See FORMAT-E-SWITCH-PLAN.md § 10 for the full account. Fix-relevant
+deltas landed by the merge, all verified on this base:
+
+| Item | What |
+|------|------|
+| Golden repin | Records regenerated from the repaired layout JSON (8465132c…). One live member changes: `X4SEL16_E3_E1_ALU1_RRR` had src1 hardwired 0 and a DR64 class on the GPR rs field. The same row's permuted field roles would encode rsd1/rsd2 swapped through the bag-by-class binding — generator now canonicalizes such members' (ins) order, pinned fail-closed. Test `x4sel16-e3-mapping-canonical.s` pins bytes for both states. |
+| Golden placement law in the solver | The residual-slot solver accepted cycles with no (entry, unit) assignment and serialization fail-closed — the bf16mul "Format E one-parcel placement failed" crash. `haydnFormatEPlacementFeasible` (SDR over the generated catalog, same normalization as encode placement) refines every exact expand; `commitProduct` honors the refined row mask. Reproducer compiles at -O2 -filetype=obj: `two-store-placement-serialize.ll`. Unit law pins: two stores never co-issue; third MAC rejected; ld/ld/mac packs; SET_HWLOOP pairs with ADDI32, never ADD32. |
+| Byte-scaled mem offsets + `areMemAccessesTriviallyDisjoint` | Plain LD/ST forms returned element indices; cross-width interval math was unsound both ways. All plain forms now scale; the disjointness hook (CB-148 on the haydn line) rides on top. Measured: bqriir32x32_df1 packs 131 ops in 115 bundles (was 118). |
+| CB-144 ported (was live here) | `G_EXTRACT/INSERT_VECTOR_ELT` widen the element out of i1; the S1 `clampMaxNumElements` rows (assert-only, CB-130's lesson) removed. |
+| pr28982 freeze hang ported (was live here) | `G_FREEZE` clamps its vector result; a `<16 x s32>` value no longer exists for consumers to chase in a loop. `freeze-wide-vector-no-hang.ll`. |
+| Splice RAW fix | `spliceSkippablesForCycle` checked only defs; a skippable could be hoisted above its own producer. Symmetric predicate + range-exact hoist/sink ported. |
+| DWARF line unit | `MinInstAlignment` 12 → 1: advances that are not whole parcels truncate and every later line address drifts (functions align to 4). `dwarf-line-bundle-addresses.s`. |
+| `tryCSEConstantDR64` guards | The ADDI32/LOADI32 operand-kind aborts (frame index in the source, @global in the imm slot) now decline with a debug line. |
+| Tip-stale tests aligned | 15 unit tests red against this line's own 08-10 entry-capacity/Option-A semantics; 2 lld tests still pinning `R_HAYDN_32` after typed `R_HAYDN_HWLoopOff1/2` returned. All aligned to measured law. |
+| Tooling ported | `utils/haydn_encoding.py` (DB authority: --check 3686/126 self-consistent on this base), `haydn_vacuous_not.py` (reports 161 vacuous CHECK-NOTs here — corpus cleanup is follow-up), `haydn_ae_audit.py` (589 macros, 0 findings). `haydn_pack_probe.py` not ported (parses the retired encoding TD). |
+
 ### Closed — CB-137 / CB-138 / CB-140 SFR-class 2-op encoding (2026-08-10)
 
 Same root: compiler emitted **3-DR** forms (`RR_DDD` / `x2seq32 d0, d0, d1`) for
