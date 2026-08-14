@@ -24,6 +24,21 @@ public:
 
   bool legalizeCustom(LegalizerHelper &Helper, MachineInstr &MI,
                       LostDebugLocObserver &LocObserver) const override;
+
+  /// Lower llvm.vacopy / llvm.vaend. Peer: AArch64LegalizerInfo.cpp:1706
+  /// and RISCVLegalizerInfo.cpp:776.
+  bool legalizeIntrinsic(LegalizerHelper &Helper,
+                         MachineInstr &MI) const override;
+
+private:
+  /// Initialize the 5×i32 structured va_list from save-area frame indices.
+  /// Peer: RISCVLegalizerInfo.cpp:812 legalizeVAStart.
+  bool legalizeVAStart(LegalizerHelper &Helper, MachineInstr &MI) const;
+
+  /// Two-bank va_arg with stack overflow. Peer: AArch64LegalizerInfo.cpp:2158
+  /// (straight-line list walk). Haydn selects GPR vs DR cursor and overflows
+  /// onto __stack with G_SELECT (no post-RA CFG).
+  bool legalizeVAArg(LegalizerHelper &Helper, MachineInstr &MI) const;
 };
 
 } // end namespace llvm

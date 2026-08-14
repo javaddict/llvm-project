@@ -9,6 +9,9 @@
 // This file contains the entry points for global functions defined in the LLVM
 // Haydn back-end.
 //
+// Debt markers: new deferred work uses `// RESIDUAL(goal-N):` so
+// llvm/utils/haydn/product_coverage_pin.sh can inventory it.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDN_H
@@ -30,14 +33,9 @@ Target &getTheHaydnTarget();
 FunctionPass *createHaydnPostLegalizerCombiner();
 FunctionPass *createHaydnPostSelectOptimizePass();
 FunctionPass *createHaydnExpandPseudosPass();
-FunctionPass *createHaydnExpandPostIncEarlyPass();
 FunctionPass *createHaydnHardwareLoopsPass();
 FunctionPass *createHaydnFixupHwLoopsPass();
-FunctionPass *createHaydnConditionOptimizerPass();
-FunctionPass *createHaydnCopyElimPass();
-FunctionPass *createHaydnPEIPeepholePass();
 FunctionPass *createHaydnEnsureTerminatorsPass();
-FunctionPass *createHaydnBitSimplifyPass();
 // AIE createAIEFinalizeBundle peer (AIEFinalizeBundle.h / AIE2TargetMachine:244).
 FunctionPass *createHaydnFinalizeBundlePass();
 // fail-closed committed-bundle verifier (after FinalizeBundle).
@@ -49,14 +47,9 @@ FunctionPass *createHaydnLatencyStallsPass();
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
 void initializeHaydnPostSelectOptimizePass(PassRegistry &);
 void initializeHaydnExpandPseudosPass(PassRegistry &);
-void initializeHaydnExpandPostIncEarlyPass(PassRegistry &);
 void initializeHaydnHardwareLoopsPass(PassRegistry &);
 void initializeHaydnFixupHwLoopsPass(PassRegistry &);
-void initializeHaydnConditionOptimizerPass(PassRegistry &);
-void initializeHaydnCopyElimPass(PassRegistry &);
-void initializeHaydnPEIPeepholePass(PassRegistry &);
 void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
-void initializeHaydnBitSimplifyPass(PassRegistry &);
 void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
 void initializeHaydnLatencyStallsPass(PassRegistry &);

@@ -17,13 +17,10 @@
 #   addr = __gr_top + __gr_offs
 # with VASTART initializing __gr_offs to the NEGATIVE bank size.
 #
-# CB-131 systematic placement: ISel is thin (G_VAARG → VAARG_I32/I64 pseudo);
-# ExpandPseudos owns the full two-bank + stack-overflow algorithm and emits
-# ADD32 (not SUB32) on the reg path. This MIR test pins the ISel half:
-# G_VAARG must become VAARG_I32. The companion IR test
-# `va_order_init_offsets` in varargs-two-bank-va-list.ll guards the
-# VASTART-side initial-offset store. BundleSim `va-arg-1`/`va-arg-2` gate the
-# ExpandPseudos upward formula + overflow path end-to-end.
+# CB-131 systematic placement: ISel is thin (G_VAARG → VAARG_I32/I64 pseudo)
+# for leftover G_VAARG injected after legalizer. Product G_VAARG is consumed
+# by HaydnLegalizerInfo::legalizeVAArg. This MIR pins the ISel half:
+# G_VAARG must become VAARG_I32. Companion IR: gisel/vaarg-legalizer-home.ll.
 #
 # Why MIR: asserting the post-instruction-select pseudo is the surgical way
 # to keep ISel thin. If someone re-inlines a SUB32 downward formula into ISel

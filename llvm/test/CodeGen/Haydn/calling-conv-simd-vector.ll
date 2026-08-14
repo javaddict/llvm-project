@@ -11,7 +11,7 @@ define <2 x i32> @ret_v2i32(<2 x i32> %v) {
 }
 
 ; CHECK-LABEL: ret_v4i16:
-; CHECK: jalr_w
+; CHECK: jalr
 define <4 x i16> @ret_v4i16(<4 x i16> %v) {
   ret <4 x i16> %v
 }

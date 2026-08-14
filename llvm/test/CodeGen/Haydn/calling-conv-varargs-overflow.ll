@@ -18,7 +18,7 @@ declare void @llvm.va_end(ptr)
 define i64 @varargs_five_i64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, ...) nounwind {
 ; CHECK-LABEL: varargs_five_i64:
 ; CHECK: add64
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
@@ -36,7 +36,7 @@ entry:
 define i64 @varargs_many_gpr_then_i64(i32 %a1, i32 %a2, i32 %a3, i32 %a4, i32 %a5, i32 %a6, i32 %a7, i32 %a8, i64 %x, ...) nounwind {
 ; CHECK-LABEL: varargs_many_gpr_then_i64:
 ; CHECK: {{add64|sext32t64}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %ap = alloca ptr
   call void @llvm.va_start(ptr %ap)
@@ -55,8 +55,8 @@ define i64 @call_five_i64_overflow() nounwind {
 ; CHECK-LABEL: call_five_i64_overflow:
 ; Stack-passed overflow args: st64 / d_sdw to SP slots before the call.
 ; CHECK: st64
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, varargs_five_i64_callee
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(\.s[012])?}} {{.*}}, varargs_five_i64_callee
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %r = call i64 (i64, i64, i64, i64, i64, ...) @varargs_five_i64_callee(
       i64 1, i64 2, i64 3, i64 4, i64 5, i64 6, i64 7)

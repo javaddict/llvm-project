@@ -16,8 +16,8 @@ declare i32 @identity_i32(i32)
 
 define void @caller_0_args() {
 ; CHECK-LABEL: caller_0_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, sink_i32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(\.s[012])?}} {{.*}}, sink_i32
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   call void @sink_i32(i32 0)
   ret void
 }
@@ -26,8 +26,8 @@ define void @caller_0_args() {
 
 define i32 @caller_1_arg(i32 %a) {
 ; CHECK-LABEL: caller_1_arg:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, identity_i32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(\.s[012])?}} {{.*}}, identity_i32
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = call i32 @identity_i32(i32 %a)
   ret i32 %r
 }
@@ -38,7 +38,7 @@ declare i32 @add2(i32, i32)
 
 define i32 @caller_2_args(i32 %a, i32 %b) {
 ; CHECK-LABEL: caller_2_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add2
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add2
   %r = call i32 @add2(i32 %a, i32 %b)
   ret i32 %r
 }
@@ -49,7 +49,7 @@ declare i32 @add3(i32, i32, i32)
 
 define i32 @caller_3_args(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: caller_3_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add3
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add3
   %r = call i32 @add3(i32 %a, i32 %b, i32 %c)
   ret i32 %r
 }
@@ -60,7 +60,7 @@ declare i32 @add4(i32, i32, i32, i32)
 
 define i32 @caller_4_args(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: caller_4_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add4
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add4
   %r = call i32 @add4(i32 %a, i32 %b, i32 %c, i32 %d)
   ret i32 %r
 }
@@ -71,7 +71,7 @@ declare i32 @add5(i32, i32, i32, i32, i32)
 
 define i32 @caller_5_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK-LABEL: caller_5_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add5
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add5
   %r = call i32 @add5(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e)
   ret i32 %r
 }
@@ -82,7 +82,7 @@ declare i32 @add6(i32, i32, i32, i32, i32, i32)
 
 define i32 @caller_6_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) {
 ; CHECK-LABEL: caller_6_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add6
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add6
   %r = call i32 @add6(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f)
   ret i32 %r
 }
@@ -93,7 +93,7 @@ declare i32 @add7(i32, i32, i32, i32, i32, i32, i32)
 
 define i32 @caller_7_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g) {
 ; CHECK-LABEL: caller_7_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add7
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add7
   %r = call i32 @add7(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g)
   ret i32 %r
 }
@@ -107,7 +107,7 @@ declare i32 @add8(i32, i32, i32, i32, i32, i32, i32, i32)
 define i32 @caller_8_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g, i32 %h) {
 ; CHECK-LABEL: caller_8_args:
 ; CHECK: st32
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add8
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add8
   %r = call i32 @add8(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g, i32 %h)
   ret i32 %r
 }
@@ -121,7 +121,7 @@ define i32 @caller_10_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %
 ; CHECK: st32
 ; CHECK: st32
 ; CHECK: st32
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add10
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add10
   %r = call i32 @add10(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g, i32 %h, i32 %i, i32 %j)
   ret i32 %r
 }
@@ -132,7 +132,7 @@ define i32 @caller_10_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %
 define i32 @callee_7_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g) {
 ; CHECK-LABEL: callee_7_args:
 ; CHECK: add32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %s1 = add i32 %a, %b
   %s2 = add i32 %s1, %c
   %s3 = add i32 %s2, %d
@@ -149,7 +149,7 @@ define i32 @callee_8_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g
 ; CHECK-LABEL: callee_8_args:
 ; The 8th argument is loaded from the stack
 ; CHECK: ld32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %s1 = add i32 %a, %b
   %s2 = add i32 %s1, %c
   %s3 = add i32 %s2, %d
@@ -164,7 +164,7 @@ define i32 @callee_8_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g
 
 define i32 @small_int_args(i8 %a, i16 %b, i32 %c) {
 ; CHECK-LABEL: small_int_args:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %ext_a = sext i8 %a to i32
   %ext_b = sext i16 %b to i32
   %s1 = add i32 %ext_a, %ext_b
@@ -178,8 +178,8 @@ declare void @use_ptr(ptr)
 
 define void @ptr_arg(ptr %p) {
 ; CHECK-LABEL: ptr_arg:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, use_ptr
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(\.s[012])?}} {{.*}}, use_ptr
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   call void @use_ptr(ptr %p)
   ret void
 }

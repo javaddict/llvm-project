@@ -8,6 +8,34 @@
 //
 // Unified post-RA physical-GPR temporary facility (no free assembler AT on R12).
 //
+// Why not llvm::RegScavenger
+// --------------------------
+// Generic RegScavenger never returns a reserved register
+// (RegisterScavenging.cpp isRegUsed / findSurvivorBackwards; isReserved in
+// RegisterScavenging.h). Haydn reserves R0 as soft-zero
+// (HaydnRegisterInfo::getReservedRegs). That is the blocking invariant:
+//
+//   R0 is not a scavenged temp. MatInt / ADDI zero-source sequences read
+//   R0 as 0 (NeedsZeroBase). Un-reserving R0 so FindUnusedReg can pick it
+//   (the obvious port: GPR32 order is R0, R1, …) clobbers the zero
+//   mid-sequence. AllowBorrow may temporarily use clean R0 and MUST
+//   XOR32-restore; generic RS has no such policy.
+//
+// Adjacent laws generic RS also does not express:
+//   * R13=SP, R14=FP, R15=LR reserved; R12 allocatable (no free AT);
+//     priority is call-clobbered first, R12 last.
+//   * Spill homes use emitFrameRelativeMemOp (3-tier, never move SP).
+//   * rematerializeAddImmForUse glues remat into one Format E parcel
+//     (GPR 4R/2W / bundle occupancy). RS::spill inserts store/load
+//     without a VLIW occupancy check.
+//
+// PEI large-FI scratch is a different layer: always createVirtualRegister
+// (HaydnRegisterInfo eliminateFrameIndex getScratch). Generic RS is already
+// used for PEI emergency slots (processFunctionBeforeFrameFinalized
+// addScavengingFrameIndex) and insertIndirectBranch (AllowSpill=false).
+// hasNoVRegs is not a post-PEI signal. Keep this file while ExpandPseudos /
+// remat-glue / R0 borrow still call it.
+//
 // Soft-zero R0 contract
 // ---------------------
 // R0 is reserved as *soft*-zero (not hardwired). Invariant outside a borrow

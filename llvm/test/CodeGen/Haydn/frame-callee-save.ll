@@ -51,8 +51,8 @@ define i32 @leaf_none(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = add i32 %x, 1
   ret i32 %r
 }
@@ -64,20 +64,20 @@ define i32 @save_across_call(i32 %a) {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
 ; CHECK-NEXT:    { nop; move32 r8, r1 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { add32 r1, r1, r8; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %v = call i32 @use_i32(i32 %a)
   %r = add i32 %v, %a
   ret i32 %r
@@ -93,7 +93,7 @@ define i32 @save_many_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
-; CHECK-NEXT:    { nop; addi32_w r6, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r6, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 lr, r6, 0 }
 ; CHECK-NEXT:    { nop; st32 fp, r6, 1 }
 ; CHECK-NEXT:    { nop; st32 r11, r6, 2 }
@@ -109,23 +109,23 @@ define i32 @save_many_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK-NEXT:    .cfi_offset lr, -24
 ; CHECK-NEXT:    { move32 r10, r3; move32 r9, r2 }
 ; CHECK-NEXT:    { move32 r8, r5; move32 r11, r4 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r10, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r11 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r11, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; add32 r2, fp, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r10 }
@@ -138,8 +138,8 @@ define i32 @save_many_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK-NEXT:    { nop; ld32 r10, sp, 5 }
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 6 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %v1 = call i32 @use_i32(i32 %a)
   %v2 = call i32 @use_i32(i32 %b)
   %v3 = call i32 @use_i32(i32 %c)
@@ -163,7 +163,7 @@ define i64 @save_dr64(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
 ; CHECK-NEXT:    { nop; st32 lr, sp, 9 }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d10, r1, 0 }
 ; CHECK-NEXT:    { nop; st64 d9, r1, 1 }
 ; CHECK-NEXT:    { nop; st64 d8, r1, 2 }
@@ -173,15 +173,15 @@ define i64 @save_dr64(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    .cfi_offset d9, -24
 ; CHECK-NEXT:    .cfi_offset d10, -32
 ; CHECK-NEXT:    { or64 d9, d2, d2; or64 d8, d1, d1 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add64 d1, d10, d8 }
 ; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
@@ -190,8 +190,8 @@ define i64 @save_dr64(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    { nop; ld64 d9, sp, 2 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 9 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 40 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %v1 = call i64 @use_i64(i64 %a)
   %v2 = call i64 @use_i64(i64 %b)
   %v3 = call i64 @use_i64(i64 %c)
@@ -214,13 +214,13 @@ define i64 @save_mixed_gpr_dr64(i32 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    .cfi_offset d8, -16
 ; CHECK-NEXT:    { nop; sext32t64 d8, r1 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { add64 d0, d0, d8; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 1 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 5 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %ext = sext i32 %a to i64
   %v = call i64 @use_i64(i64 %b)
   %r = add i64 %v, %ext
@@ -235,7 +235,7 @@ define i32 @clobber_test(i32 %a, i32 %b) {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32_w r3, sp, 12 }
+; CHECK-NEXT:    { nop; addi32 r3, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 lr, r3, 0 }
 ; CHECK-NEXT:    { nop; st32 r9, r3, 1 }
 ; CHECK-NEXT:    { nop; st32 r8, r3, 2 }
@@ -244,15 +244,15 @@ define i32 @clobber_test(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_offset r9, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
 ; CHECK-NEXT:    { move32 r9, r2; move32 r8, r1 }
-; CHECK-NEXT:    { nop; jal_w lr, clobber_all }
+; CHECK-NEXT:    { nop; jal lr, clobber_all }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r8, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   call void @clobber_all()
   %r = add i32 %a, %b
   ret i32 %r
@@ -266,22 +266,22 @@ define i32 @nested_calls(i32 %a) {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { move32 r8, r1; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r8, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %v1 = call i32 @use_i32(i32 %a)
   %v2 = call i32 @use_i32(i32 %v1)
   %r = add i32 %v1, %v2
@@ -296,7 +296,7 @@ define i32 @deep_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
-; CHECK-NEXT:    { nop; addi32_w r12, sp, 16 }
+; CHECK-NEXT:    { nop; addi32 r12, sp, 16 }
 ; CHECK-NEXT:    { nop; st32 lr, r12, 0 }
 ; CHECK-NEXT:    { nop; st32 fp, r12, 1 }
 ; CHECK-NEXT:    { nop; st32 r11, r12, 2 }
@@ -314,34 +314,34 @@ define i32 @deep_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { move32 fp, r5; move32 r9, r4 }
 ; CHECK-NEXT:    { nop; move32 r10, r6 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r11 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r11, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, fp }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r10, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; ld32 r2, sp, 2 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -359,8 +359,8 @@ define i32 @deep_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { nop; ld32 r10, sp, 7 }
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 8 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 9 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 40 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
+; CHECK:    { nop; jalr r0, lr, 0 }
                           i32 %a4, i32 %a5, i32 %a6) {
   %v0 = call i32 @use_i32(i32 %a0)
   %v1 = call i32 @use_i32(i32 %a1)
@@ -386,7 +386,7 @@ define i64 @dr64_deep_pressure(i64 %a0, i64 %a1, i64 %a2) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
 ; CHECK-NEXT:    { nop; st32 lr, sp, 9 }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d10, r1, 0 }
 ; CHECK-NEXT:    { nop; st64 d9, r1, 1 }
 ; CHECK-NEXT:    { nop; st64 d8, r1, 2 }
@@ -396,15 +396,15 @@ define i64 @dr64_deep_pressure(i64 %a0, i64 %a1, i64 %a2) {
 ; CHECK-NEXT:    .cfi_offset d9, -24
 ; CHECK-NEXT:    .cfi_offset d10, -32
 ; CHECK-NEXT:    { or64 d9, d2, d2; or64 d8, d1, d1 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add64 d1, d10, d8 }
 ; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
@@ -413,8 +413,8 @@ define i64 @dr64_deep_pressure(i64 %a0, i64 %a1, i64 %a2) {
 ; CHECK-NEXT:    { nop; ld64 d9, sp, 2 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 9 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 40 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %v0 = call i64 @use_i64(i64 %a0)
   %v1 = call i64 @use_i64(i64 %a1)
   %v2 = call i64 @use_i64(i64 %a2)

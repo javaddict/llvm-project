@@ -51,8 +51,8 @@ public:
   // Tell LSR that Haydn supports post-increment loads/stores
   // (D_LDW_POST_IMM/REG and D_SDW_POST_IMM). When LSR knows the target
   // supports post-increment addressing, it converts multi-offset GEP chains
-  // into sequential pointer advances that the LoadStoreOptimizer can fuse
-  // into single post-increment load/store instructions.
+  // into sequential pointer advances that ISel can match as post-increment
+  // load/store (HaydnExpandPseudos still splits ST64_POST_INC to ST64+ADDI).
   bool isIndexedLoadLegal(TTI::MemIndexedMode Mode, Type *Ty) const override;
   bool isIndexedStoreLegal(TTI::MemIndexedMode Mode, Type *Ty) const override;
 

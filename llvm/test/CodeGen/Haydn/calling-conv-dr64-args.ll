@@ -16,7 +16,7 @@ declare i64 @add2_i64(i64, i64)
 
 define void @caller_0_dr64_args() {
 ; CHECK-LABEL: caller_0_dr64_args:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret void
 }
 
@@ -24,7 +24,7 @@ define void @caller_0_dr64_args() {
 
 define i64 @caller_1_dr64_arg(i64 %a) {
 ; CHECK-LABEL: caller_1_dr64_arg:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, identity_i64
+; CHECK: jal{{(\.s[012])?}} {{.*}}, identity_i64
   %r = call i64 @identity_i64(i64 %a)
   ret i64 %r
 }
@@ -33,7 +33,7 @@ define i64 @caller_1_dr64_arg(i64 %a) {
 
 define i64 @caller_2_dr64_args(i64 %a, i64 %b) {
 ; CHECK-LABEL: caller_2_dr64_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add2_i64
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add2_i64
   %r = call i64 @add2_i64(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -44,7 +44,7 @@ declare i64 @add3_i64(i64, i64, i64)
 
 define i64 @caller_3_dr64_args(i64 %a, i64 %b, i64 %c) {
 ; CHECK-LABEL: caller_3_dr64_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add3_i64
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add3_i64
   %r = call i64 @add3_i64(i64 %a, i64 %b, i64 %c)
   ret i64 %r
 }
@@ -55,7 +55,7 @@ declare i64 @add4_i64(i64, i64, i64, i64)
 
 define i64 @caller_4_dr64_args(i64 %a, i64 %b, i64 %c, i64 %d) {
 ; CHECK-LABEL: caller_4_dr64_args:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add4_i64
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add4_i64
   %r = call i64 @add4_i64(i64 %a, i64 %b, i64 %c, i64 %d)
   ret i64 %r
 }
@@ -67,7 +67,7 @@ declare i64 @add5_i64(i64, i64, i64, i64, i64)
 define i64 @caller_5_dr64_args(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e) {
 ; CHECK-LABEL: caller_5_dr64_args:
 ; CHECK: st64
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add5_i64
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add5_i64
   %r = call i64 @add5_i64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e)
   ret i64 %r
 }
@@ -81,7 +81,7 @@ define i64 @caller_8_dr64_args(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, i64 %f, i
 ; 4 stack stores for overflow arguments
 ; CHECK: {{st64|d_sdw|d_sw}}
 ; CHECK: {{st64|d_sdw|d_sw}}
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, add8_i64
+; CHECK: jal{{(\.s[012])?}} {{.*}}, add8_i64
   %r = call i64 @add8_i64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, i64 %f, i64 %g, i64 %h)
   ret i64 %r
 }
@@ -91,7 +91,7 @@ define i64 @caller_8_dr64_args(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, i64 %f, i
 define i64 @callee_4_dr64(i64 %a, i64 %b, i64 %c, i64 %d) {
 ; CHECK-LABEL: callee_4_dr64:
 ; CHECK-NOT: ld64 {{.*}}, sp,
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %s1 = add i64 %a, %b
   %s2 = add i64 %s1, %c
   %s3 = add i64 %s2, %d
@@ -104,7 +104,7 @@ define i64 @callee_5_dr64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e) {
 ; CHECK-LABEL: callee_5_dr64:
 ; The 5th argument must be loaded from the stack
 ; CHECK: ld64
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %s1 = add i64 %a, %b
   %s2 = add i64 %s1, %c
   %s3 = add i64 %s2, %d
@@ -116,7 +116,7 @@ define i64 @callee_5_dr64(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e) {
 
 define i64 @return_i64(i64 %a) {
 ; CHECK-LABEL: return_i64:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret i64 %a
 }
 
@@ -124,7 +124,7 @@ define i64 @return_i64(i64 %a) {
 
 define i64 @return_computed_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: return_computed_i64:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = add i64 %a, %b
   ret i64 %r
 }

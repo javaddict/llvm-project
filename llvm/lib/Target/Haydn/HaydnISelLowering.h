@@ -71,6 +71,14 @@ public:
   bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallBase &I,
                           MachineFunction &MF,
                           unsigned Intrinsic) const override;
+
+  // Structured va_list is 5xi32 (20 bytes). Default pointer-sized MMO
+  // under-covers G_VASTART stores into the list.
+  unsigned getVaListSizeInBits(const DataLayout &DL) const override {
+    (void)DL;
+    return 5 * 32;
+  }
+
 };
 
 } // namespace llvm

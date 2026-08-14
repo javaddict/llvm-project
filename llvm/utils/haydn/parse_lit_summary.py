@@ -112,6 +112,16 @@ Total Discovered Tests: 10
     assert f == 0 and x == 0 and xf == 4, (f, x, xf, u, p)
     assert ok(f, x)
 
+    # Trailing-noise trap: prose mentioning Failed must not invent a counter.
+    trailing = """
+Total Discovered Tests: 3
+  Passed           :   3
+note: earlier Failed attempt was fixed
+"""
+    f, x, xf, u, p = parse_lit_summary(trailing)
+    assert f == 0 and x == 0 and p == 3, (f, x, xf, u, p)
+    assert ok(f, x)
+
     print("parse_lit_summary self-test OK")
     return 0
 

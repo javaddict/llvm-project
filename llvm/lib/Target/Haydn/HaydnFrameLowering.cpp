@@ -18,6 +18,7 @@
 #include "MCTargetDesc/HaydnMatInt.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -53,18 +54,38 @@ static void emitMaterializeImm32(MachineBasicBlock &MBB,
   }
 }
 
-// PEI post-RA scratch for prologue/epilogue CSR addressing.
-// ABI-safe filter = call-clobbered set (not CSRs), not entry live-in, not Avoid.
-// ProtectRetCC (epilogue only): also exclude RetCC R1/R2 so large FrameDestroy
-// materialize cannot clobber live return values.
-static Register getPEIScratchReg(const MachineFunction &MF, Register Avoid,
+// True when emitPrologue/emitEpilogue must MatInt a stack size into a scratch
+// (SUBI32/ADDI32 simm16 does not fit). Used by canUseAsPrologue/Epilogue so
+// shrink-wrap will not commit a save point that PEI cannot satisfy.
+static bool peiRequiresScratch(const MachineFunction &MF) {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  uint64_t Est = MFI.getStackSize();
+  uint64_t Est2 = MFI.estimateStackSize(MF);
+  if (Est2 > Est)
+    Est = Est2;
+  return !isInt<16>(static_cast<int64_t>(Est));
+}
+
+// PEI post-RA scratch at insertion point I, not function entry live-ins.
+//
+// Peer overlay:
+//   AArch64FrameLowering.cpp:888-929 findScratchNonCalleeSaveRegister
+//     (LivePhysRegs + CSR-as-used so ShrinkWrap canUseAsPrologue and
+//      emitPrologue see the same set)
+//   PPCFrameLowering.cpp:425-525 findScratchRegister
+//     (RegScavenger at block start / first terminator for non-entry)
+//
+// ABI-safe = call-clobbered GPR (not CSRs / R0 / R14 / reserved / Avoid).
+// ProtectRetCC (epilogue): also exclude RetCC R1/R2.
+// Returns Register() if none is free at I — never a live/used register.
+static Register getPEIScratchReg(MachineBasicBlock &MBB,
+                                 MachineBasicBlock::iterator I, Register Avoid,
                                  Register Avoid2 = Register(),
                                  bool ProtectRetCC = false) {
+  MachineFunction &MF = *MBB.getParent();
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const HaydnRegisterInfo *TRI = ST.getRegisterInfo();
-
   const MachineRegisterInfo &MRI = MF.getRegInfo();
-  const MachineBasicBlock &Entry = MF.front();
   const MCPhysReg *CSRs = TRI->getCalleeSavedRegs(&MF);
 
   auto isCalleeSavedPhys = [&](MCPhysReg Reg) {
@@ -85,29 +106,41 @@ static Register getPEIScratchReg(const MachineFunction &MF, Register Avoid,
       return false;
     if (MRI.isReserved(Reg))
       return false;
-    if (Entry.isLiveIn(Reg))
-      return false;
     if (isCalleeSavedPhys(Reg))
       return false;
     return Haydn::GPR32NoSPNoLRRegClass.contains(Reg);
   };
 
-  for (MCPhysReg Reg : Haydn::GPR32NoSPNoLRRegClass)
-    if (isABISafeScratch(Reg) && !MRI.isPhysRegUsed(Reg))
-      return Reg;
+  // Liveness at I (HaydnPostRAScratch.cpp:101-106 / LivePhysRegs stepBackward).
+  LivePhysRegs LiveRegs(*TRI);
+  LiveRegs.addLiveOuts(MBB);
+  for (MachineBasicBlock::iterator II = MBB.end(); II != I;) {
+    --II;
+    LiveRegs.stepBackward(*II);
+  }
+  // CSRs may look free during ShrinkWrap canUseAsPrologue but PEI later
+  // adds them as live-in (AArch64FrameLowering.cpp:888-896).
+  for (const MCPhysReg *P = CSRs; *P; ++P)
+    LiveRegs.addReg(*P);
 
   for (MCPhysReg Reg : Haydn::GPR32NoSPNoLRRegClass)
-    if (isABISafeScratch(Reg))
+    if (isABISafeScratch(Reg) && LiveRegs.available(MRI, Reg))
       return Reg;
 
-  if (Avoid != Haydn::R12 && Avoid2 != Haydn::R12 &&
-      !(ProtectRetCC && isRetCCPhys(Haydn::R12)) &&
-      !MRI.isReserved(Haydn::R12) && !Entry.isLiveIn(Haydn::R12) &&
-      !isCalleeSavedPhys(Haydn::R12))
-    return Haydn::R12;
+  return Register();
+}
 
-  report_fatal_error(
-      "Haydn PEI: no ABI-safe scratch GPR (need call-clobbered free reg)");
+static Register requirePEIScratchReg(MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator I,
+                                     Register Avoid,
+                                     Register Avoid2 = Register(),
+                                     bool ProtectRetCC = false) {
+  Register Reg = getPEIScratchReg(MBB, I, Avoid, Avoid2, ProtectRetCC);
+  if (!Reg)
+    report_fatal_error(
+        "Haydn PEI: no ABI-safe scratch GPR at insertion point "
+        "(need call-clobbered free reg; refuse used-reg fallback)");
+  return Reg;
 }
 
 static int64_t getCalleeSavedCFAOffset(const MachineFunction &MF, int FI) {
@@ -146,13 +179,11 @@ static void emitMaterializeOffset(MachineBasicBlock &MBB,
 // Emit a callee-saved register store at an arbitrary byte offset from
 // BaseReg. When the offset fits the s0 LS imm4 scaled range
 // ([0,60]/4-aligned for ST32, [0,120]/8-aligned for ST64) the plain
-// immediate-offset ST32/ST64 is emitted (migrates to ST32_M0S0LS via the
-// finalizer). When the offset is out of range (negative or large CSR slots)
-// the offset is materialized into a PEI scratch (\c getPEIScratchReg: ABI
-// call-clobbered / reserved R12 — same contract as EFI scavenger) and the
-// ST32_REG_M0S0LS / ST64_REG_M0S0LS Mode-0 register-offset variant is emitted.
-// This eliminates the legacy Haydn32 LS emit path for CSR spills (Gap 1
-// tryDecodeLegacyLSProbe).
+// immediate-offset ST32/ST64 is emitted. When the offset is out of range
+// (negative or large CSR slots) the offset is materialized into a PEI
+// scratch (\c getPEIScratchReg: ABI call-clobbered / reserved R12 — same
+// contract as EFI scavenger) and the logical ST32_REG_M0S0LS /
+// ST64_REG_M0S0LS register-offset form is emitted. Product encode is Format E.
 static void emitCSRStore(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI, const DebugLoc &DL,
                          const HaydnInstrInfo *TII, unsigned StoreOpc,
@@ -263,6 +294,18 @@ void HaydnFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   // Get the alignment.
   Align StackAlign = getStackAlign();
 
+  // Static MaxAlign > StackAlign(8) realigns in emitPrologue (AND32 +
+  // MatInt(-MaxAlign); RISCVFrameLowering.cpp:1142-1153). VLAs + realign
+  // still fail closed: no BP, so a VLA would move the post-AND SP used as
+  // the local base (RISCV hasBP at RISCVFrameLowering.cpp:494-505).
+  if (MFI.getMaxAlign() > StackAlign && MFI.hasVarSizedObjects()) {
+    report_fatal_error("Haydn: stack object alignment " +
+                           Twine(MFI.getMaxAlign().value()) +
+                           " exceeds ABI StackAlign(8) with VLAs; SP "
+                           "realignment needs a base pointer",
+                       /*GenCrashDiag=*/false);
+  }
+
   // Get the maximum call frame size of all the calls.
   uint64_t MaxCallFrameSize = MFI.getMaxCallFrameSize();
 
@@ -331,7 +374,31 @@ bool HaydnFrameLowering::enableShrinkWrapping(
   if (hasFP(MF))
     return false;
 
+  // Product Options.EnableCFIFixup is set in the target machine so
+  // shrink-wrapped multi-exit frames can restore CFA/CSR CFI state. Epilogue
+  // FrameDestroy CFI is always emitted from emitEpilogue.
   return true;
+}
+
+bool HaydnFrameLowering::canUseAsPrologue(const MachineBasicBlock &MBB) const {
+  // AArch64FrameLowering.cpp:932-970 / RISCVFrameLowering.cpp:2323-2348:
+  // shrink-wrap must not pick a block where PEI would clobber a live
+  // call-clobbered GPR. If a scratch is free at block start, the point is
+  // safe; if PEI does not require one (small SUBI32, skip stride), also safe.
+  MachineBasicBlock &Tmp = const_cast<MachineBasicBlock &>(MBB);
+  if (getPEIScratchReg(Tmp, Tmp.begin(), Haydn::R13))
+    return true;
+  return !peiRequiresScratch(*MBB.getParent());
+}
+
+bool HaydnFrameLowering::canUseAsEpilogue(const MachineBasicBlock &MBB) const {
+  // PPCFrameLowering.cpp:558-561: scavenger at first terminator / return.
+  MachineBasicBlock &Tmp = const_cast<MachineBasicBlock &>(MBB);
+  MachineBasicBlock::iterator I =
+      Tmp.isReturnBlock() ? Tmp.getLastNonDebugInstr() : Tmp.getFirstTerminator();
+  if (getPEIScratchReg(Tmp, I, Haydn::R13, Register(), /*ProtectRetCC=*/true))
+    return true;
+  return !peiRequiresScratch(*MBB.getParent());
 }
 
 //===----------------------------------------------------------------------===//
@@ -373,10 +440,8 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
     // See CLAUDE.md register map (R0=soft-zero).
     //
     // slice Z: zero R0 via XOR32 R0,R0,R0 (x^x=0 identity), not the
-    // retired ZERO_GPR pseudo. The finalizer rewrites standalone XOR32 ->
-    // XOR32_M0 (EW_64Bit), so this is slot-OR compatible — the packetizer
-    // bundled prologue zero no longer fatals under -haydn-pure-tblgen-emit
-    // (the 8 obj-emit fatals that gated row-auction retirement).
+    // retired ZERO_GPR pseudo. Post-RA commit places XOR32 as a Format E
+    // member; the packetizer bundled prologue zero is a product parcel.
     BuildMI(MBB, MBBI, DL, TII->get(Haydn::XOR32), Haydn::R0)
         .addReg(Haydn::R0)
         .addReg(Haydn::R0)
@@ -414,7 +479,8 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
           .setMIFlag(MachineInstr::FrameSetup);
     } else {
       // Large stack: MatInt(size) into PEI scratch, SUB32 SP, SP, scratch.
-      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/Haydn::R13);
+      Register TempReg =
+          requirePEIScratchReg(MBB, MBBI, /*Avoid=*/Haydn::R13);
       emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
                            static_cast<int64_t>(AlignedStackSize),
                            MachineInstr::FrameSetup);
@@ -469,12 +535,14 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
       }
     }
 
-    // PEI scratch for stride-4 base; fall back to individual stores if that
-    // scratch is itself in the CSR list (would clobber before saving it).
-    Register StrideScratch = getPEIScratchReg(MF, /*Avoid=*/Haydn::R13);
-    bool ScratchNeedsSaving = false;
+    // PEI scratch for stride-4 base. Skip the stride path when none is free
+    // at MBBI (all caller-saved live) or the chosen scratch is itself a CSR
+    // being saved (would clobber before saving it). Never a used-reg pick.
+    Register StrideScratch =
+        getPEIScratchReg(MBB, MBBI, /*Avoid=*/Haydn::R13);
+    bool ScratchNeedsSaving = !StrideScratch;
     for (const auto &E : GPRCSRegs) {
-      if (E.Reg == StrideScratch) {
+      if (StrideScratch && E.Reg == StrideScratch) {
         ScratchNeedsSaving = true;
         break;
       }
@@ -568,26 +636,34 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
       }
 
       if (RunLen >= 2) {
-        Register BaseReg = getPEIScratchReg(MF, /*Avoid=*/Haydn::R13);
-        Register FrameReg = DRCSRegs[0].BaseReg;
-        int BaseOffset = DRCSRegs[0].Offset;
-        emitMaterializeOffset(MBB, MBBI, DL, TII, BaseReg, FrameReg,
-                              BaseOffset, MachineInstr::FrameSetup);
+        Register BaseReg =
+            getPEIScratchReg(MBB, MBBI, /*Avoid=*/Haydn::R13);
+        if (!BaseReg) {
+          for (const auto &E : DRCSRegs) {
+            emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, E.Reg, E.BaseReg,
+                         E.Offset, MachineInstr::FrameSetup);
+          }
+        } else {
+          Register FrameReg = DRCSRegs[0].BaseReg;
+          int BaseOffset = DRCSRegs[0].Offset;
+          emitMaterializeOffset(MBB, MBBI, DL, TII, BaseReg, FrameReg,
+                                BaseOffset, MachineInstr::FrameSetup);
 
-        // ST64 imm is dword element index (EA = base + (imm << 3)).
-        for (unsigned J = 0; J < RunLen; ++J) {
-          int RelOffset = DRCSRegs[J].Offset - BaseOffset;
-          BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST64))
-              .addReg(DRCSRegs[J].Reg)
-              .addReg(BaseReg)
-              .addImm(RelOffset >> 3)
-              .setMIFlag(MachineInstr::FrameSetup);
-        }
+          // ST64 imm is dword element index (EA = base + (imm << 3)).
+          for (unsigned J = 0; J < RunLen; ++J) {
+            int RelOffset = DRCSRegs[J].Offset - BaseOffset;
+            BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST64))
+                .addReg(DRCSRegs[J].Reg)
+                .addReg(BaseReg)
+                .addImm(RelOffset >> 3)
+                .setMIFlag(MachineInstr::FrameSetup);
+          }
 
-        for (unsigned J = RunLen; J < DRCSRegs.size(); ++J) {
-          emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, DRCSRegs[J].Reg,
-                       DRCSRegs[J].BaseReg, DRCSRegs[J].Offset,
-                       MachineInstr::FrameSetup);
+          for (unsigned J = RunLen; J < DRCSRegs.size(); ++J) {
+            emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, DRCSRegs[J].Reg,
+                         DRCSRegs[J].BaseReg, DRCSRegs[J].Offset,
+                         MachineInstr::FrameSetup);
+          }
         }
       } else {
         for (const auto &E : DRCSRegs) {
@@ -638,7 +714,8 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
           .addImm(AlignedStackSize)
           .setMIFlag(MachineInstr::FrameSetup);
     } else {
-      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/FP);
+      Register TempReg =
+          requirePEIScratchReg(MBB, MBBI, /*Avoid=*/FP);
       emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
                            static_cast<int64_t>(AlignedStackSize),
                            MachineInstr::FrameSetup);
@@ -648,20 +725,41 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
           .setMIFlag(MachineInstr::FrameSetup);
     }
 
-    CFIIndex = MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(
-        nullptr, MCRI->getDwarfRegNum(FP, true)));
+    // After FP = SP + AlignedStackSize, FP equals incoming SP (entry CFA).
+    // CFA must be FP+0. DW_CFA_def_cfa_register keeps the prior
+    // .cfi_def_cfa_offset StackSize, yielding CFA = FP + StackSize =
+    // incoming_SP + StackSize — wrong by the whole frame. DW_CFA_def_cfa
+    // sets register and offset together (RISCV/LoongArch shape).
+    CFIIndex = MF.addFrameInst(MCCFIInstruction::cfiDefCfa(
+        nullptr, MCRI->getDwarfRegNum(FP, true), /*Offset=*/0));
     BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::CFI_INSTRUCTION))
         .addCFIIndex(CFIIndex)
         .setMIFlags(MachineInstr::FrameSetup);
+
+    // Realign SP after FP captures incoming SP. Peer:
+    // RISCVFrameLowering.cpp:1142-1153 `ANDI SP, SP, -MaxAlign`. ANDI32
+    // is uimm20 ZEXT; materialise the mask and AND32.
+    if (TRI->hasStackRealignment(MF)) {
+      assert(!MFI.hasVarSizedObjects() &&
+             "Haydn: SP realignment with VLAs requires a base pointer");
+      const int64_t Mask =
+          -static_cast<int64_t>(MFI.getMaxAlign().value());
+      Register MaskReg = requirePEIScratchReg(MBB, MBBI, /*Avoid=*/Haydn::R13,
+                                              /*Avoid2=*/FP);
+      emitMaterializeImm32(MBB, MBBI, DL, TII, MaskReg, Mask,
+                           MachineInstr::FrameSetup);
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::AND32), Haydn::R13)
+          .addReg(Haydn::R13)
+          .addReg(MaskReg)
+          .setMIFlag(MachineInstr::FrameSetup);
+    }
   }
 
-  // Emit.cfi_offset directives for each saved callee-saved register.
-  // CFI offsets are CFA-relative (CFA = SP for non-FP frames, FP otherwise).
-  // getObjectOffset is frame-layout-relative (negative, below the post-prologue
-  // SP). For SP-CFA we must add getStackSize to get the CFA-relative offset
-  // otherwise the offset is double-counted. getFrameIndexReference handles the
-  // FP-vs-SP distinction and matches the path used by eliminateFrameIndex.
-  // See cfi-sp-cfa-requires-stacksize and F12.
+  // Emit .cfi_offset for each saved CSR. Offsets come from
+  // getCalleeSavedCFAOffset = getObjectOffset (frame-layout FI offset).
+  // That is the CFA-relative value this backend emits; do not add
+  // getStackSize here (that would double-count). See
+  // cfi-sp-cfa-requires-stacksize.
   for (const CalleeSavedInfo &CI : CSI) {
     Register Reg = CI.getReg();
     int FrameIdx = CI.getFrameIdx();
@@ -745,10 +843,11 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
   // Get the number of bytes to allocate from the FrameInfo.
   uint64_t StackSize = MFI.getStackSize();
 
-  // Dyn-alloca / VLA moves SP. CSR restores need post-prologue SP.
-  // Recover from FP (R14): prologue set FP = SP + StackSize, so
-  // fixed-frame SP = FP - StackSize. BP is folded into FP.
-  if (MFI.hasVarSizedObjects()) {
+  // Dyn-alloca / VLA or SP realign moves SP off FP - StackSize. CSR
+  // restores need the pre-realign SP. Recover from FP (R14): prologue set
+  // FP = incoming SP, so pre-realign SP = FP - StackSize. Peer:
+  // RISCVFrameLowering.cpp:1259-1308 RestoreSPFromFP.
+  if (MFI.hasVarSizedObjects() || TRI->hasStackRealignment(MF)) {
     assert(hasFP(MF) && "var-sized objects require FP (BP folded into FP)");
     Register FP = TRI->getFrameRegister(MF);
     if (StackSize == 0) {
@@ -762,8 +861,9 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
           .addImm(-static_cast<int64_t>(StackSize))
           .setMIFlag(MachineInstr::FrameDestroy);
     } else {
-      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/FP, /*Avoid2=*/Haydn::R13,
-                                           /*ProtectRetCC=*/true);
+      Register TempReg = requirePEIScratchReg(MBB, MBBI, /*Avoid=*/FP,
+                                              /*Avoid2=*/Haydn::R13,
+                                              /*ProtectRetCC=*/true);
       emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
                            static_cast<int64_t>(StackSize),
                            MachineInstr::FrameDestroy);
@@ -867,9 +967,9 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
     } else {
       // Large stack restore: MatInt(size) into PEI scratch, ADD32 SP.
       // RetCC R1/R2 are excluded by getPEIScratchReg permanently.
-      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/Haydn::R13,
-                                           /*Avoid2=*/Register(),
-                                           /*ProtectRetCC=*/true);
+      Register TempReg = requirePEIScratchReg(MBB, MBBI, /*Avoid=*/Haydn::R13,
+                                              /*Avoid2=*/Register(),
+                                              /*ProtectRetCC=*/true);
       emitMaterializeImm32(MBB, MBBI, DL, TII, TempReg,
                            static_cast<int64_t>(StackSize),
                            MachineInstr::FrameDestroy);
@@ -914,26 +1014,46 @@ HaydnFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const HaydnRegisterInfo *TRI = MF.getSubtarget<HaydnSubtarget>().getRegisterInfo();
 
-  // Use FP if we have one, otherwise use SP
-  FrameReg = TRI->getFrameRegister(MF);
-
-  // The offset is the object's offset from the frame pointer/stack pointer
-  // For SP (when no FP), the offset is negative (below SP)
-  // For FP, the offset is positive (above FP for locals, below for saved regs)
   int64_t Offset = MFI.getObjectOffset(FI);
 
-  // If using SP, adjust offset by stack size
-  if (!hasFP(MF)) {
-    Offset += MFI.getStackSize();
+  // CSR spill slots live above the realign pad. Address them from the
+  // pre-realign SP (prologue stores before AND32; epilogue RestoreSPFromFP
+  // then loads). Peer: RISCVFrameLowering.cpp:1418-1426.
+  const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
+  if (!CSI.empty()) {
+    int MinCSFI = CSI.front().getFrameIdx();
+    int MaxCSFI = CSI.back().getFrameIdx();
+    if (FI >= MinCSFI && FI <= MaxCSFI) {
+      FrameReg = Haydn::R13;
+      Offset += static_cast<int64_t>(MFI.getStackSize());
+      return StackOffset::getFixed(Offset);
+    }
   }
+
+  // After AND32, non-fixed locals sit at the realigned SP. No BP: VLAs +
+  // realign is fail-closed in determineFrameLayout. Peer:
+  // RISCVFrameLowering.cpp:1428-1467.
+  if (TRI->hasStackRealignment(MF) && !MFI.isFixedObjectIndex(FI)) {
+    assert(!MFI.hasVarSizedObjects() &&
+           "Haydn: stack realignment with VLAs requires a base pointer");
+    FrameReg = Haydn::R13;
+    Offset += static_cast<int64_t>(MFI.getStackSize());
+    return StackOffset::getFixed(Offset);
+  }
+
+  FrameReg = TRI->getFrameRegister(MF);
+  if (!hasFP(MF))
+    Offset += static_cast<int64_t>(MFI.getStackSize());
 
   return StackOffset::getFixed(Offset);
 }
 
 bool HaydnFrameLowering::allocateScavengingFrameIndexesNearIncomingSP(
     const MachineFunction &MF) const {
-  // hasFP → near FP; !hasFP → late near final SP (see header).
-  return hasFP(MF);
+  // hasFP && !realign → near FP; realign / !hasFP → late near final SP.
+  const TargetRegisterInfo *TRI =
+      MF.getSubtarget<HaydnSubtarget>().getRegisterInfo();
+  return hasFP(MF) && !TRI->hasStackRealignment(MF);
 }
 
 void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
@@ -943,7 +1063,6 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
 
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const TargetRegisterInfo *TRI = ST.getRegisterInfo();
-  const HaydnInstrInfo *TII = ST.getInstrInfo();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetRegisterClass &RC = Haydn::GPR32RegClass;
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
@@ -953,18 +1072,9 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
   // estimateStackSize is small (yarpgen_seed2). Keep one emergency FI
   // 4 bytes, same insurance as ARM without a free IP. Never pad N>1.
   // Nested phys scavenge is gone (vreg EFI).
-  unsigned ScavSlotsNum = 1;
-
-  // Far branch relaxation: product parcels are Format E (12 B via
-  // productParcelBytes). Large functions may need insertIndirectBranch;
-  // reserve a FI for full-pressure (BranchRelaxation's fresh RegScavenger).
-  unsigned EstBytes = 0;
-  for (const MachineBasicBlock &MBB : MF)
-    for (const MachineInstr &MI : MBB)
-      EstBytes += TII->getInstSizeInBytes(MI);
-  bool MayNeedBranchRelax = !isInt<16>(static_cast<int64_t>(EstBytes));
-  if (MayNeedBranchRelax)
-    ScavSlotsNum = std::max(ScavSlotsNum, 1u);
+  // One emergency FI. BranchRelaxation shares it (RISC-V style); a second
+  // slot was never reserved — MayNeedBranchRelax used max(1, 1).
+  const unsigned ScavSlotsNum = 1;
 
   for (unsigned I = 0; I < ScavSlotsNum; ++I) {
     int FI = MFI.CreateSpillStackObject(TRI->getSpillSize(RC),
@@ -1106,10 +1216,12 @@ bool HaydnFrameLowering::restoreCalleeSavedRegisters(
 MachineBasicBlock::iterator HaydnFrameLowering::eliminateCallFramePseudoInstr(
     MachineFunction &MF, MachineBasicBlock &MBB,
     MachineBasicBlock::iterator MI) const {
-  // F17: Expand ADJCALLSTACKDOWN/UP. hasReservedCallFrame is false, so each
-  // call sequence must adjust SP by the outgoing stack-arg size. Operand 0 is
-  // the raw byte amount from CallLowering; ADJCALLSTACKDOWN decrements SP,
-  // ADJCALLSTACKUP restores it. Zero (after alignment) is a no-op.
+  // Sole owner of ADJCALLSTACKDOWN/UP (PEI). ExpandPseudos does not expand
+  // them. Peer: RISCVFrameLowering.cpp:1868 eliminateCallFramePseudoInstr.
+  // hasReservedCallFrame is false, so each call sequence must adjust SP by
+  // the outgoing stack-arg size. Operand 0 is the raw byte amount from
+  // CallLowering; ADJCALLSTACKDOWN decrements SP, ADJCALLSTACKUP restores
+  // it. Zero (after alignment) is a no-op.
   //
   // Alignment (B1 / fir_blms* freestanding dual): SP must stay StackAlign(8)
   // across the call so the callee's DR CSR st64 spills never see ≡4 mod 8.
@@ -1141,7 +1253,8 @@ MachineBasicBlock::iterator HaydnFrameLowering::eliminateCallFramePseudoInstr(
           .addImm(Amount);
     } else {
       // Large adjustment: MatInt into PEI scratch, then SUB32/ADD32.
-      Register TempReg = getPEIScratchReg(MF, /*Avoid=*/Haydn::R13);
+      Register TempReg =
+          requirePEIScratchReg(MBB, MI, /*Avoid=*/Haydn::R13);
       emitMaterializeImm32(MBB, MI, DL, TII, TempReg, Amount,
                            MachineInstr::NoFlags);
       unsigned WideOpc = (MI->getOpcode() == Haydn::ADJCALLSTACKDOWN)

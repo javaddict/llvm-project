@@ -200,6 +200,11 @@ public:
     SMSLoopInfos[KernelBB] = std::move(Info);
   }
 
+  /// Drop kernel SMS metadata. Used by post-RA multi-stage JM-META rollback
+  /// so a failed transaction cannot leak `#<swps>` into the ordinary baseline.
+  void eraseSMSLoop(const MachineBasicBlock *KernelBB) {
+    SMSLoopInfos.erase(KernelBB);
+  }
 
   const SMSSWPSInfo *getSMSLoop(const MachineBasicBlock *KernelBB) const {
     auto It = SMSLoopInfos.find(KernelBB);

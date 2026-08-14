@@ -1,0 +1,7 @@
+-- Testing: 10 tests, 4 workers --
+Testing Time: 0.12s
+
+Total Discovered Tests: 10
+  Passed           :   9 (90.00%)
+  Failed           :   1 (10.00%)
+  Expectedly Failed:   0 (0.00%)

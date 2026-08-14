@@ -32,7 +32,10 @@ using namespace llvm;
 
 // Call-clobbered first (R1–R7), then callee-saved temps that may still be
 // dead at I (R11…R8). R12 is last and only considered when PreferNotR12 is
-// false — never "acquire" fixed R12 as free AT.
+// false — never "acquire" fixed R12 as free AT. R0 is absent: reserved
+// soft-zero, not a scavenger candidate (see HaydnPostRAScratch.h). Generic
+// RegScavenger uses allocation order and skips reserved regs, so it cannot
+// express AllowBorrow / NeedsZeroBase / R12-last.
 static constexpr MCPhysReg PostRAScratchPriority[] = {
     Haydn::R1, Haydn::R2,  Haydn::R3,  Haydn::R4, Haydn::R5, Haydn::R6,
     Haydn::R7, Haydn::R11, Haydn::R10, Haydn::R9, Haydn::R8, Haydn::R12,

@@ -6,6 +6,8 @@
 # .eh_frame CIE return-address column = 15 (R15=LR). Fixed 2026-06-16:
 # HaydnMCTargetDesc.cpp MCRegisterInfo init was R13(SP); corrected to R15(LR)
 # to match the CodeGen layer (HaydnRegisterInfo.cpp:37).
+# Code alignment factor is golden two-byte min bundle-address alignment
+# (HaydnFormat.h MinBundleAddressAlignBytes), not EncodedBytes.
 
 func:
   .cfi_startproc
@@ -15,7 +17,7 @@ func:
 # CHECK: 00000000 00000010 00000000 CIE
 # CHECK:   Version:               1
 # CHECK:   Augmentation:          "zR"
-# CHECK:   Code alignment factor: 1
+# CHECK:   Code alignment factor: 2
 # CHECK:   Data alignment factor: -4
 # CHECK:   Return address column: 15
 # CHECK:   Augmentation data:     1B

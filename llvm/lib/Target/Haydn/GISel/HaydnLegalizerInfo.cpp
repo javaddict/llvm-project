@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnLegalizerInfo.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
@@ -17,9 +18,18 @@
 #include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
 #include "llvm/CodeGen/GlobalISel/MIPatternMatch.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/RuntimeLibcalls.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
@@ -77,9 +87,10 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   //   v2i32 — X2MULPL32 (low 32 of each dual 32x32 product)
   //   v4i16 — NOT X4MUL16 (2-dest DSP mul). Scalarize; true X4MUL16 only via
   //           llvm.haydn.x4mul16 / haydn_x4mul16.
-  // s64: custom MUL64_LL (widen 32x32->64) or schoolbook partials — never
-  // __muldi3. Use customFor for s64, not legalFor/libcallFor (legalFor would
-  // hit selector LIBCALL_MUL64; libcallFor fails Haydn call arg splitting).
+  // s64: custom G_HAYDN_MUL64_WIDEN{,U} (widen 32x32->64) or schoolbook
+  // partials — never __muldi3. Use customFor for s64, not legalFor/libcallFor
+  // (legalFor would leave G_MUL for a selector that has no s64 Pat;
+  // libcallFor fails Haydn call arg splitting).
   getActionDefinitionsBuilder(G_MUL)
       .legalFor({S32, V2I32})
       .customFor({S64})
@@ -573,32 +584,54 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   //===--------------------------------------------------------------------===
   // Floating-point — soft-float (no FPU; values live as IEEE bits in GPR/DR)
   //===--------------------------------------------------------------------===
-  // Shape (mirrors RISC-V softfloat GISel):
+  // Closed contract: every advertised op either has a registered RTLIB impl
+  // in HaydnSubtarget::initLibcallLoweringInfo, a generic .lower that does
+  // not need a libcall, or .unsupported() (diagnostic, not ICE).
   //   * arith / libm / converts → .libcallFor (compiler-rt / libm)
   //   * fneg / fabs / copysign  → generic .lower (sign-bit integer tricks)
   //   * fconstant              → custom bitcast→G_CONSTANT (not constpool)
   //   * minimum/maximum*       → custom → fminnum/fmaxnum libcall
+  //   * G_FMAD                 → generic .lower (fmul+fadd); no RTLIB
+  //   * constrained/strict FP  → unsupported (no FP env)
   // Generic LegalizerHelper has no libcall cases for fneg/fabs/copysign;
   // .lower is the canonical soft-float path (do not reimplement in custom).
   getActionDefinitionsBuilder({
       G_FADD, G_FSUB, G_FMUL, G_FDIV, G_FREM,
-      G_FMA, G_FMAD, G_FSQRT,
+      G_FMA, G_FSQRT,
       G_FCOS, G_FSIN, G_FEXP, G_FLOG, G_FLOG2, G_FLOG10,
       G_FPOWI, G_FPOW,
       G_FCEIL, G_FFLOOR, G_FRINT, G_FNEARBYINT,
       G_FMINNUM, G_FMAXNUM,
-      G_STRICT_FADD, G_STRICT_FSUB, G_STRICT_FMUL, G_STRICT_FDIV,
-      G_STRICT_FREM, G_STRICT_FSQRT, G_STRICT_FMA, G_STRICT_FLDEXP,
+      G_INTRINSIC_TRUNC, G_INTRINSIC_ROUND, G_INTRINSIC_ROUNDEVEN,
   })
       // Soft-float scalars only. Vectors (e.g. v4f32) have no libcall form —
-      // scalarize then libcall per lane.
+      // scalarize then libcall per lane. Leftover widths (f16/f128) fail
+      // closed instead of advertising a nameless libcall.
       .libcallFor({S32, S64})
       .scalarizeIf(ScalarizeWideVec(0), 0)
-      .scalarize(0);
+      .scalarize(0)
+      .unsupported();
+
+  // G_FMAD has no RTLIB mapping (LegalizerHelper::libcall default-fails).
+  // Generic lower rewrites to G_FMUL+G_FADD, which then libcall.
+  getActionDefinitionsBuilder(G_FMAD)
+      .lowerFor({S32, S64})
+      .scalarize(0)
+      .unsupported();
+
+  // Constrained FP: LegalizerHelper::libcall has no STRICT cases, and Haydn
+  // has no FP environment. Fail closed rather than ICE.
+  getActionDefinitionsBuilder({
+      G_STRICT_FADD, G_STRICT_FSUB, G_STRICT_FMUL, G_STRICT_FDIV,
+      G_STRICT_FREM, G_STRICT_FSQRT, G_STRICT_FMA, G_STRICT_FLDEXP,
+  }).unsupported();
 
   // FP ↔ int / FP size conversions are multi-type. Narrow integer results
   // (s16 = G_FPTOUI s64) must clamp to s32 before libcall; same for sitofp
-  // sources. fptrunc/fpext stay s32↔s64 libcalls.
+  // sources. fptrunc/fpext: f32↔f64 are compiler-rt libcalls. f16 uses a
+  // custom integer-bit ABI (Haydn CC has no half); fp128/same-size fail
+  // closed. Do NOT clampScalar f16→s32 before the libcall check — that was
+  // the s32←s32 G_FPEXT ICE (T-DSP10).
   getActionDefinitionsBuilder({G_FPTOSI, G_FPTOUI})
       .libcallForCartesianProduct({S32, S64}, {S32, S64})
       .clampScalar(0, S32, S64)
@@ -611,17 +644,25 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .scalarize(0);
   getActionDefinitionsBuilder({G_FPTRUNC, G_FPEXT})
       .libcallFor({{S32, S64}, {S64, S32}})
-      .clampScalar(0, S32, S64)
-      .clampScalar(1, S32, S64);
+      .customFor({{S32, S16}, {S16, S32}, {S64, S16}, {S16, S64}})
+      .unsupportedIf([](const LegalityQuery &Query) {
+        if (Query.Types.size() < 2)
+          return true;
+        // Same-size is not an extension/truncation.
+        return Query.Types[0] == Query.Types[1];
+      })
+      .unsupported();
 
   // Sign-bit ops: use generic lower (XOR/AND/copysign graft). Same code as
   // RISCVLegalizerInfo softfloat — no target custom needed.
   getActionDefinitionsBuilder({G_FNEG, G_FABS})
       .lowerFor({S32, S64})
-      .scalarize(0);
+      .scalarize(0)
+      .unsupported();
   getActionDefinitionsBuilder(G_FCOPYSIGN)
       .lowerFor({{S32, S32}, {S64, S64}})
-      .scalarize(0);
+      .scalarize(0)
+      .unsupported();
 
   // llvm.minimum/maximum and *num: no reliable baremetal libcall (and generic
   // .lower of *num emits G_FCANONICALIZE we do not select). Map to
@@ -629,18 +670,21 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder({G_FMINIMUM, G_FMAXIMUM,
                                G_FMINIMUMNUM, G_FMAXIMUMNUM})
       .customFor({S32, S64})
-      .scalarize(0);
+      .scalarize(0)
+      .unsupported();
 
   // Bitcast IEEE bits → G_CONSTANT in the float-typed vreg. Generic .lower
   // would load from the constant pool; custom matches RISC-V softfloat.
   getActionDefinitionsBuilder(G_FCONSTANT)
-      .customFor({S32, S64});
+      .customFor({S16, S32, S64})
+      .unsupported();
 
   // G_FCMP: result is s1, so it cannot share the bulk {S32,S64} libcall rule.
   getActionDefinitionsBuilder(G_FCMP)
       .libcallFor({{S1, S32}, {S1, S64}})
       // Residual vector FCMP (complex-5 v2f32 SLP) — scalarize lanes first.
-      .scalarize(1);
+      .scalarize(1)
+      .unsupported();
 
   //===--------------------------------------------------------------------===
   // Atomics — all lower (no native atomics)
@@ -666,17 +710,36 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   //===--------------------------------------------------------------------===
   // Varargs
   //===--------------------------------------------------------------------===
-  // G_VASTART: single p0 argument (va_list pointer)
-  getActionDefinitionsBuilder(G_VASTART).legalFor({P0});
+  // G_VASTART / G_VAARG: custom at the legalizer (RISCV legalizeVAStart
+  // 812, AArch64 legalizeVaArg 2158). Do NOT leave them legal for a
+  // post-RA ExpandPseudos VAARG_* / VASTART pseudo.
+  getActionDefinitionsBuilder(G_VASTART).customFor({P0});
 
-  // G_VAARG: kept LEGAL and selected by a custom handler in
-  // HaydnInstructionSelector. The legalizer must NOT lower it to
-  // generic G_LOAD/G_PTR_ADD: the two-bank varargs ABI needs bank-selection
-  // (i64/f64 -> DR cursor __vr_top/__vr_offs via LD64_S1; else -> GPR cursor
-  // __gr_top/__gr_offs via LD32) with per-bank overflow to __stack, which the
-  // generic single-cursor lowering cannot express. The custom selector emits
-  // concrete Haydn ops (LD32/LD64_S1/ST32/SUB32/ADDI32) and constrains each.
-  getActionDefinitionsBuilder(G_VAARG).alwaysLegal();
+  // Two-bank varargs ABI: i64/f64 -> DR cursor __vr_top/__vr_offs; else
+  // GPR cursor __gr_top/__gr_offs; per-bank overflow to __stack.
+  // Product ABI advertises only scalar/pointer 32- and 64-bit va_arg forms.
+  // Vectors, i128, and other widths must fail closed. Sub-32 integer
+  // scalars widen to s32 (C default argument promotions).
+  getActionDefinitionsBuilder(G_VAARG)
+      .customFor({S32, S64, P0})
+      .widenScalarIf(
+          [](const LegalityQuery &Query) {
+            const LLT Ty = Query.Types[0];
+            return Ty.isScalar() && Ty.getSizeInBits() < 32;
+          },
+          changeTo(0, S32))
+      .unsupportedIf([](const LegalityQuery &Query) {
+        const LLT Ty = Query.Types[0];
+        if (Ty.isVector())
+          return true;
+        if (Ty.isPointer())
+          return false;
+        if (!Ty.isScalar())
+          return true;
+        const unsigned Sz = Ty.getSizeInBits();
+        return Sz != 32 && Sz != 64;
+      })
+      .unsupported();
 
   //===--------------------------------------------------------------------===
   // Extended load/store — peer AIE2LegalizerInfo / RISCV ExtLoadActions
@@ -888,27 +951,42 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // Control/misc with type idx (pointers / i32)
   getActionDefinitionsBuilder({
       G_BLOCK_ADDR, G_JUMP_TABLE, G_BRINDIRECT, G_BRJT,
-      G_DYN_STACKALLOC,
       G_READ_REGISTER, G_WRITE_REGISTER,
       G_READCYCLECOUNTER, G_READSTEADYCOUNTER,
       G_STACKSAVE, G_STACKRESTORE,
   }).legalFor({S32, P0});
 
-  // FP misc
+  // T-ABI2: G_DYN_STACKALLOC is custom-lowered (RISCV
+  // RISCVLegalizerInfo.cpp:512-513 .lower() + LegalizerHelper
+  // getDynStackAllocTargetPtr). Size is rounded to StackAlign(8) and the
+  // new SP is masked with -8 so alloca(n) with n%8≠0 cannot leave
+  // SP≡4 mod 8 (HaydnCallingConv MEMORY_FAULT). Align > 8 is fail-closed
+  // (no BP / no ANDI32 negative mask). Do not leave this legal for the
+  // selector: that path discarded the align operand and did not re-round.
+  getActionDefinitionsBuilder(G_DYN_STACKALLOC)
+      .customFor({{P0, S32}})
+      .clampScalar(1, S32, S32)
+      .unsupported();
+
+  // FP misc. trunc/round/roundeven libcall with the arith group above.
+  // lrint/llrint generic-lower to frint + fptosi (frint is a libcall).
+  // fptrunc_round has no Haydn/RTLIB story.
   getActionDefinitionsBuilder({
-      G_INTRINSIC_TRUNC, G_INTRINSIC_ROUND, G_INTRINSIC_ROUNDEVEN,
       G_INTRINSIC_LRINT, G_INTRINSIC_LLRINT,
-      G_INTRINSIC_FPTRUNC_ROUND,
-  }).lowerFor({S32, S64});
+  }).lowerFor({S32, S64}).unsupported();
+  getActionDefinitionsBuilder(G_INTRINSIC_FPTRUNC_ROUND).unsupported();
 
   // Soft-float: no FP class hardware. Was .legalFor but nothing selects
   // G_IS_FPCLASS → "cannot select" (divsc3/mulsc3 via crt_isnan/crt_isinf).
   // Generic lower turns it into integer bit tests on the IEEE bit-pattern
   // (same as AArch64 .lower() / RISCV softfloat .lowerFor).
+  // Bare .lower() on leftover widths hits getFltSemanticForLLT
+  // llvm_unreachable (s80/non-IEEE) — that was the unfiled crash that
+  // disabled 31 libm entrypoints. Only s32/s64 are product IEEE; else
+  // diagnostic.
   getActionDefinitionsBuilder(G_IS_FPCLASS)
       .lowerFor({{S1, S32}, {S1, S64}})
-      .scalarize(0)
-      .lower();
+      .unsupported();
 
   // FP environment
   getActionDefinitionsBuilder({
@@ -1034,12 +1112,12 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       G_VECTOR_COMPRESS,
   }).lowerFor({S32, S64});
 
-  getActionDefinitionsBuilder(G_PTRAUTH_GLOBAL_VALUE).legalFor({P0});
+  getActionDefinitionsBuilder(G_PTRAUTH_GLOBAL_VALUE).unsupported();
 }
 
 // Lower a true 64x64->64 multiply (G_MUL <s64> with at least one non-widened
-// operand) to a native schoolbook sequence using the MUL64_* partial-product
-// family. See the G_MUL block in legalizeCustom for the derivation.
+// operand) to a schoolbook of generic G_MUL <s64> partials. See the G_MUL
+// block in legalizeCustom for the derivation.
 // Decomposition (result mod 2^64):
 // aLo, aHi = unmerge a; bLo, bHi = unmerge b (each half s32)
 // LL = (zext aLo) * (zext bLo) -- low x low, full 64-bit UNSIGNED product
@@ -1049,15 +1127,15 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
 // (aHi*bHi contributes only to bits >= 64, dropped by the mod-2^64 result.)
 // The three inner G_MUL <s64> ops each have two zext-of-s32 operands, so when
 // the legalizer re-visits them they take the widening-multiply branch and
-// lower to a single MUL64_ULL (unsigned x unsigned). The cross and LL partials
-// MUST be unsigned because G_MUL <s64> is signless at the IR level -- the low
-// 64 bits of the product are the same whether the operands are interpreted as
-// signed or unsigned, but only the UNSIGNED 32x32->64 widening produces the
-// correct high-32 bits of each partial (a SIGNED widening sign-extends the
-// wrong half when bit 31 of a partial operand is set). (MurmurHash3
-// finalizer on uint64_t) was the trigger: the previous sext + MUL64_LL path
-// corrupted the high 32 bits of every round's products. The zext/unmerge
-// shl/add ops are all already handled by the Haydn selector.
+// become G_HAYDN_MUL64_WIDENU. The cross and LL partials MUST be unsigned
+// because G_MUL <s64> is signless at the IR level -- the low 64 bits of the
+// product are the same whether the operands are interpreted as signed or
+// unsigned, but only the UNSIGNED 32x32->64 widening produces the correct
+// high-32 bits of each partial (a SIGNED widening sign-extends the wrong
+// half when bit 31 of a partial operand is set). The previous sext +
+// signed-widening path corrupted the high 32 bits of every round's products
+// (MurmurHash3 finalizer on uint64_t). The zext/unmerge/shl/add ops are
+// already handled by the Haydn selector.
 static void lowerMul64Schoolbook(MachineIRBuilder &MIB, MachineRegisterInfo &MRI,
                                  MachineInstr &MI) {
   using namespace TargetOpcode;
@@ -1078,13 +1156,13 @@ static void lowerMul64Schoolbook(MachineIRBuilder &MIB, MachineRegisterInfo &MRI
   MIB.buildUnmerge({BLo, BHi}, Src1);
 
   // Zero-extend each half to 64 bits so the inner G_MUL <s64> ops hit the
-  // widening-multiply branch (both zext-of-s32) and lower to MUL64_ULL
-  // (unsigned x unsigned). Zero extension is REQUIRED here, not sign
+  // widening-multiply branch (both zext-of-s32) and become
+  // G_HAYDN_MUL64_WIDENU. Zero extension is REQUIRED here, not sign
   // extension: G_MUL <s64> is signless, and only the unsigned 32x32->64
   // widening produces the correct high 32 bits of each partial product. With
-  // sign extension the previous code selected MUL64_LL (signed x signed)
-  // which sign-extends each operand's wrong half and corrupts any product
-  // whose partials have bit 31 set in their low-32 operands.
+  // sign extension the previous path used signed widening, which
+  // sign-extends each operand's wrong half and corrupts any product whose
+  // partials have bit 31 set in their low-32 operands.
   auto ZextTo64 = [&](Register R) {
     Register Ext = MRI.createGenericVirtualRegister(S64);
     MIB.buildZExt(Ext, R);
@@ -1095,7 +1173,8 @@ static void lowerMul64Schoolbook(MachineIRBuilder &MIB, MachineRegisterInfo &MRI
   Register BLo64 = ZextTo64(BLo);
   Register BHi64 = ZextTo64(BHi);
 
-  // Three 32x32->64 widening partial products. Each lowers to MUL64_ULL.
+  // Three 32x32->64 widening partial products. Each becomes
+  // G_HAYDN_MUL64_WIDENU.
   Register LL = MRI.createGenericVirtualRegister(S64);
   MIB.buildMul(LL, ALo64, BLo64);
   Register LH = MRI.createGenericVirtualRegister(S64);
@@ -1117,12 +1196,272 @@ static void lowerMul64Schoolbook(MachineIRBuilder &MIB, MachineRegisterInfo &MRI
   MI.eraseFromParent();
 }
 
+/// IEEE half ↔ f32/f64 via compiler-rt. Haydn CC has no f16; compiler-rt
+/// without COMPILER_RT_HAS_FLOAT16 uses uint16_t, which Haydn passes/returns
+/// in a GPR32. Form the libcall with i32/f32/f64 types so CC_Haydn can assign
+/// them. Do not invent rounding: the named helpers are the golden symbols.
+static bool legalizeHalfConvertLibcall(LegalizerHelper &Helper, MachineInstr &MI,
+                                       LostDebugLocObserver &LocObserver) {
+  using namespace TargetOpcode;
+  MachineIRBuilder &MIB = Helper.MIRBuilder;
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+  MIB.setInstrAndDebugLoc(MI);
+
+  const Register Dst = MI.getOperand(0).getReg();
+  const Register Src = MI.getOperand(1).getReg();
+  const unsigned DstBits = MRI.getType(Dst).getSizeInBits();
+  const unsigned SrcBits = MRI.getType(Src).getSizeInBits();
+  LLVMContext &Ctx = MI.getMF()->getFunction().getContext();
+  const LLT S32 = LLT::scalar(32);
+
+  RTLIB::Libcall LC = RTLIB::UNKNOWN_LIBCALL;
+  Type *ArgTy = nullptr;
+  Type *RetTy = nullptr;
+  Register ArgReg = Src;
+  Register RetReg = Dst;
+  bool TruncRetToHalf = false;
+
+  if (MI.getOpcode() == G_FPEXT && SrcBits == 16) {
+    // uint16_t ABI: zero-extend the half bits into GPR32 (high 16 = 0).
+    ArgReg = MIB.buildZExt(S32, Src).getReg(0);
+    ArgTy = Type::getInt32Ty(Ctx);
+    if (DstBits == 32) {
+      LC = RTLIB::FPEXT_F16_F32;
+      RetTy = Type::getFloatTy(Ctx);
+    } else if (DstBits == 64) {
+      LC = RTLIB::FPEXT_F16_F64;
+      RetTy = Type::getDoubleTy(Ctx);
+    }
+  } else if (MI.getOpcode() == G_FPTRUNC && DstBits == 16) {
+    TruncRetToHalf = true;
+    RetReg = MRI.createGenericVirtualRegister(S32);
+    RetTy = Type::getInt32Ty(Ctx);
+    if (SrcBits == 32) {
+      LC = RTLIB::FPROUND_F32_F16;
+      ArgTy = Type::getFloatTy(Ctx);
+    } else if (SrcBits == 64) {
+      LC = RTLIB::FPROUND_F64_F16;
+      ArgTy = Type::getDoubleTy(Ctx);
+    }
+  }
+
+  if (LC == RTLIB::UNKNOWN_LIBCALL || !ArgTy || !RetTy)
+    return false;
+
+  const LegalizerHelper::LegalizeResult Status =
+      createLibcall(MIB, LC, {RetReg, RetTy, 0}, {{ArgReg, ArgTy, 0}},
+                    LocObserver, &MI);
+  if (Status != LegalizerHelper::Legalized)
+    return false;
+  if (TruncRetToHalf)
+    MIB.buildTrunc(Dst, RetReg);
+  MI.eraseFromParent();
+  return true;
+}
+
+namespace {
+
+// Structured va_list is 5×i32: __stack, __gr_top, __vr_top, __gr_offs,
+// __vr_offs. Offsets must match CallLowering saveVarArgRegisters.
+constexpr int kVaStackOff = 0;
+constexpr int kVaGrTopOff = 4;
+constexpr int kVaVrTopOff = 8;
+constexpr int kVaGrOffsOff = 12;
+constexpr int kVaVrOffsOff = 16;
+constexpr int64_t kVaStackStep = 8;
+
+Register vaListFieldPtr(MachineIRBuilder &MIB, Register List, int ByteOff,
+                        LLT PtrTy, LLT S32) {
+  if (ByteOff == 0)
+    return List;
+  auto Off = MIB.buildConstant(S32, ByteOff);
+  return MIB.buildPtrAdd(PtrTy, List, Off).getReg(0);
+}
+
+MachineMemOperand *vaListMMO(MachineFunction &MF, MachineMemOperand::Flags F,
+                             LLT MemTy, Align A, int ByteOff) {
+  return MF.getMachineMemOperand(MachinePointerInfo().getWithOffset(ByteOff), F,
+                                 MemTy, A);
+}
+
+} // namespace
+
+bool HaydnLegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
+                                           MachineInstr &MI) const {
+  MachineIRBuilder &MIB = Helper.MIRBuilder;
+  switch (cast<GIntrinsic>(MI).getIntrinsicID()) {
+  default:
+    return true;
+  case Intrinsic::vaend:
+    MI.eraseFromParent();
+    return true;
+  case Intrinsic::vacopy: {
+    // AArch64LegalizerInfo.cpp:1706 copies the va_list object; Haydn's list
+    // is 5×i32 (getVaListSizeInBits). Copy word-by-word so each G_LOAD/G_STORE
+    // is already legal (s160 is not).
+    MachineFunction &MF = *MI.getMF();
+    const LLT S32 = LLT::scalar(32);
+    const LLT PtrTy = LLT::pointer(0, 32);
+    Register DstLst = MI.getOperand(1).getReg();
+    Register SrcLst = MI.getOperand(2).getReg();
+    MIB.setInstrAndDebugLoc(MI);
+    for (unsigned W = 0; W < 5; ++W) {
+      const int ByteOff = static_cast<int>(W * 4);
+      Register SrcAddr = vaListFieldPtr(MIB, SrcLst, ByteOff, PtrTy, S32);
+      Register DstAddr = vaListFieldPtr(MIB, DstLst, ByteOff, PtrTy, S32);
+      auto Tmp = MIB.buildLoad(
+          S32, SrcAddr,
+          *vaListMMO(MF, MachineMemOperand::MOLoad, S32, Align(4), ByteOff));
+      MIB.buildStore(
+          Tmp, DstAddr,
+          *vaListMMO(MF, MachineMemOperand::MOStore, S32, Align(4), ByteOff));
+    }
+    MI.eraseFromParent();
+    return true;
+  }
+  }
+}
+
+bool HaydnLegalizerInfo::legalizeVAStart(LegalizerHelper &Helper,
+                                         MachineInstr &MI) const {
+  // RISCVLegalizerInfo.cpp:812 — store save-area addresses into va_list.
+  assert(MI.getOpcode() == TargetOpcode::G_VASTART);
+  MachineIRBuilder &MIB = Helper.MIRBuilder;
+  MachineFunction &MF = *MI.getMF();
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  MIB.setInstrAndDebugLoc(MI);
+  if (!FuncInfo->hasVarArgsSaveAreas()) {
+    MI.eraseFromParent();
+    return true;
+  }
+
+  const LLT PtrTy = LLT::pointer(0, 32);
+  const LLT S32 = LLT::scalar(32);
+  Register List = MI.getOperand(0).getReg();
+  const int GprFI = FuncInfo->getVarArgsGprFI();
+  const int DrFI = FuncInfo->getVarArgsDrFI();
+  const int StackFI = FuncInfo->getVarArgsStackFI();
+  const int GprSize = FuncInfo->getVarArgsGprSize();
+  const int DrSize = FuncInfo->getVarArgsDrSize();
+
+  auto StorePtrField = [&](int FI, int64_t Extra, int FieldOff) {
+    Register Addr = MIB.buildFrameIndex(PtrTy, FI).getReg(0);
+    if (Extra != 0) {
+      auto Off = MIB.buildConstant(S32, Extra);
+      Addr = MIB.buildPtrAdd(PtrTy, Addr, Off).getReg(0);
+    }
+    Register FieldPtr = vaListFieldPtr(MIB, List, FieldOff, PtrTy, S32);
+    MIB.buildStore(Addr, FieldPtr,
+                   *vaListMMO(MF, MachineMemOperand::MOStore, PtrTy, Align(4),
+                              FieldOff));
+  };
+  auto StoreOffsField = [&](int BankSize, int FieldOff) {
+    auto Imm = MIB.buildConstant(S32, -BankSize);
+    Register FieldPtr = vaListFieldPtr(MIB, List, FieldOff, PtrTy, S32);
+    MIB.buildStore(Imm, FieldPtr,
+                   *vaListMMO(MF, MachineMemOperand::MOStore, S32, Align(4),
+                              FieldOff));
+  };
+
+  StorePtrField(StackFI, /*Extra=*/0, kVaStackOff);
+  StorePtrField(GprFI, GprSize, kVaGrTopOff);
+  StorePtrField(DrFI, DrSize, kVaVrTopOff);
+  StoreOffsField(GprSize, kVaGrOffsOff);
+  StoreOffsField(DrSize, kVaVrOffsOff);
+  MI.eraseFromParent();
+  return true;
+}
+
+bool HaydnLegalizerInfo::legalizeVAArg(LegalizerHelper &Helper,
+                                       MachineInstr &MI) const {
+  // AArch64LegalizerInfo.cpp:2158 — GISel va_arg is straight-line (no CFG).
+  // Haydn adds GPR/DR bank select plus overflow onto __stack via G_SELECT.
+  MachineIRBuilder &MIB = Helper.MIRBuilder;
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+  MachineFunction &MF = *MI.getMF();
+
+  Register Dst = MI.getOperand(0).getReg();
+  Register List = MI.getOperand(1).getReg();
+  LLT DstTy = MRI.getType(Dst);
+  const LLT PtrTy = LLT::pointer(0, 32);
+  const LLT S32 = LLT::scalar(32);
+  const LLT S1 = LLT::scalar(1);
+
+  if (MI.getNumOperands() >= 3 && MI.getOperand(2).isImm()) {
+    const int64_t VaAlign = MI.getOperand(2).getImm();
+    if (VaAlign <= 0 || VaAlign > 8 || (VaAlign & (VaAlign - 1)) != 0)
+      return false;
+  }
+
+  const bool IsI64 = DstTy.isScalar() && DstTy.getSizeInBits() == 64;
+  const int TopOff = IsI64 ? kVaVrTopOff : kVaGrTopOff;
+  const int OffsOff = IsI64 ? kVaVrOffsOff : kVaGrOffsOff;
+  const int64_t RegStep = IsI64 ? 8 : 4;
+  const Align ValAlign = IsI64 ? Align(8) : Align(4);
+
+  MIB.setInstrAndDebugLoc(MI);
+
+  auto LoadPtrField = [&](int FieldOff) {
+    Register FieldPtr = vaListFieldPtr(MIB, List, FieldOff, PtrTy, S32);
+    return MIB
+        .buildLoad(PtrTy, FieldPtr,
+                   *vaListMMO(MF, MachineMemOperand::MOLoad, PtrTy, Align(4),
+                              FieldOff))
+        .getReg(0);
+  };
+  auto LoadOffsField = [&](int FieldOff) {
+    Register FieldPtr = vaListFieldPtr(MIB, List, FieldOff, PtrTy, S32);
+    return MIB
+        .buildLoad(S32, FieldPtr,
+                   *vaListMMO(MF, MachineMemOperand::MOLoad, S32, Align(4),
+                              FieldOff))
+        .getReg(0);
+  };
+
+  Register CurOff = LoadOffsField(OffsOff);
+  Register Top = LoadPtrField(TopOff);
+  Register StackPtr = LoadPtrField(kVaStackOff);
+  auto Tentative = MIB.buildAdd(S32, CurOff, MIB.buildConstant(S32, RegStep));
+  Register UseStack =
+      MIB.buildICmp(CmpInst::ICMP_SGT, S1, Tentative,
+                    MIB.buildConstant(S32, 0))
+          .getReg(0);
+
+  Register RegAddr = MIB.buildPtrAdd(PtrTy, Top, CurOff).getReg(0);
+  Register Addr =
+      MIB.buildSelect(PtrTy, UseStack, StackPtr, RegAddr).getReg(0);
+  MIB.buildLoad(Dst, Addr,
+                *vaListMMO(MF, MachineMemOperand::MOLoad, DstTy, ValAlign,
+                           /*ByteOff=*/0));
+
+  auto NewStack =
+      MIB.buildPtrAdd(PtrTy, StackPtr, MIB.buildConstant(S32, kVaStackStep));
+  auto NewOffs = MIB.buildAdd(S32, CurOff, MIB.buildConstant(S32, RegStep));
+  Register StoreStack =
+      MIB.buildSelect(PtrTy, UseStack, NewStack, StackPtr).getReg(0);
+  Register StoreOffs =
+      MIB.buildSelect(S32, UseStack, CurOff, NewOffs).getReg(0);
+  MIB.buildStore(StoreStack, vaListFieldPtr(MIB, List, kVaStackOff, PtrTy, S32),
+                 *vaListMMO(MF, MachineMemOperand::MOStore, PtrTy, Align(4),
+                            kVaStackOff));
+  MIB.buildStore(StoreOffs, vaListFieldPtr(MIB, List, OffsOff, PtrTy, S32),
+                 *vaListMMO(MF, MachineMemOperand::MOStore, S32, Align(4),
+                            OffsOff));
+  MI.eraseFromParent();
+  return true;
+}
+
 bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
                                         MachineInstr &MI,
                                         LostDebugLocObserver &LocObserver) const {
   using namespace TargetOpcode;
   MachineIRBuilder &MIB = Helper.MIRBuilder;
   MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
+
+  if (MI.getOpcode() == G_VASTART)
+    return legalizeVAStart(Helper, MI);
+  if (MI.getOpcode() == G_VAARG)
+    return legalizeVAArg(Helper, MI);
 
   //===--------------------------------------------------------------------===
   // G_MERGE_VALUES → non-power-of-2 result (pr79737-1: 9×s8 → s72).
@@ -1567,25 +1906,21 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
   }
 
   //===--------------------------------------------------------------------===
-  // G_MUL s64 -- widening 32x32->64 selects MUL64_LL (signed) or MUL64_ULL
-  // (unsigned) by operand extension kind; true 64x64 lowers to a native
-  // schoolbook sequence of MUL64_ULL (unsigned) partial products (
-  // No __muldi3.
+  // G_MUL s64 -- widening 32x32->64 becomes G_HAYDN_MUL64_WIDEN (signed) or
+  // G_HAYDN_MUL64_WIDENU (unsigned) by operand extension kind; true 64x64
+  // lowers to a schoolbook of three unsigned widening muls. No __muldi3.
   //===--------------------------------------------------------------------===
-  // Haydn has no single 64x64->64 multiply, but the MUL64_* family computes
-  // each 32x32->64 partial product natively: MUL64_LL = signed x signed
-  // (spec slot1_mac_opcode_table.md:59), MUL64_ULL = unsigned x unsigned
-  // (:66). For the common C pattern `(int64_t)(int32_t)a * b` (operands are
-  // G_SEXT of s32 values) we emit MUL64_LL directly; for `(uint64_t)(uint32_t)
-  // a * b` (G_ZEXT) we emit MUL64_ULL. This avoids the LIBCALL_MUL64 ->
-  // __muldi3 path that has no runtime stub and crashes at runtime (
-  // bug #19). The legalizer declares G_MUL s64 as customFor({S64}) so this
-  // runs. For true 64x64 multiply (at least one operand is NOT a widened
-  // s32), we lower to a native schoolbook sequence of three MUL64_ULL
-  // partials + add + shl, again avoiding the libcall path.
-  // We use customFor instead of libcallFor because the generic GISel libcall
-  // path fails for this target (Haydn's call lowering doesn't handle the
-  // LLVM Type*-based arg splitting correctly for libcalls).
+  // Haydn has no single 64x64->64 multiply. The MUL64_* family computes each
+  // 32x32->64 partial natively, but the legalizer emits target-generic
+  // G_HAYDN_MUL64_WIDEN{,U} (AIE G_AIE_* shape; select later). Peer:
+  // AIELegalizerHelper.cpp:1519-1531 builds G_AIE_BROADCAST_VECTOR;
+  // RISCVLegalizerInfo.cpp:444-447 uses libcallFor, never a target MUL.
+  // For `(int64_t)(int32_t)a * b` (G_SEXT of s32) emit G_HAYDN_MUL64_WIDEN;
+  // for `(uint64_t)(uint32_t)a * b` (G_ZEXT/G_ANYEXT) emit
+  // G_HAYDN_MUL64_WIDENU. True 64x64 (at least one operand not a widened
+  // s32) is schoolbook of three G_HAYDN_MUL64_WIDENU partials + add + shl.
+  // customFor, not libcallFor: Haydn call lowering does not split libcall
+  // args from LLVM Type*.
   if (MI.getOpcode() == G_MUL) {
     Register DstReg = MI.getOperand(0).getReg();
     Register Src0 = MI.getOperand(1).getReg();
@@ -1593,28 +1928,13 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     LLT DstTy = MRI.getType(DstReg);
 
     if (DstTy.getSizeInBits() == 64) {
-      const auto &TRI = *MI.getMF()->getSubtarget().getRegisterInfo();
-      const auto &TII = *MI.getMF()->getSubtarget().getInstrInfo();
-      auto &RBI = *MI.getMF()->getSubtarget().getRegBankInfo();
-
-      // Widening 32x32->64 multiply: lower to a native MUL64 widening op when
-      // both operands trace to a widened s32 value (the `(int64_t)(int32_t)a * b`
-      // shape for SIGNED widening, or `(uint64_t)(uint32_t)a * b` for UNSIGNED).
-      // This kills the LIBCALL_MUL64 -> __muldi3 path that has no runtime stub
-      // and crashes at runtime (jal resolves to ELF symbol index 0). See.
+      // Widening 32x32->64 multiply: both operands trace to a widened s32
+      // (`(int64_t)(int32_t)a * b` or `(uint64_t)(uint32_t)a * b`).
       //
-      // Sign vs unsigned matters: MUL64_LL is signed x signed 32x32->64 (spec
-      // §MAC, slot1_mac_opcode_table.md:59), MUL64_ULL is unsigned x unsigned
-      // (slot1_mac_opcode_table.md:66). For a sign-extended s32 operand both
-      // give the correct low-32-bits-influenced 64-bit product ONLY when the
-      // operand's sign bit (bit 31) is clear, OR when both operands are signed
-      // (the signed product matches the signed widening multiply). But for a
-      // ZERO-extended (unsigned) operand whose value has bit 31 set, MUL64_LL
-      // sign-extends the wrong half and produces the wrong high 32 bits -- the
-      // `uint32_t * uint32_t -> uint64_t` widening must use MUL64_ULL.
-      // (MurmurHash3 finalizer `x *= K` on uint64_t) was the trigger: the
-      // schoolbook path sext'd the operands, so all three partials selected
-      // MUL64_LL and corrupted the high 32 bits of each round's result.
+      // Sign vs unsigned: MUL64_LL is signed x signed 32x32->64; fully
+      // unsigned low×low is MUL64_ULUL (MUL64_ULL is unsigned x SIGNED).
+      // A ZERO-extended operand with bit 31 set needs the unsigned generic
+      // (G_HAYDN_MUL64_WIDENU); signed widening sign-extends the wrong half.
       auto ExtKindOfS32 = [&](Register R, unsigned &ExtOp) -> bool {
         ExtOp = 0;
         if (!R.isVirtual())
@@ -1639,52 +1959,34 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
       bool Widened1 = ExtKindOfS32(Src1, Ext1);
 
       if (Widened0 && Widened1) {
-        // Select the partial-product opcode matching the operand extension
-        // kind. SEXT (signed widening) -> MUL64_LL (signed x signed). ZEXT or
-        // ANYEXT (unsigned widening) -> MUL64_ULL (unsigned x unsigned). Mixed
-        // signedness cannot arise from a single widening multiply; fall back to
-        // the schoolbook path below if it ever did.
+        // SEXT x SEXT -> G_HAYDN_MUL64_WIDEN. ZEXT/ANYEXT x ZEXT/ANYEXT ->
+        // G_HAYDN_MUL64_WIDENU. Mixed signedness is not a single widening
+        // multiply; use the schoolbook path below.
         bool BothSigned = (Ext0 == TargetOpcode::G_SEXT &&
                            Ext1 == TargetOpcode::G_SEXT);
         bool BothUnsigned =
             (Ext0 == TargetOpcode::G_ZEXT || Ext0 == TargetOpcode::G_ANYEXT) &&
             (Ext1 == TargetOpcode::G_ZEXT || Ext1 == TargetOpcode::G_ANYEXT);
         if (BothSigned || BothUnsigned) {
-          // CSE profiles include regclass/bank. Never raw
-          // RBI.constrainGenericRegister on existing vregs while Legalizer CSE
-          // is live — it desyncs CSEMap (Combiner assert on G_SEXT/G_ZEXT).
-          // constrainSelectedInstRegOperands uses MF.getObserver() (AIE /
-          // upstream Utils.cpp pattern).
-          // MUL64_ULL is unsigned x SIGNED per the ISA (rs2 sign-extended);
-          // fully-unsigned low×low is MUL64_ULUL.
-          unsigned MulOpc = BothSigned ? Haydn::MUL64_LL : Haydn::MUL64_ULUL;
-          MachineInstr *NewMI =
-              MIB.buildInstr(MulOpc, {DstReg}, {Src0, Src1});
-          constrainSelectedInstRegOperands(*NewMI, TII, TRI, RBI);
+          unsigned MulOpc = BothSigned ? Haydn::G_HAYDN_MUL64_WIDEN
+                                       : Haydn::G_HAYDN_MUL64_WIDENU;
+          MIB.buildInstr(MulOpc, {DstReg}, {Src0, Src1});
           MI.eraseFromParent();
           return true;
         }
       }
 
       // True 64x64 multiply (at least one operand is not a widened s32).
-      // Haydn has no single 64x64->64 multiply, but the MUL64_* family computes
-      // each 32x32->64 partial product natively (MUL64_LL = aLo*bLo etc.). We
-      // decompose G_MUL <s64> into the schoolbook form using generic G_MIR ops
-      // that the selector already lowers to native instructions:
+      // Schoolbook of generic G_MIR; inner G_MUL <s64> of zext-of-s32
+      // re-enter as G_HAYDN_MUL64_WIDENU:
       //
       // aLo, aHi = G_UNMERGE_VALUES a (2 x s32)
       // bLo, bHi = G_UNMERGE_VALUES b (2 x s32)
-      // LL = (sext aLo) * (sext bLo) -> MUL64_LL (widening path)
-      // LH = (sext aLo) * (sext bHi) -> MUL64_LL (widening path)
-      // HL = (sext aHi) * (sext bLo) -> MUL64_LL (widening path)
+      // LL/LH/HL = (zext half) * (zext half) -> G_HAYDN_MUL64_WIDENU
       // result = LL + ((LH + HL) << 32) (mod 2^64)
       //
-      // The HH partial (aHi*bHi) only contributes to bits >= 64 and is dropped
-      // by the mod-2^64 result. The three inner G_MUL <s64> ops each have two
-      // sext-of-s32 operands, so they re-enter this handler via the
-      // IsWidenedFromS32 branch above and lower to a single MUL64_LL -- no
-      // recursion, no libcall. This eliminates the LIBCALL_MUL64 -> __muldi3
-      // path that had no runtime stub. See mul-i64-native-all-shapes.ll.
+      // HH (aHi*bHi) only contributes to bits >= 64. See
+      // mul-i64-native-all-shapes.ll.
       lowerMul64Schoolbook(MIB, MRI, MI);
       return true;
     }
@@ -1692,10 +1994,10 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
   }
 
   //===--------------------------------------------------------------------===
-  // G_UMULH s64 — high 64 bits of unsigned 64x64 multiply, via native
-  // MUL64_LL partial products (schoolbook). Required by the generic
-  // PreLegalizerCombiner's udiv-by-constant strength reduction, which
-  // expands `udiv X, K` to `(UMULH X, magic) >> shift`.
+  // G_UMULH s64 — high 64 bits of unsigned 64x64 multiply, via schoolbook
+  // G_MUL of zext halves (each becomes G_HAYDN_MUL64_WIDENU). Required by
+  // the generic PreLegalizerCombiner's udiv-by-constant strength reduction,
+  // which expands `udiv X, K` to `(UMULH X, magic) >> shift`.
   //
   // Formula (a, b are s64):
   // aLo, aHi = unmerge a (each s32, zero-extended for the inner mul)
@@ -1726,7 +2028,7 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     MIB.buildUnmerge({BLo, BHi}, Src1);
 
     // Zero-extend each half to s64 so inner G_MUL ops hit the widening path
-    // (MUL64_LL). Zero extension is correct for UMULH.
+    // (G_HAYDN_MUL64_WIDENU). Zero extension is correct for UMULH.
     auto ZextTo64 = [&](Register R) {
       Register Ext = MRI.createGenericVirtualRegister(S64);
       MIB.buildZExt(Ext, R);
@@ -1737,7 +2039,8 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     Register BLo64 = ZextTo64(BLo);
     Register BHi64 = ZextTo64(BHi);
 
-    // Four 32x32->64 widening partial products. Each lowers to MUL64_LL.
+    // Four 32x32->64 widening partial products. Each becomes
+    // G_HAYDN_MUL64_WIDENU.
     Register LL = MRI.createGenericVirtualRegister(S64);
     MIB.buildMul(LL, ALo64, BLo64);
     Register LH = MRI.createGenericVirtualRegister(S64);
@@ -1788,6 +2091,10 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     MI.eraseFromParent();
     return true;
   }
+
+  // IEEE half convert: integer-bit libcall ABI (see legalizeHalfConvertLibcall).
+  if (MI.getOpcode() == G_FPEXT || MI.getOpcode() == G_FPTRUNC)
+    return legalizeHalfConvertLibcall(Helper, MI, LocObserver);
 
   // Soft-float G_FCONSTANT: bitcast IEEE bits into G_CONSTANT (not constpool).
   if (MI.getOpcode() == G_FCONSTANT) {
@@ -2282,6 +2589,46 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
       }
     }
     MIB.buildBuildVector(DstReg, ResultElems);
+    MI.eraseFromParent();
+    return true;
+  }
+
+  //===--------------------------------------------------------------------===
+  // G_DYN_STACKALLOC — T-ABI2. Round size to StackAlign(8) and mask SP
+  // with -8. Peer: LegalizerHelper::getDynStackAllocTargetPtr
+  // (LegalizerHelper.cpp:9234) used by RISCV .lower()
+  // (RISCVLegalizerInfo.cpp:512-513). TLI stack-save register is unset
+  // on Haydn (ISelLowering is out of scope); use architectural SP R13.
+  // Alignment > StackAlign is fail-closed (no BP, ANDI32 is uimm20 ZEXT).
+  //===--------------------------------------------------------------------===
+  if (MI.getOpcode() == G_DYN_STACKALLOC) {
+    MachineFunction &MF = *MI.getMF();
+    const Align StackAlign =
+        MF.getSubtarget().getFrameLowering()->getStackAlign();
+    const Align Alignment = assumeAligned(MI.getOperand(2).getImm());
+    if (Alignment > StackAlign)
+      return false;
+
+    Register Dst = MI.getOperand(0).getReg();
+    Register Size = MI.getOperand(1).getReg();
+    const LLT PtrTy = MRI.getType(Dst);
+    const LLT SizeTy = MRI.getType(Size);
+
+    MIB.setInstrAndDebugLoc(MI);
+
+    // Round size up to StackAlign so SP never lands at ≡4 mod 8
+    // (HaydnCallingConv MEMORY_FAULT). Idempotent if IRTranslator already
+    // rounded (IRTranslator.cpp:3216-3225).
+    auto Pad = MIB.buildConstant(SizeTy, StackAlign.value() - 1);
+    auto Rounded = MIB.buildAdd(SizeTy, Size, Pad, MachineInstr::NoUWrap);
+    auto SizeMask = MIB.buildConstant(
+        SizeTy, static_cast<int64_t>(~(uint64_t)(StackAlign.value() - 1)));
+    Register AlignedSize = MIB.buildAnd(SizeTy, Rounded, SizeMask).getReg(0);
+
+    Register NewSP = Helper.getDynStackAllocTargetPtr(Haydn::R13, AlignedSize,
+                                                      StackAlign, PtrTy);
+    MIB.buildCopy(Haydn::R13, NewSP);
+    MIB.buildCopy(Dst, NewSP);
     MI.eraseFromParent();
     return true;
   }

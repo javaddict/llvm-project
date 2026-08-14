@@ -15,8 +15,8 @@
 //   - No isCodeGenOnly encode-only defs; no Pats that reject GISel.
 //
 // Incremental GlobalISel Pats. C++ residual covers multi-instr lowers:
-// s64 icmp/select, SIMD shifts (lane-0 extract), loads/stores, G_MUL s64
-// (splat/libcall), and non-1:1 forms.
+// s64 icmp/select, SIMD shifts (lane-0 extract), loads/stores,
+// G_HAYDN_MUL64_WIDEN{,U}, and other non-1:1 forms.
 //
 //===----------------------------------------------------------------------===//
 
@@ -116,7 +116,8 @@ def : Pat<(i64 (sra DR64:$rs1, GPR32:$rs2)), (SRA64 DR64:$rs1, GPR32:$rs2)>;
 //===----------------------------------------------------------------------===//
 // Scalar / SIMD mul — 1:1. Logical opcodes only.
 // MULL: $rd=$rs2 tied; TwoAddress inserts MOV when needed.
-// v2i32: X2MULPL32 (low-half product per lane). s64 mul stays C++.
+// v2i32: X2MULPL32 (low-half product per lane). s64 mul is legalizer
+// widen/schoolbook then G_HAYDN_MUL64_WIDEN{,U} C++ residual.
 //===----------------------------------------------------------------------===//
 
 def : Pat<(i32 (mul GPR32:$rs1, GPR32:$rs2)), (MULL GPR32:$rs1, GPR32:$rs2)>;

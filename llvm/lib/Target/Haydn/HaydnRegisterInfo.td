@@ -25,9 +25,10 @@ class HaydnReg<bits<4> Enc, string n, list<string> alt = []> : Register<n> {
 
 //===----------------------------------------------------------------------===//
 // GPR32: General Purpose Registers (R0-R15)
-// R0=soft-zero (reserved), R12=AT linker/assembler scratch (reserved)
+// R0=soft-zero (reserved). R12 is a normal allocatable caller-saved GPR
+// (AIE model: no free AT / no permanent MatInt reserve).
 // R13=SP (always reserved), R14=FP (reserved when hasFP), R15=LR (always reserved).
-// Allocatable GPRs: R1-R11.
+// Allocatable GPRs: R1–R12.
 //===----------------------------------------------------------------------===//
 
 def R0  : HaydnReg< 0, "r0">,  DwarfRegNum<[0]>;
@@ -42,7 +43,7 @@ def R8  : HaydnReg< 8, "r8">,  DwarfRegNum<[8]>;
 def R9  : HaydnReg< 9, "r9">,  DwarfRegNum<[9]>;
 def R10 : HaydnReg<10, "r10">, DwarfRegNum<[10]>;
 def R11 : HaydnReg<11, "r11">, DwarfRegNum<[11]>;
-def R12 : HaydnReg<12, "r12">, DwarfRegNum<[12]>;  // AT (linker/assembler scratch, reserved —)
+def R12 : HaydnReg<12, "r12">, DwarfRegNum<[12]>;  // caller-saved GPR (not free AT)
 def R13 : HaydnReg<13, "sp">,  DwarfRegNum<[13]>;  // Stack Pointer
 def R14 : HaydnReg<14, "fp">,  DwarfRegNum<[14]>;  // Frame Pointer (when used)
 def R15 : HaydnReg<15, "lr">,  DwarfRegNum<[15]>;  // Link Register
@@ -145,9 +146,13 @@ def DR64 : RegisterClass<"Haydn",
   >;
 }
 
+// Architectural AR0/AR1 only. Not allocatable: copyPhysReg is GPR/DR only and
+// there is no AR spill. ISel pins AR0/AR1 as physregs (implicit defs). Peer:
+// AIE unspillable sparse classes, Hexagon CtrRegs, RISCV VCSR.
 def AR : RegisterClass<"Haydn",
   [i64], 64, (add AR0, AR1)
 > {
+  let isAllocatable = 0;
   let RegInfos = RegInfoByHwMode<
     [DefaultMode],
     [RegInfo<64, 64, 64>]
@@ -171,5 +176,6 @@ def GPR32Lo : RegisterClass<"Haydn",
   >;
 }
 
-// Callee-saved registers defined in HaydnCallingConv.td to avoid duplicate
-// CSR_Haydn is defined there as: R8-R11, R15(LR), D8-D15 (R12=AT reserved).
+// Callee-saved registers defined in HaydnCallingConv.td.
+// CSR_Haydn is defined there as: R8–R11, R14, R15(LR), D8–D15.
+// R12 is a normal caller-saved GPR (not reserved AT).

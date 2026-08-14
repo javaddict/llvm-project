@@ -337,7 +337,101 @@ private:
   Register SPReg;
 };
 
+// Product C ABI family only. Non-C CCs must not silently reuse CC_Haydn.
+static bool isSupportedCallingConv(CallingConv::ID CC) {
+  switch (CC) {
+  case CallingConv::C:
+  case CallingConv::Fast:
+  case CallingConv::Cold:
+    return true;
+  default:
+    return false;
+  }
+}
+
+// Nest/swift/byref/inalloca/preallocated require dedicated ABI seats Haydn
+// does not own. Reject before any formal/call/return mutation so they cannot
+// map as plain args or silently reuse CC_Haydn.
+static bool hasUnsupportedABIArgFlags(const CallLowering::ArgInfo &Arg) {
+  for (const ISD::ArgFlagsTy &F : Arg.Flags) {
+    if (F.isNest() || F.isSwiftError() || F.isSwiftSelf() || F.isSwiftAsync() ||
+        F.isInAlloca() || F.isPreallocated() || F.isByRef())
+      return true;
+  }
+  return false;
+}
+
+static bool hasUnsupportedABIArgFlags(ArrayRef<CallLowering::ArgInfo> Args) {
+  for (const CallLowering::ArgInfo &Arg : Args)
+    if (hasUnsupportedABIArgFlags(Arg))
+      return true;
+  return false;
+}
+
+// IR-level preflight for formals: generic setArgFlags can assert on some
+// unsupported param attrs (e.g. inalloca size path) before ArgFlags are
+// available. Reject from Function attributes before that machinery runs.
+static bool hasUnsupportedIRParamAttrs(const Argument &Arg) {
+  return Arg.hasNestAttr() || Arg.hasByRefAttr() ||
+         Arg.hasAttribute(Attribute::SwiftSelf) ||
+         Arg.hasAttribute(Attribute::SwiftAsync) ||
+         Arg.hasAttribute(Attribute::SwiftError) ||
+         Arg.hasAttribute(Attribute::InAlloca) ||
+         Arg.hasAttribute(Attribute::Preallocated);
+}
+
 } // end anonymous namespace
+
+
+// Isolate a byval source into a private stack object with word-wise
+// G_LOAD/G_STORE (never G_MEMCPY, which nests ADJCALLSTACK under the outer
+// call frame). Returns the frame-index pointer vreg.
+static Register isolateByValArgument(MachineIRBuilder &MIRBuilder,
+                                     MachineRegisterInfo &MRI, Register SrcPtr,
+                                     uint64_t MemSize, Align SrcAlign) {
+  MachineFunction &MF = MIRBuilder.getMF();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  Align ObjAlign = std::max(SrcAlign, Align(4));
+  int FI = MFI.CreateStackObject(MemSize, ObjAlign, /*isSS=*/false);
+  LLT PtrTy = LLT::pointer(0, 32);
+  LLT S32 = LLT::scalar(32);
+  Register DstPtr = MIRBuilder.buildFrameIndex(PtrTy, FI).getReg(0);
+  MachinePointerInfo DstMPO = MachinePointerInfo::getFixedStack(MF, FI);
+  MachinePointerInfo SrcMPO(SrcPtr);
+
+  uint64_t Offset = 0;
+  while (Offset < MemSize) {
+    unsigned Chunk = 1;
+    if (Offset + 8 <= MemSize && (Offset % 8) == 0 && ObjAlign.value() >= 8 &&
+        SrcAlign.value() >= 8)
+      Chunk = 8;
+    else if (Offset + 4 <= MemSize)
+      Chunk = 4;
+    else if (Offset + 2 <= MemSize)
+      Chunk = 2;
+    LLT Ty = LLT::scalar(Chunk * 8);
+    Register SrcAddr = SrcPtr;
+    Register DstAddr = DstPtr;
+    if (Offset != 0) {
+      auto Off = MIRBuilder.buildConstant(S32, Offset);
+      SrcAddr = MIRBuilder.buildPtrAdd(PtrTy, SrcPtr, Off).getReg(0);
+      DstAddr = MIRBuilder.buildPtrAdd(PtrTy, DstPtr, Off).getReg(0);
+    }
+    auto *SrcMMO = MF.getMachineMemOperand(
+        SrcMPO.getWithOffset(Offset),
+        MachineMemOperand::MOLoad | MachineMemOperand::MODereferenceable, Ty,
+        commonAlignment(SrcAlign, Offset));
+    auto *DstMMO = MF.getMachineMemOperand(
+        DstMPO.getWithOffset(Offset),
+        MachineMemOperand::MOStore | MachineMemOperand::MODereferenceable, Ty,
+        commonAlignment(ObjAlign, Offset));
+    Register Tmp = MRI.createGenericVirtualRegister(Ty);
+    MIRBuilder.buildLoad(Tmp, SrcAddr, *SrcMMO);
+    MIRBuilder.buildStore(Tmp, DstAddr, *DstMMO);
+    Offset += Chunk;
+  }
+  return DstPtr;
+}
 
 // canLowerReturn / lowerReturn follow X86CallLowering (tablegen RetCC_*) and
 // RISCVCallLowering (splitToValueTypes + determineAndHandleAssignments + sret
@@ -346,6 +440,11 @@ bool HaydnCallLowering::canLowerReturn(MachineFunction &MF,
                                        CallingConv::ID CallConv,
                                        SmallVectorImpl<BaseArgInfo> &Outs,
                                        bool IsVarArg) const {
+  // Do not reject unsupported CCs here: returning false makes the generic
+  // CallLowering wrapper attempt sret demotion (insertSRetOutgoingArgument)
+  // for call returns, which is wrong for fail-closed CC ownership and can
+  // assert on unsized void returns. Unsupported CCs are rejected in
+  // lowerReturn / lowerFormalArguments / lowerCall before mutation.
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, IsVarArg, MF, ArgLocs,
                  MF.getFunction().getContext());
@@ -358,6 +457,8 @@ bool HaydnCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
                                     FunctionLoweringInfo &FLI) const {
   MachineFunction &MF = MIRBuilder.getMF();
   MachineRegisterInfo &MRI = MF.getRegInfo();
+  if (!isSupportedCallingConv(MF.getFunction().getCallingConv()))
+    return false;
 
   auto RetMI = MIRBuilder.buildInstrNoInsert(Haydn::RET);
 
@@ -370,9 +471,21 @@ bool HaydnCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
 
     ArgInfo OrigRetInfo(VRegs, Val->getType(), 0);
     setArgFlags(OrigRetInfo, AttributeList::ReturnIndex, DL, F);
+    if (hasUnsupportedABIArgFlags(OrigRetInfo))
+      return false;
 
     SmallVector<ArgInfo, 4> SplitRetInfos;
     splitToValueTypes(OrigRetInfo, SplitRetInfos, DL, CC);
+
+    // Preflight return assignment before any return-value copy mutation so
+    // unsupported RetCC seats match call-site fail-closed ownership.
+    {
+      CallLowering::OutgoingValueAssigner Preflight(RetCC_Haydn);
+      SmallVector<CCValAssign, 8> RetLocs;
+      CCState RetCCInfo(CC, F.isVarArg(), MF, RetLocs, F.getContext());
+      if (!determineAssignments(Preflight, SplitRetInfos, RetCCInfo))
+        return false;
+    }
 
     CallLowering::OutgoingValueAssigner Assigner(RetCC_Haydn);
     HaydnOutgoingValueHandler Handler(MIRBuilder, MRI, RetMI);
@@ -395,6 +508,14 @@ bool HaydnCallLowering::lowerFormalArguments(
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const DataLayout &DL = F.getDataLayout();
 
+  // Fail closed on non-C CC and nest/swift/byref/inalloca formals before
+  // mutation (IR attrs first so setArgFlags never asserts on unsupported seats).
+  if (!isSupportedCallingConv(F.getCallingConv()))
+    return false;
+  for (const Argument &Arg : F.args())
+    if (hasUnsupportedIRParamAttrs(Arg))
+      return false;
+
   SmallVector<ArgInfo, 8> SplitArgs;
 
   // Hidden sret pointer when the return value does not fit RetCC (R1–R2 / D0).
@@ -405,7 +526,21 @@ bool HaydnCallLowering::lowerFormalArguments(
     unsigned Idx = Arg.getArgNo();
     ArgInfo OrigArg(VRegs[Idx], Arg, Idx);
     setArgFlags(OrigArg, Idx + 1, DL, F);
+    if (hasUnsupportedABIArgFlags(OrigArg))
+      return false;
     splitToValueTypes(OrigArg, SplitArgs, DL, F.getCallingConv());
+  }
+
+  // Preflight formal assignment before any copy-from-physreg mutation so
+  // unsupported CC seats leave zero partial formal MIR (parity with call
+  // assignment preflight before CALLSEQ).
+  {
+    CallLowering::IncomingValueAssigner Preflight(CC_Haydn);
+    SmallVector<CCValAssign, 16> ArgLocs;
+    CCState ArgCCInfo(F.getCallingConv(), F.isVarArg(), MF, ArgLocs,
+                      F.getContext());
+    if (!determineAssignments(Preflight, SplitArgs, ArgCCInfo))
+      return false;
   }
 
   HaydnFormalArgHandler Handler(MIRBuilder, MRI);
@@ -441,101 +576,92 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
     return false;
   Info.IsTailCall = false;
 
-  // F17: Emit ADJCALLSTACKDOWN before the call sequence and ADJCALLSTACKUP
-  // after it, sized by the outgoing stack-argument bytes. Without this pair
-  // outgoing stack arguments are written at the current SP and clobber the
-  // caller's frame (callee would interpret them as incoming args at the wrong
-  // offset, and a signal/interrupt during the call would corrupt live data).
-  // `Assigner.StackSize` is populated by determineAndHandleAssignments below;
-  // we patch the immediate into the already-inserted ADJCALLSTACKDOWN afterward
-  // (RISC-V pattern). The instr is inserted before arg stores so the scavenger
-  // FI eliminator see the correct SP.
-  MachineInstrBuilder CallSeqStart =
-      MIRBuilder.buildInstr(Haydn::ADJCALLSTACKDOWN);
+  // Only the default C ABI family is implemented. Unsupported CCs and
+  // nest/swift/byref/inalloca/preallocated args or returns fail closed with
+  // zero partial call-sequence MIR (no silent fallback onto CC_Haydn).
+  if (!isSupportedCallingConv(Info.CallConv))
+    return false;
+  if (hasUnsupportedABIArgFlags(Info.OrigArgs))
+    return false;
+  if (hasUnsupportedABIArgFlags(Info.OrigRet))
+    return false;
 
-  // Build the call instruction. Direct calls (symbol/imm callee
-  // MO_GlobalAddress, MO_ExternalSymbol, MO_Immediate) use JAL
-  // (jump-and-link): (outs GPR32:$rd), (ins calltarget:$target).
-  // Indirect calls (function pointer — MO_Register) must use JALR
-  // (jump-and-link-register): (outs GPR32:$rd), (ins GPR32:$rs
-  // calltarget:$target), because JAL's `calltarget` operand cannot hold a
-  // register. Routing a reg callee through JAL produced `jal lr,` with a
-  // blank target : the ISS decoded the missing target as r0=0 and the
-  // program self-looped on every function-pointer call. $rd receives the
-  // return address (link register R15 = LR).
+  // Isolate byval sources into private stack objects before CC assignment.
+  // Pass the isolated pointer as a plain argument (no byval flag) so the
+  // callee observes a copy rather than the caller's original object, and so
+  // assignment never falls into the generic G_MEMCPY byval path.
+  for (ArgInfo &OrigArg : Info.OrigArgs) {
+    if (OrigArg.Flags.empty() || !OrigArg.Flags[0].isByVal())
+      continue;
+    assert(OrigArg.Regs.size() == 1 && "split byval pointer unexpected");
+    uint64_t MemSize = OrigArg.Flags[0].getByValSize();
+    Align SrcAlign = OrigArg.Flags[0].getNonZeroByValAlign();
+    Register Isolated =
+        isolateByValArgument(MIRBuilder, MRI, OrigArg.Regs[0], MemSize, SrcAlign);
+    OrigArg = ArgInfo(Isolated, OrigArg.Ty, OrigArg.OrigArgIndex,
+                      /*Flags=*/{}, OrigArg.OrigValue);
+  }
+
+  // Split args/returns and preflight CC assignment before any CALLSEQ or
+  // call emission so unsupported types leave zero partial MIR.
+  // Shared path may have prepended a hidden sret ArgInfo to OrigArgs.
+  SmallVector<ArgInfo, 8> SplitArgs;
+  for (auto &OrigArg : Info.OrigArgs)
+    splitToValueTypes(OrigArg, SplitArgs, DL, Info.CallConv);
+
+  SmallVector<ArgInfo, 4> SplitRetInfos;
+  if (Info.CanLowerReturn && !Info.OrigRet.Ty->isVoidTy())
+    splitToValueTypes(Info.OrigRet, SplitRetInfos, DL, Info.CallConv);
+
+  CallLowering::OutgoingValueAssigner Assigner(CC_Haydn);
+  {
+    SmallVector<CCValAssign, 16> ArgLocs;
+    CCState ArgCCInfo(Info.CallConv, Info.IsVarArg, MF, ArgLocs,
+                      MF.getFunction().getContext());
+    if (!determineAssignments(Assigner, SplitArgs, ArgCCInfo))
+      return false;
+  }
+  if (!SplitRetInfos.empty()) {
+    CallLowering::IncomingValueAssigner RetAssigner(RetCC_Haydn);
+    SmallVector<CCValAssign, 8> RetLocs;
+    CCState RetCCInfo(Info.CallConv, Info.IsVarArg, MF, RetLocs,
+                      MF.getFunction().getContext());
+    if (!determineAssignments(RetAssigner, SplitRetInfos, RetCCInfo))
+      return false;
+  }
+
+  // Emit ADJCALLSTACKDOWN only after assignment preflight succeeds. Size is
+  // known from Assigner.StackSize; round up to StackAlign so SP never becomes
+  // ≡4 mod 8 across a call (B1 / DR st64).
+  const Align StackAlign =
+      MF.getSubtarget<HaydnSubtarget>().getFrameLowering()->getStackAlign();
+  const uint64_t CallFrameBytes =
+      alignTo(static_cast<uint64_t>(Assigner.StackSize), StackAlign);
+  MIRBuilder.buildInstr(Haydn::ADJCALLSTACKDOWN)
+      .addImm(static_cast<int64_t>(CallFrameBytes))
+      .addImm(0);
+
+  // Direct: real JAL_W with callee MO (GlobalAddress / ExternalSymbol) and
+  // call-preserved regmask. Peer: AArch64CallLowering.cpp:1079,1192 (BL +
+  // addRegMask). Do not emit PseudoCALL — ExpandPseudos does not expand it.
+  // Indirect: PseudoCALLIndirect (printer → JALR_W); constrain callee vreg
+  // to GPR32 so the $rs operand verifies.
   MachineInstrBuilder MIB;
   if (Info.Callee.isReg()) {
-    // Indirect call through a function pointer. Emit PseudoCALLIndirect
-    // (expanded to JALR R15, rs, 0 by ExpandPseudos). The callee vreg is a
-    // generic pointer (p0); constrain it to GPR32 so the pseudo's $rs operand
-    // satisfies the verifier. PseudoCALLIndirect is isCall=1 but NOT a
-    // terminator (control returns), unlike raw JALR (terminator, for RET).
     MIB = MIRBuilder.buildInstrNoInsert(Haydn::PseudoCALLIndirect);
     MIB.addReg(Haydn::R15, RegState::Define); // link register ($rd)
-    // The callee vreg is a generic pointer (p0) at this (legalizer) stage.
-    // Bank+constrain it to GPR32 via RBI.constrainGenericRegister (the MRI
-    // constrainRegClass asserts on an unbanked generic vreg). regalloc then
-    // assigns a phys GPR that expandPseudoCALLIndirect reads.
     Register CalleeReg = Info.Callee.getReg();
     if (CalleeReg.isVirtual())
       if (auto *RBI = MF.getSubtarget().getRegBankInfo())
         RBI->constrainGenericRegister(CalleeReg, Haydn::GPR32RegClass, MRI);
     MIB.addReg(CalleeReg); // function pointer ($rs)
   } else {
-    // Direct call: preserve the callee operand verbatim. The generic libcall
-    // path (LegalizerHelper::createLibcall) constructs the callee as an
-    // MO_ExternalSymbol referencing the runtime function name (e.g.
-    // "__addsf3"); normal call lowering constructs MO_GlobalAddress. Adding
-    // Info.Callee directly — rather than reconstructing it via
-    // addGlobalAddress/addExternalSymbol — guarantees the callee operand
-    // (and its MCSymbol, after MCInst lowering) survives to the emitter.
-    // Mirrors RISC-V's lowerCall idiom (RISCVCallLowering.cpp:
-    // `.add(Info.Callee)`). See.
-    // Phase 1a: route direct call to the 48-bit WIDE form (JAL_W
-    // encoding_manual.md §5.5 Class 001). The legacy Haydn32 FmtJ parcel is
-    // being purged from CodeGen selection; JAL/JALR defs remain in the.td for
-    // the asm parser / decoder until Phase 3. The brtarget_wide_i20 operand
-    // class emits FIXUP_HAYDN_WIDE_CallSImm20 via getSImmOpValueXStepWide — no
-    // MCCodeEmitter call/branch fixup-kind routing needed for the _W opcodes.
     MIB = MIRBuilder.buildInstrNoInsert(Haydn::JAL_W);
     MIB.addReg(Haydn::R15, RegState::Define); // link register
     MIB.add(Info.Callee);
   }
 
-  // Handle arguments. For IR calls that need sret demotion, CallLowering's
-  // shared path already prepended the hidden sret ArgInfo to OrigArgs.
-  SmallVector<ArgInfo, 8> SplitArgs;
-  for (auto &OrigArg : Info.OrigArgs)
-    splitToValueTypes(OrigArg, SplitArgs, DL, Info.CallConv);
-
-  HaydnOutgoingValueHandler Handler(MIRBuilder, MRI, MIB);
-  CallLowering::OutgoingValueAssigner Assigner(CC_Haydn);
-
-  if (!determineAndHandleAssignments(Handler, Assigner, SplitArgs,
-                                     MIRBuilder, Info.CallConv,
-                                     Info.IsVarArg))
-    return false;
-
-  // Patch the now-known outgoing stack size into the already-inserted
-  // ADJCALLSTACKDOWN, then insert the call and ADJCALLSTACKUP. The pseudos set
-  // MaxCallFrameSize (read by determineFrameLayout) and are expanded by
-  // eliminateCallFramePseudoInstr. Round StackSize up to the target stack
-  // alignment so SP never becomes ≡4 mod 8 across a call (B1: single i32
-  // stack arg with Size=4 left StackSize=4; callee DR st64 then faults).
-  // Text parcel size is orthogonal — SP ABI stays StackAlign(8) for DR.
-  // Round StackSize up to StackAlign so SP never becomes ≡4 mod 8 across a
-  // call (B1). Operand 1 of ADJCALLSTACK* is the FrameSetup/Destroy twin
-  // amount for the verifier (must match op0, not "align") — keep 0 as
-  // Haydn/RISC-V style second imm when unused, or pass the same amount.
-  const Align StackAlign =
-      MF.getSubtarget<HaydnSubtarget>().getFrameLowering()->getStackAlign();
-  const uint64_t CallFrameBytes =
-      alignTo(static_cast<uint64_t>(Assigner.StackSize), StackAlign);
-  CallSeqStart.addImm(static_cast<int64_t>(CallFrameBytes)).addImm(0);
-
-  // Call-preserved regmask via getCallPreservedMask: CSR bank R8–R11, R14,
-  // R15, D8–D15 (R14 always CSR; hasFP reserves it as frame base). R12 is
-  // normal call-clobbered.
+  // Call-preserved regmask: CSR bank R8–R11, R14, R15, D8–D15.
   {
     const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
     const uint32_t *Mask = TRI->getCallPreservedMask(MF, Info.CallConv);
@@ -543,19 +669,22 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
     MIB.addRegMask(Mask);
   }
 
+  {
+    HaydnOutgoingValueHandler Handler(MIRBuilder, MRI, MIB);
+    CallLowering::OutgoingValueAssigner EmitAssigner(CC_Haydn);
+    if (!determineAndHandleAssignments(Handler, EmitAssigner, SplitArgs,
+                                       MIRBuilder, Info.CallConv,
+                                       Info.IsVarArg))
+      return false;
+  }
+
   MIRBuilder.insertInstr(MIB);
   MIRBuilder.buildInstr(Haydn::ADJCALLSTACKUP)
       .addImm(static_cast<int64_t>(CallFrameBytes))
       .addImm(0);
 
-  // Copy returned values into result vregs. Mirrors RISCVCallLowering::lowerCall
-  // X86CallLowering::lowerCall: splitToValueTypes + RetCC + CallReturnHandler
-  // (IncomingValueHandler that marks call implicit-defs). Not a hand-walked
-  // R1/R2/D0 index.
-  if (Info.CanLowerReturn && !Info.OrigRet.Ty->isVoidTy()) {
-    SmallVector<ArgInfo, 4> SplitRetInfos;
-    splitToValueTypes(Info.OrigRet, SplitRetInfos, DL, Info.CallConv);
-
+  // Copy returned values into result vregs (RetCC + CallReturnHandler).
+  if (!SplitRetInfos.empty()) {
     CallLowering::IncomingValueAssigner RetAssigner(RetCC_Haydn);
     HaydnCallReturnHandler RetHandler(MIRBuilder, MRI, MIB);
     if (!determineAndHandleAssignments(RetHandler, RetAssigner, SplitRetInfos,
