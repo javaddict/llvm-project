@@ -177,8 +177,8 @@ define i32 @large_alloca() nounwind {
 ; CHECK-NEXT:    { subi32 sp, sp, 40; nop }
 ; CHECK-NEXT:    { addi32 r1, r0, 42; addi32 r3, sp, 8 }
 ; CHECK-NEXT:    { addi32 r2, r0, 99; s_sw_with_imm r1, r3, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 7 }
-; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; s_lw_with_imm r2, r3, 7 }
+; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; s_sw_with_imm r2, r3, 7 }
+; CHECK-NEXT:    { s_lw_with_imm r2, r3, 7; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }

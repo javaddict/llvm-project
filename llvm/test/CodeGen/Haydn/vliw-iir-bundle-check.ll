@@ -123,13 +123,12 @@ define void @biquad_process_block(ptr nocapture %input, ptr nocapture %output,
 ; ASM-NEXT:    { sub32 r1, r1, r3; mull r3, r4, fp; nop }
 ; ASM-NEXT:    { sub32 r1, r1, r3; nop; nop }
 ; ASM-NEXT:    { addi32 r2, r2, 4; s_sw_with_imm r1, r2, 0 }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r10, r8, 0 }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r11, r8, 1 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r1, r8, 2 }
 ; ASM-NEXT:    { s_lw_with_imm r1, sp, 4; nop; nop } // 4-byte Folded Reload
 ; ASM-NEXT:    // 4-byte Reload
+; ASM-NEXT:    { nop; nop; s_sw_with_imm r10, r8, 0 }
+; ASM-NEXT:    { slt32 r1, r9, r1; nop; s_sw_with_imm r11, r8, 1 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm fp, r8, 3 }
-; ASM-NEXT:    { slt32 r1, r9, r1; nop; nop }
 ; ASM-NEXT:    { bnez r1, .LBB2_1; nop; nop }
 ; ASM-NEXT:  // %bb.2: // %exit
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
