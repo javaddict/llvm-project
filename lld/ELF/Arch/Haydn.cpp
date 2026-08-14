@@ -90,10 +90,18 @@ public:
     assert(Idle.size() >= 4 &&
            "idle parcel must cover the 4-byte TargetInfo trapInstr field");
     // trapInstr is a fixed 4-byte generic LLD field (Writer::fillTrap /
-    // OutputSection::getFiller). All-zero is not a Format E bundle (indicator
-    // must be 111). Seed it from the generated idle parcel; do not invent a
-    // second pad encoding. Whole-parcel gaps use nopInstrs below.
-    trapInstr = {Idle[0], Idle[1], Idle[2], Idle[3]};
+    // OutputSection::getFiller); it lands in the sub-parcel residues that
+    // whole-parcel nopInstrs cannot cover (function alignment sits on the
+    // 4-byte lattice, so residues of 4 or 8 (mod EncodedBytes) are
+    // unavoidable and can never hold a legal bundle). Zero is the one
+    // ISA-inert filler: indicator != 111 means the bytes are not code, and
+    // BundleSim's coverage walk (CB-146) accepts zero gaps by inspecting
+    // the bytes. Seeding this from the idle parcel put a 111-indicator
+    // prefix into dead gaps and made the linear-sweep disassembler decode
+    // a phantom bundle straddling the next function's entry (overlapping
+    // PCs -> CODE_IMAGE_REJECT; gcc-torture align-3). Whole-parcel gaps
+    // still use the generated idle parcel via nopInstrs below.
+    trapInstr = {0x00, 0x00, 0x00, 0x00};
     nopInstrs = std::vector<std::vector<uint8_t>>{
         std::vector<uint8_t>(Idle.begin(), Idle.end())};
   }
