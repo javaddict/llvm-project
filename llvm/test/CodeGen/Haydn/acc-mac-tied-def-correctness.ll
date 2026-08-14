@@ -29,7 +29,10 @@
 ; dropping the Constraints let-block from the.td), the post-RA verifier OR
 ; verify-machineinstrs will catch the mismatched operand count / untied
 ; accumulator, and the OR64 seed would reappear in the output. The
-; CHECK-NOT: or64 in each case guards against the regressed seed pattern.
+; the CHECK-NOT on `or64` in each case guards against the regressed seed
+; pattern. (Written this way deliberately: a comment line that STARTS with
+; `CHECK-NOT:` is a directive, not prose — FileCheck read the whole
+; sentence as a pattern, which then never matched and never failed.)
 ;
 ; The MC printer renders the tied-def as `OP dst, src1, src2` (the tied
 ; rd_in operand is not printed because it equals rd by the constraint).
@@ -59,7 +62,7 @@ declare <2 x i32> @llvm.haydn.x2fcmula32rs(<2 x i32>, <2 x i32>, <2 x i32>)
 ; The two-address coalescer will assign acc and dst to the same phys reg.
 ; CHECK-LABEL: test_mula64_ll:
 ; CHECK-NOT: or64
-; CHECK: mula64.ll
+; CHECK: mula64_ll
 define i64 @test_mula64_ll(i64 %acc, i64 %a, i64 %b) {
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>
@@ -70,7 +73,7 @@ define i64 @test_mula64_ll(i64 %acc, i64 %a, i64 %b) {
 ; MULS64_LL (rtd = rtd - product): same tied-def check.
 ; CHECK-LABEL: test_muls64_ll:
 ; CHECK-NOT: or64
-; CHECK: muls64.ll
+; CHECK: muls64_ll
 define i64 @test_muls64_ll(i64 %acc, i64 %a, i64 %b) {
   %bc.3 = bitcast i64 %a to <2 x i32>
   %bc.4 = bitcast i64 %b to <2 x i32>
@@ -155,8 +158,8 @@ define i64 @test_x2fcmula32rs(i64 %acc, i64 %a, i64 %b) {
 ; fails.
 ; CHECK-LABEL: test_chain_acc:
 ; CHECK-NOT: or64
-; CHECK: mula64.ll{{.*}}
-; CHECK: muls64.ll{{.*}}
+; CHECK: mula64_ll{{.*}}
+; CHECK: muls64_ll{{.*}}
 define i64 @test_chain_acc(i64 %acc, i64 %a, i64 %b, i64 %c, i64 %d) {
   %bc.15 = bitcast i64 %a to <2 x i32>
   %bc.16 = bitcast i64 %b to <2 x i32>

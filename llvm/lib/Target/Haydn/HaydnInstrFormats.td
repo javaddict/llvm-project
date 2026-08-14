@@ -205,6 +205,28 @@ def uimm20_wide_abs
 // offset in 2-byte units (§5.14 D1: field stores offset>>1, decoder
 // sign-extends then shifts left 1). Symbolic target emits the dedicated
 // FIXUP_HAYDN_WIDE_CallSImm20 (PC-rel, TargetOffset=28).
+// Format E branch / call targets.
+//
+// The generated members take these instead of a plain simmN so the immediate
+// carries its SCALE. § 5.14 D1 puts branch offsets in 2-byte units; a plain
+// simm12 stores the byte offset raw, so `beqz r1, -12` encoded -12 while the
+// same distance written as a symbol encoded -6 (the relocation applying
+// ValueShift). Two encodings for one offset — see FORMAT-E-SWITCH-PLAN.md
+// § 6.10.
+//
+// The encoders dispatch the fixup kind on the OPCODE
+// (getBranchFixupKind / getCallFixupKind), so one class serves every
+// placement and every branch shape; only the decoder needs the field width.
+def brtarget_e12 : Operand<OtherVT> {
+  let EncoderMethod = "getBranchTargetOpValue";
+  let DecoderMethod = "decodeSImmOperandXStepWide<12,1,/*IsSigned*/1>";
+}
+
+def calltarget_e20 : Operand<OtherVT> {
+  let EncoderMethod = "getCallTargetOpValue";
+  let DecoderMethod = "decodeSImmOperandXStepWide<20,1,/*IsSigned*/1>";
+}
+
 def brtarget_wide_i20 : Operand<OtherVT> {
   let EncoderMethod =
       "getSImmOpValueXStepWide<20,/*Shift*/1,/*IsSigned*/1,/*IsPCRel*/1,"
@@ -409,7 +431,7 @@ class FmtALU32<bits<8> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b111;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot012_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -442,7 +464,7 @@ class FmtALU32Ext<bits<8> opcode, bits<5> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b111;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot012_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   // the MULL family (FmtALU32Ext) is emitted ONLY as an 8-byte Mode-0
   // bundle; its standalone-32.td def would otherwise shadow FmtLS loads that
   // share opcode 0x3F (e.g. ldu8 bytes decoded as mull). Push these defs out
@@ -472,7 +494,7 @@ class FmtALU32Unary<bits<8> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b111;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot012_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -491,7 +513,7 @@ class FmtI<bits<6> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b111;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot012_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs;
@@ -511,7 +533,7 @@ class FmtLS<bits<8> opcode, dag outs, dag ins, string asmstr,
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let mayLoad = 1;   // overridden per instruction
-  let Itinerary = Slot0_LS;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rt;
   bits<4> rs;
@@ -557,7 +579,7 @@ class FmtLSPostInc<bits<8> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b010;   // Slot 1 only (FU=LD, matches LD64_S1)
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot1_LD;   // Same itinerary as LD64_S1 / LD32_S1
+  let Itinerary = NoItinerary;  // per-instruction; see the def   // Same itinerary as LD64_S1 / LD32_S1
 
   bits<4> rt;        // data destination (rtd/rt; DR64 or GPR32 per def)
   bits<4> rs;        // base register (encoded once; tied to $rs_wb)
@@ -606,7 +628,7 @@ class FmtLSPostIncReg<bits<8> opcode, bits<4> type, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b010;   // Slot 1 only (FU=LD, matches LD64_S1)
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot1_LD;   // Same itinerary as LD64_S1 / LD32_S1
+  let Itinerary = NoItinerary;  // per-instruction; see the def   // Same itinerary as LD64_S1 / LD32_S1
 
   bits<4> rt;        // data destination (rtd; DR64)
   bits<4> rs;        // base register (encoded once; tied to $rs_wb)
@@ -653,7 +675,7 @@ class FmtLaneStore<bits<8> opcode, dag outs, dag ins, string asmstr,
   let TSFlags{2-0} = 0b001;   // Slot 0 (Load/Store unit)
   let TSFlags{4-3} = 0b01;    // 32-bit width
   let mayStore = 1;
-  let Itinerary = Slot0_LS;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rtd;       // DR64 data source (the register whose lane is stored)
   bits<4> rs;        // GPR32 base register
@@ -680,7 +702,7 @@ class FmtALU64<bits<8> opcode, bits<10> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -709,7 +731,7 @@ class FmtALU64_2Dest<bits<8> opcode, bits<6> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;       // destination 1 (DR64, encoded @ Inst{21-18})
   bits<4> rtd2;     // destination 2 (DR64, encoded @ Inst{9-6}, legacy-only)
@@ -757,7 +779,7 @@ class FmtALU64Acc<bits<8> opcode, bits<10> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_MAC_AccFirst;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rd_in;  // accumulator input (tied to destination, same encoded field)
@@ -781,7 +803,7 @@ class FmtALU64Unary<bits<8> opcode, bits<10> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -803,7 +825,7 @@ class FmtALU64Binary<bits<8> opcode, bits<10> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -826,7 +848,7 @@ class FmtALU64SelImm<bits<8> opcode, bits<6> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -863,7 +885,7 @@ class FmtALU64ShiftImm<bits<8> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;   // slots 1+2
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot12_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -889,7 +911,7 @@ class FmtMAC<bits<8> opcode, bits<6> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_MAC;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs1;
@@ -941,7 +963,7 @@ class FmtMAC2Dest<bits<8> opcode, bits<6> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b010;   // SLOT1-only (overridable per-def)
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_MAC;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;       // destination 1 (DR64, encoded @ Inst{21-18})
   bits<4> rtd2;     // destination 2 (DR64, encoded @ Inst{9-6}, legacy-only)
@@ -967,7 +989,7 @@ class FmtBR<bits<6> opcode, dag outs, dag ins, string asmstr,
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let isBranch = 1;
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rs;
   bits<16> offset;
@@ -986,7 +1008,7 @@ class FmtBRCond<bits<6> opcode, dag outs, dag ins, string asmstr,
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let isBranch = 1;
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rs1;
   bits<4> rs2;
@@ -1018,7 +1040,7 @@ class FmtJ<bits<6> opcode, dag outs, dag ins, string asmstr,
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let isCall = 1;
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<20> target;
@@ -1036,7 +1058,7 @@ class FmtJR<bits<6> opcode, dag outs, dag ins, string asmstr,
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
   let isCall = 1;
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<4> rs;
@@ -1055,7 +1077,7 @@ class FmtCSR<bits<6> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
 
   bits<4> rd;
   bits<8> csr_addr;

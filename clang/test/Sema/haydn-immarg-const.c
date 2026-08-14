@@ -37,21 +37,29 @@ haydn_x4int16 test_x4seli_bad(haydn_x4int16 a, haydn_x4int16 b) {
 }
 
 // --- UA AR ImmArg ---------------------------------------------------------
-void test_wbar_ok(void *p) { __builtin_haydn_wbarwua(1, p, 0); }
+// Format E dropped the direction select and the stride, so ar_sel is the only
+// ImmArg this family still has. The non-constant case that used to be aimed
+// at dir_sel is aimed at ar_sel instead, so that edge stays covered rather
+// than disappearing with the operand.
+void test_wbar_ok(void *p) { __builtin_haydn_wbarwua(1, p); }
 void test_wbar_ar_bad(void *p) {
   // expected-error@+1 {{argument value 4 is outside the valid range [0, 3]}}
-  __builtin_haydn_wbarwua(4, p, 0);
+  __builtin_haydn_wbarwua(4, p);
 }
-void test_wbar_dir_nonconst(void *p, int d) {
+void test_wbar_ar_nonconst(void *p, int ar) {
   // expected-error@+1 {{argument to '__builtin_haydn_wbarwua' must be a constant integer}}
-  __builtin_haydn_wbarwua(0, p, d);
+  __builtin_haydn_wbarwua(ar, p);
 }
-void test_sqhwua_ok(int64_t d, void *p, int s) {
-  __builtin_haydn_d_sqhwua_post(d, p, 2, s, 1);
+void test_sqhwua_ok(int64_t d, void *p) {
+  __builtin_haydn_d_sqhwua_post(d, p, 2);
 }
-void test_sqhwua_ar_nonconst(int64_t d, void *p, int s, int ar) {
+void test_sqhwua_ar_nonconst(int64_t d, void *p, int ar) {
   // expected-error@+1 {{argument to '__builtin_haydn_d_sqhwua_post' must be a constant integer}}
-  __builtin_haydn_d_sqhwua_post(d, p, ar, s, 0);
+  __builtin_haydn_d_sqhwua_post(d, p, ar);
+}
+void test_sqhwua_ar_bad(int64_t d, void *p) {
+  // expected-error@+1 {{argument value 4 is outside the valid range [0, 3]}}
+  __builtin_haydn_d_sqhwua_post(d, p, 4);
 }
 
 // --- CB REG cbr_sel ImmArg ------------------------------------------------
@@ -70,8 +78,8 @@ int64_t test_sin_cos_nonconst(int phase, int n) {
   // expected-error@+1 {{argument to '__builtin_haydn_sin_cos' must be a constant integer}}
   return __builtin_haydn_sin_cos(phase, n);
 }
-int64_t test_movei_l_ok(void) { return __builtin_haydn_movei_l(-1); }
-int64_t test_movei_l_nonconst(int v) {
+int64_t test_movei_l_ok(int64_t a) { return __builtin_haydn_movei_l(a, -1); }
+int64_t test_movei_l_nonconst(int64_t a, int v) {
   // expected-error@+1 {{argument to '__builtin_haydn_movei_l' must be a constant integer}}
-  return __builtin_haydn_movei_l(v);
+  return __builtin_haydn_movei_l(a, v);
 }

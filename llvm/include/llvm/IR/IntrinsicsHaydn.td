@@ -52,12 +52,17 @@ class haydn_ternary_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
                        [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 /// SFR-setting compare (Effect=SFR / D215 BUG-1): writes implicit SFR.
-/// If the return value is unused (as in `(void)haydn_x2slt32(a,b)` before a
-/// MOVT32), DCE would delete a pure IntrNoMem call. IntrHasSideEffects keeps
-/// the SFR write so subsequent X2MOVT32/X2MOVF16 see the correct flags.
+/// VOID: the hardware compares two sources and writes SFR, and no register.
+/// It used to return its first operand, which existed only to give the
+/// instruction a destination the ISA does not have -- GISel allocated a dead
+/// vreg for it and every caller either discarded it or read the flags back
+/// through MOVESFR2GPR. Read the result with haydn_movesfr2gpr().
+/// IntrHasSideEffects is what keeps the SFR write alive now that there is no
+/// result at all; a pure IntrNoMem call with no uses would be deleted before
+/// the following X2MOVT32/X2MOVF16 could see the flags.
 /// Clang: BuiltinsHaydn.td Effect=SFR → [NoThrow] (no Const).
-class haydn_sfr_compare_intrinsic<string name, LLVMType res_ty, LLVMType op_ty>
-    : Haydn_Intrinsic<name, [res_ty], [op_ty, op_ty],
+class haydn_sfr_compare_intrinsic<string name, LLVMType op_ty>
+    : Haydn_Intrinsic<name, [], [op_ty, op_ty],
                        [IntrHasSideEffects, IntrWillReturn]>;
 
 /// C1.2 ambient SFR cmov (Effect=SFR): x2/x4 movt/movf.
@@ -502,10 +507,10 @@ def int_haydn_neg64 : haydn_unary_intrinsic<"haydn_neg64", llvm_i64_ty, llvm_i64
 // Instructions: MULSA32_HHLL, MULSA32_HLLH, MULSS32_HHLL, MULSS32_HLLH
 //===----------------------------------------------------------------------===//
 
-def int_haydn_mulsa32_hhll : haydn_binary_intrinsic<"haydn_mulsa32_hhll", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_mulsa32_hllh : haydn_binary_intrinsic<"haydn_mulsa32_hllh", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_mulss32_hhll : haydn_binary_intrinsic<"haydn_mulss32_hhll", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_mulss32_hllh : haydn_binary_intrinsic<"haydn_mulss32_hllh", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_mulsa32_hhll : haydn_ternary_intrinsic<"haydn_mulsa32_hhll", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_mulsa32_hllh : haydn_ternary_intrinsic<"haydn_mulsa32_hllh", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_mulss32_hhll : haydn_ternary_intrinsic<"haydn_mulss32_hhll", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_mulss32_hllh : haydn_ternary_intrinsic<"haydn_mulss32_hllh", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // NOTE: satsr64 / packsr32 / packsr32x2_* are NOT golden encodings.
@@ -633,11 +638,11 @@ def int_haydn_x2cmul32s : haydn_simd_mac_2dest_intrinsic<"haydn_x2cmul32s">;
 //===----------------------------------------------------------------------===//
 
 // X2SEQ32 — Dual 32-bit signed equal compare → SFR
-def int_haydn_x2seq32 : haydn_sfr_compare_intrinsic<"haydn_x2seq32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2seq32 : haydn_sfr_compare_intrinsic<"haydn_x2seq32", llvm_v2i32_ty>;
 // X2SLT32 — Dual 32-bit signed less-than compare → SFR
-def int_haydn_x2slt32 : haydn_sfr_compare_intrinsic<"haydn_x2slt32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2slt32 : haydn_sfr_compare_intrinsic<"haydn_x2slt32", llvm_v2i32_ty>;
 // X2SLE32 — Dual 32-bit signed less-or-equal compare → SFR
-def int_haydn_x2sle32 : haydn_sfr_compare_intrinsic<"haydn_x2sle32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2sle32 : haydn_sfr_compare_intrinsic<"haydn_x2sle32", llvm_v2i32_ty>;
 // X2MOVF32 — Dual 32-bit conditional move if SFR false (ambient low-level)
 //   dst[i] = (SFR[i] == 0) ? src2[i] : src1[i]
 //   Takes two DR64 operands: src1 (fallthrough/false value), src2 (true value).
@@ -650,11 +655,11 @@ def int_haydn_x2movf32 : haydn_sfr_cmov_intrinsic<"haydn_x2movf32", llvm_v2i32_t
 def int_haydn_x2movt32 : haydn_sfr_cmov_intrinsic<"haydn_x2movt32", llvm_v2i32_ty, llvm_v2i32_ty>;
 
 // X4SEQ16 — Quad 16-bit signed equal compare → SFR
-def int_haydn_x4seq16 : haydn_sfr_compare_intrinsic<"haydn_x4seq16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4seq16 : haydn_sfr_compare_intrinsic<"haydn_x4seq16", llvm_v4i16_ty>;
 // X4SLT16 — Quad 16-bit signed less-than compare → SFR
-def int_haydn_x4slt16 : haydn_sfr_compare_intrinsic<"haydn_x4slt16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4slt16 : haydn_sfr_compare_intrinsic<"haydn_x4slt16", llvm_v4i16_ty>;
 // X4SLE16 — Quad 16-bit signed less-or-equal compare → SFR
-def int_haydn_x4sle16 : haydn_sfr_compare_intrinsic<"haydn_x4sle16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4sle16 : haydn_sfr_compare_intrinsic<"haydn_x4sle16", llvm_v4i16_ty>;
 // X4MOVF16 — Quad 16-bit conditional move if SFR false (ambient low-level)
 //   dst[i] = (SFR[i] == 0) ? src2[i] : src1[i]
 def int_haydn_x4movf16 : haydn_sfr_cmov_intrinsic<"haydn_x4movf16", llvm_v4i16_ty, llvm_v4i16_ty>;
@@ -798,24 +803,24 @@ def int_haydn_fmul16_ls33 : haydn_i64_from_v4i16_binary<"haydn_fmul16_ls33">;
 // Acc migration (same encoding class as 11_00/33_22).
 //===----------------------------------------------------------------------===//
 
-def int_haydn_fmulaa16_hs_13_02 : haydn_i64_from_v4i16_binary<"haydn_fmulaa16_hs_13_02">;
+def int_haydn_fmulaa16_hs_13_02 : haydn_i64_from_v4i16_mac<"haydn_fmulaa16_hs_13_02">;
 // Ternary Acc: rtd[63:32] = SATQ1.31(rtd[63:32] + p3 + p2). Migrated with
 // FMULAA16_HS_33_22 -> FmtALU64Acc for AE_MULAFQ16X2_FIR_1 correctness.
 def int_haydn_fmulaa16_hs_33_22 : haydn_i64_from_v4i16_mac<"haydn_fmulaa16_hs_33_22">;
-def int_haydn_fmulaa16_ls_11_00 : haydn_i64_from_v4i16_binary<"haydn_fmulaa16_ls_11_00">;
-def int_haydn_fmulaa16_ls_13_02 : haydn_i64_from_v4i16_binary<"haydn_fmulaa16_ls_13_02">;
-def int_haydn_fmulaa16_ls_33_22 : haydn_i64_from_v4i16_binary<"haydn_fmulaa16_ls_33_22">;
+def int_haydn_fmulaa16_ls_11_00 : haydn_i64_from_v4i16_mac<"haydn_fmulaa16_ls_11_00">;
+def int_haydn_fmulaa16_ls_13_02 : haydn_i64_from_v4i16_mac<"haydn_fmulaa16_ls_13_02">;
+def int_haydn_fmulaa16_ls_33_22 : haydn_i64_from_v4i16_mac<"haydn_fmulaa16_ls_33_22">;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: FMULSS16 HS/LS MSU variants (binary DR64)
 // Q15*Q15 MSU into Q31, subtract, lane-pair select.
 //===----------------------------------------------------------------------===//
 
-def int_haydn_fmulss16_hs_13_02 : haydn_i64_from_v4i16_binary<"haydn_fmulss16_hs_13_02">;
-def int_haydn_fmulss16_hs_33_22 : haydn_i64_from_v4i16_binary<"haydn_fmulss16_hs_33_22">;
-def int_haydn_fmulss16_ls_11_00 : haydn_i64_from_v4i16_binary<"haydn_fmulss16_ls_11_00">;
-def int_haydn_fmulss16_ls_13_02 : haydn_i64_from_v4i16_binary<"haydn_fmulss16_ls_13_02">;
-def int_haydn_fmulss16_ls_33_22 : haydn_i64_from_v4i16_binary<"haydn_fmulss16_ls_33_22">;
+def int_haydn_fmulss16_hs_13_02 : haydn_i64_from_v4i16_mac<"haydn_fmulss16_hs_13_02">;
+def int_haydn_fmulss16_hs_33_22 : haydn_i64_from_v4i16_mac<"haydn_fmulss16_hs_33_22">;
+def int_haydn_fmulss16_ls_11_00 : haydn_i64_from_v4i16_mac<"haydn_fmulss16_ls_11_00">;
+def int_haydn_fmulss16_ls_13_02 : haydn_i64_from_v4i16_mac<"haydn_fmulss16_ls_13_02">;
+def int_haydn_fmulss16_ls_33_22 : haydn_i64_from_v4i16_mac<"haydn_fmulss16_ls_33_22">;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: F2MUL zero-accumulator variants (binary DR64)
@@ -825,16 +830,16 @@ def int_haydn_fmulss16_ls_33_22 : haydn_i64_from_v4i16_binary<"haydn_fmulss16_ls
 //===----------------------------------------------------------------------===//
 
 // Saturating with rounding
-def int_haydn_f2mulas32rs_hhll : haydn_i64_from_v2i32_binary<"haydn_f2mulas32rs_hhll">;
-def int_haydn_f2mulas32rs_hllh : haydn_i64_from_v2i32_binary<"haydn_f2mulas32rs_hllh">;
-def int_haydn_f2mulsa32rs_hhll : haydn_i64_from_v2i32_binary<"haydn_f2mulsa32rs_hhll">;
-def int_haydn_f2mulsa32rs_hllh : haydn_i64_from_v2i32_binary<"haydn_f2mulsa32rs_hllh">;
+def int_haydn_f2mulas32rs_hhll : haydn_i64_from_v2i32_mac<"haydn_f2mulas32rs_hhll">;
+def int_haydn_f2mulas32rs_hllh : haydn_i64_from_v2i32_mac<"haydn_f2mulas32rs_hllh">;
+def int_haydn_f2mulsa32rs_hhll : haydn_i64_from_v2i32_mac<"haydn_f2mulsa32rs_hhll">;
+def int_haydn_f2mulsa32rs_hllh : haydn_i64_from_v2i32_mac<"haydn_f2mulsa32rs_hllh">;
 
 // Non-saturating with rounding
-def int_haydn_f2mulas32r_hhll : haydn_i64_from_v2i32_binary<"haydn_f2mulas32r_hhll">;
-def int_haydn_f2mulas32r_hllh : haydn_i64_from_v2i32_binary<"haydn_f2mulas32r_hllh">;
-def int_haydn_f2mulsa32r_hhll : haydn_i64_from_v2i32_binary<"haydn_f2mulsa32r_hhll">;
-def int_haydn_f2mulsa32r_hllh : haydn_i64_from_v2i32_binary<"haydn_f2mulsa32r_hllh">;
+def int_haydn_f2mulas32r_hhll : haydn_i64_from_v2i32_mac<"haydn_f2mulas32r_hhll">;
+def int_haydn_f2mulas32r_hllh : haydn_i64_from_v2i32_mac<"haydn_f2mulas32r_hllh">;
+def int_haydn_f2mulsa32r_hhll : haydn_i64_from_v2i32_mac<"haydn_f2mulsa32r_hhll">;
+def int_haydn_f2mulsa32r_hllh : haydn_i64_from_v2i32_mac<"haydn_f2mulsa32r_hllh">;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: X2/X4 SIMD Unary ops
@@ -872,10 +877,10 @@ def int_haydn_x4cmul16_f2  : Haydn_Intrinsic<"haydn_x4cmul16_f2",  [llvm_v2i32_t
 // X2/X4 binary (DR64 binary: i64, i64 -> i64)
 def int_haydn_x2max32   : haydn_binary_intrinsic<"haydn_x2max32",   llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x2min32   : haydn_binary_intrinsic<"haydn_x2min32",   llvm_v2i32_ty, llvm_v2i32_ty>;
-def int_haydn_x2clamp32 : haydn_binary_intrinsic<"haydn_x2clamp32", llvm_v2i32_ty, llvm_v2i32_ty>;
+def int_haydn_x2clamp32 : haydn_ternary_intrinsic<"haydn_x2clamp32", llvm_v2i32_ty, llvm_v2i32_ty>;
 def int_haydn_x4max16   : haydn_binary_intrinsic<"haydn_x4max16",   llvm_v4i16_ty, llvm_v4i16_ty>;
 def int_haydn_x4min16   : haydn_binary_intrinsic<"haydn_x4min16",   llvm_v4i16_ty, llvm_v4i16_ty>;
-def int_haydn_x4clamp16 : haydn_binary_intrinsic<"haydn_x4clamp16", llvm_v4i16_ty, llvm_v4i16_ty>;
+def int_haydn_x4clamp16 : haydn_ternary_intrinsic<"haydn_x4clamp16", llvm_v4i16_ty, llvm_v4i16_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: Shuffle/Pack ops
@@ -921,9 +926,7 @@ def int_haydn_x4cjmula16s_l : Haydn_Intrinsic<"haydn_x4cjmula16s_l", [llvm_v2i32
 
 // Unary DR64: i64 -> i64
 def int_haydn_not64 : haydn_unary_intrinsic<"haydn_not64", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_seq64 : Haydn_Intrinsic<"haydn_seq64",
-    [llvm_i64_ty], [llvm_i64_ty],
-    [IntrHasSideEffects]>;
+def int_haydn_seq64 : haydn_sfr_compare_intrinsic<"haydn_seq64", llvm_i64_ty>;
 
 // Binary DR64: i64, i64 -> i64
 def int_haydn_max64   : haydn_binary_intrinsic<"haydn_max64",   llvm_i64_ty, llvm_i64_ty>;
@@ -957,32 +960,32 @@ def int_haydn_srl64 : Haydn_Intrinsic<"haydn_srl64",
 //   Lane pairs: 00, 10, 11, 20, 21, 22, 30, 31, 32, 33
 //===----------------------------------------------------------------------===//
 
-def int_haydn_smula16_00 : haydn_binary_intrinsic<"haydn_smula16_00", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_10 : haydn_binary_intrinsic<"haydn_smula16_10", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_11 : haydn_binary_intrinsic<"haydn_smula16_11", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_20 : haydn_binary_intrinsic<"haydn_smula16_20", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_21 : haydn_binary_intrinsic<"haydn_smula16_21", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_22 : haydn_binary_intrinsic<"haydn_smula16_22", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_30 : haydn_binary_intrinsic<"haydn_smula16_30", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_31 : haydn_binary_intrinsic<"haydn_smula16_31", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_32 : haydn_binary_intrinsic<"haydn_smula16_32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16_33 : haydn_binary_intrinsic<"haydn_smula16_33", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_00 : haydn_ternary_intrinsic<"haydn_smula16_00", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_10 : haydn_ternary_intrinsic<"haydn_smula16_10", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_11 : haydn_ternary_intrinsic<"haydn_smula16_11", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_20 : haydn_ternary_intrinsic<"haydn_smula16_20", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_21 : haydn_ternary_intrinsic<"haydn_smula16_21", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_22 : haydn_ternary_intrinsic<"haydn_smula16_22", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_30 : haydn_ternary_intrinsic<"haydn_smula16_30", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_31 : haydn_ternary_intrinsic<"haydn_smula16_31", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_32 : haydn_ternary_intrinsic<"haydn_smula16_32", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16_33 : haydn_ternary_intrinsic<"haydn_smula16_33", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: SMULA16S — Signed 16-bit saturating MAC with lane selection
 // SMULA16S_* — saturating multiply-accumulate (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_smula16s_00 : haydn_binary_intrinsic<"haydn_smula16s_00", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_10 : haydn_binary_intrinsic<"haydn_smula16s_10", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_11 : haydn_binary_intrinsic<"haydn_smula16s_11", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_20 : haydn_binary_intrinsic<"haydn_smula16s_20", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_21 : haydn_binary_intrinsic<"haydn_smula16s_21", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_22 : haydn_binary_intrinsic<"haydn_smula16s_22", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_30 : haydn_binary_intrinsic<"haydn_smula16s_30", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_31 : haydn_binary_intrinsic<"haydn_smula16s_31", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_32 : haydn_binary_intrinsic<"haydn_smula16s_32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smula16s_33 : haydn_binary_intrinsic<"haydn_smula16s_33", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_00 : haydn_ternary_intrinsic<"haydn_smula16s_00", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_10 : haydn_ternary_intrinsic<"haydn_smula16s_10", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_11 : haydn_ternary_intrinsic<"haydn_smula16s_11", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_20 : haydn_ternary_intrinsic<"haydn_smula16s_20", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_21 : haydn_ternary_intrinsic<"haydn_smula16s_21", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_22 : haydn_ternary_intrinsic<"haydn_smula16s_22", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_30 : haydn_ternary_intrinsic<"haydn_smula16s_30", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_31 : haydn_ternary_intrinsic<"haydn_smula16s_31", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_32 : haydn_ternary_intrinsic<"haydn_smula16s_32", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smula16s_33 : haydn_ternary_intrinsic<"haydn_smula16s_33", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: SMULS16 — Signed 16-bit multiply-subtract with lane selection
@@ -990,32 +993,32 @@ def int_haydn_smula16s_33 : haydn_binary_intrinsic<"haydn_smula16s_33", llvm_i64
 //   rd -= signed_mul_16(rs1_lane_i, rs2_lane_j)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_smuls16_00 : haydn_binary_intrinsic<"haydn_smuls16_00", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_10 : haydn_binary_intrinsic<"haydn_smuls16_10", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_11 : haydn_binary_intrinsic<"haydn_smuls16_11", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_20 : haydn_binary_intrinsic<"haydn_smuls16_20", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_21 : haydn_binary_intrinsic<"haydn_smuls16_21", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_22 : haydn_binary_intrinsic<"haydn_smuls16_22", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_30 : haydn_binary_intrinsic<"haydn_smuls16_30", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_31 : haydn_binary_intrinsic<"haydn_smuls16_31", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_32 : haydn_binary_intrinsic<"haydn_smuls16_32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16_33 : haydn_binary_intrinsic<"haydn_smuls16_33", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_00 : haydn_ternary_intrinsic<"haydn_smuls16_00", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_10 : haydn_ternary_intrinsic<"haydn_smuls16_10", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_11 : haydn_ternary_intrinsic<"haydn_smuls16_11", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_20 : haydn_ternary_intrinsic<"haydn_smuls16_20", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_21 : haydn_ternary_intrinsic<"haydn_smuls16_21", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_22 : haydn_ternary_intrinsic<"haydn_smuls16_22", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_30 : haydn_ternary_intrinsic<"haydn_smuls16_30", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_31 : haydn_ternary_intrinsic<"haydn_smuls16_31", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_32 : haydn_ternary_intrinsic<"haydn_smuls16_32", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16_33 : haydn_ternary_intrinsic<"haydn_smuls16_33", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: SMULS16S — Signed 16-bit saturating multiply-subtract
 // SMULS16S_* — saturating multiply-subtract (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_smuls16s_00 : haydn_binary_intrinsic<"haydn_smuls16s_00", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_10 : haydn_binary_intrinsic<"haydn_smuls16s_10", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_11 : haydn_binary_intrinsic<"haydn_smuls16s_11", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_20 : haydn_binary_intrinsic<"haydn_smuls16s_20", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_21 : haydn_binary_intrinsic<"haydn_smuls16s_21", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_22 : haydn_binary_intrinsic<"haydn_smuls16s_22", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_30 : haydn_binary_intrinsic<"haydn_smuls16s_30", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_31 : haydn_binary_intrinsic<"haydn_smuls16s_31", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_32 : haydn_binary_intrinsic<"haydn_smuls16s_32", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_smuls16s_33 : haydn_binary_intrinsic<"haydn_smuls16s_33", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_00 : haydn_ternary_intrinsic<"haydn_smuls16s_00", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_10 : haydn_ternary_intrinsic<"haydn_smuls16s_10", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_11 : haydn_ternary_intrinsic<"haydn_smuls16s_11", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_20 : haydn_ternary_intrinsic<"haydn_smuls16s_20", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_21 : haydn_ternary_intrinsic<"haydn_smuls16s_21", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_22 : haydn_ternary_intrinsic<"haydn_smuls16s_22", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_30 : haydn_ternary_intrinsic<"haydn_smuls16s_30", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_31 : haydn_ternary_intrinsic<"haydn_smuls16s_31", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_32 : haydn_ternary_intrinsic<"haydn_smuls16s_32", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_smuls16s_33 : haydn_ternary_intrinsic<"haydn_smuls16s_33", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: FMULS16 — Fractional 16-bit multiply-subtract (binary DR64)
@@ -1023,27 +1026,27 @@ def int_haydn_smuls16s_33 : haydn_binary_intrinsic<"haydn_smuls16s_33", llvm_i64
 // FMULS16_LS_* — low-half signed, lane-select fractional subtract
 //===----------------------------------------------------------------------===//
 
-def int_haydn_fmuls16_hs00 : haydn_binary_intrinsic<"haydn_fmuls16_hs00", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs01 : haydn_binary_intrinsic<"haydn_fmuls16_hs01", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs02 : haydn_binary_intrinsic<"haydn_fmuls16_hs02", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs03 : haydn_binary_intrinsic<"haydn_fmuls16_hs03", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs11 : haydn_binary_intrinsic<"haydn_fmuls16_hs11", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs12 : haydn_binary_intrinsic<"haydn_fmuls16_hs12", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs13 : haydn_binary_intrinsic<"haydn_fmuls16_hs13", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs22 : haydn_binary_intrinsic<"haydn_fmuls16_hs22", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs23 : haydn_binary_intrinsic<"haydn_fmuls16_hs23", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_hs33 : haydn_binary_intrinsic<"haydn_fmuls16_hs33", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs00 : haydn_ternary_intrinsic<"haydn_fmuls16_hs00", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs01 : haydn_ternary_intrinsic<"haydn_fmuls16_hs01", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs02 : haydn_ternary_intrinsic<"haydn_fmuls16_hs02", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs03 : haydn_ternary_intrinsic<"haydn_fmuls16_hs03", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs11 : haydn_ternary_intrinsic<"haydn_fmuls16_hs11", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs12 : haydn_ternary_intrinsic<"haydn_fmuls16_hs12", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs13 : haydn_ternary_intrinsic<"haydn_fmuls16_hs13", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs22 : haydn_ternary_intrinsic<"haydn_fmuls16_hs22", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs23 : haydn_ternary_intrinsic<"haydn_fmuls16_hs23", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_hs33 : haydn_ternary_intrinsic<"haydn_fmuls16_hs33", llvm_i64_ty, llvm_i64_ty>;
 
-def int_haydn_fmuls16_ls00 : haydn_binary_intrinsic<"haydn_fmuls16_ls00", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls01 : haydn_binary_intrinsic<"haydn_fmuls16_ls01", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls02 : haydn_binary_intrinsic<"haydn_fmuls16_ls02", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls03 : haydn_binary_intrinsic<"haydn_fmuls16_ls03", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls11 : haydn_binary_intrinsic<"haydn_fmuls16_ls11", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls12 : haydn_binary_intrinsic<"haydn_fmuls16_ls12", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls13 : haydn_binary_intrinsic<"haydn_fmuls16_ls13", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls22 : haydn_binary_intrinsic<"haydn_fmuls16_ls22", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls23 : haydn_binary_intrinsic<"haydn_fmuls16_ls23", llvm_i64_ty, llvm_i64_ty>;
-def int_haydn_fmuls16_ls33 : haydn_binary_intrinsic<"haydn_fmuls16_ls33", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls00 : haydn_ternary_intrinsic<"haydn_fmuls16_ls00", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls01 : haydn_ternary_intrinsic<"haydn_fmuls16_ls01", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls02 : haydn_ternary_intrinsic<"haydn_fmuls16_ls02", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls03 : haydn_ternary_intrinsic<"haydn_fmuls16_ls03", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls11 : haydn_ternary_intrinsic<"haydn_fmuls16_ls11", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls12 : haydn_ternary_intrinsic<"haydn_fmuls16_ls12", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls13 : haydn_ternary_intrinsic<"haydn_fmuls16_ls13", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls22 : haydn_ternary_intrinsic<"haydn_fmuls16_ls22", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls23 : haydn_ternary_intrinsic<"haydn_fmuls16_ls23", llvm_i64_ty, llvm_i64_ty>;
+def int_haydn_fmuls16_ls33 : haydn_ternary_intrinsic<"haydn_fmuls16_ls33", llvm_i64_ty, llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: FMULAS32S — Fractional add-subtract dual MAC, saturating
@@ -1083,12 +1086,8 @@ def int_haydn_sra64r : Haydn_Intrinsic<"haydn_sra64r",
 // Unary DR64 matching the instruction defs: (outs DR64:$rd), (ins DR64:$rs)
 //===----------------------------------------------------------------------===//
 
-def int_haydn_slt64 : Haydn_Intrinsic<"haydn_slt64",
-    [llvm_i64_ty], [llvm_i64_ty],
-    [IntrHasSideEffects]>;
-def int_haydn_sle64 : Haydn_Intrinsic<"haydn_sle64",
-    [llvm_i64_ty], [llvm_i64_ty],
-    [IntrHasSideEffects]>;
+def int_haydn_slt64 : haydn_sfr_compare_intrinsic<"haydn_slt64", llvm_i64_ty>;
+def int_haydn_sle64 : haydn_sfr_compare_intrinsic<"haydn_sle64", llvm_i64_ty>;
 
 //===----------------------------------------------------------------------===//
 // Wave 5: Scalar 64-bit SFR Conditional Move
@@ -1098,10 +1097,10 @@ def int_haydn_sle64 : Haydn_Intrinsic<"haydn_sle64",
 //===----------------------------------------------------------------------===//
 
 def int_haydn_movt64 : Haydn_Intrinsic<"haydn_movt64",
-    [llvm_i64_ty], [llvm_i64_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty],
     [IntrHasSideEffects]>;
 def int_haydn_movf64 : Haydn_Intrinsic<"haydn_movf64",
-    [llvm_i64_ty], [llvm_i64_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty],
     [IntrHasSideEffects]>;
 
 //===----------------------------------------------------------------------===//
@@ -1283,17 +1282,19 @@ def int_haydn_pldwwua : Haydn_Intrinsic<"haydn_pldwwua",
     [], [llvm_i32_ty, llvm_ptr_ty],
     [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 
-// i64 d_lqhwua_post(i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
-// ar_sel uimm2 + dir_sel uimm1 are ImmArg; stride stays variable GPR.
+// i64 d_lqhwua_post(i32 ptr, i32 ar_sel)
+// ar_sel uimm2 is ImmArg. Format E dropped the stride and the direction
+// select: the post-increment is a fixed +8 forwards, so the operands the
+// caller used to supply are gone rather than defaulted.
 def int_haydn_d_lqhwua_post : Haydn_Intrinsic<"haydn_d_lqhwua_post",
-    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>, IntrReadMem, IntrHasSideEffects,
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
-// i64 d_ltwua_post(i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
+// i64 d_ltwua_post(i32 ptr, i32 ar_sel)
 def int_haydn_d_ltwua_post : Haydn_Intrinsic<"haydn_d_ltwua_post",
-    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>, IntrReadMem, IntrHasSideEffects,
+    [llvm_i64_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrReadMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
 // void flar(i32 ar_sel) — AR-only state clear; ar_sel ImmArg uimm2.
@@ -1301,22 +1302,22 @@ def int_haydn_flar : Haydn_Intrinsic<"haydn_flar",
     [], [llvm_i32_ty],
     [ImmArg<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
 
-// void wbarwua(i32 ar_sel, i32 ptr, i32 dir_sel)
+// void wbarwua(i32 ar_sel, i32 ptr)
 def int_haydn_wbarwua : Haydn_Intrinsic<"haydn_wbarwua",
-    [], [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects,
+    [], [llvm_i32_ty, llvm_ptr_ty],
+    [ImmArg<ArgIndex<0>>, IntrWriteMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
-// void d_sqhwua_post(i64 data, i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
+// void d_sqhwua_post(i64 data, i32 ptr, i32 ar_sel)
 def int_haydn_d_sqhwua_post : Haydn_Intrinsic<"haydn_d_sqhwua_post",
-    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<4>>, IntrWriteMem, IntrHasSideEffects,
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
-// void d_stwua_post(i64 data, i32 ptr, i32 ar_sel, i32 stride, i32 dir_sel)
+// void d_stwua_post(i64 data, i32 ptr, i32 ar_sel)
 def int_haydn_d_stwua_post : Haydn_Intrinsic<"haydn_d_stwua_post",
-    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<4>>, IntrWriteMem, IntrHasSideEffects,
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrHasSideEffects,
      IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
@@ -1897,11 +1898,11 @@ def int_haydn_transf64f2 : Haydn_Intrinsic<"haydn_transf64f2",
     [llvm_i64_ty], [llvm_i32_ty],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_movei_h : Haydn_Intrinsic<"haydn_movei_h",
-    [llvm_i64_ty], [llvm_i32_ty],
-    [ImmArg<ArgIndex<0>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_movei_l : Haydn_Intrinsic<"haydn_movei_l",
-    [llvm_i64_ty], [llvm_i32_ty],
-    [ImmArg<ArgIndex<0>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 def int_haydn_zero_dr : Haydn_Intrinsic<"haydn_zero_dr",
     [llvm_i64_ty], [],
     [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;

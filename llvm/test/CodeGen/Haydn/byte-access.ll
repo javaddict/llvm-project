@@ -13,7 +13,7 @@
 ; byte load -> ldu8 / s_lbu_* (NOT ld32 / s_lw)
 define i32 @load_char(ptr %p) {
 ; CHECK-LABEL: load_char:
-; CHECK-NOT: {{(^|[^_])ld32|s_lw}}
+; CHECK-NOT: {{(^|[^_])s_lw_}}
 ; CHECK: {{ldu8|s_lbu}}
   %q = getelementptr i8, ptr %p, i32 1
   %c = load i8, ptr %q
@@ -24,7 +24,7 @@ define i32 @load_char(ptr %p) {
 ; byte store -> st8 / s_sb_* (NOT st32 / s_sw)
 define void @store_char(ptr %p, i8 %v) {
 ; CHECK-LABEL: store_char:
-; CHECK-NOT: {{(^|[^_])st32|s_sw}}
+; CHECK-NOT: {{(^|[^_])s_sw_}}
 ; CHECK: {{st8|s_sb}}
   %q = getelementptr i8, ptr %p, i32 2
   store i8 %v, ptr %q
@@ -34,7 +34,7 @@ define void @store_char(ptr %p, i8 %v) {
 ; half load -> ldu16 / s_lhwu_* (NOT ld32 / s_lw)
 define i32 @load_short(ptr %p) {
 ; CHECK-LABEL: load_short:
-; CHECK-NOT: {{(^|[^_])ld32|s_lw}}
+; CHECK-NOT: {{(^|[^_])s_lw_}}
 ; CHECK: {{ldu16|s_lhwu}}
   %q = getelementptr i16, ptr %p, i32 1
   %s = load i16, ptr %q
@@ -46,7 +46,7 @@ define i32 @load_short(ptr %p) {
 ; Without explicit align 1, i32 ABI align is 4 and ld32 is legal even at GEP+1.
 define i32 @load_i32_unaligned(ptr %p) {
 ; CHECK-LABEL: load_i32_unaligned:
-; CHECK-NOT: {{(^|[^_])ld32|s_lw}}
+; CHECK-NOT: {{(^|[^_])s_lw_}}
 ; CHECK: {{ldu8|s_lbu}}
   %q = getelementptr i8, ptr %p, i32 1
   %v = load i32, ptr %q, align 1

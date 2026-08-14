@@ -99,6 +99,12 @@ struct CycleState {
   /// Intersection of FormatIDs still covering OccupiedSlots and compatible
   /// with every accepted member (bit = formatIDBit(FormatID)).
   uint64_t FeasibleFormatMask = ProductFormatMask;
+  /// The mask this cycle STARTED from, before any member narrowed it. The
+  /// re-solve in tryAdd re-decides every placement, so it has to seed from the
+  /// unnarrowed frontier; FeasibleFormatMask has already been intersected down
+  /// by the members it is about to discard. Kept rather than recomputed
+  /// because a synthetic table may have been seeded with a subset.
+  uint64_t SeedFormatMask = ProductFormatMask;
 
   bool empty() const { return Members.empty(); }
   unsigned memberCount() const {
@@ -115,6 +121,7 @@ inline CycleState makeInitialCycleState(ArrayRef<FormatDesc> Table) {
     S.FeasibleFormatMask |= formatIDBit(F.FID);
   if (S.FeasibleFormatMask == 0)
     S.FeasibleFormatMask = ProductFormatMask;
+  S.SeedFormatMask = S.FeasibleFormatMask;
   return S;
 }
 
@@ -191,6 +198,113 @@ inline std::optional<unsigned> fieldSlotsToIndex(SlotBits Field) {
   if (Index >= static_cast<unsigned>(llvm::MaxSlots))
     return std::nullopt;
   return Index;
+}
+
+/// Placement alternatives for \p LogicalOpc, restricted to the ones that name
+/// exactly one position and ordered the way the greedy walk orders them —
+/// highest slot bit first. Sharing this between the greedy path and the
+/// re-solve is what makes the two agree: explored in the same order, the first
+/// solution the search finds IS the greedy one whenever greedy succeeds.
+inline bool
+placementAlternativesByPosition(const HaydnMCFormats &Fmts, unsigned LogicalOpc,
+                                SmallVectorImpl<PlacementAlternative> &Out,
+                                const MCInstrInfo *MII) {
+  if (!enumeratePlacementAlternatives(Fmts, LogicalOpc, Out, MII))
+    return false;
+  llvm::erase_if(Out, [](const PlacementAlternative &A) {
+    return A.FieldSlots == 0 || !fieldSlotsToIndex(A.FieldSlots);
+  });
+  if (Out.empty())
+    return false;
+  llvm::stable_sort(Out, [](const PlacementAlternative &A,
+                            const PlacementAlternative &B) {
+    return A.FieldSlots > B.FieldSlots;
+  });
+  return true;
+}
+
+/// Depth-first assignment of one alternative per member to a distinct (slot,
+/// unit) pair that keeps some format covering the whole occupancy. Records the
+/// accepted alternative per member in \p Chosen.
+inline bool
+assignMembers(ArrayRef<SmallVector<PlacementAlternative, 8>> Alts,
+              ArrayRef<FormatDesc> Table, unsigned I, SlotBits Occ,
+              Haydn::UnitBits Units, uint64_t Mask,
+              MutableArrayRef<const PlacementAlternative *> Chosen) {
+  if (I == Alts.size())
+    return true;
+  for (const PlacementAlternative &A : Alts[I]) {
+    if (Occ & A.FieldSlots)
+      continue;
+    if (Units & A.Units)
+      continue;
+    const uint64_t Allowed = Mask & A.CompatibleFormatMask;
+    if (Allowed == 0)
+      continue;
+    const SlotBits NewOcc = Occ | A.FieldSlots;
+    const uint64_t NewMask = coveringFormatMask(Table, NewOcc, Allowed);
+    if (NewMask == 0)
+      continue;
+    Chosen[I] = &A;
+    if (assignMembers(Alts, Table, I + 1, NewOcc, Units | A.Units, NewMask,
+                      Chosen))
+      return true;
+  }
+  Chosen[I] = nullptr;
+  return false;
+}
+
+/// Re-solve \p S from scratch over its existing members plus \p LogicalOpc.
+/// Existing members keep their LOGICAL identity — only the (member opcode,
+/// slot, unit) each was assigned may move — so a caller holding per-member
+/// state keyed on the logical is unaffected, while one that has already
+/// published a member opcode must re-publish it. The post-RA hazard recognizer
+/// is the second kind: it stamps an alternate descriptor per instruction as
+/// each is accepted, and re-stamps the movers (HaydnHazardRecognizer.cpp).
+///
+/// \returns true and mutates \p S on accept; false leaves \p S untouched.
+inline bool tryReassign(CycleState &S, const HaydnMCFormats &Fmts,
+                        ArrayRef<FormatDesc> Table, unsigned LogicalOpc,
+                        const MCInstrInfo *MII) {
+  const unsigned N = static_cast<unsigned>(S.Members.size());
+  SmallVector<SmallVector<PlacementAlternative, 8>, 4> Alts(N + 1);
+  for (unsigned I = 0; I != N; ++I)
+    if (!placementAlternativesByPosition(Fmts, S.Members[I].LogicalOpcode,
+                                         Alts[I], MII))
+      return false;
+  if (!placementAlternativesByPosition(Fmts, LogicalOpc, Alts[N], MII))
+    return false;
+
+  SmallVector<const PlacementAlternative *, 4> Chosen(N + 1, nullptr);
+  // Seed from the frontier the cycle STARTED with: this re-decides every
+  // placement, so the narrowing the discarded assignment produced must not
+  // constrain it.
+  if (!assignMembers(Alts, Table, /*I=*/0, /*Occ=*/0, /*Units=*/0,
+                     S.SeedFormatMask, Chosen))
+    return false;
+
+  CycleState New;
+  New.SeedFormatMask = S.SeedFormatMask;
+  New.FeasibleFormatMask = S.SeedFormatMask;
+  New.Members.reserve(N + 1);
+  for (unsigned I = 0; I != N + 1; ++I) {
+    const PlacementAlternative &A = *Chosen[I];
+    CycleMember M;
+    M.LogicalOpcode = I < N ? S.Members[I].LogicalOpcode : LogicalOpc;
+    M.MemberOpcode = A.MemberOpcode;
+    M.FieldSlots = A.FieldSlots;
+    M.Units = A.Units;
+    New.Members.push_back(M);
+    New.OccupiedSlots |= A.FieldSlots;
+    New.OccupiedUnits |= A.Units;
+    New.FeasibleFormatMask =
+        coveringFormatMask(Table, New.OccupiedSlots,
+                           New.FeasibleFormatMask & A.CompatibleFormatMask);
+  }
+  assert(New.FeasibleFormatMask != 0 &&
+         "re-solve accepted an occupancy no format covers");
+  S = std::move(New);
+  return true;
 }
 
 /// First free field assignment for \p LogicalOpc that keeps a covering format.
@@ -270,6 +384,19 @@ inline bool tryAdd(CycleState &S, const HaydnMCFormats &Fmts,
       return true;
     }
   }
+
+  // Greedy could not place it, and that is NOT the same as infeasible. The
+  // walk above commits the first alternative that fits and never reconsiders,
+  // so an earlier member may be sitting on the only slot or unit this one can
+  // use — or, more often, may have taken a P3x slot and thereby committed the
+  // whole cycle to the 3-entry format, which excludes every instruction whose
+  // wide immediate only fits a 2-entry entry. Re-solve the cycle before
+  // rejecting (CB-147).
+  //
+  // Measured on gcc-c-torture before this existed: 1961 of 2507 rejections
+  // (78%) were greedy-only, i.e. an assignment did exist.
+  if (!S.Members.empty() && tryReassign(S, Fmts, Table, LogicalOpc, MII))
+    return true;
 
   // Alternatives whose FieldSlots is not exactly one position are skipped
   // above; there are none today. Pure reject.

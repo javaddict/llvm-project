@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Bundle128 cycle plan foundation (behavior-preserving for Bundle128):
+// Format E cycle plan foundation:
 //
-//   * FormatID — durable product format identity (today: only Bundle128Full)
+//   * FormatID — durable product format identity (BundleE2 / BundleE3)
 //   * EncodedBytes / EncodedBits / CycleCount — typed quantities (plan §3.5)
 //   * BundlePlan — one architectural cycle's committed placement summary
 //
@@ -21,17 +21,17 @@
 //   | Arch time      | CycleCount             | byte distance           |
 //
 // Generated table units (pin in unit tests):
-//   * VLIWFormat::Size for BUNDLE128_FULL is **EncodedBytes** (value 16).
-//     (Older comments said "bits"; the table value 16 is the parcel byte size.)
-//   * MCSlotInfo::Size is **EncodedBits** per slot window (48 / 40 / 40).
-//     Sum = Bundle128EncodedBits (128).
+//   * VLIWFormat::Size for BUNDLE_E2 / BUNDLE_E3 is **EncodedBytes** (12).
+//   * MCSlotInfo::Size is **EncodedBits** per entry window (45/41 for E2,
+//     31/31/27 for E3). These do NOT sum to the bundle width: 6 header bits
+//     plus a few unused bits above the top entry make up the rest.
 //
 // This header is the single numeric authority for the product parcel size.
 // getInstSizeInBytes, FixupHwLoops, and HardwareLoops all read
 // encodedBytesFor(FormatID) / ProductFormatDesc.Bytes (AIE
 // getAIEMachineBundleSize → Format->getSize(), AIEBaseInstrInfo.cpp:546-555;
 // getInstSizeInBytes → table Size, AIE1InstrInfo.cpp:646-651). No second
-// hard-coded "always 16" oracle independent of FormatID.
+// hard-coded "always 12" oracle independent of FormatID.
 //
 // Multi-MI BUNDLE roots carry a durable FormatID immediate (plan §6.3).
 // Singleton real MIs also become BUNDLE + FormatID via HaydnFinalizeBundle
@@ -39,14 +39,14 @@
 // Solver-facing FormatDesc {FormatID, Priority, EncodedBytes, SlotSet}
 // and first-covering Priority ranking (AIE PacketFormats::getFormat
 // AIEFormat.cpp:18-27 table-order first covering → explicit Priority per
-// plan §4.3). Product live table remains one row (BUNDLE128_FULL).
+// plan §4.3). Product live table is two rows (BUNDLE_E2, BUNDLE_E3).
 // Pure CycleState tryAdd/commit in HaydnBundleFormatSolver.h
 // (AIEBundle.h canAdd/add + HazardRecognizer alt try); Bundle/HR/SMS are
 // adapters. Placement is alts-only; materialize via setDesc.
 //
 // productFeasibleFormatMask / Bundle+ResourceCycle getFeasibleFormatMask
-// expose the Pre-RA/SMS FormatID frontier (size-1 Full product; logical only;
-// plan §7.1). No freeze of FormatID before post-RA.
+// expose the Pre-RA/SMS FormatID frontier (logical only; plan §7.1). No
+// freeze of FormatID before post-RA.
 //
 //===----------------------------------------------------------------------===//
 
@@ -102,40 +102,73 @@ struct CycleCount {
 };
 
 //===----------------------------------------------------------------------===//
-// Product format identity (only Bundle128 until BF0+BF5)
+// Product format identity
 //===----------------------------------------------------------------------===//
 
-/// Stable FormatID. Only Bundle128Full is authorized for product encode.
-/// Compact IDs must not be invented here — blocked on BF0 hardware manifest.
+/// Stable FormatID, one enumerator per product format row.
+///
+/// Format E has two composites and they are selected by ENTRY COUNT, not by
+/// capability: an occupancy over {P20,P21} is a 2-entry bundle and one over
+/// {P30,P31,P32} is a 3-entry bundle. The generated ConflictBits make the two
+/// slot sets mutually exclusive, so an occupancy can only ever be covered by
+/// one row — which is what makes the table scan below the entry-count
+/// decision rather than something a caller has to decide.
 enum class FormatID : unsigned {
-  Bundle128Full = 0,
+  BundleE2 = 0,
+  BundleE3 = 1,
 };
 
-/// Sole live product format.
-inline constexpr FormatID ProductFormatID = FormatID::Bundle128Full;
+/// Default row for callers with no occupancy to derive one from — an explicit
+/// stall, or a bare MI outside any bundle.
+///
+/// NOT "the sole live format". That is what it meant under Bundle128, and it
+/// is why so much surrounding code could assume a single row. Anywhere an
+/// occupancy exists, derive from it; see makeProductPlan.
+inline constexpr FormatID ProductFormatID = FormatID::BundleE2;
 
-/// Bundle128 parcel: 16 bytes = 128 bits = one architectural cycle when issued.
-inline constexpr unsigned Bundle128EncodedBytesValue = 16;
-inline constexpr unsigned Bundle128EncodedBitsValue = 128;
-inline constexpr EncodedBytes Bundle128EncodedBytes{Bundle128EncodedBytesValue};
-inline constexpr EncodedBits Bundle128EncodedBits{Bundle128EncodedBitsValue};
+/// Format E parcel: 12 bytes = 96 bits = one architectural cycle when issued.
+/// Both composites are this size, which is what keeps productParcelBytes()
+/// single-valued across the switch — asserted below, not assumed.
+inline constexpr unsigned ProductEncodedBytesValue = Haydn::BUNDLE_E_BYTES;
+inline constexpr unsigned ProductEncodedBitsValue = Haydn::BUNDLE_E_BITS;
+inline constexpr EncodedBytes ProductEncodedBytes{ProductEncodedBytesValue};
+inline constexpr EncodedBits ProductEncodedBits{ProductEncodedBitsValue};
 inline constexpr CycleCount OneCycle{1};
 
-/// Physical slot window widths (bits) — match generated MCSlotInfo.
-inline constexpr EncodedBits Slot0EncodedBits{48};
-inline constexpr EncodedBits Slot1EncodedBits{40};
-inline constexpr EncodedBits Slot2EncodedBits{40};
+/// Header occupies Inst{2-0} (format indicator), Inst{3} (entry count) and
+/// Inst{5-4} (reserved), so the payload starts at bit 6.
+inline constexpr unsigned BundleEHeaderBits = 6;
 
-static_assert(Slot0EncodedBits.Value + Slot1EncodedBits.Value +
-                      Slot2EncodedBits.Value ==
-                  Bundle128EncodedBitsValue,
-              "slot windows must sum to Bundle128 bit width");
+/// Physical entry window widths (bits), matching the generated composites in
+/// HaydnFormatEComposites.td.
+///
+/// Unlike Bundle128's 48/40/40 these do NOT tile the word: each composite
+/// leaves a few bits unused above its top entry. Anything that assumed the
+/// windows sum to the bundle width has to be re-derived rather than rescaled.
+inline constexpr EncodedBits P20EncodedBits{45}; // BUNDLE_E2 Inst{50-6}
+inline constexpr EncodedBits P21EncodedBits{41}; // BUNDLE_E2 Inst{91-51}
+inline constexpr EncodedBits P30EncodedBits{31}; // BUNDLE_E3 Inst{36-6}
+inline constexpr EncodedBits P31EncodedBits{31}; // BUNDLE_E3 Inst{67-37}
+inline constexpr EncodedBits P32EncodedBits{27}; // BUNDLE_E3 Inst{94-68}
+
+/// Bits left unused above the top entry of each composite.
+inline constexpr unsigned BundleE2UnusedBits = 4; // Inst{95-92}
+inline constexpr unsigned BundleE3UnusedBits = 1; // Inst{95}
+
+static_assert(BundleEHeaderBits + P20EncodedBits.Value + P21EncodedBits.Value +
+                      BundleE2UnusedBits ==
+                  ProductEncodedBitsValue,
+              "BUNDLE_E2 header + entry windows + unused must tile 96 bits");
+static_assert(BundleEHeaderBits + P30EncodedBits.Value + P31EncodedBits.Value +
+                      P32EncodedBits.Value + BundleE3UnusedBits ==
+                  ProductEncodedBitsValue,
+              "BUNDLE_E3 header + entry windows + unused must tile 96 bits");
 
 //===----------------------------------------------------------------------===//
 // Table unit conversions (generated VLIWFormat / MCSlotInfo)
 //===----------------------------------------------------------------------===//
 
-/// VLIWFormat::Size for the product BUNDLE128_FULL row is EncodedBytes (16).
+/// VLIWFormat::Size for the product BUNDLE_E2 / BUNDLE_E3 rows is EncodedBytes (12).
 inline constexpr EncodedBytes vliwFormatSizeAsBytes(unsigned TableSize) {
   return EncodedBytes{TableSize};
 }
@@ -174,7 +207,7 @@ inline bool isProductFormat(FormatID ID);
 // (AIEFormat.cpp:18-27). Haydn strengthens that into an explicit Priority
 // ranking (plan §4.3): among formats that cover OccupiedSlots, the lowest
 // Priority wins; equal Priority keeps earlier table index (stable AIE-like
-// order). Product table is still a single BUNDLE128_FULL row; unit tests may
+// order). Product table is BUNDLE_E2 + BUNDLE_E3; unit tests may
 // build multi-row synthetic tables (AIE BundleTest.cpp:33-41 FormatData[]
 // pattern) without product emit.
 
@@ -188,8 +221,8 @@ struct FormatDesc {
   FormatID FID = ProductFormatID;
   /// Lower wins among covering formats (AIE table-order strengthen).
   FormatPriority Priority = 0;
-  EncodedBytes Bytes = Bundle128EncodedBytes;
-  /// Haydn::SLOT* bitset this format can accommodate (VLIWFormat::SlotSet).
+  EncodedBytes Bytes = ProductEncodedBytes;
+  /// Haydn::SLOT_P* bitset this format can accommodate (VLIWFormat::SlotSet).
   SlotBits SlotSet = 0;
 
   constexpr FormatDesc() = default;
@@ -209,26 +242,25 @@ struct FormatDesc {
 // The product format table
 //===----------------------------------------------------------------------===//
 //
-// ONE ROW TODAY, and the code below must not assume that. Format E replaces
-// this table with two rows — BUNDLE_E2 (entries P20,P21) and BUNDLE_E3
-// (P30,P31,P32), both 12 bytes — and everything here is written so that the
-// switch is a change of DATA, not of shape. What changes at the switch:
+// TWO ROWS, and the code below does not assume how many. This was one row
+// under Bundle128; the switch was a change of DATA, not of shape, and every
+// lookup below is unchanged because they all scan the table.
 //
-//   * the rows: one becomes two, 16 bytes becomes 12
-//   * FormatID's enumerators
-//   * the slot-window widths and their static_assert
+// Priority is equal, so the tie-break is table order — but it never fires:
+// the generated ConflictBits make {P20,P21} and {P30,P31,P32} mutually
+// exclusive, so no occupancy is covered by both rows. The one exception is
+// the empty occupancy (a stall), which both rows cover and where E2 wins by
+// table order. That is harmless because the two rows are the same size.
 //
-// What does NOT change: every lookup below, because they all scan the table.
-//
-// Note the two format E rows have the same Bytes, so productParcelBytes()
-// stays single-valued across the switch. It is asserted, not assumed — a
-// future mixed-size table would fire the assert rather than silently hand
-// BranchRelaxation the wrong parcel size (§ 6.x: a wrong stride does not fail
-// cleanly).
+// Both rows have the same Bytes, so productParcelBytes() is single-valued.
+// It is asserted, not assumed — a future mixed-size table would fire the
+// assert rather than silently hand BranchRelaxation the wrong parcel size
+// (a wrong stride does not fail cleanly, it desyncs the parcel stream).
 inline constexpr FormatDesc ProductFormatRows[] = {
-    {FormatID::Bundle128Full, /*Priority=*/0, Bundle128EncodedBytes,
-     /*SlotSet=*/static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1 |
-                                       Haydn::SLOT2)},
+    {FormatID::BundleE2, /*Priority=*/0, ProductEncodedBytes,
+     /*SlotSet=*/static_cast<SlotBits>(Haydn::SLOT_SET_E2)},
+    {FormatID::BundleE3, /*Priority=*/0, ProductEncodedBytes,
+     /*SlotSet=*/static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
 };
 
 inline constexpr unsigned ProductFormatRowCount =
@@ -256,10 +288,10 @@ inline bool isProductFormat(FormatID ID) {
 }
 
 /// Product parcel EncodedBytes — the size unit for BR / hwloop / bare MIs.
-/// Prefer this over a free-floating "16" or a parallel Bundle128Bytes magic.
+/// Prefer this over a free-floating "12" or a parallel parcel-size magic.
 ///
-/// Meaningful only while every row is the same size, which holds for Bundle128
-/// (one row) and for format E (two rows, both 12 bytes). The assert is the
+/// Meaningful only while every row is the same size, which holds for format E
+/// (two rows, both 12 bytes). The assert is the
 /// gate: if a row set ever mixes sizes, callers that want "the" parcel size
 /// have to be revisited rather than silently given the first row's.
 inline constexpr EncodedBytes productParcelBytes() {
@@ -288,7 +320,7 @@ inline unsigned ceilParcelsForBytes(unsigned Bytes, EncodedBytes Unit) {
   return (Bytes + Unit.Value - 1) / Unit.Value;
 }
 
-/// Ceil parcels under the live product format (BUNDLE128_FULL / 16 B).
+/// Ceil parcels under the live product format (BUNDLE_E2 / BUNDLE_E3, 12 B).
 inline unsigned ceilProductParcels(unsigned Bytes) {
   return ceilParcelsForBytes(Bytes, productParcelBytes());
 }
@@ -305,7 +337,7 @@ inline constexpr uint64_t formatIDBit(FormatID ID) {
 }
 
 /// Product CompatibleFormatMask: every live row, ORed from the table.
-/// Was a single formatIDBit(Bundle128Full); format E makes it two bits, and a
+/// Was a single formatIDBit under Bundle128; format E makes it two bits, and a
 /// member compatible with only one composite becomes expressible.
 inline constexpr uint64_t computeProductFormatMask() {
   uint64_t M = 0;
@@ -318,6 +350,20 @@ inline constexpr uint64_t ProductFormatMask = computeProductFormatMask();
 /// Product FormatDesc table. Scan it; do not assume its length.
 inline ArrayRef<FormatDesc> productFormatTable() {
   return ArrayRef<FormatDesc>(ProductFormatRows, ProductFormatRowCount);
+}
+
+/// \returns the FormatID whose row has exactly \p SlotSet, or nullopt.
+///
+/// The bridge from a generated VLIWFormat (what the packer chose) to the
+/// plan's durable identity (what gets stamped on the BUNDLE root). Callers
+/// that already hold the chosen format should use this rather than
+/// ProductFormatID — under Bundle128 the two were the same thing and the
+/// distinction did not exist.
+inline std::optional<FormatID> formatIDForSlotSet(SlotBits SlotSet) {
+  for (const FormatDesc &F : ProductFormatRows)
+    if (F.SlotSet == SlotSet)
+      return F.FID;
+  return std::nullopt;
 }
 
 /// First covering format with best (lowest) Priority.
@@ -348,7 +394,7 @@ selectFormatByPriority(ArrayRef<FormatDesc> Table, SlotBits Occupied) {
 // the TargetOpcode::BUNDLE root so identity is MIR-durable and clone-safe
 // without pointer plans or MF side maps.
 //
-// Product today: only Bundle128Full (imm 0). API is FormatID-typed for N rows.
+// Two product rows: BundleE2 (imm 0), BundleE3 (imm 1).
 // Multi-MI stamped in PostRA materialize; singletons in HaydnFinalizeBundle.
 
 /// Encode FormatID as the unsigned value stored in the BUNDLE-root imm.
@@ -359,8 +405,10 @@ inline constexpr unsigned formatIDToImm(FormatID ID) {
 /// Decode a BUNDLE-root imm. Unknown values → nullopt (N-format-ready gate).
 inline std::optional<FormatID> formatIDFromImm(unsigned Imm) {
   switch (Imm) {
-  case formatIDToImm(FormatID::Bundle128Full):
-    return FormatID::Bundle128Full;
+  case formatIDToImm(FormatID::BundleE2):
+    return FormatID::BundleE2;
+  case formatIDToImm(FormatID::BundleE3):
+    return FormatID::BundleE3;
   }
   return std::nullopt;
 }
@@ -406,8 +454,9 @@ inline std::optional<FormatID> getBundleFormatID(const MachineInstr &MI) {
   return std::nullopt;
 }
 
-/// FormatID for a cycle: stamped imm if present, else product Full (legacy /
-/// unstamped roots still encode as Bundle128).
+/// FormatID for a cycle: stamped imm if present, else the default row.
+/// An unstamped root has no entry count recorded, so this cannot recover it —
+/// prefer deriving from the occupancy where one is available.
 inline FormatID getBundleFormatIDOrProduct(const MachineInstr &MI) {
   if (auto ID = getBundleFormatID(MI))
     return *ID;
@@ -428,16 +477,17 @@ inline EncodedBytes committedEncodedBytes(const MachineInstr &MI) {
 //===----------------------------------------------------------------------===//
 
 /// Committed (or provisional) plan for one issue cycle.
-/// FormatID is always Bundle128Full; EncodedBytes always 16.
+/// FID follows the occupancy (BundleE2 or BundleE3); EncodedBytes is 12 either
+/// way.
 /// MemberOpcodes hold logical public opcodes (never _S* private peers).
-/// OccupiedSlots is the Haydn::SLOT* bitmask (not member count).
+/// OccupiedSlots is the Haydn::SLOT_P* bitmask (not member count).
 struct BundlePlan {
   FormatID FID = ProductFormatID;
-  /// Haydn::SLOT0|SLOT1|SLOT2 occupancy (may be 0 for an explicit stall).
+  /// Haydn::SLOT_P* occupancy (may be 0 for an explicit stall).
   SlotBits OccupiedSlots = 0;
   /// Logical opcodes in schedule/issue order (not necessarily encode field order).
   SmallVector<unsigned, 3> MemberOpcodes;
-  EncodedBytes Bytes = Bundle128EncodedBytes;
+  EncodedBytes Bytes = ProductEncodedBytes;
   CycleCount Cycles = OneCycle;
 
   bool empty() const { return MemberOpcodes.empty(); }
@@ -445,32 +495,53 @@ struct BundlePlan {
     return static_cast<unsigned>(MemberOpcodes.size());
   }
 
-  /// Product invariant: one cycle, Bundle128, 16 bytes.
+  /// Product invariant: one cycle, a live format row, and that row's own size.
+  /// Asks the table rather than comparing against a constant — with two rows,
+  /// "the product size" is only meaningful per row.
   bool isProductLegal() const {
-    return isProductFormat(FID) && Bytes == Bundle128EncodedBytes &&
-           Cycles == OneCycle && memberCount() <= Haydn::ISSUE_SLOT_COUNT;
+    std::optional<EncodedBytes> RowBytes = encodedBytesFor(FID);
+    return RowBytes.has_value() && Bytes == *RowBytes && Cycles == OneCycle &&
+           memberCount() <= Haydn::ISSUE_SLOT_COUNT;
   }
 };
 
-/// Build a product Bundle128 plan for the given occupancy and members.
-inline BundlePlan makeBundle128Plan(
-    SlotBits Occupied, ArrayRef<unsigned> Members = {}) {
+/// Build a product plan for the given occupancy and members.
+///
+/// The FormatID is DERIVED from the occupancy, not fixed by the caller. Under
+/// Bundle128 there was one row and stamping it was correct; format E has two
+/// and the occupancy is what says which — a {P30,P31} occupancy is a 3-entry
+/// bundle. Getting this wrong is silent rather than loud: the FID is stamped
+/// on the BUNDLE MIR root and would name a composite whose SlotSet does not
+/// contain the slots actually in use.
+///
+/// An empty occupancy (explicit stall, bare MI) has no entry count to derive
+/// from and takes ProductFormatID. Both rows are the same size, so nothing
+/// downstream that asks only for bytes can tell the difference.
+inline BundlePlan makeProductPlan(SlotBits Occupied,
+                                  ArrayRef<unsigned> Members = {}) {
   BundlePlan P;
-  P.FID = FormatID::Bundle128Full;
+  const FormatDesc *Row =
+      selectFormatByPriority(productFormatTable(), Occupied);
+  P.FID = Row ? Row->FID : ProductFormatID;
   P.OccupiedSlots = Occupied;
   P.MemberOpcodes.assign(Members.begin(), Members.end());
-  P.Bytes = Bundle128EncodedBytes;
+  P.Bytes = Row ? Row->Bytes : ProductEncodedBytes;
   P.Cycles = OneCycle;
   return P;
 }
 
-/// Explicit architectural stall (idle cycle): FormatID still Bundle128, 16 B NOP parcel.
+/// Explicit architectural stall (idle cycle): default format row, 12-byte NOP
+/// parcel.
+///
+/// Note a format E NOP bundle is NOT an all-zero word — Inst{2-0} is the
+/// format indicator — so anything that emits this must build it through the
+/// normal path rather than by zeroing 12 bytes.
 inline BundlePlan makeStallPlan() {
-  return makeBundle128Plan(/*Occupied=*/0, /*Members=*/{});
+  return makeProductPlan(/*Occupied=*/0, /*Members=*/{});
 }
 
 /// Build a BundlePlan from a selected FormatDesc (solver path; N-format-ready).
-/// Product callers still use makeBundle128Plan when FID is known Full.
+/// Prefer makeProductPlan when you have an occupancy and no chosen row.
 inline BundlePlan makePlanFromFormatDesc(const FormatDesc &F, SlotBits Occupied,
                                          ArrayRef<unsigned> Members = {}) {
   BundlePlan P;
@@ -513,7 +584,7 @@ planFromPacketFormats(const PacketFormats &Packets, SlotBits Occupied) {
   EncodedBytes B = vliwFormatSizeAsBytes(F->getSize());
   if (B != productParcelBytes())
     return std::nullopt;
-  return makeBundle128Plan(Occupied);
+  return makeProductPlan(Occupied);
 }
 
 } // namespace bundle

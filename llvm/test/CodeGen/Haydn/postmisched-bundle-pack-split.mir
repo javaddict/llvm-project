@@ -4,8 +4,8 @@
 #
 # 1. Independent ALU ops may BUNDLE (control — pack works).
 # 2. Dual S0-only stores must NOT share one BUNDLE (HR serializes).
-# 3. Dual LD32 may BUNDLE (dual-load product).
-# 4. ST32 + independent ADD32: both present; co-issue optional.
+# 3. Dual S_LW_WITH_IMM may BUNDLE (dual-load product).
+# 4. S_SW_WITH_IMM + independent ADD32: both present; co-issue optional.
 # 5. ARCTAN stays alone vs independent ALU (issue-alone schedule rule).
 # 6. LD + MAC independent may BUNDLE (DSP density / AIE multi-slot class).
 # 7. Dual MAC may BUNDLE (S1|S2).
@@ -46,7 +46,9 @@ body:             |
     liveins: $r0, $r3, $r4
 
     ; CHECK-LABEL: name: pack_two_alu
-    ; B1.1: multi-MI BUNDLE root carries durable FormatID imm (Bundle128Full=0).
+    ; B1.1: the BUNDLE root carries the FormatID as an imm, and it is an INDEX
+    ; now, not a constant: 0 is the 2-entry composite and 1 the 3-entry one. Two
+    ; ALU ops fit the 2-entry form; the packed load pair below selects 1.
     ; CHECK: BUNDLE 0
     ; CHECK: ADDI32
     ; CHECK: ADD32
@@ -84,14 +86,14 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r3, $r4
 
-    ; Two ST32 are S0-only — must not co-issue in one BUNDLE.
+    ; Two S_SW_WITH_IMM are S0-only — must not co-issue in one BUNDLE.
     ; CHECK-LABEL: name: split_dual_store
-    ; CHECK: ST32
-    ; CHECK: ST32
+    ; CHECK: S_SW_{{[A-Z_]*}}
+    ; CHECK: S_SW_{{[A-Z_]*}}
     ; CHECK-NOT: BUNDLE
     ; CHECK: JALR
-    ST32 $r1, $r2, 0
-    ST32 $r3, $r4, 4
+    S_SW_WITH_IMM $r1, $r2, 0
+    S_SW_WITH_IMM $r3, $r4, 1
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 
 ...
@@ -120,14 +122,14 @@ body:             |
   bb.0:
     liveins: $r1, $r2
 
-    ; Dual LD32 (S0|S1) should pack when independent.
+    ; Dual S_LW_WITH_IMM (S0|S1) should pack when independent.
     ; CHECK-LABEL: name: pack_dual_load
-    ; CHECK: BUNDLE 0
-    ; CHECK: LD32
-    ; CHECK: LD32
+    ; CHECK: BUNDLE 1
+    ; CHECK: S_LW_{{[A-Z_]*}}
+    ; CHECK: S_LW_{{[A-Z_]*}}
     ; CHECK: JALR
-    $r3 = LD32 $r1, 0
-    $r4 = LD32 $r2, 0
+    $r3 = S_LW_WITH_IMM $r1, 0
+    $r4 = S_LW_WITH_IMM $r2, 0
     $r0 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 
@@ -159,12 +161,12 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r3, $r4
 
-    ; ST32 + ADD32 both survive; co-issue is QoR (not required for correctness).
+    ; S_SW_WITH_IMM + ADD32 both survive; co-issue is QoR (not required for correctness).
     ; CHECK-LABEL: name: pack_store_alu
-    ; CHECK-DAG: ST32
+    ; CHECK-DAG: S_SW_{{[A-Z_]*}}
     ; CHECK-DAG: ADD32
     ; CHECK: JALR
-    ST32 $r1, $r2, 0
+    S_SW_WITH_IMM $r1, $r2, 0
     $r5 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
     $r0 = COPY $r5
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -234,13 +236,13 @@ body:             |
   bb.0:
     liveins: $r1, $d4, $d5, $d6
 
-    ; LD32 (S0|S1) + F2MULAA32R_HHLL (S1|S2) — AIE-style multi-slot density.
+    ; S_LW_WITH_IMM (S0|S1) + F2MULAA32R_HHLL (S1|S2) — AIE-style multi-slot density.
     ; CHECK-LABEL: name: pack_ld_mac
-    ; CHECK: BUNDLE 0
-    ; CHECK-DAG: LD32
+    ; CHECK: BUNDLE 1
+    ; CHECK-DAG: S_LW_{{[A-Z_]*}}
     ; CHECK-DAG: F2MULAA32R_HHLL
     ; CHECK: JALR
-    $r3 = LD32 $r1, 0
+    $r3 = S_LW_WITH_IMM $r1, 0
     $d4 = F2MULAA32R_HHLL $d4, $d5, $d6, implicit-def dead $sfr
     $r0 = COPY $r3
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -277,7 +279,7 @@ body:             |
 
     ; Dual MAC on S1|S2 should pack when independent.
     ; CHECK-LABEL: name: pack_dual_mac
-    ; CHECK: BUNDLE 0
+    ; CHECK: BUNDLE 1
     ; CHECK: F2MULAA32R_HHLL
     ; CHECK: F2MULAA32R_HHLL
     ; CHECK: JALR

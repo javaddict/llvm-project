@@ -12,11 +12,13 @@ declare void @clobber()
 define void @callee_with_dr_pressure(i64 %a, i64 %b, i64 %c, i64 %d) {
 ; CHECK-LABEL: callee_with_dr_pressure:
 ; CHECK: subi32{{.*}}sp
-; Stride / CSR base must not be a callee-saved GPR.
-; CHECK-NOT: addi32{{(_w)?}}{{.*}}r8,{{.*}}sp
-; CHECK-NOT: addi32{{(_w)?}}{{.*}}r9,{{.*}}sp
-; CHECK-NOT: addi32{{(_w)?}}{{.*}}r10,{{.*}}sp
-; CHECK-NOT: addi32{{(_w)?}}{{.*}}r11,{{.*}}sp
+; Stride / CSR base must not be a callee-saved GPR. [^;] rather than .*
+; because a bundle prints several instructions on one line: .* spans the
+; separator and matched `r8` from one member against `sp` from another.
+; CHECK-NOT: addi32{{(_w)?}}{{[^;]*}}r8,{{[^;]*}}sp
+; CHECK-NOT: addi32{{(_w)?}}{{[^;]*}}r9,{{[^;]*}}sp
+; CHECK-NOT: addi32{{(_w)?}}{{[^;]*}}r10,{{[^;]*}}sp
+; CHECK-NOT: addi32{{(_w)?}}{{[^;]*}}r11,{{[^;]*}}sp
 ; CHECK: jal
 entry:
   ; Keep several i64 values live across the call → D8–D15 pressure.

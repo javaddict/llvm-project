@@ -45,14 +45,14 @@ late_path:
 ; Entry block should NOT have stack allocation or callee-save stores.
 ; It should just compare and branch.
 ; CHECK-NOT: subi32{{.*}}sp{{.*}}sp
-; CHECK-NOT: st32{{.*}}r8
-; CHECK-NOT: st32{{.*}}r9
-; CHECK-NOT: st32{{.*}}r10
-; CHECK-NOT: st32{{.*}}r11
-; CHECK-NOT: st32{{.*}}r12
+; CHECK-NOT: s_sw_{{.*}}r8
+; CHECK-NOT: s_sw_{{.*}}r9
+; CHECK-NOT: s_sw_{{.*}}r10
+; CHECK-NOT: s_sw_{{.*}}r11
+; CHECK-NOT: s_sw_{{.*}}r12
 ;
 ; The first callee-save store and SP decrement should appear in the late path
 ; (the block after the branch to early_exit).
 ; CHECK: subi32{{.*}}sp{{.*}}sp
-; CHECK: st32{{.*}}r{{(8|9|10|11|12)}}
+; CHECK: s_sw_{{[a-z_]*}}{{.*}}r{{(8|9|10|11|12)}}
 ; CHECK: jal{{.*}}getValue

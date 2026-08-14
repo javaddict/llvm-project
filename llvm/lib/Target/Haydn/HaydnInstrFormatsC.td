@@ -165,7 +165,7 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 class Haydn48WideBase<dag outs, dag ins, string asmstr, list<dag> pattern>
     : HaydnInst48<outs, ins, asmstr, pattern> {
   // Default itinerary + slot bits — subclasses override per Class.
-  let Itinerary = Slot012_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b111;   // slots 0+1+2 default; overridden per Class
 }
 
@@ -199,7 +199,7 @@ class Fmt48_WideGPRImm<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
   // ALU32 ops execute in ANY slot (same itinerary as 32-bit FmtI ADDI32).
-  let Itinerary = Slot012_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b111;   // slots 0+1+2
 
   bits<4> rt;       // destination GPR32 (bits[15:12])
@@ -229,7 +229,7 @@ class Fmt48_WideGPRImm<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideBR_I20<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b001;   // slot 0 only (branches)
   // isBranch/isTerminator set per-def (calls vs branches differ) — /.
 
@@ -249,7 +249,7 @@ class Fmt48_WideBR_I20<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideBR_RI12<bits<8> opcode, dag outs, dag ins, string asmstr,
                         list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b001;
   // isBranch/isTerminator set per-def (calls vs branches differ) — /.
 
@@ -271,7 +271,7 @@ class Fmt48_WideBR_RI12<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideBR_I12<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b001;
   // isBranch/isTerminator set per-def (calls vs branches differ) — /.
 
@@ -303,10 +303,17 @@ class Fmt48_WideBR_I12<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot12_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b110;
 
-  bits<4> rtd;            // DR64 destination (bits[15:12]); rsd tied
+  // The source register has no home in this 48-bit form, which is the only
+  // reason SLLI64/SRLI64/SRAI64 are declared `$rtd = $rsd`. The hardware does
+  // not tie them: the database gives them independent read and write ports and
+  // the format E members encode both. The tie cannot come off while they are
+  // derived from this class — an untied operand needs a field to encode into —
+  // so it goes when the Bundle128 formats do (§ 5.2), and until then it costs
+  // a register copy. FORMAT-E-SWITCH-PLAN.md 5.11.
+  bits<4> rtd;            // DR64 destination (bits[15:12]); rsd tied to it
   bits<6> imm;            // bits[47:42]
 
   let Inst{47 - 42} = imm;
@@ -334,7 +341,7 @@ class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideCSR<bits<8> opcode, dag outs, dag ins, string asmstr,
                     list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b001;
   let hasSideEffects = 1;   // CSR accesses are side-effecting
 
@@ -357,7 +364,7 @@ class Fmt48_WideCSR<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideSET_HWLOOP<bits<8> opcode, dag outs, dag ins, string asmstr,
                            list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b001;
   let hasSideEffects = 1; let isNotDuplicable = 1;
 
@@ -382,7 +389,7 @@ class Fmt48_WideSET_HWLOOP<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideSET_HWLOOP_F2<bits<8> opcode, dag outs, dag ins, string asmstr,
                               list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b001;
   let hasSideEffects = 1; let isNotDuplicable = 1;
 
@@ -408,7 +415,7 @@ class Fmt48_WideSET_HWLOOP_F2<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideSET_HWLOOP_REG<bits<8> opcode, dag outs, dag ins, string asmstr,
                                list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
+  let Itinerary = NoItinerary;  // per-instruction; see the def
   let TSFlags{2-0} = 0b001;
   let hasSideEffects = 1; let isNotDuplicable = 1;
 

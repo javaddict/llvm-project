@@ -15,33 +15,34 @@
 # Load / store
 #===----------------------------------------------------------------------===
 
-# CHECK: {{.*}} ld32{{.*}} r0, r1, 0
-ld32 r0, r1, 0
-# CHECK: {{.*}} ld32{{.*}} r2, r3, 4
-ld32 r2, r3, 4
-# CHECK: {{.*}} ld32{{.*}} r4, r5, -4
-ld32 r4, r5, -4
+# CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r0, r1, 0
+s_lw_with_imm r0, r1, 0
+# ELEMENT index throughout: S_LW is rs + (imm6 << 2), S_LHWS is << 1.
+# CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r2, r3, 1
+s_lw_with_imm r2, r3, 1
+# CHECK: {{.*}} s_lw_{{[a-z_]*}}{{.*}} r4, r5, -1
+s_lw_with_imm r4, r5, -1
 
-# CHECK: {{.*}} ld16{{.*}} r3, r4, 0
-ld16 r3, r4, 0
-# CHECK: {{.*}} ld16{{.*}} r5, r6, 2
-ld16 r5, r6, 2
-# CHECK: {{.*}} ldu16{{.*}} r11, r12, 0
-ldu16 r11, r12, 0
-# CHECK: {{.*}} st16{{.*}} r2, r3, 0
-st16 r2, r3, 0
+# CHECK: {{.*}} s_lhws_{{[a-z_]*}}{{.*}} r3, r4, 0
+s_lhws_with_imm r3, r4, 0
+# CHECK: {{.*}} s_lhws_{{[a-z_]*}}{{.*}} r5, r6, 1
+s_lhws_with_imm r5, r6, 1
+# CHECK: {{.*}} s_lhwu_{{[a-z_]*}}{{.*}} r11, r12, 0
+s_lhwu_with_imm r11, r12, 0
+# CHECK: {{.*}} s_shw_{{[a-z_]*}}{{.*}} r2, r3, 0
+s_shw_with_imm r2, r3, 0
 
-# CHECK: {{.*}} ld8{{.*}} r10, r11, 0
-ld8 r10, r11, 0
-# CHECK: {{.*}} ldu8{{.*}} r5, r6, 0
-ldu8 r5, r6, 0
-# CHECK: {{.*}} st8{{.*}} r9, r10, 0
-st8 r9, r10, 0
+# CHECK: {{.*}} s_lbs_{{[a-z_]*}}{{.*}} r10, r11, 0
+s_lbs_with_imm r10, r11, 0
+# CHECK: {{.*}} s_lbu_{{[a-z_]*}}{{.*}} r5, r6, 0
+s_lbu_with_imm r5, r6, 0
+# CHECK: {{.*}} s_sb_{{[a-z_]*}}{{.*}} r9, r10, 0
+s_sb_with_imm r9, r10, 0
 
-# CHECK: {{.*}} ld64{{.*}} d0, r4, 0
-ld64 d0, r4, 0
-# CHECK: {{.*}} st64{{.*}} d0, r8, 0
-st64 d0, r8, 0
+# CHECK: {{.*}} d_ldw_{{[a-z_]*}}{{.*}} d0, r4, 0
+d_ldw_with_imm d0, r4, 0
+# CHECK: {{.*}} d_sdw_{{[a-z_]*}}{{.*}} d0, r8, 0
+d_sdw_with_imm d0, r8, 0
 
 #===----------------------------------------------------------------------===
 # ALU32

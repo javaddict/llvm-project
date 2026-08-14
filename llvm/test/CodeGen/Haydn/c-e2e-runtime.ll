@@ -93,7 +93,7 @@ define i32 @test_call(i32 %x) {
 ; Post-migration (R10): function calls emit `c.jal` (compressed) or `jal`
 ; depending on reachability; the return is `jalr r0, lr, 0`. Accept either
 ; call form.
-; CHECK-DAG: jal{{(\.s[012])?}}
+; CHECK-DAG: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 
 ; Control flow — should emit branch instructions
 define i32 @abs_val(i32 %x) {
@@ -110,7 +110,7 @@ neg:
 ; CHECK-LABEL: <abs_val>:
 ; sge may be fused to bge (CondOpt / AIE-style xor(setcc,1) absorb) or
 ; remain as zero-test after invert. Accept either form.
-; CHECK-DAG: {{bnez|beqz|bge}}{{(\.s[012])?}}
+; CHECK-DAG: {{bnez|beqz|bge}}{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 
 ; Division — should emit libcall to __divsi3
 define i32 @test_div(i32 %a, i32 %b) {
@@ -124,4 +124,4 @@ define i32 @test_div(i32 %a, i32 %b) {
 ; instruction. The load-bearing assertion is that the div libcall is
 ; reached via a jump instruction; the byte-exact decode of the spill
 ; sequence is tracked separately.
-; CHECK-DAG: jal{{(\.s[012])?}}
+; CHECK-DAG: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}

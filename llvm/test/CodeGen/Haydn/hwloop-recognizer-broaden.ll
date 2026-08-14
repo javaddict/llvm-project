@@ -2,7 +2,16 @@
 ; and converts countable loops to LoopStart + PseudoLoopEnd pseudos (renamed
 ; from SET_HWLOOP_F2 by the IR-level rearchitecture, prior revision).
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s \
+; RUN:   | FileCheck %s --implicit-check-not=BLT
+;
+; --implicit-check-not=BLT is the regression signature every case below
+; describes in prose and none of them asserted. GAP-2 regressing leaves a BLT
+; back-edge and GAP-3 a BLTU (which contains BLT, so one exclusion covers
+; both); gap4 deliberately does not convert and stays on BNEZ, which this does
+; not forbid. File-wide rather than placed, because a CHECK-NOT's window is
+; bounded by the surrounding positive directives and the back-edge can sit on
+; either side of them.
 ;
 ; REGRESSION TEST: HWLoop recognizer broadening (G1, post-).
 ;
@@ -69,7 +78,7 @@
 define i32 @gap2_countup_blt(ptr readonly %a, i32 %n) nounwind {
 ; CHECK-LABEL: name: gap2_countup_blt
 ; CHECK: SET_HWLOOP
-; CHECK-NOT: HWLOOP_END
+; CHECK: PseudoLoopEnd
 entry:
   %c0 = icmp sgt i32 %n, 0
   br i1 %c0, label %loop, label %exit
@@ -111,7 +120,7 @@ exit:
 define i32 @gap3_pointer_iv(ptr readonly %p, ptr readnone %end) nounwind {
 ; CHECK-LABEL: name: gap3_pointer_iv
 ; CHECK: SET_HWLOOP
-; CHECK-NOT: HWLOOP_END
+; CHECK: PseudoLoopEnd
 entry:
   br label %loop
 
@@ -142,8 +151,11 @@ exit:
 ; The *genuine* multi-BB regression test (side-effecting branches that
 ; resist if-conversion) lives in hwloop-multibb.ll @gap4_multibb_calls and
 ; DOES emit SET_HWLOOP_F2. This function is kept here to document that the
-; if-conversion collapse is benign — the loop still runs correctly, just on
-; a BLT back-edge because the optimizer already removed the multibb shape.
+; if-conversion collapse is benign — the loop still runs correctly, just on a
+; branch back-edge because the optimizer already removed the multibb shape.
+; (An earlier revision of this line said BLT; the branch is BNEZ, as the
+; CHECK block below already said. Two comments in one file disagreeing about
+; the back-edge is how the vacuous HWLOOP_END NOTs went unread for so long.)
 ;
 ; Test design: counted integer loop, body clamps %v to 0 when negative
 ; (data-dependent, no side effects in either branch). If the backend stops

@@ -17,8 +17,8 @@
 
 ; CHECK-LABEL: st_v8i8_align1:
 ; CHECK-NOT: d_sw_
-; CHECK-NOT: st64
-; CHECK: st8
+; CHECK-NOT: d_sdw_
+; CHECK: s_sb_{{[a-z_]*}}
 define void @st_v8i8_align1(ptr %p, <8 x i8> %v) nounwind {
   store <8 x i8> %v, ptr %p, align 1
   ret void
@@ -26,8 +26,8 @@ define void @st_v8i8_align1(ptr %p, <8 x i8> %v) nounwind {
 
 ; CHECK-LABEL: st_v8i8_align2:
 ; CHECK-NOT: d_sw_
-; CHECK-NOT: st64
-; CHECK: st16
+; CHECK-NOT: d_sdw_
+; CHECK: s_shw_{{[a-z_]*}}
 define void @st_v8i8_align2(ptr %p, <8 x i8> %v) nounwind {
   store <8 x i8> %v, ptr %p, align 2
   ret void
@@ -44,7 +44,7 @@ define void @st_v8i8_align4(ptr %p, <8 x i8> %v) nounwind {
 
 ; Natural alignment still gets the single 64-bit store.
 ; CHECK-LABEL: st_v8i8_align8:
-; CHECK: st64
+; CHECK: d_sdw_{{[a-z_]*}}
 define void @st_v8i8_align8(ptr %p, <8 x i8> %v) nounwind {
   store <8 x i8> %v, ptr %p, align 8
   ret void
@@ -52,7 +52,7 @@ define void @st_v8i8_align8(ptr %p, <8 x i8> %v) nounwind {
 
 ; CHECK-LABEL: st_v4i16_align1:
 ; CHECK-NOT: d_sw_
-; CHECK: st8
+; CHECK: s_sb_{{[a-z_]*}}
 define void @st_v4i16_align1(ptr %p, <4 x i16> %v) nounwind {
   store <4 x i16> %v, ptr %p, align 1
   ret void
@@ -60,7 +60,7 @@ define void @st_v4i16_align1(ptr %p, <4 x i16> %v) nounwind {
 
 ; CHECK-LABEL: st_v2i32_align1:
 ; CHECK-NOT: d_sw_
-; CHECK: st8
+; CHECK: s_sb_{{[a-z_]*}}
 define void @st_v2i32_align1(ptr %p, <2 x i32> %v) nounwind {
   store <2 x i32> %v, ptr %p, align 1
   ret void
@@ -68,14 +68,14 @@ define void @st_v2i32_align1(ptr %p, <2 x i32> %v) nounwind {
 
 ; Load side: byte-aligned vector load must not use LD32/LD64 on the pointer.
 ; CHECK-LABEL: ld_v8i8_align1:
-; CHECK: ldu8
+; CHECK: s_lbu_{{[a-z_]*}}
 define <8 x i8> @ld_v8i8_align1(ptr %p) nounwind {
   %r = load <8 x i8>, ptr %p, align 1
   ret <8 x i8> %r
 }
 
 ; CHECK-LABEL: ld_v8i8_align8:
-; CHECK: ld64
+; CHECK: d_ldw_{{[a-z_]*}}
 define <8 x i8> @ld_v8i8_align8(ptr %p) nounwind {
   %r = load <8 x i8>, ptr %p, align 8
   ret <8 x i8> %r

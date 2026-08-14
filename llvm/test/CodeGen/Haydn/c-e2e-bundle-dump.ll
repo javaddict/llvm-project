@@ -103,7 +103,7 @@ declare i64 @llvm.haydn.mul64.su.lul(<2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.mul64.us.luh(<2 x i32>, <2 x i32>)
 define i64 @test_mul64_ss_ll(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_mul64_ss_ll>:
-; CHECK: mul64.ll
+; CHECK: mul64_ll
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.1, <2 x i32> %bc.2)
@@ -112,7 +112,7 @@ define i64 @test_mul64_ss_ll(i64 %a, i64 %b) {
 
 define i64 @test_mul64_ss_hh(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_mul64_ss_hh>:
-; CHECK: mul64.hh
+; CHECK: mul64_hh
   %bc.3 = bitcast i64 %a to <2 x i32>
   %bc.4 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.ss.hh(<2 x i32> %bc.3, <2 x i32> %bc.4)
@@ -121,7 +121,7 @@ define i64 @test_mul64_ss_hh(i64 %a, i64 %b) {
 
 define i64 @test_mul64_uu_ull(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_mul64_uu_ull>:
-; CHECK: mul64.ull
+; CHECK: mul64_ull
   %bc.5 = bitcast i64 %a to <2 x i32>
   %bc.6 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.uu.ull(<2 x i32> %bc.5, <2 x i32> %bc.6)
@@ -130,7 +130,7 @@ define i64 @test_mul64_uu_ull(i64 %a, i64 %b) {
 
 define i64 @test_mul64_su_lul(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_mul64_su_lul>:
-; CHECK: mul64.lul
+; CHECK: mul64_lul
   %bc.7 = bitcast i64 %a to <2 x i32>
   %bc.8 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.su.lul(<2 x i32> %bc.7, <2 x i32> %bc.8)
@@ -139,7 +139,7 @@ define i64 @test_mul64_su_lul(i64 %a, i64 %b) {
 
 define i64 @test_mul64_us_luh(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_mul64_us_luh>:
-; CHECK: mul64.luh
+; CHECK: mul64_luh
   %bc.9 = bitcast i64 %a to <2 x i32>
   %bc.10 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.us.luh(<2 x i32> %bc.9, <2 x i32> %bc.10)
@@ -154,7 +154,7 @@ declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.mula64.ss.hh(i64, <2 x i32>, <2 x i32>)
 define i64 @test_mula64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_mula64_ss_ll>:
-; CHECK: mula64.ll
+; CHECK: mula64_ll
   %bc.11 = bitcast i64 %a to <2 x i32>
   %bc.12 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.11, <2 x i32> %bc.12)
@@ -163,7 +163,7 @@ define i64 @test_mula64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 
 define i64 @test_mula64_ss_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_mula64_ss_hh>:
-; CHECK: mula64.hh
+; CHECK: mula64_hh
   %bc.13 = bitcast i64 %a to <2 x i32>
   %bc.14 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.ss.hh(i64 %acc, <2 x i32> %bc.13, <2 x i32> %bc.14)
@@ -178,7 +178,7 @@ declare i64 @llvm.haydn.muls64.ss.ll(i64, <2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.muls64.ss.hh(i64, <2 x i32>, <2 x i32>)
 define i64 @test_muls64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_muls64_ss_ll>:
-; CHECK: muls64.ll
+; CHECK: muls64_ll
   %bc.15 = bitcast i64 %a to <2 x i32>
   %bc.16 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.muls64.ss.ll(i64 %acc, <2 x i32> %bc.15, <2 x i32> %bc.16)
@@ -187,7 +187,7 @@ define i64 @test_muls64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 
 define i64 @test_muls64_ss_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_muls64_ss_hh>:
-; CHECK: muls64.hh
+; CHECK: muls64_hh
   %bc.17 = bitcast i64 %a to <2 x i32>
   %bc.18 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.muls64.ss.hh(i64 %acc, <2 x i32> %bc.17, <2 x i32> %bc.18)
@@ -239,7 +239,7 @@ declare i64 @llvm.haydn.fmul32s.lh(<2 x i32>, <2 x i32>)
 declare i64 @llvm.haydn.fmul32s.hh(<2 x i32>, <2 x i32>)
 define i64 @test_fmul32s_ll(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_fmul32s_ll>:
-; CHECK: fmul32s.ll
+; CHECK: fmul32s_ll
   %bc.19 = bitcast i64 %a to <2 x i32>
   %bc.20 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.ll(<2 x i32> %bc.19, <2 x i32> %bc.20)
@@ -248,7 +248,7 @@ define i64 @test_fmul32s_ll(i64 %a, i64 %b) {
 
 define i64 @test_fmul32s_lh(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_fmul32s_lh>:
-; CHECK: fmul32s.lh
+; CHECK: fmul32s_lh
   %bc.21 = bitcast i64 %a to <2 x i32>
   %bc.22 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.lh(<2 x i32> %bc.21, <2 x i32> %bc.22)
@@ -257,7 +257,7 @@ define i64 @test_fmul32s_lh(i64 %a, i64 %b) {
 
 define i64 @test_fmul32s_hh(i64 %a, i64 %b) {
 ; CHECK-LABEL: <test_fmul32s_hh>:
-; CHECK: fmul32s.hh
+; CHECK: fmul32s_hh
   %bc.23 = bitcast i64 %a to <2 x i32>
   %bc.24 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.hh(<2 x i32> %bc.23, <2 x i32> %bc.24)
@@ -439,7 +439,7 @@ define i32 @test_macq31(i32 %a, i32 %b, i32 %c) {
 
 define i64 @test_mulq63(i64 %a, i64 %b, i64 %c) {
 ; CHECK-LABEL: <test_mulq63>:
-; CHECK: mul64.ll
+; CHECK: mul64_ll
   %r = call i64 @llvm.haydn.mulq63(i64 %a, i64 %b, i64 %c)
   ret i64 %r
 }
@@ -531,7 +531,7 @@ exit:
 
 define i64 @dot_product_sat(ptr %a, ptr %b, i32 %n) {
 ; CHECK-LABEL: <dot_product_sat>:
-; CHECK: mul64.hh
+; CHECK: mul64_hh
 ; CHECK: add64s
 entry:
   br label %loop
@@ -678,7 +678,7 @@ define i32 @q31_filter_tap(i32 %sample, i32 %coeff, i32 %state) {
 
 define i64 @branch_dsp(i64 %a, i64 %b, i32 %flag) {
 ; CHECK-LABEL: <branch_dsp>:
-; CHECK: mul64.ll
+; CHECK: mul64_ll
 ; CHECK: add64s
 entry:
   %cmp = icmp eq i32 %flag, 0

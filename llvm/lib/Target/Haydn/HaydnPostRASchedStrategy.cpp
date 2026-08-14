@@ -56,7 +56,12 @@ STATISTIC(NumScheduledCyclesSplit,
 static bool cycleCanFormLegalBundle(ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.empty() || Instrs.size() > 3)
     return false;
-  HaydnMCFormats Fmts;
+  // WithMII, so the unit axis is live: format E forbids two entries of a
+  // bundle sharing a hardware unit, and that is a property of the MEMBER, so
+  // it cannot be checked without names. A plain HaydnMCFormats here would
+  // silently accept e.g. two loads on LOAD1 (§ 5.7).
+  HaydnMCFormatsWithMII Fmts(
+      *Instrs.front()->getMF()->getSubtarget().getInstrInfo());
   Haydn::MachineBundle Bundle(&Fmts);
   for (MachineInstr *MI : Instrs) {
     if (!Bundle.canAdd(MI))
@@ -194,8 +199,31 @@ HaydnPostRASchedStrategy::computeRegionBundles() {
   return Bundles;
 }
 
+// True if reordering MI past X would break a register dependency. Symmetric,
+// so one predicate serves both directions: any shared register where at least
+// one side writes is an edge, whichever way the move goes.
+static bool crossingBreaksDependency(const MachineInstr &MI,
+                                     const MachineInstr &X,
+                                     const TargetRegisterInfo *TRI) {
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.getReg())
+      continue;
+    Register R = MO.getReg();
+    if (MO.isDef()) {
+      if (X.readsRegister(R, TRI) || X.definesRegister(R, TRI))
+        return true;
+    } else if (X.definesRegister(R, TRI)) {
+      // X produces what MI consumes. This is the edge the def-only check
+      // missed: a logical with no Inst bits is inferred MCID::Pseudo, so
+      // SEXT32T64 is "skippable" and was hoisted above its own producer.
+      return true;
+    }
+  }
+  return false;
+}
+
 // Splice skippable MIs out of [First,Last] so real members are contiguous.
-// Returns false if a skippable has a reg conflict with a real member (unsafe).
+// Returns false if a skippable can be moved in neither direction (unsafe).
 static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
                                      ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.size() < 2)
@@ -212,28 +240,30 @@ static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
     ++It;
     if (!isBundleSkippable(MI) || &MI == First)
       continue;
-    bool HasRegConflict = false;
-    for (const MachineOperand &MO : MI.operands()) {
-      if (!MO.isReg() || !MO.isDef() || !MO.getReg())
-        continue;
-      Register DefReg = MO.getReg();
-      for (const MachineInstr *RealMI : Instrs) {
-        if (RealMI == &MI)
-          continue;
-        if (RealMI->readsRegister(DefReg, TRI) ||
-            RealMI->definesRegister(DefReg, TRI)) {
-          HasRegConflict = true;
-          break;
-        }
-      }
-      if (HasRegConflict)
-        break;
+
+    // Debug values carry no dataflow; they may always move. Everything else
+    // is checked against exactly what it would cross — hoisting spans
+    // [First, MI), sinking spans (MI, Last] — rather than against the member
+    // list as a set, which both over- and under-approximated the range.
+    bool IsDebug = MI.isDebugInstr();
+    bool CanHoist = IsDebug || !MI.hasUnmodeledSideEffects();
+    bool CanSink = CanHoist;
+    if (!IsDebug) {
+      for (MachineBasicBlock::instr_iterator J = First->getIterator();
+           CanHoist && J != MI.getIterator(); ++J)
+        CanHoist = !crossingBreaksDependency(MI, *J, TRI);
+      for (MachineBasicBlock::instr_iterator J = std::next(MI.getIterator()),
+                                             SE = std::next(Last->getIterator());
+           CanSink && J != SE; ++J)
+        CanSink = !crossingBreaksDependency(MI, *J, TRI);
     }
-    if (HasRegConflict) {
+
+    if (CanHoist)
+      MBB.splice(First->getIterator(), &MBB, MI.getIterator());
+    else if (CanSink)
+      MBB.splice(std::next(Last->getIterator()), &MBB, MI.getIterator());
+    else
       BundleUnsafe = true;
-      continue;
-    }
-    MBB.splice(First->getIterator(), &MBB, MI.getIterator());
   }
   return !BundleUnsafe;
 }
@@ -262,7 +292,11 @@ static void finalizeLegalMultiMI(MachineBasicBlock &MBB,
                                  ArrayRef<MachineInstr *> Instrs) {
   assert(Instrs.size() >= 2 && "multi-MI finalize only");
 
-  HaydnMCFormats Fmts;
+  // WithMII — see cycleCanFormLegalBundle. This is the path that commits the
+  // real bundle, so a missing unit check here ships a bundle the hardware
+  // cannot issue.
+  HaydnMCFormatsWithMII Fmts(
+      *Instrs.front()->getMF()->getSubtarget().getInstrInfo());
   Haydn::MachineBundle Bundle(&Fmts);
 
   // SlotMap authority: fixed getSlotKind after setDesc (AIE shape). Bundle
@@ -288,14 +322,21 @@ static void finalizeLegalMultiMI(MachineBasicBlock &MBB,
   MachineInstr &Root =
       *getBundleStart(Bundle.getInstrs().front()->getIterator());
   assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
-  haydn::bundle::stampBundleFormatID(Root, haydn::bundle::ProductFormatID);
+  // Stamp the format the packer actually chose, not a constant. Format E has
+  // two composites and this is the multi-MI path, so a 3-entry cycle must be
+  // stamped BundleE3 — Bundle128 had one row and the constant was correct.
+  // Fmt is the row Bundle::getFormatOrNull picked by slot coverage, which IS
+  // the entry-count decision.
+  haydn::bundle::stampBundleFormatID(
+      Root, haydn::bundle::formatIDForSlotSet(Fmt->getSlotSet())
+                .value_or(haydn::bundle::ProductFormatID));
   ++NumMultiMIBundlesFinalized;
 }
 
 // When a scheduled cycle cannot form one legal BUNDLE, greedily split
 // into ordered legal sub-cycles (multi-MI BUNDLE or singleton standalone).
 // Never silently leave a multi-MI illegal cycle as an unordered fog — each
-// sub-cycle is an explicit architectural cycle (FormatID Bundle128Full).
+// sub-cycle is an explicit architectural cycle (a product FormatID row).
 static void materializeMaybeSplitCycle(MachineBasicBlock &MBB,
                                        ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.size() < 2)
@@ -359,7 +400,7 @@ void HaydnPostRASchedStrategy::materializeBundles(
   // * 2-3 MIs legal → finalizeBundle + stamp FormatID
   // * 2-3 MIs illegal → explicit greedy split (not silent fog)
   //
-  // Product plan: every encode cycle is FormatID::Bundle128Full / 16 B
+  // Product plan: every encode cycle is BundleE2 or BundleE3 / 12 B
   // (haydn::bundle::BundlePlan). Multi-MI BUNDLE roots carry FormatID imm 0
   // (stampBundleFormatID). Singleton cycles become BUNDLE + FormatID in
   // HaydnFinalizeBundle after this scheduler (AIE2 addPreSched2 order).

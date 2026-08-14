@@ -364,10 +364,14 @@ void HaydnAsmPrinter::emitHWLoopWideInst(unsigned Sel,
     HWInst.addOperand(MCOperand::createExpr(EndExpr));   // offset2 (brtarget)
     HWInst.addOperand(MCOperand::createReg(RsReg));      // rs (GPR32 count)
   }
-  // Align the SET parcel to Bundle128 (16 B) before emit. HWLoop offsets are
-  // PC-relative to the SET address (FIXUP_HAYDN_HWLoopOff1/2). A.6: never
-  // request sub-parcel Align(4) pads — writeNopData only accepts 16 B multiples.
-  OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
+  // Align the SET parcel to a bundle boundary before emit. HWLoop offsets are
+  // PC-relative to the SET address (FIXUP_HAYDN_HWLoopOff1/2).
+  //
+  // Align(4), not Align(16): a format E bundle is 12 bytes, so bundle
+  // boundaries are at section_start + 12k and are always 4-aligned, while
+  // asking for 16 needs 4 or 8 bytes of padding that is not a whole bundle
+  // and aborts the assembler. See § 5.9.
+  OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
   EmitToStreamer(*OutStreamer, HWInst);
   // Setup-gap NOPs: HaydnFixupHwLoops (addPreEmit after BranchRelaxation).
 }
@@ -464,7 +468,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       // Pad first, then labels (÷4). Do not use setPreInstrSymbol for these
       // symbols — parent AsmPrinter would emit PreInstr before this pad.
       // A.6: Bundle128 pad only (16 B); implies 4-byte PC for ÷4 HWLoop fixups.
-      OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
+      OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
       for (MCSymbol *Sym : It->second)
         OutStreamer->emitLabel(Sym);
       It->second.clear();
@@ -494,7 +498,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       if (LastReal == MI) {
         // Pad once before END label(s), then clear (no double-define).
         // A.6: 16 B Bundle128 parcels only (covers ÷4 HWLoop END alignment).
-        OutStreamer->emitCodeAlignment(Align(16), &getSubtargetInfo());
+        OutStreamer->emitCodeAlignment(Align(4), &getSubtargetInfo());
         for (MCSymbol *Sym : It->second)
           OutStreamer->emitLabel(Sym);
         It->second.clear();
@@ -562,7 +566,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
             "BUNDLE — multi-parcel expand cannot share a Bundle128 composite");
     }
 
-    HaydnMCFormats Fmts;
+    HaydnMCFormatsWithMII Fmts(*MF->getSubtarget().getInstrInfo());
     Haydn::MCBundle Bundle(&Fmts);
 
     // AIEBaseAsmPrinter.cpp:143-154: verbose per-slot Spill/Reload comments
@@ -690,21 +694,25 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       report_fatal_error(Twine(OS.str()));
     }
     // AIEBaseAsmPrinter.cpp:161-164 — MCBundle.setOpcode(Format->Opcode).
-    // Product sole live row is BUNDLE128_FULL (N-format-ready: when more
-    // packet rows land, Format table selects Opcode; no hard-coded second
-    // product path here).
-    assert(Format->Opcode == Haydn::BUNDLE128_FULL &&
-           "product live format must be BUNDLE128_FULL (table-ready for N)");
-
+    // The "N-format-ready" note this used to carry is now cashed in: there are
+    // two packet rows, BUNDLE_E2 and BUNDLE_E3, and getFormatOrNull picked
+    // between them by asking which one covers the occupied slots. That IS the
+    // entry-count choice — a bundle holding P20/P21 can only be covered by
+    // BUNDLE_E2 and one holding P30/P31/P32 only by BUNDLE_E3, because the
+    // generated ConflictBits make the two sets mutually exclusive. Nothing
+    // here needs to know which is which.
     MCInst MCB;
     MCB.setOpcode(Format->Opcode);
 
-    // Emit in S0-S1-S2 encode order (BUNDLE128_FULL operand dag), not
-    // Format.getSlots() S2→S1→S0 MIR field order. Empty slots → NOP
-    // (AIE SlotInfo NOP peer; HaydnSlots NopOpc is 0 → Haydn::NOP).
-    for (unsigned K = 0; K < llvm::Haydn::ISSUE_SLOT_COUNT; ++K) {
-      MCSlotKind Slot = MCSlotKind(MCSlotKind::Haydn_SLOT_S0 +
-                                   static_cast<int>(K));
+    // Emit in operand-dag order. Format.getSlots() is in AsmString order,
+    // which is written high entry first ("$e1; $e0"), while the dag is
+    // (ins p20_entry:$e0, p21_entry:$e1) — low entry first. So walk the slot
+    // range backwards. Empty entries → NOP (AIE SlotInfo NOP peer). Note a
+    // 1-entry bundle cannot exist: format E has no one-entry form, so a lone
+    // instruction lands in BUNDLE_E2 and the other entry is NOP-padded here.
+    const auto &Slots = Format->getSlots();
+    for (const MCSlotKind *It = Slots.end(); It != Slots.begin();) {
+      MCSlotKind Slot = *--It;
       MCInst *Instr = Bundle.at(Slot);
       if (!Instr) {
         Instr = OutContext.createMCInst();
@@ -848,8 +856,14 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         Tmp.setOpcode(Inst.Opc);
 
         switch (Inst.Opc) {
+        case Haydn::LUI:
+          // (rd, imm). The source went with the Bundle128 shape in
+          // afc345108f57 — FORMAT-E-SWITCH-PLAN.md 5.11.
+          Tmp.addOperand(MCOperand::createReg(DstReg));
+          Tmp.addOperand(MCOperand::createImm(Inst.Imm));
+          break;
         default:
-          // ADDI32, LUI, ADDI32_W: (rd, rs, imm). ADDI32_W is the 48-bit
+          // ADDI32, ADDI32_W: (rd, rs, imm). ADDI32_W is the 48-bit
           // wide-add variant (20-bit imm); its $rt/$rs operands are tied in
           // the.td Constraints, so the (rd, rs, imm) shape is identical.
           Tmp.addOperand(MCOperand::createReg(DstReg));
@@ -885,12 +899,11 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -914,13 +927,12 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 
       // Emit ADDI32 with LO16 fixup (auto-created by MC layer based on opcode)
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -935,13 +947,12 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 
       // Emit ADDI32 with LO16 fixup
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -958,12 +969,11 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       MCInst LuiInst;
       LuiInst.setOpcode(Haydn::LUI);
       LuiInst.addOperand(MCOperand::createReg(DstReg));
-      LuiInst.addOperand(MCOperand::createReg(Haydn::R0));
       LuiInst.addOperand(MCOperand::createExpr(Expr));
       emitWrappedInst(LuiInst);
 
       MCInst AddiInst;
-      AddiInst.setOpcode(Haydn::ADDI32_W);
+      AddiInst.setOpcode(Haydn::ADDI32);
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createReg(DstReg));
       AddiInst.addOperand(MCOperand::createExpr(Expr));
@@ -1154,7 +1164,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
   // ST32 with DR64 data is a selector bug — do not silently rewrite
   // in the printer (sizes/sched already fixed on the wrong opcode). Fail closed.
-  if (TmpInst.getOpcode() == Haydn::ST32 && TmpInst.getNumOperands() >= 1 &&
+  if (TmpInst.getOpcode() == Haydn::S_SW_WITH_IMM && TmpInst.getNumOperands() >= 1 &&
       TmpInst.getOperand(0).isReg()) {
     const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
     unsigned Reg = TmpInst.getOperand(0).getReg();

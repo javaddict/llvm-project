@@ -43,7 +43,7 @@ body:             |
 
     $r0 = frame-setup XOR32 $r0, $r0
     $r13 = frame-setup SUBI32 $r13, 16
-    frame-setup ST32 $r15, $r13, 12
+    frame-setup S_SW_WITH_IMM $r15, $r13, 3
 
     ; Pre-call PEI remat of large stack offset into reserved R12 + WITH_REG store.
     ; CHECK: $r12 = LOADI32 128
@@ -62,7 +62,7 @@ body:             |
     $r4 = LD32_REG_M0S0LS $r13, $r12
 
     $r1 = ADD32 $r1, $r4
-    $r15 = LD32 $r13, 12
-    $r13 = ADDI32_W $r13, 16
+    $r15 = S_LW_WITH_IMM $r13, 3
+    $r13 = ADDI32 $r13, 16
     RET implicit $r15, implicit $r1
 ...

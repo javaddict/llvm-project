@@ -177,36 +177,21 @@ static cl::opt<bool> AccurateMemoryLatency(
 #include "HaydnGenInstrInfo.inc"
 #include "HaydnGenDFAPacketizer.inc"
 
-// Map a `_S{0,1,2}` opcode to its base semantic opcode enum.
-// Strips the suffix + maps the base name to its legacy enum. Used by the SMS
-// naive loop recognizer + branch-analysis (for _W_S0 far branches).
+// Map a format-member opcode to the logical it was expanded from.
+//
+// Delegates to getHaydnLogicalBaseOpcode, which resolves the base by NAME
+// SEARCH rather than a hardcoded table, so it works for both spellings:
+// Bundle128's `<logical>_S<k>` and format E's `<logical>_P<form><pos>_<UNIT>`.
+//
+// This used to strip only `_S0/_S1/_S2` and then look the stripped name up in
+// a hand-maintained KnownBases table. Under format E neither half worked — the
+// suffix never matched, so the member opcode was returned unchanged and every
+// caller's `Opc == Haydn::BEQ`-style compare silently failed. In
+// getBranchDestBlock that reached llvm_unreachable and took out 112 of the 430
+// CodeGen tests in branch relaxation. Same correction as c290615e3cb0 made for
+// the hwloop predicates: fold through the logical, never the spelling.
 static unsigned getHaydnFlexBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
-  StringRef Name = MII.getName(Opc);
-  StringRef Base = Name;
-  for (StringRef Suffix : {"_S0", "_S1", "_S2"}) {
-    if (Base.ends_with(Suffix)) {
-      Base = Base.drop_back(Suffix.size());
-      break;
-    }
-  }
-  if (Base == Name)
-    return Opc;
-  static const std::pair<StringRef, unsigned> KnownBases[] = {
-      {"ADD32", Haydn::ADD32},         {"ADDI32", Haydn::ADDI32},
-      {"ADDI32_W", Haydn::ADDI32_W},   {"SUB32", Haydn::SUB32},
-      {"SEQ32", Haydn::SEQ32},         {"SLT32", Haydn::SLT32},
-      {"SLTU32", Haydn::SLTU32},       {"XORI32", Haydn::XORI32},
-      {"JAL", Haydn::JAL},         {"JALR", Haydn::JALR},
-      {"BEQ", Haydn::BEQ},         {"BNE", Haydn::BNE},
-      {"BGE", Haydn::BGE},         {"BLT", Haydn::BLT},
-      {"BGEU", Haydn::BGEU},       {"BLTU", Haydn::BLTU},
-      {"BEQZ", Haydn::BEQZ},       {"BNEZ", Haydn::BNEZ},
-      {"BGEZ", Haydn::BGEZ},       {"BLTZ", Haydn::BLTZ},
-      {"CSRW", Haydn::CSRW},           {"ORI32", Haydn::ORI32}};
-  for (auto [BaseName, Enum] : KnownBases)
-    if (Base == BaseName)
-      return Enum;
-  return Opc;
+  return getHaydnLogicalBaseOpcode(Opc, MII);
 }
 
 HaydnInstrInfo::HaydnInstrInfo(const HaydnSubtarget &STI)
@@ -230,16 +215,13 @@ void HaydnInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   }
 
   // GPR32 → GPR32: MOVE32 rd, rs, rs (register move).
-  // The.td models MOVE32 with two source operands ($rs1, $rs2) because the
-  // R-type encoding (FmtALU32) has separate rs1/rs2 bit fields, and both
-  // must be populated for a deterministic encoding. copyPhysReg therefore
-  // passes SrcReg twice. Semantically MOVE32 reads only one register
-  // (1R/1W, RI-like — see), and the VLIW packetizer's countGPRPorts
-  // dedupes repeated source operands so this counts as a single GPR read.
-  // Using OR32 rd, rs, rs instead would also work but OR32 is two-source
-  // in the.td (no duplicate), so MOVE32 is the canonical single-read move.
+  // MOVE32 reads one register (1R/1W). It used to be modelled with two source
+  // operands so that FmtALU32's rs2 bit field had something to encode, and
+  // copyPhysReg passed SrcReg twice to fill it; the field is bound to zero in
+  // the.td now, which is what the database and the format E members say. An
+  // operand the logical has and the member does not is a place the encoder
+  // reads the wrong one — FORMAT-E-SWITCH-PLAN.md § 5.11.
   BuildMI(MBB, MI, DL, get(Haydn::MOVE32), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc))
       .addReg(SrcReg, getKillRegState(KillSrc));
 }
 
@@ -286,10 +268,10 @@ void HaydnInstrInfo::storeRegToStackSlot(
   // Use contains check since GPR32NoSPNoLR is a subclass
   if (RC == &Haydn::GPR32RegClass || RC == &Haydn::GPR32NoSPNoLRRegClass ||
       RC->hasSubClassEq(&Haydn::GPR32RegClass)) {
-    Opc = Haydn::ST32;
+    Opc = Haydn::S_SW_WITH_IMM;
     Size = 4;
   } else if (RC == &Haydn::DR64RegClass) {
-    Opc = Haydn::ST64; // Use 64-bit store for DR64 registers
+    Opc = Haydn::D_SDW_WITH_IMM; // Use 64-bit store for DR64 registers
     Size = 8;
   } else {
     llvm_unreachable("Unknown register class for store");
@@ -325,10 +307,10 @@ void HaydnInstrInfo::loadRegFromStackSlot(
   // Use contains check since GPR32NoSPNoLR is a subclass
   if (RC == &Haydn::GPR32RegClass || RC == &Haydn::GPR32NoSPNoLRRegClass ||
       RC->hasSubClassEq(&Haydn::GPR32RegClass)) {
-    Opc = Haydn::LD32;
+    Opc = Haydn::S_LW_WITH_IMM;
     Size = 4;
   } else if (RC == &Haydn::DR64RegClass) {
-    Opc = Haydn::LD64; // logical; slot from placement / setDesc materialize
+    Opc = Haydn::D_LDW_WITH_IMM; // logical; slot from placement / setDesc materialize
     Size = 8;
   } else {
     llvm_unreachable("Unknown register class for load");
@@ -979,12 +961,17 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     Register CurrentReg = Haydn::R0;
     for (const HaydnMatInt::Inst &MatInst : Seq) {
       switch (MatInst.Opc) {
-      default:
-        // ADDI32 / LUI / ADDI32_W / ORI32_W: (rd, rs, imm)
-        BuildMI(MBB, MBBI, DL, get(MatInst.Opc), DstReg)
-            .addReg(CurrentReg)
-            .addImm(MatInst.Imm);
+      default: {
+        // ADDI32 / ADDI32_W / ORI32_W: (rd, rs, imm). LUI is (rd, imm) —
+        // its source went with the Bundle128 shape in afc345108f57 and this
+        // loop kept passing one, which MachineVerifier rejects as an extra
+        // explicit operand. FORMAT-E-SWITCH-PLAN.md 5.11.
+        auto B = BuildMI(MBB, MBBI, DL, get(MatInst.Opc), DstReg);
+        if (MatInst.Opc != Haydn::LUI)
+          B.addReg(CurrentReg);
+        B.addImm(MatInst.Imm);
         break;
+      }
       case Haydn::SLLI32:
         BuildMI(MBB, MBBI, DL, get(Haydn::SLLI32), DstReg)
             .addReg(CurrentReg)
@@ -1034,9 +1021,10 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(V);
       Register Cur = Haydn::R0;
       for (size_t I = 0; I < Seq.size(); ++I) {
-        BuildMI(MBB, MBBI, DL, get(Seq[I].Opc), Target)
-            .addReg(Cur)
-            .addImm(Seq[I].Imm);
+        auto B = BuildMI(MBB, MBBI, DL, get(Seq[I].Opc), Target);
+        if (Seq[I].Opc != Haydn::LUI)  // (rd, imm), see above
+          B.addReg(Cur);
+        B.addImm(Seq[I].Imm);
         Cur = Target;
       }
     };
@@ -1048,7 +1036,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
               .addReg(Haydn::R13)
               .addImm(8);
           emitConst32(Lo, Scr);
-          BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(Haydn::R13)
               .addImm(0);
@@ -1060,14 +1048,14 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
           } else {
             emitConst32(Hi, Scr);
           }
-          BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+          BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
               .addReg(Scr)
               .addReg(Haydn::R13)
-              .addImm(4);
-          BuildMI(MBB, MBBI, DL, get(Haydn::LD64), DstReg)
+              .addImm(haydnScaledLSImm(4, 4));
+          BuildMI(MBB, MBBI, DL, get(Haydn::D_LDW_WITH_IMM), DstReg)
               .addReg(Haydn::R13)
               .addImm(0);
-          BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32_W), Haydn::R13)
+          BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32), Haydn::R13)
               .addReg(Haydn::R13)
               .addImm(8);
         },
@@ -1117,7 +1105,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     if (SrcLo == Haydn::R0) {
       // rd = (uint64_t)rs_hi << 32 — hi in [63:32], zero in [31:0].
       // Zero low half comes from the shift, not from reading R0.
-      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT32T64), DstReg)
           .addReg(SrcHi, getKillRegState(HiKill));
       BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
           .addReg(DstReg)
@@ -1128,7 +1116,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     if (SrcHi == Haydn::R0) {
       // rd = zero_extend(rs_lo) — lo in [31:0], zero in [63:32].
       // Zero high half from (<<32)>>32; do not read R0.
-      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT32T64), DstReg)
           .addReg(SrcLo, getKillRegState(LoKill));
       BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
           .addReg(DstReg)
@@ -1146,28 +1134,28 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // When SrcLo == SrcHi, only apply kill on the last use to avoid
     // killing the same physical register twice.
     if (SrcLo == SrcHi) {
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcLo, getKillRegState(false))
           .addReg(Haydn::R13)
           .addImm(0);
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcHi, getKillRegState(LoKill || HiKill))
           .addReg(Haydn::R13)
-          .addImm(4);
+          .addImm(haydnScaledLSImm(4, 4));
     } else {
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcLo, getKillRegState(LoKill))
           .addReg(Haydn::R13)
           .addImm(0);
-      BuildMI(MBB, MBBI, DL, get(Haydn::ST32))
+      BuildMI(MBB, MBBI, DL, get(Haydn::S_SW_WITH_IMM))
           .addReg(SrcHi, getKillRegState(HiKill))
           .addReg(Haydn::R13)
-          .addImm(4);
+          .addImm(haydnScaledLSImm(4, 4));
     }
-    BuildMI(MBB, MBBI, DL, get(Haydn::LD64), DstReg)
+    BuildMI(MBB, MBBI, DL, get(Haydn::D_LDW_WITH_IMM), DstReg)
         .addReg(Haydn::R13)
         .addImm(0);
-    BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32_W), Haydn::R13)
+    BuildMI(MBB, MBBI, DL, get(Haydn::ADDI32), Haydn::R13)
         .addReg(Haydn::R13)
         .addImm(8);
 
@@ -1222,7 +1210,7 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
   // Look through debug/NOP. Post-RA setDesc may leave ADDI32_W_S0 member Desc.
   {
     unsigned BaseOpc = getHaydnFlexBaseOpcode(Opc, *this);
-    if (BaseOpc == Haydn::ADDI32 || BaseOpc == Haydn::ADDI32_W) {
+    if (BaseOpc == Haydn::ADDI32) {
       if (MI.getNumExplicitOperands() >= 1 && MI.getOperand(0).isReg()) {
         Register Dest = MI.getOperand(0).getReg();
         // Bundled remat def: whole BUNDLE is a boundary via SET inside, but
@@ -1568,18 +1556,19 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   //      AIEBaseInstrInfo.cpp:546-555)
   //   * bare real / multi-parcel pseudo → ProductFormatDesc.Bytes * N
   //     (AIE getInstSizeInBytes → get(Opcode).getSize(),
-  //      AIE1InstrInfo.cpp:646-651; Haydn product is one BUNDLE128_FULL
+  //      AIE1InstrInfo.cpp:646-651; Haydn product is one 12-byte format E
   //      parcel per architectural cycle)
   //   * child inside a BUNDLE → 0 (composite size is on the root)
   //   * pure meta / zero-size pseudos → 0
-  // No parallel "always 16" oracle independent of FormatID/EncodedBytes.
+  // No parallel "always 12" oracle independent of FormatID/EncodedBytes.
   using haydn::bundle::committedEncodedBytes;
   using haydn::bundle::productParcelBytes;
   const unsigned B = productParcelBytes();
-  static_assert(haydn::bundle::Bundle128EncodedBytesValue == 16u, "");
+  static_assert(haydn::bundle::ProductEncodedBytesValue == 12u,
+                "format E product parcel is 12 bytes");
   static_assert(
       haydn::bundle::ProductFormatDesc.Bytes.Value ==
-          haydn::bundle::Bundle128EncodedBytesValue,
+          haydn::bundle::ProductEncodedBytesValue,
       "product FormatDesc.Bytes is the EncodedBytes oracle");
 
   // Formed VLIW packet: committed FormatID → EncodedBytes (idle slots = zeros).
@@ -2049,9 +2038,8 @@ std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
     BuildMI(&MBB, BranchDL, HII->get(Haydn::LOADI32), CmpReg).addImm(TC + 1);
   } else {
     BuildMI(&MBB, BranchDL, HII->get(Haydn::LUI), CmpReg)
-        .addReg(Haydn::R0)
         .addImm(((static_cast<uint32_t>(TC + 1) + 0x8000) >> 16) & 0xFFFF);
-    BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32_W), CmpReg)
+    BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32), CmpReg)
         .addReg(CmpReg)
         .addImm((TC + 1) & 0xFFFF);
   }
@@ -2103,7 +2091,7 @@ void HaydnPipelinerLoopInfo::adjustTripCount(int TripCountAdjust) {
   // Use the cached LoopBB (the original loop body).
   MachineBasicBlock *LoopBB = this->LoopBB;
   if (isInt<16>(Adj)) {
-    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADDI32_W),
+    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADDI32),
             NewTC)
         .addReg(TripCountReg)
         .addImm(Adj);
@@ -2140,8 +2128,7 @@ namespace {
 // opcodes and their `_S<k>` Selector-emitted variants.
 static bool isInductionStep(unsigned Opc, const MCInstrInfo &MII) {
   unsigned Base = getHaydnFlexBaseOpcode(Opc, MII);
-  return Base == Haydn::ADD32 || Base == Haydn::ADDI32 ||
-         Base == Haydn::ADDI32_W || Base == Haydn::SUB32;
+  return Base == Haydn::ADD32 || Base == Haydn::ADDI32 || Base == Haydn::SUB32;
 }
 
 // Return the latch-incoming value of a PHI in \p LoopBB, i.e. the incoming
@@ -2193,7 +2180,7 @@ static bool getInductionStep(const MachineRegisterInfo &MRI,
                              const MachineInstr &BumpMI, int64_t &Step) {
   unsigned Opc = BumpMI.getOpcode();
   unsigned Base = getHaydnFlexBaseOpcode(Opc, MII);
-  if (Base == Haydn::ADDI32 || Base == Haydn::ADDI32_W) {
+  if (Base == Haydn::ADDI32) {
     if (!BumpMI.getOperand(2).isImm())
       return false;
     Step = BumpMI.getOperand(2).getImm();
@@ -2210,7 +2197,7 @@ static bool getInductionStep(const MachineRegisterInfo &MRI,
     if (!Def)
       continue;
     unsigned DefBase = getHaydnFlexBaseOpcode(Def->getOpcode(), MII);
-    if (DefBase != Haydn::ADDI32 && DefBase != Haydn::ADDI32_W)
+    if (DefBase != Haydn::ADDI32)
       continue;
     if (Def->getOperand(1).getReg() != Haydn::R0 || !Def->getOperand(2).isImm())
       continue;
@@ -2620,7 +2607,7 @@ std::optional<int64_t> getHaydnConstantImm(Register R,
     if (Opc == Haydn::LOADI32 && Def->getOperand(1).isImm())
       return Def->getOperand(1).getImm();
     // ADDI32 / ADDI32_W rd, r0, imm  (materialize small constants)
-    if ((Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W) &&
+    if ((Opc == Haydn::ADDI32) &&
         Def->getNumOperands() >= 3 && Def->getOperand(1).isReg() &&
         Def->getOperand(2).isImm()) {
       Register Base = Def->getOperand(1).getReg();
@@ -2891,13 +2878,13 @@ bool HaydnInstrInfo::getBaseAndOffsetPosition(const MachineInstr &MI,
 
   // Plain base+imm loads/stores used by canUseLastOffsetValue rewrite.
   switch (Opc) {
-  case Haydn::LD32:
-  case Haydn::LD64:
+  case Haydn::S_LW_WITH_IMM:
+  case Haydn::D_LDW_WITH_IMM:
     BasePos = 1;
     OffsetPos = 2;
     break;
-  case Haydn::ST32:
-  case Haydn::ST64:
+  case Haydn::S_SW_WITH_IMM:
+  case Haydn::D_SDW_WITH_IMM:
     BasePos = 1;
     OffsetPos = 2;
     break;
@@ -2940,7 +2927,7 @@ bool HaydnInstrInfo::getIncrementValue(const MachineInstr &MI,
   }
 
   // Plain ADDI is the split post-inc fallback (and common IV step).
-  if (Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W) {
+  if (Opc == Haydn::ADDI32) {
     const MachineOperand &ImmOp = MI.getOperand(2);
     if (!ImmOp.isImm() || !isInt<32>(ImmOp.getImm()))
       return false;
@@ -3010,27 +2997,96 @@ bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
   }
 
   // Plain LD/ST base+imm.
+  // Plain `<base> + imm` forms. Offset is returned in BYTES, and the
+  // immediate is an ELEMENT INDEX -- `simm6:$scaled_imm`, EA = rs + (imm <<
+  // log2(width)) -- so it has to be scaled on the way out. It was not, which
+  // shrank every distance by the access width: two words at elements 0 and 1
+  // are 4 bytes apart and looked 1 apart, i.e. overlapping. The PreImm path
+  // above already had the shift; this one never did.
+  //
+  // The byte and halfword forms were missing entirely, so they reported "no
+  // information" and every consumer had to assume the worst about them.
+  {
+    unsigned W = 0;
+    switch (Opc) {
+    case Haydn::S_LBS_WITH_IMM:
+    case Haydn::S_LBU_WITH_IMM:
+    case Haydn::S_SB_WITH_IMM:
+      W = 1;
+      break;
+    case Haydn::S_LHWS_WITH_IMM:
+    case Haydn::S_LHWU_WITH_IMM:
+    case Haydn::S_SHW_WITH_IMM:
+      W = 2;
+      break;
+    case Haydn::S_LW_WITH_IMM:
+    case Haydn::S_SW_WITH_IMM:
+      W = 4;
+      break;
+    case Haydn::D_LDW_WITH_IMM:
+    case Haydn::D_SDW_WITH_IMM:
+      W = 8;
+      break;
+    default:
+      break;
+    }
+    if (W) {
+      if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
+          !MI.getOperand(2).isImm())
+        return false;
+      BaseOps.push_back(&MI.getOperand(1));
+      Offset = MI.getOperand(2).getImm() * (int64_t)W;
+      Width = LocationSize::precise(W);
+      return true;
+    }
+  }
   switch (Opc) {
-  case Haydn::LD32:
-  case Haydn::LD64:
-    if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
-        !MI.getOperand(2).isImm())
-      return false;
-    BaseOps.push_back(&MI.getOperand(1));
-    Offset = MI.getOperand(2).getImm();
-    Width = LocationSize::precise(Opc == Haydn::LD64 ? 8 : 4);
-    return true;
-  case Haydn::ST32:
-  case Haydn::ST64:
-    if (MI.getNumOperands() < 3 || !MI.getOperand(1).isReg() ||
-        !MI.getOperand(2).isImm())
-      return false;
-    BaseOps.push_back(&MI.getOperand(1));
-    Offset = MI.getOperand(2).getImm();
-    Width = LocationSize::precise(Opc == Haydn::ST64 ? 8 : 4);
-    return true;
   default:
     return false;
   }
+}
+
+bool HaydnInstrInfo::areMemAccessesTriviallyDisjoint(
+    const MachineInstr &MIa, const MachineInstr &MIb) const {
+  assert(MIa.mayLoadOrStore() && "MIa must be a load or store.");
+  assert(MIb.mayLoadOrStore() && "MIb must be a load or store.");
+
+  if (MIa.hasUnmodeledSideEffects() || MIb.hasUnmodeledSideEffects() ||
+      MIa.hasOrderedMemoryRef() || MIb.hasOrderedMemoryRef())
+    return false;
+
+  // The interface's own contract: assume any register used to compute an
+  // address holds the same value in both instructions. That is what makes a
+  // bare base comparison sound here, and it is why this is a post-RA question.
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+  SmallVector<const MachineOperand *, 4> BaseOpsA, BaseOpsB;
+  int64_t OffsetA = 0, OffsetB = 0;
+  bool ScalableA = false, ScalableB = false;
+  LocationSize WidthA = LocationSize::precise(0),
+               WidthB = LocationSize::precise(0);
+
+  if (!getMemOperandsWithOffsetWidth(MIa, BaseOpsA, OffsetA, ScalableA, WidthA,
+                                     TRI) ||
+      !getMemOperandsWithOffsetWidth(MIb, BaseOpsB, OffsetB, ScalableB, WidthB,
+                                     TRI))
+    return false;
+
+  // Haydn never reports a scalable offset, but a false here is the safe answer
+  // if that ever changes rather than a comparison of incomparable units.
+  if (ScalableA || ScalableB)
+    return false;
+  if (BaseOpsA.size() != 1 || BaseOpsB.size() != 1)
+    return false;
+  if (!BaseOpsA[0]->isIdenticalTo(*BaseOpsB[0]))
+    return false;
+  if (!WidthA.hasValue() || !WidthB.hasValue())
+    return false;
+
+  // Offsets come back in BYTES (§ 5.18 — the immediate is an element index and
+  // the accessor scales it), so this compares like with like.
+  const int64_t LowOffset = std::min(OffsetA, OffsetB);
+  const int64_t HighOffset = std::max(OffsetA, OffsetB);
+  const LocationSize LowWidth = (LowOffset == OffsetA) ? WidthA : WidthB;
+  return LowOffset + static_cast<int64_t>(LowWidth.getValue()) <= HighOffset;
 }
 

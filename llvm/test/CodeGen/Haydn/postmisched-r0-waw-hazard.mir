@@ -40,9 +40,9 @@ body:             |
     ; CHECK-LABEL: name: test_r0_dual_def_no_bundle
     ; Soft-zero then redefine R0 — must stay separate (no BUNDLE wrapping both).
     ; After B3.1 materialize, opcodes may be format-member (XOR32_S2 etc.).
-    ; CHECK: $r0 = XOR32{{(_S[0-2])?}} $r0, $r0
+    ; CHECK: $r0 = XOR32{{(_P[23][0-9]_[A-Z0-9]+)?}} $r0, $r0
     ; CHECK-NOT: BUNDLE{{.*}}$r0 = XOR32{{.*}}$r0 = ADDI32
-    ; CHECK: $r0 = ADDI32{{(_S[0-2])?}}
+    ; CHECK: $r0 = ADDI32{{(_P[23][0-9]_[A-Z0-9]+)?}}
     ; CHECK: JALR
     $r0 = XOR32 $r0, $r0, implicit-def dead $sfr
     $r0 = ADDI32 $r1, 0, implicit-def dead $sfr
@@ -76,7 +76,7 @@ body:             |
 
     ; CHECK-LABEL: name: test_r0_softzero_with_other_def_can_bundle
     ; Soft-zero R0 + independent write to R3 may co-issue (no R0 dual-def).
-    ; CHECK: BUNDLE 0,
+    ; CHECK: BUNDLE 1,
     ; CHECK: XOR32
     ; CHECK: ADD32
     ; CHECK: JALR

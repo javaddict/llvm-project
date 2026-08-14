@@ -909,7 +909,7 @@ static bool isImmediateMaterialization(const MachineInstr &MI, Register Reg,
   // ADDI32_W is the WIDE-only immediate form (RI20); the compact ADDI32 is
   // also accepted for legacy emission. Both have op0=dst, op1=src(R0), op2=imm.
   if ((MI.getOpcode() == Haydn::ADDI32 ||
-       MI.getOpcode() == Haydn::ADDI32_W) &&
+       MI.getOpcode() == Haydn::ADDI32) &&
       MI.getOperand(0).isReg() &&
       MI.getOperand(0).getReg() == Reg && MI.getOperand(1).isReg() &&
       MI.getOperand(1).getReg() == Haydn::R0 && MI.getOperand(2).isImm()) {
@@ -989,7 +989,7 @@ static bool findImmediateDefBefore(MachineBasicBlock *MBB, Register Reg,
 // Logical LD32 only (: no durable LD32_S1 on MIR).
 static bool isSpStackLoad32(const MachineInstr &MI, Register Reg, int &Off) {
   unsigned Opc = MI.getOpcode();
-  if (Opc != Haydn::LD32)
+  if (Opc != Haydn::S_LW_WITH_IMM)
     return false;
   if (!MI.getOperand(0).isReg() || MI.getOperand(0).getReg() != Reg)
     return false;
@@ -1019,7 +1019,7 @@ static int findStackLoadOffset(MachineBasicBlock *MBB, Register Reg) {
 static Register findStackStoreSrc(MachineBasicBlock *MBB, int Offset) {
   for (auto I = MBB->rbegin(), E = MBB->rend(); I != E; ++I) {
     MachineInstr &MI = *I;
-    if (MI.getOpcode() != Haydn::ST32)
+    if (MI.getOpcode() != Haydn::S_SW_WITH_IMM)
       continue;
     if (MI.getOperand(0).isReg() && MI.getOperand(1).isReg() &&
         MI.getOperand(1).getReg() == Haydn::R13 &&
@@ -1042,7 +1042,7 @@ static Register findStackStoreSrc(MachineBasicBlock *MBB, int Offset,
   StoreMI = nullptr;
   for (auto I = MBB->rbegin(), E = MBB->rend(); I != E; ++I) {
     MachineInstr &MI = *I;
-    if (MI.getOpcode() != Haydn::ST32)
+    if (MI.getOpcode() != Haydn::S_SW_WITH_IMM)
       continue;
     if (MI.getOperand(0).isReg() && MI.getOperand(1).isReg() &&
         MI.getOperand(1).getReg() == Haydn::R13 &&
@@ -1803,7 +1803,7 @@ static bool findImmediateDefOnDomChainScoped(MachineBasicBlock *Start,
 // $r4" and misidentify $r4 (a temp) as the IV. See (copy-following).
 static MachineInstr *matchIVBump(MachineInstr &MI, Register Reg) {
   unsigned Opc = MI.getOpcode();
-  if (Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W) {
+  if (Opc == Haydn::ADDI32) {
     // $rX = ADDI32 $rX, imm — operand 0 (dest) and operand 1 (src) must both
     // be Reg (self-bump).
     if (MI.getNumOperands() >= 2 && MI.getOperand(0).isReg() &&
@@ -1824,7 +1824,7 @@ static MachineInstr *matchIVBump(MachineInstr &MI, Register Reg) {
       return &MI;
     return nullptr;
   }
-  if (Opc == Haydn::LD32_POST || Opc == Haydn::LD64_POST ||
+  if (Opc == Haydn::S_LW_POST_IMM || Opc == Haydn::D_LDW_POST_IMM ||
       Opc == Haydn::S_LW_POST_IMM || Opc == Haydn::D_LDW_POST_IMM) {
     // Pointer-IV: base-writeback (operand 1). Guard operand count.
     // the DB-named S_LW_POST_IMM (scalar i32 -> GPR32)
@@ -1959,7 +1959,7 @@ static MachineInstr *findIVBumpInLoop(const MachineLoop *L, Register Reg,
     // IV are common in register-pressured loops). See (GAP-B extension).
     for (MachineBasicBlock *MBB : SearchBlocks) {
       for (MachineInstr &MI : *MBB) {
-        if (MI.getOpcode() != Haydn::LD32 || MI.getNumOperands() < 3 ||
+        if (MI.getOpcode() != Haydn::S_LW_WITH_IMM || MI.getNumOperands() < 3 ||
             !MI.getOperand(0).isReg() || MI.getOperand(0).getReg() != DstReg)
           continue;
         if (!MI.getOperand(1).isReg() || MI.getOperand(1).getReg() != Haydn::R13 ||
@@ -1985,7 +1985,7 @@ static MachineInstr *findIVBumpInLoop(const MachineLoop *L, Register Reg,
     for (MachineBasicBlock *MBB : SearchBlocks) {
       for (MachineInstr &MI : *MBB) {
         unsigned Opc = MI.getOpcode();
-        if (Opc != Haydn::ADDI32 && Opc != Haydn::ADDI32_W &&
+        if (Opc != Haydn::ADDI32 &&
             Opc != Haydn::ADD32)
           continue;
         if (MI.getNumOperands() < 3 || !MI.getOperand(0).isReg() ||
@@ -2004,7 +2004,7 @@ static MachineInstr *findIVBumpInLoop(const MachineLoop *L, Register Reg,
   for (MachineBasicBlock *MBB : SearchBlocks) {
     for (MachineInstr &MI : *MBB) {
       unsigned Opc = MI.getOpcode();
-      if (Opc != Haydn::ADDI32 && Opc != Haydn::ADDI32_W &&
+      if (Opc != Haydn::ADDI32 &&
           Opc != Haydn::ADD32)
         continue;
       if (MI.getNumOperands() < 3 || !MI.getOperand(0).isReg() ||
@@ -2211,7 +2211,7 @@ static int64_t extractIVBump(MachineInstr *BumpMI, Register IVReg,
   }
 
   // ADDI32/ADDI32_W iv, imm — immediate increment (iv = iv + imm).
-  if (BumpOpc == Haydn::ADDI32 || BumpOpc == Haydn::ADDI32_W) {
+  if (BumpOpc == Haydn::ADDI32) {
     if (!BumpMI->getOperand(1).isReg() || !BumpMI->getOperand(2).isImm())
       return 0;
     if (BumpMI->getOperand(1).getReg() != IVReg)
@@ -2237,7 +2237,7 @@ static int64_t extractIVBump(MachineInstr *BumpMI, Register IVReg,
   // 0 for a LD32_POST bump, the pass printed "Cannot determine IV step", and
   // every pointer-IV streaming loop stayed on a BLTU/BLT back-edge. The imm is
   // at operand index 3.
-  if (BumpOpc == Haydn::LD32_POST || BumpOpc == Haydn::LD64_POST ||
+  if (BumpOpc == Haydn::S_LW_POST_IMM || BumpOpc == Haydn::D_LDW_POST_IMM ||
       BumpOpc == Haydn::S_LW_POST_IMM || BumpOpc == Haydn::D_LDW_POST_IMM) {
     if (BumpMI->getNumOperands() < 4 ||
         !BumpMI->getOperand(1).isReg() || !BumpMI->getOperand(3).isImm())
@@ -2249,7 +2249,7 @@ static int64_t extractIVBump(MachineInstr *BumpMI, Register IVReg,
       return 0; // Only forward strides (post-increment).
     // D_LDW_POST_IMM / LD64_POST are doubleword (<<3); the scalar word
     // forms (S_LW_POST_IMM / LD32_POST) are <<2.
-    bool IsDw = (BumpOpc == Haydn::LD64_POST ||
+    bool IsDw = (BumpOpc == Haydn::D_LDW_POST_IMM ||
                  BumpOpc == Haydn::D_LDW_POST_IMM);
     int64_t ByteStride = ElemStride << (IsDw ? 3 : 2);
     return ByteStride;
@@ -3226,7 +3226,7 @@ bool HaydnHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     // generalizes Case 1. findTripCount guarantees -init fits simm16.
     if (ScalarTripInit != 0) {
       // LimitReg = ADDI32 LimitReg, -init
-      BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::ADDI32_W), LimitReg)
+      BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::ADDI32), LimitReg)
           .addReg(LimitReg)
           .addImm(-ScalarTripInit);
     }

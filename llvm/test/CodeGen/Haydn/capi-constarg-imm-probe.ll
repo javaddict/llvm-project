@@ -8,13 +8,13 @@
 declare i32 @llvm.haydn.slli32(i32, i32)
 declare i64 @llvm.haydn.srai64(i64, i32)
 declare i64 @llvm.haydn.sin.cos(i32, i32)
-declare i64 @llvm.haydn.movei.h(i32)
+declare i64 @llvm.haydn.movei.h(i64, i32)
 declare i32 @llvm.haydn.arctan(i64, i32)
 declare void @llvm.haydn.setcbr.begin(i32, i32)
 declare void @llvm.haydn.flar(i32)
 declare void @llvm.haydn.pldwwua(i32, ptr)
-declare i64 @llvm.haydn.d.ltwua.post(ptr, i32, i32, i32)
-declare void @llvm.haydn.wbarwua(i32, ptr, i32)
+declare i64 @llvm.haydn.d.ltwua.post(ptr, i32)
+declare void @llvm.haydn.wbarwua(i32, ptr)
 declare <2 x i32> @llvm.haydn.x2slli32(<2 x i32>, i32)
 declare <4 x i16> @llvm.haydn.x4seli16(<4 x i16>, <4 x i16>, i32)
 
@@ -41,8 +41,8 @@ define i64 @probe_sin_cos(i32 %phase) {
 
 ; CHECK-LABEL: probe_movei_h:
 ; CHECK: movei_h
-define i64 @probe_movei_h() {
-  %r = call i64 @llvm.haydn.movei.h(i32 4660)
+define i64 @probe_movei_h(i64 %acc) {
+  %r = call i64 @llvm.haydn.movei.h(i64 %acc, i32 4660)
   ret i64 %r
 }
 
@@ -65,11 +65,11 @@ define void @probe_setcbr(i32 %val) {
 ; CHECK: d_ltwua_post
 ; CHECK: flar
 ; CHECK: wbarwua
-define i64 @probe_ua_stream(ptr %base, ptr %ptr, i32 %stride) {
+define i64 @probe_ua_stream(ptr %base, ptr %ptr) {
   call void @llvm.haydn.pldwwua(i32 0, ptr %base)
-  %v = call i64 @llvm.haydn.d.ltwua.post(ptr %ptr, i32 0, i32 %stride, i32 0)
+  %v = call i64 @llvm.haydn.d.ltwua.post(ptr %ptr, i32 0)
   call void @llvm.haydn.flar(i32 0)
-  call void @llvm.haydn.wbarwua(i32 1, ptr %ptr, i32 0)
+  call void @llvm.haydn.wbarwua(i32 1, ptr %ptr)
   ret i64 %v
 }
 

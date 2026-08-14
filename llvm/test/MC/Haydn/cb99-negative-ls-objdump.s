@@ -8,19 +8,24 @@
     .globl cb99_negative_ls_objdump
     .type cb99_negative_ls_objdump,@function
 cb99_negative_ls_objdump:
-    { ld32 r1, r10, -4; nop; nop }
-    { ld64 d1, r10, -8; nop; nop }
-    { st32 r1, r10, -4; nop; nop }
-    { ldu8 r1, r10, -1; nop; nop }
-    { st8 r1, r10, -1; nop; nop }
+    { s_lw_with_imm r1, r10, -1; nop; nop }
+    { d_ldw_with_imm d1, r10, -1; nop; nop }
+    { s_sw_with_imm r1, r10, -1; nop; nop }
+    { s_lbu_with_imm r1, r10, -1; nop; nop }
+    { s_sb_with_imm r1, r10, -1; nop; nop }
     { jalr r0, lr, 0; nop; nop }
     .size cb99_negative_ls_objdump, .-cb99_negative_ls_objdump
 
-# CHECK: ld32{{.*}}r1,{{.*}}r10,{{.*}}-4
-# CHECK: ld64{{.*}}d1,{{.*}}r10,{{.*}}-8
-# CHECK: st32{{.*}}r1,{{.*}}r10,{{.*}}-4
-# CHECK: ldu8{{.*}}r1,{{.*}}r10,{{.*}}-1
-# CHECK: st8{{.*}}r1,{{.*}}r10,{{.*}}-1
-# CHECK-NOT: 65532
-# CHECK-NOT: 65528
-# CHECK-NOT: 65535
+# The immediate is a SCALED element index now, so the byte offsets in the
+# source (-4, -8, -1) print as -1 in every case: -4/4, -8/8 and -1/1.
+# CHECK: s_lw_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-1
+# CHECK: d_ldw_{{[a-z_]*}}{{.*}}d1,{{.*}}r10,{{.*}}-1
+# CHECK: s_sw_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-1
+# CHECK: s_lbu_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-1
+# CHECK: s_sb_{{[a-z_]*}}{{.*}}r1,{{.*}}r10,{{.*}}-1
+# The point of the test: a negative offset must print SIGNED. The unsigned
+# renderings to forbid moved with the field width -- they were 65532 / 65528 /
+# 65535 for a 16-bit field, and the field is 6 bits now, so -1 misprinted as
+# unsigned is 63. Guarding the old values would have guarded nothing.
+# CHECK-NOT: {{, 63 }}
+# CHECK-NOT: {{, 6[0-3] }}

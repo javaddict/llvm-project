@@ -32,56 +32,56 @@
 
 define i32 @atomic_load_monotonic(ptr %ptr) {
 ; CHECK-LABEL: atomic_load_monotonic:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_load_4
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_load_4
   %v = load atomic i32, ptr %ptr monotonic, align 4
   ret i32 %v
 }
 
 define i32 @atomic_load_acquire(ptr %ptr) {
 ; CHECK-LABEL: atomic_load_acquire:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_load_4
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_load_4
   %v = load atomic i32, ptr %ptr acquire, align 4
   ret i32 %v
 }
 
 define void @atomic_store_monotonic(ptr %ptr, i32 %val) {
 ; CHECK-LABEL: atomic_store_monotonic:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_store_4
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_store_4
   store atomic i32 %val, ptr %ptr monotonic, align 4
   ret void
 }
 
 define void @atomic_store_release(ptr %ptr, i32 %val) {
 ; CHECK-LABEL: atomic_store_release:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_store_4
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_store_4
   store atomic i32 %val, ptr %ptr release, align 4
   ret void
 }
 
 define i64 @atomic_load_i64(ptr %ptr) {
 ; CHECK-LABEL: atomic_load_i64:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_load_8
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_load_8
   %v = load atomic i64, ptr %ptr monotonic, align 8
   ret i64 %v
 }
 
 define void @atomic_store_i64(ptr %ptr, i64 %val) {
 ; CHECK-LABEL: atomic_store_i64:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_store_8
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_store_8
   store atomic i64 %val, ptr %ptr monotonic, align 8
   ret void
 }
 
 define i32 @atomic_rmw_add(ptr %ptr) {
 ; CHECK-LABEL: atomic_rmw_add:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_fetch_add_4
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_fetch_add_4
   %v = atomicrmw add ptr %ptr, i32 1 monotonic
   ret i32 %v
 }
 
 define i32 @atomic_rmw_xchg(ptr %ptr) {
 ; CHECK-LABEL: atomic_rmw_xchg:
-; CHECK:       jal{{(\.s[012])?}} {{.*}}__atomic_exchange_4
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}} {{.*}}__atomic_exchange_4
   %v = atomicrmw xchg ptr %ptr, i32 42 monotonic
   ret i32 %v
 }

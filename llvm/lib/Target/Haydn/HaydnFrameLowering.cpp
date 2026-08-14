@@ -45,9 +45,15 @@ static void emitMaterializeImm32(MachineBasicBlock &MBB,
   HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Imm);
   Register Current = Haydn::R0;
   for (const HaydnMatInt::Inst &Inst : Seq) {
-    BuildMI(MBB, MBBI, DL, TII->get(Inst.Opc), Dst)
-        .addReg(Current)
-        .addImm(Inst.Imm)
+    // LUI takes no source: the database is `LUI rt, imm12` and the
+    // logical was corrected to match in afc345108f57, which missed
+    // these two materialisation loops. Passing the running register
+    // anyway leaves an extra explicit operand and MachineVerifier
+    // rejects the function. FORMAT-E-SWITCH-PLAN.md 5.11.
+    auto B = BuildMI(MBB, MBBI, DL, TII->get(Inst.Opc), Dst);
+    if (Inst.Opc != Haydn::LUI)
+      B.addReg(Current);
+    B.addImm(Inst.Imm)
         .setMIFlag(FrameFlag);
     Current = Dst;
   }
@@ -150,7 +156,7 @@ static void emitMaterializeOffset(MachineBasicBlock &MBB,
         .setMIFlag(FrameFlag);
   } else if (isInt<20>(Offset)) {
     // DestReg = BaseReg + Offset (ADDI32_W simm20)
-    BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), DestReg)
+    BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), DestReg)
         .addReg(BaseReg)
         .addImm(Offset)
         .setMIFlag(FrameFlag);
@@ -164,13 +170,13 @@ static void emitMaterializeOffset(MachineBasicBlock &MBB,
 }
 
 // Emit a callee-saved register store at an arbitrary byte offset from
-// BaseReg. When the offset fits the s0 LS imm4 scaled range
-// ([0,60]/4-aligned for ST32, [0,120]/8-aligned for ST64) the plain
-// immediate-offset ST32/ST64 is emitted (migrates to ST32_M0S0LS via the
+// BaseReg. When the offset is width-aligned and fits format E's scaled simm6
+// ([-128,124]/4-aligned for S_SW, [-256,248]/8-aligned for D_SDW) the plain
+// immediate-offset store is emitted (migrates to ST32_M0S0LS via the
 // finalizer). When the offset is out of range (negative or large CSR slots)
 // the offset is materialized into a PEI scratch (\c getPEIScratchReg: ABI
 // call-clobbered / reserved R12 — same contract as EFI scavenger) and the
-// ST32_REG_M0S0LS / ST64_REG_M0S0LS Mode-0 register-offset variant is emitted.
+// S_SW_WITH_REG / D_SDW_WITH_REG Mode-0 register-offset variant is emitted.
 // This eliminates the legacy Haydn32 LS emit path for CSR spills (Gap 1
 // tryDecodeLegacyLSProbe).
 static void emitCSRStore(MachineBasicBlock &MBB,
@@ -178,27 +184,28 @@ static void emitCSRStore(MachineBasicBlock &MBB,
                          const HaydnInstrInfo *TII, unsigned StoreOpc,
                          Register SrcReg, Register BaseReg, int Offset,
                          MachineInstr::MIFlag FrameFlag) {
-  unsigned Shift = (StoreOpc == Haydn::ST64) ? 3 : 2;
-  int64_t MaxOff = static_cast<int64_t>(15) << Shift;
-  bool InImm4Range = (Offset >= 0 && Offset <= MaxOff &&
-                      (Offset & ((1 << Shift) - 1)) == 0);
-  if (InImm4Range) {
+  // Mirror of emitCSRLoad: golden scaled simm6, EA = base + (simm6 << Shift).
+  unsigned Shift = (StoreOpc == Haydn::D_SDW_WITH_IMM) ? 3 : 2;
+  unsigned Width = 1u << Shift;
+  bool Aligned = (Offset & (static_cast<int>(Width) - 1)) == 0;
+  bool InSimm6Range = Aligned && isInt<6>(Offset >> Shift);
+  if (InSimm6Range) {
     BuildMI(MBB, MBBI, DL, TII->get(StoreOpc))
         .addReg(SrcReg)
         .addReg(BaseReg)
-        .addImm(Offset)
+        .addImm(haydnScaledLSImm(Offset, Width))
         .setMIFlag(FrameFlag);
     return;
   }
   // logical REG forms only; private *_S0 peers are MC encode-only.
-  unsigned RegOpc = (StoreOpc == Haydn::ST64) ? Haydn::ST64_REG_M0S0LS
-                                              : Haydn::ST32_REG_M0S0LS;
+  unsigned RegOpc = (StoreOpc == Haydn::D_SDW_WITH_IMM) ? Haydn::D_SDW_WITH_REG
+                                              : Haydn::S_SW_WITH_REG;
   // Short-lived offset: soft-zero R0 when free; restore after store.
   assert(SrcReg != Haydn::R0 && BaseReg != Haydn::R0);
   Register OffReg = Haydn::R0;
   if (Offset != 0) {
     if (isInt<20>(Offset)) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), OffReg)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), OffReg)
           .addReg(OffReg)
           .addImm(Offset)
           .setMIFlag(FrameFlag);
@@ -223,7 +230,7 @@ static void emitCSRStore(MachineBasicBlock &MBB,
 // from BaseReg. Mirrors emitCSRStore for the epilogue restore path. When the
 // offset fits the s0 LS imm4 scaled range the plain immediate-offset LD32
 // LD64 is emitted; otherwise the offset is materialized into a PEI scratch
-// (getPEIScratchReg) and the LD32_REG_M0S0LS / LD64_REG_M0S0LS register
+// (getPEIScratchReg) and the S_LW_WITH_REG / D_LDW_WITH_REG register
 // offset variant is emitted. A pure-constant scratch (LOADI32/ADDI feeding
 // the LD) is live into the load so it is not DCE'd — unlike a reserved-reg
 // stride base that had no consumer after frame-destroy.
@@ -234,24 +241,24 @@ static void emitCSRLoad(MachineBasicBlock &MBB,
                         MachineInstr::MIFlag FrameFlag) {
   // Golden scaled simm6 : EA = base + (simm6 << log2(width)).
   // LD64 scale 8; LD32 scale 4. Outside [-32,31] scaled → REG-offset.
-  bool Is64 = (LoadOpc == Haydn::LD64);
+  bool Is64 = (LoadOpc == Haydn::D_LDW_WITH_IMM);
   unsigned Shift = Is64 ? 3 : 2;
   bool Aligned = (Offset & ((1 << Shift) - 1)) == 0;
   bool InSimm6Range = Aligned && isInt<6>(Offset >> Shift);
   if (InSimm6Range) {
     BuildMI(MBB, MBBI, DL, TII->get(LoadOpc), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset)
+        .addImm(haydnScaledLSImm(Offset, 1u << Shift))
         .setMIFlag(FrameFlag);
     return;
   }
-  unsigned RegOpc = Is64 ? Haydn::LD64_REG_M0S0LS : Haydn::LD32_REG_M0S0LS;
+  unsigned RegOpc = Is64 ? Haydn::D_LDW_WITH_REG : Haydn::S_LW_WITH_REG;
   // Soft-zero R0 as short-lived offset temp (avoids stealing R1 return).
   assert(DstReg != Haydn::R0 && BaseReg != Haydn::R0);
   Register OffReg = Haydn::R0;
   if (Offset != 0) {
     if (isInt<20>(Offset)) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), OffReg)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), OffReg)
           .addReg(OffReg)
           .addImm(Offset)
           .setMIFlag(FrameFlag);
@@ -520,30 +527,30 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
         // Store each register at its offset relative to the base.
         for (unsigned J = 0; J < RunLen; ++J) {
           int RelOffset = GPRCSRegs[J].Offset - BaseOffset;
-          BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST32))
+          BuildMI(MBB, MBBI, DL, TII->get(Haydn::S_SW_WITH_IMM))
               .addReg(GPRCSRegs[J].Reg)
               .addReg(BaseReg)
-              .addImm(RelOffset)
+              .addImm(haydnScaledLSImm(RelOffset, 4))
               .setMIFlag(MachineInstr::FrameSetup);
         }
 
         // Remaining non-consecutive registers: plain stores from their FrameReg.
         for (unsigned J = RunLen; J < GPRCSRegs.size(); ++J) {
-          emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST32, GPRCSRegs[J].Reg,
+          emitCSRStore(MBB, MBBI, DL, TII, Haydn::S_SW_WITH_IMM, GPRCSRegs[J].Reg,
                        GPRCSRegs[J].BaseReg, GPRCSRegs[J].Offset,
                        MachineInstr::FrameSetup);
         }
       } else {
         // No consecutive run of 2+ — plain stores from each CSR's FrameReg.
         for (const auto &E : GPRCSRegs) {
-          emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST32, E.Reg, E.BaseReg,
+          emitCSRStore(MBB, MBBI, DL, TII, Haydn::S_SW_WITH_IMM, E.Reg, E.BaseReg,
                        E.Offset, MachineInstr::FrameSetup);
         }
       }
     } else {
       // 0 or 1 GPR callee-saves, or scratch needs saving — individual stores.
       for (const auto &E : GPRCSRegs) {
-        emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST32, E.Reg, E.BaseReg,
+        emitCSRStore(MBB, MBBI, DL, TII, Haydn::S_SW_WITH_IMM, E.Reg, E.BaseReg,
                      E.Offset, MachineInstr::FrameSetup);
       }
     }
@@ -593,27 +600,27 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
 
         for (unsigned J = 0; J < RunLen; ++J) {
           int RelOffset = DRCSRegs[J].Offset - BaseOffset;
-          BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST64))
+          BuildMI(MBB, MBBI, DL, TII->get(Haydn::D_SDW_WITH_IMM))
               .addReg(DRCSRegs[J].Reg)
               .addReg(BaseReg)
-              .addImm(RelOffset)
+              .addImm(haydnScaledLSImm(RelOffset, 8))
               .setMIFlag(MachineInstr::FrameSetup);
         }
 
         for (unsigned J = RunLen; J < DRCSRegs.size(); ++J) {
-          emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, DRCSRegs[J].Reg,
+          emitCSRStore(MBB, MBBI, DL, TII, Haydn::D_SDW_WITH_IMM, DRCSRegs[J].Reg,
                        DRCSRegs[J].BaseReg, DRCSRegs[J].Offset,
                        MachineInstr::FrameSetup);
         }
       } else {
         for (const auto &E : DRCSRegs) {
-          emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, E.Reg, E.BaseReg,
+          emitCSRStore(MBB, MBBI, DL, TII, Haydn::D_SDW_WITH_IMM, E.Reg, E.BaseReg,
                        E.Offset, MachineInstr::FrameSetup);
         }
       }
     } else {
       for (const auto &E : DRCSRegs) {
-        emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, E.Reg, E.BaseReg,
+        emitCSRStore(MBB, MBBI, DL, TII, Haydn::D_SDW_WITH_IMM, E.Reg, E.BaseReg,
                      E.Offset, MachineInstr::FrameSetup);
       }
     }
@@ -644,12 +651,12 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
   if (hasFP(MF)) {
     Register FP = TRI->getFrameRegister(MF); // R14
     if (AlignedStackSize == 0) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), FP)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), FP)
           .addReg(Haydn::R13)
           .addImm(0)
           .setMIFlag(MachineInstr::FrameSetup);
     } else if (isInt<16>(AlignedStackSize)) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), FP)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), FP)
           .addReg(Haydn::R13)
           .addImm(AlignedStackSize)
           .setMIFlag(MachineInstr::FrameSetup);
@@ -772,12 +779,12 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
     assert(hasFP(MF) && "var-sized objects require FP (BP folded into FP)");
     Register FP = TRI->getFrameRegister(MF);
     if (StackSize == 0) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), Haydn::R13)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), Haydn::R13)
           .addReg(FP)
           .addImm(0)
           .setMIFlag(MachineInstr::FrameDestroy);
     } else if (isInt<16>(static_cast<int64_t>(StackSize))) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), Haydn::R13)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), Haydn::R13)
           .addReg(FP)
           .addImm(-static_cast<int64_t>(StackSize))
           .setMIFlag(MachineInstr::FrameDestroy);
@@ -833,7 +840,7 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
       // never emit bare LD64 SP, imm for large frames (e.g. +480).
       // emitCSRLoad picks imm when scaled simm6-legal, else LD64_REG + scratch.
       // Logical LD64 only; slot from placement / setDesc materialize.
-      emitCSRLoad(MBB, MBBI, DL, TII, Haydn::LD64, E.Reg, E.BaseReg,
+      emitCSRLoad(MBB, MBBI, DL, TII, Haydn::D_LDW_WITH_IMM, E.Reg, E.BaseReg,
                   E.Offset, MachineInstr::FrameDestroy);
     }
   }
@@ -871,7 +878,7 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
     }
 
     for (const auto &E : GPRCSRegs) {
-      emitCSRLoad(MBB, MBBI, DL, TII, Haydn::LD32, E.Reg, E.BaseReg,
+      emitCSRLoad(MBB, MBBI, DL, TII, Haydn::S_LW_WITH_IMM, E.Reg, E.BaseReg,
                   E.Offset, MachineInstr::FrameDestroy);
     }
   }
@@ -880,7 +887,7 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
   // ADDI32 R13, R13, AlignedStackSize
   if (StackSize != 0) {
     if (isInt<16>(StackSize)) {
-      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32_W), Haydn::R13)
+      BuildMI(MBB, MBBI, DL, TII->get(Haydn::ADDI32), Haydn::R13)
           .addReg(Haydn::R13)
           .addImm(StackSize)
           .setMIFlag(MachineInstr::FrameDestroy);
@@ -1080,7 +1087,7 @@ MachineBasicBlock::iterator HaydnFrameLowering::eliminateCallFramePseudoInstr(
       // SUBI32 cancelled to a SP *increase* (grew into the caller's frame).
       AdjOpc = Haydn::SUBI32;
     } else {
-      AdjOpc = Haydn::ADDI32_W;
+      AdjOpc = Haydn::ADDI32;
     }
 
     if (isInt<20>(Amount)) {

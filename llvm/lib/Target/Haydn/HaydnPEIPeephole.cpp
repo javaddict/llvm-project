@@ -179,7 +179,7 @@ bool HaydnPEIPeephole::eliminateDeadFPSetup(MachineFunction &MF) {
     // Pattern 2: OR32 R14, R13, R13 — FP = SP (copy via identity-OR).
     // Pattern 3: ADD32 R14, R13, <reg> — FP = SP + reg (large frame setup).
     // Pattern 4: MOVE32 R14, R13 — FP = SP (register move).
-    if (Opcode == Haydn::ADDI32 || Opcode == Haydn::ADDI32_W) {
+    if (Opcode == Haydn::ADDI32) {
       if (MI.getNumOperands() >= 3 && MI.getOperand(0).isReg() &&
           MI.getOperand(1).isReg() && MI.getOperand(2).isImm()) {
         tryRemoveDeadFPSetup(MF, MI, "ADDI32", ToRemove);

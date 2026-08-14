@@ -632,9 +632,12 @@ static inline uintptr_t haydn_cbr_step(uintptr_t p, intptr_t offs, int sel)
 // Pointer post-inc remains C GEP (SCEV-visible); HW AGU writeback is not
 // returned to IR/C.
 //
-// ar_sel/dir are ImmArg encoding fields. Call sites that only have a
-// runtime ae_valign must switch-literal dispatch so Sema sees ICE 0..3 / 0..1
-// at the haydn_* ImmArg surface (never pass ar&=3 as a non-ICE builtin arg).
+// ar_sel is an ImmArg encoding field. Call sites that only have a runtime
+// ae_valign must switch-literal dispatch so Sema sees ICE 0..3 at the
+// haydn_* ImmArg surface (never pass ar&=3 as a non-ICE builtin arg).
+//
+// There is no stride and no direction select: format E post-increments by a
+// fixed +8 forwards. The AE_* macros that needed either are withdrawn.
 
 /// Seed AR from ptr. `ar` is 0..3 (masked); ImmArg via switch literals.
 static inline ae_valign haydn_ae_la64_pp_ar(int ar, const void *ptr) {
@@ -664,32 +667,29 @@ static inline ae_valign haydn_ae_zalign64_ar(int ar) {
   return (ae_valign)(ar & 3);
 }
 
-/// Load 8 B unaligned (16x4 or 32x2 layout is type-level only). dir: 0/1.
-/// haydn_d_*ua_post public wrappers already switch-literal ar/dir (haydn.h).
-static inline ae_int32x2 haydn_ae_la64_step(int ar, const void *p, int stride, int dir) {
-  return haydn_d_ltwua_post(p, ar, stride, dir);
+/// Load 8 B unaligned (16x4 or 32x2 layout is type-level only), advancing the
+/// AR cursor by the fixed +8 the instruction now carries.
+/// haydn_d_*ua_post public wrappers already switch-literal ar (haydn.h).
+static inline ae_int32x2 haydn_ae_la64_step(int ar, const void *p) {
+  return haydn_d_ltwua_post(p, ar);
 }
-static inline ae_int16x4 haydn_ae_la16x4_step(int ar, const void *p, int stride, int dir) {
-  return haydn_d_lqhwua_post(p, ar, stride, dir);
+static inline ae_int16x4 haydn_ae_la16x4_step(int ar, const void *p) {
+  return haydn_d_lqhwua_post(p, ar);
 }
-static inline void haydn_ae_sa64_step(ae_int32x2 data, int ar, void *p, int stride,
-                                        int dir) {
-  haydn_d_stwua_post(data, p, ar, stride, dir);
+static inline void haydn_ae_sa64_step(ae_int32x2 data, int ar, void *p) {
+  haydn_d_stwua_post(data, p, ar);
 }
-static inline void haydn_ae_sa16x4_step(ae_int16x4 data, int ar, void *p, int stride,
-                                          int dir) {
-  haydn_d_sqhwua_post(data, p, ar, stride, dir);
+static inline void haydn_ae_sa16x4_step(ae_int16x4 data, int ar, void *p) {
+  haydn_d_sqhwua_post(data, p, ar);
 }
-static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
-  switch (((ar & 3) << 1) | (dir & 1)) {
-  case 0: haydn_wbarwua(0, p, 0); break;
-  case 1: haydn_wbarwua(0, p, 1); break;
-  case 2: haydn_wbarwua(1, p, 0); break;
-  case 3: haydn_wbarwua(1, p, 1); break;
-  case 4: haydn_wbarwua(2, p, 0); break;
-  case 5: haydn_wbarwua(2, p, 1); break;
-  case 6: haydn_wbarwua(3, p, 0); break;
-  default: haydn_wbarwua(3, p, 1); break;
+/// haydn_wbarwua is a bare macro over the builtin, not a switch-literal
+/// wrapper like the d_*ua_post four, so the ICE has to be produced here.
+static inline void haydn_ae_sa64pos(int ar, void *p) {
+  switch (ar & 3) {
+  case 0: haydn_wbarwua(0, p); break;
+  case 1: haydn_wbarwua(1, p); break;
+  case 2: haydn_wbarwua(2, p); break;
+  default: haydn_wbarwua(3, p); break;
   }
 }
 
@@ -708,7 +708,7 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
 #define AE_ZALIGN64_AR(ar) haydn_ae_zalign64_ar(ar)
 
 #define AE_SA64POS_FP(align, ptr) \
-  haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (ptr), 0)
+  haydn_ae_sa64pos(__HAYDN_AR_SEL(align), (ptr))
 #define AE_SA64POS(align, ptr) AE_SA64POS_FP(align, ptr)
 /* Withdrawn (§ 8 Q2): the trailing 1 was the direction select. */
 #define AE_SA64NEG_FP(align, ptr) \
@@ -719,7 +719,7 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 0); \
+    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) + 8); \
   } while (0)
 // UA load + H-first pack (same LE→H as late AE_L32X2_IP / CB XC). BundleSim
@@ -728,7 +728,7 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 0); \
+    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p); \
     (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) + 8); \
     (void)(align); \
@@ -737,7 +737,7 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    (dst) = (ae_int64)haydn_ae_la64_step(__ar, __p, 8, 0); \
+    (dst) = (ae_int64)haydn_ae_la64_step(__ar, __p); \
     (ptr) = (ae_int64 *)((char *)(ptr) + 8); \
   } while (0)
 
@@ -745,21 +745,21 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 0); \
+    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) + 8); \
   } while (0)
 #define AE_SA32X2_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
+    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) + 8); \
   } while (0)
 #define AE_SA64_IP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
+    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p); \
     (ptr) = (ae_int64 *)((char *)(ptr) + 8); \
   } while (0)
 
@@ -770,46 +770,25 @@ static inline void haydn_ae_sa64pos(int ar, void *p, int dir) {
 #define AE_SA32X2_IP_X(src, align, ptr, inc) \
   __HAYDN_AE_WITHDRAWN_STMT(AE_SA32X2_IP_X, "a runtime stride")
 
+/* Withdrawn (§ 8 Q2), like the two above: these four took `dir = 1` AND a
+ * runtime stride, and format E's AR has neither. Each is #undef'd and
+ * withdrawn again at its overload site further down — withdrawing here too
+ * keeps the early definition from being the one place in the header that
+ * still hands an AR helper a stride and a direction. What they did, for
+ * whoever writes the emulation: |inc| as the stride, reverse direction, and
+ * the C cursor moving DOWN by ((inc) ? (inc) : 8). */
 #define AE_LA16X4_RIP(dst, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    if (__s < 0) __s = -__s; \
-    if (__s == 0) __s = 8; \
-    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, __s, 1); \
-    (ptr) = (ae_int16x4 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_LA16X4_RIP, \
+                            "reverse direction (dir = 1) and a runtime stride")
 #define AE_LA32X2_RIP(dst, align, ptr, offs) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(offs); \
-    if (__s < 0) __s = -__s; \
-    if (__s == 0) __s = 8; \
-    (dst) = (ae_int32x2)haydn_ae_la64_step(__ar, __p, __s, 1); \
-    (ptr) = (ae_int32x2 *)((char *)(ptr) - ((offs) ? (offs) : 8)); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_LA32X2_RIP, \
+                            "reverse direction (dir = 1) and a runtime stride")
 #define AE_SA16X4_RIP(src, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    if (__s < 0) __s = -__s; \
-    if (__s == 0) __s = 8; \
-    haydn_ae_sa16x4_step((int64_t)(src), __ar, __p, __s, 1); \
-    (ptr) = (ae_int16x4 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA16X4_RIP, \
+                            "reverse direction (dir = 1) and a runtime stride")
 #define AE_SA32X2_RIP(src, align, ptr, inc) \
-  do { \
-    int __ar = __HAYDN_AR_SEL(align); \
-    void *__p = (ptr); \
-    int __s = (int)(inc); \
-    if (__s < 0) __s = -__s; \
-    if (__s == 0) __s = 8; \
-    haydn_ae_sa64_step((int64_t)(src), __ar, __p, __s, 1); \
-    (ptr) = (ae_int32x2 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
-  } while (0)
+  __HAYDN_AE_WITHDRAWN_STMT(AE_SA32X2_RIP, \
+                            "reverse direction (dir = 1) and a runtime stride")
 
 /* Early IC/RIC placeholders — late overload block is the public 3/4-arg API.
  * RIC must not silent-alias forward IC (dir=0, +8); route to reverse
@@ -1438,11 +1417,16 @@ int haydn_recip_q31(int x) {
 #define __AE_MOVT64_GET(_1, _2, _3, NAME, ...) NAME
 #define __AE_MOVT64_OVERLOAD(...) \
   __AE_MOVT64_GET(__VA_ARGS__, __AE_MOVT64_3, __AE_MOVT64_2, )(__VA_ARGS__)
-#define __AE_MOVT64_2(dst, src)     ((dst) = (ae_int64)haydn_movt64((src)))
+// Two operands, not one. The database is `MOVT64 rtd, rsd` with
+// `rtd = (SFR == 4'b1111) ? rsd : rtd` — rtd is READ as well as written,
+// because the instruction leaves it alone when the condition is false. A
+// one-argument call cannot express that, and it did not compile.
+#define __AE_MOVT64_2(dst, src)     ((dst) = (ae_int64)haydn_movt64((dst), (src)))
 #define __AE_MOVT64_3(dst, src, cf) ((void)((cf) && ((dst) = (src)), 0))
 
-/// 64-bit conditional move if SFR false
-#define AE_MOVF64(dst, src) ((dst) = (ae_int64)haydn_movf64((src)))
+/// 64-bit conditional move if SFR false. Same read-modify-write shape:
+/// `MOVF64 rtd, rsd` / `rtd = (SFR == 4'b0000) ? rsd : rtd`.
+#define AE_MOVF64(dst, src) ((dst) = (ae_int64)haydn_movf64((dst), (src)))
 
 //===----------------------------------------------------------------------===//
 // Compare (LT via pure cmplt; EQ/LE/SEQ/SLE ambient compare + movesfr2gpr)
@@ -2425,7 +2409,7 @@ static inline float int32_rtor_ae_f32(ae_int32 v) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    (dst) = (ae_f24x2)haydn_ae_la64_step(__ar, __p, 8, 0); \
+    (dst) = (ae_f24x2)haydn_ae_la64_step(__ar, __p); \
     (ptr) = (ae_f24x2 *)((char *)(ptr) + 8); \
   } while (0)
 #define AE_LA32X2F24_I(dst, align, ptr, offs) \
@@ -2451,7 +2435,7 @@ static inline float int32_rtor_ae_f32(ae_int32 v) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
+    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p); \
     (ptr) = (ae_f24x2 *)((char *)(ptr) + 8); \
   } while (0)
 #define AE_SA32X2F24_I(src, align, ptr, offs) \
@@ -2998,8 +2982,12 @@ static inline ae_int16x4 __ae_sraa16(ae_int16x4 a, int s) {
 // haydn_x2abs32/neg32 take haydn_x2int32, not int64 bag.
 #define AE_ABS32(a)   ((ae_int32x2)haydn_x2abs32(a))
 #define AE_NEG32(a)   ((ae_int32x2)haydn_x2neg32(a))
-#define AE_EQ16(a, b) haydn_x4seq16((a), (b))
-#define AE_LT16(a, b) haydn_x4slt16((a), (b))
+// Spellings of the quad-16 compares above. They used to cast the compare's
+// own return value, which was the vector passthrough the AE_SEQ16X4 block
+// explicitly warns against -- and which the ISA does not produce at all: the
+// compares write SFR and no register. Defer to the corrected forms.
+#define AE_EQ16(a, b) AE_SEQ16X4((a), (b))
+#define AE_LT16(a, b) AE_SLT16X4((a), (b))
 #define AE_LT64(a, b) ((a) < (b))
 #define AE_LE64(a, b) ((a) <= (b))
 #define AE_EQ64(a, b) ((a) == (b))
@@ -3612,7 +3600,7 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 0); \
+    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p); \
     (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
   } while (0)
@@ -3628,7 +3616,7 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 0); \
+    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p); \
     (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
@@ -3646,7 +3634,7 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 0); \
+    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p); \
     (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
   } while (0)
@@ -3663,7 +3651,7 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
     haydn_dr64_t __s = haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)(src)); \
-    haydn_ae_sa64_step((int64_t)__s, __ar, __p, 8, 0); \
+    haydn_ae_sa64_step((int64_t)__s, __ar, __p); \
     (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
   } while (0)
@@ -4579,7 +4567,7 @@ typedef int ae_p24s;
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 0); \
+    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p); \
     (ptr) = (ae_int16x4 *)((char *)(ptr) + 8); \
   } while (0)
 
@@ -4588,7 +4576,7 @@ typedef int ae_p24s;
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 0); \
+    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) + 8); \
   } while (0)
 

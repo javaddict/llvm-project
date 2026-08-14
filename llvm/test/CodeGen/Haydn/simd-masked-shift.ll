@@ -56,14 +56,14 @@ define i64 @test_x4frst16(i64 %a, i64 %b) {
 ;===----------------------------------------------------------------------===
 
 define <2 x i32> @test_x2frsst32_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i32> %mask_val) {
-  %cmp = call <2 x i32> @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %mask_val)
+  call void @llvm.haydn.x2slt32(<2 x i32> %a,<2 x i32> %mask_val)
   %shifted = call <2 x i32> @llvm.haydn.x2frsst32(<2 x i32> %a,<2 x i32> %b)
   %result = call <2 x i32> @llvm.haydn.x2movt32(<2 x i32> %a,<2 x i32> %shifted)
   ret <2 x i32> %result
 }
 
 define <4 x i16> @test_x4frsst16_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16> %mask_val) {
-  %cmp = call <4 x i16> @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %mask_val)
+  call void @llvm.haydn.x4seq16(<4 x i16> %a,<4 x i16> %mask_val)
   %a_i = bitcast <4 x i16> %a to i64
   %b_i = bitcast <4 x i16> %b to i64
   %bc.7 = bitcast i64 %a_i to <4 x i16>
@@ -80,8 +80,8 @@ define <4 x i16> @test_x4frsst16_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16>
 ;===----------------------------------------------------------------------===
 
 ; SFR compare (binary DR64)
-declare <2 x i32> @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
-declare <4 x i16> @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
+declare void @llvm.haydn.x2slt32(<2 x i32>, <2 x i32>)
+declare void @llvm.haydn.x4seq16(<4 x i16>, <4 x i16>)
 
 ; SFR conditional move (binary DR64)
 declare <2 x i32> @llvm.haydn.x2movt32(<2 x i32>, <2 x i32>)

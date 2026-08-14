@@ -4,23 +4,24 @@
 # RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
 # RUN: llvm-readobj -x .text %t | FileCheck %s
 #
-# R_HAYDN_32 absolute 32-bit data relocation after Bundle128 code.
+# R_HAYDN_32 absolute 32-bit data relocation after format E code.
 #
-# Layout:
-#   0x10000: Bundle128 ADD32 (16 B)
-#   0x10010: Bundle128 MOVE32 (16 B)
-#   0x10020: .long external_func  → LE word = VA(external_func)
-#   external_func follows (nm reports its address).
+# Layout (format E bundles are 12 bytes, not Bundle128's 16):
+#   0x10000: format E ADD32 bundle  (12 B)
+#   0x1000c: format E MOVE32 bundle (12 B)
+#   0x10018: .long external_func  → LE word = VA(external_func)
+#   0x1001c: external_func follows (nm reports its address).
 
 # NM-DAG: {{[0-9a-f]+}} T _start
 # NM-DAG: {{[0-9a-f]+}} T external_func
 
-# Absolute word at file offset corresponding to VA 0x10020 within .text hex
-# dump. external_func is placed immediately after the 4-byte word at 0x10024
-# when no other padding is inserted — LE bytes of 0x00010024 are 24 00 01 00.
+# Absolute word at VA 0x10018 within the .text hex dump. external_func is
+# placed immediately after that 4-byte word, at 0x1001c, when no other padding
+# is inserted — LE bytes of 0x0001001c are 1c 00 01 00. The address is
+# derivable: 0x10000 + 2 * 12 (two bundles) + 4 (the .long).
 # If linker padding changes, update this CHECK from nm + readobj together.
 # CHECK: Hex dump of section '.text':
-# CHECK: 24000100
+# CHECK: 1c000100
 
 .globl _start
 _start:

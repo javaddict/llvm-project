@@ -15,8 +15,8 @@ declare i64 @helper_i64(i64)
 ;Simple tail call
 define i32 @tail_call_simple(i32 %a) nounwind {
 ; CHECK-LABEL: tail_call_simple:
-; CHECK: jal{{(\.s[012])?}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = tail call i32 @helper_i32(i32 %a)
   ret i32 %r
 }
@@ -24,7 +24,7 @@ define i32 @tail_call_simple(i32 %a) nounwind {
 ;Tail call with different argument
 define i32 @tail_call_modified(i32 %a) nounwind {
 ; CHECK-LABEL: tail_call_modified:
-; CHECK: jal{{(\.s[012])?}}
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %b = add i32 %a, 1
   %r = tail call i32 @helper_i32(i32 %b)
   ret i32 %r
@@ -33,7 +33,7 @@ define i32 @tail_call_modified(i32 %a) nounwind {
 ;Tail call with i64
 define i64 @tail_call_i64(i64 %a) nounwind {
 ; CHECK-LABEL: tail_call_i64:
-; CHECK: jal{{(\.s[012])?}}
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %r = tail call i64 @helper_i64(i64 %a)
   ret i64 %r
 }
@@ -41,8 +41,8 @@ define i64 @tail_call_i64(i64 %a) nounwind {
 ;Non-tail call for comparison (regular call + ret)
 define i32 @regular_call(i32 %a) nounwind {
 ; CHECK-LABEL: regular_call:
-; CHECK: jal{{(\.s[012])?}}
-; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}} r0, lr, 0
   %r = call i32 @helper_i32(i32 %a)
   ret i32 %r
 }
@@ -50,7 +50,7 @@ define i32 @regular_call(i32 %a) nounwind {
 ;Tail call to function that uses the result
 define i32 @tail_call_used(i32 %a) nounwind {
 ; CHECK-LABEL: tail_call_used:
-; CHECK: jal{{(\.s[012])?}}
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
   %r = tail call i32 @helper_i32(i32 %a)
   ret i32 %r
 }
@@ -58,7 +58,7 @@ define i32 @tail_call_used(i32 %a) nounwind {
 ;Mutual tail recursion pattern
 define i32 @mutual_a(i32 %x) nounwind {
 ; CHECK-LABEL: mutual_a:
-; CHECK: jal{{(\.s[012])?}}
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %cmp = icmp eq i32 %x, 0
   br i1 %cmp, label %done, label %recurse

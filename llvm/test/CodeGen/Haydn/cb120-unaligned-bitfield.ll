@@ -17,10 +17,10 @@
 ; i24 bitfield RMW must use byte loads/stores, never word
 define void @bf_rmw_i24(ptr %p) {
 ; CHECK-LABEL: bf_rmw_i24:
-; CHECK-NOT: ld32
-; CHECK-NOT: st32
-; CHECK: ldu8
-; CHECK: st8
+; CHECK-NOT: s_lw_
+; CHECK-NOT: s_sw_
+; CHECK: s_lbu_{{[a-z_]*}}
+; CHECK: s_sb_{{[a-z_]*}}
   %bf.load = load i24, ptr %p, align 1
   %bf.clear = and i24 %bf.load, -1048576
   %bf.set = or disjoint i24 %bf.clear, 989828
@@ -31,8 +31,8 @@ define void @bf_rmw_i24(ptr %p) {
 ; unaligned i32 load at odd address: byte sequence, not ld32
 define i32 @load_i32_align1(ptr %p) {
 ; CHECK-LABEL: load_i32_align1:
-; CHECK-NOT: ld32
-; CHECK: ldu8
+; CHECK-NOT: s_lw_
+; CHECK: s_lbu_{{[a-z_]*}}
   %v = load i32, ptr %p, align 1
   ret i32 %v
 }
@@ -40,8 +40,8 @@ define i32 @load_i32_align1(ptr %p) {
 ; unaligned i32 store: byte stores, not st32
 define void @store_i32_align1(ptr %p, i32 %v) {
 ; CHECK-LABEL: store_i32_align1:
-; CHECK-NOT: st32
-; CHECK: st8
+; CHECK-NOT: s_sw_
+; CHECK: s_sb_{{[a-z_]*}}
   store i32 %v, ptr %p, align 1
   ret void
 }
@@ -49,9 +49,9 @@ define void @store_i32_align1(ptr %p, i32 %v) {
 ; unaligned i16 (F2b half family): must not use ldu16/ld32 on odd EA
 define i32 @load_i16_align1(ptr %p) {
 ; CHECK-LABEL: load_i16_align1:
-; CHECK-NOT: ldu16
-; CHECK-NOT: ld32
-; CHECK: ldu8
+; CHECK-NOT: s_lhwu_
+; CHECK-NOT: s_lw_
+; CHECK: s_lbu_{{[a-z_]*}}
   %v = load i16, ptr %p, align 1
   %z = zext i16 %v to i32
   ret i32 %z
@@ -60,7 +60,7 @@ define i32 @load_i16_align1(ptr %p) {
 ; naturally aligned i32 still uses ld32
 define i32 @load_i32_align4(ptr %p) {
 ; CHECK-LABEL: load_i32_align4:
-; CHECK: ld32
+; CHECK: s_lw_{{[a-z_]*}}
   %v = load i32, ptr %p, align 4
   ret i32 %v
 }

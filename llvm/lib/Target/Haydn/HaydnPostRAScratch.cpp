@@ -148,14 +148,14 @@ void emitScratchMemOp(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                       bool IsStore, unsigned StoreFlags) {
   if (isInt<16>(Off)) {
     if (IsStore)
-      BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+      BuildMI(MBB, I, DL, TII.get(Haydn::S_SW_WITH_IMM))
           .addReg(Scr, StoreFlags)
           .addReg(FrameReg)
-          .addImm(Off);
+          .addImm(haydnScaledLSImm(Off, 4));
     else
-      BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
+      BuildMI(MBB, I, DL, TII.get(Haydn::S_LW_WITH_IMM), Scr)
           .addReg(FrameReg)
-          .addImm(Off);
+          .addImm(haydnScaledLSImm(Off, 4));
     return;
   }
 
@@ -163,16 +163,16 @@ void emitScratchMemOp(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (!isInt<20>(Off))
     report_fatal_error(
         "Haydn: post-RA scratch spill FI offset exceeds simm20");
-  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Tmp)
+  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32), Tmp)
       .addReg(FrameReg)
       .addImm(Off);
   if (IsStore)
-    BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+    BuildMI(MBB, I, DL, TII.get(Haydn::S_SW_WITH_IMM))
         .addReg(Scr, StoreFlags)
         .addReg(Tmp)
         .addImm(0);
   else
-    BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr).addReg(Tmp).addImm(0);
+    BuildMI(MBB, I, DL, TII.get(Haydn::S_LW_WITH_IMM), Scr).addReg(Tmp).addImm(0);
   BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Tmp).addReg(Tmp).addReg(Tmp);
 }
 
@@ -201,7 +201,7 @@ ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
   BuildMI(MBB, I, DL, TII.get(Haydn::SUBI32), Haydn::R13)
       .addReg(Haydn::R13)
       .addImm(8);
-  BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+  BuildMI(MBB, I, DL, TII.get(Haydn::S_SW_WITH_IMM))
       .addReg(Scr)
       .addReg(Haydn::R13)
       .addImm(0);
@@ -218,10 +218,10 @@ void endSpill(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                      /*IsStore=*/false, /*StoreFlags=*/0);
     return;
   }
-  BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Scr)
+  BuildMI(MBB, I, DL, TII.get(Haydn::S_LW_WITH_IMM), Scr)
       .addReg(Haydn::R13)
       .addImm(0);
-  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32_W), Haydn::R13)
+  BuildMI(MBB, I, DL, TII.get(Haydn::ADDI32), Haydn::R13)
       .addReg(Haydn::R13)
       .addImm(8);
 }
@@ -381,7 +381,7 @@ Register llvm::rematerializeAddImmForUse(MachineInstr &UseMI,
 
   // Src not killed — may still be live after the use.
   MachineInstr *RematDef =
-      BuildMI(MBB, InsertPt, DL, TII.get(Haydn::ADDI32_W), Dest)
+      BuildMI(MBB, InsertPt, DL, TII.get(Haydn::ADDI32), Dest)
           .addReg(Src)
           .addImm(Adj);
 

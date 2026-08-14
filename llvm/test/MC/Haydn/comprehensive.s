@@ -65,15 +65,18 @@ MOVF32 R11, R12, R0
 # Slot 0 Load/Store Instructions
 #===----------------------------------------------------------------------===
 
-LD32 R1, R2, 0
-LD16 R3, R4, 8
-LD8 R5, R6, 16
-LDU16 R7, R8, 24
-LDU8 R9, R10, 32
+# § 5.6 spellings; the immediate is an element index in a simm6 field, so the
+# byte offsets these lines used to carry (8, 16, 24, 32) are divided by the
+# access width rather than kept.
+S_LW_WITH_IMM R1, R2, 0
+S_LHWS_WITH_IMM R3, R4, 4
+S_LBS_WITH_IMM R5, R6, 16
+S_LHWU_WITH_IMM R7, R8, 12
+S_LBU_WITH_IMM R9, R10, 31
 
-ST32 R11, R12, 0
-ST16 R0, R1, 4
-ST8 R2, R3, 2
+S_SW_WITH_IMM R11, R12, 0
+S_SHW_WITH_IMM R0, R1, 2
+S_SB_WITH_IMM R2, R3, 2
 
 #===----------------------------------------------------------------------===
 # Branch Instructions
@@ -127,8 +130,8 @@ X4MUL16 D1, D2, D3, D4
 
 # MAC operations — 4-operand MAC32 removed post-; not assembled here.
 
-# Slot 1 loads (LD64 is the mnemonic)
-LD64 D4, R5, 0
+# DR64 load
+D_LDW_WITH_IMM D4, R5, 0
 
 #===----------------------------------------------------------------------===
 # System Instructions
@@ -174,14 +177,14 @@ CSRW 0, R7
 # CHECK: seq32
 # CHECK: movt32
 # CHECK: movf32
-# CHECK: ld32
-# CHECK: ld16
-# CHECK: ld8
-# CHECK: ldu16
-# CHECK: ldu8
-# CHECK: st32
-# CHECK: st16
-# CHECK: st8
+# CHECK: s_lw_with_imm
+# CHECK: s_lhws_with_imm
+# CHECK: s_lbs_with_imm
+# CHECK: s_lhwu_with_imm
+# CHECK: s_lbu_with_imm
+# CHECK: s_sw_with_imm
+# CHECK: s_shw_with_imm
+# CHECK: s_sb_with_imm
 # CHECK: beq
 # CHECK: bne
 # CHECK: bge
@@ -203,6 +206,6 @@ CSRW 0, R7
 # CHECK: x4add16
 # CHECK: x4mul16
 # Mulq31/macq31/mulq63 REMOVED (phantom — not in the ISA DB).
-# CHECK: ld64
+# CHECK: d_ldw_with_imm
 # CHECK: csrr
 # CHECK: csrw

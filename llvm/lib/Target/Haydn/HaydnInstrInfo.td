@@ -220,6 +220,7 @@ def ADD32 : FmtALU32<0x00, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "add32\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -233,17 +234,20 @@ def ADD32 : FmtALU32<0x00, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 def ADD32S : FmtALU32<0x01, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                       "add32s\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SUB32 : FmtALU32<0x02, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "sub32\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SUB32S : FmtALU32<0x03, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                       "sub32s\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 //===----------------------------------------------------------------------===//
 // G-format (FmtG_S0_ALU32 / *_G) shells retired (Bundle128-only).
@@ -255,22 +259,26 @@ def ADDI32 : FmtI<0x20, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
                  "addi32\t$rd, $rs, $imm",
                  []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def ADDI32S : FmtI<0x21, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
                    "addi32s\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SUBI32 : FmtI<0x22, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
                  "subi32\t$rd, $rs, $imm",
                  []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SUBI32S : FmtI<0x23, (outs GPR32:$rd), (ins GPR32:$rs, simm16:$imm),
                   "subi32s\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -281,24 +289,28 @@ def AND32 : FmtALU32<0x04, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "and32\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def OR32 : FmtALU32<0x05, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                     "or32\t$rd, $rs1, $rs2",
                     []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def XOR32 : FmtALU32<0x06, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "xor32\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def NOT32 : FmtALU32Unary<0x07, (outs GPR32:$rd), (ins GPR32:$rs1),
                            "not32\t$rd, $rs1",
                            []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // Logical public identity for ZEXT imm ALU. Private peers:
@@ -311,24 +323,33 @@ def NOT32 : FmtALU32Unary<0x07, (outs GPR32:$rd), (ins GPR32:$rs1),
 def ANDI32 : FmtI<0x24, (outs GPR32:$rd), (ins GPR32:$rs, uimm20:$imm),
                   "andi32\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def ORI32 : FmtI<0x25, (outs GPR32:$rd), (ins GPR32:$rs, uimm20:$imm),
                  "ori32\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def XORI32 : FmtI<0x26, (outs GPR32:$rd), (ins GPR32:$rs, uimm20:$imm),
                   "xori32\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 //===----------------------------------------------------------------------===//
 // Move / Load Immediate Instructions
 //===----------------------------------------------------------------------===//
 
-def MOVE32 : FmtALU32<0x08, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
+def MOVE32 : FmtALU32<0x08, (outs GPR32:$rd), (ins GPR32:$rs1),
                       "move32\t$rd, $rs1",
                       []> {
   let TSFlags{2-0} = 0b001;
+  // The database is `MOVE32 rt, rs`, and the asm string never named $rs2 --
+  // copyPhysReg passed the source twice to fill it. Bind the field instead:
+  // an operand the logical has and the member does not is a place the encoder
+  // reads the wrong one. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rs2 = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // NOP — canonical no-operation instruction.
@@ -355,9 +376,19 @@ def NOP : HaydnInst16<(outs), (ins), "nop", []> {
   let Inst{15 - 0} = 0x0000;
 }
 
-def LUI : FmtI<0x27, (outs GPR32:$rd), (ins GPR32:$rs, uimm12:$imm),
+// Database shape: `LUI rt, imm12`. The extra GPR32:$rs was a Bundle128
+// artifact — callers passed R0 for it — and it made the LOGICAL's operand
+// list one longer than its format E members', so after materialization the
+// encoder read the dummy register where the immediate should be: imm encoded
+// as 0 and no HI12 relocation was emitted at all. See § 5.11.
+def LUI : FmtI<0x27, (outs GPR32:$rd), (ins uimm12:$imm),
               "lui\t$rd, $imm", []> {
+  // FmtI's Inst{19-16} still wants an `rs` field; bind it rather than keep an
+  // operand for it. The Bundle128 encoding this feeds is dead on this branch
+  // (the members encode), so the value only has to exist.
+  let rs = 0;
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -368,111 +399,133 @@ def SRLI32 : FmtI<0x29, (outs GPR32:$rd), (ins GPR32:$rs, uimm5:$imm),
                   "srli32\t$rd, $rs, $imm",
                   []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SRAI32 : FmtI<0x2A, (outs GPR32:$rd), (ins GPR32:$rs, uimm5:$imm),
                   "srai32\t$rd, $rs, $imm",
                   []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SRAI32R : FmtI<0x2B, (outs GPR32:$rd), (ins GPR32:$rs, uimm5:$imm),
                    "srai32r\t$rd, $rs, $imm", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SLLI32 : FmtI<0x2C, (outs GPR32:$rd), (ins GPR32:$rs, uimm5:$imm),
                   "slli32\t$rd, $rs, $imm",
                   []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SRL32 : FmtALU32<0x09, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "srl32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SRA32 : FmtALU32<0x0A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "sra32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SRA32R : FmtALU32<0x0B, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                       "sra32r\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SLL32 : FmtALU32<0x0C, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "sll32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 //===----------------------------------------------------------------------===//
 // DSP / Miscellaneous Instructions
 //===----------------------------------------------------------------------===//
 
-def ABS32S : FmtALU32<0x0D, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
+def ABS32S : FmtALU32<0x0D, (outs GPR32:$rd), (ins GPR32:$rs1),
                       "abs32s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b001;
+  let rs2 = 0;  // `ABS32S rt, rs`: $rs2 was never in the asm string
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
-def ABS32 : FmtALU32<0x0E, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
+def ABS32 : FmtALU32<0x0E, (outs GPR32:$rd), (ins GPR32:$rs1),
                      "abs32\t$rd, $rs1",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let rs2 = 0;  // `ABS32 rt, rs`: $rs2 was never in the asm string
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def MAX32 : FmtALU32<0x0F, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "max32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def MAXU32 : FmtALU32<0x10, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                       "maxu32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def MIN32 : FmtALU32<0x11, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "min32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def MINU32 : FmtALU32<0x12, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                       "minu32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def NEG32 : FmtALU32Unary<0x13, (outs GPR32:$rd), (ins GPR32:$rs1),
                            "neg32\t$rd, $rs1",
                            []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def NEG32S : FmtALU32Unary<0x14, (outs GPR32:$rd), (ins GPR32:$rs1),
                             "neg32s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def BREV32 : FmtALU32<0x15, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                       "brev32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def NSA32 : FmtALU32Unary<0x16, (outs GPR32:$rd), (ins GPR32:$rs1),
                           "nsa32\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def NSAU32 : FmtALU32Unary<0x17, (outs GPR32:$rd), (ins GPR32:$rs1),
                            "nsau32\t$rd, $rs1",
                            []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def POPCOUNT32 : FmtALU32Unary<0x18, (outs GPR32:$rd), (ins GPR32:$rs1),
                                "popcount32\t$rd, $rs1",
                                []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -496,23 +549,27 @@ def SLT32 : FmtALU32<0x19, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "slt32\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SLTU32 : FmtALU32<0x1A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                       "sltu32\t$rd, $rs1, $rs2",
                       []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SLE32 : FmtALU32<0x1B, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "sle32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SEQ32 : FmtALU32<0x1C, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
                      "seq32\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // Scalar conditional moves — MOVT32/MOVF32.
@@ -525,11 +582,13 @@ let Constraints = "$rd = $rd_src" in {
 def MOVT32 : FmtALU32<0x1D, (outs GPR32:$rd), (ins GPR32:$rd_src, GPR32:$rs1, GPR32:$rs2),
                       "movt32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def MOVF32 : FmtALU32<0x1E, (outs GPR32:$rd), (ins GPR32:$rd_src, GPR32:$rs1, GPR32:$rs2),
                       "movf32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 } // Constraints
 
@@ -548,23 +607,6 @@ def MOVF32 : FmtALU32<0x1E, (outs GPR32:$rd), (ins GPR32:$rd_src, GPR32:$rs1, GP
 // They are aliases that expand to the real instructions above.
 
 let isCodeGenOnly = 1 in {
-def SHL32 : FmtALU32<0x0C, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                     "sll32\t$rd, $rs1, $rs2",
-                     []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LSR32 : FmtALU32<0x09, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                     "srl32\t$rd, $rs1, $rs2",
-                     []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def ASR32 : FmtALU32<0x0A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                     "sra32\t$rd, $rs1, $rs2",
-                     []> {
-  let TSFlags{2-0} = 0b001;
-}
 } // isCodeGenOnly
 
 //===----------------------------------------------------------------------===//
@@ -598,10 +640,6 @@ def ASR32 : FmtALU32<0x0A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 // unary range alongside SEQ64/SLT64/SLE64/MOVT64/MOVF64/X2ABS32S. The
 // GPR32-in / DR64-out operand-type mix is per the ISA spec DB entry
 // (`SEXT32T64 rtd, rs`, behavior `rtd = SEXT32->64(rs)`).
-def SEXT_GPR32_TO_DR64
-    : FmtALU64Unary<0x67, 0x197, (outs DR64:$rd), (ins GPR32:$rs1),
-                    "sext32t64\t$rd, $rs1", []>;
-
 //===----------------------------------------------------------------------===//
 // Branch Instructions
 //===----------------------------------------------------------------------===//
@@ -617,60 +655,70 @@ def BEQ : FmtBRCond<0x2D, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset)
               "beq\t$rs1, $rs2, $offset",
               []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BNE : FmtBRCond<0x2E, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset),
               "bne\t$rs1, $rs2, $offset",
               []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BGE : FmtBRCond<0x2F, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset),
               "bge\t$rs1, $rs2, $offset",
               []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BGEU : FmtBRCond<0x30, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset),
                "bgeu\t$rs1, $rs2, $offset",
                []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BLT : FmtBRCond<0x31, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset),
               "blt\t$rs1, $rs2, $offset",
               []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BLTU : FmtBRCond<0x32, (outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset),
                "bltu\t$rs1, $rs2, $offset",
                []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BEQZ : FmtBR<0x33, (outs), (ins GPR32:$rs, brtarget:$offset),
                "beqz\t$rs, $offset",
                []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BNEZ : FmtBR<0x34, (outs), (ins GPR32:$rs, brtarget:$offset),
                "bnez\t$rs, $offset",
                []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BGEZ : FmtBR<0x35, (outs), (ins GPR32:$rs, brtarget:$offset),
                "bgez\t$rs, $offset",
                []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def BLTZ : FmtBR<0x36, (outs), (ins GPR32:$rs, brtarget:$offset),
                "bltz\t$rs, $offset",
                []> {
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 } // end isBranch, isTerminator
 
@@ -713,6 +761,7 @@ def JAL : FmtJ<0x37, (outs GPR32:$rd), (ins calltarget:$target),
   // out of the decoder trie (DecoderEmitter.cpp:1377). The custom JAL
   // pre-checks in HaydnDisassembler::getInstruction are removed.
   let DecoderNamespace = "Haydn32";
+  let Itinerary = Unit_ALU0_L1;
 }
 
 def JALR : FmtJR<0x38, (outs GPR32:$rd), (ins GPR32:$rs, calltarget:$target),
@@ -726,6 +775,7 @@ def JALR : FmtJR<0x38, (outs GPR32:$rd), (ins GPR32:$rs, calltarget:$target),
   let isCall = 1;
   let isIndirectBranch = 1;
   let TSFlags{2-0} = 0b001;
+  let Itinerary = Unit_ALU0_L1;
 }
 
 // Pseudo call instruction - expands to JAL_W (HaydnExpandPseudos).
@@ -903,13 +953,18 @@ def WFI : HaydnPseudo<(outs), (ins), "wfi", []>;
 // treats them correctly. The one real correctness fix CSRW needs is
 // `hasSideEffects = 1` — without it a dead CSRW (e.g. CBR setup) is DCE'd
 // and the CSR is never programmed (the exact trap WUR_AE_CBEGIN0/CEND0 hit).
-def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
+def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr),
                "csrr\t$rd, $csr_addr", []> {
   let TSFlags{2-0} = 0b001;
-  // $rs is not a real input for CSRR (DB reads only the CSR); it exists for
-  // MC operand-count parity with the shared FmtCSR decoder (case 25 decodes
-  // rd + csr_addr + rs for BOTH CSRR and CSRW). Regalloc ignores an unused
-  // tied input operand; no correctness impact.
+  // The database is `CSRR rt, uimm8` — it reads the CSR and no register.
+  // $rs used to be kept "for MC operand-count parity with the shared FmtCSR
+  // decoder", the same reason CSRW carried a dead $rd until 6e35b4124346
+  // showed it did not hold. It does not hold here either: the decoder names
+  // neither CSRR nor csr_addr any more, and the asm string never spelled $rs,
+  // so no test could see it. What it did do was give CodeGen an operand the
+  // member does not have. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rs = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L2;
 }
 
 // CSRW: the destination is a CSR (a side effect), NOT a GPR, so the database
@@ -944,6 +999,7 @@ def CSRW : FmtCSR<0x3A, (outs), (ins uimm8:$csr_addr, GPR32:$rs),
                "csrw\t$csr_addr, $rs", []> {
   let TSFlags{2-0} = 0b001;
   let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L2;
 }
 
 //===----------------------------------------------------------------------===//
@@ -963,25 +1019,6 @@ def LD32 : FmtLS<0x3B, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
   let Itinerary = Unit_LS0LOAD1_L2;
 }
 
-def LD16 : FmtLS<0x3C, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                 "ld16\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LD8 : FmtLS<0x3D, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                "ld8\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LDU16 : FmtLS<0x3E, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                  "ldu16\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def LDU8 : FmtLS<0x3F, (outs GPR32:$rt), (ins GPR32:$rs, simm16:$offset),
-                 "ldu8\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
 }
 
 // plain 64-bit load — DR64, S0|S1 choice-set (Slot01_LD).
@@ -993,27 +1030,7 @@ def LD64 : FmtLS<0x45, (outs DR64:$rt), (ins GPR32:$rs, simm16:$offset),
 }
 
 let mayStore = 1 in {
-def ST32 : FmtLS<0x40, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
-                 "st32\t$rt, $rs, $offset",
-                 []> {
-  let TSFlags{2-0} = 0b001;
-}
-
 // 64-bit store — DR64 value, GPR32 base + simm16 offset, slot 1
-def ST64 : FmtLS<0x46, (outs), (ins DR64:$rt, GPR32:$rs, simm16:$offset),
-                 "st64\t$rt, $rs, $offset",
-                 []> {
-}
-
-def ST16 : FmtLS<0x41, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
-                 "st16\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
-
-def ST8 : FmtLS<0x42, (outs), (ins GPR32:$rt, GPR32:$rs, simm16:$offset),
-                "st8\t$rt, $rs, $offset", []> {
-  let TSFlags{2-0} = 0b001;
-}
 }
 
 //===----------------------------------------------------------------------===//
@@ -1062,30 +1079,35 @@ def ADD64 : FmtALU64<0x50, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                      "add64\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def SUB64 : FmtALU64<0x51, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                      "sub64\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def AND64 : FmtALU64<0x52, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                      "and64\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def OR64 : FmtALU64<0x53, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                     "or64\t$rd, $rs1, $rs2",
                     []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def XOR64 : FmtALU64<0x54, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                      "xor64\t$rd, $rs1, $rs2",
                      []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // SLLI64/SRLI64/SRAI64 are defined as the 48-bit WideImm immediate forms in
@@ -1099,11 +1121,13 @@ def XOR64 : FmtALU64<0x54, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
 def X2ADD32 : FmtALU64<0x58, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                        "x2add32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def X2SUB32 : FmtALU64<0x59, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                        "x2sub32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // X2MUL32 — DB restricts to slot 1 only (capstone-schedule-port-audit
@@ -1127,6 +1151,7 @@ def X2MUL32 : FmtALU64_2Dest<0x5A, 0x00,
 def X4ADD16 : FmtALU64<0x5B, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                        "x4add16\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // X4MUL16 — golden D-MAC slots 1+2 (X4MUL16_S1/S2 in HaydnFormatsMAC.td).
@@ -1146,6 +1171,7 @@ def X4MUL16 : FmtALU64_2Dest<0x5C, 0x00,
 def X4SUB16 : FmtALU64<0x5D, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
                        "x4sub16\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // SIMD X2 shift operations (dual 32-bit)
@@ -1154,16 +1180,19 @@ def X4SUB16 : FmtALU64<0x5D, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
 def X2SLL32 : FmtALU64<0x64, 0x000, (outs DR64:$rd), (ins DR64:$rs1, GPR32:$rs2),
                       "x2sll32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def X2SRL32 : FmtALU64<0x65, 0x000, (outs DR64:$rd), (ins DR64:$rs1, GPR32:$rs2),
                       "x2srl32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 def X2SRA32 : FmtALU64<0x66, 0x000, (outs DR64:$rd), (ins DR64:$rs1, GPR32:$rs2),
                       "x2sra32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1195,34 +1224,62 @@ def X2SRA32 : FmtALU64<0x66, 0x000, (outs DR64:$rd), (ins DR64:$rs1, GPR32:$rs2)
 // Schedule Found=0 for all II. Explicit SFR Defs/Uses keep cmp→cmov
 // RAW correct without memory barriers.
 let hasSideEffects = 0, Defs = [SFR] in {
-def SEQ64 : FmtALU64Unary<0x67, 0x187, (outs DR64:$rd), (ins DR64:$rs1),
-                          "seq64\t$rd, $rs1", []> {
+def SEQ64 : FmtALU64Binary<0x67, 0x187, (outs),
+                           (ins DR64:$rs1, DR64:$rs2),
+                           "seq64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // Binary, not unary: the database is `SEQ64 rsd1, rsd2` and both
+  // are read. The old shape called the first a destination, which
+  // no operand-count check could see. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
-def SLT64 : FmtALU64Unary<0x67, 0x188, (outs DR64:$rd), (ins DR64:$rs1),
-                          "slt64\t$rd, $rs1", []> {
+def SLT64 : FmtALU64Binary<0x67, 0x188, (outs),
+                           (ins DR64:$rs1, DR64:$rs2),
+                           "slt64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // Binary, not unary: the database is `SLT64 rsd1, rsd2` and both
+  // are read. The old shape called the first a destination, which
+  // no operand-count check could see. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
-def SLE64 : FmtALU64Unary<0x67, 0x189, (outs DR64:$rd), (ins DR64:$rs1),
-                          "sle64\t$rd, $rs1", []> {
+def SLE64 : FmtALU64Binary<0x67, 0x189, (outs),
+                           (ins DR64:$rs1, DR64:$rs2),
+                           "sle64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // Binary, not unary: the database is `SLE64 rsd1, rsd2` and both
+  // are read. The old shape called the first a destination, which
+  // no operand-count check could see. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 }  // hasSideEffects = 0, Defs = [SFR]
 
 // Scalar 64-bit SFR conditional move (unary DR64 → reads SFR, sets dst).
 let hasSideEffects = 0, Uses = [SFR] in {
-def MOVT64 : FmtALU64Unary<0x67, 0x18A, (outs DR64:$rd), (ins DR64:$rs1),
+def MOVT64 : FmtALU64Unary<0x67, 0x18A, (outs DR64:$rd),
+                           (ins DR64:$rd_in, DR64:$rs1),
                            "movt64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `MOVT64 rtd, rsd` keeps rtd when the condition rejects it, so the
+  // destination is also a source. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rd = $rd_in";
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
-def MOVF64 : FmtALU64Unary<0x67, 0x18B, (outs DR64:$rd), (ins DR64:$rs1),
+def MOVF64 : FmtALU64Unary<0x67, 0x18B, (outs DR64:$rd),
+                           (ins DR64:$rd_in, DR64:$rs1),
                            "movf64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `MOVF64 rtd, rsd` keeps rtd when the condition rejects it, so the
+  // destination is also a source. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rd = $rd_in";
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 }  // hasSideEffects = 0, Uses = [SFR]
 
@@ -1231,6 +1288,7 @@ def X2ABS32S : FmtALU64Unary<0x67, 0x18C, (outs DR64:$rd), (ins DR64:$rs1),
                              "x2abs32s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // ABS64 / ABS64S / NEG64 / NEG64S — 64-bit unary abs/neg (golden slot1/2 ALU).
@@ -1244,21 +1302,25 @@ def ABS64 : FmtALU64Unary<0x67, 0x1A7, (outs DR64:$rd), (ins DR64:$rs1),
                           "abs64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def ABS64S : FmtALU64Unary<0x67, 0x1A8, (outs DR64:$rd), (ins DR64:$rs1),
                            "abs64s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def NEG64 : FmtALU64Unary<0x67, 0x1A9, (outs DR64:$rd), (ins DR64:$rs1),
                           "neg64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def NEG64S : FmtALU64Unary<0x67, 0x1AA, (outs DR64:$rd), (ins DR64:$rs1),
                            "neg64s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // NOT64 — logical public. Private encode peers: NOT64_S1/S2
@@ -1269,6 +1331,7 @@ def NOT64 : FmtALU64Unary<0x67, 0x1AB, (outs DR64:$rd), (ins DR64:$rs1),
                           "not64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // X2 abs/neg unary family (golden slot1/2 ALU Index 81-86).
@@ -1282,26 +1345,31 @@ def X2ABS32 : FmtALU64Unary<0x67, 0x1A2, (outs DR64:$rd), (ins DR64:$rs1),
                             "x2abs32\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def X2NEG32 : FmtALU64Unary<0x67, 0x1A3, (outs DR64:$rd), (ins DR64:$rs1),
                             "x2neg32\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def X2NEG32S : FmtALU64Unary<0x67, 0x1A4, (outs DR64:$rd), (ins DR64:$rs1),
                              "x2neg32s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def X2NEG32_L : FmtALU64Unary<0x67, 0x1A5, (outs DR64:$rd), (ins DR64:$rs1),
                               "x2neg32_l\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def X2NEG32S_L : FmtALU64Unary<0x67, 0x1A6, (outs DR64:$rd), (ins DR64:$rs1),
                                "x2neg32s_l\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // X4ABS16 / X4ABS16S — 4x16-bit abs (golden slot1/2 ALU).
@@ -1315,11 +1383,13 @@ def X4ABS16 : FmtALU64Unary<0x67, 0x1AC, (outs DR64:$rd), (ins DR64:$rs1),
                             "x4abs16\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def X4ABS16S : FmtALU64Unary<0x67, 0x1AD, (outs DR64:$rd), (ins DR64:$rs1),
                              "x4abs16s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // X4CMUL16 / X4CMUL16S / X4CMUL16_F2 / X4CMUL16S_F2 — 4x16-bit complex
@@ -1369,31 +1439,54 @@ def X4CMUL16S_F2 : FmtALU64Unary<0x67, 0x1B1, (outs DR64:$rd), (ins DR64:$rs1),
 // symbolic operand to FIXUP_HAYDN_32, and § 6.1's trap is precisely a logical
 // and its member disagreeing about which class holds the EncoderMethod.
 let Itinerary = Unit_ALU0ALU1ALU2_L1 in {
-def MOVEI_H : Fmt48_MOVEI<0x1F, (outs DR64:$rd), (ins simm32_movei:$imm32),
-                          "movei_h\t$rd, $imm32", []>;
-def MOVEI_L : Fmt48_MOVEI<0x20, (outs DR64:$rd), (ins simm32_movei:$imm32),
-                          "movei_l\t$rd, $imm32", []>;
+// Each writes ONE half and preserves the other — `rtd = {imm32, rtd[31:00]}` —
+// so the destination is also a source. Without the tie the preserved half is
+// whatever the register allocator left there, and a caller could not build a
+// 64-bit constant at all: two independent defs cannot be chained.
+// FORMAT-E-SWITCH-PLAN.md 5.11.
+def MOVEI_H : Fmt48_MOVEI<0x1F, (outs DR64:$rd),
+                          (ins DR64:$rd_in, simm32_movei:$imm32),
+                          "movei_h\t$rd, $imm32", []> {
+  let Constraints = "$rd = $rd_in";
+}
+def MOVEI_L : Fmt48_MOVEI<0x20, (outs DR64:$rd),
+                          (ins DR64:$rd_in, simm32_movei:$imm32),
+                          "movei_l\t$rd, $imm32", []> {
+  let Constraints = "$rd = $rd_in";
+}
 }
 
 // X2 SIMD compare → SFR (binary DR64 → sets SFR). Passthrough return.
 let hasSideEffects = 0, Defs = [SFR] in {
-def X2SEQ32 : FmtALU64Binary<0x67, 0x18D, (outs DR64:$rd),
+def X2SEQ32 : FmtALU64Binary<0x67, 0x18D, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x2seq32\t$rd, $rs1, $rs2", []> {
+                             "x2seq32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
-def X2SLT32 : FmtALU64Binary<0x67, 0x18E, (outs DR64:$rd),
+def X2SLT32 : FmtALU64Binary<0x67, 0x18E, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x2slt32\t$rd, $rs1, $rs2", []> {
+                             "x2slt32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
-def X2SLE32 : FmtALU64Binary<0x67, 0x18F, (outs DR64:$rd),
+def X2SLE32 : FmtALU64Binary<0x67, 0x18F, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x2sle32\t$rd, $rs1, $rs2", []> {
+                             "x2sle32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 }  // hasSideEffects = 0, Defs = [SFR]
 
@@ -1404,34 +1497,58 @@ def X2MOVF32 : FmtALU64Binary<0x67, 0x190, (outs DR64:$rd),
                               "x2movf32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X2MOVF32 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def X2MOVT32 : FmtALU64Binary<0x67, 0x191, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x2movt32\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X2MOVT32 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 }  // hasSideEffects = 0, Uses = [SFR]
 
 // X4 SIMD compare → SFR (binary DR64 → sets SFR).
 let hasSideEffects = 0, Defs = [SFR] in {
-def X4SEQ16 : FmtALU64Binary<0x67, 0x192, (outs DR64:$rd),
+def X4SEQ16 : FmtALU64Binary<0x67, 0x192, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x4seq16\t$rd, $rs1, $rs2", []> {
+                             "x4seq16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
-def X4SLT16 : FmtALU64Binary<0x67, 0x193, (outs DR64:$rd),
+def X4SLT16 : FmtALU64Binary<0x67, 0x193, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x4slt16\t$rd, $rs1, $rs2", []> {
+                             "x4slt16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
-def X4SLE16 : FmtALU64Binary<0x67, 0x194, (outs DR64:$rd),
+def X4SLE16 : FmtALU64Binary<0x67, 0x194, (outs),
                              (ins DR64:$rs1, DR64:$rs2),
-                             "x4sle16\t$rd, $rs1, $rs2", []> {
+                             "x4sle16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // The comparison writes SFR and no register. The format still
+  // carries a dest field, so bind it rather than keep an operand.
+  let rd = 0;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 }  // hasSideEffects = 0, Defs = [SFR]
 
@@ -1442,12 +1559,24 @@ def X4MOVF16 : FmtALU64Binary<0x67, 0x195, (outs DR64:$rd),
                               "x4movf16\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X4MOVF16 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 def X4MOVT16 : FmtALU64Binary<0x67, 0x196, (outs DR64:$rd),
                               (ins DR64:$rs1, DR64:$rs2),
                               "x4movt16\t$rd, $rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  // `X4MOVT16 rtd, rsd` preserves the lanes the condition rejects, so
+  // $rs1 IS the destination read back. Declaring the tie is what pins
+  // them to one register; the operand list is unchanged, so no caller
+  // moves. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Constraints = "$rs1 = $rd";
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 }  // hasSideEffects = 0, Uses = [SFR]
 
@@ -1459,6 +1588,7 @@ def X4SELI16 : FmtALU64SelImm<0x67, 0x06, (outs DR64:$rd),
                               "x4seli16\t$rd, $rs1, $rs2, $imm", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
 }
 
 // X2/X4 SIMD shift-immediate — proper binary encoding.
@@ -1479,28 +1609,44 @@ def X4SELI16 : FmtALU64SelImm<0x67, 0x06, (outs DR64:$rd),
 // live in HaydnDClassOpcodes.cpp getEncOpcodeMap — see for the table.
 def X2SLLI32  : FmtALU64ShiftImm<0x69, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm5:$shamt),
-                    "x2slli32\t$rd, $rs1, $shamt", []>;
+                    "x2slli32\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def X2SRLI32  : FmtALU64ShiftImm<0x6A, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm5:$shamt),
-                    "x2srli32\t$rd, $rs1, $shamt", []>;
+                    "x2srli32\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def X2SRAI32  : FmtALU64ShiftImm<0x6B, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm5:$shamt),
-                    "x2srai32\t$rd, $rs1, $shamt", []>;
+                    "x2srai32\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def X2SRAI32R : FmtALU64ShiftImm<0x6C, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm5:$shamt),
-                    "x2srai32r\t$rd, $rs1, $shamt", []>;
+                    "x2srai32r\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def X4SLLI16  : FmtALU64ShiftImm<0x6D, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm4:$shamt),
-                    "x4slli16\t$rd, $rs1, $shamt", []>;
+                    "x4slli16\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def X4SRLI16  : FmtALU64ShiftImm<0x6E, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm4:$shamt),
-                    "x4srli16\t$rd, $rs1, $shamt", []>;
+                    "x4srli16\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def X4SRAI16  : FmtALU64ShiftImm<0x6F, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm4:$shamt),
-                    "x4srai16\t$rd, $rs1, $shamt", []>;
+                    "x4srai16\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def X4SRAI16R : FmtALU64ShiftImm<0x70, (outs DR64:$rd),
                     (ins DR64:$rs1, uimm4:$shamt),
-                    "x4srai16r\t$rd, $rs1, $shamt", []>;
+                    "x4srai16r\t$rd, $rs1, $shamt", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 // SFR ↔ GPR32 transfer. These have unusual operand shapes:
 // MOVESFR2GPR — no input regs (reads SFR implicitly), outputs GPR32.
@@ -1685,20 +1831,10 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 // Spec: Database/haydn_instruction_db.json "D_LDW_POST_IMM".
 // HiFi analog: ae_l64.ip. Two-def: data destination $rt (DR64) and base
 // writeback $rs_wb (tied to $rs via the AGU bypass).
-let mayLoad = 1, Constraints = "$rs = $rs_wb" in
-def LD64_POST : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
-                              (ins GPR32:$rs, simm6:$scaled_imm),
-                              "ld64.post\t$rt, $rs, $scaled_imm", []>;
-
 // S_LW_POST_IMM rt, rs, imm6 — load 32b word from [rs], then rs += (imm6<<2).
 // Spec: Database/haydn_instruction_db.json "S_LW_POST_IMM".
 // HiFi analog: ae_l32.ip / C-language *p++. Two-def: data destination $rt
 // (GPR32) and base writeback $rs_wb (tied to $rs via the AGU bypass).
-let mayLoad = 1, Constraints = "$rs = $rs_wb" in
-def LD32_POST : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
-                              (ins GPR32:$rs, simm6:$scaled_imm),
-                              "ld32.post\t$rt, $rs, $scaled_imm", []>;
-
 //===----------------------------------------------------------------------===//
 // Fused post-increment stores (AGU writeback, spec D_SDW_POST_IMM
 // S_SW_POST_IMM family). Mirrors the load post-inc pair above with mayStore=1:
@@ -1725,18 +1861,8 @@ def LD32_POST : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
 
 // D_SDW_POST_IMM rtd, rs, imm6 — store 64b rtd to [rs], then rs += (imm6<<3).
 // HiFi analog: ae_s64.ip.
-let mayStore = 1, Constraints = "$rs = $rs_wb" in
-def ST64_POST : FmtLSPostInc<0x49, (outs GPR32:$rs_wb),
-                              (ins DR64:$rt, GPR32:$rs, simm6:$scaled_imm),
-                              "st64.post\t$rt, $rs, $scaled_imm", []>;
-
 // S_SW_POST_IMM rt, rs, imm6 — store 32b rt to [rs], then rs += (imm6<<2).
 // HiFi analog: ae_s32.ip / C-language *p++ = x.
-let mayStore = 1, Constraints = "$rs = $rs_wb" in
-def ST32_POST : FmtLSPostInc<0x4A, (outs GPR32:$rs_wb),
-                              (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
-                              "st32.post\t$rt, $rs, $scaled_imm", []>;
-
 //===----------------------------------------------------------------------===//
 // Lane stores: store one 32-bit lane of a DR64 to memory.
 // These eliminate the MOVE32_DR_L/H + ST32 cross-bank round-trip (2 instrs
@@ -1748,11 +1874,15 @@ def ST32_POST : FmtLSPostInc<0x4A, (outs GPR32:$rs_wb),
 
 def D_SW_L_WITH_IMM : FmtLaneStore<0x4B,
     (outs), (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
-    "d_sw_l_with_imm\t$rtd, $rs, $scaled_imm", []>;
+    "d_sw_l_with_imm\t$rtd, $rs, $scaled_imm", []> {
+  let Itinerary = Unit_LS0_L1;
+}
 
 def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
     (outs), (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
-    "d_sw_h_with_imm\t$rtd, $rs, $scaled_imm", []>;
+    "d_sw_h_with_imm\t$rtd, $rs, $scaled_imm", []> {
+  let Itinerary = Unit_LS0_L1;
+}
 
 
 //===----------------------------------------------------------------------===//
@@ -1815,13 +1945,6 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // therefore RETAINED (it has live derived defs). Fmt48_* class retirement is
 // blocked until all 21 live Fmt48_* defs migrate to Bundle128 s0/s1/s2
 // projections (see HaydnInstrFormatsC.td note).
-def ADDI32_W  : Fmt48_WideGPRImm<0x01, (outs GPR32:$rt),
-                                 (ins GPR32:$rs, simm20_wide_abs:$imm),
-                                 "addi32_w\t$rt, $rs, $imm", []>;
-def ORI32_W   : Fmt48_WideGPRImm<0x06, (outs GPR32:$rt),
-                                 (ins GPR32:$rs, uimm20_wide_abs:$imm),
-                                 "ori32_w\t$rt, $rs, $imm", []>;
-
 //===----------------------------------------------------------------------===//
 // Class 001 — Branch (§5.5). Offsets in 2-byte units (§5.14, D1).
 //===----------------------------------------------------------------------===//
@@ -1838,52 +1961,16 @@ def ORI32_W   : Fmt48_WideGPRImm<0x06, (outs GPR32:$rt),
 // R14 is a GPR; clobber/preserve via regmask only (not Defs).
 let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
             D0, D1, D2, D3, D4, D5, D6, D7] in {
-let isCall = 1 in
-def JAL_W : Fmt48_WideBR_I20<0x20, (outs GPR32:$rt),
-                             (ins brtarget_wide_i20:$offset),
-                             "jal_w\t$rt, $offset", []>;
-
 // CB-129: isBarrier required so MachineBlockPlacement does not treat an
 // unanalyzable indirect jump/RET as fallthrough (assert in buildCFGChains
 // on computed-goto). PseudoCALLIndirect expands to JALR_W only at print time
 // (post-MBP); pure jumps/RETs are MIR terminators that never fall through.
-let isTerminator = 1, isBarrier = 1, isCall = 1, isIndirectBranch = 1 in
-def JALR_W : Fmt48_WideBR_RI12<0x30, (outs GPR32:$rt),
-                               (ins GPR32:$rs, calltarget_wide_ri12:$offset),
-                               "jalr_w\t$rt, $rs, $offset", []>;
 } // Defs = caller-saved clobbers for calls
 
 // Conditional branches (§5.5). isBranch + isTerminator only — branches have no
 // side effects (the prior hasSideEffects=1/Defs=[SFR] was a CSR-hazard leftover
 // that does not apply to branches).
 let isBranch = 1, isTerminator = 1 in {
-def BEQ_W  : Fmt48_WideBR_RI12<0x24, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "beq_w\t$rs, $rt, $offset", []>;
-def BNE_W  : Fmt48_WideBR_RI12<0x25, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bne_w\t$rs, $rt, $offset", []>;
-def BGE_W  : Fmt48_WideBR_RI12<0x26, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bge_w\t$rs, $rt, $offset", []>;
-def BGEU_W : Fmt48_WideBR_RI12<0x27, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bgeu_w\t$rs, $rt, $offset", []>;
-def BLT_W  : Fmt48_WideBR_RI12<0x28, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "blt_w\t$rs, $rt, $offset", []>;
-def BLTU_W : Fmt48_WideBR_RI12<0x29, (outs),
-                               (ins GPR32:$rs, GPR32:$rt, brtarget_wide_ri12:$offset),
-                               "bltu_w\t$rs, $rt, $offset", []>;
-
-def BEQZ_W  : Fmt48_WideBR_I12<0x2C, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "beqz_w\t$rs, $offset", []>;
-def BNEZ_W  : Fmt48_WideBR_I12<0x2D, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "bnez_w\t$rs, $offset", []>;
-def BGEZ_W  : Fmt48_WideBR_I12<0x2E, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "bgez_w\t$rs, $offset", []>;
-def BLTZ_W  : Fmt48_WideBR_I12<0x2F, (outs), (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                               "bltz_w\t$rs, $offset", []>;
 } // isBranch, isTerminator
 
 //===----------------------------------------------------------------------===//
@@ -1905,16 +1992,26 @@ def BLTZ_W  : Fmt48_WideBR_I12<0x2F, (outs), (ins GPR32:$rs, brtarget_wide_i12:$
 // rsd → wrong schoolbook half extract → cb50.s exit 96 vs host/ELF 21.
 // One mechanism: always print the 3-operand DB shape (matches ISS + objdump).
 // InstAlias keeps hand-written 2-op assembly working (in-place form).
+// Tied only because Fmt48_WideDR_RI6 can encode one register — see the class.
+// The database and the format E members both give $rsd and $rtd independent
+// homes, so this is the retired encoding's constraint, not the hardware's, and
+// it is what keeps these three on § 5.11's `ties` axis.
 let Constraints = "$rtd = $rsd" in {
 def SLLI64  : Fmt48_WideDR_RI6<0x50, (outs DR64:$rtd),
                                (ins DR64:$rsd, uimm6_dr:$imm),
-                               "slli64\t$rtd, $rsd, $imm", []>;
+                               "slli64\t$rtd, $rsd, $imm", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def SRLI64  : Fmt48_WideDR_RI6<0x51, (outs DR64:$rtd),
                                (ins DR64:$rsd, uimm6_dr:$imm),
-                               "srli64\t$rtd, $rsd, $imm", []>;
+                               "srli64\t$rtd, $rsd, $imm", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
                                (ins DR64:$rsd, uimm6_dr:$imm),
-                               "srai64\t$rtd, $rsd, $imm", []>;
+                               "srai64\t$rtd, $rsd, $imm", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 }
 // No InstAlias for the old 2-op print form: uimm6_dr is not an Operand
 // subclass usable in InstAlias result args. Hand asm can write the DB
@@ -1953,22 +2050,23 @@ def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
 // (MC/Haydn/d465-flex-coverage-completion.s), exactly as JAL_W, BEQ_W and the
 // rest were kept by their folds; it retires with the member files in the
 // format E switch.
-let hasSideEffects = 0, Defs = [SFR] in
-def CSRW_W : Fmt48_WideCSR<0x81, (outs),
-                           (ins uimm8_csr:$uimm8, GPR32:$rt),
-                           "csrw_w\t$uimm8, $rt", []>;
-
 let hasSideEffects = 0, isNotDuplicable = 1, Defs = [SFR] in {
 def SET_HWLOOP : Fmt48_WideSET_HWLOOP<0x88, (outs),
     (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2,
          uimm16_hwloop_cnt:$cnt),
-    "set_hwloop\t$sel, $offset1, $offset2, $cnt", []>;
+    "set_hwloop\t$sel, $offset1, $offset2, $cnt", []> {
+  let Itinerary = Unit_ALU0_L1;
+}
 def SET_HWLOOP_F2 : Fmt48_WideSET_HWLOOP_F2<0x89, (outs),
     (ins uimm1:$sel, hwloop_off1:$offset1, hwloop_off2:$offset2, GPR32:$rs),
-    "set_hwloop_f2\t$sel, $offset1, $offset2, $rs", []>;
+    "set_hwloop_f2\t$sel, $offset1, $offset2, $rs", []> {
+  let Itinerary = Unit_ALU0_L1;
+}
 def SET_HWLOOP_REG : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
     (ins uimm1:$sel, GPR32:$rs1, GPR32:$rs2, GPR32:$rs3),
-    "set_hwloop_reg\t$sel, $rs1, $rs2, $rs3", []>;
+    "set_hwloop_reg\t$sel, $rs1, $rs2, $rs3", []> {
+  let Itinerary = Unit_ALU0_L1;
+}
 }
 
 //===----------------------------------------------------------------------===//
@@ -1981,3 +2079,82 @@ def SET_HWLOOP_REG : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
 // Fmt48_WideLS class (HaydnInstrFormatsC.td). Wide-offset LS is now reached
 // via the Bundle128 _S0 family-2 defs (HaydnFormatsLS.td).
 //===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// AR (hardware unaligned access) logicals.
+//
+// These lived in HaydnFormatsLS.td beside their Bundle128 members. They are
+// logicals, not members, so they outlive that file: ISel and the post-RA
+// hazard recognizer name them, and placement is the alternates auction.
+//
+// Shapes follow `instruction_type_index.json` group AR. The re-delivered
+// database dropped the second base register and the direction select, and the
+// post-increment is a fixed +8 rather than a runtime stride:
+//
+//   PLDWWUA_POST ar_sel, rs        ar[ar_sel] = mem64[rs & ~7];  rs += 8
+//   FLAR         ar_sel            ar[ar_sel] = 0
+//   WBARWUA      ar_sel, rs        residual -> mem64[rs & ~7];   ar = 0
+//   D_LTWUA_POST  rtd, ar_sel, rs  two-word unaligned load,      rs += 8
+//   D_LQHWUA_POST rtd, ar_sel, rs  quad-half unaligned load,     rs += 8
+//   D_STWUA_POST  rtd, ar_sel, rs  two-word unaligned store,     rs += 8
+//   D_SQHWUA_POST rtd, ar_sel, rs  quad-half unaligned store,    rs += 8
+//
+// rs is tied because the hardware writes it back. ISel marks that def Dead:
+// the C-level cursor is ordinary pointer arithmetic, not a readback of the
+// hardware writeback, so the tie exists to model the register write for
+// packing and register allocation, not to carry a value.
+//
+// WBARWUA reads rs and does not write it (database GPR_Write_Port is null),
+// so it alone has no tied writeback.
+//===----------------------------------------------------------------------===//
+
+let mayLoad = 1, hasSideEffects = 1 in
+def PLDWWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+                             (ins GPR32:$rs, uimm2:$ar_sel),
+                             "pldwwua_post\t$ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Unit_LS0LOAD1_L2;
+}
+
+let hasSideEffects = 1 in
+def FLAR : HaydnInst<4, (outs), (ins uimm2:$ar_sel), "flar\t$ar_sel", []> {
+  let Itinerary = Unit_LS0LOAD1_L1;
+}
+
+let mayStore = 1, hasSideEffects = 1 in
+// `WBARWUA ar_sel, rs`: the selector leads in the database Syntax and in
+// the format E members, so it leads here too (§ 5.11 `kinds`).
+def WBARWUA : HaydnInst<4, (outs), (ins uimm2:$ar_sel, GPR32:$rs),
+                        "wbarwua\t$ar_sel, $rs", []> {
+  let Itinerary = Unit_LS0_L1;
+}
+
+let mayLoad = 1, hasSideEffects = 1 in {
+def D_LTWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
+                             (ins GPR32:$rs, uimm2:$ar_sel),
+                             "d_ltwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Unit_LS0LOAD1_L2;
+}
+def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
+                              (ins GPR32:$rs, uimm2:$ar_sel),
+                              "d_lqhwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Unit_LS0LOAD1_L2;
+}
+}
+
+let mayStore = 1, hasSideEffects = 1 in {
+def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+                             (ins DR64:$rtd, GPR32:$rs, uimm2:$ar_sel),
+                             "d_stwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Unit_LS0_L1;
+}
+def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+                              (ins DR64:$rtd, GPR32:$rs, uimm2:$ar_sel),
+                              "d_sqhwua_post\t$rtd, $ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  let Itinerary = Unit_LS0_L1;
+}
+}

@@ -131,10 +131,10 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     }
     // Logical LD32 (Slot01_LD); post-RA HR tryAddProduct picks LD32_S0/S1
     // and leaveRegion setDesc materializes the member (B3.exit.3).
-    BuildMI(MBB, MI, DL, TII->get(Haydn::LD32), DstReg)
+    BuildMI(MBB, MI, DL, TII->get(Haydn::S_LW_WITH_IMM), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset);
-    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
+        .addImm(haydnScaledLSImm(Offset, 4));
+    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
     break;
@@ -156,18 +156,18 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     // td form: (outs GPR32:$rs_wb), (ins GPR32:$rt, GPR32:$rs, simm6:$imm)
     // MCInst operand order: [rt, rs_wb, rs, scaled_imm]
     if (Offset == 0 && (Stride % 4) == 0 && isInt<6>(Stride >> 2)) {
-      BuildMI(MBB, MI, DL, TII->get(Haydn::ST32_POST))
+      BuildMI(MBB, MI, DL, TII->get(Haydn::S_SW_POST_IMM))
           .addReg(BaseReg, RegState::Define)       // $rs_wb (AGU writeback)
           .addReg(DataReg)                          // $rt (stored data, GPR32)
           .addReg(BaseReg)                          // $rs (input base, tied)
           .addImm(Stride >> 2);                     // $scaled_imm (imm6 index)
       break;
     }
-    BuildMI(MBB, MI, DL, TII->get(Haydn::ST32))
+    BuildMI(MBB, MI, DL, TII->get(Haydn::S_SW_WITH_IMM))
         .addReg(DataReg)
         .addReg(BaseReg)
-        .addImm(Offset);
-    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
+        .addImm(haydnScaledLSImm(Offset, 4));
+    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
     break;
@@ -197,10 +197,10 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     // fallback so it can pack with a sibling load. The fused D_LDW_POST_IMM
     // path above is preferred (single instruction); this split is the rare
     // fallback for non-multiple stride / out-of-range index.
-    BuildMI(MBB, MI, DL, TII->get(Haydn::LD64), DstReg)
+    BuildMI(MBB, MI, DL, TII->get(Haydn::D_LDW_WITH_IMM), DstReg)
         .addReg(BaseReg)
-        .addImm(Offset);
-    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
+        .addImm(haydnScaledLSImm(Offset, 8));
+    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
     break;
@@ -219,18 +219,18 @@ bool HaydnExpandPostIncEarly::expandMI(MachineBasicBlock &MBB,
     // td form: (outs GPR32:$rs_wb), (ins DR64:$rt, GPR32:$rs, simm6:$imm)
     // MCInst operand order: [rt, rs_wb, rs, scaled_imm]
     if (Offset == 0 && (Stride % 8) == 0 && isInt<6>(Stride >> 3)) {
-      BuildMI(MBB, MI, DL, TII->get(Haydn::ST64_POST))
+      BuildMI(MBB, MI, DL, TII->get(Haydn::D_SDW_POST_IMM))
           .addReg(BaseReg, RegState::Define)       // $rs_wb (AGU writeback)
           .addReg(DataReg)                          // $rt (stored data, DR64)
           .addReg(BaseReg)                          // $rs (input base, tied)
           .addImm(Stride >> 3);                     // $scaled_imm (imm6 index)
       break;
     }
-    BuildMI(MBB, MI, DL, TII->get(Haydn::ST64))
+    BuildMI(MBB, MI, DL, TII->get(Haydn::D_SDW_WITH_IMM))
         .addReg(DataReg)
         .addReg(BaseReg)
-        .addImm(Offset);
-    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), BaseReg)
+        .addImm(haydnScaledLSImm(Offset, 8));
+    BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32), BaseReg)
         .addReg(BaseReg)
         .addImm(Stride);
     break;

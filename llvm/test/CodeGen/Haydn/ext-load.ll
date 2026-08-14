@@ -12,7 +12,7 @@
 ;Sign-extending load i8 -> i32
 define i32 @sextload_i8_to_i32(ptr %ptr) {
 ; CHECK-LABEL: sextload_i8_to_i32:
-; CHECK: ld8
+; CHECK: s_lbs_{{[a-z_]*}}
   %v = load i8, ptr %ptr
   %r = sext i8 %v to i32
   ret i32 %r
@@ -21,7 +21,7 @@ define i32 @sextload_i8_to_i32(ptr %ptr) {
 ;Zero-extending load i8 -> i32
 define i32 @zextload_i8_to_i32(ptr %ptr) {
 ; CHECK-LABEL: zextload_i8_to_i32:
-; CHECK: ldu8
+; CHECK: s_lbu_{{[a-z_]*}}
   %v = load i8, ptr %ptr
   %r = zext i8 %v to i32
   ret i32 %r
@@ -30,7 +30,7 @@ define i32 @zextload_i8_to_i32(ptr %ptr) {
 ;Sign-extending load i16 -> i32
 define i32 @sextload_i16_to_i32(ptr %ptr) {
 ; CHECK-LABEL: sextload_i16_to_i32:
-; CHECK: ld16
+; CHECK: s_lhws_{{[a-z_]*}}
   %v = load i16, ptr %ptr
   %r = sext i16 %v to i32
   ret i32 %r
@@ -39,7 +39,7 @@ define i32 @sextload_i16_to_i32(ptr %ptr) {
 ;Zero-extending load i16 -> i32
 define i32 @zextload_i16_to_i32(ptr %ptr) {
 ; CHECK-LABEL: zextload_i16_to_i32:
-; CHECK: ldu16
+; CHECK: s_lhwu_{{[a-z_]*}}
   %v = load i16, ptr %ptr
   %r = zext i16 %v to i32
   ret i32 %r
@@ -48,7 +48,7 @@ define i32 @zextload_i16_to_i32(ptr %ptr) {
 ;Load i8 with sign extension to i64
 define i64 @sextload_i8_to_i64(ptr %ptr) {
 ; CHECK-LABEL: sextload_i8_to_i64:
-; CHECK-DAG: ld8
+; CHECK-DAG: s_lbs_{{[a-z_]*}}
 ; CHECK-DAG: sext32t64
   %v = load i8, ptr %ptr
   %r = sext i8 %v to i64
@@ -58,7 +58,7 @@ define i64 @sextload_i8_to_i64(ptr %ptr) {
 ;Load i16 with sign extension to i64
 define i64 @sextload_i16_to_i64(ptr %ptr) {
 ; CHECK-LABEL: sextload_i16_to_i64:
-; CHECK-DAG: ld16
+; CHECK-DAG: s_lhws_{{[a-z_]*}}
 ; CHECK-DAG: sext32t64
   %v = load i16, ptr %ptr
   %r = sext i16 %v to i64
@@ -68,7 +68,7 @@ define i64 @sextload_i16_to_i64(ptr %ptr) {
 ;Load i32 with sign extension to i64
 define i64 @sextload_i32_to_i64(ptr %ptr) {
 ; CHECK-LABEL: sextload_i32_to_i64:
-; CHECK-DAG: ld32
+; CHECK-DAG: s_lw_{{[a-z_]*}}
 ; Post-: sext i32->i64 selects directly to sext32t64 (was sra32-based lowering).
 ; CHECK-DAG: sext32t64
   %v = load i32, ptr %ptr
@@ -79,7 +79,7 @@ define i64 @sextload_i32_to_i64(ptr %ptr) {
 ;Load i32 with zero extension to i64
 define i64 @zextload_i32_to_i64(ptr %ptr) {
 ; CHECK-LABEL: zextload_i32_to_i64:
-; CHECK-DAG: ld32
+; CHECK-DAG: s_lw_{{[a-z_]*}}
 ; CHECK-NOT: sxt
   %v = load i32, ptr %ptr
   %r = zext i32 %v to i64
@@ -90,7 +90,7 @@ define i64 @zextload_i32_to_i64(ptr %ptr) {
 define i32 @array_sext_i8(ptr %array, i32 %index) {
 ; CHECK-LABEL: array_sext_i8:
 ; Byte GEP+sextload may fuse to s_lbs_pre_reg (postinc-sext) or ld8.
-; CHECK: {{s_lbs_pre_reg|ld8}}
+; CHECK: {{s_lbs_pre_reg|s_lbs_[a-z_]*}}
   %ptr = getelementptr i8, ptr %array, i32 %index
   %v = load i8, ptr %ptr
   %r = sext i8 %v to i32
@@ -100,8 +100,8 @@ define i32 @array_sext_i8(ptr %array, i32 %index) {
 ;Multiple extloads in sequence
 define i32 @multiple_extloads(ptr %p1, ptr %p2) {
 ; CHECK-LABEL: multiple_extloads:
-; CHECK-DAG: ld8
-; CHECK-DAG: ld16
+; CHECK-DAG: s_lbs_{{[a-z_]*}}
+; CHECK-DAG: s_lhws_{{[a-z_]*}}
 ; CHECK: add32
   %v1 = load i8, ptr %p1
   %e1 = sext i8 %v1 to i32
@@ -114,7 +114,7 @@ define i32 @multiple_extloads(ptr %p1, ptr %p2) {
 ;Volatile extload
 define i32 @volatile_sextload(ptr %ptr) {
 ; CHECK-LABEL: volatile_sextload:
-; CHECK: ld8
+; CHECK: s_lbs_{{[a-z_]*}}
   %v = load volatile i8, ptr %ptr
   %r = sext i8 %v to i32
   ret i32 %r
@@ -125,9 +125,9 @@ define i32 @volatile_sextload(ptr %ptr) {
 ; High byte uses ld8 (sign), low byte uses s_lbu_* (zero); combine via sll+or.
 define i32 @unaligned_sextload(ptr %ptr) {
 ; CHECK-LABEL: unaligned_sextload:
-; CHECK-NOT: ldu16
-; CHECK-NOT: {{[^0-9]}}ld16
-; CHECK-DAG: {{s_lbu_|ldu8|ld8}}
+; CHECK-NOT: s_lhwu_
+; CHECK-NOT: {{[^0-9]}}s_lhws_
+; CHECK-DAG: {{s_lbu_|s_lbu_[a-z_]*|s_lbs_[a-z_]*}}
 ; CHECK-DAG: slli32
 ; CHECK-DAG: or32
   %v = load i16, ptr %ptr, align 1

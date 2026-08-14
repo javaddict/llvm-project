@@ -30,8 +30,8 @@ define i32 @caller(i32 %n) nounwind {
 ; Flex cutover: subi32 -> subi32 (slot-suffixed Flex form).
 ; CHECK:       subi32{{.*}} sp, sp,
 ; LR must NOT be stored below the decremented SP (the bug signature).
-; CHECK-NOT:   st32 {{lr|r15}}, {{sp|r13}}, -{{[0-9]+}}
-; CHECK:       jal{{(\.s[012])?}}
+; CHECK-NOT:   s_sw_{{[a-z_]*}} {{lr|r15}}, {{sp|r13}}, -{{[0-9]+}}
+; CHECK:       jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
 entry:
   %v = alloca i32, i32 %n        ; forces hasFP = true
   call void @use(ptr %v)         ; non-leaf -> forces LR (R15) save

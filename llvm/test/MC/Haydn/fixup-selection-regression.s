@@ -56,21 +56,27 @@ jal r0, another_func
 # CHECK:      {{.*}}: R_HAYDN_WIDE_CallSImm20 another_func
 
 #===----------------------------------------------------------------------===#
-# LD32 with symbolic offset. routes asm-parse LD/ST to the 48-bit WIDE
-# LS parcel (emitWideLSParcel), so the symbolic offset emits the WIDE-LS
-# fixup FIXUP_HAYDN_WIDE_LSOff20 -> R_HAYDN_LO20 (20-bit, ±512KB). The legacy
-# R_HAYDN_32 (FIXUP_HAYDN_32 from the deleted 4-byte FmtLS path) is gone.
+# Load with a symbolic offset. The load-bearing assertion is the reloc TYPE:
+# the symbolic offset must reach getExprFixupKind and come back R_HAYDN_LO20,
+# not the legacy R_HAYDN_32 (FIXUP_HAYDN_32, from the deleted 4-byte FmtLS
+# path) nor a wrong BranchSImm16.
+#
+# NOTE this object does not LINK under format E, deliberately and loudly.
+# s_lw_with_imm's offset is simm6 scaled by the access width, so a 20-bit
+# field has no geometry row for that placement and ld.lld reports
+# "no format E geometry for this placement" rather than patching the wrong
+# bits (FORMAT-E-SWITCH-PLAN.md § 5.8). A symbolic address is materialized and
+# fed to a _WITH_REG form instead (§ 5.6); nothing in CodeGen emits the shape
+# below. The assertion is kept because this is still the only gate on which
+# fixup kind an LS expression selects.
 #===----------------------------------------------------------------------===#
 
-ld32 r1, r2, data_sym
+s_lw_with_imm r1, r2, data_sym
 # CHECK:      {{.*}}: R_HAYDN_LO20 data_sym
 
 #===----------------------------------------------------------------------===#
-# ST32 with symbolic offset -- same WIDE-LS path, R_HAYDN_LO20
+# Store with symbolic offset -- same path, same R_HAYDN_LO20
 #===----------------------------------------------------------------------===#
 
-# asm-parse ST32 also routes through the 48-bit WIDE LS parcel. The
-# load-bearing assertion remains the reloc TYPE (R_HAYDN_LO20, not the
-# legacy R_HAYDN_32 nor a wrong BranchSImm16).
-st32 r3, r4, store_sym
+s_sw_with_imm r3, r4, store_sym
 # CHECK:      {{.*}}: R_HAYDN_LO20 store_sym

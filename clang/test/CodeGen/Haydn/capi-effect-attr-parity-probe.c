@@ -60,7 +60,7 @@ haydn_pred2_t pure_x2cmplt_attrs(haydn_x2int32 a, haydn_x2int32 b) {
 // ---------------------------------------------------------------------------
 
 // IR-LABEL: @sfr_x2slt32_attrs
-// IR: call <2 x i32> @llvm.haydn.x2slt32
+// IR: call void @llvm.haydn.x2slt32
 void sfr_x2slt32_attrs(haydn_x2int32 a, haydn_x2int32 b) {
   (void)haydn_x2slt32(a, b);
 }
@@ -79,9 +79,9 @@ unsigned sfr_movesfr2gpr_attrs(void) {
 
 // Two-epoch reverse order: both ambient movt survive CSE at O2 (C1.2+C1.3).
 // IR-LABEL: @sfr_two_epoch_movt_no_cse
-// IR: call <2 x i32> @llvm.haydn.x2slt32
+// IR: call void @llvm.haydn.x2slt32
 // IR: call <2 x i32> @llvm.haydn.x2movt32
-// IR: call <2 x i32> @llvm.haydn.x2slt32
+// IR: call void @llvm.haydn.x2slt32
 // IR: call <2 x i32> @llvm.haydn.x2movt32
 haydn_x2int32 sfr_two_epoch_movt_no_cse(haydn_x2int32 a, haydn_x2int32 b,
                                         haydn_x2int32 c, haydn_x2int32 d,

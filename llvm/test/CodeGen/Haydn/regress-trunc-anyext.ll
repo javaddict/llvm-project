@@ -39,119 +39,31 @@
 ; G_BRCOND uses the i1 value. This was the CoreMark blocker.
 
 
-; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
 
-; CHECK: 	.text
-; CHECK: 	.globl	test_trunc_s32_to_s1            // -- Begin function test_trunc_s32_to_s1
-; CHECK: 	.type	test_trunc_s32_to_s1,@function
-; CHECK: test_trunc_s32_to_s1:                   // @test_trunc_s32_to_s1
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
-; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ seq32	r2, r1, r2; sltu32	r1, r1, r4; nop }
-; CHECK: 	{ slt32	r3, r4, r3; xori32	r1, r1, 1; nop }
-; CHECK: 	{ xori32	r3, r3, 1; xori32	r2, r2, 1; nop }
-; CHECK: 	{ movt32	r3, r1, r2; nop; nop }
-; CHECK: 	{ not32	r1, r3; nop; nop }
-; CHECK: 	{ andi32	r1, r1, 1; nop; nop }
-; CHECK: 	{ nop; nop; bnez	r1, .LBB0_2 }
-; CHECK: // %bb.1:                               // %yes
-; CHECK: 	{ nop; nop; addi32_w	r1, r0, 42 }
-; CHECK: 	{ nop; nop; beqz	r0, .LBB0_3 }
-; CHECK: .LBB0_2:                                // %no
-; CHECK: 	{ nop; nop; addi32_w	r1, r0, 0 }
-; CHECK: .LBB0_3:                                // %yes
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
-; CHECK: .Lfunc_end0:
-; CHECK: 	.size	test_trunc_s32_to_s1, .Lfunc_end0-test_trunc_s32_to_s1
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK: 	.globl	test_anyext_i1_to_i32           // -- Begin function test_anyext_i1_to_i32
-; CHECK: 	.type	test_anyext_i1_to_i32,@function
-; CHECK: test_anyext_i1_to_i32:                  // @test_anyext_i1_to_i32
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
-; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ slt32	r1, r1, r2; nop; nop }
-; CHECK: 	{ movt32	r4, r3, r1; nop; nop }
-; CHECK: 	{ move32	r1, r4; nop; nop }
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
-; CHECK: .Lfunc_end1:
-; CHECK: 	.size	test_anyext_i1_to_i32, .Lfunc_end1-test_anyext_i1_to_i32
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK: 	.globl	test_trunc_s32_to_s16           // -- Begin function test_trunc_s32_to_s16
-; CHECK: 	.type	test_trunc_s32_to_s16,@function
-; CHECK: test_trunc_s32_to_s16:                  // @test_trunc_s32_to_s16
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
-; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ add32	r1, r1, r2; nop; nop }
-; CHECK: 	{ slli32	r1, r1, 16; nop; nop }
-; CHECK: 	{ srai32	r1, r1, 16; nop; nop }
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
-; CHECK: .Lfunc_end2:
-; CHECK: 	.size	test_trunc_s32_to_s16, .Lfunc_end2-test_trunc_s32_to_s16
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK: 	.globl	test_anyext_i16_to_i32          // -- Begin function test_anyext_i16_to_i32
-; CHECK: 	.type	test_anyext_i16_to_i32,@function
-; CHECK: test_anyext_i16_to_i32:                 // @test_anyext_i16_to_i32
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
-; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ add32	r1, r1, r2; nop; nop }
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
-; CHECK: .Lfunc_end3:
-; CHECK: 	.size	test_anyext_i16_to_i32, .Lfunc_end3-test_anyext_i16_to_i32
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK: 	.globl	test_anyext_i1_condition_i64_select // -- Begin function test_anyext_i1_condition_i64_select
-; CHECK: 	.type	test_anyext_i1_condition_i64_select,@function
-; CHECK: test_anyext_i1_condition_i64_select:    // @test_anyext_i1_condition_i64_select
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
-; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ move32_dr_l	r3, d1; subi32	sp, sp, 8; nop }
-; CHECK: 	{ move32_dr_h	r4, d1; seq32	r1, r1, r2; nop }
-; CHECK: 	{ move32_dr_l	r2, d0; move32_dr_h	r5, d0; nop }
-; CHECK: 	{ movt32	r3, r2, r1; nop; nop }
-; CHECK: 	{ nop; nop; st32	r3, sp, 0 }
-; CHECK: 	{ movt32	r4, r5, r1; nop; nop }
-; CHECK: 	{ nop; nop; st32	r4, sp, 4 }
-; CHECK: 	{ nop; ld64	d0, sp, 0; addi32_w	sp, sp, 8 }
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
-; CHECK: .Lfunc_end4:
-; CHECK: 	.size	test_anyext_i1_condition_i64_select, .Lfunc_end4-test_anyext_i1_condition_i64_select
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK: 	.section	".note.GNU-stack","",@progbits
 
 define i32 @test_trunc_s32_to_s1(i32 %a, i32 %b, i32 %c, i32 %d) {
-
-; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (S0-S1-S2 / setDesc members); .file skipped
-
-
+; CHECK-LABEL: test_trunc_s32_to_s1:
+; CHECK:       // #<spill-kpi> @test_trunc_s32_to_s1 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { seq32 r2, r1, r2; sltu32 r1, r1, r4; nop }
+; CHECK-NEXT:    { xori32 r1, r1, 1; slt32 r3, r4, r3 }
+; CHECK-NEXT:    { xori32 r3, r3, 1; xori32 r2, r2, 1 }
+; CHECK-NEXT:    { movt32 r3, r1, r2; nop; nop }
+; CHECK-NEXT:    { not32 r1, r3; nop; nop }
+; CHECK-NEXT:    { andi32 r1, r1, 1; nop }
+; CHECK-NEXT:    { bnez r1, .LBB0_2; nop; nop }
+; CHECK-NEXT:  // %bb.1: // %yes
+; CHECK-NEXT:    { addi32 r1, r0, 42; nop }
+; CHECK-NEXT:    { beqz r0, .LBB0_3; nop; nop }
+; CHECK-NEXT:  .LBB0_2: // %no
+; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
+; CHECK-NEXT:  .LBB0_3: // %yes
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   %cmp1 = icmp eq i32 %a, %b
   br i1 %cmp1, label %then, label %else
@@ -179,6 +91,18 @@ no:
 ; Exercises: G_SELECT with an i1 condition forces G_ANYEXT of the i1
 ; condition to s32 before the bitwise select expansion.
 define i32 @test_anyext_i1_to_i32(i32 %a, i32 %b, i32 %x, i32 %y) {
+; CHECK-LABEL: test_anyext_i1_to_i32:
+; CHECK:       // #<spill-kpi> @test_anyext_i1_to_i32 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { slt32 r1, r1, r2; nop; nop }
+; CHECK-NEXT:    { movt32 r4, r3, r1; nop; nop }
+; CHECK-NEXT:    { move32 r1, r4; nop; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   %cmp = icmp slt i32 %a, %b
   %result = select i1 %cmp, i32 %x, i32 %y
@@ -190,6 +114,18 @@ entry:
 ; then the caller sign-extends it back. The trunc selector must handle
 ; s32->s16 without buildCopy.
 define signext i16 @test_trunc_s32_to_s16(i32 %a, i32 %b) {
+; CHECK-LABEL: test_trunc_s32_to_s16:
+; CHECK:       // #<spill-kpi> @test_trunc_s32_to_s16 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
+; CHECK-NEXT:    { slli32 r1, r1, 16; nop; nop }
+; CHECK-NEXT:    { srai32 r1, r1, 16; nop; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   %sum = add i32 %a, %b
   %trunc = trunc i32 %sum to i16
@@ -200,6 +136,16 @@ entry:
 ; Exercises: i16 argument that is any-extended to i32. On Haydn, sub-32-bit
 ; values live in GPR32, so anyext is constrain + replaceRegWith.
 define i32 @test_anyext_i16_to_i32(i16 signext %a, i32 %b) {
+; CHECK-LABEL: test_anyext_i16_to_i32:
+; CHECK:       // #<spill-kpi> @test_anyext_i16_to_i32 spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   %ext = sext i16 %a to i32
   %result = add i32 %ext, %b
@@ -211,6 +157,22 @@ entry:
 ; must be any-extended to s32 for the bitwise select, and the i64 values
 ; are handled by the s64 select path.
 define i64 @test_anyext_i1_condition_i64_select(i32 %a, i32 %b, i64 %x, i64 %y) {
+; CHECK-LABEL: test_anyext_i1_condition_i64_select:
+; CHECK:       // #<spill-kpi> @test_anyext_i1_condition_i64_select spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { move32_dr_l r3, d1; move32_dr_h r4, d1; nop }
+; CHECK-NEXT:    { seq32 r1, r1, r2; move32_dr_l r2, d0; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r3, r2, r1 }
+; CHECK-NEXT:    { move32_dr_h r5, d0; nop; s_sw_with_imm r3, sp, 0 }
+; CHECK-NEXT:    { movt32 r4, r5, r1; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   %cmp = icmp eq i32 %a, %b
   %result = select i1 %cmp, i64 %x, i64 %y

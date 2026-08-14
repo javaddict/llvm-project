@@ -2,41 +2,48 @@
 // RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 // REQUIRES: haydn-registered-target
 //
-// REGRESSION TEST (/ Stage-2 Bundle128 ALU32 FU): the hand-computed
-// 16 LE bytes for `add32 r1, r2, r3` (per s0_encoding.md §4.1 ALU32-RR +
-// §5 ADD32 opcode remap 0x00 -> 0x3E + byte table) MUST decode to
-// `add32 r1, r2, r3` AND occupy exactly 16 bytes (width assertion).
+// REGRESSION TEST: hand-computed bytes for `add32 r1, r2, r3` MUST decode
+// back to `add32 r1, r2, r3` AND occupy exactly 12 bytes (width assertion).
 //
-// === BYTE DERIVATION (hand-computed per) ===
+// This is a BYTE-PINNED oracle and its value is that the bytes come from the
+// ISA document rather than from the encoder. `--emit roundtrip` checks the
+// encoder against the decoder and passes on any defect symmetric across the
+// pair; these bytes were derived from format_e_bit_layout_v2.json by hand and
+// agree with neither by construction. Keep it that way — if this file is ever
+// "updated" by pasting `-show-encoding` output, it stops being evidence.
 //
-// s0 layout (48b window, MSB-offsets [80,127]):
-// FU(3b) = ALU32 = 000 @ MSB-off [80,82] -> bundle[47:45]
-// opcode(6b)= 0x3E @ MSB-off [83,88] -> bundle[44:39]
-// rsd1(4b) = r2 = 2 @ MSB-off [89,92] -> bundle[38:35] (src first)
-// rsd2(4b) = r3 = 3 @ MSB-off [93,96] -> bundle[34:31]
-// rtd(4b) = r1 = 1 @ MSB-off [97,100] -> bundle[30:27] (dest last)
-// spare(27b)= 0
-// s1, s2 = NOP (all-zero).
+// === BYTE DERIVATION (hand-computed from format_e_bit_layout_v2.json) ===
 //
-// Encoder places sources BEFORE dest (s1_encoding.md RR convention applied
-// uniformly across s0/s1/s2 by placeFlexSlot — NOT the s0_encoding.md doc
-// order of "rt rs1 rs2").
+//   bit[2:0]   = 0b111    format indicator
+//   bit[3]     = 0        entry_num: 2 entries
+//   bit[5:4]   = 0        reserved
+//   entry0 = bit[50:6]:
+//     mapping   bit[7:6]   = 0b00      -> ALU0
+//     type_code bit[12:8]  = 0b01011   -> RR
+//     opcode    bit[19:13] = 0x04      -> ADD32
+//     dest rt   bit[23:20] = 1         -> r1
+//     src1 rs1  bit[27:24] = 2         -> r2
+//     src2 rs2  bit[31:28] = 3         -> r3
+//     reserved  bit[50:32] = 0
+//   entry1 = bit[91:51]:
+//     mapping   bit[52:51] = 0b00      -> ALU1
+//     type_code bit[53]    = 0         -> NOP
 //
-// Result 128-bit word, LE 16 bytes (R2-dense Bundle128):
-// 32 01 00 00 40 01 00 00 00 00 00 00 00 00 00 00
+//   Note the field order: the ISA document places dest BEFORE the sources in
+//   the bit layout, while the asm writes `add32 rt, rs1, rs2`. The two orders
+//   are independent and the layout is the authority for the bits.
 //
-// NO XFAIL — Stage-2 ALU32 (ADD32) is migrated to Bundle128 (encoder routes
-// Haydn::ADD32 through encodeBundle128 per isBundle128TargetOpcode).
+//   Little-endian 12 bytes: 07 8b 10 32 00 00 00 00 00 00 00 00
 
 // CHECK-LABEL: <.text>:
-// The byte-CHECK asserts BOTH the exact 16 bytes AND the width (16 bytes
-// shown, not 8 — a regression to legacy 8-byte slot-OR would show 8 bytes
-// at this offset and a different op at 0x08).
-// CHECK: 0: 32 01 00 00 40 01 00 00 00 00 00 00 00 00 00 00
-// CHECK: add32 r1, r2, r3
+// The byte-CHECK asserts BOTH the exact bytes AND the width: 12 shown, not
+// 16 — a Bundle128 parcel here would list 16 and put the next op at 0x10.
+// CHECK: 0: 07 8b 10 32 00 00 00 00 00 00 00 00 {{.*}}add32{{.*}}r1, r2, r3
 // CHECK-NOT: <?>
 // CHECK-NOT: <unknown>
+// One ADD32 and no more: the pre-bundle decoder produced repeated ops at
+// sub-parcel intervals, and this is what catches a return to that.
 // CHECK-NOT: add32
 
-.byte 0x32, 0x01, 0x00, 0x00, 0x40, 0x01, 0x00, 0x00
-.byte 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+.byte 0x07, 0x8b, 0x10, 0x32, 0x00, 0x00
+.byte 0x00, 0x00, 0x00, 0x00, 0x00, 0x00

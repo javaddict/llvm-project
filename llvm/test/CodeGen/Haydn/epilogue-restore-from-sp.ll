@@ -11,16 +11,16 @@
 ; Symptom: main's saved LR (in R15) is lost across printf and the program
 ; returns to garbage.
 ;
-; Fix: the epilogue restores GPRs directly from SP (LD32 rt, SP, off), no
+; Fix: the epilogue restores GPRs directly from SP (S_LW_{{[A-Z_]*}} rt, SP, off), no
 ; R12 base pointer.
 ;
 ; CHECK-LABEL: epilogue_restore_from_sp:
-; CHECK: st32
-; CHECK: jal{{(\.s[012])?}}
-; CHECK: ld32
+; CHECK: s_sw_{{[a-z_]*}}
+; CHECK: jal{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK: s_lw_{{[a-z_]*}}
 ; CHECK: sp,
-; CHECK: jalr{{(\.s[012])?}}
-; CHECK-NOT: ld32 {{[^,]+}}, r12,
+; CHECK: jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}
+; CHECK-NOT: s_lw_{{[a-z_]*}} {{[^,]+}}, r12,
 define void @epilogue_restore_from_sp(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 entry:
   call void @callee_with_many_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %a, i32 %b, i32 %c, i32 %d)

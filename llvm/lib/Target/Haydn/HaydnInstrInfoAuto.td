@@ -16,254 +16,343 @@
 def ADD64S : FmtALU64<0x67, 0x000,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "add64s	$rd, $rs1, $rs2", []>;
+    "add64s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def ADD64S_H : FmtALU64<0x67, 0x001,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "add64s_h	$rd, $rs1, $rs2", []>;
+    "add64s_h	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def ADD64S_L : FmtALU64<0x67, 0x002,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "add64s_l	$rd, $rs1, $rs2", []>;
+    "add64s_l	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def ADD64_H : FmtALU64<0x67, 0x003,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "add64_h	$rd, $rs1, $rs2", []>;
+    "add64_h	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def ADD64_L : FmtALU64<0x67, 0x004,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "add64_l	$rd, $rs1, $rs2", []>;
+    "add64_l	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def F2MULAA32RS_HHLL : FmtALU64Acc<0x67, 0x005,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulaa32rs_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULAA32RS_HLLH : FmtALU64Acc<0x67, 0x006,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulaa32rs_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULAA32R_HHLL : FmtALU64Acc<0x67, 0x007,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulaa32r_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULAA32R_HLLH : FmtALU64Acc<0x67, 0x008,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulaa32r_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULAS32RS_HHLL : FmtALU64<0x67, 0x009,
+def F2MULAS32RS_HHLL : FmtALU64Acc<0x67, 0x009,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32rs_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32rs_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULAS32RS_HLLH : FmtALU64<0x67, 0x00A,
+def F2MULAS32RS_HLLH : FmtALU64Acc<0x67, 0x00A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32rs_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32rs_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULAS32R_HHLL : FmtALU64<0x67, 0x00B,
+def F2MULAS32R_HHLL : FmtALU64Acc<0x67, 0x00B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32r_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32r_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULAS32R_HLLH : FmtALU64<0x67, 0x00C,
+def F2MULAS32R_HLLH : FmtALU64Acc<0x67, 0x00C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32r_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulas32r_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULSA32RS_HHLL : FmtALU64<0x67, 0x00D,
+def F2MULSA32RS_HHLL : FmtALU64Acc<0x67, 0x00D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32rs_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32rs_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULSA32RS_HLLH : FmtALU64<0x67, 0x00E,
+def F2MULSA32RS_HLLH : FmtALU64Acc<0x67, 0x00E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32rs_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32rs_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULSA32R_HHLL : FmtALU64<0x67, 0x00F,
+def F2MULSA32R_HHLL : FmtALU64Acc<0x67, 0x00F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32r_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32r_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def F2MULSA32R_HLLH : FmtALU64<0x67, 0x010,
+def F2MULSA32R_HLLH : FmtALU64Acc<0x67, 0x010,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32r_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "f2mulsa32r_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULSS32RS_HHLL : FmtALU64Acc<0x67, 0x011,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulss32rs_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULSS32RS_HLLH : FmtALU64Acc<0x67, 0x012,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulss32rs_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULSS32R_HHLL : FmtALU64Acc<0x67, 0x013,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulss32r_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULSS32R_HLLH : FmtALU64Acc<0x67, 0x014,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "f2mulss32r_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def F2MULZAA32RS_HHLL : FmtALU64<0x67, 0x015,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32rs_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZAA32RS_HLLH : FmtALU64<0x67, 0x016,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32rs_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZAA32R_HHLL : FmtALU64<0x67, 0x017,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32r_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZAA32R_HLLH : FmtALU64<0x67, 0x018,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32r_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZAS32RS_HHLL : FmtALU64<0x67, 0x019,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzas32rs_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZAS32RS_HLLH : FmtALU64<0x67, 0x01A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzas32rs_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZAS32R_HHLL : FmtALU64<0x67, 0x01B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzas32r_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZAS32R_HLLH : FmtALU64<0x67, 0x01C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzas32r_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSA32RS_HHLL : FmtALU64<0x67, 0x01D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32rs_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSA32RS_HLLH : FmtALU64<0x67, 0x01E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32rs_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSA32R_HHLL : FmtALU64<0x67, 0x01F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32r_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSA32R_HLLH : FmtALU64<0x67, 0x020,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32r_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSS32RS_HHLL : FmtALU64<0x67, 0x021,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzss32rs_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSS32RS_HLLH : FmtALU64<0x67, 0x022,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzss32rs_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSS32R_HHLL : FmtALU64<0x67, 0x023,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzss32r_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def F2MULZSS32R_HLLH : FmtALU64<0x67, 0x024,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzss32r_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FF2MUL32RS_HH : FmtALU64<0x67, 0x025,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs_hh	$rd, $rs1, $rs2", []>;
+    "ff2mul32rs_hh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FF2MUL32RS_LH : FmtALU64<0x67, 0x026,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs_lh	$rd, $rs1, $rs2", []>;
+    "ff2mul32rs_lh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FF2MUL32RS_LL : FmtALU64<0x67, 0x027,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs_ll	$rd, $rs1, $rs2", []>;
+    "ff2mul32rs_ll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FF2MUL32R_HH : FmtALU64<0x67, 0x028,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r_hh	$rd, $rs1, $rs2", []>;
+    "ff2mul32r_hh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FF2MUL32R_LH : FmtALU64<0x67, 0x029,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r_lh	$rd, $rs1, $rs2", []>;
+    "ff2mul32r_lh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FF2MUL32R_LL : FmtALU64<0x67, 0x02A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r_ll	$rd, $rs1, $rs2", []>;
+    "ff2mul32r_ll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FF2MULA32RS_HH : FmtALU64Acc<0x67, 0x02B,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2mula32rs_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULA32RS_LH : FmtALU64Acc<0x67, 0x02C,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2mula32rs_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULA32RS_LL : FmtALU64Acc<0x67, 0x02D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2mula32rs_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // FF2MULA32R/FF2MULS32R/FF2MULS32RS — DB behavior for all nine is a
 // read-modify-write of the accumulator: `rtd = rtd +/- rnd(product)`
@@ -281,351 +370,433 @@ def FF2MULA32R_HH : FmtALU64Acc<0x67, 0x02E,
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2mula32r_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULA32R_LH : FmtALU64Acc<0x67, 0x02F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2mula32r_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULA32R_LL : FmtALU64Acc<0x67, 0x030,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2mula32r_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULS32RS_HH : FmtALU64Acc<0x67, 0x031,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2muls32rs_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULS32RS_LH : FmtALU64Acc<0x67, 0x032,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2muls32rs_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULS32RS_LL : FmtALU64Acc<0x67, 0x033,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2muls32rs_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULS32R_HH : FmtALU64Acc<0x67, 0x034,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2muls32r_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULS32R_LH : FmtALU64Acc<0x67, 0x035,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2muls32r_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FF2MULS32R_LL : FmtALU64Acc<0x67, 0x036,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "ff2muls32r_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMUL16_HS00 : FmtALU64<0x67, 0x037,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs00	$rd, $rs1, $rs2", []>;
+    "fmul16_hs00	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS01 : FmtALU64<0x67, 0x038,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs01	$rd, $rs1, $rs2", []>;
+    "fmul16_hs01	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS02 : FmtALU64<0x67, 0x039,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs02	$rd, $rs1, $rs2", []>;
+    "fmul16_hs02	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS03 : FmtALU64<0x67, 0x03A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs03	$rd, $rs1, $rs2", []>;
+    "fmul16_hs03	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS11 : FmtALU64<0x67, 0x03B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs11	$rd, $rs1, $rs2", []>;
+    "fmul16_hs11	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS12 : FmtALU64<0x67, 0x03C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs12	$rd, $rs1, $rs2", []>;
+    "fmul16_hs12	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS13 : FmtALU64<0x67, 0x03D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs13	$rd, $rs1, $rs2", []>;
+    "fmul16_hs13	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS22 : FmtALU64<0x67, 0x03E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs22	$rd, $rs1, $rs2", []>;
+    "fmul16_hs22	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS23 : FmtALU64<0x67, 0x03F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs23	$rd, $rs1, $rs2", []>;
+    "fmul16_hs23	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_HS33 : FmtALU64<0x67, 0x040,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs33	$rd, $rs1, $rs2", []>;
+    "fmul16_hs33	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS00 : FmtALU64<0x67, 0x041,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls00	$rd, $rs1, $rs2", []>;
+    "fmul16_ls00	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS01 : FmtALU64<0x67, 0x042,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls01	$rd, $rs1, $rs2", []>;
+    "fmul16_ls01	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS02 : FmtALU64<0x67, 0x043,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls02	$rd, $rs1, $rs2", []>;
+    "fmul16_ls02	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS03 : FmtALU64<0x67, 0x044,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls03	$rd, $rs1, $rs2", []>;
+    "fmul16_ls03	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS11 : FmtALU64<0x67, 0x045,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls11	$rd, $rs1, $rs2", []>;
+    "fmul16_ls11	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS12 : FmtALU64<0x67, 0x046,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls12	$rd, $rs1, $rs2", []>;
+    "fmul16_ls12	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS13 : FmtALU64<0x67, 0x047,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls13	$rd, $rs1, $rs2", []>;
+    "fmul16_ls13	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS22 : FmtALU64<0x67, 0x048,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls22	$rd, $rs1, $rs2", []>;
+    "fmul16_ls22	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS23 : FmtALU64<0x67, 0x049,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls23	$rd, $rs1, $rs2", []>;
+    "fmul16_ls23	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL16_LS33 : FmtALU64<0x67, 0x04A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls33	$rd, $rs1, $rs2", []>;
+    "fmul16_ls33	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def FMUL32S_HH : FmtALU64<0x67, 0x04B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s_hh	$rd, $rs1, $rs2", []>;
+    "fmul32s_hh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMUL32S_LH : FmtALU64<0x67, 0x04C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s_lh	$rd, $rs1, $rs2", []>;
+    "fmul32s_lh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMUL32S_LL : FmtALU64<0x67, 0x04D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s_ll	$rd, $rs1, $rs2", []>;
+    "fmul32s_ll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULA16_HS00 : FmtALU64Acc<0x67, 0x04E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS01 : FmtALU64Acc<0x67, 0x04F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs01	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS02 : FmtALU64Acc<0x67, 0x050,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs02	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS03 : FmtALU64Acc<0x67, 0x051,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs03	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS11 : FmtALU64Acc<0x67, 0x052,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs11	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS12 : FmtALU64Acc<0x67, 0x053,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs12	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS13 : FmtALU64Acc<0x67, 0x054,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs13	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS22 : FmtALU64Acc<0x67, 0x055,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs22	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS23 : FmtALU64Acc<0x67, 0x056,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs23	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_HS33 : FmtALU64Acc<0x67, 0x057,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_hs33	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS00 : FmtALU64Acc<0x67, 0x058,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS01 : FmtALU64Acc<0x67, 0x059,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls01	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS02 : FmtALU64Acc<0x67, 0x05A,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls02	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS03 : FmtALU64Acc<0x67, 0x05B,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls03	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS11 : FmtALU64Acc<0x67, 0x05C,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls11	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS12 : FmtALU64Acc<0x67, 0x05D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls12	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS13 : FmtALU64Acc<0x67, 0x05E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls13	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS22 : FmtALU64Acc<0x67, 0x05F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls22	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS23 : FmtALU64Acc<0x67, 0x060,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls23	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA16_LS33 : FmtALU64Acc<0x67, 0x061,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula16_ls33	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA32S_HH : FmtALU64Acc<0x67, 0x062,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula32s_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA32S_LH : FmtALU64Acc<0x67, 0x063,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula32s_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULA32S_LL : FmtALU64Acc<0x67, 0x064,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmula32s_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULAA16_HS_11_00 : FmtALU64Acc<0x67, 0x065,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulaa16_hs_11_00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULAA16_HS_13_02 : FmtALU64<0x67, 0x066,
+def FMULAA16_HS_13_02 : FmtALU64Acc<0x67, 0x066,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_hs_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_hs_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // Spec/DB: rtd[63:32] = SATQ1.31(rtd[63:32] + p3 + p2); DR_Read_Port
 // includes rtd. Encoding is byte-identical to prior FmtALU64 form
@@ -636,22 +807,32 @@ def FMULAA16_HS_33_22 : FmtALU64Acc<0x67, 0x067,
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulaa16_hs_33_22	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULAA16_LS_11_00 : FmtALU64<0x67, 0x068,
+def FMULAA16_LS_11_00 : FmtALU64Acc<0x67, 0x068,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_11_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_ls_11_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULAA16_LS_13_02 : FmtALU64<0x67, 0x069,
+def FMULAA16_LS_13_02 : FmtALU64Acc<0x67, 0x069,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_ls_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULAA16_LS_33_22 : FmtALU64<0x67, 0x06A,
+def FMULAA16_LS_33_22 : FmtALU64Acc<0x67, 0x06A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_33_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulaa16_ls_33_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // FMULAA32S_HHLL/HLLH and FMULAS32S_HHLL/HLLH are accumulator-form dual-MACs:
 // the DB (haydn_instruction_db.json:7272/7314/7356/7397) shows slot-1 reads
@@ -673,149 +854,216 @@ def FMULAA32S_HHLL : FmtALU64Acc<0x67, 0x06B,
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulaa32s_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULAA32S_HLLH : FmtALU64Acc<0x67, 0x06C,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulaa32s_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULAS32S_HHLL : FmtALU64Acc<0x67, 0x06D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulas32s_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULAS32S_HLLH : FmtALU64Acc<0x67, 0x06E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulas32s_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS00 : FmtALU64<0x67, 0x06F,
+def FMULS16_HS00 : FmtALU64Acc<0x67, 0x06F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS01 : FmtALU64<0x67, 0x070,
+def FMULS16_HS01 : FmtALU64Acc<0x67, 0x070,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs01	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs01	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS02 : FmtALU64<0x67, 0x071,
+def FMULS16_HS02 : FmtALU64Acc<0x67, 0x071,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS03 : FmtALU64<0x67, 0x072,
+def FMULS16_HS03 : FmtALU64Acc<0x67, 0x072,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs03	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs03	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS11 : FmtALU64<0x67, 0x073,
+def FMULS16_HS11 : FmtALU64Acc<0x67, 0x073,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS12 : FmtALU64<0x67, 0x074,
+def FMULS16_HS12 : FmtALU64Acc<0x67, 0x074,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs12	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs12	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS13 : FmtALU64<0x67, 0x075,
+def FMULS16_HS13 : FmtALU64Acc<0x67, 0x075,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs13	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs13	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS22 : FmtALU64<0x67, 0x076,
+def FMULS16_HS22 : FmtALU64Acc<0x67, 0x076,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS23 : FmtALU64<0x67, 0x077,
+def FMULS16_HS23 : FmtALU64Acc<0x67, 0x077,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs23	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs23	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_HS33 : FmtALU64<0x67, 0x078,
+def FMULS16_HS33 : FmtALU64Acc<0x67, 0x078,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_hs33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS00 : FmtALU64<0x67, 0x079,
+def FMULS16_LS00 : FmtALU64Acc<0x67, 0x079,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS01 : FmtALU64<0x67, 0x07A,
+def FMULS16_LS01 : FmtALU64Acc<0x67, 0x07A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls01	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls01	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS02 : FmtALU64<0x67, 0x07B,
+def FMULS16_LS02 : FmtALU64Acc<0x67, 0x07B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS03 : FmtALU64<0x67, 0x07C,
+def FMULS16_LS03 : FmtALU64Acc<0x67, 0x07C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls03	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls03	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS11 : FmtALU64<0x67, 0x07D,
+def FMULS16_LS11 : FmtALU64Acc<0x67, 0x07D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS12 : FmtALU64<0x67, 0x07E,
+def FMULS16_LS12 : FmtALU64Acc<0x67, 0x07E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls12	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls12	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS13 : FmtALU64<0x67, 0x07F,
+def FMULS16_LS13 : FmtALU64Acc<0x67, 0x07F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls13	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls13	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS22 : FmtALU64<0x67, 0x080,
+def FMULS16_LS22 : FmtALU64Acc<0x67, 0x080,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS23 : FmtALU64<0x67, 0x081,
+def FMULS16_LS23 : FmtALU64Acc<0x67, 0x081,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls23	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls23	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULS16_LS33 : FmtALU64<0x67, 0x082,
+def FMULS16_LS33 : FmtALU64Acc<0x67, 0x082,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmuls16_ls33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULS32S_HH : FmtALU64Acc<0x67, 0x083,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmuls32s_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULS32S_LH : FmtALU64Acc<0x67, 0x084,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmuls32s_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULS32S_LL : FmtALU64Acc<0x67, 0x085,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmuls32s_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // FMULSA32S_HHLL/HLLH: accumulator-form (DB :8375/:8416 behavior
 // `rtd = SATQ1.63(rtd -...)` reads rtd). Migrated FmtALU64 -> FmtALU64Acc
@@ -834,46 +1082,64 @@ def FMULSA32S_HHLL : FmtALU64Acc<0x67, 0x086,
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulsa32s_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULSA32S_HLLH : FmtALU64Acc<0x67, 0x087,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulsa32s_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULSS16_HS_11_00 : FmtALU64Acc<0x67, 0x088,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulss16_hs_11_00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULSS16_HS_13_02 : FmtALU64<0x67, 0x089,
+def FMULSS16_HS_13_02 : FmtALU64Acc<0x67, 0x089,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_hs_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_hs_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULSS16_HS_33_22 : FmtALU64<0x67, 0x08A,
+def FMULSS16_HS_33_22 : FmtALU64Acc<0x67, 0x08A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_hs_33_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_hs_33_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULSS16_LS_11_00 : FmtALU64<0x67, 0x08B,
+def FMULSS16_LS_11_00 : FmtALU64Acc<0x67, 0x08B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_11_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_ls_11_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULSS16_LS_13_02 : FmtALU64<0x67, 0x08C,
+def FMULSS16_LS_13_02 : FmtALU64Acc<0x67, 0x08C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_13_02	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_ls_13_02	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def FMULSS16_LS_33_22 : FmtALU64<0x67, 0x08D,
+def FMULSS16_LS_33_22 : FmtALU64Acc<0x67, 0x08D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_33_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "fmulss16_ls_33_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // FMULSS32S_HHLL/HLLH — spec correction (Rev 2): the *SS*
 // (sub-sub → combine '+') inner-product sign was inverted in the old manual.
@@ -889,468 +1155,585 @@ def FMULSS32S_HHLL : FmtALU64Acc<0x67, 0x08E,
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulss32s_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULSS32S_HLLH : FmtALU64Acc<0x67, 0x08F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "fmulss32s_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def FMULZAA16_HS_11_00 : FmtALU64<0x67, 0x090,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_hs_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzaa16_hs_11_00	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAA16_HS_13_02 : FmtALU64<0x67, 0x091,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_hs_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzaa16_hs_13_02	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAA16_HS_33_22 : FmtALU64<0x67, 0x092,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_hs_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzaa16_hs_33_22	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAA16_LS_11_00 : FmtALU64<0x67, 0x093,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_ls_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzaa16_ls_11_00	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAA16_LS_13_02 : FmtALU64<0x67, 0x094,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_ls_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzaa16_ls_13_02	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAA16_LS_33_22 : FmtALU64<0x67, 0x095,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_ls_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzaa16_ls_33_22	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAA32S_HHLL : FmtALU64<0x67, 0x096,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzaa32s_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAA32S_HLLH : FmtALU64<0x67, 0x097,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzaa32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAS32S_HHLL : FmtALU64<0x67, 0x098,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzas32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzas32s_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZAS32S_HLLH : FmtALU64<0x67, 0x099,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzas32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzas32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSA32S_HHLL : FmtALU64<0x67, 0x09A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzsa32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzsa32s_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSA32S_HLLH : FmtALU64<0x67, 0x09B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzsa32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzsa32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS16_HS_11_00 : FmtALU64<0x67, 0x09C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_hs_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzss16_hs_11_00	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS16_HS_13_02 : FmtALU64<0x67, 0x09D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_hs_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzss16_hs_13_02	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS16_HS_33_22 : FmtALU64<0x67, 0x09E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_hs_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzss16_hs_33_22	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS16_LS_11_00 : FmtALU64<0x67, 0x09F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_ls_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzss16_ls_11_00	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS16_LS_13_02 : FmtALU64<0x67, 0x0A0,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_ls_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzss16_ls_13_02	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS16_LS_33_22 : FmtALU64<0x67, 0x0A1,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_ls_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzss16_ls_33_22	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS32S_HHLL : FmtALU64<0x67, 0x0A2,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzss32s_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def FMULZSS32S_HLLH : FmtALU64<0x67, 0x0A3,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzss32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MAX64 : FmtALU64<0x67, 0x0A4,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "max64	$rd, $rs1, $rs2", []>;
+    "max64	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def MIN64 : FmtALU64<0x67, 0x0A5,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "min64	$rd, $rs1, $rs2", []>;
+    "min64	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def MUL16AQ : FmtALU64Acc<0x67, 0x0A6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mul16aq	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MUL16ZAQ : FmtALU64<0x67, 0x0A7,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul16zaq	$rd, $rs1, $rs2", []>;
+    "mul16zaq	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MUL64_HH : FmtALU64<0x67, 0x0A8,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.hh	$rd, $rs1, $rs2", []>;
+    "mul64.hh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_HL : FmtALU64<0x67, 0x0A9,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.hl	$rd, $rs1, $rs2", []>;
+    "mul64.hl	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_HUH : FmtALU64<0x67, 0x0AA,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.huh	$rd, $rs1, $rs2", []>;
+    "mul64.huh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_HUL : FmtALU64<0x67, 0x0AB,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.hul	$rd, $rs1, $rs2", []>;
+    "mul64.hul	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_LH : FmtALU64<0x67, 0x0AC,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.lh	$rd, $rs1, $rs2", []>;
+    "mul64.lh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_LL : FmtALU64<0x67, 0x0AD,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ll	$rd, $rs1, $rs2", []>;
+    "mul64.ll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_LUH : FmtALU64<0x67, 0x0AE,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.luh	$rd, $rs1, $rs2", []>;
+    "mul64.luh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_LUL : FmtALU64<0x67, 0x0AF,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.lul	$rd, $rs1, $rs2", []>;
+    "mul64.lul	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_UHH : FmtALU64<0x67, 0x0B0,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhh	$rd, $rs1, $rs2", []>;
+    "mul64.uhh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_UHL : FmtALU64<0x67, 0x0B1,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhl	$rd, $rs1, $rs2", []>;
+    "mul64.uhl	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_UHUH : FmtALU64<0x67, 0x0B2,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhuh	$rd, $rs1, $rs2", []>;
+    "mul64.uhuh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_UHUL : FmtALU64<0x67, 0x0B3,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhul	$rd, $rs1, $rs2", []>;
+    "mul64.uhul	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_ULH : FmtALU64<0x67, 0x0B4,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ulh	$rd, $rs1, $rs2", []>;
+    "mul64.ulh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_ULL : FmtALU64<0x67, 0x0B5,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ull	$rd, $rs1, $rs2", []>;
+    "mul64.ull	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_ULUH : FmtALU64<0x67, 0x0B6,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uluh	$rd, $rs1, $rs2", []>;
+    "mul64.uluh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MUL64_ULUL : FmtALU64<0x67, 0x0B7,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ulul	$rd, $rs1, $rs2", []>;
+    "mul64.ulul	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MULA64_HH : FmtALU64Acc<0x67, 0x0B8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_HL : FmtALU64Acc<0x67, 0x0B9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.hl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_HUH : FmtALU64Acc<0x67, 0x0BA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.huh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_HUL : FmtALU64Acc<0x67, 0x0BB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.hul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_LH : FmtALU64Acc<0x67, 0x0BC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_LL : FmtALU64Acc<0x67, 0x0BD,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_LUH : FmtALU64Acc<0x67, 0x0BE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.luh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_LUL : FmtALU64Acc<0x67, 0x0BF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.lul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_UHH : FmtALU64Acc<0x67, 0x0C0,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.uhh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_UHL : FmtALU64Acc<0x67, 0x0C1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.uhl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_UHUH : FmtALU64Acc<0x67, 0x0C2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.uhuh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_UHUL : FmtALU64Acc<0x67, 0x0C3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.uhul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_ULH : FmtALU64Acc<0x67, 0x0C4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.ulh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_ULL : FmtALU64Acc<0x67, 0x0C5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.ull	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_ULUH : FmtALU64Acc<0x67, 0x0C6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.uluh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULA64_ULUL : FmtALU64Acc<0x67, 0x0C7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mula64.ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAA32_HHLL : FmtALU64Acc<0x67, 0x0C8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulaa32_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAA32_HLLH : FmtALU64Acc<0x67, 0x0C9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulaa32_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS32_HHLL : FmtALU64Acc<0x67, 0x0CA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas32_hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS32_HLLH : FmtALU64Acc<0x67, 0x0CB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas32_hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_HH : FmtALU64Acc<0x67, 0x0CC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_HL : FmtALU64Acc<0x67, 0x0CD,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_hl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_HUH : FmtALU64Acc<0x67, 0x0CE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_huh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_HUL : FmtALU64Acc<0x67, 0x0CF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_hul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_LH : FmtALU64Acc<0x67, 0x0D0,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_LL : FmtALU64Acc<0x67, 0x0D1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_LUH : FmtALU64Acc<0x67, 0x0D2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_luh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_LUL : FmtALU64Acc<0x67, 0x0D3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_lul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_UHH : FmtALU64Acc<0x67, 0x0D4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_uhh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_UHL : FmtALU64Acc<0x67, 0x0D5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_uhl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_UHUH : FmtALU64Acc<0x67, 0x0D6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_uhuh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_UHUL : FmtALU64Acc<0x67, 0x0D7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_uhul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_ULH : FmtALU64Acc<0x67, 0x0D8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_ulh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_ULL : FmtALU64Acc<0x67, 0x0D9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_ull	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_ULUH : FmtALU64Acc<0x67, 0x0DA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_uluh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULAS64_ULUL : FmtALU64Acc<0x67, 0x0DB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulas64_ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // MULL/MULSSH/MULSUH/MULUUH — slot-0 GPR32 multiply (DB pipeline=MAC
 // slots=[0], latency 2; golden slot0_alu indices 65-68). migrated these
@@ -1374,10 +1757,12 @@ def MULL : FmtALU32Ext<0x3F, 0b00000,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "mull	$rd, $rs1, $rs2", []> {
-  // rt = rs*rt destructive wire form — $rs2 (source 2) is tied to $rd
-  // (dest), so the encoded rt field carries rs2. TwoAddress inserts a MOV
-  // copy when the selector's dst != src2.
-  let Constraints = "$rd = $rs2";
+  // NOT tied, despite an earlier note claiming a "destructive wire form".
+  // The database reads rs1 and rs2 and writes rt, three distinct registers,
+  // and both FmtALU32Ext and the format E members carry three register
+  // fields. The tie only made TwoAddress insert a copy the hardware never
+  // needed. FORMAT-E-SWITCH-PLAN.md 5.11.
+  let Itinerary = Unit_MAC0MAC1_L1;
 }
 
 def MULS64_HH : FmtALU64Acc<0x67, 0x0DD,
@@ -1385,244 +1770,288 @@ def MULS64_HH : FmtALU64Acc<0x67, 0x0DD,
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_HL : FmtALU64Acc<0x67, 0x0DE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.hl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_HUH : FmtALU64Acc<0x67, 0x0DF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.huh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_HUL : FmtALU64Acc<0x67, 0x0E0,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.hul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_LH : FmtALU64Acc<0x67, 0x0E1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_LL : FmtALU64Acc<0x67, 0x0E2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_LUH : FmtALU64Acc<0x67, 0x0E3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.luh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_LUL : FmtALU64Acc<0x67, 0x0E4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.lul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_UHH : FmtALU64Acc<0x67, 0x0E5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.uhh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_UHL : FmtALU64Acc<0x67, 0x0E6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.uhl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_UHUH : FmtALU64Acc<0x67, 0x0E7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.uhuh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_UHUL : FmtALU64Acc<0x67, 0x0E8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.uhul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_ULH : FmtALU64Acc<0x67, 0x0E9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.ulh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_ULL : FmtALU64Acc<0x67, 0x0EA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.ull	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_ULUH : FmtALU64Acc<0x67, 0x0EB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.uluh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULS64_ULUL : FmtALU64Acc<0x67, 0x0EC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "muls64.ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def MULSA32_HHLL : FmtALU64<0x67, 0x0ED,
+def MULSA32_HHLL : FmtALU64Acc<0x67, 0x0ED,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulsa32_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulsa32_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def MULSA32_HLLH : FmtALU64<0x67, 0x0EE,
+def MULSA32_HLLH : FmtALU64Acc<0x67, 0x0EE,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulsa32_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulsa32_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def MULSS32_HHLL : FmtALU64<0x67, 0x0EF,
+def MULSS32_HHLL : FmtALU64Acc<0x67, 0x0EF,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulss32_hhll	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulss32_hhll	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def MULSS32_HLLH : FmtALU64<0x67, 0x0F0,
+def MULSS32_HLLH : FmtALU64Acc<0x67, 0x0F0,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulss32_hllh	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "mulss32_hllh	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_HH : FmtALU64Acc<0x67, 0x0F1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_HL : FmtALU64Acc<0x67, 0x0F2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_hl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_HUH : FmtALU64Acc<0x67, 0x0F3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_huh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_HUL : FmtALU64Acc<0x67, 0x0F4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_hul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_LH : FmtALU64Acc<0x67, 0x0F5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_LL : FmtALU64Acc<0x67, 0x0F6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_LUH : FmtALU64Acc<0x67, 0x0F7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_luh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_LUL : FmtALU64Acc<0x67, 0x0F8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_lul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_UHH : FmtALU64Acc<0x67, 0x0F9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_uhh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_UHL : FmtALU64Acc<0x67, 0x0FA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_uhl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_UHUH : FmtALU64Acc<0x67, 0x0FB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_uhuh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_UHUL : FmtALU64Acc<0x67, 0x0FC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_uhul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_ULH : FmtALU64Acc<0x67, 0x0FD,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_ulh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_ULL : FmtALU64Acc<0x67, 0x0FE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_ull	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_ULUH : FmtALU64Acc<0x67, 0x0FF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_uluh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def MULSS64_ULUL : FmtALU64Acc<0x67, 0x100,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "mulss64_ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // MULSSH/MULSUH/MULUUH — slot-0 GPR32 multiply (see MULL comment above;
 // Mode-0 §6.5 migration). Same destructive wire form: opcode 0x3F, ext[4:2]
@@ -1634,632 +2063,896 @@ def MULSS64_ULUL : FmtALU64Acc<0x67, 0x100,
 def MULSSH : FmtALU32Ext<0x3F, 0b00100,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
-    "mulssh	$rd, $rs1, $rs2", []>;
+    "mulssh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MULSUH : FmtALU32Ext<0x3F, 0b01000,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
-    "mulsuh	$rd, $rs1, $rs2", []>;
+    "mulsuh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MULUUH : FmtALU32Ext<0x3F, 0b01100,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
-    "muluuh	$rd, $rs1, $rs2", []>;
+    "muluuh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def MULZAA32_HHLL : FmtALU64<0x67, 0x104,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzaa32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzaa32_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MULZAA32_HLLH : FmtALU64<0x67, 0x105,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzaa32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzaa32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MULZAS32_HHLL : FmtALU64<0x67, 0x106,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzas32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzas32_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MULZAS32_HLLH : FmtALU64<0x67, 0x107,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzas32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzas32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MULZSA32_HHLL : FmtALU64<0x67, 0x108,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzsa32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzsa32_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MULZSA32_HLLH : FmtALU64<0x67, 0x109,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzsa32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzsa32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MULZSS32_HHLL : FmtALU64<0x67, 0x10A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzss32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzss32_hhll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def MULZSS32_HLLH : FmtALU64<0x67, 0x10B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzss32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzss32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def SLL64 : FmtALU64<0x67, 0x10C,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "sll64	$rd, $rs1, $rs2", []>;
+    "sll64	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
-def SMULA16S_00 : FmtALU64<0x67, 0x10D,
+def SMULA16S_00 : FmtALU64Acc<0x67, 0x10D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_10 : FmtALU64<0x67, 0x10E,
+def SMULA16S_10 : FmtALU64Acc<0x67, 0x10E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_11 : FmtALU64<0x67, 0x10F,
+def SMULA16S_11 : FmtALU64Acc<0x67, 0x10F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_20 : FmtALU64<0x67, 0x110,
+def SMULA16S_20 : FmtALU64Acc<0x67, 0x110,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_21 : FmtALU64<0x67, 0x111,
+def SMULA16S_21 : FmtALU64Acc<0x67, 0x111,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_22 : FmtALU64<0x67, 0x112,
+def SMULA16S_22 : FmtALU64Acc<0x67, 0x112,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_30 : FmtALU64<0x67, 0x113,
+def SMULA16S_30 : FmtALU64Acc<0x67, 0x113,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_31 : FmtALU64<0x67, 0x114,
+def SMULA16S_31 : FmtALU64Acc<0x67, 0x114,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_32 : FmtALU64<0x67, 0x115,
+def SMULA16S_32 : FmtALU64Acc<0x67, 0x115,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16S_33 : FmtALU64<0x67, 0x116,
+def SMULA16S_33 : FmtALU64Acc<0x67, 0x116,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16s_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_00 : FmtALU64<0x67, 0x117,
+def SMULA16_00 : FmtALU64Acc<0x67, 0x117,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_10 : FmtALU64<0x67, 0x118,
+def SMULA16_10 : FmtALU64Acc<0x67, 0x118,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_11 : FmtALU64<0x67, 0x119,
+def SMULA16_11 : FmtALU64Acc<0x67, 0x119,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_20 : FmtALU64<0x67, 0x11A,
+def SMULA16_20 : FmtALU64Acc<0x67, 0x11A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_21 : FmtALU64<0x67, 0x11B,
+def SMULA16_21 : FmtALU64Acc<0x67, 0x11B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_22 : FmtALU64<0x67, 0x11C,
+def SMULA16_22 : FmtALU64Acc<0x67, 0x11C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_30 : FmtALU64<0x67, 0x11D,
+def SMULA16_30 : FmtALU64Acc<0x67, 0x11D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_31 : FmtALU64<0x67, 0x11E,
+def SMULA16_31 : FmtALU64Acc<0x67, 0x11E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_32 : FmtALU64<0x67, 0x11F,
+def SMULA16_32 : FmtALU64Acc<0x67, 0x11F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULA16_33 : FmtALU64<0x67, 0x120,
+def SMULA16_33 : FmtALU64Acc<0x67, 0x120,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smula16_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smula16_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_00 : FmtALU64<0x67, 0x121,
+def SMULS16S_00 : FmtALU64Acc<0x67, 0x121,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_10 : FmtALU64<0x67, 0x122,
+def SMULS16S_10 : FmtALU64Acc<0x67, 0x122,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_11 : FmtALU64<0x67, 0x123,
+def SMULS16S_11 : FmtALU64Acc<0x67, 0x123,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_20 : FmtALU64<0x67, 0x124,
+def SMULS16S_20 : FmtALU64Acc<0x67, 0x124,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_21 : FmtALU64<0x67, 0x125,
+def SMULS16S_21 : FmtALU64Acc<0x67, 0x125,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_22 : FmtALU64<0x67, 0x126,
+def SMULS16S_22 : FmtALU64Acc<0x67, 0x126,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_30 : FmtALU64<0x67, 0x127,
+def SMULS16S_30 : FmtALU64Acc<0x67, 0x127,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_31 : FmtALU64<0x67, 0x128,
+def SMULS16S_31 : FmtALU64Acc<0x67, 0x128,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_32 : FmtALU64<0x67, 0x129,
+def SMULS16S_32 : FmtALU64Acc<0x67, 0x129,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16S_33 : FmtALU64<0x67, 0x12A,
+def SMULS16S_33 : FmtALU64Acc<0x67, 0x12A,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16s_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_00 : FmtALU64<0x67, 0x12B,
+def SMULS16_00 : FmtALU64Acc<0x67, 0x12B,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_00	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_00	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_10 : FmtALU64<0x67, 0x12C,
+def SMULS16_10 : FmtALU64Acc<0x67, 0x12C,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_10	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_10	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_11 : FmtALU64<0x67, 0x12D,
+def SMULS16_11 : FmtALU64Acc<0x67, 0x12D,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_11	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_11	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_20 : FmtALU64<0x67, 0x12E,
+def SMULS16_20 : FmtALU64Acc<0x67, 0x12E,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_20	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_20	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_21 : FmtALU64<0x67, 0x12F,
+def SMULS16_21 : FmtALU64Acc<0x67, 0x12F,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_21	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_21	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_22 : FmtALU64<0x67, 0x130,
+def SMULS16_22 : FmtALU64Acc<0x67, 0x130,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_22	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_22	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_30 : FmtALU64<0x67, 0x131,
+def SMULS16_30 : FmtALU64Acc<0x67, 0x131,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_30	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_30	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_31 : FmtALU64<0x67, 0x132,
+def SMULS16_31 : FmtALU64Acc<0x67, 0x132,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_31	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_31	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_32 : FmtALU64<0x67, 0x133,
+def SMULS16_32 : FmtALU64Acc<0x67, 0x133,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def SMULS16_33 : FmtALU64<0x67, 0x134,
+def SMULS16_33 : FmtALU64Acc<0x67, 0x134,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_33	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "smuls16_33	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 // SRA64/SRA64R/SRL64: 64-bit shift producing DR64 result.
 // ISA DB: rtd=DR64(result), rsd=DR64(data), rs=GPR32(shift amount)
 def SRA64 : FmtALU64<0x67, 0x135,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "sra64	$rd, $rs1, $rs2", []>;
+    "sra64	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def SRA64R : FmtALU64<0x67, 0x136,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "sra64r	$rd, $rs1, $rs2", []>;
+    "sra64r	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def SRL64 : FmtALU64<0x67, 0x137,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "srl64	$rd, $rs1, $rs2", []>;
+    "srl64	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def SUB64S : FmtALU64<0x67, 0x138,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "sub64s	$rd, $rs1, $rs2", []>;
+    "sub64s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def SUB64S_H : FmtALU64<0x67, 0x139,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "sub64s_h	$rd, $rs1, $rs2", []>;
+    "sub64s_h	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def SUB64S_L : FmtALU64<0x67, 0x13A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "sub64s_l	$rd, $rs1, $rs2", []>;
+    "sub64s_l	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def SUB64_H : FmtALU64<0x67, 0x13B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "sub64_h	$rd, $rs1, $rs2", []>;
+    "sub64_h	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def SUB64_L : FmtALU64<0x67, 0x13C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "sub64_l	$rd, $rs1, $rs2", []>;
+    "sub64_l	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2ADD32S : FmtALU64<0x67, 0x13D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2add32s	$rd, $rs1, $rs2", []>;
+    "x2add32s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2ADD32S_HLLH : FmtALU64<0x67, 0x13E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2add32s_hllh	$rd, $rs1, $rs2", []>;
+    "x2add32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2ADD32_HLLH : FmtALU64<0x67, 0x13F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2add32_hllh	$rd, $rs1, $rs2", []>;
+    "x2add32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2ADDSUB32 : FmtALU64<0x67, 0x140,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2addsub32	$rd, $rs1, $rs2", []>;
+    "x2addsub32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2ADDSUB32S : FmtALU64<0x67, 0x141,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2addsub32s	$rd, $rs1, $rs2", []>;
+    "x2addsub32s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2ADDSUB32S_HLLH : FmtALU64<0x67, 0x142,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2addsub32s_hllh	$rd, $rs1, $rs2", []>;
+    "x2addsub32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2ADDSUB32_HLLH : FmtALU64<0x67, 0x143,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2addsub32_hllh	$rd, $rs1, $rs2", []>;
+    "x2addsub32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
-def X2CLAMP32 : FmtALU64<0x67, 0x144,
+def X2CLAMP32 : FmtALU64Acc<0x67, 0x144,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2clamp32	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x2clamp32	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2DOT32 : FmtALU64<0x67, 0x145,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2dot32	$rd, $rs1, $rs2", []>;
+    "x2dot32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X2FCMUL32RS : FmtALU64<0x67, 0x146,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2fcmul32rs	$rd, $rs1, $rs2", []>;
+    "x2fcmul32rs	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X2FCMUL32RSS : FmtALU64<0x67, 0x147,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2fcmul32rss	$rd, $rs1, $rs2", []>;
+    "x2fcmul32rss	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X2FCMULA32RS : FmtALU64Acc<0x67, 0x148,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fcmula32rs	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FCMULA32RSS : FmtALU64Acc<0x67, 0x149,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fcmula32rss	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FF2RSST32 : FmtALU64<0x67, 0x14A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2ff2rsst32	$rd, $rs1, $rs2", []>;
+    "x2ff2rsst32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2FF2RST32 : FmtALU64<0x67, 0x14B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2ff2rst32	$rd, $rs1, $rs2", []>;
+    "x2ff2rst32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2FMUL32RS : FmtALU64<0x67, 0x14C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2fmul32rs	$rd, $rs1, $rs2", []>;
+    "x2fmul32rs	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X2FMUL32RSS : FmtALU64<0x67, 0x14D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2fmul32rss	$rd, $rs1, $rs2", []>;
+    "x2fmul32rss	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X2FMUL32TS : FmtALU64<0x67, 0x14E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2fmul32ts	$rd, $rs1, $rs2", []>;
+    "x2fmul32ts	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X2FMULA32RS : FmtALU64Acc<0x67, 0x14F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fmula32rs	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FMULA32RSS : FmtALU64Acc<0x67, 0x150,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fmula32rss	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FMULA32TS : FmtALU64Acc<0x67, 0x151,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fmula32ts	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FMULS32RS : FmtALU64Acc<0x67, 0x152,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fmuls32rs	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FMULS32RSS : FmtALU64Acc<0x67, 0x153,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fmuls32rss	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FMULS32TS : FmtALU64Acc<0x67, 0x154,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2fmuls32ts	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2FRSST32 : FmtALU64<0x67, 0x155,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2frsst32	$rd, $rs1, $rs2", []>;
+    "x2frsst32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2FRST32 : FmtALU64<0x67, 0x156,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2frst32	$rd, $rs1, $rs2", []>;
+    "x2frst32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2MAX32 : FmtALU64<0x67, 0x157,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2max32	$rd, $rs1, $rs2", []>;
+    "x2max32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2MIN32 : FmtALU64<0x67, 0x158,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2min32	$rd, $rs1, $rs2", []>;
+    "x2min32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2MULAPH32 : FmtALU64Acc<0x67, 0x159,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2mulaph32	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2MULAPL32 : FmtALU64Acc<0x67, 0x15A,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2mulapl32	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2MULPH32 : FmtALU64<0x67, 0x15B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2mulph32	$rd, $rs1, $rs2", []>;
+    "x2mulph32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def X2MULPL32 : FmtALU64<0x67, 0x15C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2mulpl32	$rd, $rs1, $rs2", []>;
+    "x2mulpl32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L1;
+}
 
 def X2MULSPH32 : FmtALU64Acc<0x67, 0x15D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2mulsph32	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2MULSPL32 : FmtALU64Acc<0x67, 0x15E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x2mulspl32	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X2SEL32_HH : FmtALU64<0x67, 0x15F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_hh	$rd, $rs1, $rs2", []>;
+    "x2sel32_hh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SEL32_HL : FmtALU64<0x67, 0x160,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_hl	$rd, $rs1, $rs2", []>;
+    "x2sel32_hl	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SEL32_LH : FmtALU64<0x67, 0x161,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_lh	$rd, $rs1, $rs2", []>;
+    "x2sel32_lh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SEL32_LL : FmtALU64<0x67, 0x162,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_ll	$rd, $rs1, $rs2", []>;
+    "x2sel32_ll	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 // X2SRA32R: per spec, rtd=DR64, rsd=DR64, rs=GPR32 (shift amount).
 def X2SRA32R : FmtALU64<0x67, 0x163,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "x2sra32r	$rd, $rs1, $rs2", []>;
+    "x2sra32r	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SUB32S : FmtALU64<0x67, 0x164,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2sub32s	$rd, $rs1, $rs2", []>;
+    "x2sub32s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SUB32S_HLLH : FmtALU64<0x67, 0x165,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2sub32s_hllh	$rd, $rs1, $rs2", []>;
+    "x2sub32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SUB32_HLLH : FmtALU64<0x67, 0x166,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2sub32_hllh	$rd, $rs1, $rs2", []>;
+    "x2sub32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SUBADD32 : FmtALU64<0x67, 0x167,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32	$rd, $rs1, $rs2", []>;
+    "x2subadd32	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SUBADD32S : FmtALU64<0x67, 0x168,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32s	$rd, $rs1, $rs2", []>;
+    "x2subadd32s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SUBADD32S_HLLH : FmtALU64<0x67, 0x169,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32s_hllh	$rd, $rs1, $rs2", []>;
+    "x2subadd32s_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X2SUBADD32_HLLH : FmtALU64<0x67, 0x16A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32_hllh	$rd, $rs1, $rs2", []>;
+    "x2subadd32_hllh	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4ADD16S : FmtALU64<0x67, 0x16B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4add16s	$rd, $rs1, $rs2", []>;
+    "x4add16s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4CJMUL16S_H : FmtALU64<0x67, 0x16C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmul16s_h	$rd, $rs1, $rs2", []>;
+    "x4cjmul16s_h	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4CJMUL16S_L : FmtALU64<0x67, 0x16D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmul16s_l	$rd, $rs1, $rs2", []>;
+    "x4cjmul16s_l	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4CJMULA16S_H : FmtALU64Acc<0x67, 0x16E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x4cjmula16s_h	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X4CJMULA16S_L : FmtALU64Acc<0x67, 0x16F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x4cjmula16s_l	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
-def X4CLAMP16 : FmtALU64<0x67, 0x170,
+def X4CLAMP16 : FmtALU64Acc<0x67, 0x170,
     (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4clamp16	$rd, $rs1, $rs2", []>;
+    (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
+    "x4clamp16	$rd, $rs1, $rs2", []> {
+    let Constraints = "$rd = $rd_in";
+    let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4CMUL16S_H : FmtALU64<0x67, 0x171,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cmul16s_h	$rd, $rs1, $rs2", []>;
+    "x4cmul16s_h	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4CMUL16S_L : FmtALU64<0x67, 0x172,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cmul16s_l	$rd, $rs1, $rs2", []>;
+    "x4cmul16s_l	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4CMULA16S_H : FmtALU64Acc<0x67, 0x173,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x4cmula16s_h	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X4CMULA16S_L : FmtALU64Acc<0x67, 0x174,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x4cmula16s_l	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X4DOT16 : FmtALU64<0x67, 0x175,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4dot16	$rd, $rs1, $rs2", []>;
+    "x4dot16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4FCMUL16RS : FmtALU64<0x67, 0x176,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4fcmul16rs	$rd, $rs1, $rs2", []>;
+    "x4fcmul16rs	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4FCMUL16RSS : FmtALU64<0x67, 0x177,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4fcmul16rss	$rd, $rs1, $rs2", []>;
+    "x4fcmul16rss	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 // X4FCMULA16RS / RSS — complex MAC accumulate forms. DB behavior reads rtd
 // as accumulator (rtd[lane] = SAT(rtd[lane] +...)), so these are tied-def
@@ -2269,81 +2962,109 @@ def X4FCMULA16RS : FmtALU64Acc<0x67, 0x178,
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x4fcmula16rs	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X4FCMULA16RSS : FmtALU64Acc<0x67, 0x179,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
     "x4fcmula16rss	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
-  }
+    let Itinerary = Unit_MAC0MAC1_L2_AccFirst;
+}
 
 def X4FMUL16RS : FmtALU64<0x67, 0x17A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4fmul16rs	$rd, $rs1, $rs2", []>;
+    "x4fmul16rs	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4FMUL16RSS : FmtALU64<0x67, 0x17B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4fmul16rss	$rd, $rs1, $rs2", []>;
+    "x4fmul16rss	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4FMUL16TS : FmtALU64<0x67, 0x17C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4fmul16ts	$rd, $rs1, $rs2", []>;
+    "x4fmul16ts	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_MAC0MAC1_L2;
+}
 
 def X4FRSST16 : FmtALU64<0x67, 0x17D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4frsst16	$rd, $rs1, $rs2", []>;
+    "x4frsst16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4FRST16 : FmtALU64<0x67, 0x17E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4frst16	$rd, $rs1, $rs2", []>;
+    "x4frst16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4MAX16 : FmtALU64<0x67, 0x17F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4max16	$rd, $rs1, $rs2", []>;
+    "x4max16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4MIN16 : FmtALU64<0x67, 0x180,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4min16	$rd, $rs1, $rs2", []>;
+    "x4min16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4SAT32T16 : FmtALU64<0x67, 0x181,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4sat32t16	$rd, $rs1, $rs2", []>;
+    "x4sat32t16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 // X4 SIMD shifts: per spec, rtd=DR64, rsd=DR64, rs=GPR32 (shift amount).
 // The shift amount comes from a GPR32 register (signed 5-bit value in rs[4:0]).
 def X4SLL16 : FmtALU64<0x67, 0x182,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "x4sll16	$rd, $rs1, $rs2", []>;
+    "x4sll16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4SRA16 : FmtALU64<0x67, 0x183,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "x4sra16	$rd, $rs1, $rs2", []>;
+    "x4sra16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4SRA16R : FmtALU64<0x67, 0x184,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "x4sra16r	$rd, $rs1, $rs2", []>;
+    "x4sra16r	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4SRL16 : FmtALU64<0x67, 0x185,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
-    "x4srl16	$rd, $rs1, $rs2", []>;
+    "x4srl16	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 def X4SUB16S : FmtALU64<0x67, 0x186,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4sub16s	$rd, $rs1, $rs2", []>;
+    "x4sub16s	$rd, $rs1, $rs2", []> {
+  let Itinerary = Unit_ALU0ALU1ALU2_L1;
+}
 
 //===----------------------------------------------------------------------===//
 // FmtMAC — Ternary register (rd, rs1, rs2, ra). DB restricts this whole
@@ -2773,6 +3494,11 @@ let isPseudo = 1 in {
 // as GPR32 (capstone drift cat 1). Fixed to DR64 source. Inert: no selector
 // case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
 let TSFlags = 14, isCodeGenOnly = 1 in
+// isPseudo = 0: this def has real format E members (<NAME>_P<form><pos>_<UNIT>), so it is a real instruction and the
+// enclosing `let isPseudo = 1 in {` at line 2925 -- Bundle128's "no encoding for this yet" -- no longer describes it. Leaving it
+// pseudo makes HaydnAsmPrinter's `else if (I->isPseudo()) continue;`
+// DROP the instruction from its bundle without a word.
+let isPseudo = 0 in
 def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs, simm16:$imm),
     "arctan	$rd, $rs, $imm", []>;
@@ -2851,6 +3577,7 @@ def D_LDW_POST_IMM : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
 
 let isCodeGenOnly = 1, isAsmParserOnly = 1, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -2858,6 +3585,7 @@ def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LHW_POST_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_post_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2918,6 +3646,7 @@ def D_LDW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2927,6 +3656,7 @@ def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LHW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2945,6 +3675,7 @@ def D_LDW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -2954,6 +3685,7 @@ def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0 in
 def D_LHW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lhw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -3148,16 +3880,19 @@ def D_SHW_WITH_IMM : HaydnInst<4, (outs),
 }
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def EXP2 : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "exp2	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def LOG2 : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "log2	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def MOVE64 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "move64	$rd, $rs", []>;
@@ -3186,31 +3921,37 @@ def MOVE64 : HaydnInst<4, (outs DR64:$rd),
 // Prior stubs modeled GPR32 source (capstone drift); product members are
 // DR64 source. Same shape as POPCOUNT64.
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSA16_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsa16_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSA32_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsa32_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSA64 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsa64	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSAZ16_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsaz16_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSAZ32_L : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsaz32_l	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def NSAZ64 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "nsaz64	$rd, $rs", []>;
@@ -3219,11 +3960,13 @@ def NSAZ64 : HaydnInst<4, (outs GPR32:$rd),
 // DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
 // as GPR32 (capstone drift cat 1). Fixed to DR64 source (R_GD).
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def POPCOUNT64 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "popcount64	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def RECIP : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "recip	$rd, $rs", []>;
@@ -3247,16 +3990,24 @@ def RECIP : HaydnInst<4, (outs GPR32:$rd),
 // real instruction NOT isCodeGenOnly (parseable + encodable), this stub
 // isCodeGenOnly (excluded from matcher). AsmPrinter never emits this opcode
 // (it emits SEXT_GPR32_TO_DR64), so MC encoding of the stub is irrelevant.
+// Shape corrected to match the database and this def's OWN generated members
+// (`SEXT32T64_P20_ALU0` is `(outs DR64:$rtd), (ins GPR32:$rs)`): the database
+// says `rtd = SEXT32->64(rs)`, so the result is 64-bit. It was declared
+// `(outs GPR32:$rd)` while it was an unreachable stub, which was harmless
+// only because CodeGen emitted SEXT_GPR32_TO_DR64 instead. CodeGen now emits
+// THIS, because it is the name the database gave members to.
 let TSFlags = 14, isCodeGenOnly = 1 in
-def SEXT32T64 : HaydnInst<4, (outs GPR32:$rd),
+let isPseudo = 0 in
+def SEXT32T64 : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs),
-    "sext32t64	$rd, $rs", []>;
+    "sext32t64	$rtd, $rs", []>;
 
 // SIN_COS — DB syntax `SIN_COS rtd, rs, uimm4` (DR64 dest + GPR32 src
 // DB slots DR_Write=['rtd'] GPR_Read=['rs']). Stub previously modeled dest
 // as GPR32 (capstone drift cat 2). Fixed to DR64 dest. Inert: no selector
 // case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def SIN_COS : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs, simm16:$imm),
     "sin_cos	$rd, $rs, $imm", []>;
@@ -3264,11 +4015,13 @@ def SIN_COS : HaydnInst<4, (outs DR64:$rd),
 
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def SQRT : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "sqrt	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def SRAI64R : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs, simm16:$imm),
     "srai64r	$rd, $rs, $imm", []>;
@@ -3716,21 +4469,25 @@ def S_SW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // has no case), no intrinsic Pat in HaydnIntrinsics.td. Stays isCodeGenOnly
 // until a real encoding lands (M5).
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64 : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs),
     "transf64	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64F2 : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs),
     "transf64f2	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "transf64_h	$rd, $rs", []>;
 
 let TSFlags = 14, isCodeGenOnly = 1 in
+let isPseudo = 0 in
 def TRANSF64_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "transf64_l	$rd, $rs", []>;
@@ -3740,21 +4497,25 @@ def TRANSF64_L : HaydnInst<4, (outs DR64:$rd),
 // forms remain in HaydnFormatsALU64.td (golden Mode-0 opcodes 0x51..0x56).
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32S_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32s_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32S_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32s_l	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32_l	$rd, $rs", []>;
@@ -3763,21 +4524,25 @@ def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
 // Prior logical used DR64 dest (R_DD drift); setDesc then aborted
 // '$d0 is not a GPR32'. Match members so alts leaveRegion is legal.
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HMAX32 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x2hmax32	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2HMIN32 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x2hmin32	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2MJSWAP32 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2mjswap32	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2MJSWAP32S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2mjswap32s	$rd, $rs", []>;
@@ -3793,6 +4558,7 @@ def X2MJSWAP32S : HaydnInst<4, (outs DR64:$rd),
 // (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2swap32	$rd, $rs", []>;
@@ -3807,47 +4573,56 @@ def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
 // HaydnFormatsMAC.td.
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4CONJ16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4conj16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4CONJ16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4conj16s	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4ENERGY16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4energy16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4HADD16_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4hadd16_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4HADD16_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4hadd16_l	$rd, $rs", []>;
 
 let TSFlags = 14 in
 // X4HMAX/X4HMIN — same R_GD shape as X2HMAX (GPR32 dest, DR64 src).
+let isPseudo = 0 in
 def X4HMAX16 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x4hmax16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4HMIN16 : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs),
     "x4hmin16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4MJSWAP16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4mjswap16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4MJSWAP16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4mjswap16s	$rd, $rs", []>;
@@ -3858,24 +4633,29 @@ def X4MJSWAP16S : HaydnInst<4, (outs DR64:$rd),
 // (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4NEG16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4neg16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4NEG16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4neg16s	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isPseudo = 0 in
 def X4SWAP16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4swap16	$rd, $rs", []>;
 
 let TSFlags = 14 in
-def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
-    (ins simm16:$imm),
-    "zero_dr	$rd, $imm", []>;
+// `ZERO_DR rtd` writes zero and takes no input; the immediate was spurious
+// and gave CodeGen an operand the member does not have (§ 5.11).
+let isPseudo = 0 in
+def ZERO_DR : HaydnInst<4, (outs DR64:$rd), (ins),
+    "zero_dr	$rd", []>;
 
 // MOVESFR2GPR / MOVEGPR2SFR / ZERO_SFR moved to HaydnInstrInfo.td (
 // real 32-bit R-type encodings under opcode 0x67 funct 0x198/0x199/0x19A
@@ -4015,8 +4795,11 @@ def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
 //===----------------------------------------------------------------------===//
 
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
+// Operands follow the database Syntax — `D_SDW_CB_IMM cbr_sel, ...` — so the
+// selector immediate leads. It used to sit third, which put an
+// immediate where the member has a register (§ 5.11 `kinds`).
 def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
-    (ins DR64:$rtd, GPR32:$rs, i32imm:$cbr_sel, simm16:$imm),
+    (ins i32imm:$cbr_sel, DR64:$rtd, GPR32:$rs, simm16:$imm),
     "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm", []> {
   let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
@@ -4039,8 +4822,11 @@ def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // D_SDW_CB_IMM but stride is GPR32. Layout mirrors D_LDW_CB_REG with the
 // data operand flipped to a source.
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
+// Operands follow the database Syntax — `D_SDW_CB_REG cbr_sel, ...` — so the
+// selector immediate leads. It used to sit third, which put an
+// immediate where the member has a register (§ 5.11 `kinds`).
 def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
-    (ins DR64:$rtd, GPR32:$rs1, i32imm:$cbr_sel, GPR32:$rs2),
+    (ins i32imm:$cbr_sel, DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
   let Constraints = "$rs1 = $rs1_wb";
   let TSFlags{2-0} = 0b001;

@@ -79,13 +79,24 @@ HaydnTargetLowering::HaydnTargetLowering(const TargetMachine &TM,
   setMinimumJumpTableEntries(4);
 
   // Bundle128 product: every instruction/parcel is 16 bytes (MCAsmInfo
-  // MinInstAlignment). Functions must be 16-byte aligned so call/JALR
-  // targets and LR return PCs are exact Bundle128 records — same contract
-  // as AIE (AIEBaseISelLowering Min/Pref FunctionAlignment Align(16)).
-  // Leaving the TargetLowering default Align(1) risks BAD_PC when a callee
-  // entry is not a multiple of 16 after link (next PC not an exact record).
-  setMinFunctionAlignment(Align(16));
-  setPrefFunctionAlignment(Align(16));
+  // MinInstAlignment). A callee entry and an LR return PC must land on an
+  // exact bundle boundary, or the next PC is not a record start and the ISS
+  // faults. Under Bundle128 that meant Align(16), the parcel size.
+  //
+  // Format E's parcel is 12 bytes, which is NOT a power of two, so it cannot
+  // be requested directly — and asking for 16 is actively wrong: padding a
+  // stream of 12-byte bundles up to a 16-byte boundary needs 4, 8 or 12 bytes
+  // depending on the function's size, and only 12 is a whole bundle. The other
+  // two abort the assembler ("unable to write nop sequence of N bytes"), so
+  // whether a function assembled at all depended on its length.
+  //
+  // Align(4) is the right request: every bundle boundary is at
+  // section_start + 12k, which is always 4-aligned, so the requirement is
+  // already met and the padding is always zero. It preserves the contract
+  // (entries stay on bundle boundaries) without ever asking for a partial
+  // bundle. See FORMAT-E-SWITCH-PLAN.md § 5.9.
+  setMinFunctionAlignment(Align(4));
+  setPrefFunctionAlignment(Align(4));
 }
 
 EVT HaydnTargetLowering::getSetCCResultType(const DataLayout &DL,
@@ -338,7 +349,7 @@ bool HaydnTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
   //===--------------------------------------------------------------------===//
   // AR unaligned stream (StateMem) — mem through ptr + AR sticky state.
   // pldwwua(ar_sel, ptr): ptr at arg1; UA post loads: ptr at arg0
-  // UA stores: data, ptr, ... → ptr at arg1; wbarwua(ar, ptr, dir) → arg1
+  // UA stores: data, ptr, ar_sel → ptr at arg1; wbarwua(ar, ptr) → arg1
   // Volatile MMO: AR state is not IR-visible; order vs other mem.
   //===--------------------------------------------------------------------===//
   case Intrinsic::haydn_pldwwua:

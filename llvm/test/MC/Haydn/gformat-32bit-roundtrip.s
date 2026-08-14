@@ -35,5 +35,10 @@ _start:
     sub32 r1, r2, r3     // rd!=rs1 -> Mode-0 (NOT G-eligible)
     or32  r0, r1, r2     // rd!=rs1 -> Mode-0 (NOT G-eligible)
 
-# CHECK:      0: 32 01 00 00 c0 01 00 00 00 00 00 00 00 00 00 00       { nop; nop; sub32 r1, r2, r3
-# CHECK:      10: 21 00 00 00 80 03 00 00 00 00 00 00 00 00 00 00       { nop; nop; or32 r0, r1, r2
+# Both ops are r0-r7 and both take the ordinary path: 12-byte parcels sharing
+# the format-indicator and entry-mapping prefix, differing in the opcode
+# nibble (1a for sub32, 26 for or32) and the register fields. A G-format
+# decision would have made the first one a shorter, differently shaped parcel
+# and moved the second off 0xc.
+# CHECK:      0: 8f 00 00 00 40 00 00 00 e0 1a 42 06 {{.*}}sub32{{.*}}r1, r2, r3
+# CHECK:      c: 8f 00 00 00 40 00 00 00 e0 26 20 04 {{.*}}or32{{.*}}r0, r1, r2

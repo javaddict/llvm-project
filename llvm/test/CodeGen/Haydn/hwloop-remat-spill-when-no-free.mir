@@ -5,12 +5,12 @@
 # (never silent clobber). Src $r1 stays un-redefined in-place.
 #
 # CHECK-LABEL: name: remat_spill_no_free
-# Live GPRs force NeedsSpill — ST32 of chosen scratch before ADDI, LD32 after SET.
-# CHECK: ST32
-# CHECK: $r{{[0-9]+}} = ADDI32_W $r1, -1
-# CHECK-NOT: $r1 = ADDI32_W $r1, -1
+# Live GPRs force NeedsSpill — S_SW_WITH_IMM of chosen scratch before ADDI, S_LW_WITH_IMM after SET.
+# CHECK: S_SW_{{[A-Z_]*}}
+# CHECK: $r{{[0-9]+}} = ADDI32 $r1, -1
+# CHECK-NOT: $r1 = ADDI32 $r1, -1
 # CHECK: SET_HWLOOP_F2
-# CHECK: LD32
+# CHECK: S_LW_{{[A-Z_]*}}
 
 --- |
   define dso_local void @remat_spill_no_free(i32 %n, ptr %p) {

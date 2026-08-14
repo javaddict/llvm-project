@@ -9,7 +9,7 @@
 // Port of AIEFinalizeBundle (AIEFinalizeBundle.cpp:22-54 isBundleCandidate +
 // runOnMachineFunction loop). Haydn delta vs AIE:
 //
-//   * After finalizeBundle, stamp FormatID::Bundle128Full as the BUNDLE-root
+//   * After finalizeBundle, stamp the FormatID as the BUNDLE-root
 //     imm (B1.1 / plan §6.3; AIEHazardRecognizer.cpp:278-312 peer for multi-MI;
 //     this pass covers singletons).
 //   * B4.3 late layout firewall: before wrap, materialize bare multi-slot
@@ -17,7 +17,7 @@
 //     (AIEMachineScheduler.cpp:1121-1139 materializeMultiOpcodeInstrs;
 //     AIEHazardRecognizer.cpp:174-214 alt try; HaydnBundleMaterialize
 //     commitLateProductCycle). Idempotent on already-bundled / already-
-//     setDesc members. Product encode remains BUNDLE128_FULL only.
+//     setDesc members. Product encode is BUNDLE_E2 / BUNDLE_E3.
 //
 // Pipeline:
 //   * addPreSched2 after PostMachineScheduler (AIE2TargetMachine.cpp:242-244)
@@ -106,6 +106,16 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
         assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
         // Durable FormatID (HaydnBundlePlan.h stampBundleFormatID; multi-MI
         // path: HaydnPostRASchedStrategy.cpp:266-280).
+        //
+        // FIXME(format E): this is the SINGLETON path and it has no chosen
+        // format to derive from, so it stamps the default row. That is right
+        // for most singletons — there is no 1-entry form, so a lone
+        // instruction is NOP-padded to a 2-entry bundle — but NOT for an
+        // ALU2-only op (ARCTAN, RECIP, …): the 2-entry form's entry0 admits
+        // only ALU0/LOADSTORE0/MAC0 and ALU2 does not appear in the 2-entry
+        // form at all, so those must be BundleE3. Deriving it needs the
+        // placement decision this path does not currently make; it lands with
+        // the emitter work in FORMAT-E-SWITCH-PLAN.md § 5.2.
         haydn::bundle::stampBundleFormatID(Root,
                                            haydn::bundle::ProductFormatID);
         Changed = true;

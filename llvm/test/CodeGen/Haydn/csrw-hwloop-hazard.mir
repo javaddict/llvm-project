@@ -1,15 +1,15 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
 #
-# REBASELINED : / FLEX cutover — CSRW_W and SET_HWLOOP now render as CSRW_W_S0 and SET_HWLOOP_S0 in postmisched output. hazard intent preserved: test1 (CSR 0x20) stays as two separate non-bundled instrs; test2 (CSR 0x10) is also left un-bundled here (the bundling assertion belongs to a -run-pass=haydn-packetizer test, per the comment below).
+# REBASELINED : / FLEX cutover — CSRW and SET_HWLOOP now render as CSRW_W_S0 and SET_HWLOOP_S0 in postmisched output. hazard intent preserved: test1 (CSR 0x20) stays as two separate non-bundled instrs; test2 (CSR 0x10) is also left un-bundled here (the bundling assertion belongs to a -run-pass=haydn-packetizer test, per the comment below).
 #
-# MIR body refreshed : CSRW_W and SET_HWLOOP now carry the
+# MIR body refreshed : CSRW and SET_HWLOOP now carry the
 # post-BUG-2 `implicit-def $sfr` operands required by the SFR/HWLR
 # implicit-Def modelling in HaydnInstrInfo.td (Defs = [SFR]). The hazard
 # logic this test exercises (: CSRW 0x20-0x25 must not bundle with
 # SET_HWLOOP) is unchanged; only the test's input operands were stale.
 #
 # Previously expected-fail — the ScheduleDAG barrier-edge serialization (root cause
-# both CSRW_W and SET_HWLOOP had hasUnmodeledSideEffects because their
+# both CSRW and SET_HWLOOP had hasUnmodeledSideEffects because their
 # pattern was and they set hasSideEffects=1 with no explicit SFR def/use)
 # shadowed the hazard gate. FIXED: HaydnInstrInfo.td now models the
 # CSR/HWLR side effect via an explicit SFR implicit def (Defs=[SFR]
@@ -28,11 +28,11 @@
 # one of those addresses would race the implicit HWLR write that SET_HWLOOP
 # performs, so the packetizer must serialize them into separate bundles.
 #
-# Why this test uses CSRW_W + SET_HWLOOP (the 48-bit wide forms):
+# Why this test uses CSRW + SET_HWLOOP (the 48-bit wide forms):
 # The narrow SET_HWLOOP / SET_HWLOOP_F2 are MCID::Pseudo and lowered by
 # AsmPrinter AFTER the post-RA scheduler, so they never reach postmisched
 # as real instructions (getHazardType early-outs on isPseudo).
-# The wide forms CSRW_W / SET_HWLOOP are real (non-pseudo) instructions
+# The wide forms CSRW / SET_HWLOOP are real (non-pseudo) instructions
 # that the encoding migration is wiring onto the post-RA path. They are the
 # load-bearing path for this hazard once the migration lands; constructing
 # them directly in MIR exercises the gate today.
@@ -59,7 +59,7 @@
 # =============================================================================
 # test2 (CSR 0x10, NOT a HWLR address) bundles as designed: "no hazard
 # > SHOULD bundle, proving the gate does not over-reject". Previously this
-# control FAILED: both CSRW_W and SET_HWLOOP ended up as standalone instrs
+# control FAILED: both CSRW and SET_HWLOOP ended up as standalone instrs
 # even with no hazard. Root cause (confirmed via `-debug`):
 #
 # SU(0): CSRW 16, $r1
@@ -68,13 +68,13 @@
 # SU(0): Ord Latency=0 Barrier
 #
 # The ScheduleDAG inserted an ORDER Barrier edge between every pair of
-# `hasUnmodeledSideEffects` instructions. CSRW_W and SET_HWLOOP both had
+# `hasUnmodeledSideEffects` instructions. CSRW and SET_HWLOOP both had
 # `hasSideEffects=1` and pattern `` (no explicit SFR def/use, unlike scalar
 # ALU ops), so they were treated as memory-barrier-like and serialized by the
 # DAG BUILDER — BEFORE the HaydnHazardRecognizer ever saw them. The gate
 # (HaydnHazardRecognizer.cpp) was correct but DEAD CODE on these two opcodes.
 #
-# Fix (HaydnInstrInfo.td): CSRW_W and the three SET_HWLOOP forms now set
+# Fix (HaydnInstrInfo.td): CSRW and the three SET_HWLOOP forms now set
 # `hasSideEffects = 0` and `Defs = [SFR]`, modelling the CSR/HWLR side effect
 # as an explicit SFR implicit def. The DAG stops adding barrier edges (no
 # MCID::UnmodeledSideEffects), and the gate is the sole separator.

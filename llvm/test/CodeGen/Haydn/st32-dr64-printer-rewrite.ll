@@ -16,7 +16,7 @@
 ; Printer no longer rewrites ST32→ST64. Selector must emit ST64 for
 ; i64 stores. A bad ST32+DR64 MIR fails closed (fatal) instead of silent rewrite.
 ;
-; Guard: CHECK st64 + CHECK-NOT st32 dN for the scalar i64 store path.
+; Guard: CHECK d_sdw_{{[a-z_]*}} + CHECK-NOT s_sw_{{[a-z_]*}} dN for the scalar i64 store path.
 ;
 ; Test design: a simple i64 store produces a clean `st64` (the selector
 ; correctly picks ST64 for a 64-bit scalar store). The regression check is
@@ -32,5 +32,5 @@ entry:
 attributes #0 = { nounwind }
 
 ; CHECK-LABEL: store_i64:
-; CHECK: st64
-; CHECK-NOT: st32 {{d[0-9]}}
+; CHECK: d_sdw_{{[a-z_]*}}
+; CHECK-NOT: s_sw_{{[a-z_]*}} {{d[0-9]}}

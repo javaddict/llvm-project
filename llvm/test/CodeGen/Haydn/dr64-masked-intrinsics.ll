@@ -18,10 +18,10 @@
 ; Intrinsic declarations
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.slt64(i64)
-declare i64 @llvm.haydn.sle64(i64)
-declare i64 @llvm.haydn.movt64(i64)
-declare i64 @llvm.haydn.movf64(i64)
+declare void @llvm.haydn.slt64(i64, i64)
+declare void @llvm.haydn.sle64(i64, i64)
+declare i64 @llvm.haydn.movt64(i64, i64)
+declare i64 @llvm.haydn.movf64(i64, i64)
 declare i32 @llvm.haydn.movesfr2gpr()
 declare void @llvm.haydn.movegpr2sfr(i32)
 declare void @llvm.haydn.zero.sfr()
@@ -31,19 +31,19 @@ declare void @llvm.haydn.zero.sfr()
 ;===----------------------------------------------------------------------===;
 
 ; SLT64: set SFR if value < tied_operand (signed 64-bit)
-define dso_local i64 @test_slt64(i64 %a) {
+define dso_local i64 @test_slt64(i64 %a, i64 %cmp_rhs) {
 ; CHECK-LABEL: test_slt64:
 ; CHECK: slt64
-  %1 = call i64 @llvm.haydn.slt64(i64 %a)
-  ret i64 %1
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
 ; SLE64: set SFR if value <= tied_operand (signed 64-bit)
-define dso_local i64 @test_sle64(i64 %a) {
+define dso_local i64 @test_sle64(i64 %a, i64 %cmp_rhs) {
 ; CHECK-LABEL: test_sle64:
 ; CHECK: sle64
-  %1 = call i64 @llvm.haydn.sle64(i64 %a)
-  ret i64 %1
+  call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }
 
 ;===----------------------------------------------------------------------===;
@@ -51,22 +51,22 @@ define dso_local i64 @test_sle64(i64 %a) {
 ;===----------------------------------------------------------------------===;
 
 ; MOVT64: move if SFR true (SFR == 4'b1111)
-define dso_local i64 @test_movt64(i64 %a) {
+define dso_local i64 @test_movt64(i64 %a, i64 %cmp_rhs, i64 %acc) {
 ; CHECK-LABEL: test_movt64:
 ; CHECK: slt64
 ; CHECK: movt64
-  %1 = call i64 @llvm.haydn.slt64(i64 %a)
-  %2 = call i64 @llvm.haydn.movt64(i64 %a)
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  %2 = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %2
 }
 
 ; MOVF64: move if SFR false (SFR == 4'b0000)
-define dso_local i64 @test_movf64(i64 %a) {
+define dso_local i64 @test_movf64(i64 %a, i64 %cmp_rhs, i64 %acc) {
 ; CHECK-LABEL: test_movf64:
 ; CHECK: sle64
 ; CHECK: movf64
-  %1 = call i64 @llvm.haydn.sle64(i64 %a)
-  %2 = call i64 @llvm.haydn.movf64(i64 %a)
+  call void @llvm.haydn.sle64(i64 %a, i64 %cmp_rhs)
+  %2 = call i64 @llvm.haydn.movf64(i64 %acc, i64 %a)
   ret i64 %2
 }
 
@@ -103,12 +103,12 @@ define dso_local void @test_zero_sfr() {
 ;===----------------------------------------------------------------------===;
 
 ; Full scalar predication: compare, then conditionally move
-define dso_local i64 @test_scalar_predication(i64 %a) {
+define dso_local i64 @test_scalar_predication(i64 %a, i64 %cmp_rhs, i64 %acc) {
 ; CHECK-LABEL: test_scalar_predication:
 ; CHECK: slt64
 ; CHECK: movt64
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
-  %result = call i64 @llvm.haydn.movt64(i64 %cmp)
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  %result = call i64 @llvm.haydn.movt64(i64 %acc, i64 %a)
   ret i64 %result
 }
 
@@ -117,11 +117,11 @@ define dso_local i64 @test_scalar_predication(i64 %a) {
 ;===----------------------------------------------------------------------===;
 
 ; Save SFR to GPR, do a compare, then restore SFR
-define dso_local i64 @test_sfr_save_restore(i64 %a, i32 %saved_sfr) {
+define dso_local i64 @test_sfr_save_restore(i64 %a, i32 %saved_sfr, i64 %cmp_rhs) {
 ; CHECK-LABEL: test_sfr_save_restore:
 ; CHECK-DAG: movegpr2sfr
 ; CHECK-DAG: slt64
   call void @llvm.haydn.movegpr2sfr(i32 %saved_sfr)
-  %1 = call i64 @llvm.haydn.slt64(i64 %a)
-  ret i64 %1
+  call void @llvm.haydn.slt64(i64 %a, i64 %cmp_rhs)
+  ret i64 %a
 }

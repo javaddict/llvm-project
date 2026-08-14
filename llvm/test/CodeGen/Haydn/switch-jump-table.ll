@@ -7,7 +7,7 @@
 ;
 ; Test jump table switch lowering for Haydn.
 ; Dense switches with 4+ consecutive cases are lowered via jump tables
-; (G_BRJT → SHL32 + ADD32 + LD32 + BR_JT → JALR).
+; (G_BRJT → SLL32 + ADD32 + S_LW_WITH_IMM + BR_JT → JALR).
 ; Sparse switches with fewer cases still use comparison + branch chains.
 ;
 ; REGRESSION TEST: Jump table lowering (G_BRJT → BR_JT → JALR).
@@ -40,51 +40,51 @@
 ; CHECK: 	{ 	subi32	sp, sp, 8 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 7 }
 ; CHECK: 	{ 	sltu32	r2, r2, r1 }
-; CHECK: 	{ 	bnez{{(\.s[012])?}}	r2, .LBB0_10 }
+; CHECK: 	{ 	bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r2, .LBB0_10 }
 ; CHECK: // %bb.1:                               // %entry
 ; CHECK: 	{ nop; slli32	r1, r1, 2; lui	r2, .LJTI0_0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r2, .LJTI0_0 }
 ; CHECK: 	{ 	add32	r1, r2, r1 }
 ; CHECK: 	{ 	ld32	r1, r1, 0 }
-; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, r1, 0 }
+; CHECK: 	{ 	jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, r1, 0 }
 ; CHECK: .LBB0_2:                                // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 10 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_3:                                // %bb4
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 50 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_4:                                // %bb2
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 30 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_5:                                // %bb3
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 40 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_6:                                // %bb7
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 80 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_7:                                // %bb1
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 20 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_8:                                // %bb5
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 60 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_9:                                // %bb6
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 70 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB0_11 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB0_11 }
 ; CHECK: .LBB0_10:                               // %default
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 0 }
 ; CHECK: .LBB0_11:                               // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end0:
 ; CHECK: 	.size	switch_jt_8, .Lfunc_end0-switch_jt_8
 ; CHECK: 	.section	.rodata,"a",@progbits
@@ -108,31 +108,31 @@
 ; CHECK: 	{ 	subi32	sp, sp, 8 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 3 }
 ; CHECK: 	{ 	seq32	r2, r1, r2 }
-; CHECK: 	{ 	bnez{{(\.s[012])?}}	r2, .LBB1_5 }
+; CHECK: 	{ 	bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r2, .LBB1_5 }
 ; CHECK: // %bb.1:                               // %entry
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 2 }
 ; CHECK: 	{ 	seq32	r2, r1, r2 }
-; CHECK: 	{ 	bnez{{(\.s[012])?}}	r2, .LBB1_4 }
+; CHECK: 	{ 	bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r2, .LBB1_4 }
 ; CHECK: // %bb.2:                               // %entry
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 1 }
 ; CHECK: 	{ 	seq32	r1, r1, r2 }
 ; CHECK: 	{ 	xori32	r1, r1, 1 }
-; CHECK: 	{ 	bnez{{(\.s[012])?}}	r1, .LBB1_6 }
+; CHECK: 	{ 	bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r1, .LBB1_6 }
 ; CHECK: // %bb.3:                               // %bb1
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 100 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB1_7 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB1_7 }
 ; CHECK: .LBB1_4:                                // %bb2
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 200 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB1_7 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB1_7 }
 ; CHECK: .LBB1_5:                                // %bb3
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 300 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB1_7 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB1_7 }
 ; CHECK: .LBB1_6:                                // %default
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 0 }
 ; CHECK: .LBB1_7:                                // %bb1
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end1:
 ; CHECK: 	.size	switch_small_no_jt, .Lfunc_end1-switch_small_no_jt
 ; CHECK:                                         // -- End function
@@ -147,31 +147,31 @@
 ; CHECK: 	{ 	addi32{{(_w)?}}	r3, r0, -10 }
 ; CHECK: 	{ 	add32	r2, r2, r3 }
 ; CHECK: 	{ 	sltu32	r3, r1, r2 }
-; CHECK: 	{ 	bnez{{(\.s[012])?}}	r3, .LBB2_5 }
+; CHECK: 	{ 	bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r3, .LBB2_5 }
 ; CHECK: // %bb.1:                               // %entry
 ; CHECK: 	{ nop; slli32	r2, r2, 2; lui	r3, .LJTI2_0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r3, r3, .LJTI2_0 }
 ; CHECK: 	{ 	add32	r2, r3, r2 }
 ; CHECK: 	{ 	ld32	r2, r2, 0 }
-; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, r2, 0 }
+; CHECK: 	{ 	jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, r2, 0 }
 ; CHECK: .LBB2_2:                                // %bb10
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 1 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB2_6 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB2_6 }
 ; CHECK: .LBB2_3:                                // %bb11
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 2 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB2_6 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB2_6 }
 ; CHECK: .LBB2_4:                                // %bb13
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 4 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB2_6 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB2_6 }
 ; CHECK: .LBB2_5:                                // %default
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 0 }
 ; CHECK: .LBB2_6:                                // %bb12
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end2:
 ; CHECK: 	.size	switch_jt_offset, .Lfunc_end2-switch_jt_offset
 ; CHECK: 	.section	.rodata,"a",@progbits
@@ -191,35 +191,35 @@
 ; CHECK: 	{ 	subi32	sp, sp, 8 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r0, 3 }
 ; CHECK: 	{ 	sltu32	r2, r2, r1 }
-; CHECK: 	{ 	bnez{{(\.s[012])?}}	r2, .LBB3_6 }
+; CHECK: 	{ 	bnez{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r2, .LBB3_6 }
 ; CHECK: // %bb.1:                               // %entry
 ; CHECK: 	{ nop; slli32	r1, r1, 2; lui	r2, .LJTI3_0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r2, r2, .LJTI3_0 }
 ; CHECK: 	{ 	add32	r1, r2, r1 }
 ; CHECK: 	{ 	ld32	r1, r1, 0 }
-; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, r1, 0 }
+; CHECK: 	{ 	jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, r1, 0 }
 ; CHECK: .LBB3_2:                                // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 100 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB3_7 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB3_7 }
 ; CHECK: .LBB3_3:                                // %bb2
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 300 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB3_7 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB3_7 }
 ; CHECK: .LBB3_4:                                // %bb3
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 400 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB3_7 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB3_7 }
 ; CHECK: .LBB3_5:                                // %bb1
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, 200 }
-; CHECK: 	{ 	beqz{{(\.s[012])?}}	r0, .LBB3_7 }
+; CHECK: 	{ 	beqz{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, .LBB3_7 }
 ; CHECK: .LBB3_6:                                // %default
 ; CHECK: 	{ 	addi32{{(_w)?}}	r1, r0, -1 }
 ; CHECK: .LBB3_7:                                // %bb0
 ; CHECK: 	{ 	xor32	r0, r0, r0 }
 ; CHECK: 	{ 	addi32{{(_w)?}}	sp, sp, 8 }
-; CHECK: 	{ 	jalr{{(\.s[012])?}}	r0, lr, 0 }
+; CHECK: 	{ 	jalr{{(_[pP][23][0-9]_[A-Z0-9]+)?}}	r0, lr, 0 }
 ; CHECK: .Lfunc_end3:
 ; CHECK: 	.size	switch_jt_with_default, .Lfunc_end3-switch_jt_with_default
 ; CHECK: 	.section	.rodata,"a",@progbits

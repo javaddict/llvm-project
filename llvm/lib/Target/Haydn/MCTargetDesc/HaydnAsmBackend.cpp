@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnAsmBackend.h"
+#include "HaydnBaseInfo.h"
 #include "HaydnFixupKinds.h"
 #include "HaydnRelocLayout.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
@@ -118,12 +119,34 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       return;
     }
     const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
-    if (Fixup.getOffset() + FI.NBytes > F.getSize()) {
+
+    // Format E: the field's position is BUNDLE-absolute and depends on the
+    // placement, so neither the byte the relocation names nor the kind's
+    // nominal FieldLsb locates it. Resolve it from the bundle image; both
+    // errors are silent, and one of them lands on the header (§ 5.8).
+    if (!HaydnReloc::isInstructionFieldReloc(R)) {
+      // A plain data word: patch it where the relocation says, no bundle.
+      if (Fixup.getOffset() + FI.NBytes > F.getSize()) {
+        getContext().reportError(Fixup.getLoc(),
+                                 "fixup offset exceeds fragment size");
+        return;
+      }
+      HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize,
+                             FI.FieldLsb);
+      return;
+    }
+    const unsigned BundleByte = Fixup.getOffset() % Haydn::BUNDLE_E_BYTES;
+    uint8_t *BundleBase = Data - BundleByte;
+    if (Fixup.getOffset() - BundleByte + Haydn::BUNDLE_E_BYTES > F.getSize()) {
       getContext().reportError(Fixup.getLoc(), "fixup offset exceeds fragment size");
       return;
     }
-    // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
-    HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FI.FieldLsb);
+    if (!HaydnReloc::patchRelocFieldInBundle(BundleBase, BundleByte, FI,
+                                             Comp.FieldVal)) {
+      getContext().reportError(
+          Fixup.getLoc(), "no format E relocation geometry for this placement");
+      return;
+    }
     return;
   }
 
@@ -178,12 +201,24 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   assert(unsigned(Kind - FirstTargetFixupKind) < Haydn::NumTargetFixupKinds &&
          "Invalid fixup kind!");
 
-  HaydnReloc::RelocKind R = HaydnReloc::mapFixupKind(Kind);
-  const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
+  // NO bit range. Under format E a fixup kind does not determine one: the
+  // field's position depends on the PLACEMENT — (entry count, entry index,
+  // mapping) — and MCFixupKindInfo has no room for that, being keyed by kind
+  // alone. `RelocFieldInfo::FieldLsb` is the Bundle128 answer, where every
+  // kind sat at one offset in a 4- or 6-byte image; reporting it here named
+  // bits the encoder had legitimately written and tripped MCAsmStreamer's
+  // "Encoder wrote into fixed up bit!" on jal and on the HI12/LO20 pair.
+  //
+  // Nothing is lost. This override reaches only MCAsmStreamer's -show-encoding
+  // annotation, which merely stops lettering which bits a fixup owns; the
+  // instruction bytes and the fixup list still print. The geometry that
+  // matters is per-placement and lives in HaydnRelocLayout, which applyFixup
+  // above and lld's Haydn::relocate both consult through
+  // patchRelocFieldInBundle. See FORMAT-E-SWITCH-PLAN.md 5.8.
+  //
   // This LLVM tree stores PC-relativity on MCFixup::isPCRel (set by the
   // encoder), not on MCFixupKindInfo::Flags. Keep Flags=0 (matches RISCV).
-  return MCFixupKindInfo{Names[Kind - FirstTargetFixupKind], FI.FieldLsb,
-                         FI.FieldSize, 0};
+  return MCFixupKindInfo{Names[Kind - FirstTargetFixupKind], 0, 0, 0};
 }
 
 // Write NOP data to the output stream.
@@ -194,17 +229,30 @@ HaydnAsmBackend::createObjectTargetWriter() const {
 
 bool HaydnAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
                                    const MCSubtargetInfo *) const {
-  // A.6 / Bundle128: executable pad is full 16-byte parcels only (all-zero
-  // Bundle128 NOP). Reject non-multiples so MC/lld cannot leave 2/4/8-byte
-  // executable gaps that the ISS treats as truncated parcels.
-  constexpr uint64_t Bundle128Bytes = 16;
-  if (Count % Bundle128Bytes != 0)
+  // A.6: executable pad is full parcels only. Reject non-multiples so MC/lld
+  // cannot leave 2/4/8-byte executable gaps that the ISS treats as truncated
+  // parcels.
+  //
+  // The size comes from Haydn::BUNDLE_E_BYTES, the MC-layer bundle-width
+  // constant that HaydnBundlePlan.h's ProductEncodedBytesValue is itself
+  // defined from. This was a local `= 16` — a second oracle that would have
+  // kept padding in 16-byte units after the switch to 12, silently desyncing
+  // the parcel stream at every pad site. (The plan header is the CodeGen-layer
+  // authority and cannot be included here; it pulls in MachineInstr.h.)
+  constexpr uint64_t ParcelBytes = Haydn::BUNDLE_E_BYTES;
+  if (Count % ParcelBytes != 0)
     return false;
 
-  // All-zero 16-byte little-endian composite (idle s2|s1|s0 windows).
-  static const char Zeros[Bundle128Bytes] = {};
-  for (uint64_t Idx = 0; Idx < Count; Idx += Bundle128Bytes)
-    OS.write(Zeros, Bundle128Bytes);
+  // FIXME(format E): an all-zero word is NOT a NOP bundle any more. Bundle128
+  // had no header, so a zero slot window WAS the idle encoding; format E puts
+  // the 0b111 format indicator in Inst{2-0} and the entry count in Inst{3}, so
+  // twelve zero bytes decode as a different format's bundle rather than as
+  // padding. This has to become a real all-NOP BUNDLE_E2 built through the
+  // normal encode path — see FORMAT-E-SWITCH-PLAN.md § 5.2. The size below is
+  // now right; the contents are not.
+  static const char Zeros[ParcelBytes] = {};
+  for (uint64_t Idx = 0; Idx < Count; Idx += ParcelBytes)
+    OS.write(Zeros, ParcelBytes);
 
   return true;
 }

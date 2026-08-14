@@ -11,9 +11,9 @@ define i64 @load_i64_align4_then_byte() {
 ; CHECK-LABEL: load_i64_align4_then_byte:
 ; CHECK: // %bb.0:
 ; CHECK-NOT: d_ldw_post_imm
-; CHECK-NOT: {{[[:space:]]}}ld64{{[[:space:]]}}
-; CHECK: ld32
-; CHECK: ld32
+; CHECK-NOT: {{[[:space:]]}}d_ldw_{{[a-z_]*}}{{[[:space:]]}}
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
 ; CHECK: jalr{{.*}}lr
 entry:
   %p = getelementptr inbounds i8, ptr @s, i32 12
@@ -26,9 +26,9 @@ define i64 @postinc_load_i64_align4(ptr %p) {
 ; CHECK-LABEL: postinc_load_i64_align4:
 ; CHECK: // %bb.0:
 ; CHECK-NOT: d_ldw_post_imm
-; CHECK-NOT: {{[[:space:]]}}ld64{{[[:space:]]}}
-; CHECK: ld32
-; CHECK: ld32
+; CHECK-NOT: {{[[:space:]]}}d_ldw_{{[a-z_]*}}{{[[:space:]]}}
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
 ; CHECK: jalr{{.*}}lr
 entry:
   %v = load i64, ptr %p, align 4
@@ -41,7 +41,7 @@ define void @postinc_store_i64_align4(ptr %p, i64 %v) {
 ; CHECK-LABEL: postinc_store_i64_align4:
 ; CHECK: // %bb.0:
 ; CHECK-NOT: d_sdw_post_imm
-; CHECK-NOT: {{[[:space:]]}}st64{{[[:space:]]}}
+; CHECK-NOT: {{[[:space:]]}}d_sdw_{{[a-z_]*}}{{[[:space:]]}}
 ; CHECK: jalr{{.*}}lr
 entry:
   store i64 %v, ptr %p, align 4

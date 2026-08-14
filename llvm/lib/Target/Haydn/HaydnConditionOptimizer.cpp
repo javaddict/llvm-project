@@ -416,7 +416,7 @@ static bool srcRegsNotClobbered(const TargetRegisterInfo *TRI,
 // True if \p MI is ADDI32/ADDI32_W defining \p Reg as R0 + imm 1.
 static bool isMaterializeOne(const MachineInstr &MI, Register Reg) {
   unsigned Opc = MI.getOpcode();
-  if (Opc != Haydn::ADDI32 && Opc != Haydn::ADDI32_W)
+  if (Opc != Haydn::ADDI32)
     return false;
   if (MI.getNumOperands() < 3 || !MI.getOperand(0).isReg() ||
       !MI.getOperand(1).isReg() || !MI.getOperand(2).isImm())
@@ -557,7 +557,7 @@ bool HaydnConditionOptimizer::foldCmpBranch(MachineFunction &MF) {
       // Optional: ADDI One, R0, 1 between CMP and XOR32 (legacy dual-path).
       // Do not skip arbitrary instructions — only pure mat-one of a new reg.
       if ((NextMI->getOpcode() == Haydn::ADDI32 ||
-           NextMI->getOpcode() == Haydn::ADDI32_W) &&
+           NextMI->getOpcode() == Haydn::ADDI32) &&
           NextMI->getNumOperands() >= 3 && NextMI->getOperand(0).isReg() &&
           isMaterializeOne(*NextMI, NextMI->getOperand(0).getReg()) &&
           NextMI->getOperand(0).getReg() != CmpDst) {

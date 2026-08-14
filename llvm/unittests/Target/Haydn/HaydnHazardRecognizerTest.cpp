@@ -13,7 +13,7 @@
 // pure product tryAdd S2→S1→S0 field order the HR commits on Emit.
 //
 // HaydnFuncUnitWrapper is pure data (no MachineInstr/MachineFunction needed).
-// Slot bit indices: SLOT0=0, SLOT1=1, SLOT2=2 (itinerary FuncUnits).
+// Slot bit indices: SLOT_P30=0, SLOT_P31=1, SLOT_P32=2 (itinerary FuncUnits).
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,6 +24,7 @@
 #include "HaydnPortModel.h"
 #include "HaydnStaticBitSet.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "gtest/gtest.h"
 
@@ -348,32 +349,35 @@ TEST(HaydnPackLegalityTest, DualAuthorityIssueCapMatchesBundle) {
 
 TEST(HaydnHazardRecognizerTest, B24_TryAddIsPlacementAuthorityS2First) {
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   ASSERT_TRUE(hasPlacementAlternatives(Fmts, Haydn::ADD32));
   CycleState S = makeProductCycleState();
   // Empty cycle accepts ADD32 on S2 (not S0).
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P32));
+  // The index is the slot KIND's position in the enum, which now starts at the
+  // 2-entry slots -- so P32 is 4, P31 is 3, P30 is 2. The order the solver
+  // fills them in is unchanged: highest entry first.
   EXPECT_EQ(fieldSlotsToIndex(S.Members.back().FieldSlots),
-            std::optional<unsigned>(2u));
+            fieldSlotsToIndex(Haydn::SLOT_P32));
 
-  // Second ADD32 → S1; third → S0; fourth Hazard-shaped reject.
+  // Second ADD32 -> P31; third -> P30; fourth rejected.
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(fieldSlotsToIndex(S.Members.back().FieldSlots),
-            std::optional<unsigned>(1u));
+            fieldSlotsToIndex(Haydn::SLOT_P31));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(fieldSlotsToIndex(S.Members.back().FieldSlots),
-            std::optional<unsigned>(0u));
+            fieldSlotsToIndex(Haydn::SLOT_P30));
   EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::ADD32));
 }
 
 TEST(HaydnHazardRecognizerTest, B24_ST32BlocksSecondStore) {
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::ST32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P30));
+  EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   // Multi-slot ALU still fits on S2.
   EXPECT_TRUE(canTryAddProduct(S, Fmts, Haydn::ADD32));
 }
@@ -382,13 +386,13 @@ TEST(HaydnHazardRecognizerTest, B24_DualLoadThenMac) {
   // Dual LD32 (S0|S1) + MAC (S1|S2) product pack — tryAdd order must allow
   // LD@S1, LD@S0, MAC@S2 when loads issue first (or MAC@S2 then loads).
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::LD32)); // prefers S1 (S0|S1, high first)
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::LD32)); // remaining load slot
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM)); // prefers S1 (S0|S1, high first)
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_LW_WITH_IMM)); // remaining load slot
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MULA32));
   EXPECT_EQ(S.OccupiedSlots,
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT_P30 | Haydn::SLOT_P31 | Haydn::SLOT_P32));
 }
 
 //===----------------------------------------------------------------------===//
@@ -400,7 +404,7 @@ TEST(HaydnHazardRecognizerTest, B25_NoAltSkipsPlacementGate) {
   // placement fallback (AIEHazardRecognizer.cpp:186-187: no alts → fixed-slot
   // canAdd; Haydn no-alt means no multi-slot auction).
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   EXPECT_FALSE(hasPlacementAlternatives(Fmts, /*Opcode=*/0));
   CycleState S = makeProductCycleState();
   EXPECT_FALSE(canTryAddProduct(S, Fmts, 0));
@@ -411,16 +415,17 @@ TEST(HaydnHazardRecognizerTest, B25_NoAltSkipsPlacementGate) {
 
 TEST(HaydnHazardRecognizerTest, B25_FieldSlotsFromSparseIndex) {
   using namespace llvm::haydn::bundle;
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
-  // Sparse {0, S1, S2}: non-zero rows carry FieldSlots by index.
-  ASSERT_EQ(Alts.size(), 2u);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  // Each row's FieldSlots comes from its own member. ADD64 is no longer the
+  // sparse case -- it has the same seven placements ADD32 has.
+  EXPECT_EQ(Alts.size(), 7u);
+  for (const PlacementAlternative &A : Alts)
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_P32));
 }
 
 } // end anonymous namespace

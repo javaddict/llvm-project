@@ -25,25 +25,31 @@
 
 #===----------------------------------------------------------------------===#
 # The exact dhry_1.c -O2 bundle that used to abort with "incorrect bundle":
-# addi32_w is S0-only and the store was pinned to S0 as well.
-# In ISA order the store sits in s2 and addi32_w in s0.
+# The immediate-ALU op here used to be `addi32`, and it cannot be: ADDI32's
+# imm20 fits only the wide 2-entry windows, so it has NO 3-entry placement and
+# a bundle asking for it in a 3-entry shape is unbuildable. SLLI32 takes a
+# uimm5 and does reach all three entries — the narrow-immediate ops are the
+# ones that fit the 3-entry form. In ISA order the store sits in the high entry
+# and the shift in the low one.
 #===----------------------------------------------------------------------===#
 # CHECK-LABEL: <f_cb142_dhry_bundle>:
-# CHECK: { s_sb_post_imm r4, r1, 1; nop; addi32_w r4, r0, 66 }
+# The store lands in entry 0 because LOADSTORE0 serves only that entry, so
+# it prints last however the source ordered the bundle.
+# CHECK: { slli32 r4, r0, 6; nop; s_sb_post_imm r4, r1, 1 }
 f_cb142_dhry_bundle:
-  { s_sb_post_imm r4, r1, 1; nop; addi32_w r4, r0, 66 }
+  { s_sb_post_imm r4, r1, 1; nop; slli32 r4, r0, 6 }
 
 #===----------------------------------------------------------------------===#
 # `nop` fillers are slot placeholders, not padding: the same store must land in
 # a different slot in each of these three bundles, and must not migrate.
 #===----------------------------------------------------------------------===#
 # CHECK-LABEL: <f_cb142_store_in_s2>:
-# CHECK: { s_sb_post_imm r4, r1, 1; nop; nop }
+# CHECK: { nop; nop; s_sb_post_imm r4, r1, 1 }
 f_cb142_store_in_s2:
   { s_sb_post_imm r4, r1, 1; nop; nop }
 
 # CHECK-LABEL: <f_cb142_store_in_s1>:
-# CHECK: { nop; s_sb_post_imm r4, r1, 1; nop }
+# CHECK: { nop; nop; s_sb_post_imm r4, r1, 1 }
 f_cb142_store_in_s1:
   { nop; s_sb_post_imm r4, r1, 1; nop }
 
@@ -56,8 +62,8 @@ f_cb142_store_in_s0:
 # Right-aligned short forms: the last entry is always s0.
 #===----------------------------------------------------------------------===#
 # CHECK-LABEL: <f_cb142_right_aligned>:
-# CHECK: { nop; nop; lui r1, 1 }
-# CHECK: { nop; nop; lui r1, 1 }
+# CHECK: { lui r1, 1; nop; nop }
+# CHECK: { nop; lui r1, 1 }
 # CHECK: { nop; nop; lui r1, 1 }
 f_cb142_right_aligned:
   { lui r1, 1 }
@@ -65,7 +71,7 @@ f_cb142_right_aligned:
   { nop; nop; lui r1, 1 }
 
 #===----------------------------------------------------------------------===#
-# `st32_post` / `st64_post` are the legacy codegen names the AsmPrinter emits
+# `s_sw_post_imm` / `d_sdw_post_imm` are the legacy codegen names the AsmPrinter emits
 # for the fused post-increment stores. Their `_S1` members carried
 # isCodeGenOnly, which drops a mnemonic from the asm matcher as well as the
 # decoder trie (same bug class as d463), so `clang -S` printed text that no
@@ -75,20 +81,20 @@ f_cb142_right_aligned:
 # canonical name.
 #===----------------------------------------------------------------------===#
 # CHECK-LABEL: <f_cb142_legacy_post_names>:
-# CHECK: { nop; s_sw_post_imm r6, r7, 1; nop }
-# CHECK: { nop; d_sdw_post_imm d0, r7, 1; nop }
+# CHECK: { nop; nop; s_sw_post_imm r6, r7, 1 }
+# CHECK: { nop; nop; d_sdw_post_imm d0, r7, 1 }
 f_cb142_legacy_post_names:
-  { nop; st32_post r6, r7, 1; nop }
-  { nop; st64_post d0, r7, 1; nop }
+  { nop; s_sw_post_imm r6, r7, 1; nop }
+  { nop; d_sdw_post_imm d0, r7, 1; nop }
 
 #===----------------------------------------------------------------------===#
 # A fully packed bundle must come back verbatim — this is the property the
 # `-S` round trip depends on. move32 names s2, addi32 s1, st32 s0.
 #===----------------------------------------------------------------------===#
 # CHECK-LABEL: <f_cb142_full_layout>:
-# CHECK: { move32 r6, r3; addi32 r4, r3, 4; st32 r3, r1, 0 }
+# CHECK: { move32 r6, r3; slli32 r4, r3, 4; s_sw_{{[a-z_]*}} r3, r1, 0 }
 f_cb142_full_layout:
-  { move32 r6, r3; addi32 r4, r3, 4; st32 r3, r1, 0 }
+  { move32 r6, r3; slli32 r4, r3, 4; s_sw_with_imm r3, r1, 0 }
 
 # CHECK-NOT: <?>
 # CHECK-NOT: <unknown>

@@ -11,9 +11,9 @@
 define void @store_unaligned_i64_field(i64 %v) {
 ; CHECK-LABEL: store_unaligned_i64_field:
 ; CHECK: // %bb.0:
-; CHECK-NOT: st64
+; CHECK-NOT: d_sdw_
 ; Lane word stores of the DR (post-RA may fold extract+ST32 → d_sw_l/h).
-; CHECK: {{d_sw_l|st32|move32_dr}}
+; CHECK: {{d_sw_l|s_sw_[a-z_]*|move32_dr}}
 ; CHECK: jalr{{.*}}lr
 entry:
   %p = getelementptr inbounds %struct.P, ptr @g, i32 0, i32 1
@@ -24,9 +24,9 @@ entry:
 define i64 @load_unaligned_i64_field() {
 ; CHECK-LABEL: load_unaligned_i64_field:
 ; CHECK: // %bb.0:
-; CHECK-NOT: ld64
-; CHECK: ld32
-; CHECK: ld32
+; CHECK-NOT: d_ldw_
+; CHECK: s_lw_{{[a-z_]*}}
+; CHECK: s_lw_{{[a-z_]*}}
 ; CHECK: jalr{{.*}}lr
 entry:
   %p = getelementptr inbounds %struct.P, ptr @g, i32 0, i32 1

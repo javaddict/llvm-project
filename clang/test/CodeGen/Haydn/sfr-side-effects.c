@@ -14,7 +14,7 @@
 #include <haydn.h>
 
 // CHECK-LABEL: @sfr_compare_not_dced
-// CHECK: call <2 x i32> @llvm.haydn.x2slt32
+// CHECK: call void @llvm.haydn.x2slt32
 void sfr_compare_not_dced(haydn_x2int32 a, haydn_x2int32 b) {
   // Result is intentionally discarded. The SFR side-effect must keep the
   // call live. If this CHECK fails (no call emitted), F19 has regressed.

@@ -12,7 +12,7 @@
 // in MachineInstrBundle, except that it also bundles standalone instructions.
 // After PostMachineScheduler multi-MI materialize (B1.1 FormatID stamp), every
 // remaining non-meta, non-bundled real MI becomes a singleton BUNDLE with
-// durable FormatID::Bundle128Full imm (product encode only).
+// durable FormatID imm (product encode only).
 //
 // B4.3: also empty-cycle tryAdd → setDesc on bare multi-slot logicals before
 // wrap (AIEMachineScheduler.cpp:1121-1139 peer). Idempotent on already-

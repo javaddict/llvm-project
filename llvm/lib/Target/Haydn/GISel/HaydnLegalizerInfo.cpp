@@ -812,7 +812,28 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .maxScalar(0, S64);
 
   // G_FREEZE is a no-op — always legal for any type.
-  getActionDefinitionsBuilder(G_FREEZE).alwaysLegal();
+  // G_FREEZE narrows with its type before it is anything else. It was
+  // `alwaysLegal()`, which let a <16 x s32> exist as a VALUE — and nothing
+  // else in the target can hold one, so every consumer narrowed it locally
+  // and something re-merged the pieces to feed the next consumer. That is a
+  // loop the legalizer has no reason to leave: gcc-c-torture pr28982a and
+  // pr28982b at -O2 reached 356505 legalizations and register numbers past
+  // %300000 without finishing, and clang hung.
+  //
+  // The wide vector has to stop existing at its PRODUCER. Chasing it at the
+  // consumers does not converge, and two attempts at that are worth recording
+  // because both looked right: capping the custom vector→vector unmerge at a
+  // 128-bit source moved the loop one level down (to <4 x s32>), and lowering
+  // that unmerge through a scalar bitcast instead of element extracts moved it
+  // to G_CONCAT_VECTORS re-forming the <16 x s32>. Neither is needed once the
+  // freeze narrows, and neither is kept.
+  //
+  // No S1 clamp: one element is not a smaller vector (CB-130).
+  getActionDefinitionsBuilder(G_FREEZE)
+      .clampMaxNumElements(0, S32, 2)
+      .clampMaxNumElements(0, S16, 4)
+      .clampMaxNumElements(0, S8, 8)
+      .alwaysLegal();
 
   // 1 type idx, 1 imm idx (scale/width)
   getActionDefinitionsBuilder({
@@ -909,13 +930,24 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder(G_BUILD_VECTOR)
       .legalFor({{V2I32, S32}})
       .customFor({{V4I16, S16}, {V8I8, S8}, {V4I8, S8}, {V2I16, S16}})
-      // Residual SLP builds (v4s32/v16s32/v16s1/…): fewer-elements down to a
-      // legal native shape. Bare .lower() is UnableToLegalize for BUILD_VECTOR
-      // and the artifact-retry loop hangs the legalizer (pr28982a @ -O2).
+      // Residual SLP builds (v4s32, v16s32, …): fewer-elements down to a legal
+      // native shape.
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
+      // There is deliberately NO clamp for S1, and one element is not a
+      // smaller vector. clampMaxNumElements builds its target with
+      // LLT::scalarOrVector(), which returns a SCALAR for a count of one, so
+      // `.clampMaxNumElements(0, S1, 1)` asked fewerElementsVector to narrow
+      // <2 x s1> to plain s1 — and fewerElementsVectorMerge asserts
+      // "Expected vector types". That was the whole of CB-130.
+      //
+      // A <N x s1> build is an ARTIFACT here, not something to legalize: it
+      // appears when a vector G_ICMP is scalarized, and the matching unmerge
+      // arrives when its users (G_ZEXT, G_SELECT) are scalarized in turn.
+      // Falling through to .lower() below reports UnableToLegalize, the
+      // legalizer defers the instruction to the artifact combiner, and the
+      // pair cancels. Haydn has no vector-of-i1 shape for it to become.
       .lower();
 
   //===--------------------------------------------------------------------===
@@ -936,23 +968,60 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // (it produced `MOVE32 <GPR>, $d0`, an illegal cross-bank move, and never
   // read the high half, so EVERY lane returned lane 0's low byte).
   getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
+      // A vector of i1 has no representation at all, and the generic lowering
+      // cannot help: with a variable index it spills the vector to the stack,
+      // and lowerExtractInsertVectorElt gives up on an element that is not
+      // byte-sized. So `extractelement <2 x i1> %c, i32 %i` reported "unable
+      // to legalize" (CB-144) — reachable from ordinary C, since a vector
+      // icmp feeding a variable-indexed read is all it takes.
+      //
+      // Widening the RESULT is enough. widenScalar on type index 0 anyexts the
+      // source vector's elements to match and truncates the result back, so
+      // the whole thing becomes an s32 extract from a <N x s32> — a shape the
+      // rules below already handle — and the i1 disappears before anything
+      // has to represent it.
+      .widenScalarIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0] == S1 && Query.Types[1].isFixedVector() &&
+                   Query.Types[1].getElementType() == S1;
+          },
+          [=](const LegalityQuery &Query) {
+            (void)Query;
+            return std::make_pair(0, S32);
+          })
       .customFor({{S32, V2I32}, {S16, V4I16}, {S8, V8I8}})
       // Residual SLP: fewer-elements on the source vector first so generic
       // lower does not unmerge a v16 and re-create extracts (legalizer hang).
       .clampMaxNumElements(1, S32, 2)
       .clampMaxNumElements(1, S16, 4)
       .clampMaxNumElements(1, S8, 8)
-      .clampMaxNumElements(1, S1, 1)
+      // No S1 clamp here either: one element is not a smaller vector, and
+      // clampMaxNumElements builds its target with LLT::scalarOrVector(),
+      // which returns a SCALAR for a count of one. It is the construct that
+      // asserted "Expected vector types" in CB-130, sitting unreached rather
+      // than working. A <N x s1> reaching these rules is unlegalizable today
+      // and says so; that is a gap, not something a clamp can close.
       .lower();
 
   // G_INSERT_VECTOR_ELT: custom for v2i32 and v4i16.
   // Expanded in legalizeCustom to G_UNMERGE_VALUES + shift/mask/merge.
   getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+      // Same as the extract above: widen the element type out of i1 first.
+      // Type index 0 is the RESULT VECTOR here, so widening it carries the
+      // source vector and the inserted value with it.
+      .widenScalarIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0].isFixedVector() &&
+                   Query.Types[0].getElementType() == S1;
+          },
+          [=](const LegalityQuery &Query) {
+            return std::make_pair(
+                0, LLT::fixed_vector(Query.Types[0].getNumElements(), S32));
+          })
       .customFor({{V2I32, S32}, {V4I16, S16}})
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
       .lower();
 
   //===--------------------------------------------------------------------===
@@ -982,7 +1051,6 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
       .lower();
 
   getActionDefinitionsBuilder({

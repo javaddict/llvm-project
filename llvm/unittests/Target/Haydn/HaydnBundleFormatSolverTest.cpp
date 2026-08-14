@@ -14,7 +14,7 @@
 //   AIEFormat.cpp:18-27 PacketFormats::getFormat first-covering
 //   BundleTest.cpp:33-41 FormatData[] synthetic multi-row shape
 //
-// Product: BUNDLE128_FULL only. Synthetic 2-row FormatDesc is unit/solver
+// Product: BUNDLE_E3 only. Synthetic 2-row FormatDesc is unit/solver
 // only (not product emit).
 //
 //===----------------------------------------------------------------------===//
@@ -24,6 +24,7 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
+#include "HaydnTestMCInstrInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/MC/MCInst.h"
 #include "gtest/gtest.h"
@@ -50,8 +51,10 @@ TEST(HaydnBundleFormatSolver, EmptyCommitStall) {
   ASSERT_TRUE(Plan.has_value());
   EXPECT_TRUE(Plan->empty());
   EXPECT_EQ(Plan->OccupiedSlots, 0u);
-  EXPECT_EQ(Plan->FID, FormatID::Bundle128Full);
-  EXPECT_EQ(Plan->Bytes.Value, 16u);
+  // An empty cycle has no occupancy to derive a composite from, so it takes
+  // the default row rather than a chosen one.
+  EXPECT_EQ(Plan->FID, ProductFormatID);
+  EXPECT_EQ(Plan->Bytes.Value, ProductEncodedBytesValue);
   EXPECT_TRUE(Plan->isProductLegal());
 }
 
@@ -62,31 +65,31 @@ TEST(HaydnBundleFormatSolver, EmptyCommitStall) {
 TEST(HaydnBundleFormatSolver, ST32_ADD64_Pack) {
   // ST32 is S0-only; ADD64 is S1|S2. Disjoint → both fit (mirrors
   // HaydnBundleTest DisjointSlotsFit).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
 
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   EXPECT_EQ(S.memberCount(), 1u);
-  EXPECT_EQ(S.OccupiedSlots & Haydn::SLOT0, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::ST32);
-  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ST32_S0);
-  EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(S.OccupiedSlots & Haydn::SLOT_P30, SlotBits(Haydn::SLOT_P30));
+  EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::S_SW_WITH_IMM);
+  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::S_SW_WITH_IMM_P30_LOADSTORE0);
+  EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P30));
 
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
   EXPECT_EQ(S.memberCount(), 2u);
-  EXPECT_NE(S.OccupiedSlots & (Haydn::SLOT1 | Haydn::SLOT2), 0u);
+  EXPECT_NE(S.OccupiedSlots & (Haydn::SLOT_P31 | Haydn::SLOT_P32), 0u);
   // Prefer S2 first (Bundle.pickSlot order).
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD64_S2);
-  EXPECT_EQ(S.Members[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD64_P32_ALU0);
+  EXPECT_EQ(S.Members[1].FieldSlots, SlotBits(Haydn::SLOT_P32));
 
   auto Plan = commitProduct(S);
   ASSERT_TRUE(Plan.has_value());
   EXPECT_TRUE(Plan->isProductLegal());
   EXPECT_EQ(Plan->memberCount(), 2u);
-  EXPECT_EQ(Plan->MemberOpcodes[0], Haydn::ST32);
+  EXPECT_EQ(Plan->MemberOpcodes[0], Haydn::S_SW_WITH_IMM);
   EXPECT_EQ(Plan->MemberOpcodes[1], Haydn::ADD64);
   EXPECT_EQ(Plan->OccupiedSlots, S.OccupiedSlots);
-  EXPECT_EQ(Plan->FID, FormatID::Bundle128Full);
+  EXPECT_EQ(Plan->FID, FormatID::BundleE3);
 }
 
 //===----------------------------------------------------------------------===//
@@ -94,19 +97,22 @@ TEST(HaydnBundleFormatSolver, ST32_ADD64_Pack) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleFormatSolver, ThreeADD32_RejectFourth) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
 
   for (unsigned I = 0; I < 3; ++I) {
     ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32)) << "ADD32 #" << I;
   }
   EXPECT_EQ(S.memberCount(), 3u);
-  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_ALL));
+  EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E3));
 
   // Slot order preference S2 → S1 → S0.
-  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_S2);
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_S0);
+  // P32/ALU0, P31/ALU1, P30/ALU2 — one per unit. The solver used to be
+  // free to put all three on ALU0 because nothing modelled units;
+  // that bundle cannot issue (FORMAT-E-SWITCH-PLAN.md 3, 7.1).
+  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P32_ALU0);
+  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_P31_ALU1);
+  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_P30_ALU2);
 
   EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ADD32))
       << "fourth ADD32 must conflict once S0|S1|S2 are full";
@@ -123,25 +129,34 @@ TEST(HaydnBundleFormatSolver, ThreeADD32_RejectFourth) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
-  ASSERT_EQ(Alts.size(), 3u);
-  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::ADD32_S0);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(Alts[1].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[2].MemberOpcode, Haydn::ADD32_S2);
-  EXPECT_EQ(Alts[2].FieldSlots, SlotBits(Haydn::SLOT2));
+  // Seven placements, not three: ADD32 has two ALUs at each 3-entry position
+  // plus one at entry 0 of the 2-entry form. The stamp is what matters here,
+  // and it comes from the member, so assert it that way rather than by index.
+  EXPECT_EQ(Alts.size(), 7u);
+  SlotBits Union = 0;
+  for (const PlacementAlternative &A : Alts) {
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
+    Union |= A.FieldSlots;
+  }
+  EXPECT_EQ(Union, Fmts.getLegalSlots(Haydn::ADD32));
   for (const PlacementAlternative &A : Alts) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
   }
 
   Alts.clear();
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
-  ASSERT_EQ(Alts.size(), 2u);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  // ADD64 is no longer the sparse counter-example: it has the same seven
+  // placements ADD32 has.
+  EXPECT_EQ(Alts.size(), 7u);
+  SlotBits Add64Union = 0;
+  for (const PlacementAlternative &A : Alts) {
+    EXPECT_EQ(A.FieldSlots, fieldSlotsForMember(Fmts, A.MemberOpcode));
+    Add64Union |= A.FieldSlots;
+  }
+  EXPECT_EQ(Add64Union, Fmts.getLegalSlots(Haydn::ADD64));
 }
 
 //===----------------------------------------------------------------------===//
@@ -151,18 +166,19 @@ TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
 TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
   // Unit-only multi-row table (AIE BundleTest.cpp:33-41 FormatData shape).
   // Narrow Priority 0 covers S0|S1; Full Priority 1 is wide fallback.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, /*Priority=*/1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, /*Priority=*/1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
 
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeInitialCycleState(Table);
   EXPECT_EQ(S.FeasibleFormatMask,
-            formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full));
+            formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3));
 
   // ADD32 with product-only alts: first free field under both formats.
   // S2 is preferred but Narrow does not cover S2 — only Full covers S2.
@@ -178,11 +194,11 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
   //
   // Direct Priority selection on synthetic occupancy:
   CycleState NarrowOnly;
-  NarrowOnly.OccupiedSlots = Haydn::SLOT0;
+  NarrowOnly.OccupiedSlots = Haydn::SLOT_P30;
   NarrowOnly.FeasibleFormatMask =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
   NarrowOnly.Members.push_back(
-      CycleMember{Haydn::ADD32, Haydn::ADD32_S0, Haydn::SLOT0});
+      CycleMember{Haydn::ADD32, Haydn::ADD32_P30_ALU0, Haydn::SLOT_P30});
 
   auto NarrowPlan = commit(NarrowOnly, Table);
   ASSERT_TRUE(NarrowPlan.has_value());
@@ -192,42 +208,43 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_PrefersNarrowPriority) {
 
   // Occupancy needing S2 → Full only.
   CycleState NeedsFull;
-  NeedsFull.OccupiedSlots = Haydn::SLOT2;
+  NeedsFull.OccupiedSlots = Haydn::SLOT_P32;
   NeedsFull.FeasibleFormatMask =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
   NeedsFull.Members.push_back(
-      CycleMember{Haydn::ADD32, Haydn::ADD32_S2, Haydn::SLOT2});
+      CycleMember{Haydn::ADD32, Haydn::ADD32_P32_ALU0, Haydn::SLOT_P32});
   auto FullPlan = commit(NeedsFull, Table);
   ASSERT_TRUE(FullPlan.has_value());
-  EXPECT_EQ(FullPlan->FID, FormatID::Bundle128Full);
+  EXPECT_EQ(FullPlan->FID, FormatID::BundleE3);
   EXPECT_TRUE(FullPlan->isProductLegal());
 }
 
 TEST(HaydnBundleFormatSolver, SyntheticTwoRow_RestrictedMaskDropsFull) {
   // Member CompatibleFormatMask = Narrow only: Feasible shrinks to Narrow
   // when covering holds. Exercise coveringFormatMask + selectFeasible.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, 0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, 1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, 1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
   const uint64_t NarrowMask = formatIDBit(SynthNarrow);
   const uint64_t BothMask =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
 
   // S0 under Narrow-only allowed → NewMask = Narrow only.
-  uint64_t New = coveringFormatMask(Table, Haydn::SLOT0, NarrowMask);
+  uint64_t New = coveringFormatMask(Table, Haydn::SLOT_P30, NarrowMask);
   EXPECT_EQ(New, NarrowMask);
 
   // S2 under Narrow-only → no cover.
-  New = coveringFormatMask(Table, Haydn::SLOT2, NarrowMask);
+  New = coveringFormatMask(Table, Haydn::SLOT_P32, NarrowMask);
   EXPECT_EQ(New, 0u);
 
   // S2 under Both → Full only.
-  New = coveringFormatMask(Table, Haydn::SLOT2, BothMask);
-  EXPECT_EQ(New, formatIDBit(FormatID::Bundle128Full));
+  New = coveringFormatMask(Table, Haydn::SLOT_P32, BothMask);
+  EXPECT_EQ(New, formatIDBit(FormatID::BundleE3));
 
   // tryAdd with product alts: Full mask only; empty commit on multi-row
   // prefers Narrow Priority 0 (covers 0).
@@ -244,9 +261,9 @@ TEST(HaydnBundleFormatSolver, SyntheticTwoRow_RestrictedMaskDropsFull) {
 TEST(HaydnBundleFormatSolver, BruteForceVsBundleCanAddOracle) {
   // Sequential packing: solver tryAdd accept/reject must match Bundle.canAdd
   // for multi-slot logicals that have PlacementAlternatives (Full product).
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   const unsigned Opcodes[] = {
-      Haydn::ADD32, Haydn::ST32, Haydn::ADD64, Haydn::LD32, Haydn::SUB32,
+      Haydn::ADD32, Haydn::S_SW_WITH_IMM, Haydn::ADD64, Haydn::S_LW_WITH_IMM, Haydn::SUB32,
   };
 
   // All non-empty sequences of length <= 4 from a small alphabet.
@@ -299,25 +316,25 @@ TEST(HaydnBundleFormatSolver, BruteForceVsBundleCanAddOracle) {
     runSeq(Seq);
   }
   {
-    unsigned Seq[] = {Haydn::ST32, Haydn::ADD64, Haydn::ADD32};
+    unsigned Seq[] = {Haydn::S_SW_WITH_IMM, Haydn::ADD64, Haydn::ADD32};
     runSeq(Seq);
   }
   {
-    unsigned Seq[] = {Haydn::LD32, Haydn::ADD32, Haydn::ADD64};
+    unsigned Seq[] = {Haydn::S_LW_WITH_IMM, Haydn::ADD32, Haydn::ADD64};
     runSeq(Seq);
   }
   {
-    unsigned Seq[] = {Haydn::ST32, Haydn::ST32}; // second ST32 must fail
+    unsigned Seq[] = {Haydn::S_SW_WITH_IMM, Haydn::S_SW_WITH_IMM}; // second ST32 must fail
     runSeq(Seq);
   }
 }
 
 TEST(HaydnBundleFormatSolver, TryAddRejectLeavesStateUnchanged) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
   const CycleState Before = S;
-  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ST32)); // S0 conflict
+  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM)); // S0 conflict
   EXPECT_EQ(S.memberCount(), Before.memberCount());
   EXPECT_EQ(S.OccupiedSlots, Before.OccupiedSlots);
   EXPECT_EQ(S.FeasibleFormatMask, Before.FeasibleFormatMask);
@@ -325,7 +342,7 @@ TEST(HaydnBundleFormatSolver, TryAddRejectLeavesStateUnchanged) {
 }
 
 TEST(HaydnBundleFormatSolver, UnknownOpcodeNoAltsRejected) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   EXPECT_FALSE(tryAddProduct(S, Fmts, /*LogicalOpc=*/0));
   EXPECT_TRUE(S.empty());
@@ -336,43 +353,48 @@ TEST(HaydnBundleFormatSolver, UnknownOpcodeNoAltsRejected) {
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleFormatSolver, MakeFromOccupiedAndCanTryAdd) {
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState Empty = makeProductCycleStateFromOccupied(0);
   EXPECT_TRUE(Empty.empty());
   EXPECT_EQ(Empty.OccupiedSlots, 0u);
   EXPECT_TRUE(canTryAddProduct(Empty, Fmts, Haydn::ADD32));
 
-  CycleState OccS0 = makeProductCycleStateFromOccupied(Haydn::SLOT0);
-  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT0));
+  CycleState OccS0 = makeProductCycleStateFromOccupied(Haydn::SLOT_P30);
+  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT_P30));
   EXPECT_NE(OccS0.FeasibleFormatMask, 0u);
   // ST32 is S0-only — cannot add onto occupied S0.
-  EXPECT_FALSE(canTryAddProduct(OccS0, Fmts, Haydn::ST32));
+  EXPECT_FALSE(canTryAddProduct(OccS0, Fmts, Haydn::S_SW_WITH_IMM));
   // ADD64 is S1|S2 — still fits.
   EXPECT_TRUE(canTryAddProduct(OccS0, Fmts, Haydn::ADD64));
   // Probe must not mutate.
-  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(OccS0.OccupiedSlots, SlotBits(Haydn::SLOT_P30));
   EXPECT_TRUE(OccS0.empty()) << "from-occupied has no member history";
 }
 
 TEST(HaydnBundleFormatSolver, FieldSlotsToIndex) {
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT0), std::optional<unsigned>(0u));
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT1), std::optional<unsigned>(1u));
-  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT2), std::optional<unsigned>(2u));
+  // The index is the slot's own bit position, and P20/P21 now occupy 0 and 1,
+  // so the 3-entry slots start at 2. This is a slot-kind index, NOT an entry
+  // number: P30 is entry 0 of its composite and index 2.
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P20), std::optional<unsigned>(0u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P21), std::optional<unsigned>(1u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P30), std::optional<unsigned>(2u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P31), std::optional<unsigned>(3u));
+  EXPECT_EQ(fieldSlotsToIndex(Haydn::SLOT_P32), std::optional<unsigned>(4u));
   EXPECT_FALSE(fieldSlotsToIndex(0).has_value());
   EXPECT_FALSE(
-      fieldSlotsToIndex(Haydn::SLOT0 | Haydn::SLOT1).has_value());
+      fieldSlotsToIndex(Haydn::SLOT_P30 | Haydn::SLOT_P31).has_value());
 }
 
 TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
   // Pin S2→S1→S0 order that Bundle/HR adapters inherit.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT_P32));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT1));
+  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT_P31));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT0));
+  EXPECT_EQ(S.Members.back().FieldSlots, SlotBits(Haydn::SLOT_P30));
   EXPECT_FALSE(canTryAddProduct(S, Fmts, Haydn::ADD32));
 }
 
@@ -385,58 +407,68 @@ TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
 // Haydn keeps a FormatID *mask* frontier until post-RA freeze (plan §7.1).
 
 TEST(HaydnBundleFormatSolver, B41_ProductFeasibleFormatMaskEmptyOccupied) {
-  // Empty and every Full-covering occupancy → ProductFormatMask (size-1).
+  // An empty occupancy leaves both composites open -- that is the frontier the
+  // solver narrows. The moment a slot is taken the frontier collapses to the
+  // one composite that slot belongs to, which is the entry-count decision
+  // making itself rather than being decided (5.2).
   EXPECT_EQ(productFeasibleFormatMask(/*Occupied=*/0), ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT0), ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT1 | Haydn::SLOT2),
-            ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_ALL), ProductFormatMask);
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P20),
+            formatIDBit(FormatID::BundleE2));
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P30),
+            formatIDBit(FormatID::BundleE3));
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P31 | Haydn::SLOT_P32),
+            formatIDBit(FormatID::BundleE3));
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_SET_E3),
+            formatIDBit(FormatID::BundleE3));
+  // A mask spanning both is not a bundle: no row covers it.
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P20 | Haydn::SLOT_P30), 0u);
 
   // makeProductCycleStateFromOccupied rebuilds the same frontier.
   EXPECT_EQ(makeProductCycleStateFromOccupied(0).FeasibleFormatMask,
             ProductFormatMask);
-  EXPECT_EQ(makeProductCycleStateFromOccupied(Haydn::SLOT_ALL).FeasibleFormatMask,
-            ProductFormatMask);
+  EXPECT_EQ(makeProductCycleStateFromOccupied(Haydn::SLOT_SET_E3).FeasibleFormatMask,
+            formatIDBit(FormatID::BundleE3));
 }
 
 TEST(HaydnBundleFormatSolver, B41_SyntheticSecondFormatCanShrinkFrontier) {
   // N-format-ready: synthetic 2nd FormatDesc row can drop out of the mask
   // when occupancy no longer covers (no product emit).
   // AIE BundleTest.cpp:33-41 FormatData[] multi-row shape.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, /*Priority=*/1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, /*Priority=*/1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
   const uint64_t Both =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
 
   // Empty / S0: both formats cover.
   EXPECT_EQ(feasibleFormatMask(Table, /*Occupied=*/0, Both), Both);
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT0, Both), Both);
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT0 | Haydn::SLOT1, Both), Both);
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P30, Both), Both);
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P30 | Haydn::SLOT_P31, Both), Both);
 
   // S2 needs Full — Narrow drops (frontier shrinks).
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT2, Both),
-            formatIDBit(FormatID::Bundle128Full));
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_ALL, Both),
-            formatIDBit(FormatID::Bundle128Full));
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P32, Both),
+            formatIDBit(FormatID::BundleE3));
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_SET_E3, Both),
+            formatIDBit(FormatID::BundleE3));
 
   // Product helper remains Full-only even when occupancy is S2.
-  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT2), ProductFormatMask);
+  EXPECT_EQ(productFeasibleFormatMask(Haydn::SLOT_P32), formatIDBit(FormatID::BundleE3));
 }
 
 TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
   // After packing, CycleState.FeasibleFormatMask stays ProductFormatMask.
-  HaydnMCFormats Fmts;
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
   CycleState S = makeProductCycleState();
   EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-  EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
-  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
-  EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
+  EXPECT_EQ(S.FeasibleFormatMask, formatIDBit(FormatID::BundleE3));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::S_SW_WITH_IMM));
+  EXPECT_EQ(S.FeasibleFormatMask, formatIDBit(FormatID::BundleE3));
   EXPECT_EQ(productFeasibleFormatMask(S.OccupiedSlots), S.FeasibleFormatMask);
 }
 
@@ -468,11 +500,11 @@ TEST(HaydnBundleFormatSolver, B42_ComputeProductResMII_ADD32) {
 TEST(HaydnBundleFormatSolver, B42_ComputeProductResMII_LD_LD_MAC) {
   // LD32 (S0|S1) ×2 + X2MULA32 (S1|S2): tryAdd S2→S1→S0 packs all three.
   // AIE-shaped dual-load + MAC density (ResMII 1).
-  unsigned Ops[] = {Haydn::LD32, Haydn::LD32, Haydn::X2MULA32};
+  unsigned Ops[] = {Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM, Haydn::X2MULA32};
   EXPECT_EQ(computeProductResMII(Ops), 1u);
 
   // Reverse order still one cycle.
-  unsigned Ops2[] = {Haydn::X2MULA32, Haydn::LD32, Haydn::LD32};
+  unsigned Ops2[] = {Haydn::X2MULA32, Haydn::S_LW_WITH_IMM, Haydn::S_LW_WITH_IMM};
   EXPECT_EQ(computeProductResMII(Ops2), 1u);
 }
 
@@ -481,25 +513,26 @@ TEST(HaydnBundleFormatSolver, B42_LiveMaskVsOccupiedRebuild_Synthetic) {
   // rebuild when CompatibleFormatMask restricts members (N-format-ready).
   // Product alts are Full-only so product path matches; exercise covering
   // with restricted Allowed mask on a synthetic table.
-  constexpr FormatID SynthNarrow = static_cast<FormatID>(1);
+  // Past both live composites: FormatID 1 is BundleE3, not a spare value.
+  constexpr FormatID SynthNarrow = static_cast<FormatID>(2);
   const FormatDesc Table[] = {
       {SynthNarrow, /*Priority=*/0, EncodedBytes{8},
-       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1)},
-      {FormatID::Bundle128Full, /*Priority=*/1, Bundle128EncodedBytes,
-       static_cast<SlotBits>(Haydn::SLOT_ALL)},
+       static_cast<SlotBits>(Haydn::SLOT_P30 | Haydn::SLOT_P31)},
+      {FormatID::BundleE3, /*Priority=*/1, ProductEncodedBytes,
+       static_cast<SlotBits>(Haydn::SLOT_SET_E3)},
   };
   const uint64_t Both =
-      formatIDBit(SynthNarrow) | formatIDBit(FormatID::Bundle128Full);
+      formatIDBit(SynthNarrow) | formatIDBit(FormatID::BundleE3);
   const uint64_t NarrowOnly = formatIDBit(SynthNarrow);
 
   // Occupancy-only rebuild with Both seed keeps both for S0.
-  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT0, Both), Both);
+  EXPECT_EQ(feasibleFormatMask(Table, Haydn::SLOT_P30, Both), Both);
 
   // Live-style: member Compatible = Narrow only shrinks frontier to Narrow
   // (same accumulation tryAdd does via Allowed = Feasible ∩ Compatible).
-  uint64_t Live = coveringFormatMask(Table, Haydn::SLOT0, NarrowOnly);
+  uint64_t Live = coveringFormatMask(Table, Haydn::SLOT_P30, NarrowOnly);
   EXPECT_EQ(Live, NarrowOnly);
-  EXPECT_NE(Live, feasibleFormatMask(Table, Haydn::SLOT0, Both))
+  EXPECT_NE(Live, feasibleFormatMask(Table, Haydn::SLOT_P30, Both))
       << "Occupied-only rebuild with full seed drifts from live Compatible "
          "intersection — SMS must hold live CycleState";
 }
@@ -510,6 +543,114 @@ TEST(HaydnBundleFormatSolver, B42_ComputeProductResMII_SixADD32) {
   for (unsigned &O : Ops)
     O = Haydn::ADD32;
   EXPECT_EQ(computeProductResMII(Ops), 2u);
+}
+
+//===----------------------------------------------------------------------===//
+// Unit exclusivity is exact here, and CB-143's residual said otherwise
+//===----------------------------------------------------------------------===//
+
+// Three ADD32 fit because [ALU0, ALU1, ALU2] is three units (above). A MAC
+// is the case that cannot: X2MUL32's five placements are P20/MAC0, P21/MAC1,
+// P30/MAC0, P31/MAC0, P32/MAC1, so the machine offers it exactly two units
+// and a third one has nowhere to go.
+//
+// CB-143's residual line claimed the opposite — that three instructions
+// sharing a two-unit Available set "pass and cannot all issue". They do not
+// pass: tryAdd tracks OccupiedUnits per member, so this is exact. The claim
+// described HaydnFuncUnitWrapper::conflict, whose Required bits are entry
+// POSITIONS (PlacementAlternative::FieldSlots), not units.
+TEST(HaydnBundleFormatSolver, TwoMACUnitsRejectThird) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+  CycleState S = makeProductCycleState();
+
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  EXPECT_EQ(S.memberCount(), 2u);
+  EXPECT_EQ(llvm::popcount(S.OccupiedUnits), 2)
+      << "two MACs must hold two distinct units";
+
+  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::X2MUL32))
+      << "the machine has MAC0 and MAC1 only — a third MAC cannot issue even "
+         "though a third entry slot is free";
+  EXPECT_EQ(S.memberCount(), 2u) << "reject must leave state unchanged";
+}
+
+//===----------------------------------------------------------------------===//
+// CB-147 — the first placement chooses the format, and E2-only ops lose
+//===----------------------------------------------------------------------===//
+
+// The two product rows have disjoint slot sets ({P20,P21} vs {P30,P31,P32}),
+// so no occupancy is covered by both and the first member placed would decide
+// the format for the whole cycle if the walk never reconsidered. It does:
+// tryAdd tries alternatives by descending slot bit, and when none fits it
+// re-solves the cycle from scratch rather than rejecting.
+//
+// ADDI32 has no P3x placement at all — a wide immediate only fits a 2-entry
+// entry — so after ADD32 has taken P32 there is exactly one way to seat both,
+// and it requires MOVING ADD32 to its single E2 placement. This is CB-147, and
+// what makes it worth a test is that the move is the dangerous half: every
+// placed member already has a published alternate descriptor.
+TEST(HaydnBundleFormatSolver, CB147_ReSolveSeatsE2OnlyADDI32) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+
+  // The order that used to lose: the flexible op goes first and takes E3.
+  {
+    CycleState S = makeProductCycleState();
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
+    ASSERT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P32))
+        << "descending walk still takes the highest slot when it is free";
+    ASSERT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P32_ALU0);
+
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADDI32))
+        << "ADDI32 is E2-only, so seating it requires re-solving the cycle";
+    EXPECT_EQ(S.memberCount(), 2u);
+    EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E2));
+
+    // The whole point: member 0 MOVED. ADD32 has exactly one E2 placement, so
+    // the assignment is forced and can be named rather than merely bounded.
+    EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P20_ALU0)
+        << "the already-placed member must be relocated, not left at P32";
+    EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADDI32_P21_ALU1);
+    EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::ADD32)
+        << "a re-solve moves placements, never logical identity";
+    EXPECT_EQ(S.Members[1].LogicalOpcode, Haydn::ADDI32);
+  }
+
+  // Other order: greedy already works, so nothing is re-solved and nothing
+  // moves. This is the half that must stay byte-identical to the old behaviour.
+  {
+    CycleState S = makeProductCycleState();
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADDI32));
+    EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADDI32_P21_ALU1)
+        << "ADDI32's highest placement is P21, which commits the cycle to E2";
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
+    EXPECT_EQ(S.memberCount(), 2u);
+    EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E2));
+    EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADDI32_P21_ALU1)
+        << "greedy succeeded, so the first member must not have moved";
+  }
+}
+
+// A re-solve must not manufacture capacity. Three MACs still cannot issue
+// (two units), and a fourth op still cannot enter a full 3-entry cycle — the
+// search is exhaustive over assignments, not over the machine.
+TEST(HaydnBundleFormatSolver, CB147_ReSolveDoesNotInventCapacity) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+
+  CycleState S = makeProductCycleState();
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::X2MUL32))
+      << "MAC0 and MAC1 are the only two units; no assignment seats a third";
+  EXPECT_EQ(S.memberCount(), 2u) << "reject must leave state unchanged";
+
+  CycleState T = makeProductCycleState();
+  for (unsigned I = 0; I < 3; ++I)
+    ASSERT_TRUE(tryAddProduct(T, Fmts, Haydn::ADD32)) << "ADD32 #" << I;
+  EXPECT_FALSE(tryAddProduct(T, Fmts, Haydn::ADD32))
+      << "a 3-entry cycle is full; re-solving cannot seat a fourth";
+  EXPECT_EQ(T.memberCount(), 3u);
+  EXPECT_EQ(T.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E3));
 }
 
 } // namespace

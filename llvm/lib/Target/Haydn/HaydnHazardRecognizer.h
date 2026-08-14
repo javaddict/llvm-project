@@ -85,9 +85,18 @@ void applyFormatOrdering(Haydn::MachineBundle &Bundle, const VLIWFormat &Format,
 // This covers the 3 slots (SLOT0/1/2 — the itinerary FuncUnits). GPR port
 // demand is tracked as scalar counts rather than FU bits because the 4R2W
 // budget is a counting constraint, not an exclusivity constraint. The value
-// must match the number of FuncUnits declared in HaydnSchedule.td
-// ([SLOT0, SLOT1, SLOT2] = 3).
-inline constexpr unsigned HAYDN_NUM_FU_BITS = 3;
+// must match the number of FuncUnits HaydnItineraries declares, which is
+// HaydnFormatEUnits: LOADSTORE0, LOAD1, ALU0, ALU1, ALU2, MAC0, MAC1.
+//
+// It was 3, for the retired [SLOT0, SLOT1, SLOT2], and those three sat AHEAD
+// of the units in the list — so a Unit_* itinerary set bits 3..9 and the loop
+// over bits 0..2 in HaydnFuncUnitWrapper recorded NOTHING. From the day the
+// members were retargeted onto the unit model the post-RA scheduler had an
+// empty resource set for every instruction and its exclusivity check was
+// inert. It did not show: bundle legality comes from the placement
+// (FORMAT-E-SWITCH-PLAN.md section 7), never from here.
+//
+inline constexpr unsigned HAYDN_NUM_FU_BITS = 7;
 
 // Per-cycle resource container — the RC type parameter of
 // ResourceScoreboard<HaydnFuncUnitWrapper>.
@@ -346,9 +355,27 @@ private:
   haydn::bundle::CycleState CurrentCycleState =
       haydn::bundle::makeProductCycleState();
 
+  // The instructions behind CurrentCycleState.Members, in the same order and
+  // appended in lockstep. tryAdd may RE-SOLVE the cycle to fit a newcomer
+  // (CB-147), which moves an already-accepted member to a different member
+  // opcode; the alternate descriptor published for it then names the slot it
+  // left, so commitPlacementForEmit re-stamps every mover and needs this to
+  // find them. Cleared with CurrentCycleState on Advance/Recede/Reset.
+  //
+  // These pointers live no longer than the ones HaydnAlternateDescriptors
+  // already keys on, and nothing replaces a MachineInstr between here and
+  // leaveRegion's materializeMultiOpcodeInstrs — which is the only reason it
+  // is safe to hold them at all. Facts, not pointers, is still the rule for
+  // everything that outlives a cycle (see CurrentCycleMemOps).
+  SmallVector<MachineInstr *, 3> CurrentCycleMIs;
+
   // HaydnMCFormats for PlacementAlternative / tryAdd (B2.5 alts-only).
   // Stateless table lookup.
-  HaydnMCFormats Fmts;
+  // WithMII: this is the placement authority — enumeratePlacementAlternatives
+  // and tryAddProduct below choose which MEMBER an instruction becomes, and
+  // the unit is a property of the member. A plain HaydnMCFormats here makes
+  // that choice slot-only (§ 5.7).
+  HaydnMCFormatsWithMII Fmts;
 
   // Walk all scheduling classes to compute the scoreboard depth and the
   // maximum result latency (used to size the scoreboard window).

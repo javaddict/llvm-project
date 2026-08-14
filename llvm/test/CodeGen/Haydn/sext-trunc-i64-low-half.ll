@@ -17,55 +17,28 @@
 ; drops the low half fails FileCheck.
 
 
-; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
 
-; CHECK: 	.text
-; CHECK: 	.globl	sext_trunc_low_half             // -- Begin function sext_trunc_low_half
-; CHECK: 	.type	sext_trunc_low_half,@function
-; CHECK: sext_trunc_low_half:                    // @sext_trunc_low_half
-; CHECK: 	.cfi_startproc
-; CHECK: // %bb.0:                               // %entry
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ subi32	sp, sp, 8; nop; nop }
-; CHECK: 	.cfi_def_cfa_offset 8
-; CHECK: 	{ nop; nop; lui	r1, v20 }
-; CHECK: 	{ nop; nop; addi32_w	r1, r1, v20 }
-; CHECK: 	{ nop; ld64	d0, r1, 0; lui	r2, v4 }
-; CHECK: 	{ nop; nop; addi32_w	r2, r2, v4 }
-; CHECK: 	{ nop; ld64	d1, r2, 0; addi32_w	r1, r0, 32 }
-; CHECK: 	{ sll64	d0, d0, r1; nop; nop }
-; CHECK: 	{ sra64	d0, d0, r1; nop; nop }
-; CHECK: 	{ or64	d0, d0, d1; nop; nop }
-; CHECK: 	{ xor32	r0, r0, r0; nop; nop }
-; CHECK: 	{ nop; nop; addi32_w	sp, sp, 8 }
-; CHECK: 	{ nop; nop; jalr	r0, lr, 0 }
-; CHECK: .Lfunc_end0:
-; CHECK: 	.size	sext_trunc_low_half, .Lfunc_end0-sext_trunc_low_half
-; CHECK: 	.cfi_endproc
-; CHECK:                                         // -- End function
-; CHECK: 	.type	v20,@object                     // @v20
-; CHECK: 	.data
-; CHECK: 	.globl	v20
-; CHECK: 	.p2align	3, 0x0
-; CHECK: v20:
-; CHECK: 	.quad	1851795283613690922             // 0x19b2e5ffcc89ac2a
-; CHECK: 	.size	v20, 8
-; CHECK: 	.type	v4,@object                      // @v4
-; CHECK: 	.globl	v4
-; CHECK: 	.p2align	3, 0x0
-; CHECK: v4:
-; CHECK: 	.quad	-6903239071969274604            // 0xa032c4a393ac9514
-; CHECK: 	.size	v4, 8
-; CHECK: 	.section	".note.GNU-stack","",@progbits
 
 @v20 = dso_local global i64 1851795283613690922, align 8
 @v4  = dso_local global i64 11543505001740277012, align 8
 
 define dso_local i64 @sext_trunc_low_half() {
-
-; REBASELINED (auto) B3.exit.4 Desc-only Bundle128 print (S0-S1-S2 / setDesc members); .file skipped
-
-
+; CHECK-LABEL: sext_trunc_low_half:
+; CHECK:       // #<spill-kpi> @sext_trunc_low_half spills=0 spill-bytes=0 reloads=0 reload-bytes=0
+; CHECK-NEXT:  // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { lui r1, v20; lui r2, v4; nop }
+; CHECK-NEXT:    { addi32 r1, r1, v20; addi32 r2, r2, v4 }
+; CHECK-NEXT:    { d_ldw_with_imm d0, r1, 0; addi32 r1, r0, 32 }
+; CHECK-NEXT:    { d_ldw_with_imm d1, r2, 0; nop; nop }
+; CHECK-NEXT:    { sll64 d0, d0, r1; nop; nop }
+; CHECK-NEXT:    { sra64 d0, d0, r1; nop; nop }
+; CHECK-NEXT:    { or64 d0, d0, d1; nop; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   %a = load i64, ptr @v20, align 8
   %trunc = trunc i64 %a to i32

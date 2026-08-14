@@ -137,12 +137,13 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
             LLVM_DEBUG(dbgs() << "  AND32 with R0 (zero): " << MI);
             ++NumZeroOpsSimplified;
             // Replace with MOVE32 rd, R0 (so rd gets zero).
-            // We use R0 as both source operands (MOVE32 is rd = rs1, but the
-            // printer shows only rs1; the encoding uses rs1 field only).
+            // One source: MOVE32 is `rd = rs1` and the database agrees, so
+            // the second was only ever filling FmtALU32's rs2 field. That
+            // field is bound in the.td now (§ 5.11).
             BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                          .getInstrInfo()->get(Haydn::MOVE32),
                     DstReg)
-                .addReg(Haydn::R0).addReg(Haydn::R0);
+                .addReg(Haydn::R0);
             ToRemove.push_back(&MI);
             Changed = true;
             continue;
@@ -155,7 +156,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
             BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                          .getInstrInfo()->get(Haydn::MOVE32),
                     DstReg)
-                .addReg(Haydn::R0).addReg(Haydn::R0);
+                .addReg(Haydn::R0);
             ToRemove.push_back(&MI);
             Changed = true;
             continue;
@@ -170,7 +171,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
             BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                          .getInstrInfo()->get(Haydn::MOVE32),
                     DstReg)
-                .addReg(Src1Reg).addReg(Src1Reg);
+                .addReg(Src1Reg);
             ToRemove.push_back(&MI);
             Changed = true;
             continue;
@@ -195,7 +196,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
               BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                            .getInstrInfo()->get(Haydn::MOVE32),
                       DstReg)
-                  .addReg(Src1Reg).addReg(Src1Reg);
+                  .addReg(Src1Reg);
               ToRemove.push_back(&MI);
               Changed = true;
               continue;
@@ -208,7 +209,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
               BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                            .getInstrInfo()->get(Haydn::MOVE32),
                       DstReg)
-                  .addReg(Src2Reg).addReg(Src2Reg);
+                  .addReg(Src2Reg);
               ToRemove.push_back(&MI);
               Changed = true;
               continue;
@@ -233,7 +234,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
               BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                            .getInstrInfo()->get(Haydn::MOVE32),
                       DstReg)
-                  .addReg(Src1Reg).addReg(Src1Reg);
+                  .addReg(Src1Reg);
               ToRemove.push_back(&MI);
               Changed = true;
               continue;
@@ -245,7 +246,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
               BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                            .getInstrInfo()->get(Haydn::MOVE32),
                       DstReg)
-                  .addReg(Src2Reg).addReg(Src2Reg);
+                  .addReg(Src2Reg);
               ToRemove.push_back(&MI);
               Changed = true;
               continue;
@@ -271,7 +272,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
               BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                            .getInstrInfo()->get(Haydn::MOVE32),
                       DstReg)
-                  .addReg(Haydn::R0).addReg(Haydn::R0);
+                  .addReg(Haydn::R0);
               ToRemove.push_back(&MI);
               Changed = true;
               continue;
@@ -317,7 +318,7 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
               BuildMI(MBB, MI, MI.getDebugLoc(), MI.getMF()->getSubtarget()
                            .getInstrInfo()->get(Haydn::MOVE32),
                       DstReg)
-                  .addReg(SrcReg).addReg(SrcReg);
+                  .addReg(SrcReg);
               ToRemove.push_back(&MI);
               Changed = true;
               continue;
@@ -343,7 +344,6 @@ bool HaydnBitSimplify::runOnMachineFunction(MachineFunction &MF) {
                     MI.getMF()->getSubtarget().getInstrInfo()->get(
                         Haydn::MOVE32),
                     DstReg)
-                .addReg(SrcReg)
                 .addReg(SrcReg);
             ToRemove.push_back(&MI);
             Changed = true;

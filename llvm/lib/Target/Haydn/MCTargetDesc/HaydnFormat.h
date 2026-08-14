@@ -118,6 +118,12 @@ public:
   // terminates once it passes \p Size.
   const VLIWFormat *getFormatBySize(SlotBits SlotSet, unsigned Size) const;
 
+  // \returns the format holding exactly \p NumEntries entries, or nullptr.
+  // Format E has one row per entry count, so this identifies a composite from
+  // nothing but "how many instructions are in this bundle" — which is all the
+  // asm parser knows while reading `{ a; b; c }`.
+  const VLIWFormat *getFormatByEntryCount(unsigned NumEntries) const;
+
 private:
   const VLIWFormat *FormatsTable;
 };

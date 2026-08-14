@@ -1,56 +1,53 @@
 # RUN: llvm-mc -triple haydn-unknown-elf -filetype=obj %s -o %t.o && \
-# RUN:   llvm-objdump -s --triple=haydn-unknown-elf %t.o | FileCheck %s
+# RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
 #
-# REGRESSION TEST (RISK-6): HWLoopOff1/HWLoopOff2 FieldLsb must match
-# the Bundle128 s0 slot window, NOT the legacy 48-bit-parcel geometry. This
-# was the REAL root.
+# REGRESSION TEST for § 5.14, FIXED. This is the SILENT form of that defect —
+# no reserved bit, no <unknown>, just wrong offsets — and
+# hwloop-fixup-reserved-bit.s is the loud one. They went green together and
+# should stay that way.
 #
-# Bug: HaydnRelocLayout.cpp HWLoopOff1 (FieldLsb=26) + HWLoopOff2 (FieldLsb=14)
-# were transcribed from the LEGACY 48-bit parcel layout (Fmt48_WideSET_HWLOOP_F2
-# in HaydnInstrFormatsC.td: offset1@bits[31:26], offset2@bits[25:14]) and never
-# updated when routed all emission through Bundle128. The actually-emitted
-# def is SET_HWLOOP_F2_S0 (HaydnFormatsALU32.td, class
-# HaydnFU_ALU32_S0_HWLOOP_F2_W: `s0 = {FU, opcode, reserved, rs, offset2
-# offset1, sel}`), which places offset1 at s0 bits[6:1] and offset2 at s0
-# bits[18:7]. With stale FieldLsb=26, applyFixup wrote the 6-bit offset1 into
-# bits[31:26] of the LoWord -- corrupting the rs/reserved bits and leaving
-# bits[6:1] zero. The IsSigned=false fix alone was incomplete: the field RANGE
-# was correct but the field POSITION was wrong.
+# REGRESSION TEST (RISK-6): the hardware-loop offset fixups must land in the
+# fields the instruction declares. That was the original question here and it
+# is still the question — only the layout it is asked against has changed.
 #
-# Test design: emit set_hwloop_f2 with symbolic labels at known Bundle128
-# offsets, then dump raw.text bytes. The fixup resolves locally (same
-# fragment) so applyFixup patches both fields before the object is written.
-# Lbody = 16 bytes ahead (one Bundle128 parcel) -> off1 = 16/4 = 4
-# Lend = 32 bytes ahead (two parcels) -> off2 = 32/4 = 8
-# The load-bearing assertion: byte0 of the LoWord carries (off1 << 1) | sel
-# = (4 << 1) | 0 = 0x08. With stale FieldLsb=26, off1 patched bits[31:26]
-# (byte3) and byte0 was 0x00. This test does NOT depend on the WIDE-path
-# decoder (separately XFAIL'd in bug2-hwloop-wide-fixup-off1-off2.s); it
-# inspects raw section bytes directly via `llvm-objdump -s`.
+# The Bundle128 version: HWLoopOff1 (FieldLsb=26) and HWLoopOff2 (FieldLsb=14)
+# had been transcribed from the legacy 48-bit parcel and never updated, so
+# applyFixup wrote offset1 into bits[31:26] of the LoWord — corrupting the
+# rs/reserved bits and leaving the real field zero. The range was right and
+# the POSITION was wrong, which is why a range-only fix did not close it.
+#
+# The format E version, measured: the fields are
+#
+#     e1{17-12} = uimm6_offset1     e1{29-18} = uimm12_offset2
+#
+# and with .Lbody 12 bytes ahead and .Lend 24 ahead the encoder used to produce
+#
+#     off1 = 0        off2 = 3 (printed as 12)
+#
+# off1 was zero for any choice of units, and off2 was carrying the distance to
+# .Lbody — the value that belongs to off1. The two label fixups were landing
+# in the wrong field, NO reserved bit was set, and nothing complained: the
+# disassembler printed `set_hwloop_f2 0, 0, 12, r1` for a loop running +12 to
+# +24. That is what makes this the useful half of the pair to keep.
+#
+# The check needs no byte pattern: asserting the printed operands says the
+# same thing and survives a layout change, which the old byte0 == 0x08
+# assertion did not.
 
 .text
 .globl test_d486_hwloop_fieldlsb
-.balign 16
+# .balign 4, not 16 — see § 5.9: a 12-byte parcel cannot align to 16.
+.balign 4
 test_d486_hwloop_fieldlsb:
-    # SET_HWLOOP_F2 at offset 0 -> 16-byte Bundle128 parcel (bytes 0..15).
-    # The s0 LoWord is bytes 0..5; bytes 6..15 are s1/s2 NOP padding.
-    # Symbolic off1/off2 emit FIXUP_HAYDN_HWLoopOff1/Off2, patched by
-    # applyFixup at the FieldLsb positions (1 and 7).
+    # SET_HWLOOP_F2 in the parcel at 0.
     set_hwloop_f2 0, .Lbody, .Lend, r1
 .Lbody:
-    # offset 16 from SET_HWLOOP_F2 base -> off1 = 16/4 = 4 (bits[6:1]=000100)
-    # 16-byte Bundle128 parcel (bytes 16..31)
+    # one parcel ahead -> 12 bytes
     { add32 r1, r2, r3 }
 .Lend:
-    # offset 32 from SET_HWLOOP_F2 base -> off2 = 32/4 = 8 (bits[18:7]=0x008)
-    # 16-byte Bundle128 parcel (bytes 32..47)
+    # two parcels ahead -> 24 bytes
     { add32 r4, r5, r6 }
 
-# CHECK-LABEL: Contents of section .text:
-# The first 16 bytes are the SET_HWLOOP_F2 Bundle128 parcel. Byte0 = LoWord
-# bit[7:0] = (off1=4 << 1) | sel=0 = 0x08 (FIX). With stale FieldLsb=26, byte0
-# was 0x00 (off1 missed byte0 entirely, corrupting byte3 instead). We assert
-# the hex pattern "08" appears at the start of the section content line -- this
-# is the deterministic discriminator between the fixed and stale FieldLsb.
-# CHECK:      0000 08
+# CHECK-LABEL: <test_d486_hwloop_fieldlsb>:
+# CHECK: set_hwloop_f2{{.*}}0, 12, 24, r1

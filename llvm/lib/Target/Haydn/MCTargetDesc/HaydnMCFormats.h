@@ -387,16 +387,29 @@ public:
   // the generated table; retires when M0_64 migrates (post-P5).
   const MCFormatDesc &getMode0FormatDesc() const;
 
-  // \returns the Bundle128 format-desc (the 3-slot 128-bit single composite
-  // form). SlotsMap carries the s0/s1/s2 slot-window positions;
-  // use getSlotOffsetsHiBit(SLOT0/1/2) on the result to recover each slot's
-  // MSB-indexed window in the 128b word:
-  // s0 = [0,47] (48b window; FU(3b) at offset 0)
-  // s1 = [48,87] (40b window; FU(3b) at offset 48)
-  // s2 = [88,127] (40b window; FU(3b) at offset 88)
-  // Delegates to getFormatDesc(Haydn::BUNDLE128_FULL) reading the GENERATED
+  // \returns the format-desc for one of the two format E composites,
+  // \p CompositeOpcode being Haydn::BUNDLE_E2 or Haydn::BUNDLE_E3. Its
+  // SlotsMap carries that composite's entry-window positions inside the 96-bit
+  // bundle; use getSlotOffsetsHiBit(Kind) on the result to recover an entry's
+  // MSB-indexed window.
+  //
+  // Unlike Bundle128's single BUNDLE128_FULL, WHICH composite applies is not a
+  // constant — it follows from the entry count. Callers get it from
+  // Bundle::getFormatOrNull()->Opcode, i.e. from the generated packet-format
+  // table's coverage of the occupied slots, rather than deciding for
+  // themselves. Delegates to getFormatDesc reading the GENERATED
   // Haydn::Formats table (single truth).
-  const MCFormatDesc &getBundle128FormatDesc() const;
+  const MCFormatDesc &getCompositeFormatDesc(unsigned CompositeOpcode) const;
+
+  // \returns the MCInstrInfo this formats object was built with, or nullptr.
+  //
+  // The unit axis needs a member's NAME to read its unit off, and only
+  // MCInstrInfo has names. Carrying it here rather than asking every Bundle
+  // caller to pass it separately is what stops a caller silently losing the
+  // unit check — HaydnMCCodeEmitter already constructed
+  // HaydnMCFormatsWithMII and then dropped the MII on the floor when it built
+  // its Bundle. See FORMAT-E-SWITCH-PLAN.md § 5.7.
+  virtual const MCInstrInfo *getMCInstrInfo() const { return nullptr; }
 
   // \returns whether \p Opcode has an entry in the format-desc table.
   virtual bool isSupportedInstruction(unsigned Opcode) const;
@@ -438,9 +451,16 @@ public:
   // \returns the FormatAvailable LUT from HaydnFormat.h.
   virtual ArrayRef<bool> getIsFormatAvailable() const = 0;
 
-  // \returns whether \p SlotSet (a combination of Haydn::SLOT* masks) names a
-  // packetable slot combination (true iff some format's SlotSet covers it).
+  // \returns whether \p SlotSet (a combination of Haydn::SLOT_P* masks) names
+  // a packetable slot combination (true iff some format's SlotSet covers it).
   bool isFormatAvailable(uint64_t SlotSet) const;
+
+  // \returns the packet format holding exactly \p NumEntries entries, or
+  // nullptr. Format E has one row per entry count (BUNDLE_E2, BUNDLE_E3), so
+  // this is how a caller that knows only "how many instructions are written
+  // here" — the asm parser reading `{ a; b; c }` — recovers which slots those
+  // positions name. Its getSlots() is in AsmString order, high entry first.
+  const VLIWFormat *getFormatByEntryCount(unsigned NumEntries) const;
 
 protected:
   // Check if the Instruction is indeed into the Tables (AIE pattern).
@@ -475,7 +495,7 @@ public:
 // member-opcode-aware formats subclass
 //===----------------------------------------------------------------------===//
 //
-// The MC encoder wires `Haydn::Bundle<MCInst>` into `encodeBundle128` as the
+// The MC encoder wires `Haydn::Bundle<MCInst>` into `encodeBundleE` as the
 // AIE-faithful shuffler. Bundle's `pickSlot` calls `getLegalSlots(Opc)` through
 // the `HaydnBaseMCFormats*` interface. The base `HaydnMCFormats::getLegalSlots`
 // only recognizes logical opcodes (getAlternateInstsOpcode rows). For an
@@ -537,6 +557,8 @@ class HaydnMCFormatsWithMII : public HaydnMCFormats {
 public:
   HaydnMCFormatsWithMII(const MCInstrInfo &MII) : MII(MII) {}
 
+  const MCInstrInfo *getMCInstrInfo() const override { return &MII; }
+
   // Member-opcode-aware legal-slot query. Strips the `_S<k>` suffix to
   // recover the logical base, then queries alts-derived getLegalSlots.
   // For a logical opcode this is identical to the base implementation.
@@ -555,10 +577,10 @@ MCSlotKind haydnSlotMaskToKind(SlotBits Mask);
 // shared Bundle128-target predicate (Bundle128 16-byte emit path).
 //===----------------------------------------------------------------------===//
 //
-// The MC encoder (`HaydnMCCodeEmitter::encodeInstruction` / `encodeBundle128`)
+// The MC encoder (`HaydnMCCodeEmitter::encodeInstruction` / `encodeBundleE`)
 // routes BOTH standalone Bundle128-target opcodes AND formed BUNDLEs whose
-// real children are all Bundle128-target through `encodeBundle128`, emitting a
-// 128-bit (16-byte) Bundle128 composite word via `emitBundle128Word`.
+// real children are all Bundle128-target through `encodeBundleE`, emitting a
+// 128-bit (16-byte) Bundle128 composite word via `emitBundleWord`.
 //
 // A `_S<k>` opcode is SELF-DESCRIBING: its name suffix carries the slot
 // digit (0/1/2 = S0/S1/S2). A logical opcode with PlacementAlternative members
@@ -578,8 +600,8 @@ MCSlotKind haydnSlotMaskToKind(SlotBits Mask);
 // a `_S<k>` opcode (self-describing name suffix), OR
 // a logical opcode with PlacementAlternative members (encode materializes).
 // In both cases the emitted width is 16 bytes. This mirrors the MC encoder's
-// `isBundle128TargetOpcode` gate (`HaydnMCCodeEmitter.cpp`).
-bool isHaydnBundle128TargetOpcode(unsigned Opc, const MCInstrInfo &MII);
+// `isBundleTargetOpcode` gate (`HaydnMCCodeEmitter.cpp`).
+bool isHaydnBundleTargetOpcode(unsigned Opc, const MCInstrInfo &MII);
 
 } // namespace llvm
 
