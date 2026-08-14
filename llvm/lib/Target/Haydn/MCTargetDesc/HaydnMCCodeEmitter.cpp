@@ -1243,6 +1243,30 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
       break;
     }
   }
+  // Accumulator members (CB-152c) carry tied input operands the LOGICAL asm
+  // never spells ("mulss32.hhll d0, d1, d2" parses to three operands while
+  // the member Desc holds dest, dest_acc, src1, src2). A tied USE may
+  // therefore have nothing in its class bag to consume. Synthesize it from
+  // its tie target — but only when the bag is short: when the input DID
+  // carry the duplicated register (CodeGen-shaped MCInsts, the LS writeback
+  // collapses above), the remaining bag exceeds what the remaining non-tied
+  // operands need and the old consume order is preserved bit-for-bit.
+  auto remainingNonTiedOfClass = [&](unsigned AfterOI, int RegClass) {
+    unsigned N = 0;
+    for (unsigned OJ = AfterOI + 1, OE = Desc.getNumOperands(); OJ != OE;
+         ++OJ) {
+      const MCOperandInfo &OJInfo = Desc.operands()[OJ];
+      const bool IsRegJ = OJInfo.OperandType == MCOI::OPERAND_REGISTER ||
+                          OJInfo.RegClass >= 0;
+      if (!IsRegJ || OJInfo.RegClass != RegClass)
+        continue;
+      if (Desc.getOperandConstraint(OJ, MCOI::TIED_TO) >= 0 &&
+          OJ >= Desc.getNumDefs())
+        continue; // another tied use; it can synthesize for itself
+      ++N;
+    }
+    return N;
+  };
   Out.clear();
   Out.setOpcode(MemberOpc);
   for (unsigned OI = 0, OE = Desc.getNumOperands(); OI != OE; ++OI) {
@@ -1250,6 +1274,22 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
     const bool IsReg = OIInfo.OperandType == MCOI::OPERAND_REGISTER ||
                        OIInfo.RegClass >= 0;
     if (IsReg) {
+      const int TiedTo = Desc.getOperandConstraint(OI, MCOI::TIED_TO);
+      if (TiedTo >= 0 && OI >= Desc.getNumDefs() &&
+          static_cast<unsigned>(TiedTo) < Out.getNumOperands() &&
+          Out.getOperand(TiedTo).isReg()) {
+        unsigned BagLeft = 0;
+        if (OIInfo.RegClass == (int)Haydn::DR64RegClassID)
+          BagLeft = DRs.size() - std::min<size_t>(Di, DRs.size());
+        else if (OIInfo.RegClass == (int)Haydn::ARRegClassID)
+          BagLeft = ARs.size() - std::min<size_t>(Ai, ARs.size());
+        else
+          BagLeft = GPRs.size() - std::min<size_t>(Gi, GPRs.size());
+        if (BagLeft <= remainingNonTiedOfClass(OI, OIInfo.RegClass)) {
+          Out.addOperand(Out.getOperand(TiedTo));
+          continue;
+        }
+      }
       MCRegister R = Haydn::R0;
       if (OIInfo.RegClass == (int)Haydn::DR64RegClassID) {
         if (Di >= DRs.size())

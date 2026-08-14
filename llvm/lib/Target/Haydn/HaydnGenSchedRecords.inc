@@ -14,6 +14,9 @@
 
 // Itinerary= alias for FmtALU64Acc. OperandCycles use only 1/2.
 def Slot12_MAC_AccFirst : InstrItinClass;
+// Per-slot AccFirst for committed accumulator members (CB-152c).
+def Slot1_MAC_AccFirst : InstrItinClass;
+def Slot2_MAC_AccFirst : InstrItinClass;
 
 def HaydnItineraries : ProcessorItineraries<
   [LOADSTORE0, LOAD1, ALU0, ALU1, ALU2, MAC0, MAC1],
@@ -35,5 +38,7 @@ def HaydnItineraries : ProcessorItineraries<
     InstrItinData<Slot2_ALU, [InstrStage<1, [ALU2]>], [1]>,
     InstrItinData<Slot2_LS, [InstrStage<1, [ALU2]>], [2]>,
     InstrItinData<Slot2_ALU_SinCosLat, [InstrStage<1, [ALU2]>], [17]>,
-    InstrItinData<Slot2_MAC, [InstrStage<1, [MAC1]>], [2, 1, 1, 2]>
+    InstrItinData<Slot2_MAC, [InstrStage<1, [MAC1]>], [2, 1, 1, 2]>,
+    InstrItinData<Slot1_MAC_AccFirst, [InstrStage<1, [MAC0]>], [2, 2, 1, 1]>,
+    InstrItinData<Slot2_MAC_AccFirst, [InstrStage<1, [MAC1]>], [2, 2, 1, 1]>
   ]>;

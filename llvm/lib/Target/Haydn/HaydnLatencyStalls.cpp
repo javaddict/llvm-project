@@ -178,15 +178,40 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
     auto readsPending = [&](const Cycle &C) -> unsigned {
       unsigned Worst = 0;
       for (const MachineInstr *MI : C.Members) {
-        for (const MachineOperand &MO : MI->operands()) {
+        const unsigned SC = MI->getDesc().getSchedClass();
+        for (unsigned OpIdx = 0, E = MI->getNumOperands(); OpIdx != E;
+             ++OpIdx) {
+          const MachineOperand &MO = MI->getOperand(OpIdx);
           if (!MO.isReg() || !MO.isUse() || !MO.getReg())
             continue;
+          // Published read stage of this use; 1 (issue) unless this is a
+          // TIED use with an itinerary annotation. AccFirst consumers read
+          // the accumulator at the accumulate stage (OperandCycles entry 2),
+          // which is what makes golden acc->acc RecMII=1 chains legal
+          // back-to-back; the committed accumulator members carry that tied
+          // acc use explicitly (CB-152c), and charging it at issue would
+          // insert a stall the hardware does not need. ONLY tied uses take
+          // the grace: itinerary OperandCycles are positional, so e.g. a
+          // store's value use sits on the load class's dest-latency entry —
+          // granting untied uses the annotated cycle silently relaxed
+          // load->store chains. Same-cycle reads keep going through the
+          // RAW/no-forwarding checks elsewhere; this only relaxes the
+          // CROSS-cycle wait for the documented late-read accumulator.
+          unsigned ReadAt = 1;
+          if (MI->getDesc().getOperandConstraint(OpIdx, MCOI::TIED_TO) >= 0)
+            if (std::optional<unsigned> Cyc =
+                    Itin->getOperandCycle(SC, OpIdx))
+              if (*Cyc != 0)
+                ReadAt = *Cyc;
           MCRegister Reg = MO.getReg().asMCReg();
           for (const auto &KV : Pending) {
             if (KV.second == 0)
               continue;
-            if (Reg == KV.first || TRI.regsOverlap(Reg, KV.first))
-              Worst = std::max(Worst, KV.second);
+            if (Reg == KV.first || TRI.regsOverlap(Reg, KV.first)) {
+              const unsigned Grace = ReadAt - 1;
+              if (KV.second > Grace)
+                Worst = std::max(Worst, KV.second - Grace);
+            }
           }
         }
       }

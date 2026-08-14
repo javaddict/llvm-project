@@ -210,6 +210,12 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
         PublishedItin("Slot2_LS", (u["ALU2"],), (l2,)),
         PublishedItin("Slot2_ALU_SinCosLat", (u["ALU2"],), (l17,)),
         PublishedItin("Slot2_MAC", (u["MAC1"],), mac_wb),
+        # Per-slot AccFirst (CB-152c): committed members of FmtALU64Acc
+        # logicals pin one MAC unit but must keep the accumulator-read-late
+        # OperandCycles, or acc->acc chains (golden RecMII=1) grow a
+        # spurious stall NOP. Same published numbers, unit-restricted.
+        PublishedItin("Slot1_MAC_AccFirst", (u["MAC0"],), mac_acc),
+        PublishedItin("Slot2_MAC_AccFirst", (u["MAC1"],), mac_acc),
     )
 
 
@@ -287,6 +293,9 @@ def emit_sched_records_inc(
         "\n"
         "// Itinerary= alias for FmtALU64Acc. OperandCycles use only 1/2.\n"
         "def Slot12_MAC_AccFirst : InstrItinClass;\n"
+        "// Per-slot AccFirst for committed accumulator members (CB-152c).\n"
+        "def Slot1_MAC_AccFirst : InstrItinClass;\n"
+        "def Slot2_MAC_AccFirst : InstrItinClass;\n"
         "\n"
         f"def HaydnItineraries : ProcessorItineraries<\n"
         f"  [{fu}],\n"
