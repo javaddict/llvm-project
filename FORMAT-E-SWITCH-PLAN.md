@@ -23,7 +23,7 @@ Companion documents:
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **The only branch. The format E switch landed on it in `37932ae027aa` (2026-08-14), a merge of `haydn-formate-switch-mc`.** Fully green: llvm lit 604/620 zero failures, `HaydnTests` 256/256, clang 1428/1475 zero failures, `--check` + round-trip 3686/3686, BundleSim ctest 226/226, gcc-c-torture 1417 PASS / 0 FAIL at -O3, CoreMark e2e PASS. |
 | `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | ctest **226/226**. The § 5.5 executor port is done; the old "41/221, the rest failing in the un-ported executor" is retired. |
-| `llvm-project` | `haydn-formate-switch-mc` | `6107f7edec50` | **merged into `haydn` and no longer the place to work.** Fully contained (`git merge-base --is-ancestor formate-mc haydn`). Kept as a ref, not deleted. |
+| `llvm-project` | ~~`haydn-formate-switch-mc`~~ | `6107f7edec50` | **merged and then DELETED** (local and `fork`, 2026-08-14). Nothing was lost and nothing needed a backup tag: that commit is the merge's **second parent**, so every commit on it stays permanently reachable from `haydn`. `git rev-list --count fork/haydn-formate-switch-mc ^fork/haydn` was **0** before the delete. To read it again: `git log 6107f7edec50`. |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; subsumed by `-mc`, and so by `haydn` |
 
 **`haydn` is the trunk, and since `37932ae027aa` that is finally true of the
