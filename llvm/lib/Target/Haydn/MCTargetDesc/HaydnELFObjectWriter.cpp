@@ -52,10 +52,14 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
       // 8-bit absolute DATA reloc (.byte sym). /: see FK_Data_2.
       return ELF::R_HAYDN_8;
     case FK_Data_8:
-      // 64-bit data not supported for 32-bit architecture
-      llvm_unreachable("64-bit data relocations not supported on 32-bit Haydn");
+      // 64-bit data relocs are not a Haydn ELF kind (32-bit baremetal).
+      // Diagnose; never llvm_unreachable — `.quad sym` is a user error.
+      reportError(Fixup.getLoc(),
+                  "64-bit data relocations not supported on 32-bit Haydn");
+      return ELF::R_HAYDN_NONE;
     default:
-      llvm_unreachable("Invalid generic relocation kind");
+      reportError(Fixup.getLoc(), "unsupported generic relocation kind");
+      return ELF::R_HAYDN_NONE;
     }
   }
 
@@ -159,10 +163,9 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_WIDE_CallSImm20;
 
   case Haydn::FIXUP_HAYDN_LS_IMM:
-    // Format E RI6 LS field is MC-only until R_HAYDN_LS_IMM is allocated.
-    // Surface as absolute SImm16 so objects assemble; lld range/patch for
-    // true RI6 is a follow-up (prefer LO20/ADDI materialization for far data).
-    return ELF::R_HAYDN_SImm16;
+    // Format E LOADSTORE0/LOAD1 RI6: 1:1 to R_HAYDN_LS_IMM (AIE dense
+    // fixup→ELF map: AIEELFObjectWriter.cpp:60-63). Never alias SImm16.
+    return ELF::R_HAYDN_LS_IMM;
   }
 }
 

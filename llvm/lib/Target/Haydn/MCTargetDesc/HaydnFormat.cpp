@@ -134,6 +134,17 @@ namespace llvm {
 namespace haydn {
 namespace format {
 
+ArrayRef<uint8_t> canonicalFullSlotIdleParcel() {
+  static const uint8_t Bytes[] = {
+      static_cast<uint8_t>((FormatEIndicatorBits & 0x7u) |
+                           ((FormatEEntryNumTwo & 0x1u) << 3)),
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  const unsigned Parcel = encodedBytesOrDie(BundleFormatRowID::E96TwoEntry).Value;
+  assert(Parcel == sizeof(Bytes) &&
+         "full-slot idle length must match production EncodedBytes");
+  return ArrayRef<uint8_t>(Bytes, Parcel);
+}
+
 const ObjectEncodingProfileDesc &getProductionObjectEncodingProfile() {
   return ProductionProfile;
 }

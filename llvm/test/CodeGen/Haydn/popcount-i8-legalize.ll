@@ -27,21 +27,21 @@ declare i8 @llvm.ctlz.i8(i8, i1)
 
 define i8 @popcount_i8(i8 %x) {
 ; CHECK-LABEL: popcount_i8:
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jalr{{(\.s[012])?}}
   %c = call i8 @llvm.ctpop.i8(i8 %x)
   ret i8 %c
 }
 
 define i8 @cttz_i8(i8 %x) {
 ; CHECK-LABEL: cttz_i8:
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jalr{{(\.s[012])?}}
   %c = call i8 @llvm.cttz.i8(i8 %x, i1 false)
   ret i8 %c
 }
 
 define i8 @ctlz_i8(i8 %x) {
 ; CHECK-LABEL: ctlz_i8:
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jalr{{(\.s[012])?}}
   %c = call i8 @llvm.ctlz.i8(i8 %x, i1 false)
   ret i8 %c
 }

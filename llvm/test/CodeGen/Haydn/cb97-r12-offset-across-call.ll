@@ -29,7 +29,7 @@ define i32 @test_call_has_modsi3(i32 %a, i32 %b) nounwind {
 ; remat of r12 is the failure mode.
 ;
 ; CHECK-LABEL: test_large_offset_across_call:
-; CHECK: {{__modsi3|and32|andi32|sra32|srai32|srl32|srli32|jal_w}}
+; CHECK: {{__modsi3|and32|andi32|sra32|srai32|srl32|srli32|jal}}
 ; Between call and epilogue soft-zero re-zero (xor32 r0 before CSR restore)
 ; no stale sp+r12 access without remat (failure mode when R12 was
 ; reserved AT and remat was DCE'd across the call).
@@ -54,7 +54,7 @@ entry:
 
 ; Loop body calls __modsi3; post-loop block reloads a large-offset slot.
 ; CHECK-LABEL: test_loop_call_reload:
-; CHECK: {{__modsi3|and32|andi32|sra32|srai32|srl32|srli32|jal_w}}
+; CHECK: {{__modsi3|and32|andi32|sra32|srai32|srl32|srli32|jal}}
 ; CHECK-NOT: { {{ld32_reg|st32_reg}}{{[^}]*}}sp, r12
 ; CHECK: xor32{{.*}}r0, r0, r0
 ; CHECK: {{ld32(_reg)?}}

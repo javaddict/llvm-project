@@ -23,7 +23,7 @@
 define i32 @mul_by_one(i32 %x) nounwind {
 ; CHECK-LABEL: mul_by_one:
 ; CHECK-NOT: mul32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %r = mul i32 %x, 1
   ret i32 %r
 }
@@ -33,9 +33,9 @@ define i64 @mul_by_one_64(i64 %x) nounwind {
 ; i64 mul by 1: the IR/GISel combiner folds x*1 -> x, so no multiply remains.
 ; Even if it didn't fold, G_MUL <s64> now lowers to native MUL64_LL partials
 ; never a __muldi3 libcall. Either way there is no jal_w __muldi3.
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__muldi3
-; CHECK-NOT: jal_w{{(\.s[012])?}} {{.*}}__mulsi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__mulsi3
+; CHECK: jalr{{(\.s[012])?}}
   %r = mul i64 %x, 1
   ret i64 %r
 }
@@ -47,7 +47,7 @@ define i32 @add_chain_i32(i32 %x) nounwind {
 ; The two constant adds should be folded: addi32{{(_w)?}} r2, r0, 30 then add32 r1, r1, r2.
 ; There should be exactly one add-immediate materializing 30.
 ; CHECK: addi32{{(_w)?}} {{.*}}, 30
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %t1 = add i32 %x, 10
   %r = add i32 %t1, 20
   ret i32 %r
@@ -57,7 +57,7 @@ define i64 @add_chain_i64(i64 %x) nounwind {
 ; CHECK-LABEL: add_chain_i64:
 ; i64 add constant chain should fold to add64 with constant 300.
 ; CHECK: add64
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %t1 = add i64 %x, 100
   %r = add i64 %t1, 200
   ret i64 %r
@@ -69,7 +69,7 @@ define i32 @add_chain_neg(i32 %x) nounwind {
 ; CHECK-LABEL: add_chain_neg:
 ; Should fold to addi32{{(_w)?}} with -2.
 ; CHECK: addi32{{(_w)?}} {{.*}}, -2
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %t1 = add i32 %x, -5
   %r = add i32 %t1, 3
   ret i32 %r

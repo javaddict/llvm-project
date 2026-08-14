@@ -14,9 +14,24 @@
 // stamp), every remaining non-meta, non-bundled real MI becomes a singleton
 // BUNDLE with durable Format E BundleFormatRowID + CompletionStateID.
 //
+// Never calls skipFunction: this is target-local no-reorder commit ownership
+// for remaining bare MIs (including when PostMachineScheduler quality-skips
+// optnone). Plain O0 without optnone still runs postmisched first and may
+// already hold multi-MI full-fill packs; already-bundled roots are left alone.
+// Both paths leave only committed Format-E cycles for product emission.
+// Singleton completion is full-slot architectural NOP pad (AllEntriesReal),
+// not unqualified underfill/singleton stub invent.
+//
 // Also empty-cycle tryAdd → setDesc on bare multi-slot logicals before wrap
 // (AIEMachineScheduler.cpp:1121-1139 peer). Idempotent on already-setDesc
 // members / ops without PlacementAlternatives.
+//
+// After wrap/stamp, copy the earliest member DebugLoc onto any BUNDLE root
+// that has none (generic finalizeBundle already does this for new wraps —
+// MachineInstrBundle.cpp:90-136; Hexagon packetize-debug-loc.mir). This pass
+// also fills already-bundled roots it otherwise skips, so DwarfDebug
+// beginInstruction on the top-level BUNDLE (AsmPrinter iterates MBB, not
+// bundled children) still records line-table / is_stmt.
 //
 // Pipeline:
 //   * addPreSched2 after PostMachineScheduler (AIE2TargetMachine.cpp:242-244)

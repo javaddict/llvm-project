@@ -1,6 +1,22 @@
 //===----------------------------------------------------------------------===//
 // Haydn Instruction Definitions - Auto-generated from spec JSON
-// Binary encodings are hypothesized (per CLAUDE.md section 2.9 / M0).
+//
+// Hypothesized Inst{} encodings (FmtALU64 / FmtMAC / FmtALU32Ext and hand
+// Inst{} on HaydnInst stubs). Quarantined isCodeGenOnly=1 so they are
+// un-encodable at MC: AsmMatcher and the decoder skip isCodeGenOnly records.
+// CodeGen still selects these logicals; post-RA setDesc commits slot /
+// Format E members. Do not invent replacement encodings. Do not activate
+// Format E members from this file.
+//
+// R13: Format E catalog logicals in this file override to isCodeGenOnly=0
+// with unused DecoderNamespace HaydnAutoNoDecode (FormatsLS LD32_S0 idiom:
+// matcher yes, live decoder trie no). Non-catalog hypothesized names stay
+// under the outer isCodeGenOnly=1 quarantine.
+//
+// PORT_FIRST: AIE MultiSlot_Pseudo is isPseudo + isCodeGenOnly without a
+// live Inst{} that MC would emit as zeros (AIE2InstrFormats.td:26-29);
+// mapping-only MOV_OR is isCodeGenOnly (AIE2GenInstrInfo.td:97). Hexagon
+// mapping-only insns use isCodeGenOnly (HexagonPseudo.td:500-508).
 //
 // FmtALU64: 391 instructions, opcode=0x67, funct=0x000-0x186
 // FmtMAC: 14 instructions, opcode=0x68, funct=0x00-0x0D
@@ -8,260 +24,308 @@
 // Pseudo: 161 instructions (no matching format)
 //===----------------------------------------------------------------------===//
 
+let isCodeGenOnly = 1 in {
+
 //===----------------------------------------------------------------------===//
 // FmtALU64 — Binary register (rd, rs1, rs2) — slots 1+2 (0b110)
 // 391 instructions
 //===----------------------------------------------------------------------===//
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def ADD64S : FmtALU64<0x67, 0x000,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "add64s	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def ADD64S_H : FmtALU64<0x67, 0x001,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "add64s_h	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def ADD64S_L : FmtALU64<0x67, 0x002,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "add64s_l	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def ADD64_H : FmtALU64<0x67, 0x003,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "add64_h	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def ADD64_L : FmtALU64<0x67, 0x004,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "add64_l	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAA32RS_HHLL : FmtALU64Acc<0x67, 0x005,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulaa32rs_hhll	$rd, $rs1, $rs2", []> {
+    "f2mulaa32rs.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAA32RS_HLLH : FmtALU64Acc<0x67, 0x006,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulaa32rs_hllh	$rd, $rs1, $rs2", []> {
+    "f2mulaa32rs.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAA32R_HHLL : FmtALU64Acc<0x67, 0x007,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulaa32r_hhll	$rd, $rs1, $rs2", []> {
+    "f2mulaa32r.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAA32R_HLLH : FmtALU64Acc<0x67, 0x008,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulaa32r_hllh	$rd, $rs1, $rs2", []> {
+    "f2mulaa32r.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAS32RS_HHLL : FmtALU64<0x67, 0x009,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulas32rs.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAS32RS_HLLH : FmtALU64<0x67, 0x00A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulas32rs.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAS32R_HHLL : FmtALU64<0x67, 0x00B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulas32r.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAS32R_HLLH : FmtALU64<0x67, 0x00C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulas32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulas32r.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSA32RS_HHLL : FmtALU64<0x67, 0x00D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulsa32rs.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSA32RS_HLLH : FmtALU64<0x67, 0x00E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulsa32rs.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSA32R_HHLL : FmtALU64<0x67, 0x00F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulsa32r.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSA32R_HLLH : FmtALU64<0x67, 0x010,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulsa32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulsa32r.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSS32RS_HHLL : FmtALU64Acc<0x67, 0x011,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulss32rs_hhll	$rd, $rs1, $rs2", []> {
+    "f2mulss32rs.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSS32RS_HLLH : FmtALU64Acc<0x67, 0x012,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulss32rs_hllh	$rd, $rs1, $rs2", []> {
+    "f2mulss32rs.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSS32R_HHLL : FmtALU64Acc<0x67, 0x013,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulss32r_hhll	$rd, $rs1, $rs2", []> {
+    "f2mulss32r.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULSS32R_HLLH : FmtALU64Acc<0x67, 0x014,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "f2mulss32r_hllh	$rd, $rs1, $rs2", []> {
+    "f2mulss32r.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAA32RS_HHLL : FmtALU64<0x67, 0x015,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32rs.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAA32RS_HLLH : FmtALU64<0x67, 0x016,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32rs.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAA32R_HHLL : FmtALU64<0x67, 0x017,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32r.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAA32R_HLLH : FmtALU64<0x67, 0x018,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzaa32r.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAS32RS_HHLL : FmtALU64<0x67, 0x019,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzas32rs.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAS32RS_HLLH : FmtALU64<0x67, 0x01A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzas32rs.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAS32R_HHLL : FmtALU64<0x67, 0x01B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzas32r.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZAS32R_HLLH : FmtALU64<0x67, 0x01C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzas32r.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSA32RS_HHLL : FmtALU64<0x67, 0x01D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32rs.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSA32RS_HLLH : FmtALU64<0x67, 0x01E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32rs.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSA32R_HHLL : FmtALU64<0x67, 0x01F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32r.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSA32R_HLLH : FmtALU64<0x67, 0x020,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzsa32r.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSS32RS_HHLL : FmtALU64<0x67, 0x021,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32rs_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzss32rs.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSS32RS_HLLH : FmtALU64<0x67, 0x022,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32rs_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzss32rs.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSS32R_HHLL : FmtALU64<0x67, 0x023,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32r_hhll	$rd, $rs1, $rs2", []>;
+    "f2mulzss32r.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULZSS32R_HLLH : FmtALU64<0x67, 0x024,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32r_hllh	$rd, $rs1, $rs2", []>;
+    "f2mulzss32r.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MUL32RS_HH : FmtALU64<0x67, 0x025,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs_hh	$rd, $rs1, $rs2", []>;
+    "ff2mul32rs.hh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MUL32RS_LH : FmtALU64<0x67, 0x026,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs_lh	$rd, $rs1, $rs2", []>;
+    "ff2mul32rs.lh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MUL32RS_LL : FmtALU64<0x67, 0x027,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs_ll	$rd, $rs1, $rs2", []>;
+    "ff2mul32rs.ll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MUL32R_HH : FmtALU64<0x67, 0x028,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r_hh	$rd, $rs1, $rs2", []>;
+    "ff2mul32r.hh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MUL32R_LH : FmtALU64<0x67, 0x029,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r_lh	$rd, $rs1, $rs2", []>;
+    "ff2mul32r.lh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MUL32R_LL : FmtALU64<0x67, 0x02A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r_ll	$rd, $rs1, $rs2", []>;
+    "ff2mul32r.ll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULA32RS_HH : FmtALU64Acc<0x67, 0x02B,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2mula32rs_hh	$rd, $rs1, $rs2", []> {
+    "ff2mula32rs.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULA32RS_LH : FmtALU64Acc<0x67, 0x02C,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2mula32rs_lh	$rd, $rs1, $rs2", []> {
+    "ff2mula32rs.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULA32RS_LL : FmtALU64Acc<0x67, 0x02D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2mula32rs_ll	$rd, $rs1, $rs2", []> {
+    "ff2mula32rs.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
@@ -276,382 +340,443 @@ def FF2MULA32RS_LL : FmtALU64Acc<0x67, 0x02D,
 // Encoding is byte-identical to the prior FmtALU64 form (FmtALU64Acc
 // writes rd_in into the same Inst{21-18} field as rd; the tied constraint
 // guarantees rd_in == rd). See.
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULA32R_HH : FmtALU64Acc<0x67, 0x02E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2mula32r_hh	$rd, $rs1, $rs2", []> {
+    "ff2mula32r.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULA32R_LH : FmtALU64Acc<0x67, 0x02F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2mula32r_lh	$rd, $rs1, $rs2", []> {
+    "ff2mula32r.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULA32R_LL : FmtALU64Acc<0x67, 0x030,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2mula32r_ll	$rd, $rs1, $rs2", []> {
+    "ff2mula32r.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULS32RS_HH : FmtALU64Acc<0x67, 0x031,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2muls32rs_hh	$rd, $rs1, $rs2", []> {
+    "ff2muls32rs.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULS32RS_LH : FmtALU64Acc<0x67, 0x032,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2muls32rs_lh	$rd, $rs1, $rs2", []> {
+    "ff2muls32rs.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULS32RS_LL : FmtALU64Acc<0x67, 0x033,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2muls32rs_ll	$rd, $rs1, $rs2", []> {
+    "ff2muls32rs.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULS32R_HH : FmtALU64Acc<0x67, 0x034,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2muls32r_hh	$rd, $rs1, $rs2", []> {
+    "ff2muls32r.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULS32R_LH : FmtALU64Acc<0x67, 0x035,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2muls32r_lh	$rd, $rs1, $rs2", []> {
+    "ff2muls32r.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULS32R_LL : FmtALU64Acc<0x67, 0x036,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "ff2muls32r_ll	$rd, $rs1, $rs2", []> {
+    "ff2muls32r.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS00 : FmtALU64<0x67, 0x037,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs00	$rd, $rs1, $rs2", []>;
+    "fmul16.hs00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS01 : FmtALU64<0x67, 0x038,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs01	$rd, $rs1, $rs2", []>;
+    "fmul16.hs01	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS02 : FmtALU64<0x67, 0x039,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs02	$rd, $rs1, $rs2", []>;
+    "fmul16.hs02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS03 : FmtALU64<0x67, 0x03A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs03	$rd, $rs1, $rs2", []>;
+    "fmul16.hs03	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS11 : FmtALU64<0x67, 0x03B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs11	$rd, $rs1, $rs2", []>;
+    "fmul16.hs11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS12 : FmtALU64<0x67, 0x03C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs12	$rd, $rs1, $rs2", []>;
+    "fmul16.hs12	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS13 : FmtALU64<0x67, 0x03D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs13	$rd, $rs1, $rs2", []>;
+    "fmul16.hs13	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS22 : FmtALU64<0x67, 0x03E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs22	$rd, $rs1, $rs2", []>;
+    "fmul16.hs22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS23 : FmtALU64<0x67, 0x03F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs23	$rd, $rs1, $rs2", []>;
+    "fmul16.hs23	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_HS33 : FmtALU64<0x67, 0x040,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_hs33	$rd, $rs1, $rs2", []>;
+    "fmul16.hs33	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS00 : FmtALU64<0x67, 0x041,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls00	$rd, $rs1, $rs2", []>;
+    "fmul16.ls00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS01 : FmtALU64<0x67, 0x042,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls01	$rd, $rs1, $rs2", []>;
+    "fmul16.ls01	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS02 : FmtALU64<0x67, 0x043,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls02	$rd, $rs1, $rs2", []>;
+    "fmul16.ls02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS03 : FmtALU64<0x67, 0x044,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls03	$rd, $rs1, $rs2", []>;
+    "fmul16.ls03	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS11 : FmtALU64<0x67, 0x045,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls11	$rd, $rs1, $rs2", []>;
+    "fmul16.ls11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS12 : FmtALU64<0x67, 0x046,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls12	$rd, $rs1, $rs2", []>;
+    "fmul16.ls12	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS13 : FmtALU64<0x67, 0x047,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls13	$rd, $rs1, $rs2", []>;
+    "fmul16.ls13	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS22 : FmtALU64<0x67, 0x048,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls22	$rd, $rs1, $rs2", []>;
+    "fmul16.ls22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS23 : FmtALU64<0x67, 0x049,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls23	$rd, $rs1, $rs2", []>;
+    "fmul16.ls23	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL16_LS33 : FmtALU64<0x67, 0x04A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul16_ls33	$rd, $rs1, $rs2", []>;
+    "fmul16.ls33	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL32S_HH : FmtALU64<0x67, 0x04B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s_hh	$rd, $rs1, $rs2", []>;
+    "fmul32s.hh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL32S_LH : FmtALU64<0x67, 0x04C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s_lh	$rd, $rs1, $rs2", []>;
+    "fmul32s.lh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMUL32S_LL : FmtALU64<0x67, 0x04D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s_ll	$rd, $rs1, $rs2", []>;
+    "fmul32s.ll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS00 : FmtALU64Acc<0x67, 0x04E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs00	$rd, $rs1, $rs2", []> {
+    "fmula16.hs00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS01 : FmtALU64Acc<0x67, 0x04F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs01	$rd, $rs1, $rs2", []> {
+    "fmula16.hs01	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS02 : FmtALU64Acc<0x67, 0x050,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs02	$rd, $rs1, $rs2", []> {
+    "fmula16.hs02	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS03 : FmtALU64Acc<0x67, 0x051,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs03	$rd, $rs1, $rs2", []> {
+    "fmula16.hs03	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS11 : FmtALU64Acc<0x67, 0x052,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs11	$rd, $rs1, $rs2", []> {
+    "fmula16.hs11	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS12 : FmtALU64Acc<0x67, 0x053,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs12	$rd, $rs1, $rs2", []> {
+    "fmula16.hs12	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS13 : FmtALU64Acc<0x67, 0x054,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs13	$rd, $rs1, $rs2", []> {
+    "fmula16.hs13	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS22 : FmtALU64Acc<0x67, 0x055,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs22	$rd, $rs1, $rs2", []> {
+    "fmula16.hs22	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS23 : FmtALU64Acc<0x67, 0x056,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs23	$rd, $rs1, $rs2", []> {
+    "fmula16.hs23	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS33 : FmtALU64Acc<0x67, 0x057,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_hs33	$rd, $rs1, $rs2", []> {
+    "fmula16.hs33	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS00 : FmtALU64Acc<0x67, 0x058,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls00	$rd, $rs1, $rs2", []> {
+    "fmula16.ls00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS01 : FmtALU64Acc<0x67, 0x059,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls01	$rd, $rs1, $rs2", []> {
+    "fmula16.ls01	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS02 : FmtALU64Acc<0x67, 0x05A,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls02	$rd, $rs1, $rs2", []> {
+    "fmula16.ls02	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS03 : FmtALU64Acc<0x67, 0x05B,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls03	$rd, $rs1, $rs2", []> {
+    "fmula16.ls03	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS11 : FmtALU64Acc<0x67, 0x05C,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls11	$rd, $rs1, $rs2", []> {
+    "fmula16.ls11	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS12 : FmtALU64Acc<0x67, 0x05D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls12	$rd, $rs1, $rs2", []> {
+    "fmula16.ls12	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS13 : FmtALU64Acc<0x67, 0x05E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls13	$rd, $rs1, $rs2", []> {
+    "fmula16.ls13	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS22 : FmtALU64Acc<0x67, 0x05F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls22	$rd, $rs1, $rs2", []> {
+    "fmula16.ls22	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS23 : FmtALU64Acc<0x67, 0x060,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls23	$rd, $rs1, $rs2", []> {
+    "fmula16.ls23	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_LS33 : FmtALU64Acc<0x67, 0x061,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula16_ls33	$rd, $rs1, $rs2", []> {
+    "fmula16.ls33	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA32S_HH : FmtALU64Acc<0x67, 0x062,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula32s_hh	$rd, $rs1, $rs2", []> {
+    "fmula32s.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA32S_LH : FmtALU64Acc<0x67, 0x063,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula32s_lh	$rd, $rs1, $rs2", []> {
+    "fmula32s.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA32S_LL : FmtALU64Acc<0x67, 0x064,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmula32s_ll	$rd, $rs1, $rs2", []> {
+    "fmula32s.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA16_HS_11_00 : FmtALU64Acc<0x67, 0x065,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulaa16_hs_11_00	$rd, $rs1, $rs2", []> {
+    "fmulaa16.hs.11.00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA16_HS_13_02 : FmtALU64<0x67, 0x066,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_hs_13_02	$rd, $rs1, $rs2", []>;
+    "fmulaa16.hs.13.02	$rd, $rs1, $rs2", []>;
 
 // Spec/DB: rtd[63:32] = SATQ1.31(rtd[63:32] + p3 + p2); DR_Read_Port
 // includes rtd. Encoding is byte-identical to prior FmtALU64 form
 // (FmtALU64Acc only adds a tied $rd_in MIR operand; wire layout unchanged).
 // Migrated so GISel selectAccMAC / FIR_1 can preserve the accumulator.
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA16_HS_33_22 : FmtALU64Acc<0x67, 0x067,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulaa16_hs_33_22	$rd, $rs1, $rs2", []> {
+    "fmulaa16.hs.33.22	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA16_LS_11_00 : FmtALU64<0x67, 0x068,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_11_00	$rd, $rs1, $rs2", []>;
+    "fmulaa16.ls.11.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA16_LS_13_02 : FmtALU64<0x67, 0x069,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_13_02	$rd, $rs1, $rs2", []>;
+    "fmulaa16.ls.13.02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA16_LS_33_22 : FmtALU64<0x67, 0x06A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulaa16_ls_33_22	$rd, $rs1, $rs2", []>;
+    "fmulaa16.ls.33.22	$rd, $rs1, $rs2", []>;
 
 // FMULAA32S_HHLL/HLLH and FMULAS32S_HHLL/HLLH are accumulator-form dual-MACs:
 // the DB (haydn_instruction_db.json:7272/7314/7356/7397) shows slot-1 reads
@@ -668,152 +793,179 @@ def FMULAA16_LS_33_22 : FmtALU64<0x67, 0x06A,
 // Encoding-safe: FmtALU64Acc uses the identical bit layout as FmtALU64
 // (rd_in duplicates rd in Inst{21-18}, no new encoding bits — see). The
 // intrinsic/selector/Pat consumers are reconciled in lockstep (A1 full).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA32S_HHLL : FmtALU64Acc<0x67, 0x06B,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulaa32s_hhll	$rd, $rs1, $rs2", []> {
+    "fmulaa32s.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAA32S_HLLH : FmtALU64Acc<0x67, 0x06C,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulaa32s_hllh	$rd, $rs1, $rs2", []> {
+    "fmulaa32s.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAS32S_HHLL : FmtALU64Acc<0x67, 0x06D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulas32s_hhll	$rd, $rs1, $rs2", []> {
+    "fmulas32s.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULAS32S_HLLH : FmtALU64Acc<0x67, 0x06E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulas32s_hllh	$rd, $rs1, $rs2", []> {
+    "fmulas32s.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS00 : FmtALU64<0x67, 0x06F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs00	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS01 : FmtALU64<0x67, 0x070,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs01	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs01	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS02 : FmtALU64<0x67, 0x071,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs02	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS03 : FmtALU64<0x67, 0x072,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs03	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs03	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS11 : FmtALU64<0x67, 0x073,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs11	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS12 : FmtALU64<0x67, 0x074,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs12	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs12	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS13 : FmtALU64<0x67, 0x075,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs13	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs13	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS22 : FmtALU64<0x67, 0x076,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs22	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS23 : FmtALU64<0x67, 0x077,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs23	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs23	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_HS33 : FmtALU64<0x67, 0x078,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_hs33	$rd, $rs1, $rs2", []>;
+    "fmuls16.hs33	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS00 : FmtALU64<0x67, 0x079,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls00	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS01 : FmtALU64<0x67, 0x07A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls01	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls01	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS02 : FmtALU64<0x67, 0x07B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls02	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS03 : FmtALU64<0x67, 0x07C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls03	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls03	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS11 : FmtALU64<0x67, 0x07D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls11	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS12 : FmtALU64<0x67, 0x07E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls12	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls12	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS13 : FmtALU64<0x67, 0x07F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls13	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls13	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS22 : FmtALU64<0x67, 0x080,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls22	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS23 : FmtALU64<0x67, 0x081,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls23	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls23	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS16_LS33 : FmtALU64<0x67, 0x082,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmuls16_ls33	$rd, $rs1, $rs2", []>;
+    "fmuls16.ls33	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS32S_HH : FmtALU64Acc<0x67, 0x083,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmuls32s_hh	$rd, $rs1, $rs2", []> {
+    "fmuls32s.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS32S_LH : FmtALU64Acc<0x67, 0x084,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmuls32s_lh	$rd, $rs1, $rs2", []> {
+    "fmuls32s.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULS32S_LL : FmtALU64Acc<0x67, 0x085,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmuls32s_ll	$rd, $rs1, $rs2", []> {
+    "fmuls32s.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
@@ -829,51 +981,59 @@ def FMULS32S_LL : FmtALU64Acc<0x67, 0x085,
 // (old DB had the two products with opposite signs). The encoding/operand
 // shape is unchanged; only the documented behavior string was wrong. The
 // *SS* family below was corrected the other way (inner '-', products '+').
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSA32S_HHLL : FmtALU64Acc<0x67, 0x086,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulsa32s_hhll	$rd, $rs1, $rs2", []> {
+    "fmulsa32s.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSA32S_HLLH : FmtALU64Acc<0x67, 0x087,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulsa32s_hllh	$rd, $rs1, $rs2", []> {
+    "fmulsa32s.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS16_HS_11_00 : FmtALU64Acc<0x67, 0x088,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulss16_hs_11_00	$rd, $rs1, $rs2", []> {
+    "fmulss16.hs.11.00	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS16_HS_13_02 : FmtALU64<0x67, 0x089,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_hs_13_02	$rd, $rs1, $rs2", []>;
+    "fmulss16.hs.13.02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS16_HS_33_22 : FmtALU64<0x67, 0x08A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_hs_33_22	$rd, $rs1, $rs2", []>;
+    "fmulss16.hs.33.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS16_LS_11_00 : FmtALU64<0x67, 0x08B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_11_00	$rd, $rs1, $rs2", []>;
+    "fmulss16.ls.11.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS16_LS_13_02 : FmtALU64<0x67, 0x08C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_13_02	$rd, $rs1, $rs2", []>;
+    "fmulss16.ls.13.02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS16_LS_33_22 : FmtALU64<0x67, 0x08D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulss16_ls_33_22	$rd, $rs1, $rs2", []>;
+    "fmulss16.ls.33.22	$rd, $rs1, $rs2", []>;
 
 // FMULSS32S_HHLL/HLLH — spec correction (Rev 2): the *SS*
 // (sub-sub → combine '+') inner-product sign was inverted in the old manual.
@@ -884,130 +1044,155 @@ def FMULSS16_LS_33_22 : FmtALU64<0x67, 0x08D,
 // (DB reads rtd) is a SEPARATE pre-existing gap — these stay FmtALU64 here
 // for encoding parity with the sibling FMULZ*32S zero-acc ops; the spec
 // fix is documentation-only.
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS32S_HHLL : FmtALU64Acc<0x67, 0x08E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulss32s_hhll	$rd, $rs1, $rs2", []> {
+    "fmulss32s.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULSS32S_HLLH : FmtALU64Acc<0x67, 0x08F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "fmulss32s_hllh	$rd, $rs1, $rs2", []> {
+    "fmulss32s.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA16_HS_11_00 : FmtALU64<0x67, 0x090,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_hs_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzaa16.hs.11.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA16_HS_13_02 : FmtALU64<0x67, 0x091,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_hs_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzaa16.hs.13.02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA16_HS_33_22 : FmtALU64<0x67, 0x092,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_hs_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzaa16.hs.33.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA16_LS_11_00 : FmtALU64<0x67, 0x093,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_ls_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzaa16.ls.11.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA16_LS_13_02 : FmtALU64<0x67, 0x094,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_ls_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzaa16.ls.13.02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA16_LS_33_22 : FmtALU64<0x67, 0x095,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16_ls_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzaa16.ls.33.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA32S_HHLL : FmtALU64<0x67, 0x096,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzaa32s.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAA32S_HLLH : FmtALU64<0x67, 0x097,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzaa32s.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAS32S_HHLL : FmtALU64<0x67, 0x098,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzas32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzas32s.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZAS32S_HLLH : FmtALU64<0x67, 0x099,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzas32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzas32s.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSA32S_HHLL : FmtALU64<0x67, 0x09A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzsa32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzsa32s.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSA32S_HLLH : FmtALU64<0x67, 0x09B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzsa32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzsa32s.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS16_HS_11_00 : FmtALU64<0x67, 0x09C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_hs_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzss16.hs.11.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS16_HS_13_02 : FmtALU64<0x67, 0x09D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_hs_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzss16.hs.13.02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS16_HS_33_22 : FmtALU64<0x67, 0x09E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_hs_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzss16.hs.33.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS16_LS_11_00 : FmtALU64<0x67, 0x09F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_ls_11_00	$rd, $rs1, $rs2", []>;
+    "fmulzss16.ls.11.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS16_LS_13_02 : FmtALU64<0x67, 0x0A0,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_ls_13_02	$rd, $rs1, $rs2", []>;
+    "fmulzss16.ls.13.02	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS16_LS_33_22 : FmtALU64<0x67, 0x0A1,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16_ls_33_22	$rd, $rs1, $rs2", []>;
+    "fmulzss16.ls.33.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS32S_HHLL : FmtALU64<0x67, 0x0A2,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss32s_hhll	$rd, $rs1, $rs2", []>;
+    "fmulzss32s.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULZSS32S_HLLH : FmtALU64<0x67, 0x0A3,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss32s_hllh	$rd, $rs1, $rs2", []>;
+    "fmulzss32s.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MAX64 : FmtALU64<0x67, 0x0A4,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "max64	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MIN64 : FmtALU64<0x67, 0x0A5,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "min64	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL16AQ : FmtALU64Acc<0x67, 0x0A6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1015,91 +1200,109 @@ def MUL16AQ : FmtALU64Acc<0x67, 0x0A6,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL16ZAQ : FmtALU64<0x67, 0x0A7,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul16zaq	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_HH : FmtALU64<0x67, 0x0A8,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.hh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_HL : FmtALU64<0x67, 0x0A9,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.hl	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_HUH : FmtALU64<0x67, 0x0AA,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.huh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_HUL : FmtALU64<0x67, 0x0AB,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.hul	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_LH : FmtALU64<0x67, 0x0AC,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.lh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_LL : FmtALU64<0x67, 0x0AD,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.ll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_LUH : FmtALU64<0x67, 0x0AE,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.luh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_LUL : FmtALU64<0x67, 0x0AF,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.lul	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_UHH : FmtALU64<0x67, 0x0B0,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.uhh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_UHL : FmtALU64<0x67, 0x0B1,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.uhl	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_UHUH : FmtALU64<0x67, 0x0B2,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.uhuh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_UHUL : FmtALU64<0x67, 0x0B3,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.uhul	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_ULH : FmtALU64<0x67, 0x0B4,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.ulh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_ULL : FmtALU64<0x67, 0x0B5,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.ull	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_ULUH : FmtALU64<0x67, 0x0B6,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.uluh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL64_ULUL : FmtALU64<0x67, 0x0B7,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "mul64.ulul	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_HH : FmtALU64Acc<0x67, 0x0B8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1107,6 +1310,7 @@ def MULA64_HH : FmtALU64Acc<0x67, 0x0B8,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_HL : FmtALU64Acc<0x67, 0x0B9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1114,6 +1318,7 @@ def MULA64_HL : FmtALU64Acc<0x67, 0x0B9,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_HUH : FmtALU64Acc<0x67, 0x0BA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1121,6 +1326,7 @@ def MULA64_HUH : FmtALU64Acc<0x67, 0x0BA,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_HUL : FmtALU64Acc<0x67, 0x0BB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1128,6 +1334,7 @@ def MULA64_HUL : FmtALU64Acc<0x67, 0x0BB,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_LH : FmtALU64Acc<0x67, 0x0BC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1135,6 +1342,7 @@ def MULA64_LH : FmtALU64Acc<0x67, 0x0BC,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_LL : FmtALU64Acc<0x67, 0x0BD,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1142,6 +1350,7 @@ def MULA64_LL : FmtALU64Acc<0x67, 0x0BD,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_LUH : FmtALU64Acc<0x67, 0x0BE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1149,6 +1358,7 @@ def MULA64_LUH : FmtALU64Acc<0x67, 0x0BE,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_LUL : FmtALU64Acc<0x67, 0x0BF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1156,6 +1366,7 @@ def MULA64_LUL : FmtALU64Acc<0x67, 0x0BF,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_UHH : FmtALU64Acc<0x67, 0x0C0,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1163,6 +1374,7 @@ def MULA64_UHH : FmtALU64Acc<0x67, 0x0C0,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_UHL : FmtALU64Acc<0x67, 0x0C1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1170,6 +1382,7 @@ def MULA64_UHL : FmtALU64Acc<0x67, 0x0C1,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_UHUH : FmtALU64Acc<0x67, 0x0C2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1177,6 +1390,7 @@ def MULA64_UHUH : FmtALU64Acc<0x67, 0x0C2,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_UHUL : FmtALU64Acc<0x67, 0x0C3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1184,6 +1398,7 @@ def MULA64_UHUL : FmtALU64Acc<0x67, 0x0C3,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_ULH : FmtALU64Acc<0x67, 0x0C4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1191,6 +1406,7 @@ def MULA64_ULH : FmtALU64Acc<0x67, 0x0C4,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_ULL : FmtALU64Acc<0x67, 0x0C5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1198,6 +1414,7 @@ def MULA64_ULL : FmtALU64Acc<0x67, 0x0C5,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_ULUH : FmtALU64Acc<0x67, 0x0C6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1205,6 +1422,7 @@ def MULA64_ULUH : FmtALU64Acc<0x67, 0x0C6,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_ULUL : FmtALU64Acc<0x67, 0x0C7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1212,143 +1430,163 @@ def MULA64_ULUL : FmtALU64Acc<0x67, 0x0C7,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAA32_HHLL : FmtALU64Acc<0x67, 0x0C8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulaa32_hhll	$rd, $rs1, $rs2", []> {
+    "mulaa32.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAA32_HLLH : FmtALU64Acc<0x67, 0x0C9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulaa32_hllh	$rd, $rs1, $rs2", []> {
+    "mulaa32.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS32_HHLL : FmtALU64Acc<0x67, 0x0CA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas32_hhll	$rd, $rs1, $rs2", []> {
+    "mulas32.hhll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS32_HLLH : FmtALU64Acc<0x67, 0x0CB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas32_hllh	$rd, $rs1, $rs2", []> {
+    "mulas32.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_HH : FmtALU64Acc<0x67, 0x0CC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_hh	$rd, $rs1, $rs2", []> {
+    "mulas64.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_HL : FmtALU64Acc<0x67, 0x0CD,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_hl	$rd, $rs1, $rs2", []> {
+    "mulas64.hl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_HUH : FmtALU64Acc<0x67, 0x0CE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_huh	$rd, $rs1, $rs2", []> {
+    "mulas64.huh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_HUL : FmtALU64Acc<0x67, 0x0CF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_hul	$rd, $rs1, $rs2", []> {
+    "mulas64.hul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_LH : FmtALU64Acc<0x67, 0x0D0,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_lh	$rd, $rs1, $rs2", []> {
+    "mulas64.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_LL : FmtALU64Acc<0x67, 0x0D1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_ll	$rd, $rs1, $rs2", []> {
+    "mulas64.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_LUH : FmtALU64Acc<0x67, 0x0D2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_luh	$rd, $rs1, $rs2", []> {
+    "mulas64.luh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_LUL : FmtALU64Acc<0x67, 0x0D3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_lul	$rd, $rs1, $rs2", []> {
+    "mulas64.lul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_UHH : FmtALU64Acc<0x67, 0x0D4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_uhh	$rd, $rs1, $rs2", []> {
+    "mulas64.uhh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_UHL : FmtALU64Acc<0x67, 0x0D5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_uhl	$rd, $rs1, $rs2", []> {
+    "mulas64.uhl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_UHUH : FmtALU64Acc<0x67, 0x0D6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_uhuh	$rd, $rs1, $rs2", []> {
+    "mulas64.uhuh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_UHUL : FmtALU64Acc<0x67, 0x0D7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_uhul	$rd, $rs1, $rs2", []> {
+    "mulas64.uhul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_ULH : FmtALU64Acc<0x67, 0x0D8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_ulh	$rd, $rs1, $rs2", []> {
+    "mulas64.ulh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_ULL : FmtALU64Acc<0x67, 0x0D9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_ull	$rd, $rs1, $rs2", []> {
+    "mulas64.ull	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_ULUH : FmtALU64Acc<0x67, 0x0DA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_uluh	$rd, $rs1, $rs2", []> {
+    "mulas64.uluh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULAS64_ULUL : FmtALU64Acc<0x67, 0x0DB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulas64_ulul	$rd, $rs1, $rs2", []> {
+    "mulas64.ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
@@ -1367,9 +1605,10 @@ def MULAS64_ULUL : FmtALU64Acc<0x67, 0x0DB,
 // The funct template param writes the variant STATICALLY into Inst bits[8:4]
 // (ext[4:2]=variant, ext[1:0]=0) so tablegen's decoder table can distinguish
 // the 4 variants (FmtALU32 leaves ext unset → all collide → "Decoding
-// conflict"). FmtALU32Ext provides EW_32Bit + Slot012_ALU itinerary + GPR32
-// operand model; the Mode-0 encoder uses getEncOpcodeMap (not these Inst
-// bits). See.
+// conflict"). FmtALU32Ext provides 32-bit TSFlags width bits + Slot012_ALU itinerary + GPR32
+// operand model; Format E encode uses generated member InstBits (not these Inst
+// bits).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULL : FmtALU32Ext<0x3F, 0b00000,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
@@ -1380,6 +1619,7 @@ def MULL : FmtALU32Ext<0x3F, 0b00000,
   let Constraints = "$rd = $rs2";
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_HH : FmtALU64Acc<0x67, 0x0DD,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1387,6 +1627,7 @@ def MULS64_HH : FmtALU64Acc<0x67, 0x0DD,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_HL : FmtALU64Acc<0x67, 0x0DE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1394,6 +1635,7 @@ def MULS64_HL : FmtALU64Acc<0x67, 0x0DE,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_HUH : FmtALU64Acc<0x67, 0x0DF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1401,6 +1643,7 @@ def MULS64_HUH : FmtALU64Acc<0x67, 0x0DF,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_HUL : FmtALU64Acc<0x67, 0x0E0,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1408,6 +1651,7 @@ def MULS64_HUL : FmtALU64Acc<0x67, 0x0E0,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_LH : FmtALU64Acc<0x67, 0x0E1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1415,6 +1659,7 @@ def MULS64_LH : FmtALU64Acc<0x67, 0x0E1,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_LL : FmtALU64Acc<0x67, 0x0E2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1422,6 +1667,7 @@ def MULS64_LL : FmtALU64Acc<0x67, 0x0E2,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_LUH : FmtALU64Acc<0x67, 0x0E3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1429,6 +1675,7 @@ def MULS64_LUH : FmtALU64Acc<0x67, 0x0E3,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_LUL : FmtALU64Acc<0x67, 0x0E4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1436,6 +1683,7 @@ def MULS64_LUL : FmtALU64Acc<0x67, 0x0E4,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_UHH : FmtALU64Acc<0x67, 0x0E5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1443,6 +1691,7 @@ def MULS64_UHH : FmtALU64Acc<0x67, 0x0E5,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_UHL : FmtALU64Acc<0x67, 0x0E6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1450,6 +1699,7 @@ def MULS64_UHL : FmtALU64Acc<0x67, 0x0E6,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_UHUH : FmtALU64Acc<0x67, 0x0E7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1457,6 +1707,7 @@ def MULS64_UHUH : FmtALU64Acc<0x67, 0x0E7,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_UHUL : FmtALU64Acc<0x67, 0x0E8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1464,6 +1715,7 @@ def MULS64_UHUL : FmtALU64Acc<0x67, 0x0E8,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_ULH : FmtALU64Acc<0x67, 0x0E9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1471,6 +1723,7 @@ def MULS64_ULH : FmtALU64Acc<0x67, 0x0E9,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_ULL : FmtALU64Acc<0x67, 0x0EA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1478,6 +1731,7 @@ def MULS64_ULL : FmtALU64Acc<0x67, 0x0EA,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_ULUH : FmtALU64Acc<0x67, 0x0EB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1485,6 +1739,7 @@ def MULS64_ULUH : FmtALU64Acc<0x67, 0x0EB,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_ULUL : FmtALU64Acc<0x67, 0x0EC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1492,135 +1747,155 @@ def MULS64_ULUL : FmtALU64Acc<0x67, 0x0EC,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSA32_HHLL : FmtALU64<0x67, 0x0ED,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulsa32_hhll	$rd, $rs1, $rs2", []>;
+    "mulsa32.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSA32_HLLH : FmtALU64<0x67, 0x0EE,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulsa32_hllh	$rd, $rs1, $rs2", []>;
+    "mulsa32.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS32_HHLL : FmtALU64<0x67, 0x0EF,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulss32_hhll	$rd, $rs1, $rs2", []>;
+    "mulss32.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS32_HLLH : FmtALU64<0x67, 0x0F0,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulss32_hllh	$rd, $rs1, $rs2", []>;
+    "mulss32.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_HH : FmtALU64Acc<0x67, 0x0F1,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_hh	$rd, $rs1, $rs2", []> {
+    "mulss64.hh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_HL : FmtALU64Acc<0x67, 0x0F2,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_hl	$rd, $rs1, $rs2", []> {
+    "mulss64.hl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_HUH : FmtALU64Acc<0x67, 0x0F3,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_huh	$rd, $rs1, $rs2", []> {
+    "mulss64.huh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_HUL : FmtALU64Acc<0x67, 0x0F4,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_hul	$rd, $rs1, $rs2", []> {
+    "mulss64.hul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_LH : FmtALU64Acc<0x67, 0x0F5,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_lh	$rd, $rs1, $rs2", []> {
+    "mulss64.lh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_LL : FmtALU64Acc<0x67, 0x0F6,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_ll	$rd, $rs1, $rs2", []> {
+    "mulss64.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_LUH : FmtALU64Acc<0x67, 0x0F7,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_luh	$rd, $rs1, $rs2", []> {
+    "mulss64.luh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_LUL : FmtALU64Acc<0x67, 0x0F8,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_lul	$rd, $rs1, $rs2", []> {
+    "mulss64.lul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_UHH : FmtALU64Acc<0x67, 0x0F9,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_uhh	$rd, $rs1, $rs2", []> {
+    "mulss64.uhh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_UHL : FmtALU64Acc<0x67, 0x0FA,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_uhl	$rd, $rs1, $rs2", []> {
+    "mulss64.uhl	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_UHUH : FmtALU64Acc<0x67, 0x0FB,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_uhuh	$rd, $rs1, $rs2", []> {
+    "mulss64.uhuh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_UHUL : FmtALU64Acc<0x67, 0x0FC,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_uhul	$rd, $rs1, $rs2", []> {
+    "mulss64.uhul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_ULH : FmtALU64Acc<0x67, 0x0FD,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_ulh	$rd, $rs1, $rs2", []> {
+    "mulss64.ulh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_ULL : FmtALU64Acc<0x67, 0x0FE,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_ull	$rd, $rs1, $rs2", []> {
+    "mulss64.ull	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_ULUH : FmtALU64Acc<0x67, 0x0FF,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_uluh	$rd, $rs1, $rs2", []> {
+    "mulss64.uluh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSS64_ULUL : FmtALU64Acc<0x67, 0x100,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "mulss64_ulul	$rd, $rs1, $rs2", []> {
+    "mulss64.ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
@@ -1631,363 +1906,435 @@ def MULSS64_ULUL : FmtALU64Acc<0x67, 0x100,
 // (golden: GPR_Write_Port=[rt], GPR_Read_Port=[rs1,rs2], no tie). REMOVE the
 // spurious `let Constraints = "$rd = $rs2"` (it was the B3 verifier-reject
 // cause — golden says rt is distinct from rs1/rs2).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSSH : FmtALU32Ext<0x3F, 0b00100,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "mulssh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULSUH : FmtALU32Ext<0x3F, 0b01000,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "mulsuh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULUUH : FmtALU32Ext<0x3F, 0b01100,
     (outs GPR32:$rd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "muluuh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZAA32_HHLL : FmtALU64<0x67, 0x104,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzaa32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzaa32.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZAA32_HLLH : FmtALU64<0x67, 0x105,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzaa32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzaa32.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZAS32_HHLL : FmtALU64<0x67, 0x106,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzas32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzas32.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZAS32_HLLH : FmtALU64<0x67, 0x107,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzas32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzas32.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZSA32_HHLL : FmtALU64<0x67, 0x108,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzsa32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzsa32.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZSA32_HLLH : FmtALU64<0x67, 0x109,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzsa32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzsa32.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZSS32_HHLL : FmtALU64<0x67, 0x10A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzss32_hhll	$rd, $rs1, $rs2", []>;
+    "mulzss32.hhll	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULZSS32_HLLH : FmtALU64<0x67, 0x10B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "mulzss32_hllh	$rd, $rs1, $rs2", []>;
+    "mulzss32.hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SLL64 : FmtALU64<0x67, 0x10C,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "sll64	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_00 : FmtALU64<0x67, 0x10D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_00	$rd, $rs1, $rs2", []>;
+    "smula16s.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_10 : FmtALU64<0x67, 0x10E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_10	$rd, $rs1, $rs2", []>;
+    "smula16s.10	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_11 : FmtALU64<0x67, 0x10F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_11	$rd, $rs1, $rs2", []>;
+    "smula16s.11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_20 : FmtALU64<0x67, 0x110,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_20	$rd, $rs1, $rs2", []>;
+    "smula16s.20	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_21 : FmtALU64<0x67, 0x111,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_21	$rd, $rs1, $rs2", []>;
+    "smula16s.21	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_22 : FmtALU64<0x67, 0x112,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_22	$rd, $rs1, $rs2", []>;
+    "smula16s.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_30 : FmtALU64<0x67, 0x113,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_30	$rd, $rs1, $rs2", []>;
+    "smula16s.30	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_31 : FmtALU64<0x67, 0x114,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_31	$rd, $rs1, $rs2", []>;
+    "smula16s.31	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_32 : FmtALU64<0x67, 0x115,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_32	$rd, $rs1, $rs2", []>;
+    "smula16s.32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16S_33 : FmtALU64<0x67, 0x116,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16s_33	$rd, $rs1, $rs2", []>;
+    "smula16s.33	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_00 : FmtALU64<0x67, 0x117,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_00	$rd, $rs1, $rs2", []>;
+    "smula16.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_10 : FmtALU64<0x67, 0x118,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_10	$rd, $rs1, $rs2", []>;
+    "smula16.10	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_11 : FmtALU64<0x67, 0x119,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_11	$rd, $rs1, $rs2", []>;
+    "smula16.11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_20 : FmtALU64<0x67, 0x11A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_20	$rd, $rs1, $rs2", []>;
+    "smula16.20	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_21 : FmtALU64<0x67, 0x11B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_21	$rd, $rs1, $rs2", []>;
+    "smula16.21	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_22 : FmtALU64<0x67, 0x11C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_22	$rd, $rs1, $rs2", []>;
+    "smula16.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_30 : FmtALU64<0x67, 0x11D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_30	$rd, $rs1, $rs2", []>;
+    "smula16.30	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_31 : FmtALU64<0x67, 0x11E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_31	$rd, $rs1, $rs2", []>;
+    "smula16.31	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_32 : FmtALU64<0x67, 0x11F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_32	$rd, $rs1, $rs2", []>;
+    "smula16.32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULA16_33 : FmtALU64<0x67, 0x120,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smula16_33	$rd, $rs1, $rs2", []>;
+    "smula16.33	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_00 : FmtALU64<0x67, 0x121,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_00	$rd, $rs1, $rs2", []>;
+    "smuls16s.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_10 : FmtALU64<0x67, 0x122,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_10	$rd, $rs1, $rs2", []>;
+    "smuls16s.10	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_11 : FmtALU64<0x67, 0x123,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_11	$rd, $rs1, $rs2", []>;
+    "smuls16s.11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_20 : FmtALU64<0x67, 0x124,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_20	$rd, $rs1, $rs2", []>;
+    "smuls16s.20	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_21 : FmtALU64<0x67, 0x125,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_21	$rd, $rs1, $rs2", []>;
+    "smuls16s.21	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_22 : FmtALU64<0x67, 0x126,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_22	$rd, $rs1, $rs2", []>;
+    "smuls16s.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_30 : FmtALU64<0x67, 0x127,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_30	$rd, $rs1, $rs2", []>;
+    "smuls16s.30	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_31 : FmtALU64<0x67, 0x128,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_31	$rd, $rs1, $rs2", []>;
+    "smuls16s.31	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_32 : FmtALU64<0x67, 0x129,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_32	$rd, $rs1, $rs2", []>;
+    "smuls16s.32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16S_33 : FmtALU64<0x67, 0x12A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16s_33	$rd, $rs1, $rs2", []>;
+    "smuls16s.33	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_00 : FmtALU64<0x67, 0x12B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_00	$rd, $rs1, $rs2", []>;
+    "smuls16.00	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_10 : FmtALU64<0x67, 0x12C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_10	$rd, $rs1, $rs2", []>;
+    "smuls16.10	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_11 : FmtALU64<0x67, 0x12D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_11	$rd, $rs1, $rs2", []>;
+    "smuls16.11	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_20 : FmtALU64<0x67, 0x12E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_20	$rd, $rs1, $rs2", []>;
+    "smuls16.20	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_21 : FmtALU64<0x67, 0x12F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_21	$rd, $rs1, $rs2", []>;
+    "smuls16.21	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_22 : FmtALU64<0x67, 0x130,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_22	$rd, $rs1, $rs2", []>;
+    "smuls16.22	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_30 : FmtALU64<0x67, 0x131,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_30	$rd, $rs1, $rs2", []>;
+    "smuls16.30	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_31 : FmtALU64<0x67, 0x132,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_31	$rd, $rs1, $rs2", []>;
+    "smuls16.31	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_32 : FmtALU64<0x67, 0x133,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_32	$rd, $rs1, $rs2", []>;
+    "smuls16.32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SMULS16_33 : FmtALU64<0x67, 0x134,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "smuls16_33	$rd, $rs1, $rs2", []>;
+    "smuls16.33	$rd, $rs1, $rs2", []>;
 
 // SRA64/SRA64R/SRL64: 64-bit shift producing DR64 result.
 // ISA DB: rtd=DR64(result), rsd=DR64(data), rs=GPR32(shift amount)
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SRA64 : FmtALU64<0x67, 0x135,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "sra64	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SRA64R : FmtALU64<0x67, 0x136,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "sra64r	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SRL64 : FmtALU64<0x67, 0x137,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "srl64	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SUB64S : FmtALU64<0x67, 0x138,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "sub64s	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SUB64S_H : FmtALU64<0x67, 0x139,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "sub64s_h	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SUB64S_L : FmtALU64<0x67, 0x13A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "sub64s_l	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SUB64_H : FmtALU64<0x67, 0x13B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "sub64_h	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SUB64_L : FmtALU64<0x67, 0x13C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "sub64_l	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2ADD32S : FmtALU64<0x67, 0x13D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2add32s	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2ADD32S_HLLH : FmtALU64<0x67, 0x13E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2add32s_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2ADD32_HLLH : FmtALU64<0x67, 0x13F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2add32_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2ADDSUB32 : FmtALU64<0x67, 0x140,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2addsub32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2ADDSUB32S : FmtALU64<0x67, 0x141,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2addsub32s	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2ADDSUB32S_HLLH : FmtALU64<0x67, 0x142,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2addsub32s_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2ADDSUB32_HLLH : FmtALU64<0x67, 0x143,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2addsub32_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2CLAMP32 : FmtALU64<0x67, 0x144,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2clamp32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2DOT32 : FmtALU64<0x67, 0x145,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2dot32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FCMUL32RS : FmtALU64<0x67, 0x146,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2fcmul32rs	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FCMUL32RSS : FmtALU64<0x67, 0x147,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2fcmul32rss	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FCMULA32RS : FmtALU64Acc<0x67, 0x148,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -1995,6 +2342,7 @@ def X2FCMULA32RS : FmtALU64Acc<0x67, 0x148,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FCMULA32RSS : FmtALU64Acc<0x67, 0x149,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2002,31 +2350,37 @@ def X2FCMULA32RSS : FmtALU64Acc<0x67, 0x149,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FF2RSST32 : FmtALU64<0x67, 0x14A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2ff2rsst32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FF2RST32 : FmtALU64<0x67, 0x14B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2ff2rst32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMUL32RS : FmtALU64<0x67, 0x14C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2fmul32rs	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMUL32RSS : FmtALU64<0x67, 0x14D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2fmul32rss	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMUL32TS : FmtALU64<0x67, 0x14E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2fmul32ts	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMULA32RS : FmtALU64Acc<0x67, 0x14F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2034,6 +2388,7 @@ def X2FMULA32RS : FmtALU64Acc<0x67, 0x14F,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMULA32RSS : FmtALU64Acc<0x67, 0x150,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2041,6 +2396,7 @@ def X2FMULA32RSS : FmtALU64Acc<0x67, 0x150,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMULA32TS : FmtALU64Acc<0x67, 0x151,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2048,6 +2404,7 @@ def X2FMULA32TS : FmtALU64Acc<0x67, 0x151,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMULS32RS : FmtALU64Acc<0x67, 0x152,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2055,6 +2412,7 @@ def X2FMULS32RS : FmtALU64Acc<0x67, 0x152,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMULS32RSS : FmtALU64Acc<0x67, 0x153,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2062,6 +2420,7 @@ def X2FMULS32RSS : FmtALU64Acc<0x67, 0x153,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMULS32TS : FmtALU64Acc<0x67, 0x154,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2069,26 +2428,31 @@ def X2FMULS32TS : FmtALU64Acc<0x67, 0x154,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FRSST32 : FmtALU64<0x67, 0x155,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2frsst32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FRST32 : FmtALU64<0x67, 0x156,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2frst32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MAX32 : FmtALU64<0x67, 0x157,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2max32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MIN32 : FmtALU64<0x67, 0x158,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2min32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULAPH32 : FmtALU64Acc<0x67, 0x159,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2096,6 +2460,7 @@ def X2MULAPH32 : FmtALU64Acc<0x67, 0x159,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULAPL32 : FmtALU64Acc<0x67, 0x15A,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2103,16 +2468,19 @@ def X2MULAPL32 : FmtALU64Acc<0x67, 0x15A,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULPH32 : FmtALU64<0x67, 0x15B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2mulph32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULPL32 : FmtALU64<0x67, 0x15C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2mulpl32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULSPH32 : FmtALU64Acc<0x67, 0x15D,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2120,6 +2488,7 @@ def X2MULSPH32 : FmtALU64Acc<0x67, 0x15D,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULSPL32 : FmtALU64Acc<0x67, 0x15E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2127,135 +2496,160 @@ def X2MULSPL32 : FmtALU64Acc<0x67, 0x15E,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SEL32_HH : FmtALU64<0x67, 0x15F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2sel32_hh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SEL32_HL : FmtALU64<0x67, 0x160,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2sel32_hl	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SEL32_LH : FmtALU64<0x67, 0x161,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2sel32_lh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SEL32_LL : FmtALU64<0x67, 0x162,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2sel32_ll	$rd, $rs1, $rs2", []>;
 
 // X2SRA32R: per spec, rtd=DR64, rsd=DR64, rs=GPR32 (shift amount).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SRA32R : FmtALU64<0x67, 0x163,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "x2sra32r	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SUB32S : FmtALU64<0x67, 0x164,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2sub32s	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SUB32S_HLLH : FmtALU64<0x67, 0x165,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2sub32s_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SUB32_HLLH : FmtALU64<0x67, 0x166,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2sub32_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SUBADD32 : FmtALU64<0x67, 0x167,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2subadd32	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SUBADD32S : FmtALU64<0x67, 0x168,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2subadd32s	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SUBADD32S_HLLH : FmtALU64<0x67, 0x169,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2subadd32s_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SUBADD32_HLLH : FmtALU64<0x67, 0x16A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x2subadd32_hllh	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4ADD16S : FmtALU64<0x67, 0x16B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4add16s	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CJMUL16S_H : FmtALU64<0x67, 0x16C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmul16s_h	$rd, $rs1, $rs2", []>;
+    "x4cjmul16s.h	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CJMUL16S_L : FmtALU64<0x67, 0x16D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmul16s_l	$rd, $rs1, $rs2", []>;
+    "x4cjmul16s.l	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CJMULA16S_H : FmtALU64Acc<0x67, 0x16E,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "x4cjmula16s_h	$rd, $rs1, $rs2", []> {
+    "x4cjmula16s.h	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CJMULA16S_L : FmtALU64Acc<0x67, 0x16F,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "x4cjmula16s_l	$rd, $rs1, $rs2", []> {
+    "x4cjmula16s.l	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CLAMP16 : FmtALU64<0x67, 0x170,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4clamp16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMUL16S_H : FmtALU64<0x67, 0x171,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cmul16s_h	$rd, $rs1, $rs2", []>;
+    "x4cmul16s.h	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMUL16S_L : FmtALU64<0x67, 0x172,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
-    "x4cmul16s_l	$rd, $rs1, $rs2", []>;
+    "x4cmul16s.l	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMULA16S_H : FmtALU64Acc<0x67, 0x173,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "x4cmula16s_h	$rd, $rs1, $rs2", []> {
+    "x4cmula16s.h	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMULA16S_L : FmtALU64Acc<0x67, 0x174,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
-    "x4cmula16s_l	$rd, $rs1, $rs2", []> {
+    "x4cmula16s.l	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4DOT16 : FmtALU64<0x67, 0x175,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4dot16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FCMUL16RS : FmtALU64<0x67, 0x176,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4fcmul16rs	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FCMUL16RSS : FmtALU64<0x67, 0x177,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
@@ -2264,6 +2658,7 @@ def X4FCMUL16RSS : FmtALU64<0x67, 0x177,
 // X4FCMULA16RS / RSS — complex MAC accumulate forms. DB behavior reads rtd
 // as accumulator (rtd[lane] = SAT(rtd[lane] +...)), so these are tied-def
 // FmtALU64Acc (was mis-modeled as FmtALU64 non-accumulating —).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FCMULA16RS : FmtALU64Acc<0x67, 0x178,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2271,6 +2666,7 @@ def X4FCMULA16RS : FmtALU64Acc<0x67, 0x178,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FCMULA16RSS : FmtALU64Acc<0x67, 0x179,
     (outs DR64:$rd),
     (ins DR64:$rd_in, DR64:$rs1, DR64:$rs2),
@@ -2278,41 +2674,49 @@ def X4FCMULA16RSS : FmtALU64Acc<0x67, 0x179,
     let Constraints = "$rd = $rd_in";
   }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FMUL16RS : FmtALU64<0x67, 0x17A,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4fmul16rs	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FMUL16RSS : FmtALU64<0x67, 0x17B,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4fmul16rss	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FMUL16TS : FmtALU64<0x67, 0x17C,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4fmul16ts	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FRSST16 : FmtALU64<0x67, 0x17D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4frsst16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FRST16 : FmtALU64<0x67, 0x17E,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4frst16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MAX16 : FmtALU64<0x67, 0x17F,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4max16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MIN16 : FmtALU64<0x67, 0x180,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
     "x4min16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SAT32T16 : FmtALU64<0x67, 0x181,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
@@ -2320,26 +2724,31 @@ def X4SAT32T16 : FmtALU64<0x67, 0x181,
 
 // X4 SIMD shifts: per spec, rtd=DR64, rsd=DR64, rs=GPR32 (shift amount).
 // The shift amount comes from a GPR32 register (signed 5-bit value in rs[4:0]).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SLL16 : FmtALU64<0x67, 0x182,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "x4sll16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SRA16 : FmtALU64<0x67, 0x183,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "x4sra16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SRA16R : FmtALU64<0x67, 0x184,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "x4sra16r	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SRL16 : FmtALU64<0x67, 0x185,
     (outs DR64:$rd),
     (ins DR64:$rs1, GPR32:$rs2),
     "x4srl16	$rd, $rs1, $rs2", []>;
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SUB16S : FmtALU64<0x67, 0x186,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2),
@@ -2359,6 +2768,7 @@ def X4SUB16S : FmtALU64<0x67, 0x186,
 // is a lane permutation, not a MAC -> Slot1_ALU.
 //===----------------------------------------------------------------------===//
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2CMUL32 : FmtMAC2Dest<0x68, 0x00,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
@@ -2367,6 +2777,7 @@ def X2CMUL32 : FmtMAC2Dest<0x68, 0x00,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2CMUL32S : FmtMAC2Dest<0x68, 0x01,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
@@ -2375,18 +2786,20 @@ def X2CMUL32S : FmtMAC2Dest<0x68, 0x01,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2CMUL32S_F2 : FmtMAC2Dest<0x68, 0x02,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2cmul32s_f2	$rd, $rtd2, $rs1, $rs2", []> {
+    "x2cmul32s.f2	$rd, $rtd2, $rs1, $rs2", []> {
   let Itinerary = Slot1_ALU;
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2CMUL32_F2 : FmtMAC2Dest<0x68, 0x03,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
-    "x2cmul32_f2	$rd, $rtd2, $rs1, $rs2", []> {
+    "x2cmul32.f2	$rd, $rtd2, $rs1, $rs2", []> {
   let Itinerary = Slot1_ALU;
   let TSFlags{2-0} = 0b010;
 }
@@ -2399,6 +2812,7 @@ def X2CMUL32_F2 : FmtMAC2Dest<0x68, 0x03,
 // has no rtd2/ra2 fields) — the slot encoder handles the real encoding after
 // setDesc. The Constraints force regalloc to coalesce acc1->rtd1, acc2->rtd2.
 let Constraints = "$rd = $ra, $rtd2 = $ra2" in {
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULA32 : FmtMAC2Dest<0x68, 0x04,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2407,6 +2821,7 @@ def X2MULA32 : FmtMAC2Dest<0x68, 0x04,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULS32 : FmtMAC2Dest<0x68, 0x05,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2418,6 +2833,7 @@ def X2MULS32 : FmtMAC2Dest<0x68, 0x05,
 
 // X4FF2MUL16S — (Path B): TRUE 2-output NON-accum (golden DR_Write_Port
 // =[rtd1,rtd2], DR_Read_Port=[rsd1,rsd2]). 2 dests + 2 srcs (4 operands).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FF2MUL16S : FmtMAC2Dest<0x68, 0x06,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
@@ -2427,6 +2843,7 @@ def X4FF2MUL16S : FmtMAC2Dest<0x68, 0x06,
 }
 
 let Constraints = "$rd = $ra, $rtd2 = $ra2" in {
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FF2MULA16S : FmtMAC2Dest<0x68, 0x07,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2435,6 +2852,7 @@ def X4FF2MULA16S : FmtMAC2Dest<0x68, 0x07,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FF2MULS16S : FmtMAC2Dest<0x68, 0x08,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2443,6 +2861,7 @@ def X4FF2MULS16S : FmtMAC2Dest<0x68, 0x08,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MULA16 : FmtMAC2Dest<0x68, 0x09,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2451,6 +2870,7 @@ def X4MULA16 : FmtMAC2Dest<0x68, 0x09,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MULA16S : FmtMAC2Dest<0x68, 0x0A,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2459,6 +2879,7 @@ def X4MULA16S : FmtMAC2Dest<0x68, 0x0A,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MULS16 : FmtMAC2Dest<0x68, 0x0B,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2467,6 +2888,7 @@ def X4MULS16 : FmtMAC2Dest<0x68, 0x0B,
   let TSFlags{2-0} = 0b010;
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MULS16S : FmtMAC2Dest<0x68, 0x0C,
     (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
@@ -2482,6 +2904,7 @@ def X4MULS16S : FmtMAC2Dest<0x68, 0x0C,
 // the GPR32 selector `ra` (DB `rs`) stays GPR32. Inert: no selector case
 // no intrinsic Pat. FmtMAC encoding uses DR64 register fields, matching.
 // Slot-1-only per capstone-schedule-port-audit §(b)-1.
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SEL16 : FmtMAC<0x68, 0x0D,
     (outs DR64:$rd),
     (ins DR64:$rs1, DR64:$rs2, GPR32:$ra),
@@ -2522,6 +2945,7 @@ let isAsmParserOnly = 1 in {
 
 // BREV stores — DB: mem64[REVERSE32(rs1)] = rtd; rs1 += rs2. DR64 data, WB.
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_BREV_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_brev_reg	$rtd, $rs1, $rs2", []> {
@@ -2531,6 +2955,7 @@ def D_SDW_BREV_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SW_BREV_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_sw_brev_reg	$rt, $rs1, $rs2", []> {
@@ -2541,6 +2966,7 @@ def S_SW_BREV_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 
 // POST_REG — DR64 data. DB: mem64[rs1] = rtd; rs1 += rs2.
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_post_reg	$rtd, $rs1, $rs2", []> {
@@ -2550,6 +2976,7 @@ def D_SDW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_shw_post_reg	$rtd, $rs1, $rs2", []> {
@@ -2559,6 +2986,7 @@ def D_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_H_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sw_h_post_reg	$rtd, $rs1, $rs2", []> {
@@ -2568,6 +2996,7 @@ def D_SW_H_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_L_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sw_l_post_reg	$rtd, $rs1, $rs2", []> {
@@ -2578,6 +3007,7 @@ def D_SW_L_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 
 // POST_REG — GPR32 data.
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SB_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_sb_post_reg	$rt, $rs1, $rs2", []> {
@@ -2587,6 +3017,7 @@ def S_SB_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_shw_post_reg	$rt, $rs1, $rs2", []> {
@@ -2596,6 +3027,7 @@ def S_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_sw_post_reg	$rt, $rs1, $rs2", []> {
@@ -2606,6 +3038,7 @@ def S_SW_POST_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 
 // PRE_REG — update base, then store. Same two-def shape.
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_pre_reg	$rtd, $rs1, $rs2", []> {
@@ -2615,6 +3048,7 @@ def D_SDW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_shw_pre_reg	$rtd, $rs1, $rs2", []> {
@@ -2624,6 +3058,7 @@ def D_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_H_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sw_h_pre_reg	$rtd, $rs1, $rs2", []> {
@@ -2633,6 +3068,7 @@ def D_SW_H_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_L_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sw_l_pre_reg	$rtd, $rs1, $rs2", []> {
@@ -2642,6 +3078,7 @@ def D_SW_L_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SB_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_sb_pre_reg	$rt, $rs1, $rs2", []> {
@@ -2651,6 +3088,7 @@ def S_SB_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_shw_pre_reg	$rt, $rs1, $rs2", []> {
@@ -2660,6 +3098,7 @@ def S_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, Constraints = "$rs1 = $rs1_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_sw_pre_reg	$rt, $rs1, $rs2", []> {
@@ -2670,6 +3109,7 @@ def S_SW_PRE_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 
 // WITH_REG — offset addressing, NO base writeback. (outs) empty.
 let mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_WITH_REG : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sdw_with_reg	$rtd, $rs1, $rs2", []> {
@@ -2679,6 +3119,7 @@ def D_SDW_WITH_REG : HaydnInst<4, (outs),
 }
 
 let mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SHW_WITH_REG : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_shw_with_reg	$rtd, $rs1, $rs2", []> {
@@ -2688,6 +3129,7 @@ def D_SHW_WITH_REG : HaydnInst<4, (outs),
 }
 
 let mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_H_WITH_REG : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sw_h_with_reg	$rtd, $rs1, $rs2", []> {
@@ -2697,6 +3139,7 @@ def D_SW_H_WITH_REG : HaydnInst<4, (outs),
 }
 
 let mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_L_WITH_REG : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2),
     "d_sw_l_with_reg	$rtd, $rs1, $rs2", []> {
@@ -2706,6 +3149,7 @@ def D_SW_L_WITH_REG : HaydnInst<4, (outs),
 }
 
 let mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SB_WITH_REG : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_sb_with_reg	$rt, $rs1, $rs2", []> {
@@ -2715,6 +3159,7 @@ def S_SB_WITH_REG : HaydnInst<4, (outs),
 }
 
 let mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SHW_WITH_REG : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_shw_with_reg	$rt, $rs1, $rs2", []> {
@@ -2724,6 +3169,7 @@ def S_SHW_WITH_REG : HaydnInst<4, (outs),
 }
 
 let mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SW_WITH_REG : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs1, GPR32:$rs2),
     "s_sw_with_reg	$rt, $rs1, $rs2", []> {
@@ -2740,13 +3186,13 @@ def S_SW_WITH_REG : HaydnInst<4, (outs),
 // These are genuine hardware instructions that use HaydnInst (no format class).
 // Previously wrapped in a blanket isPseudo=1 scope that suppressed emission.
 //
-// TSFlags encodes slot mask [2:0] and encoded width [4:3]:
-// TSFlags=9 = SLOT0 (0b001), EW_32Bit (0b01) — store variants
-// TSFlags=11 = SLOT0|SLOT1 (0b011), EW_32Bit (0b01) — load variants
-// TSFlags=14 = SLOT1|SLOT2 (0b110), EW_32Bit (0b01) — ALU64/SIMD/MAC
+// TSFlags encodes slot mask [2:0] and historical width bits [4:3]:
+// TSFlags=9 = SLOT0 (0b001), width bits 0b01 — store variants
+// TSFlags=11 = SLOT0|SLOT1 (0b011), width bits 0b01 — load variants
+// TSFlags=14 = SLOT1|SLOT2 (0b110), width bits 0b01 — ALU64/SIMD/MAC
 //
-// Encoding migration (task #52) will assign real opcode bits per
-// encoding_manual.md. Until then, instructions have no Inst encoding bits
+// Encoding migration assigns real opcode bits per Format E golden.
+// Until then, instructions have no Inst encoding bits
 // set. Without isPseudo=1, multiple instructions decode to 0x00000000
 // causing "Decoding conflict encountered" build errors.
 //
@@ -2772,7 +3218,9 @@ let isPseudo = 1 in {
 // DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
 // as GPR32 (capstone drift cat 1). Fixed to DR64 source. Inert: no selector
 // case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
-let TSFlags = 14, isCodeGenOnly = 1 in
+// T-SM2: conservative dest Data_Latency 17 (golden uimm4+2 max) so pre-RA
+// and LatencyStalls see the read window; members cover the same OperandCycles.
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", Itinerary = Slot12_ALU_SinCosLat in
 def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
     (ins DR64:$rs, simm16:$imm),
     "arctan	$rd, $rs, $imm", []>;
@@ -2816,6 +3264,7 @@ def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
 // Same defect class (review §8.1.3): DR64 dest + tied base writeback.
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_BREV_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_brev_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2826,6 +3275,7 @@ def D_LDW_BREV_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_BREV_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_ldw_brev_reg\t$rtd, $rs, $rs2", []> {
@@ -2842,6 +3292,7 @@ def D_LDW_BREV_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 // the asm still renders `d_ldw_post_imm $rt,...`. Mirrors LD64_POST exactly.
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_POST_IMM : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -2851,6 +3302,7 @@ def D_LDW_POST_IMM : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
 
 let isCodeGenOnly = 1, isAsmParserOnly = 1, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -2858,6 +3310,7 @@ def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LHW_POST_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_post_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2866,21 +3319,16 @@ def D_LHW_POST_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-// POST_REG forms — DR64 dest, register stride. Base is `$rs` (review §8.1.2).
-// D_LDW_POST_REG now carries real tablegen `Inst` bits via
-// FmtLSPostIncReg so the standalone 32-bit path (getBinaryCodeForInstr)
-// emits a real word, AND the bundle FU_LD path packs the s1 register-offset
-// layout per encoding_manual.md:412-494 (worked example d_ldw_post_reg d3
-// r5, r7 -> s1 window 0x157103). No `isCodeGenOnly` (unlike D_LDW_POST_IMM
-// which keeps it to avoid a decoder-table collision with its LD64_POST
-// alias): D_LDW_POST_REG has no parallel alias name, so it stays in the
-// asm parser matcher AND the auto-decoder table. The LoadStoreOptimizer
-// still builds it by opcode (HaydnLoadStoreOptimizer.cpp:245) via the
-// Pattern= (no selection). The outs data operand is `$rt` (not `$rtd`)
+// D_LDW_POST_REG carries residual tablegen `Inst` bits via FmtLSPostIncReg.
+// Product encode is Format E LD register-offset members. No `isCodeGenOnly`
+// (unlike D_LDW_POST_IMM which keeps it to avoid a decoder-table collision
+// with its LD64_POST alias): D_LDW_POST_REG has no parallel alias name.
+// The outs data operand is `$rt` (not `$rtd`)
 // to bind to the FmtLSPostIncReg `bits<4> rt` encoding field — mirrors
 // D_LDW_POST_IMM at line 2791.
 let isPseudo = 0, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_POST_REG : FmtLSPostIncReg<0x4F, 0x0, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_ldw_post_reg\t$rt, $rs, $rs2", []> {
@@ -2892,6 +3340,7 @@ def D_LDW_POST_REG : FmtLSPostIncReg<0x4F, 0x0, (outs DR64:$rt, GPR32:$rs_wb),
 // the standalone opcode (0x4E, 0x4D). All three now have real Inst bits
 // and round-trip through both standalone and bundle paths.
 let isPseudo = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LW_POST_REG : FmtLSPostIncReg<0x4E, 0x1, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lw_post_reg\t$rt, $rs, $rs2", []> {
@@ -2899,6 +3348,7 @@ def D_LW_POST_REG : FmtLSPostIncReg<0x4E, 0x1, (outs DR64:$rt, GPR32:$rs_wb),
 }
 
 let isPseudo = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LHW_POST_REG : FmtLSPostIncReg<0x4D, 0x2, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lhw_post_reg\t$rt, $rs, $rs2", []> {
@@ -2908,7 +3358,7 @@ def D_LHW_POST_REG : FmtLSPostIncReg<0x4D, 0x2, (outs DR64:$rt, GPR32:$rs_wb),
 // PRE_IMM / PRE_REG forms — update base, then load. Same two-def shape.
 // isCodeGenOnly: GISel / ExpandPostIncEarly form these so SMS
 // sees a live base writeback before MachinePipeliner.
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def D_LDW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2918,6 +3368,7 @@ def D_LDW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2927,6 +3378,7 @@ def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LHW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_pre_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2935,7 +3387,7 @@ def D_LHW_PRE_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def D_LDW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_ldw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -2945,6 +3397,7 @@ def D_LDW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -2954,6 +3407,7 @@ def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 }
 
 let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LHW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "d_lhw_pre_reg\t$rtd, $rs, $rs2", []> {
@@ -2965,6 +3419,7 @@ def D_LHW_PRE_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 // WITH_IMM / WITH_REG forms — offset addressing, NO base writeback.
 // Single def ($rtd), no tied operand.
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_with_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2974,6 +3429,7 @@ def D_LDW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lw_with_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2983,6 +3439,7 @@ def D_LW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LHW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_lhw_with_imm\t$rtd, $rs, $scaled_imm", []> {
@@ -2992,6 +3449,7 @@ def D_LHW_WITH_IMM : HaydnInst<4, (outs DR64:$rtd),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "d_ldw_with_reg\t$rtd, $rs1, $rs2", []> {
@@ -3001,6 +3459,7 @@ def D_LDW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "d_lw_with_reg\t$rtd, $rs1, $rs2", []> {
@@ -3010,6 +3469,7 @@ def D_LW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LHW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
     (ins GPR32:$rs1, GPR32:$rs2),
     "d_lhw_with_reg\t$rtd, $rs1, $rs2", []> {
@@ -3035,11 +3495,11 @@ def D_LHW_WITH_REG : HaydnInst<4, (outs DR64:$rtd),
 // {... }` scope opened at line 2413. Without it, AsmPrinter drops the
 // MCInst (MCID::Pseudo) and the store has NO effect — the exact defect
 // fixed for D_LDW_POST_IMM / S_LW_POST_IMM. Mirrors D_LDW_BREV_IMM at line
-// 2467 which correctly carries the override. The slot map
-// {DC_D1, Row 2, S0, opcode 1} in HaydnDClassOpcodes.cpp already covers this
-// opcode, so emission is real once non-pseudo.
+// 2467 which correctly carries the override. Emission is real once
+// non-pseudo.
 let isPseudo = 0, mayStore = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sdw_brev_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3051,7 +3511,7 @@ def D_SDW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // POST_IMM — DR64 data. DB: mem64[rs] = rtd; rs += imm6<<3.
 // isPseudo=0 required: inside surrounding isPseudo=1 scope (
 // WITH_* precedent) so AsmPrinter does not drop MCInst as Pseudo.
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SDW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sdw_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3061,6 +3521,7 @@ def D_SDW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_shw_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3070,6 +3531,7 @@ def D_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_H_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_h_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3079,6 +3541,7 @@ def D_SW_H_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_L_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_l_post_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3089,7 +3552,7 @@ def D_SW_L_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 
 // PRE_IMM — update base, then store. DR64 data.
 // isCodeGenOnly: selected by GISel update-addr fuse (pre-RA).
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def D_SDW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sdw_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3100,6 +3563,7 @@ def D_SDW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 
 // isPseudo=0: inside isPseudo=1 scope — emit path for public PRE stores.
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_shw_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3109,6 +3573,7 @@ def D_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_H_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_h_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3118,6 +3583,7 @@ def D_SW_H_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SW_L_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sw_l_pre_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3130,6 +3596,7 @@ def D_SW_L_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // D_SW_L/H_WITH_IMM are now defined in HaydnInstrInfo.td via
 // FmtLaneStore (with real encoding bits) so codegen can emit them.
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_WITH_IMM : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_sdw_with_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3139,6 +3606,7 @@ def D_SDW_WITH_IMM : HaydnInst<4, (outs),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SHW_WITH_IMM : HaydnInst<4, (outs),
     (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
     "d_shw_with_imm	$rtd, $rs, $scaled_imm", []> {
@@ -3147,32 +3615,20 @@ def D_SHW_WITH_IMM : HaydnInst<4, (outs),
   let Itinerary = Slot0_LS;
 }
 
-let TSFlags = 14, isCodeGenOnly = 1 in
-def EXP2 : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
-    "exp2	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
-def LOG2 : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
-    "log2	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MOVE64 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "move64	$rd, $rs", []>;
 
-// MOVEI_H / MOVEI_L — isCodeGenOnly logical bases for S0 I32 members
-// MOVEI_H_S0 / MOVEI_L_S0 (HaydnFormatsALU64.td). Operand dag must match
-// members (DR64 def + simm32_movei) so sparse alt discovery wires S0-only
-// rows and post-RA setDesc can commit the encode member without rewriting
-// the MI. Not the retired 48-bit standalone parcel; members own encoding.
-let TSFlags = 14, isCodeGenOnly = 1 in
+// MOVEI_H / MOVEI_L — logical bases for Format E I32 members
+// (MOVEI_*_E2_E0_ALU0_I32). Operand dag must match members
+// (DR64 def + simm32_movei). FieldSlots retired (R13).
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MOVEI_H : HaydnInst<4, (outs DR64:$rd),
     (ins simm32_movei:$imm32),
     "movei_h\t$rd, $imm32", []>;
 
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MOVEI_L : HaydnInst<4, (outs DR64:$rd),
     (ins simm32_movei:$imm32),
     "movei_l\t$rd, $imm32", []>;
@@ -3188,53 +3644,15 @@ def MOVEI_L : HaydnInst<4, (outs DR64:$rd),
 // NOT64 moved to HaydnInstrInfo.td (real FmtALU64Unary — was MCID::Pseudo
 // HaydnInst shell that AsmPrinter dropped; slot members NOT64_S1/S2 live).
 
+// NSA*/POPCOUNT64/HMAX*/LOG2/EXP2/RECIP/SQRT moved to HaydnInstrInfo.td
+// (FmtALU64Unary 0x67/0x1AE..0x1BC).
 // R_GD family (FormatsALU64): outs GPR32:$rt, ins DR64:$rsd.
 // Logical operand dag MUST match members so leaveRegion setDesc is legal.
 // Prior stubs modeled GPR32 source (capstone drift); product members are
 // DR64 source. Same shape as POPCOUNT64.
-let TSFlags = 14, isCodeGenOnly = 1 in
-def NSA16_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "nsa16_l	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
-def NSA32_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "nsa32_l	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
-def NSA64 : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "nsa64	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
-def NSAZ16_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "nsaz16_l	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
-def NSAZ32_L : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "nsaz32_l	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
-def NSAZ64 : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "nsaz64	$rd, $rs", []>;
-
 // POPCOUNT64 — DB syntax `POPCOUNT64 rt, rsd` (GPR32 dest + DR64 source
 // DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
 // as GPR32 (capstone drift cat 1). Fixed to DR64 source (R_GD).
-let TSFlags = 14, isCodeGenOnly = 1 in
-def POPCOUNT64 : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "popcount64	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
-def RECIP : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
-    "recip	$rd, $rs", []>;
-
 // SEQ64 / SLE64 / SLT64 moved to HaydnInstrInfo.td (— real
 // FmtALU64Unary encodings under opcode 0x67 funct 0x187/0x188/0x189).
 
@@ -3254,7 +3672,7 @@ def RECIP : HaydnInst<4, (outs GPR32:$rd),
 // real instruction NOT isCodeGenOnly (parseable + encodable), this stub
 // isCodeGenOnly (excluded from matcher). AsmPrinter never emits this opcode
 // (it emits SEXT_GPR32_TO_DR64), so MC encoding of the stub is irrelevant.
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SEXT32T64 : HaydnInst<4, (outs GPR32:$rd),
     (ins GPR32:$rs),
     "sext32t64	$rd, $rs", []>;
@@ -3263,19 +3681,16 @@ def SEXT32T64 : HaydnInst<4, (outs GPR32:$rd),
 // DB slots DR_Write=['rtd'] GPR_Read=['rs']). Stub previously modeled dest
 // as GPR32 (capstone drift cat 2). Fixed to DR64 dest. Inert: no selector
 // case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
-let TSFlags = 14, isCodeGenOnly = 1 in
+// T-SM2: conservative dest Data_Latency 17 (golden uimm4+2 max) so pre-RA
+// and LatencyStalls see the read window; members cover the same OperandCycles.
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", Itinerary = Slot12_ALU_SinCosLat in
 def SIN_COS : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs, simm16:$imm),
     "sin_cos	$rd, $rs, $imm", []>;
 
 
 
-let TSFlags = 14, isCodeGenOnly = 1 in
-def SQRT : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
-    "sqrt	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def SRAI64R : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs, simm16:$imm),
     "srai64r	$rd, $rs, $imm", []>;
@@ -3291,7 +3706,7 @@ def SRAI64R : HaydnInst<4, (outs DR64:$rd),
 //===---------------------------------------------------------------===//
 
 // S_LBS (sign-extended byte). DB: rt = sext(mem8[rs]); POST: rs += imm6.
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbs_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3300,7 +3715,7 @@ def S_LBS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbs_post_reg\t$rt, $rs, $rs2", []> {
@@ -3309,7 +3724,7 @@ def S_LBS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbs_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3318,7 +3733,7 @@ def S_LBS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbs_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3328,6 +3743,7 @@ def S_LBS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LBS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbs_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3337,6 +3753,7 @@ def S_LBS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LBS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lbs_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3346,7 +3763,7 @@ def S_LBS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 }
 
 // S_LBU (zero-extended byte).
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbu_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3355,7 +3772,7 @@ def S_LBU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbu_post_reg\t$rt, $rs, $rs2", []> {
@@ -3364,7 +3781,7 @@ def S_LBU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbu_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3373,7 +3790,7 @@ def S_LBU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LBU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lbu_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3383,6 +3800,7 @@ def S_LBU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LBU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lbu_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3392,6 +3810,7 @@ def S_LBU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LBU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lbu_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3401,7 +3820,7 @@ def S_LBU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 }
 
 // S_LHWS (sign-extended halfword).
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhws_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3410,7 +3829,7 @@ def S_LHWS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhws_post_reg\t$rt, $rs, $rs2", []> {
@@ -3419,7 +3838,7 @@ def S_LHWS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhws_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3428,7 +3847,7 @@ def S_LHWS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhws_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3438,6 +3857,7 @@ def S_LHWS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LHWS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhws_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3447,6 +3867,7 @@ def S_LHWS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LHWS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lhws_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3456,7 +3877,7 @@ def S_LHWS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 }
 
 // S_LHWU (zero-extended halfword).
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhwu_post_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3465,7 +3886,7 @@ def S_LHWU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhwu_post_reg\t$rt, $rs, $rs2", []> {
@@ -3474,7 +3895,7 @@ def S_LHWU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhwu_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3483,7 +3904,7 @@ def S_LHWU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LHWU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lhwu_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3493,6 +3914,7 @@ def S_LHWU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LHWU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lhwu_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3502,6 +3924,7 @@ def S_LHWU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LHWU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lhwu_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3517,13 +3940,11 @@ def S_LHWU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 // MCInst (MCID::Pseudo) and the load has NO effect — the exact defect
 // fixed for D_LDW_POST_IMM / S_LW_POST_IMM. Mirrors D_LDW_BREV_IMM/REG at
 // lines 2467/2477 which correctly carry the override. The S_LW_BREV_IMM/REG
-// forms have no dedicated slot-map entry in HaydnDClassOpcodes.cpp (unlike
-// the D_LDW_BREV_* forms), so the encoder takes the legacy-flat path for
-// single-child bundles and emits the TableGen encoding bits (0, like the
-// working D_SDW_BREV_REG / S_SW_BREV_REG); the hardware opcode assignment
-// for these LS bit-reversed forms is pending the encoding migration (M5).
+// forms emit TableGen encoding bits for single-child bundles (like the
+// working D_SDW_BREV_REG / S_SW_BREV_REG); product encode is Format E member.
 let isPseudo = 0, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LW_BREV_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lw_brev_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3534,6 +3955,7 @@ def S_LW_BREV_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 
 let isPseudo = 0, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LW_BREV_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lw_brev_reg\t$rt, $rs, $rs2", []> {
@@ -3549,13 +3971,14 @@ def S_LW_BREV_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 // for asm-parser-only records.
 let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LW_POST_IMM : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lw_post_imm\t$rt, $rs, $scaled_imm", []> {
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LW_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lw_post_reg\t$rt, $rs, $rs2", []> {
@@ -3565,7 +3988,7 @@ def S_LW_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 }
 
 // isCodeGenOnly: GISel forms pre-inc/dec word loads.
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LW_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lw_pre_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3574,7 +3997,7 @@ def S_LW_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayLoad = 1, Constraints = "$rs = $rs_wb" in
 def S_LW_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, GPR32:$rs2),
     "s_lw_pre_reg\t$rt, $rs, $rs2", []> {
@@ -3584,6 +4007,7 @@ def S_LW_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LW_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "s_lw_with_imm\t$rt, $rs, $scaled_imm", []> {
@@ -3593,6 +4017,7 @@ def S_LW_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_LW_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
     (ins GPR32:$rs1, GPR32:$rs2),
     "s_lw_with_reg\t$rt, $rs1, $rs2", []> {
@@ -3610,7 +4035,7 @@ def S_LW_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
 //===---------------------------------------------------------------===//
 
 // POST_IMM — GPR32 data. DB: mem8[rs] = rt[7:0]; rs += imm6 (SB, no shift).
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SB_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sb_post_imm	$rt, $rs, $scaled_imm", []> {
@@ -3619,7 +4044,7 @@ def S_SB_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_shw_post_imm	$rt, $rs, $scaled_imm", []> {
@@ -3630,7 +4055,7 @@ def S_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 
 // DB: mem32[rs] = rt; rs += imm6<<2.
 // isPseudo=0: inside isPseudo=1 scope — emit path (S_SB/S_SHW peers).
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sw_post_imm	$rt, $rs, $scaled_imm", []> {
@@ -3640,7 +4065,7 @@ def S_SW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // PRE_IMM — update base, then store. GPR32 data.
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SB_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sb_pre_imm	$rt, $rs, $scaled_imm", []> {
@@ -3649,7 +4074,7 @@ def S_SB_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
   let Itinerary = Slot0_LS;
 }
 
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_shw_pre_imm	$rt, $rs, $scaled_imm", []> {
@@ -3659,7 +4084,7 @@ def S_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 
 // isCodeGenOnly: GISel forms pre-inc/dec word stores.
-let isPseudo = 0, isCodeGenOnly = 1, mayStore = 1, Constraints = "$rs = $rs_wb" in
+let isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", mayStore = 1, Constraints = "$rs = $rs_wb" in
 def S_SW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sw_pre_imm	$rt, $rs, $scaled_imm", []> {
@@ -3670,6 +4095,7 @@ def S_SW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 
 // WITH_IMM — offset addressing, NO base writeback. (outs) empty.
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SB_WITH_IMM : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sb_with_imm	$rt, $rs, $scaled_imm", []> {
@@ -3679,6 +4105,7 @@ def S_SB_WITH_IMM : HaydnInst<4, (outs),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SHW_WITH_IMM : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_shw_with_imm	$rt, $rs, $scaled_imm", []> {
@@ -3688,6 +4115,7 @@ def S_SHW_WITH_IMM : HaydnInst<4, (outs),
 }
 
 let isPseudo = 0, isAsmParserOnly = 1, mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SW_WITH_IMM : HaydnInst<4, (outs),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sw_with_imm	$rt, $rs, $scaled_imm", []> {
@@ -3702,12 +4130,12 @@ def S_SW_WITH_IMM : HaydnInst<4, (outs),
 // in {... }` scope opened at line 2413. Without it, AsmPrinter drops the
 // MCInst (MCID::Pseudo) and the store has NO effect — the exact defect
 // fixed for D_LDW_POST_IMM / S_LW_POST_IMM. Mirrors D_LDW_BREV_IMM at line
-// 2467 which correctly carries the override. S_SW_BREV_IMM has no dedicated
-// slot-map entry in HaydnDClassOpcodes.cpp (same as the working
-// S_SW_BREV_REG), so the encoder takes the legacy-flat path for single-child
-// bundles; the hardware opcode assignment is pending the M5 encoding migration.
+// 2467 which correctly carries the override. S_SW_BREV_IMM emits TableGen
+// encoding bits for single-child bundles (same as the working S_SW_BREV_REG);
+// product encode is Format E member.
 let isPseudo = 0, mayStore = 1,
     Constraints = "$rs = $rs_wb" in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def S_SW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
     "s_sw_brev_imm	$rt, $rs, $scaled_imm", []> {
@@ -3722,22 +4150,22 @@ def S_SW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // to match the DB. Inert placeholder: no selector (HaydnInstructionSelector
 // has no case), no intrinsic Pat in HaydnIntrinsics.td. Stays isCodeGenOnly
 // until a real encoding lands (M5).
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def TRANSF64 : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs),
     "transf64	$rd, $rs", []>;
 
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def TRANSF64F2 : HaydnInst<4, (outs DR64:$rd),
     (ins GPR32:$rs),
     "transf64f2	$rd, $rs", []>;
 
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def TRANSF64_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "transf64_h	$rd, $rs", []>;
 
-let TSFlags = 14, isCodeGenOnly = 1 in
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def TRANSF64_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "transf64_l	$rd, $rs", []>;
@@ -3747,21 +4175,25 @@ def TRANSF64_L : HaydnInst<4, (outs DR64:$rd),
 // forms remain in HaydnFormatsALU64.td (golden Mode-0 opcodes 0x51..0x56).
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2HADD32S_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32s_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2HADD32S_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32s_l	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2HADD32_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2hadd32_l	$rd, $rs", []>;
@@ -3770,21 +4202,13 @@ def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
 // Prior logical used DR64 dest (R_DD drift); setDesc then aborted
 // '$d0 is not a GPR32'. Match members so alts leaveRegion is legal.
 let TSFlags = 14 in
-def X2HMAX32 : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "x2hmax32	$rd, $rs", []>;
-
-let TSFlags = 14 in
-def X2HMIN32 : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "x2hmin32	$rd, $rs", []>;
-
-let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MJSWAP32 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2mjswap32	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MJSWAP32S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2mjswap32s	$rd, $rs", []>;
@@ -3800,6 +4224,7 @@ def X2MJSWAP32S : HaydnInst<4, (outs DR64:$rd),
 // (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x2swap32	$rd, $rs", []>;
@@ -3809,67 +4234,67 @@ def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
 // Slot forms remain X4ABS16{,S}_S1/_S2 in HaydnFormatsALU64.td.
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMUL16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4cmul16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMUL16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4cmul16s	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMUL16S_F2 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
-    "x4cmul16s_f2	$rd, $rs", []>;
+    "x4cmul16s.f2	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CMUL16_F2 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
-    "x4cmul16_f2	$rd, $rs", []>;
+    "x4cmul16.f2	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CONJ16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4conj16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CONJ16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4conj16s	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4ENERGY16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4energy16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4HADD16_H : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4hadd16_h	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4HADD16_L : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4hadd16_l	$rd, $rs", []>;
 
 let TSFlags = 14 in
-// X4HMAX/X4HMIN — same R_GD shape as X2HMAX (GPR32 dest, DR64 src).
-def X4HMAX16 : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "x4hmax16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-def X4HMIN16 : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs),
-    "x4hmin16	$rd, $rs", []>;
-
-let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MJSWAP16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4mjswap16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4MJSWAP16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4mjswap16s	$rd, $rs", []>;
@@ -3880,24 +4305,31 @@ def X4MJSWAP16S : HaydnInst<4, (outs DR64:$rd),
 // (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4NEG16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4neg16	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4NEG16S : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4neg16s	$rd, $rs", []>;
 
 let TSFlags = 14 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4SWAP16 : HaydnInst<4, (outs DR64:$rd),
     (ins DR64:$rs),
     "x4swap16	$rd, $rs", []>;
 
-let TSFlags = 14 in
+// ZERO_DR — isCodeGenOnly logical base for S1/S2 I8_ZERODR members.
+// Operand dag must match members (DR64 def, no imm) so LogicalMaterialize
+// can setDesc. Golden ZERO_DR has no immediate; the simm16 stub was a
+// hypothesized Auto encoding and blocked ISel from using the logical.
+let TSFlags = 14, isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
-    (ins simm16:$imm),
-    "zero_dr	$rd, $imm", []>;
+    (ins),
+    "zero_dr\t$rd", []>;
 
 // MOVESFR2GPR / MOVEGPR2SFR / ZERO_SFR moved to HaydnInstrInfo.td (
 // real 32-bit R-type encodings under opcode 0x67 funct 0x198/0x199/0x19A
@@ -3962,6 +4394,7 @@ def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
 // AGU writeback of base (tied) — matches BundleSim and FormatsLS Flex peers.
 // Prevents PostRA multi-issue of same-base CB ops (B6 WRITE_CONFLICT).
 let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
     (ins GPR32:$rs, i32imm:$cbr_sel, simm16:$imm),
     // Print order must match golden catalog / BundleSim frontend:
@@ -3993,6 +4426,7 @@ def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
 // [1:0]=0b00
 // Mirror D_LDW_CB_IMM: multi-slot load itinerary for dual CB-load ResMII (P3).
 let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
     (ins GPR32:$rs1, i32imm:$cbr_sel, GPR32:$rs2),
     "d_ldw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
@@ -4040,6 +4474,7 @@ def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
 //===----------------------------------------------------------------------===//
 
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rtd, GPR32:$rs, i32imm:$cbr_sel, simm16:$imm),
     "d_sdw_cb_imm\t$cbr_sel, $rtd, $rs, $imm", []> {
@@ -4064,6 +4499,7 @@ def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
 // D_SDW_CB_IMM but stride is GPR32. Layout mirrors D_LDW_CB_REG with the
 // data operand flipped to a source.
 let isAsmParserOnly = 1, isPseudo = 0, mayStore = 1 in
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, i32imm:$cbr_sel, GPR32:$rs2),
     "d_sdw_cb_reg\t$cbr_sel, $rtd, $rs1, $rs2", []> {
@@ -4091,3 +4527,4 @@ def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 // FmtMAC: 14
 // FmtALU32: 23
 // HaydnInst (no format class): 167
+} // isCodeGenOnly: hypothesized Auto encodings quarantined from MC

@@ -30,33 +30,33 @@ define i32 @caller_with_stack_args() {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 24 }
 ; CHECK-NEXT:    { nop; st32 lr, r1, 0 }
 ; CHECK-NEXT:    { nop; st32 r8, r1, 1 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 8 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 8 }
 ; CHECK-NEXT:    { nop; move32 r12, sp }
-; CHECK-NEXT:    { nop; st32_post r1, r12, 2 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 1 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 2 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 3 }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 4 }
-; CHECK-NEXT:    { nop; addi32_w r5, r0, 5 }
-; CHECK-NEXT:    { nop; addi32_w r6, r0, 6 }
-; CHECK-NEXT:    { nop; addi32_w r7, r0, 7 }
-; CHECK-NEXT:    { nop; addi32_w r8, r0, 9 }
+; CHECK-NEXT:    { nop; s_sw_post_imm r1, r12, 2 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 4 }
+; CHECK-NEXT:    { nop; addi32 r5, r0, 5 }
+; CHECK-NEXT:    { nop; addi32 r6, r0, 6 }
+; CHECK-NEXT:    { nop; addi32 r7, r0, 7 }
+; CHECK-NEXT:    { nop; addi32 r8, r0, 9 }
 ; CHECK-NEXT:    { nop; st32 r8, r12, 0 }
-; CHECK-NEXT:    { nop; jal_w lr, many_args }
+; CHECK-NEXT:    { nop; jal lr, many_args }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK:    { nop; xor32 r0, r0, r0 }
 ; CHECK:    { nop; ld32 lr, sp, 6 }
 ; CHECK:    { nop; ld32 r8, sp, 7 }
-; CHECK:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK:    { nop; addi32 sp, sp, 32 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @many_args(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
                            i32 8, i32 9)
   ret i32 %r
@@ -69,32 +69,32 @@ define i32 @caller_no_stack_args() {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 24 }
 ; CHECK-NEXT:    { nop; st32 lr, r1, 0 }
 ; CHECK-NEXT:    { nop; st32 r8, r1, 1 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32_w r12, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r12, r0, 0 }
 ; CHECK-NEXT:    { nop; move32 r8, sp }
-; CHECK-NEXT:    { nop; st32_post r12, r8, 2 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 1 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 2 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 3 }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 4 }
-; CHECK-NEXT:    { nop; addi32_w r5, r0, 5 }
-; CHECK-NEXT:    { nop; addi32_w r6, r0, 6 }
-; CHECK-NEXT:    { nop; addi32_w r7, r0, 7 }
+; CHECK-NEXT:    { nop; s_sw_post_imm r12, r8, 2 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 4 }
+; CHECK-NEXT:    { nop; addi32 r5, r0, 5 }
+; CHECK-NEXT:    { nop; addi32 r6, r0, 6 }
+; CHECK-NEXT:    { nop; addi32 r7, r0, 7 }
 ; CHECK-NEXT:    { nop; st32 r12, r8, 0 }
-; CHECK-NEXT:    { nop; jal_w lr, many_args }
+; CHECK-NEXT:    { nop; jal lr, many_args }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK:    { nop; xor32 r0, r0, r0 }
 ; CHECK:    { nop; ld32 lr, sp, 6 }
 ; CHECK:    { nop; ld32 r8, sp, 7 }
-; CHECK:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK:    { nop; addi32 sp, sp, 32 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @many_args(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
                            i32 0, i32 0)
   ret i32 %r

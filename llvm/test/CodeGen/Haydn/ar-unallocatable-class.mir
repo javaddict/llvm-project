@@ -1,0 +1,26 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=none -o - %s 2>&1 | FileCheck %s
+#
+# Role: verifier — AR register class is not allocatable (no copy/spill).
+#
+# REGRESSION TEST: AR64 (RegisterClass AR) is unspillable — copyPhysReg is
+# GPR/DR only — so isAllocatable=0 (peer: AIE unspillable sparse classes,
+# Hexagon CtrRegs, RISCV VCSR). MIR must refuse AR virtual registers rather
+# than let RA allocate a class it cannot copy or spill.
+#
+# Test design: parse-only MIR that names class `ar` on a vreg. If
+# isAllocatable is restored, this file parses and the trap returns.
+#
+# CHECK: error: {{.*}}: Cannot use non-allocatable class 'AR' for virtual register 0 in function 'ar_vreg_rejected'
+# CHECK: error: {{.*}}: Cannot use non-allocatable class 'AR' for virtual register named_ar in function 'ar_vreg_rejected'
+
+---
+name: ar_vreg_rejected
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: ar }
+body:             |
+  bb.0:
+    %1:ar = IMPLICIT_DEF
+    %named_ar:ar = IMPLICIT_DEF
+    RET implicit $r15
+...

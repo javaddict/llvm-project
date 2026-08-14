@@ -49,7 +49,7 @@ define void @cb86_loadi32_mbb_address_materialize(i32 %a, i32 %b) nounwind {
 ; regression guard: before the fix, no lui/addi32{{(_w)?}} preceded the jalr.
 ; CHECK: lui
 ; CHECK: addi32{{(_w)?}}
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %exit, label %pad

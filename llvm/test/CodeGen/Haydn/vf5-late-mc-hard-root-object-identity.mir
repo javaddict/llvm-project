@@ -36,8 +36,9 @@
   define void @hard_root_killed_consolidated_operands() { ret void }
 ...
 ---
-# Two-member Format E hard root (post-setDesc members + E2/AllEntriesReal).
-# Matches the multi-MI exact-commit shape used by late multipass stable-row.
+# Two-member Format E hard root (logical ADD32+XOR32). Finalize
+# rebinds onto E3 (E2 leading-entry cannot cover both) and cutovers to
+# MemberId. Encode scatters by committed EntryIdx.
 name:            hard_root_two_member_alu
 tracksRegLiveness: true
 noVRegs:         true
@@ -45,15 +46,15 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r2, $r3, $r15
     BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
-      $r5 = XOR32_S1 $r2, $r3, implicit-def dead $sfr
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
     }
     RET implicit $r15
 
 # MIR-LABEL: name: hard_root_two_member_alu
-# MIR: BUNDLE 0, 0
-# MIR: ADD32_S2
-# MIR: XOR32_S1
+# MIR: BUNDLE 1, 0
+# MIR: ADD32{{.*}}
+# MIR: XOR32{{.*}}
 # MIR: BUNDLE 0
 # MIR: RET
 # MIR-NOT: LOADI32
@@ -82,17 +83,17 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $d0, $d1, $d2, $d3, $r15
     BUNDLE 1, 0, implicit-def $r4, implicit-def $d4, implicit-def $d5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $d0, implicit $d1, implicit $d2, implicit $d3 {
-      $r4 = ADD32_S0 $r0, $r1, implicit-def dead $sfr
-      $d4 = ADD64_S1 $d0, $d1, implicit-def dead $sfr
-      $d5 = ADD64_S2 $d2, $d3, implicit-def dead $sfr
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $d4 = ADD64 $d0, $d1, implicit-def dead $sfr
+      $d5 = ADD64 $d2, $d3, implicit-def dead $sfr
     }
     RET implicit $r15
 
 # MIR-LABEL: name: hard_root_three_member_mixed_fu
 # MIR: BUNDLE 1, 0
-# MIR: ADD32_S0
-# MIR: ADD64_S1
-# MIR: ADD64_S2
+# MIR: ADD32_E3_E0_ALU2_RR
+# MIR: ADD64_E3_E1_ALU1_RR
+# MIR: ADD64_E3_E2_ALU0_RR
 # MIR: BUNDLE 0
 # MIR: RET
 # MIR-NOT: LOADI32
@@ -116,19 +117,19 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r2, $r3, $r15
     BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit killed $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-      $r4 = ADD32_S2 killed $r0, killed $r1, implicit-def dead $sfr
-      $r5 = XOR32_S1 killed $r2, killed $r3, implicit-def dead $sfr
+      $r4 = ADD32 killed $r0, killed $r1, implicit-def dead $sfr
+      $r5 = XOR32 killed $r2, killed $r3, implicit-def dead $sfr
     }
     RET implicit $r15
 
 # MIR-LABEL: name: hard_root_killed_consolidated_operands
-# MIR: BUNDLE 0, 0
+# MIR: BUNDLE 1, 0
 # MIR: killed $r0
 # MIR: killed $r1
 # MIR: killed $r2
 # MIR: killed $r3
-# MIR: ADD32_S2 killed $r0, killed $r1
-# MIR: XOR32_S1 killed $r2, killed $r3
+# MIR: ADD32_E3_E0_ALU2_RR killed $r0, killed $r1
+# MIR: XOR32_E3_E1_ALU1_RR killed $r2, killed $r3
 # MIR: RET
 # MIR-NOT: LOADI32
 # MIR-NOT: LoopDec

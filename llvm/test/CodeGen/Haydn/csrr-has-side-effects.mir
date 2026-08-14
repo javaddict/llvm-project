@@ -1,0 +1,29 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=dead-mi-elimination \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: logical CSRR must not be DCE'd when its dest is unused.
+#
+# Bug: CSRR inherited HaydnInst hasSideEffects=0 via FmtCSR. DeadMachineInstructionElim
+# deleted a CSR read whose GPR dest was unused. A later CSRW could then hoist
+# across a missing read. Format E CSRR members already have hasSideEffects=1;
+# RISCV Zicsr is the same. Fix: hasSideEffects=1 on the logical CSRR def.
+#
+# Test design: one unused CSRR then RET. If hasSideEffects regresses to 0,
+# dead-mi-elimination erases CSRR and the CHECK fails.
+
+--- |
+  define void @dead_csrr_survives() { ret void }
+...
+---
+name:            dead_csrr_survives
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: dead_csrr_survives
+    ; CHECK: CSRR
+    $r1 = CSRR 1, $r0, implicit $sfr
+    RET implicit $r15
+...

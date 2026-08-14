@@ -5,8 +5,8 @@
 
 ; IR to GlobalISel to MC to ELF to objdump. Pins process/main mnemonics, not
 ; printer-only asm. Co-issued members use BUNDLE-DAG (slot order free).
-; Live Format E objdump names: d_sdw/s_lw/s_sw for memory, jal/jalr (not
-; legacy jal_w/jalr_w/st64/ld32 tokens). -verify-machineinstrs is live.
+; Live Format E objdump names: st64/ld32/st32 for memory, jal/jalr (not
+; legacy jal_w/jalr_w tokens). -verify-machineinstrs is live.
 ;
 ; E2E test: BiQuad IIR filter (Direct Form 1), 32x32-bit fixed-point.
 ;
@@ -125,16 +125,15 @@ for.end:
 }
 ; BUNDLE-LABEL: <bqriir32x32_df1_process>:
 ; BUNDLE: subi32 sp, sp
-; Product memory forms (Format E objdump): d_sdw = 64-bit spill/store,
-; s_lw/s_sw = 32-bit load/store (not legacy st64/ld32/st32 tokens).
-; BUNDLE-DAG: d_sdw_with_imm
-; BUNDLE-DAG: s_lw_with_imm
+; Product memory forms (Format E objdump): st64 spill/store, ld32 load.
+; BUNDLE-DAG: st64
+; BUNDLE-DAG: ld32
 ; Back-edge: slt32 + bnez (not fused blt_w) under SFR-aware scheduling.
 ; BUNDLE-DAG: {{slt32|set_hwloop}}
 ; BUNDLE-DAG: {{mul64|mula64|add64}}
 ; BUNDLE-DAG: sub64
 ; BUNDLE-DAG: sra64
-; BUNDLE-DAG: s_sw_
+; BUNDLE-DAG: st32
 ; BUNDLE-DAG: {{bnez|beqz|set_hwloop}}
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 ;
@@ -150,7 +149,7 @@ define i32 @main() {
 ; BUNDLE-DAG: addi32
 ; Unrelocated call target prints as "jal lr, 0" under Format E objdump.
 ; BUNDLE: jal{{.*}}lr, 0
-; BUNDLE: s_lw_with_imm
+; BUNDLE: ld32
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 entry:
   ; Allocate 2 sections (36 bytes each) + input/output arrays (32 bytes each)

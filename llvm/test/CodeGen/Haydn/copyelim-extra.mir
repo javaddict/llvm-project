@@ -1,35 +1,17 @@
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-copy-elim \
-# RUN:     -verify-machineinstrs -debug-only=haydn-copy-elim -o - %s 2>&1 \
-# RUN:     | FileCheck %s
-# REQUIRES: asserts
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-cp -mcp-use-is-copy-instr \
+# RUN:     -verify-machineinstrs -o - %s | FileCheck %s
 
-# Role: MIR — OR32 identity fold in HaydnCopyElim.
-
-# REGRESSION TEST: OR32 identity fold in HaydnCopyElim.
-#
-# Fixed (XFAIL hygiene): MIR OR32 arity is (rd, rs1, rs2) so the
-# identity form is `$r1 = OR32 $r1, $r1` (two sources). The prior three-source
-# form was a test-authoring bug ("Extra explicit operand").
-#
-# Background:
-# The pass historically only folded the OR64 identity pattern
-# (OR64 dN, dN, dN -> removed). extended it to also fold
-# OR32 rN, rN, rN (the GPR32 analog), since OR32 rd, rs, rs is also a
-# valid post-RA copy-like sequence and rd==rs==rs makes it a no-op.
-#
-# What this test guards:
-# An OR32 $r1, $r1 identity in the MIR must be removed by the pass.
-# The debug log must print "Eliminating OR32 identity copy:" to prove
-# the new code path (not the OR64 path) fired.
-# A neighboring non-identity OR32 must remain untouched.
+# Role: MIR — generic MCP(UseCopyInstr) via isCopyInstrImpl (MOVE32/OR32/OR64).
+# Dead non-identity COPY and OR rd,rs,rs copies are removed. Identity COPY
+# (overlapping src/dst) is kept — MCP does not erase those (HaydnCopyElim did).
+# Non-copy OR (unequal srcs) stays.
 
 --- |
-  define void @or32_identity_fold() nounwind { ret void }
+  define void @mcp_use_copy_instr() nounwind { ret void }
 ...
 ---
-# CHECK: Eliminating OR32 identity copy:{{.*}}$r1 = OR32 $r1, $r1
-# CHECK-LABEL: name: or32_identity_fold
-name:            or32_identity_fold
+# CHECK-LABEL: name: mcp_use_copy_instr
+name:            mcp_use_copy_instr
 alignment:       1
 legalized:       true
 regBankSelected: true
@@ -43,17 +25,29 @@ liveins:
   - { reg: '$r1', virtual-reg: '' }
   - { reg: '$r3', virtual-reg: '' }
   - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$d1', virtual-reg: '' }
 frameInfo:
   maxAlignment:    1
   maxCallFrameSize: 0
   hasCalls:        false
 body:             |
   bb.0:
-    liveins: $r1, $r3, $r4, $r15
+    liveins: $r1, $r3, $r4, $d0, $d1, $r15
 
-    ; CHECK-NOT: $r1 = OR32 $r1, $r1
+    ; CHECK-NOT: $r5 = COPY $r3
+    ; CHECK-NOT: $r6 = OR32 $r3, $r3
+    ; CHECK-NOT: $d2 = OR64 $d0, $d0
+    ; CHECK: $r1 = COPY $r1
+    ; CHECK: $r4 = OR32 $r4, $r4
     ; CHECK: $r2 = OR32 $r3, $r4
+    ; CHECK: $d3 = OR64 $d0, $d1
     ; CHECK: RET
-    $r1 = OR32 $r1, $r1, implicit-def dead $sfr
+    $r5 = COPY $r3
+    $r6 = OR32 $r3, $r3, implicit-def dead $sfr
+    $d2 = OR64 $d0, $d0, implicit-def dead $sfr
+    $r1 = COPY $r1
+    $r4 = OR32 $r4, $r4, implicit-def dead $sfr
     $r2 = OR32 $r3, $r4, implicit-def dead $sfr
+    $d3 = OR64 $d0, $d1, implicit-def dead $sfr
     RET implicit $r15

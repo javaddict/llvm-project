@@ -14,10 +14,10 @@
 // 0xFFFF mask is structurally impossible.
 //
 // Branch/call PC-relative kinds use the product RelocFieldInfo table
-// (halfword ÷2 for WIDE_* / BranchSImm16; CallSImm20 byte scale). FieldLsb
-// is Format E E2 e0 absolute parcel bits with r_offset = parcel origin.
-// Golden branch-scale formalization remains open; product keeps the table
-// halfword scale (not silent ValueShift=0 invent). RelocTrans::Unresolved
+// (byte PC+imm for branches and calls; hwloop displacement <<2). FieldLsb
+// is Format E E2 e0 absolute parcel bits with r_offset = parcel origin;
+// E3 I12/RI12/I20 windows are resolved from the parcel at Loc.
+// GE96-03: no extra shift on B*/JAL. RelocTrans::Unresolved
 // remains for kinds without a published wire scale, and for unknown/
 // Invalid kinds (rowFor never falls open to None). Hwloop Off1/Off2 retain
 // ValueShift=2 from the explicit SET_HWLOOP displacement law.
@@ -35,14 +35,13 @@
 
 namespace llvm::HaydnReloc {
 
-// Neutral relocation kind. Shared members (None..WIDE_BranchSImm12_RI
-// 0..20) have the SAME numeric values as the ELF `R_HAYDN_*`
-// (ELFRelocs/Haydn.def), so lld indexes the table directly via
-// `static_cast<RelocKind>(rel.type)`. MC maps its `MCFixupKind` through
-// `mapFixupKind`. MC-only fixups (no ELF reloc) are appended after the
-// shared range.
+// Neutral relocation kind. Shared members (None..LS_IMM 0..21) have the
+// SAME numeric values as the ELF `R_HAYDN_*` (ELFRelocs/Haydn.def), so lld
+// indexes the table directly via `static_cast<RelocKind>(rel.type)`. MC
+// maps its `MCFixupKind` through `mapFixupKind`. MC-only fixups (no ELF
+// reloc) are appended after the shared range.
 enum class RelocKind : uint16_t {
-  // Shared with ELF R_HAYDN_* (values 0..20 must match Haydn.def)
+  // Shared with ELF R_HAYDN_* (values 0..21 must match Haydn.def)
   None = 0,
   Data32 = 1,
   SImm16 = 2,
@@ -67,23 +66,20 @@ enum class RelocKind : uint16_t {
   // I12 form keeps WIDE_BranchSImm12 (ELF 18) @ bits[15:4]. Promoted from
   // MC-only so unresolved external targets emit a real ELF reloc.
   WIDE_BranchSImm12_RI = 20,
+  // Format E LOADSTORE0/LOAD1 RI6 signed imm6 @ parcel bits[33:28].
+  // Distinct from LO20 (ALU RI20 / retired WIDE LSOff20 @ bits[31:50]).
+  LS_IMM = 21,
   // MC-only fixups (never become ELF relocs)
-  C_BranchSImm4 = 21,
-  C_UImm4 = 22,
-  C_BranchSImm10 = 23,
-  HWLoopOffset = 24, // legacy placeholder (WIDE path uses HWLoopOff1/2)
-  LongBranchSImm20 = 25,
+  C_BranchSImm4 = 22,
+  C_UImm4 = 23,
+  C_BranchSImm10 = 24,
+  HWLoopOffset = 25, // legacy placeholder (WIDE path uses HWLoopOff1/2)
+  LongBranchSImm20 = 26,
   // s0 LS scaled-imm fields (MC-only — FI spill offsets are local).
-  S0LSOff4_2 = 26, // LD32/ST32 word offset (÷4)
-  S0LSOff4_3 = 27, // LD64/ST64 doubleword offset (÷8)
-  S0LSOff2_0 = 28, // LD16/LDU16/LD8/LDU8 (unscaled)
-  S0LSOff3_0 = 29, // ST16/ST8 (unscaled)
-  // s0 LS D_LD/S_LD/D_ST/S_ST imm6 field at bits[13:8]. Distinct from LO20
-  // (ADDI32_W/ORI32_W imm20 @ bits[37:18]); the
-  // encoder currently conflates both under FIXUP_HAYDN_LO20 (silent
-  // miscompilation of LS relocatable addresses). MC-only until the encoder
-  // wires LD32/ST32/LD64/ST64 to this kind.
-  LS_IMM = 30,
+  S0LSOff4_2 = 27, // LD32/ST32 word offset (÷4)
+  S0LSOff4_3 = 28, // LD64/ST64 doubleword offset (÷8)
+  S0LSOff2_0 = 29, // LD16/LDU16/LD8/LDU8 (unscaled)
+  S0LSOff3_0 = 30, // ST16/ST8 (unscaled)
   Invalid = 0xFFFF,
 };
 
@@ -108,7 +104,7 @@ struct RelocFieldInfo {
   uint16_t NBytes;     // image width patched (1, 2, 4, or 6 bytes)
   uint8_t FieldSize;   // field bit width
   uint8_t FieldLsb;    // LSB position of the field within the N-byte LE image
-  uint8_t ValueShift;  // input value pre-shift: 0, 1 (halfword), 2 (word/hwloop)
+  uint8_t ValueShift;  // input value pre-shift: 0 (byte), 2 (word/hwloop)
   uint8_t Align;       // required input alignment (1, 2, 4)
   bool IsSigned;       // writer: isInt<FieldSize>; reader: sign-extend
   bool IsPCRel;        // informational (PC-relativity is resolved upstream)
@@ -144,6 +140,8 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
 // Resolve FieldLsb for kinds whose absolute parcel bit position depends on the
 // live Format E mode/entry at Loc. Table FieldLsb is E2 e0 authority:
 //   WIDE_CallSImm20 — E3 JAL I20 at e0 [17:36] or e1 [48:67]
+//   WIDE_BranchSImm12 / _RI — E3 I12/RI12 at e0 [23:34], e1 [54:65],
+//     e2 I12 [81:92] (E2 e0 stays table FieldLsb=32)
 //   HWLoopOff1/Off2 — E2 HWLRIII Off1/Off2 @ [13]/[36]; E3 F2 e0 @ [18]/[24],
 //     e1 @ [49]/[55] (golden absolute parcel bits; table default is E2 F2
 //     Off1@32 / Off2@38).
@@ -160,7 +158,7 @@ struct RelocCompute {
 // patch, or an error string. This is the sole range/scale authority for MC
 // applyFixup and lld relocate / inBranchRange — consumers must not keep
 // parallel isInt field-width tables. Unresolved kinds fail closed; product
-// rows (branch halfword, call byte, hwloop ÷4, data) follow RelocFieldInfo.
+// rows (branch/call byte PC+imm, hwloop ÷4, data) follow RelocFieldInfo.
 RelocCompute computeRelocValue(RelocKind R, uint64_t Value);
 
 // Result of reading an encoded addend (inverse of computeRelocValue).

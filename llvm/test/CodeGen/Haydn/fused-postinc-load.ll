@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -stop-after=haydn-expand-post-inc-early -verify-machineinstrs < %s \
+; RUN:     -stop-after=instruction-select -verify-machineinstrs < %s \
 ; RUN:     | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s --check-prefix=ASM

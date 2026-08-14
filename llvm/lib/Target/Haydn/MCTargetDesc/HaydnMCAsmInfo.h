@@ -13,6 +13,7 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNMCASMINFO_H
 #define LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNMCASMINFO_H
 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCAsmInfoELF.h"
 
 namespace llvm {
@@ -23,7 +24,17 @@ class HaydnMCAsmInfo : public MCAsmInfoELF {
 
 public:
   explicit HaydnMCAsmInfo(const Triple &TargetTriple);
+
+  void printSpecifierExpr(raw_ostream &OS,
+                          const MCSpecifierExpr &Expr) const override;
 };
+
+namespace Haydn {
+using Specifier = uint16_t;
+
+Specifier parseSpecifierName(StringRef Name);
+StringRef getSpecifierName(Specifier Kind);
+} // namespace Haydn
 
 } // namespace llvm
 

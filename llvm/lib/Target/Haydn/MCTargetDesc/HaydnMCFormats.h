@@ -355,8 +355,9 @@ public:
 // AIEBaseMCFormats. The single Haydn variant means there is one concrete
 // subclass (HaydnMCFormats) and no per-variant split.
 // Generated Formats (HaydnGenFormats.inc) remain the live composite/member
-// table. Production object-encoding identity is the neutral registry
-// (haydn::format::ObjectEncodingProfileDesc, E96 only).
+// table. getAlternateInstsOpcode is occupancy + Format E members
+// (HaydnGenAltOccupancy.inc). Production object-encoding identity is the
+// neutral registry (haydn::format::ObjectEncodingProfileDesc, E96 only).
 class HaydnBaseMCFormats {
 public:
   virtual ~HaydnBaseMCFormats() = default;
@@ -401,9 +402,11 @@ public:
 
   // \returns the member-opcode vector for a multi-slot logical / MultiSlot_Pseudo
   // (AIE AIEMCFormats.h:376-379 peer), or nullptr if \p Opcode has no
-  // alternatives. Rows are sparse size-3: index == field, 0 for missing
-  // members. PlacementAlternative FieldSlots = 1<<index for non-zero entries;
-  // getLegalSlots ORs those indices.
+  // alternatives. Rows are sparse size-3: index == residual occupancy class,
+  // 0 for a hole. Non-zero entries are Format E members when a generated
+  // member occupies that entry; otherwise the residual FieldSlot (NOP_S0,
+  // CSRW_W_S0, ADD32_MSP). PlacementAlternative FieldSlots = 1<<index;
+  // getLegalSlots ORs those indices. Do not derive holes from raw EntryIdx.
   virtual const std::vector<unsigned> *
   getAlternateInstsOpcode(unsigned Opcode) const = 0;
 
@@ -434,11 +437,10 @@ protected:
   void checkInstructionIsSupported(unsigned Opcode) const;
 };
 
-// Concrete subclass. The generated function bodies for getSlotInfo
-// getFormatDescIndex, and getAlternateInstsOpcode are provided by
-// HaydnGenFormats.inc (GET_FORMATS_SLOTINFOS_MAPPING
-// GET_OPCODE_FORMATS_INDEX_FUNC / GET_ALTERNATE_INST_OPCODE_FUNC); the
-// declarations here match those signatures exactly.
+// Concrete subclass. getSlotInfo / getFormatDescIndex come from
+// HaydnGenFormats.inc (GET_FORMATS_SLOTINFOS_MAPPING /
+// GET_OPCODE_FORMATS_INDEX_FUNC). getAlternateInstsOpcode is occupancy +
+// Format E members (HaydnGenAltOccupancy.inc).
 class HaydnMCFormats : public HaydnBaseMCFormats {
 public:
   const std::vector<unsigned> *

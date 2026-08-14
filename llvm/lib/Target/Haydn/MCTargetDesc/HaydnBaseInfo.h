@@ -7,16 +7,14 @@
 //===----------------------------------------------------------------------===//
 //
 // This file contains small standalone definitions for the Haydn target useful
-// for the compiler back-end and the MC libraries. It provides bundle-width
-// constants, VLIW slot masks, encoded-width helpers, and TSFlags accessors
-// shared across CodeGen, MC, and the assembler/disassembler.
+// for the compiler back-end and the MC libraries: issue-slot occupancy cap,
+// VLIW slot masks, and residual FU codes shared across CodeGen and MC.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNBASEINFO_H
 #define LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNBASEINFO_H
 
-#include "llvm/MC/MCInstrDesc.h"
 #include <cstdint>
 
 namespace llvm::Haydn {
@@ -25,17 +23,11 @@ namespace llvm::Haydn {
 // VLIW bundle constants
 //===----------------------------------------------------------------------===//
 
-// Number of issue slots in a VLIW bundle.
+// Number of issue slots in a VLIW bundle (Format E E2/E3 occupancy cap).
 constexpr unsigned ISSUE_SLOT_COUNT = 3;
 
-// Bundle width tag occupies bits [15:14] of the lead parcel.
-constexpr unsigned BUNDLE_WIDTH_TAG_BITS = 2;
-
-// Tag values indicating the total encoded bundle size.
-constexpr unsigned BUNDLE_16BIT_TAG = 0b00;
-constexpr unsigned BUNDLE_32BIT_TAG = 0b01;
-constexpr unsigned BUNDLE_48BIT_TAG = 0b10;
-constexpr unsigned BUNDLE_64BIT_TAG = 0b11;
+// Product parcels are Format E only. Retired variable-width bundle tags and
+// encoded-width TSFlags accessors are deleted (never-reintroduce).
 
 //===----------------------------------------------------------------------===//
 // VLIW slot masks (TSFlags bits [2:0])
@@ -49,18 +41,6 @@ constexpr unsigned SLOT1 = 0b010;
 constexpr unsigned SLOT2 = 0b100;
 // Mask combining all three slots.
 constexpr unsigned SLOT_ALL = SLOT0 | SLOT1 | SLOT2;
-
-//===----------------------------------------------------------------------===//
-// Encoded instruction width (TSFlags bits [4:3])
-//===----------------------------------------------------------------------===//
-
-// Encoded width of an individual instruction within a bundle.
-enum EncodedWidth : unsigned {
-  EW_16Bit = 0, //< Compressed (16-bit) encoding
-  EW_32Bit = 1, //< Full-width (32-bit) encoding
-  EW_48Bit = 2, //< Extended (32+16-bit) encoding
-  EW_64Bit = 3, //< Mode-0/3 bundle slot (64-bit) — slot-OR variants
-};
 
 //===----------------------------------------------------------------------===//
 // Residual FU codes (placement / `_S*` member scaffolding)
@@ -93,25 +73,6 @@ constexpr unsigned opcodeBits(unsigned Fu) {
   }
 }
 } // namespace FlexFU
-
-//===----------------------------------------------------------------------===//
-// TSFlags field layout
-//===----------------------------------------------------------------------===//
-//
-// Bits Field
-// [2:0] Slot mask
-// [4:3] Encoded width
-//
-// Accessor helpers below extract these fields from the 64-bit TSFlags word
-// stored in MCInstrDesc.
-
-// Extract the VLIW slot mask from TSFlags.
-inline unsigned getSlotMask(uint64_t TSFlags) { return TSFlags & 0x7; }
-
-// Extract the encoded width from TSFlags.
-inline EncodedWidth getEncodedWidth(uint64_t TSFlags) {
-  return static_cast<EncodedWidth>((TSFlags >> 3) & 0x3);
-}
 
 } // namespace llvm::Haydn
 

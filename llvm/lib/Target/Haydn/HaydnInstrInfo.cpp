@@ -23,10 +23,12 @@
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMatInt.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "MCTargetDesc/HaydnRelocLayout.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -219,8 +221,10 @@ static cl::opt<bool> ForceSMSPressureReject(
 static cl::opt<uint32_t> BranchRelaxSafetyBuffer(
     "haydn-branch-relax-safety-buffer", cl::Hidden, cl::init(1024),
     cl::desc("Extra bytes added to branch distance when deciding if a "
-             "conditional is in WIDE_BranchSImm12 range (Hexagon-style "
-             "branch-relax-safety-buffer). /."));
+             "conditional is in WIDE_BranchSImm12 range (GE96-03 signed "
+             "12-bit byte PC+imm; Hexagon-style safety buffer). Default is "
+             "MaxSingleBranchGrowthBytes after named growth is charged in "
+             "getInstSizeInBytes."));
 
 // Product MemoryEdges latency is architectural: First/LastMemoryCycle tables
 // (Last-First+1, floored at 1) for Slot0_LS / Slot1_LD / Slot01_LD. Class-
@@ -1737,9 +1741,10 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
 
 bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
                                             int64_t BrOffset) const {
- // : BranchRelaxation may pass TargetOpcode::BUNDLE (header of a wrapped
-  // branch). Cond/B field width is simm12 → fall through to isInt<13> below.
-  // JAL long-reach is not modeled via BUNDLE opc (insertBranch emits bare MI).
+  // BranchRelaxation may pass TargetOpcode::BUNDLE (header of a wrapped
+  // branch). Cond/B field is GE96-03 signed 12-bit byte PC+imm — same
+  // RelocFieldInfo as applyFixup. JAL long-reach is not modeled via BUNDLE
+  // opc (insertBranch emits bare MI).
   if (BranchOpc == TargetOpcode::BUNDLE)
     BranchOpc = Haydn::B; // conservative short-range (cond/B)
 
@@ -1758,21 +1763,22 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   // Pseudo-call and jump-table pseudo reach ±512KB (JAL_W) / unlimited
   // (JALR_W via BR_JT) — always in range for any single fn.
   // NOTE : B is deliberately NOT here. B lowers to BEQZ_W R0, which
-  // shares the conditional branch's ±4 KB WIDE_BranchSImm12 reach — it is
+  // shares the conditional WIDE_BranchSImm12 byte-simm12 reach — it is
   // NOT a long-reach unconditional jump. Modeling B as always-in-range hid
   // out-of-range unconditional branches from BranchRelaxation: when
   // fixupConditionalBranch relaxes a far conditional into (inverted cond to
-  // near + B to far), the B leg still overflows ±4 KB. Letting B fall through
-  // to the isInt<13> check below makes BranchRelaxation detect the far B leg
-  // and relax it via fixupUnconditionalBranch → insertIndirectBranch
-  // (LOADI32 + JALR, unlimited reach) on the next fixed-point iteration.
+  // near + B to far), the B leg still overflows simm12. Letting B fall
+  // through to the RelocFieldInfo check below makes BranchRelaxation detect
+  // the far B leg and relax it via fixupUnconditionalBranch →
+  // insertIndirectBranch (LOADI32 + JALR, unlimited reach) on the next
+  // fixed-point iteration.
   if (BranchOpc == Haydn::PseudoCALL || BranchOpc == Haydn::BR_JT)
     return true;
 
   // ZOL / JNZD latch metas are NOT PC-relative cond branches. analyzeBranch
   // exposes them so SMS/HardwareLoops can see the back-edge, but their
-  // "offset" is the whole body span. Falling through to isInt<13> makes
-  // BranchRelaxation retarget PseudoLoopEnd through a LUI+ADDI+JALR
+  // "offset" is the whole body span. Treating them as WIDE_BranchSImm12
+  // makes BranchRelaxation retarget PseudoLoopEnd through a LUI+ADDI+JALR
   // trampoline (gcc-c-torture 20021120-1: ~10KB soft-float body). That
   // poisons the hwloop end label, and a later software-loop rewrite leaves
   // the trampoline on the exit fallthrough → infinite loop / torture
@@ -1781,24 +1787,23 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   if (BranchOpc == Haydn::PseudoLoopEnd || BranchOpc == Haydn::LoopJNZ)
     return true;
 
-  // Phase 1b : all conditional branches (BEQ_W..BLTU_W
-  // BEQZ_W..BLTZ_W) use the 48-bit WIDE format (encoding_manual.md §5.5)
-  // with a 12-bit signed offset field stored in 2-byte units (§5.14 D1):
-  // range = sext(off12) << 1 = ±(2^11) << 1 = ±4096 bytes (±4KB).
-  // The offset is measured in bytes.
+  // Logical BEQ_W..BLTU_W / BEQZ_W..BLTZ_W. One window with
+  // computeRelocValue: WIDE_BranchSImm12 FieldSize=12, ValueShift=0
+  // (GE96-03 byte PC+imm). isInt<13> was the leftover ÷2-era ±4 KiB
+  // window and left a 2–4 KiB dead zone that integrated-as then rejected.
   //
-  // Hexagon-style safety buffer (see HexagonBranchRelaxation::isJumpOutOfRange):
-  // Distance = |offset| + BranchRelaxSafetyBuffer
-  // out-of-range if !isJumpWithinBranchRange(..., Distance)
-  // Inflate BrOffset away from zero by the buffer, then apply isInt<13>.
-  // without this, BR accepted printf BNEZ at 3904 B; AsmPrinter growth
-  // made final distance 4128 B and MC-fixup failed.
-  // residual: large yarpgen TUs still under-estimate (seed 3434
-  // beqz_w @ ~4 KB with buffer=256). Default buffer is 1024 — see cl::opt.
+  // Hexagon-style residual buffer (HexagonBranchRelaxation.cpp:164-166):
+  // Distance = |offset| + BranchRelaxSafetyBuffer after getInstSizeInBytes
+  // has charged named late-layout growth. Inflate BrOffset away from zero,
+  // then apply the reloc row. Default is MaxSingleBranchGrowthBytes.
+  const HaydnReloc::RelocFieldInfo &I = HaydnReloc::getRelocFieldInfo(
+      HaydnReloc::RelocKind::WIDE_BranchSImm12);
   int64_t Inflated = BrOffset >= 0
                          ? BrOffset + (int64_t)BranchRelaxSafetyBuffer
                          : BrOffset - (int64_t)BranchRelaxSafetyBuffer;
-  return isInt<13>(Inflated);
+  int64_t Shifted = Inflated >> I.ValueShift;
+  return I.IsSigned ? isIntN(I.FieldSize, Shifted)
+                    : isUIntN(I.FieldSize, static_cast<uint64_t>(Shifted));
 }
 
 MachineBasicBlock *

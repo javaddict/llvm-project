@@ -11,7 +11,7 @@
 ; "Haydn MC: opcode 'XOR32_M0' (opNNN) has no Format E form"
 ;
 ; Fix : emit the legacy base names XOR32 / ST32 / LD32 instead. These
-; auto-pair via the FlexMap suffix-strip rule to XOR32_S0
+; auto-pair via the FlexMap suffix-strip rule to XOR32
 ; ST32_S0 / LD32_S0 (the Family 2 defs). The 3 GPR32/imm
 ; operands bind positionally; the Format E encoder resolves the flex variant.
 ;

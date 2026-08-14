@@ -71,10 +71,15 @@ class HaydnFormatInst<dag outs, dag ins, string asmstr, list<dag> pattern>
 // (no `.s0`/`.s1`/`.s2`); bare mnemonics shared across multi-slot ops.
 // InstPrinter prints the same bare AsmString for every slot; post-commit
 // authority is member Desc getSlotKind / Bundle SlotMap.
+//
+// AsmVariantName fieldslot: public matcher skips these (same idiom as
+// generated members' e96member). Residual S0/S1/S2 decoder tries stay;
+// do not use isCodeGenOnly here.
 class HaydnSlotS0<dag outs, dag ins, string asmstr, list<dag> pattern>
     : HaydnFormatInst<outs, ins, asmstr, pattern> {
   let Slot = s0_slot;
   let DecoderNamespace = "S0";
+  let AsmVariantName = "fieldslot";
   let Size = 6;  // 48-bit slot window
   bits<48> s0;
   bits<48> Inst = s0;
@@ -84,6 +89,7 @@ class HaydnSlotS1<dag outs, dag ins, string asmstr, list<dag> pattern>
     : HaydnFormatInst<outs, ins, asmstr, pattern> {
   let Slot = s1_slot;
   let DecoderNamespace = "S1";
+  let AsmVariantName = "fieldslot";
   let Size = 5;  // 40-bit slot window
   bits<40> s1;
   bits<40> Inst = s1;
@@ -93,6 +99,7 @@ class HaydnSlotS2<dag outs, dag ins, string asmstr, list<dag> pattern>
     : HaydnFormatInst<outs, ins, asmstr, pattern> {
   let Slot = s2_slot;
   let DecoderNamespace = "S2";
+  let AsmVariantName = "fieldslot";
   let Size = 5;  // 40-bit slot window
   bits<40> s2;
   bits<40> Inst = s2;

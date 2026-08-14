@@ -70,10 +70,10 @@ body:             |
     ; CHECK-LABEL: name: test1_cross_slot
     ; CHECK: liveins: $r0, $r1, $d0, $d1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT: $d0 = ADD64_S2 killed $d0, killed $d1, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = COPY killed $r2
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r2 = ADD32{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: $d0 = ADD64{{.*}} killed $d0, killed $d1, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = COPY{{.*}}$r2
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     $d0 = ADD64 $d0, $d1, implicit-def dead $sfr
 
@@ -120,14 +120,16 @@ body:             |
     ; ADDI32 (Slot0_ALU) + ST32 (Slot0_LS) -- different DFA FUs, same coarse
     ; TSFlags slot mask. The DFA allows this bundle.
     ; COPY is excluded from bundles (pseudo instruction).
+    ; W3 (store mayLoad=0): leaveRegion emits ADDI32_S1 then ST32_S0; both
+    ; still pack (S1 ALU + S0 LS). Order is not the contract — co-issue is.
 
     ; CHECK-LABEL: name: test2_cross_fu_same_slot
     ; CHECK: liveins: $r0, $r1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32_S0 killed $r1, $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r2 = ADDI32_S1 $r0, 10, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = COPY killed $r2
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r2 = ADDI32{{.*}} $r0, 10, implicit-def dead $sfr
+    ; CHECK-NEXT: {{ST32|S_SW_WITH_IMM}}{{.*}} killed $r1, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = COPY{{.*}}$r2
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     ST32 $r1, $r0, 0, implicit-def dead $sfr
 
@@ -184,11 +186,11 @@ body:             |
     ; CHECK-LABEL: name: test3_mem_plus_alu
     ; CHECK: liveins: $r0, $r1, $d0, $d1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r3 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT: $r2 = LD32_S1 $r0, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = COPY killed $r3
-    ; CHECK-NEXT: $d0 = ADD64_S2 killed $d0, killed $d1, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r3 = ADD32{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: $r2 = {{LD32|S_LW_WITH_IMM}}{{.*}} $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = COPY{{.*}}$r3
+    ; CHECK-NEXT: $d0 = ADD64{{.*}} killed $d0, killed $d1, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = LD32 $r0, 0, implicit-def dead $sfr
     $r3 = ADD32 $r0, $r1, implicit-def dead $sfr
     $d0 = ADD64 $d0, $d1, implicit-def dead $sfr
@@ -251,11 +253,11 @@ body:             |
     ; CHECK-LABEL: name: test4_max_packet
     ; CHECK: liveins: $r0, $r1, $d0, $d1, $d2, $d3, $d4, $d5, $d6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT: $d0 = ADD64_S2 killed $d2, killed $d3, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = COPY killed $r2
-    ; CHECK-NEXT: $d4 = SUB64_S2 killed $d5, killed $d6, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r2 = ADD32{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: $d0 = ADD64{{.*}} killed $d2, killed $d3, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = COPY{{.*}}$r2
+    ; CHECK-NEXT: $d4 = SUB64{{.*}} killed $d5, killed $d6, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     $d0 = ADD64 $d2, $d3, implicit-def dead $sfr
     $d4 = SUB64 $d5, $d6, implicit-def dead $sfr

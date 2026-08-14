@@ -4,7 +4,7 @@
 ; Role: smoke — Smoke: pre-existing CHECK drift — compile and emit a return.
 
 ; Smoke: pre-existing CHECK drift — compile and emit a return.
-; CHECK: {{jalr|jalr_w}}
+; CHECK: {{jalr|jalr}}
 ;
 ; REBASELINED : / cutover — native mul now carries slot suffix (mul64.ll) in single-op epilogue bundle.
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.

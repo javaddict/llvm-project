@@ -1,0 +1,188 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer,regbankselect \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=RBS
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:     -run-pass=legalizer,regbankselect,instruction-select \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=ISEL
+
+# Role: MIR — T-GS3: s64 G_MUL legalizes to G_HAYDN_MUL64_WIDEN{,U}, not MUL64_*.
+#
+# REGRESSION TEST: legalizer must not construct selected target opcodes
+# (MUL64_LL / MUL64_ULUL) for s64 G_MUL. Correct shape is a target generic
+# (G_HAYDN_MUL64_WIDEN / G_HAYDN_MUL64_WIDENU), like G_MULA64, then select.
+# If MUL64_LL returns in this pass, CSE-desync / preConstrainBankOnlyVRegs
+# mop-up comes back. Instruction-select of the generic is a C++ residual
+# next to G_MULA64 (MUL64_LL / MUL64_ULUL); ISEL prefix covers that arm.
+#
+# Peer: AIELegalizerHelper.cpp:1519-1531 (G_AIE_BROADCAST_VECTOR);
+# RISCVLegalizerInfo.cpp:444-447 (libcallFor, never a target MUL).
+
+---
+name:            widen_mul_sext
+legalized:       false
+tracksRegLiveness: true
+# CHECK-LABEL: name: widen_mul_sext
+# CHECK: G_HAYDN_MUL64_WIDEN {{.*}}
+# CHECK-NOT: G_HAYDN_MUL64_WIDENU
+# CHECK-NOT: MUL64_LL
+# CHECK-NOT: MUL64_ULUL
+# CHECK-NOT: G_MUL
+# RBS-LABEL: name: widen_mul_sext
+# RBS: G_HAYDN_MUL64_WIDEN {{.*}}
+# RBS-NOT: MUL64_LL
+# ISEL-LABEL: name: widen_mul_sext
+# ISEL: MUL64_LL
+# ISEL-NOT: G_HAYDN_MUL64_WIDEN{{U?}}
+# ISEL-NOT: MUL64_ULUL
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    %a:_(s32) = COPY $r0
+    %b:_(s32) = COPY $r1
+    %ea:_(s64) = G_SEXT %a
+    %eb:_(s64) = G_SEXT %b
+    %m:_(s64) = G_MUL %ea, %eb
+    $d0 = COPY %m
+    RET implicit $d0, implicit $r15
+...
+
+---
+name:            widen_mul_zext
+legalized:       false
+tracksRegLiveness: true
+# CHECK-LABEL: name: widen_mul_zext
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK-NOT: MUL64_LL
+# CHECK-NOT: MUL64_ULUL
+# CHECK-NOT: G_MUL
+# RBS-LABEL: name: widen_mul_zext
+# RBS: G_HAYDN_MUL64_WIDENU
+# RBS-NOT: MUL64_ULUL
+# ISEL-LABEL: name: widen_mul_zext
+# ISEL: MUL64_ULUL
+# ISEL-NOT: G_HAYDN_MUL64_WIDENU
+# ISEL-NOT: MUL64_LL
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    %a:_(s32) = COPY $r0
+    %b:_(s32) = COPY $r1
+    %ea:_(s64) = G_ZEXT %a
+    %eb:_(s64) = G_ZEXT %b
+    %m:_(s64) = G_MUL %ea, %eb
+    $d0 = COPY %m
+    RET implicit $d0, implicit $r15
+...
+
+---
+name:            widen_mul_anyext
+legalized:       false
+tracksRegLiveness: true
+# CHECK-LABEL: name: widen_mul_anyext
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK-NOT: MUL64_LL
+# CHECK-NOT: MUL64_ULUL
+# CHECK-NOT: G_MUL
+# ISEL-LABEL: name: widen_mul_anyext
+# ISEL: MUL64_ULUL
+# ISEL-NOT: G_HAYDN_MUL64_WIDENU
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    %a:_(s32) = COPY $r0
+    %b:_(s32) = COPY $r1
+    %ea:_(s64) = G_ANYEXT %a
+    %eb:_(s64) = G_ANYEXT %b
+    %m:_(s64) = G_MUL %ea, %eb
+    $d0 = COPY %m
+    RET implicit $d0, implicit $r15
+...
+
+---
+name:            mul_s64_schoolbook
+legalized:       false
+tracksRegLiveness: true
+# True 64x64: unmerge, zext halves, three unsigned widening muls.
+# CHECK-LABEL: name: mul_s64_schoolbook
+# CHECK-NOT: LIBCALL_MUL64
+# CHECK-NOT: MUL64_LL
+# CHECK-NOT: MUL64_ULUL
+# CHECK: G_UNMERGE_VALUES
+# CHECK: G_UNMERGE_VALUES
+# CHECK: G_ZEXT
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK: G_SHL
+# CHECK-NOT: G_MUL
+# RBS-LABEL: name: mul_s64_schoolbook
+# RBS: G_HAYDN_MUL64_WIDENU
+# RBS-NOT: MUL64_ULUL
+# ISEL-LABEL: name: mul_s64_schoolbook
+# ISEL: MUL64_ULUL
+# ISEL: MUL64_ULUL
+# ISEL: MUL64_ULUL
+# ISEL-NOT: G_HAYDN_MUL64_WIDENU
+# ISEL-NOT: LIBCALL_MUL64
+body:             |
+  bb.0:
+    liveins: $d0, $d1
+    %0:_(s64) = COPY $d0
+    %1:_(s64) = COPY $d1
+    %2:_(s64) = G_MUL %0, %1
+    $d0 = COPY %2
+    RET implicit $d0, implicit $r15
+...
+
+---
+name:            widen_mul_mixed_ext
+legalized:       false
+tracksRegLiveness: true
+# Mixed SEXT x ZEXT is not a single widening multiply; schoolbook of
+# unsigned widening muls. No G_MULA64 fuse (prelegalizer-mula64.mir).
+# CHECK-LABEL: name: widen_mul_mixed_ext
+# CHECK-NOT: G_MULA64
+# CHECK-NOT: MUL64_LL
+# CHECK-NOT: MUL64_ULUL
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK: G_HAYDN_MUL64_WIDENU
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    %a:_(s32) = COPY $r0
+    %b:_(s32) = COPY $r1
+    %ea:_(s64) = G_SEXT %a
+    %eb:_(s64) = G_ZEXT %b
+    %m:_(s64) = G_MUL %ea, %eb
+    $d0 = COPY %m
+    RET implicit $d0, implicit $r15
+...
+
+---
+name:            widen_mul_ss_multiuse
+legalized:       false
+tracksRegLiveness: true
+# Multi-use G_MUL is not fused to G_MULA64; legalizer still emits one
+# signed widening generic, not MUL64_LL.
+# CHECK-LABEL: name: widen_mul_ss_multiuse
+# CHECK-NOT: G_MULA64
+# CHECK-NOT: MUL64_LL
+# CHECK: G_HAYDN_MUL64_WIDEN {{.*}}
+# CHECK: G_ADD
+# CHECK: G_ADD
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $d2
+    %a:_(s32) = COPY $r0
+    %b:_(s32) = COPY $r1
+    %acc:_(s64) = COPY $d2
+    %ea:_(s64) = G_SEXT %a
+    %eb:_(s64) = G_SEXT %b
+    %m:_(s64) = G_MUL %ea, %eb
+    %r:_(s64) = G_ADD %m, %acc
+    %r2:_(s64) = G_ADD %r, %m
+    $d0 = COPY %r2
+    RET implicit $d0, implicit $r15
+...

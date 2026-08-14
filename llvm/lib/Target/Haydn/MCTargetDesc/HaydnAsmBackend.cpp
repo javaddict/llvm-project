@@ -41,14 +41,8 @@ std::optional<bool> HaydnAsmBackend::evaluateFixup(const MCFragment &F,
   return std::nullopt;
 }
 
-// Map a compressed 16-bit opcode to its 32-bit equivalent.
-// C_* compressed shells deleted. No opcode relaxes.
-unsigned HaydnAsmBackend::getRelaxedOpcode(unsigned Opcode) const {
-  return Opcode;
-}
-
 // Check whether the given instruction may need relaxation.
-// no C_* shells — nothing relaxes at MC layer.
+// Format E has no MC-layer opcode relaxation.
 bool HaydnAsmBackend::mayNeedRelaxation(unsigned Opcode,
                                         ArrayRef<MCOperand> Operands,
                                         const MCSubtargetInfo &STI) const {
@@ -58,17 +52,16 @@ bool HaydnAsmBackend::mayNeedRelaxation(unsigned Opcode,
   return false;
 }
 
-// C_* compressed shells retired. mayNeedRelaxation is always false, so this
-// override is never consulted for product emission. Keep a trivial override
-// that never requests relaxation (do not re-open C_*).
+// mayNeedRelaxation is always false, so this override is never consulted
+// for product emission. Keep a trivial override that never requests
+// relaxation.
 bool HaydnAsmBackend::fixupNeedsRelaxationAdvanced(
     const MCFragment &, const MCFixup &, const MCValue &, uint64_t,
     bool) const {
   return false;
 }
 
-// Expand a compressed 16-bit instruction to its 32-bit equivalent.
-// C_* shells deleted — no MC relaxation expansions remain.
+// Format E has no MC-layer opcode relaxation.
 void HaydnAsmBackend::relaxInstruction(MCInst &Inst,
                                        const MCSubtargetInfo &STI) const {
   (void)Inst;
@@ -96,7 +89,7 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
 
   // === Single-source reloc table (HaydnRelocLayout). Both this MC writer and
   // lld's Haydn::relocate / getImplicitAddend / inBranchRange delegate to the
-  // same geometry + transform table (branch halfword ÷2, hwloop word ÷4), so
+  // same geometry + transform table (branch/call byte PC+imm, hwloop word ÷4), so
   // reader and writer cannot diverge and no consumer keeps a parallel isInt
   // field-width table.
   //
@@ -147,7 +140,8 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       return;
     }
     // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
-    // WIDE_CallSImm20 FieldLsb is mode/entry-dependent (E2 e0 vs E3 e0/e1).
+    // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI} FieldLsb is mode/entry
+    // dependent (E2 e0 table default vs E3 e0/e1/e2).
     const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, Data);
     HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FieldLsb);
     return;

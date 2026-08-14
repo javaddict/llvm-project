@@ -57,16 +57,17 @@ define i32 @test_trunc_s32_to_s1(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-NEXT:    { nop; movt32 r3, r1, r2 }
 ; CHECK-NEXT:    { nop; not32 r1, r3 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
-; CHECK-NEXT:    { nop; bnez_w r1, .LBB0_2 }
+; CHECK-NEXT:    { nop; bnez r1, .LBB0_2 }
 ; CHECK-NEXT:  // %bb.1: // %yes
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 42 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_3 }
 ; CHECK-NEXT:  .LBB0_2: // %no
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:  .LBB0_3: // %yes
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp1 = icmp eq i32 %a, %b
   br i1 %cmp1, label %then, label %else
@@ -103,8 +104,9 @@ define i32 @test_anyext_i1_to_i32(i32 %a, i32 %b, i32 %x, i32 %y) {
 ; CHECK-NEXT:    { nop; movt32 r4, r3, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r4 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp slt i32 %a, %b
   %result = select i1 %cmp, i32 %x, i32 %y
@@ -125,8 +127,9 @@ define signext i16 @test_trunc_s32_to_s16(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; slli32 r1, r1, 16 }
 ; CHECK-NEXT:    { nop; srai32 r1, r1, 16 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %sum = add i32 %a, %b
   %trunc = trunc i32 %sum to i16
@@ -144,8 +147,9 @@ define i32 @test_anyext_i16_to_i32(i16 signext %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %ext = sext i16 %a to i32
   %result = add i32 %ext, %b
@@ -165,17 +169,18 @@ define i64 @test_anyext_i1_condition_i64_select(i32 %a, i32 %b, i64 %x, i64 %y) 
 ; CHECK-NEXT:    { move32_dr_h r4, d0; move32_dr_l r3, d0 }
 ; CHECK-NEXT:    { move32_dr_l r2, d1; seq32 r1, r1, r2 }
 ; CHECK-NEXT:    { movt32 r2, r3, r1; move32_dr_h r5, d1 }
+; CHECK-NEXT:    { nop; movt32 r5, r4, r1 }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; movt32 r5, r4, r1 }
 ; CHECK-NEXT:    { nop; st32 r5, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp eq i32 %a, %b
   %result = select i1 %cmp, i64 %x, i64 %y

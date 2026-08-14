@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "HaydnBundleFormatSolver.h"
 #include "HaydnBundlePlan.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
@@ -28,6 +29,19 @@ using namespace llvm;
 using namespace llvm::haydn::bundle;
 
 namespace {
+
+void expectAltOccupiesResidualSlot(const HaydnMCFormats &Fmts, unsigned Member,
+                                   unsigned Slot) {
+  const StringRef Name = haydnOpcodeName(Member);
+  if (Name.contains("_E2_") || Name.contains("_E3_")) {
+    EXPECT_TRUE(formatEMemberOccupiesEntry(Member, Slot)) << Name << " slot "
+                                                         << Slot;
+    return;
+  }
+  EXPECT_EQ(Fmts.getSlotKind(Member),
+            MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(Slot)))
+      << Name << " slot " << Slot;
+}
 
 TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   // getLegalSlots returns a bitmask (bit k = slot k in Haydn::SLOT convention:
@@ -64,10 +78,8 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   ASSERT_EQ(LD64Alts->size(), 3u);
   EXPECT_NE((*LD32Alts)[1], 0u);
   EXPECT_NE((*LD64Alts)[1], 0u);
-  EXPECT_EQ(Fmts.getSlotKind((*LD32Alts)[1]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
-  EXPECT_EQ(Fmts.getSlotKind((*LD64Alts)[1]),
-            MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+  expectAltOccupiesResidualSlot(Fmts, (*LD32Alts)[1], 1);
+  expectAltOccupiesResidualSlot(Fmts, (*LD64Alts)[1], 1);
 
   // MAC (X2MULA32) — legal in s1|s2.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::X2MULA32),
@@ -107,9 +119,7 @@ TEST(HaydnMCFormatsTest, GetLegalSlotsIsDerivedFromSparseAlts) {
       // Residual S0/S1/S2 enum indices sit after E2/E3 entry kinds.
       if (HasAlt) {
         EXPECT_NE((*Alts)[Slot], Opcode) << "opcode " << Opcode;
-        EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
-                  MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(Slot)))
-            << "opcode " << Opcode << " slot " << Slot;
+        expectAltOccupiesResidualSlot(Fmts, (*Alts)[Slot], Slot);
       }
     }
   }
@@ -173,8 +183,10 @@ TEST(HaydnMCFormatsTest, LegalSlotFamiliesByFU) {
             SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::XOR32),
             SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+  // ADDI32 RI20 is E2-only (entries 0/1). Residual Mask stays 0x7;
+  // getLegalSlots is the non-zero occupancy-alt indices.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADDI32),
-            SlotBits(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2));
+            SlotBits(Haydn::SLOT0 | Haydn::SLOT1));
 
   // ALU64 / shift64: no S0.
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::ADD64),
@@ -228,9 +240,7 @@ TEST(HaydnMCFormatsTest, SparseAltsMatchLegalBitsExhaustive) {
       if (HasAlt) {
         EXPECT_NE((*Alts)[Slot], Opcode)
             << "member must be a distinct private encode opcode";
-        EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
-                  MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(Slot)))
-            << "opcode " << Opcode << " slot " << Slot;
+        expectAltOccupiesResidualSlot(Fmts, (*Alts)[Slot], Slot);
       }
     }
   }
@@ -270,10 +280,7 @@ TEST(HaydnMCFormatsTest, BrevLogicalsHaveSparseAltsForSetDesc) {
         continue;
       ++NonZero;
       EXPECT_NE((*Alts)[Slot], Opcode);
-      // Member has fixed getSlotKind == residual S* (AIE getSlotKind peer).
-      EXPECT_EQ(Fmts.getSlotKind((*Alts)[Slot]),
-                MCSlotKind(MCSlotKind::Haydn_SLOT_S0 + static_cast<int>(Slot)))
-          << "opcode " << Opcode << " slot " << Slot;
+      expectAltOccupiesResidualSlot(Fmts, (*Alts)[Slot], Slot);
       // Legal bit tracks sparse hole.
       EXPECT_NE(Fmts.getLegalSlots(Opcode) & (SlotBits(1) << Slot), 0u)
           << "opcode " << Opcode << " slot " << Slot;
@@ -366,9 +373,7 @@ TEST(HaydnMCFormatsTest, SetHwloopLegalOnS0) {
     EXPECT_NE((*Alts)[0], 0u) << "opc=" << Opc;
     EXPECT_EQ((*Alts)[1], 0u) << "opc=" << Opc;
     EXPECT_EQ((*Alts)[2], 0u) << "opc=" << Opc;
-    EXPECT_EQ(Fmts.getSlotKind((*Alts)[0]),
-              MCSlotKind(MCSlotKind::Haydn_SLOT_S0))
-        << "opc=" << Opc;
+    expectAltOccupiesResidualSlot(Fmts, (*Alts)[0], 0);
   }
   // Early pseudos intentionally have no AlternateInsts row (not pack forms).
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::SET_HWLOOP), 0u);
@@ -574,9 +579,9 @@ TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {
   EXPECT_NE(V0, V1);
   EXPECT_NE(V1, V2);
   EXPECT_NE(V0, V2);
-  EXPECT_EQ(Fmts.getSlotKind(V0), MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
-  EXPECT_EQ(Fmts.getSlotKind(V1), MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
-  EXPECT_EQ(Fmts.getSlotKind(V2), MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
+  expectAltOccupiesResidualSlot(Fmts, V0, 0);
+  expectAltOccupiesResidualSlot(Fmts, V1, 1);
+  expectAltOccupiesResidualSlot(Fmts, V2, 2);
 }
 
 } // end anonymous namespace

@@ -1,27 +1,19 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d -z --no-show-raw-insn %t.o | FileCheck %s
-# XFAIL: *
-# Residual: FileCheck / idle-pad / reloc geometry still open under Format E cutover.
-# XFAIL-OWNER: branch PC-rel wire scale (golden unspecified) | positive branch-scale claim residual; no golden invent
-
-// CHECK: {{.*}}0: 07 0a 1a c0 00 00 00 00 00 00 00 00  	{ 		bnez	r1, <?>; 	nop }
-// CHECK: {{.*}}c: 07 4b 01 00 00 00 00 00 00 00 00 00  	{ 		xor32	r0, r0, r0; 	nop }
-// CHECK: {{.*}}18: 07 4b 01 00 00 00 00 00 00 00 00 00  	{ 		xor32	r0, r0, r0; 	nop }
-// CHECK: {{.*}}24: 07 0e f8 c0 00 00 00 00 00 00 00 00  	{ 	jal	lr; 	nop }
-// CHECK: {{.*}}30: 07 4b 01 00 00 00 00 00 00 00 00 00  	{ 		xor32	r0, r0, r0; 	nop }
-// CHECK: {{.*}}3c: 07 0d 02 0f 00 00 00 00 00 00 00 00  	{ 		jalr	r0, lr, <?>; 	nop }
-# Role: object — residual : conditional branch and JAL immediates printed by the disassembler are PC-relative **byte** offsets (decode.
-
-# residual : conditional branch and JAL immediates printed
-# by the disassembler are PC-relative **byte** offsets (decode
-# Shift=1 / call target bytes), not word offsets. BundleSim direct-ELF
-# must NOT ×4 them (legacy word contract). This locks the printer unit.
 #
-# Layout: each Format E parcel is 12 bytes. From the first bundle at 0
-# a forward bnez of +32 bytes targets the third parcel (addr 0x20).
+# REGRESSION TEST: GE96-03 — disassembler prints PC-relative **byte**
+# offsets (field = PC+imm, ValueShift=0). BundleSim must not ×2/×4 them.
+# Each Format E parcel is 12 bytes. bnez at 0 → .Ltarget at 0x18 is +24.
+# jal at 0x24 → .Lcall at 0x3c is +24.
+
+# CHECK: { {{.*}}bnez{{.*}}r1, 24
+# CHECK: xor32
+# CHECK: xor32
+# CHECK: { {{.*}}jal{{.*}}lr, 24
+# CHECK: xor32
+# CHECK: { {{.*}}jalr{{.*}}r0, lr, 0
 
 .text
-.balign 16
 fwd_branch:
   { bnez_w r1, .Ltarget; nop; nop }
   { xor32 r0, r0, r0; nop; nop }

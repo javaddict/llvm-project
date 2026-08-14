@@ -25,6 +25,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -95,6 +96,8 @@ bool isExpandOwnedSemanticPseudo(unsigned Opc) {
   case Haydn::VAARG_I32:
   case Haydn::VAARG_I64:
   case Haydn::VAEND:
+  case Haydn::ADJCALLSTACKDOWN:
+  case Haydn::ADJCALLSTACKUP:
   case Haydn::SETCBR_BEGIN:
   case Haydn::SETCBR_END:
   case Haydn::SET_HWLOOP:
@@ -128,11 +131,51 @@ bool isResidualExecutablePseudo(const MachineInstr &MI) {
 } // namespace haydn
 } // namespace llvm
 
-bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
-    return false;
+namespace {
 
-  HaydnMCFormats Fmts;
+/// True when a top-level bare MI would be an uncommitted encode escape if it
+/// survived product Finalize. Meta/debug/CFI/KILL/inline-asm and representation
+/// expand / late-noop pseudos are not encode cycles.
+bool isUncommittedBareEncodeEscape(const MachineInstr &MI) {
+  if (MI.isInsideBundle() || MI.isBundle())
+    return false;
+  if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isPosition() ||
+      MI.isInlineAsm() || MI.isKill() || MI.isImplicitDef() ||
+      MI.isCFIInstruction())
+    return false;
+  if (haydn::bundle::isResidualExecutablePseudo(MI))
+    return true;
+  // Real non-pseudo encode ops (logical or private member) must be BUNDLE
+  // children after target-local no-reorder Finalize.
+  return !MI.isPseudo();
+}
+
+} // namespace
+
+bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
+  // Product emission gate: never call skipFunction. Committed-cycle verify is
+  // mandatory for optnone and every other function; scheduler skipFunction is
+  // quality/reorder only and must not open an MC uncommitted escape hatch.
+
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  const bool OptNone = MF.getFunction().hasOptNone();
+
+  // Pre-scan: any top-level BUNDLE root means commit ownership has started for
+  // this function. Mixed committed roots + bare encode MIs is always illegal
+  // (partial Finalize escape). All-bare fixtures remain legal only for
+  // non-optnone verify-only MIR unit tests that never ran Finalize.
+  bool HasCommittedCycle = false;
+  for (const MachineBasicBlock &MBB : MF) {
+    for (const MachineInstr &MI : MBB.instrs()) {
+      if (!MI.isInsideBundle() && MI.isBundle()) {
+        HasCommittedCycle = true;
+        break;
+      }
+    }
+    if (HasCommittedCycle)
+      break;
+  }
+
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.instrs()) {
       // Bare residual cycle-forming pseudo (not yet wrapped) — fail closed.
@@ -145,6 +188,31 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
            << MF.getName() << " BB#" << MBB.getNumber()
            << " (exact-commit required before late firewall):\n  MI: "
            << MI;
+        report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+      }
+
+      // Refuse uncommitted bare encode escape for product commit ownership:
+      //   * optnone: postmisched quality-skips reorder, so every bare real
+      //     encode after Finalize is an MC standalone escape (all-bare or
+      //     mixed). Keyed on hasOptNone(), not skipFunction().
+      //   * any function with at least one committed BUNDLE root: mixed bare
+      //     encode is a partial-commit hole for plain O0 and optnone alike
+      //     (covers independent multi-MI packs that must not leave residual
+      //     bare encode beside committed co-issue roots).
+      // Plain non-optnone verify-only MIR may still present all-bare MIs
+      // before a separate Finalize run. Never change generic skipFunction.
+      if ((OptNone || HasCommittedCycle) && isUncommittedBareEncodeEscape(MI)) {
+        std::string Msg;
+        raw_string_ostream OS(Msg);
+        OS << "HaydnVerifyBundles: uncommitted bare encode MI in "
+           << MF.getName() << " BB#" << MBB.getNumber();
+        if (OptNone)
+          OS << " (optnone is no-reorder Format E commit via FinalizeBundle; "
+                "refuse MC standalone escape)";
+        else
+          OS << " (mixed committed BUNDLE + bare encode; target-local "
+                "no-reorder Finalize must leave only committed cycles)";
+        OS << ":\n  MI: " << MI;
         report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
       }
 
@@ -166,6 +234,64 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
              << " (one-to-one ban):\n  child: " << *I
              << "\n  root: " << MI;
           report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+        }
+      }
+
+      // Product emission ownership (T-TII5): recount members against the
+      // stamped row and selectCompletionFor. Error text names the actual
+      // check — do not claim "row and member count" for a stub-class test
+      // that never compared Expected. Capacity > ISSUE_SLOT_COUNT is left
+      // to verifyCommittedBundle so OVER-ISSUE FileCheck still matches.
+      {
+        SmallVector<unsigned, 3> Members =
+            haydn::bundle::collectBundleMemberOpcodes(MI);
+        const bool HasPadNop = haydn::bundle::bundleHasPadNop(MI);
+        auto Row = haydn::bundle::getBundleRowID(MI);
+        if (Members.empty() && !HasPadNop) {
+          std::string Msg;
+          raw_string_ostream OS(Msg);
+          OS << "HaydnVerifyBundles: empty BUNDLE is not a Format E cycle in "
+             << MF.getName() << " BB#" << MBB.getNumber()
+             << " (no real members and no architectural NOP fill)";
+          if (OptNone)
+            OS << " [optnone no-reorder commit]";
+          OS << "\n  MI: " << MI;
+          report_fatal_error(Twine(OS.str()));
+        }
+        if (auto Comp = haydn::bundle::getBundleCompletionID(MI)) {
+          if (Row) {
+            haydn::bundle::CompletionStateID Expected =
+                haydn::bundle::selectCompletionForMembersAndPads(
+                    *Row, Members.size(), HasPadNop);
+            if (*Comp != Expected) {
+              std::string Msg;
+              raw_string_ostream OS(Msg);
+              OS << "HaydnVerifyBundles: BUNDLE root CompletionStateID does "
+                    "not match row and member count in "
+                 << MF.getName() << " BB#" << MBB.getNumber()
+                 << " (stamped completion "
+                 << haydn::bundle::completionToImm(*Comp) << ", expected "
+                 << haydn::bundle::completionToImm(Expected)
+                 << " for row member count " << Members.size() << ")";
+              if (OptNone)
+                OS << " [optnone no-reorder commit]";
+              OS << "\n  MI: " << MI;
+              report_fatal_error(Twine(OS.str()));
+            }
+          } else if (!Members.empty() &&
+                     haydn::bundle::isStubCompletion(*Comp)) {
+            std::string Msg;
+            raw_string_ostream OS(Msg);
+            OS << "HaydnVerifyBundles: unqualified stub CompletionStateID on "
+                  "non-empty BUNDLE in "
+               << MF.getName() << " BB#" << MBB.getNumber()
+               << " (refuse executable singleton-stub / underfill completion; "
+                  "product requires full-slot architectural NOP pad)";
+            if (OptNone)
+              OS << " [optnone no-reorder commit]";
+            OS << "\n  MI: " << MI;
+            report_fatal_error(Twine(OS.str()));
+          }
         }
       }
 

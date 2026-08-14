@@ -28,14 +28,16 @@
 
 define dso_local i32 @vone(i32 %n,...) nounwind {
 ; CHECK-LABEL: vone:
-; Va_list init: store __stack (overflow base), __gr_top, __vr_top (3 pointer
-; fields). The bug emitted ZERO of these.
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 0
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 1
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 2
-; Va_list init: store __gr_offs and __vr_offs (negated bank sizes) at @12/@16.
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 3
-; CHECK: st32 {{r[0-9]+}}, {{r[0-9]+}}, 4
+; Legalizer-owned 5-word va_list (__stack / __gr_top / __vr_top / __gr_offs /
+; __vr_offs). ST32 word index = byte/4. GPR save-area stores also use st32
+; with 0..4, so bind the alloca pointer and CHECK-DAG each field. Missing
+; init emitted none of these stores to the list.
+; CHECK: addi32 [[AP:r[0-9]+]], sp, 12
+; CHECK-DAG: st32 {{r[0-9]+}}, [[AP]], 0
+; CHECK-DAG: st32 {{r[0-9]+}}, [[AP]], 1
+; CHECK-DAG: st32 {{r[0-9]+}}, [[AP]], 2
+; CHECK-DAG: st32 {{r[0-9]+}}, [[AP]], 3
+; CHECK-DAG: st32 {{r[0-9]+}}, [[AP]], 4
 entry:
  %ap = alloca i8, align 4
  call void @llvm.va_start(ptr %ap)

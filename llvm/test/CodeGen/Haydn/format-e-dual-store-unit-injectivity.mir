@@ -1,0 +1,92 @@
+# RUN: split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   %t/pack.mir -o - | FileCheck %s --check-prefix=PACK
+# Fatal seats abort; use not --crash so the diagnostic still reaches FileCheck.
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/verify.mir -o - 2>&1 | FileCheck %s --check-prefix=VERIFY
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: two LOADSTORE0-only stores + ALU must not commit a 3-child
+# Format E BUNDLE. Packetizer/HR/solver refuse at canAdd; verify fail-closes.
+# MC must never see the pack (do not encode two stores; do not sequential-split).
+#
+# Bug: libc bf16mull residual [D_SW_L_WITH_IMM_S2; OR64; ST8_S0] reached MC
+# and aborted: "Format E one-parcel placement failed … refuse sequential E2
+# singleton split". Golden D_SW_L_WITH_IMM and S_SB_WITH_IMM (ST8) each have
+# count=2 (E2 e0 + E3 e0 LOADSTORE0 only). Residual FieldSlots S2 vs S0 are
+# not a second store unit. Invariant: Format E units ≠ encoded entry identity.
+#
+# Fix: one mechanism — opcodesHaveFormatEUnitCover, shared by Bundle.canAdd
+# (AIEBundle.h:62-105 overlay), exactTryAddProduct, commitExact, and
+# verifyCommittedBundle.
+#
+# Test design: (1) postmisched of independent D_SW_L_WITH_IMM + OR64 + ST8
+# must not stamp E96ThreeEntry (BUNDLE 1). (2) a handwritten 3-child residual
+# BUNDLE is rejected by haydn-verify-bundles, not by MC encode abort.
+# Legal one-store 3-child packs stay in e3-three-child-entry-rebind-serialize.mir.
+
+#--- pack.mir
+--- |
+  define void @refuse_dual_store_alu() { ret void }
+...
+---
+name:            refuse_dual_store_alu
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$d1', virtual-reg: '' }
+  - { reg: '$d2', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $r1, $r2, $r3
+
+    ; PACK-LABEL: name: refuse_dual_store_alu
+    ; PACK: liveins: $d0, $d1, $d2, $r1, $r2, $r3
+    ; PACK-DAG: D_SW_L_WITH_IMM
+    ; PACK-DAG: OR64
+    ; PACK-DAG: {{ST8|S_SB_WITH_IMM}}
+    ; PACK-NOT: BUNDLE 1
+    D_SW_L_WITH_IMM $d0, $r1, 0
+    $d3 = OR64 $d1, $d2, implicit-def dead $sfr
+    ST8 $r2, $r3, 0
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+#--- verify.mir
+--- |
+  define void @illegal_dual_store_alu_bundle() { ret void }
+...
+---
+name:            illegal_dual_store_alu_bundle
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $r1, $r2, $r3, $r15
+    ; VERIFY: unit injectivity
+    BUNDLE 1, 0, implicit-def $d3, implicit-def dead $sfr, implicit $d0, implicit $d1, implicit $d2, implicit $r1, implicit $r2, implicit $r3 {
+      D_SW_L_WITH_IMM_S2 $d0, $r1, 0
+      $d3 = OR64 $d1, $d2, implicit-def dead $sfr
+      ST8 $r2, $r3, 0
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }

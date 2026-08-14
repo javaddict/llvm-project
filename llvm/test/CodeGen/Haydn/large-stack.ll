@@ -21,7 +21,7 @@ define void @large_stack_frame() {
 ; CHECK:       .cfi_def_cfa_offset
 ; CHECK:       {{(addi32|ori32|lui)}}
 ; CHECK:       add32{{.*}}sp, sp,
-; CHECK:       jalr_w
+; CHECK:       jalr
   %array = alloca [65536 x i32], align 8
   ret void
 }
@@ -35,7 +35,7 @@ define void @stack_64k_plus() {
 ; CHECK:       .cfi_def_cfa_offset
 ; CHECK:       {{(addi32|ori32|lui)}}
 ; CHECK:       add32{{.*}}sp, sp,
-; CHECK:       jalr_w
+; CHECK:       jalr
   %array = alloca [16385 x i32], align 8  ; 16385 * 4 = 65540 → aligned ~65544
   ret void
 }
@@ -46,7 +46,7 @@ define void @stack_small() {
 ; CHECK:       subi32{{.*}}sp, sp,
 ; CHECK:       .cfi_def_cfa_offset
 ; CHECK:       addi32{{(_w)?}}{{.*}}sp, sp,
-; CHECK:       jalr_w
+; CHECK:       jalr
   %array = alloca [64 x i32], align 8  ; 64 * 4 = 256 bytes
   ret void
 }
@@ -60,7 +60,7 @@ define void @very_large_stack() {
 ; CHECK:       .cfi_def_cfa_offset
 ; CHECK:       {{(addi32|ori32|lui)}}
 ; CHECK:       add32{{.*}}sp, sp,
-; CHECK:       jalr_w
+; CHECK:       jalr
   %array = alloca [131072 x i32], align 8  ; 131072 * 4 = 524288 bytes
   ret void
 }

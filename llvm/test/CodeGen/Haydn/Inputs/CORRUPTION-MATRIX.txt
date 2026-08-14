@@ -1,24 +1,71 @@
-Haydn inverse corruption matrix scaffolding (G-TEST-CONTRACTS / T7)
-==================================================================
-Stamp: 2026-08-10 T7-TEST-CONTRACTS
+Haydn inverse corruption matrix scaffolding (G-TEST-EVIDENCE / open-goals-w4 INTEGRATE)
+====================================================================================
+Stamp: 2026-08-12 open-goals-w4 INTEGRATE
+  (dual residual Mode/swap MC residual + T7 inventory restamp + SCEV wording)
+Audited backend baseline: 7b1c4fc3309134104dfc21bd0792ec7876dd41a3
 
 Purpose: independent final-boundary negatives. Each seat injects one defect;
 verifier/MC/consumer must reject without planner/fallback repair.
-Broad freestanding greens do not close this matrix.
+Owning live goal: G-TEST-EVIDENCE (with G-E96-END-TO-END for inverse seats).
+Physical multistage lifetime/post-mutation/rollback rows are executable and
+are implemented with the active host; they are keyed to
+PF-*/JM-* IDs from FAULT-INJECTION-SEATS.txt — no host / no force-fail invent.
+DG0 DecisionGuard product registry remains absent by design.
 
 | Seat              | Defect                          | Live pin                                      | Status    |
 |-------------------|---------------------------------|-----------------------------------------------|-----------|
 | row/format        | missing BundleFormatRowID imm   | bundle-corruption-matrix.mir (NO-IMM)         | landed    |
 | row/format        | unknown BundleFormatRowID (99)  | bundle-corruption-matrix.mir (BAD-ID)         | landed    |
-| residual phase    | bare LOADI32 past commit        | bundle-corruption-matrix.mir (RESIDUAL)       | landed    |
+| member capacity   | E2 row + 3 real members         | bundle-corruption-matrix.mir (E2-OVER)        | landed    |
+| private mode       | E2 row + private E3 member      | bundle-corruption-matrix.mir (E2-PRIV-E3)     | landed    |
+| completion match  | wrong CompletionStateID vs count| bundle-corruption-matrix.mir (BAD-COMP)       | landed    |
+| issue width       | memberCount > ISSUE_SLOT_COUNT  | bundle-corruption-matrix.mir (OVER-ISSUE)     | landed    |
+| residual phase    | bare LOADI32 past commit        | vf5-residual-cycle-pseudo-ban.mir             | landed    |
 | entry count       | >3 co-issue entries             | MC/Haydn/bundle-canadd-reject.s               | landed    |
-| residual printer  | SETCBR / cross-bank at print    | vf5-residual-*-ban.mir, residual-crossbank-*  | landed    |
-| completion/idle   | wrong completion/pad payload    | GE96-01/02 blocked — no golden invent         | blocked   |
-| member identity   | re-place / wrong member opc     | AR4 / independent inverse still open          | open      |
-| dependence        | illegal unit/port co-issue      | expand as generated inverse lands             | open      |
-| liveness/lifetime | post-mutation lifetime break    | PP5/PP6 fault seats (product owner T2)        | open      |
-| profile/ELF       | upgraded/default e_flags        | strict profile consumer negatives             | open      |
-| size/geometry     | non-12B product parcel          | FE8 product size pins; synthetic test-only    | partial   |
+| residual printer  | SETCBR / loopctl / LOADI32 etc. | late-mc-residual-printer-matrix.mir           | landed    |
+| O0 vs optnone     | both leave Format-E BUNDLE; full-slot NOP pad (not underfill invent) | authority-o0-vs-optnone-commit.ll | landed |
+| hwloop residual   | residual SET_HWLOOP past ban    | vf5-residual-set-hwloop-ban.mir               | landed    |
+| hwloop demote     | live body demote without soft edge | hwloop-demote-fatal-live.mir               | landed    |
+| Retained-loop incomplete | fatal pre-mutation reject | hwloop-rolea-preflight-reject.mir             | landed    |
+| XFAIL ledger drift| live XFAIL without owned row    | check_xfail_ledger.py / selfcheck.ll          | landed    |
+| inverse accept    | stamped E2/E3 product identity  | e96-bundle-inverse-verify.mir                 | landed    |
+| completion/idle   | wrong completion/pad payload    | outside current GE96-01/02 scope — no invent  | unsupported / alignment-open |
+| member wire opc   | re-place / wrong private member | bundle-corruption-matrix.mir (PRIV-REPLACE)  | landed    |
+| dependence        | illegal unit/port co-issue      | MC/Haydn/bundle-dependence-reject.s (dual ST) | landed    |
+| profile/ELF       | e_flags / profile mismatch      | eflags-e96-product-profile.{s,ll}; BundleSim  | landed    |
+| size/geometry     | non-12B product parcel          | eflags size pins + frontend 11/16 reject      | landed    |
+| HWLR CSR identity | wrong CSR/address invent        | outside current GE96-08 scope — no invent     | unsupported / alignment-open |
+| ar_sel 2/3        | invent class for ar_sel=2/3     | outside current GE96-09 scope — XFAIL owned   | unsupported / alignment-open |
+| hostile debug     | OOB printer / short residual 1..11 / Case H misalign / bad headers | hostile-byte-surface.s + d432/printer-oob | landed |
+| nested unwind     | multi-FDE CIE + 3-level SP/FP + mixed SP↔FP | unwind-frame-chain.ll                   | landed    |
+| dual-namespace    | RSP ar0/dr0 names missing       | lldb_feature_matrix.sh register read ar0/dr0  | landed    |
+| parcel step       | step-inst without PC±12         | lldb_feature_matrix.sh (preferred; residual)  | partial   |
+| library empty/obj | DSP kernel empty/stub .text/no E96 | product_library_pin MIN_TEXT + e_flags     | landed    |
+| freestanding libm  | sysroot libm.a missing from artifact | check_haydn_artifact_set required libm.a    | landed    |
+| ARTIFACT drift    | tool/git hash vs stamp mismatch | check_haydn_artifact_set + full-gate restamp  | landed    |
 
-Exit for full matrix: every decision-guard §6.5 seat has a focused reject pin
-and an exact artifact path; no seat is proven only by CoreMark/torture green.
+Physical multistage lifetime / post-mutation / rollback seats (host present)
+-------------------------------------------------------------------------------
+Keyed to closed PF-* preflight and JM-* journal IDs. Product lit injectors and
+force-fail flags are live on HaydnMultiStageSMS; default remains OFF.
+
+| Seat ID  | Defect class                          | Owning goal            | Status                                              |
+|----------|---------------------------------------|------------------------|-----------------------------------------------------|
+| PF-CFG   | CFG blocks/edges preflight miss       | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| PF-PHI   | PHI / live-in preflight miss          | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| PF-TRIP  | Trip/setup preflight miss             | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| PF-STAGE | Stage MI plan / LCD / occupancy miss  | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| PF-LIVE  | Physical lifetime/spill/subreg miss   | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| PF-ALT   | Transient alternate preflight miss    | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| PF-BUNDLE| Bundle root/member/order preflight    | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| PF-LATE  | Late layout/reloc preflight miss      | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
+| JM-ALLOC | Post-mutation alloc/clone rollback miss | G-MULTISTAGE-QUALIFY | executable force-fail + ordinary baseline retained          |
+| JM-SPLICE| Cross-MBB splice rollback miss        | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
+| JM-COMMIT| Partial E96 commit without rollback   | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
+| JM-TRIP  | Trip/setup update without restore     | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
+| JM-LIVE  | Post-mutation lifetime break          | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
+| JM-ALT   | Transient alternate escape            | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
+| JM-META  | Metadata/order/completion rollback miss | G-MULTISTAGE-QUALIFY | executable force-fail + ordinary baseline retained          |
+
+Exit: focused reject pin per landed seat; implement the inventory with the active
+host; no golden invent, fake host evidence, or premature policy default.

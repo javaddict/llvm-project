@@ -9,16 +9,16 @@
 // Implementation of the single-source Haydn relocation geometry table and the
 // generic geometric patcher. See HaydnRelocLayout.h. Product FieldLsb is Format
 // E E2 e0 absolute parcel bits (r_offset = parcel origin). Scales follow the
-// product RelocFieldInfo table (branch/call halfword ÷2; CallSImm20 byte;
-// hwloop ÷4). Golden branch-scale formalization remains open — product does
-// not invent a second scale. RelocTrans::Unresolved remains for unpublished
-// kinds and for unknown/Invalid kinds (rowFor is fail-closed).
-// Both MC and lld delegate here.
+// product RelocFieldInfo table (branch/call byte PC+imm; CallSImm20 byte;
+// hwloop ÷4). GE96-03: B*/JAL field stores the byte displacement (no ÷2).
+// RelocTrans::Unresolved remains for unpublished kinds and for unknown/
+// Invalid kinds (rowFor is fail-closed). Both MC and lld delegate here.
 //
 //===----------------------------------------------------------------------===//
 
 #include "HaydnRelocLayout.h"
 #include "HaydnFixupKinds.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -59,8 +59,8 @@ constexpr Row Table[] = {
     {RelocKind::None, {0, 0, 0, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::Data32, {4, 32, 0, 0, 1, true, false, RelocTrans::None}},
     {RelocKind::SImm16, {4, 16, 0, 0, 1, true, false, RelocTrans::None}},
-    // Branch/call product scales (table halfword ÷2; CallSImm20 byte).
-    {RelocKind::BranchSImm16, {4, 16, 0, 1, 2, true, true, RelocTrans::None}},
+    // Branch/call product scales (GE96-03: byte PC+imm; CallSImm20 byte).
+    {RelocKind::BranchSImm16, {4, 16, 0, 0, 2, true, true, RelocTrans::None}},
     // CallSImm20: signed PC-relative BYTE offset (ValueShift=0). Used by
     // assembler-independent YAML thunk geometry tests; FieldLsb=4 is a
     // placeholder write window (tests use zero content).
@@ -89,39 +89,43 @@ constexpr Row Table[] = {
     // E2 HWLRIII and E3 e0/e1 placements.
     {RelocKind::HWLoopOff1, {12, 6, 32, 2, 4, false, true, RelocTrans::None}},
     {RelocKind::HWLoopOff2, {12, 12, 38, 2, 4, false, true, RelocTrans::None}},
-    // Format E I12 one-reg branch (BEQZ/BNEZ): imm12 @ parcel bits[32:43]
-    // (ALU0 entry0 window; same I12 field position as HI12/RI12 below).
-    // FieldLsb was stale 24 (historical) — LLD wrote imm into golden-reserved
-    // bits[24:31], the decoder's c-reserved constraint failed, and objdump
-    // soft-NOP'd the entry. tblgen BEQZ_E2_E0_ALU0_I12 imm_1 @ entry[37:26]
-    // = parcel bits[32:43] is the authority.
+    // Format E I12 one-reg branch (BEQZ/BNEZ): table FieldLsb is E2 e0
+    // imm12 @ parcel bits[32:43]. E3 windows differ — resolveFieldLsb.
+    // NBytes=12 covers E3 e1/e2 (imm past bit 48). GE96-03: ValueShift=0.
     {RelocKind::WIDE_BranchSImm12,
-     {6, 12, 32, 1, 2, true, true, RelocTrans::None}},
-    // Format E RI12 two-reg branch (BEQ/BNE): imm12 @ parcel bits[32:43]
-    // (was stale 28; same field-position bug as the one-reg row above).
+     {12, 12, 32, 0, 2, true, true, RelocTrans::None}},
+    // Format E RI12 two-reg branch (BEQ/BNE): table FieldLsb is E2 e0
+    // imm12 @ parcel bits[32:43] (same golden I12/RI12 position).
     {RelocKind::WIDE_BranchSImm12_RI,
-     {6, 12, 32, 1, 2, true, true, RelocTrans::None}},
+     {12, 12, 32, 0, 2, true, true, RelocTrans::None}},
     // Format E I20 call (JAL): table FieldLsb=31 is E2 e0 (golden abs[50:31]).
     // E3 e0/e1 imm windows differ — resolveFieldLsb reads mode/entry at Loc.
     // Byte PC-relative; NBytes=12 covers E3 e1 imm @ bits[48:67].
     {RelocKind::WIDE_CallSImm20,
      {12, 20, 31, 0, 1, true, true, RelocTrans::None}},
-    {RelocKind::C_BranchSImm4, {2, 4, 0, 1, 2, true, true, RelocTrans::None}},
+    {RelocKind::C_BranchSImm4, {2, 4, 0, 0, 2, true, true, RelocTrans::None}},
     {RelocKind::C_UImm4, {2, 4, 0, 0, 1, false, false, RelocTrans::None}},
-    {RelocKind::C_BranchSImm10, {2, 10, 4, 1, 2, true, true, RelocTrans::None}},
+    {RelocKind::C_BranchSImm10, {2, 10, 4, 0, 2, true, true, RelocTrans::None}},
     {RelocKind::HWLoopOffset, {4, 16, 0, 2, 4, true, true, RelocTrans::None}},
     {RelocKind::LongBranchSImm20,
-     {4, 20, 0, 1, 2, true, true, RelocTrans::None}},
+     {4, 20, 0, 0, 2, true, true, RelocTrans::None}},
     // LS scaled-imm fields (FI/spill offsets) — width scaling, not branch.
     {RelocKind::S0LSOff4_2, {4, 4, 4, 2, 4, false, false, RelocTrans::None}},
     {RelocKind::S0LSOff4_3, {4, 4, 4, 3, 8, false, false, RelocTrans::None}},
     {RelocKind::S0LSOff2_0, {4, 2, 4, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::S0LSOff3_0, {4, 3, 4, 0, 1, false, false, RelocTrans::None}},
-    // Format E LOADSTORE0 RI6: imm6 after rt/rs under dense packing @ bits[33:28]
-    // (FieldLsb=28). Element index on the wire (codegen already ÷ width); no
-    // additional ValueShift here. Residual LoWord bits[13:8] retired.
+    // Format E LOADSTORE0/LOAD1 RI6: imm6 after rt/rs under dense packing @
+    // bits[33:28] (FieldLsb=28). Signed 6-bit, ValueShift=0. Distinct from
+    // LO20 (ALU RI20 / retired WIDE LSOff20 @ bits[31:50]). Residual LoWord
+    // bits[13:8] retired.
     {RelocKind::LS_IMM, {6, 6, 28, 0, 1, true, false, RelocTrans::None}},
 };
+
+static_assert(static_cast<unsigned>(RelocKind::WIDE_BranchSImm12_RI) ==
+                  ELF::R_HAYDN_WIDE_BranchSImm12_RI,
+              "shared RelocKind values must match ELF R_HAYDN_*");
+static_assert(static_cast<unsigned>(RelocKind::LS_IMM) == ELF::R_HAYDN_LS_IMM,
+              "LS_IMM RelocKind must match ELF R_HAYDN_LS_IMM");
 
 // Fail-closed sentinel: unknown / Invalid kinds are never product-ready.
 // Returning Table[0] (None, Trans::None) used to make isRelocTransformReady
@@ -296,11 +300,41 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
     return I.FieldLsb;
   }
 
-  if (R != RelocKind::WIDE_CallSImm20)
+  const bool IsCall = R == RelocKind::WIDE_CallSImm20;
+  const bool IsBrI12 = R == RelocKind::WIDE_BranchSImm12;
+  const bool IsBrRI12 = R == RelocKind::WIDE_BranchSImm12_RI;
+  if (!IsCall && !IsBrI12 && !IsBrRI12)
     return I.FieldLsb;
 
   if (Indicator != 0x7u)
     return I.FieldLsb;
+
+  // I12/RI12 cond-branch: table FieldLsb=32 is E2 e0 (golden abs[43:32]).
+  // E3 generated Inst{} (MSB-first):
+  //   e0/e1 31b I12  {pad2, imm12, reg4, opc3, pad4, type4=0xa, map2=2}
+  //     map@entry+0, type@entry+2, imm@entry+17
+  //     e0 @ [6:36] → abs 23; e1 @ [37:67] → abs 54
+  //   e0/e1 31b RI12 {pad2, imm12, src4, rs4, opc3, type4=0xd, map2=2}
+  //     same map/type/imm LSBs as I12 (type 0xd)
+  //   e2 27b I12 {pad2, imm12, reg4, opc3, type4=0xa, map2=2}
+  //     map@entry+0, type@entry+2, imm@entry+13 → abs 81
+  if (IsBrI12 || IsBrRI12) {
+    if (EntryNum == 0)
+      return 32u; // E2 e0
+    auto IsE3BrI12 = [&](unsigned EntryLo) -> bool {
+      return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xau;
+    };
+    auto IsE3BrRI12 = [&](unsigned EntryLo) -> bool {
+      return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xdu;
+    };
+    if (IsE3BrI12(6) || IsE3BrRI12(6))
+      return 23u;
+    if (IsE3BrI12(37) || IsE3BrRI12(37))
+      return 54u;
+    if (IsE3BrI12(68) || IsE3BrRI12(68))
+      return 81u;
+    return I.FieldLsb;
+  }
 
   if (EntryNum == 0)
     return 31u; // E2 e0 I20: Inst e0={imm20, c0, dest, …} → abs [31:50]
@@ -331,7 +365,7 @@ RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
   int64_t Sv = static_cast<int64_t>(Value);
 
   // Fail closed before any alignment or scale application when the transform
-  // is not product-ready. Prevents halfword ÷2 from remaining acceptance law.
+  // is not product-ready.
   if (I.Trans == RelocTrans::Unresolved) {
     Out.Err = kTransformNotReady;
     return Out;

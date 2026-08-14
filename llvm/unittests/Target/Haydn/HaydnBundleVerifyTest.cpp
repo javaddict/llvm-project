@@ -113,13 +113,33 @@ TEST(HaydnBundleVerifyTest, RejectsFourMembers) {
   EXPECT_NE(Err->find("ISSUE_SLOT_COUNT"), std::string::npos) << *Err;
 }
 
+TEST(HaydnBundleVerifyTest, RejectsDualStoreAluThreeChild) {
+  // libc bf16mull residual: D_SW_L_WITH_IMM_S2 + OR64 + ST8_S0. Both stores
+  // are golden LOADSTORE0 e0 only. Verify must refuse; MC must never see it.
+  HaydnMCFormats Fmts;
+  auto Logical = verifyCommittedBundle(
+      BundleFormatRowID::E96ThreeEntry,
+      {Haydn::D_SW_L_WITH_IMM, Haydn::OR64, Haydn::ST8}, Fmts);
+  ASSERT_TRUE(Logical.has_value());
+  EXPECT_NE(Logical->find("unit injectivity"), std::string::npos) << *Logical;
+
+  auto Members = verifyCommittedBundle(
+      BundleFormatRowID::E96ThreeEntry,
+      {Haydn::D_SW_L_WITH_IMM_S2, Haydn::OR64,
+       Haydn::S_SB_WITH_IMM_E2_E0_LOADSTORE0_RI6},
+      Fmts);
+  ASSERT_TRUE(Members.has_value());
+  EXPECT_NE(Members->find("unit injectivity"), std::string::npos) << *Members;
+}
+
 TEST(HaydnBundleVerifyTest, RejectsSameSlotConflict) {
-  // Two ST32 are S0-only — cannot co-issue (encode-oracle canAdd fails).
+  // Two ST32 share LOADSTORE0 — Format E unit injectivity refuses (units ≠
+  // encoded entries). Residual FieldSlots are not a second store slot.
   HaydnMCFormats Fmts;
   auto Err = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
                                    {Haydn::ST32, Haydn::ST32}, Fmts);
   ASSERT_TRUE(Err.has_value());
-  EXPECT_NE(Err->find("canAdd"), std::string::npos) << *Err;
+  EXPECT_NE(Err->find("unit injectivity"), std::string::npos) << *Err;
 }
 
 // Late-MC / one-to-one: residual cycle-forming / multi-cycle / loop-control
@@ -194,10 +214,15 @@ TEST(HaydnBundleVerifyTest, LdPlusMacIndependentOk) {
 
 TEST(HaydnBundleVerifyTest, EncodedBytesAlwaysProductParcelOnSuccess) {
   HaydnMCFormats Fmts;
-  for (ArrayRef<unsigned> Ops :
-       {ArrayRef<unsigned>{Haydn::NOP}, ArrayRef<unsigned>{Haydn::ADD32},
-        ArrayRef<unsigned>{Haydn::ST32, Haydn::ADD64},
-        ArrayRef<unsigned>{Haydn::ADD32, Haydn::XOR32, Haydn::NOT32}}) {
+  // Named arrays: ArrayRef{a,b} inside a range-for initializer_list dangles
+  // after the inner list dies; Wave 2 unit-cover then indexes name tables
+  // with garbage opcodes (SEGV). Peer: MCInstrInfo::getName (MCInstrInfo.h:71).
+  const unsigned Nop[] = {Haydn::NOP};
+  const unsigned Add[] = {Haydn::ADD32};
+  const unsigned StAdd[] = {Haydn::ST32, Haydn::ADD64};
+  const unsigned Triple[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32};
+  const ArrayRef<unsigned> Cases[] = {Nop, Add, StAdd, Triple};
+  for (ArrayRef<unsigned> Ops : Cases) {
     BundlePlan Plan;
     BundleFormatRowID Row = Ops.size() >= 3 ? BundleFormatRowID::E96ThreeEntry
                                             : BundleFormatRowID::E96TwoEntry;
@@ -303,9 +328,11 @@ TEST(HaydnBundleVerifyTest, VF24_ExhaustiveLe3VerifierVsExactOracle) {
       EXPECT_EQ(Plan.Bytes.Value, productParcelBytes().Value);
     } else if (!Seq.empty()) {
       ASSERT_TRUE(Err.has_value());
-      // Reject reason may be canAdd or hasValidFormat under E96 composites.
+      // Reject reason may be unit injectivity (LOADSTORE0 stores), canAdd, or
+      // hasValidFormat under E96 composites.
       EXPECT_TRUE(Err->find("canAdd") != std::string::npos ||
-                  Err->find("hasValidFormat") != std::string::npos)
+                  Err->find("hasValidFormat") != std::string::npos ||
+                  Err->find("unit injectivity") != std::string::npos)
           << *Err;
     }
   };
@@ -338,7 +365,7 @@ TEST(HaydnBundleVerifyTest, VF24_ClosestLegalIllegalVerifierPins) {
     auto Bad = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
                                      {Haydn::ST32, Haydn::ST32}, Fmts);
     ASSERT_TRUE(Bad.has_value());
-    EXPECT_NE(Bad->find("canAdd"), std::string::npos) << *Bad;
+    EXPECT_NE(Bad->find("unit injectivity"), std::string::npos) << *Bad;
   }
 
   // Issue-width boundary: four members always rejected.
@@ -356,7 +383,7 @@ TEST(HaydnBundleVerifyTest, VF24_ClosestLegalIllegalVerifierPins) {
         BundleFormatRowID::E96ThreeEntry,
         {Haydn::ST32, Haydn::ST32, Haydn::ADD32}, Fmts);
     ASSERT_TRUE(Bad.has_value());
-    EXPECT_NE(Bad->find("canAdd"), std::string::npos) << *Bad;
+    EXPECT_NE(Bad->find("unit injectivity"), std::string::npos) << *Bad;
   }
 
   // Three-entry product row is selected for three members (packing may still

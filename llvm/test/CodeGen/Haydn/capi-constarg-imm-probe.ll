@@ -54,7 +54,7 @@ define i32 @probe_arctan(i64 %xy) {
 }
 
 ; CHECK-LABEL: probe_setcbr:
-; CHECK: csrw_w
+; CHECK: csrw{{(_w)?}}
 define void @probe_setcbr(i32 %val) {
   call void @llvm.haydn.setcbr.begin(i32 0, i32 %val)
   ret void

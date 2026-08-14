@@ -12,9 +12,9 @@
 //
 // GET_FORMATS_PACKETS_TABLE / GET_FORMATS_SLOTS_DEFS
 // GET_FORMATS_SLOTINFOS_MAPPING / GET_OPCODE_FORMATS_INDEX_FUNC
-// GET_ALTERNATE_INST_OPCODE_FUNC regions are pulled in at namespace scope
-// (function bodies for getSlotInfo/getFormatDescIndex/getAlternateInstsOpcode
-// drop in here, declaring the very methods of HaydnMCFormats).
+// regions are pulled in at namespace scope (getSlotInfo /
+// getFormatDescIndex). getAlternateInstsOpcode is occupancy + Format E
+// members (HaydnGenAltOccupancy.inc), not the generated FieldSlot table.
 // GET_FORMATS_FORMATS_DEFS region is pulled in inside namespace Haydn so
 // the bare opcode enumerators (ADD32) resolve (AIE does the same
 // inside namespace AIE). The generated Formats is returned by
@@ -32,13 +32,26 @@
 #include "HaydnGenInstrInfo.inc"
 
 #include "HaydnFormat.h"
+#include "HaydnFormatERecords.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cstdint>
 #include <iterator>
+#include <mutex>
+#include <string>
+#include <vector>
 
 namespace llvm {
+const MCInstrInfo &getHaydnSharedMCInstrInfo();
+
+
+extern const unsigned HaydnInstrNameIndices[];
+extern const char HaydnInstrNameData[];
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "haydn-mcformats"
@@ -48,10 +61,10 @@ namespace llvm {
 //===----------------------------------------------------------------------===//
 //
 // The GET_FORMATS_* includes define: HaydnSlots (slot descriptors)
-// getSlotInfo / getFormatDescIndex / getAlternateInstsOpcode method bodies
-// (these are the declarations on HaydnMCFormats in HaydnMCFormats.h), the
-// packet-format tables, and the per-opcode Formats (returned by
-// getMCFormats). Mirrors AIEMCFormats.cpp:18-29.
+// getSlotInfo / getFormatDescIndex method bodies (declarations on
+// HaydnMCFormats), the packet-format tables, and the per-opcode Formats
+// (returned by getMCFormats). Mirrors AIEMCFormats.cpp:18-29.
+// getAlternateInstsOpcode is occupancy + Format E members.
 
 // GET_FORMATS_PACKETS_TABLE is CONSUMED. Product composites are Format E
 // (BUNDLE_E96_*). Residual `_S*` members still contribute slot ConflictBits
@@ -61,10 +74,137 @@ namespace llvm {
 #define GET_FORMATS_SLOTS_DEFS
 #define GET_FORMATS_SLOTINFOS_MAPPING
 #define GET_OPCODE_FORMATS_INDEX_FUNC
-#define GET_ALTERNATE_INST_OPCODE_FUNC
-// Materialize authority is AlternateInsts + setDesc; MC encode serializes
-// member Desc (AIEBaseMCCodeEmitter.cpp:134-162).
 #include "HaydnGenFormats.inc"
+
+#define GET_HAYDN_ALT_OCCUPANCY
+#include "HaydnGenAltOccupancy.inc"
+
+#define GET_FORMAT_E_MEMBER_OPCODES
+#include "HaydnGenFormatEMemberOpcodes.inc"
+
+namespace {
+
+StringRef occupancyOpcodeName(unsigned Opcode) {
+  return StringRef(&HaydnInstrNameData[HaydnInstrNameIndices[Opcode]]);
+}
+
+/// True when register-operand classes match. Immediates compare kind only
+/// (logical simm vs member uimm is still a setDesc-legal imm).
+bool operandClassesMatch(const MCInstrDesc &A, const MCInstrDesc &B) {
+  if (A.getNumOperands() != B.getNumOperands())
+    return false;
+  for (unsigned I = 0, E = A.getNumOperands(); I != E; ++I) {
+    const MCOperandInfo &AO = A.operands()[I];
+    const MCOperandInfo &BO = B.operands()[I];
+    const bool AReg =
+        AO.OperandType == MCOI::OPERAND_REGISTER || AO.RegClass >= 0;
+    const bool BReg =
+        BO.OperandType == MCOI::OPERAND_REGISTER || BO.RegClass >= 0;
+    if (AReg != BReg)
+      return false;
+    if (AReg && AO.RegClass != BO.RegClass)
+      return false;
+  }
+  return true;
+}
+
+/// Format E member at residual occupancy index \p Index whose MCInstrDesc
+/// matches the logical (NumDefs + operands). One logical can have two golden
+/// shapes at the same EntryIdx (SLT64 unary dest+src vs SFR-only 2-src;
+/// X2SLT32 is the SFR-only shape). First-match and "smallest OperandCount"
+/// pick the wrong one. No match → 0 so occupancy keeps the FieldSlot Fallback.
+/// EntryIdx is not a new SLOT bit — occupancy stays the residual mask.
+unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
+  const std::string Log = haydn::format_e::peelLogicalOpcodeName(
+      occupancyOpcodeName(LogicalOpc), /*StripWide=*/false);
+  const haydn::format_e::FormatEAltSpan *Span =
+      haydn::format_e::findAltSpan(Log.c_str());
+  if (!Span || Span->Count == 0)
+    return 0;
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  if (LogicalOpc >= MII.getNumOpcodes())
+    return 0;
+  const MCInstrDesc &LogDesc = MII.get(LogicalOpc);
+  unsigned ExactE2 = 0;
+  unsigned ExactE3 = 0;
+  unsigned DropE2 = 0;
+  unsigned DropE3 = 0;
+  for (unsigned I = 0; I < Span->Count; ++I) {
+    const uint16_t Mid = haydn::format_e::FormatEAltMemberIds[Span->Begin + I];
+    if (Mid >= haydn::format_e::FormatEMemberCount ||
+        Mid >= FormatEMemberOpcodeCount)
+      continue;
+    const haydn::format_e::FormatEMemberRec &Mem =
+        haydn::format_e::FormatEMembers[Mid];
+    if (Mem.IsNop || Mem.EntryIdx != Index)
+      continue;
+    const unsigned Opc = FormatEMemberOpcodes[Mid];
+    if (Opc == 0 || Opc >= MII.getNumOpcodes())
+      continue;
+    const MCInstrDesc &MemDesc = MII.get(Opc);
+    if (MemDesc.getNumDefs() != LogDesc.getNumDefs())
+      continue;
+    const bool IsE2 = Mem.Mode == 0;
+    if (MemDesc.getNumOperands() == LogDesc.getNumOperands() &&
+        operandClassesMatch(LogDesc, MemDesc)) {
+      if (IsE2 && ExactE2 == 0)
+        ExactE2 = Opc;
+      else if (!IsE2 && ExactE3 == 0)
+        ExactE3 = Opc;
+      continue;
+    }
+    // Tied-seed / trailing-use drop (X2MOVT32 3-op logical → 2-op member).
+    if (MemDesc.getNumOperands() > 0 &&
+        MemDesc.getNumOperands() < LogDesc.getNumOperands()) {
+      if (IsE2 && DropE2 == 0)
+        DropE2 = Opc;
+      else if (!IsE2 && DropE3 == 0)
+        DropE3 = Opc;
+    }
+  }
+  // E2/E3 is a bundle-level fact (child count). Occupancy defaults to E2
+  // when both Modes match the logical shape; E3-only entries (ALU32 e1/e2)
+  // keep the E3 member. Finalize rebinds to the committed row.
+  if (ExactE2)
+    return ExactE2;
+  if (ExactE3)
+    return ExactE3;
+  if (DropE2)
+    return DropE2;
+  return DropE3;
+}
+
+const std::vector<unsigned> *cachedMemberAlts(unsigned Opcode) {
+  const int Idx = haydnAltOccupancyIndex(Opcode);
+  if (Idx < 0)
+    return nullptr;
+  static std::vector<std::vector<unsigned>> Cache;
+  static std::once_flag Once;
+  std::call_once(Once, [] {
+    const size_t N = sizeof(HaydnAltOccupancy) / sizeof(HaydnAltOccupancy[0]);
+    Cache.resize(N);
+    for (size_t I = 0; I < N; ++I) {
+      Cache[I].assign(3, 0);
+      const HaydnAltOccupancyRow &Row = HaydnAltOccupancy[I];
+      for (unsigned Slot = 0; Slot < 3; ++Slot) {
+        if ((Row.Mask & (1u << Slot)) == 0)
+          continue;
+        if (unsigned Mem = formatEMemberAtResidualIndex(Row.LogicalOpc, Slot))
+          Cache[I][Slot] = Mem;
+        else
+          Cache[I][Slot] = Row.Fallback[Slot];
+      }
+    }
+  });
+  return &Cache[static_cast<size_t>(Idx)];
+}
+
+} // namespace
+
+const std::vector<unsigned> *
+HaydnMCFormats::getAlternateInstsOpcode(unsigned Opcode) const {
+  return cachedMemberAlts(Opcode);
+}
 
 namespace Haydn {
 #define GET_FORMATS_FORMATS_DEFS
@@ -278,10 +418,10 @@ bool HaydnBaseMCFormats::isFormatAvailable(uint64_t SlotSet) const {
 // HaydnMCFormats — concrete subclass
 //===----------------------------------------------------------------------===//
 //
-// getSlotInfo / getFormatDescIndex / getAlternateInstsOpcode are defined INSIDE
-// this translation unit by HaydnGenFormats.inc (included above); their
-// declarations live on HaydnMCFormats in HaydnMCFormats.h. The remaining
-// overrides delegate to the generated / hand-authored tables.
+// getSlotInfo / getFormatDescIndex are defined INSIDE this translation
+// unit by HaydnGenFormats.inc. getAlternateInstsOpcode is occupancy +
+// Format E members (HaydnGenAltOccupancy.inc). Declarations live on
+// HaydnMCFormats in HaydnMCFormats.h.
 //
 // getSlotKind (AIE AIEBaseMCFormats.cpp:66-75): after setDesc materialize,
 // Bundle canAdd/verify packs by fixed member slot — not tryAddProduct on
@@ -317,14 +457,7 @@ haydn::format::EncodedBytes haydnProductionParcelBytes() {
 }
 
 bool haydnHasCanonicalIdleParcel() {
-  // Provisional product idle: Format E E2 envelope with indicator 111 and
-  // both entry payloads zero. Zero entry windows decode as NOP under the
-  // Format E inverse (empty entry → NOP); the header is never all-zero
-  // (all-zero is not Format E). Golden GE96-01 still OPEN for named
-  // dual-NOP / map-11 completion IDs — this is the minimal wire form that
-  // satisfies writeNopData / bare-NOP / empty-composite without inventing
-  // a non-Format-E pad. Replace when golden publishes a stronger vector.
-  return true;
+  return !haydn::format::canonicalFullSlotIdleParcel().empty();
 }
 
 uint8_t haydnFormatEHeaderByte(unsigned EntryNum) {
@@ -360,13 +493,13 @@ void haydnEmitFormatEParcelLE(const APInt &Word96, SmallVectorImpl<char> &CB) {
 bool haydnTryGetCanonicalIdleParcel(SmallVectorImpl<char> &Out) {
   if (!haydnHasCanonicalIdleParcel())
     return false;
-  // E2 header only: format_indicator=111, entry_num=0, reserved=00; payload 0.
-  // EncodedBytes comes from the production registry (12), not a local literal.
-  const unsigned Parcel = haydnProductionParcelBytes().Value;
+  ArrayRef<uint8_t> Idle = haydn::format::canonicalFullSlotIdleParcel();
+  if (Idle.empty() || Idle.size() != haydnProductionParcelBytes().Value)
+    return false;
   Out.clear();
-  Out.resize(Parcel, 0);
-  Out[0] = static_cast<char>(haydnFormatEHeaderByte(
-      haydn::format::FormatEEntryNumTwo));
+  Out.reserve(Idle.size());
+  for (uint8_t B : Idle)
+    Out.push_back(static_cast<char>(B));
   return true;
 }
 

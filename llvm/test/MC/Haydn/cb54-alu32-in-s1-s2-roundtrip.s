@@ -53,9 +53,9 @@
 # Each bundle is 16 bytes (cursor advances 0xc per bundle), proving
 # Format E packing with both slots populated on one objdump line.
 # B3.5 source-order S2-first: print is S0-S1-S2 (high-prefer members last).
-# CHECK: {{.*}}0: 4f 09 82 10 20 61 84 00 00 00 00 00 { nop; neg32 r1, r2; add64 d0, d1, d2 }
-# CHECK: c: 4f 42 28 03 a0 04 0d 15 00 00 00 00 { nop; add64 d3, d4, d5; not32 r5, r6 }
-# CHECK: {{.*}}18: 4f 52 48 05 20 21 1c 02 00 00 00 00 { nop; not32 r7, r8; popcount32 r9, r10 }
-# CHECK: {{.*}}24: 4f 09 1a 2a a0 04 41 08 00 00 00 00 { nop; add64 d0, d1, d2; add64 d3, d4, d5 }
+# CHECK: {{.*}}0: 4f 09 82 10 20 61 84 00 00 00 00 00 { neg32 r1, r2; add64 d0, d1, d2 }
+# CHECK: c: 4f 42 28 03 a0 04 0d 15 00 00 00 00 { add64 d3, d4, d5; not32 r5, r6 }
+# CHECK: {{.*}}18: 4f 52 48 05 20 21 1c 02 00 00 00 00 { not32 r7, r8; popcount32 r9, r10 }
+# CHECK: {{.*}}24: 4f 09 1a 2a a0 04 41 08 00 00 00 00 { add64 d0, d1, d2; add64 d3, d4, d5 }
 # CHECK-NOT:  <unknown>
 # CHECK-NOT:  c.add

@@ -15,10 +15,14 @@
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCDwarf.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrAnalysis.h"
+#include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
+#include <mutex>
 
 #define GET_INSTRINFO_MC_DESC
 #define ENABLE_INSTR_PREDICATE_VERIFIER
@@ -51,6 +55,13 @@ static MCInstrInfo *createHaydnMCInstrInfo() {
   return Info;
 }
 
+const MCInstrInfo &llvm::getHaydnSharedMCInstrInfo() {
+  static MCInstrInfo Info;
+  static std::once_flag Once;
+  std::call_once(Once, [] { InitHaydnMCInstrInfo(&Info); });
+  return Info;
+}
+
 static MCInstPrinter *createHaydnMCInstPrinter(const Triple &T,
                                                 unsigned SyntaxVariant,
                                                 const MCAsmInfo &MAI,
@@ -73,6 +84,120 @@ static MCSubtargetInfo *createHaydnMCSubtargetInfo(const Triple &TT,
   return createHaydnMCSubtargetInfoImpl(TT, CPUName, /*TuneCPU=*/CPUName, FS);
 }
 
+namespace {
+
+/// Product objdump sees Format E parcels as BUNDLE_E96_* (or generic BUNDLE)
+/// with isInst children. Control-flow flags and PC-relative targets live on
+/// the members, not the composite root. Peer: Hexagon/RISCV MCInstrAnalysis.
+bool isHaydnCompositeBundle(unsigned Opcode) {
+  return Opcode == Haydn::BUNDLE || Opcode == Haydn::BUNDLE_E96_TWO_ENTRY ||
+         Opcode == Haydn::BUNDLE_E96_THREE_ENTRY;
+}
+
+class HaydnMCInstrAnalysis : public MCInstrAnalysis {
+public:
+  explicit HaydnMCInstrAnalysis(const MCInstrInfo *MCII)
+      : MCInstrAnalysis(MCII) {}
+
+  bool isBranch(const MCInst &Inst) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode()))
+      return anyChild(Inst, [this](const MCInst &C) { return isBranch(C); });
+    return MCInstrAnalysis::isBranch(Inst);
+  }
+
+  bool isConditionalBranch(const MCInst &Inst) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode()))
+      return anyChild(
+          Inst, [this](const MCInst &C) { return isConditionalBranch(C); });
+    return MCInstrAnalysis::isConditionalBranch(Inst);
+  }
+
+  bool isUnconditionalBranch(const MCInst &Inst) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode()))
+      return anyChild(
+          Inst, [this](const MCInst &C) { return isUnconditionalBranch(C); });
+    return MCInstrAnalysis::isUnconditionalBranch(Inst);
+  }
+
+  bool isIndirectBranch(const MCInst &Inst) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode()))
+      return anyChild(
+          Inst, [this](const MCInst &C) { return isIndirectBranch(C); });
+    return MCInstrAnalysis::isIndirectBranch(Inst);
+  }
+
+  bool isCall(const MCInst &Inst) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode()))
+      return anyChild(Inst, [this](const MCInst &C) { return isCall(C); });
+    return MCInstrAnalysis::isCall(Inst);
+  }
+
+  bool isReturn(const MCInst &Inst) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode()))
+      return anyChild(Inst, [this](const MCInst &C) { return isReturn(C); });
+    return MCInstrAnalysis::isReturn(Inst);
+  }
+
+  bool isTerminator(const MCInst &Inst) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode()))
+      return anyChild(Inst,
+                      [this](const MCInst &C) { return isTerminator(C); });
+    return MCInstrAnalysis::isTerminator(Inst);
+  }
+
+  /// PC-relative call/branch target as a byte address. Disassembler members
+  /// already recover dump-byte displacements (cond-branch <<1; JAL bytes).
+  /// JALR is rs-relative (isIndirectBranch) and is not evaluated here.
+  bool evaluateBranch(const MCInst &Inst, uint64_t Addr, uint64_t Size,
+                      uint64_t &Target) const override {
+    if (isHaydnCompositeBundle(Inst.getOpcode())) {
+      for (unsigned I = 0, E = Inst.getNumOperands(); I != E; ++I) {
+        const MCOperand &Op = Inst.getOperand(I);
+        if (!Op.isInst() || !Op.getInst())
+          continue;
+        if (evaluateBranch(*Op.getInst(), Addr, Size, Target))
+          return true;
+      }
+      return false;
+    }
+
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    if (Desc.isIndirectBranch())
+      return false;
+    if (!Desc.isBranch() && !Desc.isCall())
+      return false;
+    if (Inst.getNumOperands() == 0)
+      return false;
+    const MCOperand &ImmOp = Inst.getOperand(Inst.getNumOperands() - 1);
+    if (!ImmOp.isImm())
+      return false;
+    // Unpatched call relocs leave a 0 displacement in the .o; treating that
+    // as PC+0 would symbolize the call site itself. Linked images write a
+    // non-zero byte offset. Branch-to-self (disp 0) stays evaluable.
+    if (Desc.isCall() && ImmOp.getImm() == 0)
+      return false;
+    Target = Addr + ImmOp.getImm();
+    return true;
+  }
+
+private:
+  template <typename Pred>
+  static bool anyChild(const MCInst &Inst, Pred P) {
+    for (unsigned I = 0, E = Inst.getNumOperands(); I != E; ++I) {
+      const MCOperand &Op = Inst.getOperand(I);
+      if (Op.isInst() && Op.getInst() && P(*Op.getInst()))
+        return true;
+    }
+    return false;
+  }
+};
+
+} // end anonymous namespace
+
+static MCInstrAnalysis *createHaydnMCInstrAnalysis(const MCInstrInfo *Info) {
+  return new HaydnMCInstrAnalysis(Info);
+}
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTargetMC() {
   auto &HaydnTarget = getTheHaydnTarget();
   TargetRegistry::RegisterMCAsmBackend(HaydnTarget, createHaydnAsmBackend);
@@ -83,6 +208,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTargetMC() {
   TargetRegistry::RegisterMCInstPrinter(HaydnTarget, createHaydnMCInstPrinter);
   TargetRegistry::RegisterMCSubtargetInfo(HaydnTarget,
                                           createHaydnMCSubtargetInfo);
+  TargetRegistry::RegisterMCInstrAnalysis(HaydnTarget,
+                                          createHaydnMCInstrAnalysis);
   // custom ELF streamer registers symbols nested in Haydn::BUNDLE
   // children (MCOperand::isInst). Base MCStreamer only visits top-level exprs.
   TargetRegistry::RegisterELFStreamer(HaydnTarget, createHaydnELFStreamer);

@@ -1,0 +1,87 @@
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:     -run-pass=regbankselect,instruction-select -verify-machineinstrs \
+# RUN:     %s -o - | FileCheck %s
+
+# Role: MIR — T-GS4: BRCOND folds loop.decrement only when each erased def is one-use.
+
+# REGRESSION TEST: T-GS4 BRCOND hwloop fold one-use guards (AIE2 hasOneUse).
+#
+# Bug: G_BRCOND erased llvm.loop.decrement / loop.decrement.reg and the feeding
+# G_ICMP without hasOneNonDBGUse. A CSE'd or extra COPY of the count left a
+# use of an undefined vreg; verifier failed.
+# Fix: fold+erase only when Cond, ICMP LHS, and the intrinsic dest each have
+# one non-dbg use (AIE2InstructionSelector.cpp:726). Multi-use decrement.reg
+# selects to LoopDec so remaining users keep a def; G_BRCOND becomes BNEZ_W.
+# If the one-use guard regresses, -verify-machineinstrs fails on the two-use
+# function (use of undefined %new).
+
+--- |
+  define i32 @two_use_loopdec_reg(i32 %lc) {
+    ret i32 %lc
+  }
+  define void @one_use_loopdec_reg(i32 %lc) {
+    ret void
+  }
+  declare i32 @llvm.loop.decrement.reg.i32(i32, i32)
+...
+
+---
+name:            two_use_loopdec_reg
+legalized:       true
+regBankSelected: false
+tracksRegLiveness: true
+# CHECK-LABEL: name: two_use_loopdec_reg
+# CHECK: LoopDec
+# CHECK: BNEZ
+# CHECK-NOT: LoopJNZ
+# CHECK-NOT: G_INTRINSIC
+# CHECK-NOT: G_BRCOND
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r1
+    %prev:_(s32) = COPY $r1
+    %one:_(s32) = G_CONSTANT i32 1
+    %zero:_(s32) = G_CONSTANT i32 0
+    %new:_(s32) = G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.loop.decrement.reg), %prev(s32), %one(s32)
+    %cond:_(s1) = G_ICMP intpred(ne), %new(s32), %zero(s32)
+    $r0 = COPY %new
+    G_BRCOND %cond(s1), %bb.1
+    G_BR %bb.2
+
+  bb.1:
+    liveins: $r0, $r15
+    RET implicit $r0, implicit $r15
+
+  bb.2:
+    liveins: $r0, $r15
+    RET implicit $r0, implicit $r15
+...
+
+---
+name:            one_use_loopdec_reg
+legalized:       true
+regBankSelected: false
+tracksRegLiveness: true
+# CHECK-LABEL: name: one_use_loopdec_reg
+# CHECK: LoopDec
+# CHECK: LoopJNZ
+# CHECK-NOT: G_INTRINSIC
+# CHECK-NOT: G_BRCOND
+# CHECK-NOT: G_ICMP
+body:             |
+  bb.0:
+    successors: %bb.0, %bb.1
+    liveins: $r1
+    %prev:_(s32) = COPY $r1
+    %one:_(s32) = G_CONSTANT i32 1
+    %zero:_(s32) = G_CONSTANT i32 0
+    %new:_(s32) = G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.loop.decrement.reg), %prev(s32), %one(s32)
+    %cond:_(s1) = G_ICMP intpred(ne), %new(s32), %zero(s32)
+    G_BRCOND %cond(s1), %bb.0
+    G_BR %bb.1
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+...

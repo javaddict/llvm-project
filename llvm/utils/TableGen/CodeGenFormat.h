@@ -98,10 +98,11 @@ private:
   /// Is it a MultipleSlotOptions instruction?
   bool IsMultipleSlotOptions;
   /// Possible instructions a MultiSlot_Pseudo could expand to
-  /// (materializableInto). Vector preserves TableGen list order (slot
-  /// priority). Haydn B2.5 also synthesizes sparse size-3 AlternateInsts
-  /// (index==field, 0=hole) from Full-format `_S0`/`_S1`/`_S2` members for
-  /// non-InstFormat logicals (see emitAlternateInstsOpcodeFunc).
+  /// (materializableInto). Emission is sparse size-3 (index==field, 0=hole),
+  /// placing each member by residual `_S{N}` suffix when present, else densify
+  /// list order. Haydn also synthesizes the same sparse shape from residual
+  /// Full-format `_S0`/`_S1`/`_S2` name discovery for logicals that still lack
+  /// an explicit materializableInto list (see emitAlternateInstsOpcodeFunc).
   /// VF1.3: every emitted member is setDesc-safe vs its logical (full contract
   /// for MultiSlot_Pseudo; structural operand filter for sparse discovery).
   std::vector<std::string> AlternateInsts;

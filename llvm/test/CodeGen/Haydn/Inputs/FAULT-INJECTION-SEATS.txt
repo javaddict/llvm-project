@@ -1,38 +1,73 @@
-Haydn all-seat fault injection inventory (G-TEST-CONTRACTS / T7)
-================================================================
-Stamp: 2026-08-10 T7-TEST-CONTRACTS
+Haydn all-seat fault injection inventory (G-TEST-EVIDENCE / open-goals-w4 INTEGRATE)
+=================================================================================
+Stamp: 2026-08-12 open-goals-w4 INTEGRATE
+  (dual residual Mode/swap MC residual + T7 inventory restamp + SCEV wording)
+Audited backend baseline: 7b1c4fc3309134104dfc21bd0792ec7876dd41a3
 
-Law (decision-guard §6.4 / sms-post-ra-multistage PP5): inject failure at every
-allocation, exact-commit, trip, CFG, liveness, call arg/return, late-recommit,
-and writer seat. Each failure is byte-identical to baseline or restores a
-structural snapshot.
+Law (pipeline contract physical multistage mode + G-TEST-EVIDENCE): inject
+failure at every allocation, exact-commit, trip, CFG, liveness, call arg/return,
+late-recommit,
+and writer seat. Multistage PF-*/JM-* rows are executable on the physical host
+(HaydnMultiStageSMS) — never fake product force-fail evidence.
+DG0 DecisionGuard product registry stays absent by design — ownership residual
+is Inputs/* + check_xfail_ledger.py / parse_lit_summary.py policy pins only.
 
-Post-pipeliner product force-fail flag today
---------------------------------------------
--haydn-post-pipeliner-force-fail returns BEFORE mutation
-  (HaydnPostPipeliner materialize/schedule pre-mutation seats only).
-Live pin: post-pipeliner-mat-force-fail-unchanged.ll
-  (engine-OFF asm byte-identical to force-on+force-fail; cert reject stats).
+| Seat                         | Owning goal              | Injection surface              | Test pin / status                          |
+|------------------------------|--------------------------|--------------------------------|--------------------------------------------|
+| Retained-loop incomplete LoopStart | G-HWLOOP-ROLE-A     | rejectIncompleteRoleA fatal    | hwloop-rolea-preflight-reject.mir (landed) |
+| Current multi-block IR decline | G-MULTI-BB-HWLOOP      | TTI getNumBlocks()>1           | hwloop-multibb.ll (landed decline)         |
+| Fixup range demote fatal     | G-HWLOOP-ROLE-A          | HaydnFixupHwLoops demote       | hwloop-demote-fatal-live.mir (landed)      |
+| O0 vs optnone ownership      | G-O0-EXACT-PIPELINE      | skipFunction + full-slot pad   | authority-o0-vs-optnone-commit.ll (landed) |
+| Inverse FormatID corruption  | G-E96-END-TO-END         | haydn-verify-bundles           | bundle-corruption-matrix.mir NO-IMM/BAD-ID |
+| Inverse member capacity      | G-E96-END-TO-END         | haydn-verify-bundles           | E2-OVER/OVER-ISSUE (landed)                |
+| Inverse completion match     | G-E96-END-TO-END         | haydn-verify-bundles           | BAD-COMP (landed)                          |
+| Unexplained XFAIL drift      | G-TEST-EVIDENCE          | ledger vs live XFAIL set       | check_xfail_ledger.py + selfcheck (landed) |
+| Hostile disasm / printer OOB | G-DEBUG-OBSERVABILITY    | objdump / InstPrinter          | hostile-byte-surface (C/D2/G/H) + d432/printer-oob |
+| Nested unwind / frame-chain  | G-DEBUG-OBSERVABILITY    | FrameLowering + multi-FDE CIE  | unwind-frame-chain.ll (3-level + FP↔SP)    |
+| CFI / CFA / RA column        | G-DEBUG-OBSERVABILITY    | FrameLowering + CFIFixup       | cfi-*.ll + unwind-frame-chain.ll (landed)  |
+| Remote reg-map names         | G-DEBUG-OBSERVABILITY    | BundleSim LLDB RSP             | lldb_feature_matrix.sh ar0/dr0 (enforced)  |
+| Parcel step-inst             | G-DEBUG-OBSERVABILITY    | BundleSim LLDB vCont;s         | lldb_feature_matrix.sh (PC±12 preferred)   |
+| ELF e_flags profile          | G-ECOSYSTEM-CONSUMERS    | AsmBackend stamp + consumer    | eflags-e96-product-profile; c-e2e-runtime  |
+| Illegal dual-store co-issue  | G-TEST-EVIDENCE          | MC one-parcel placement        | bundle-dependence-reject.s (landed)        |
+| Non-12B section / record     | G-ECOSYSTEM-CONSUMERS    | frontend + code_image load     | test_frontend_pipeline 11/16 reject        |
+| DSP library product pin      | G-LIBRARY-COVERAGE       | NatureDSP original + -mcpu=haydn| product_library_pin (MIN_TEXT; artifact_id)|
+| Freestanding provenance      | G-RUNTIME-TOOLCHAIN      | full-gate ARTIFACT + libc/libm | run_full_gate fail-closed; libm required  |
+| Product coverage aggregate   | G-TEST-EVIDENCE          | monorepo product_coverage_pin  | ledger+ARTIFACT+NatureDSP+lit seats       |
 
-That pin proves pre-mutation closed-fail identity. It does NOT cover
-post-mutation degrade seats called out by staff audit / PIPE-03.
+Physical multistage preflight seats (executable host present; force-fail seats live)
+-------------------------------------------------------------------------------
+Closed seat list. Host HaydnMultiStageSMS implements each PF-* force-fail seat;
+product default remains OFF. Qualification residual is G-MULTISTAGE-QUALIFY.
 
-Seat table
-----------
-| Seat                         | Owner track | Injection surface              | Test pin / status                          |
-|------------------------------|-------------|--------------------------------|--------------------------------------------|
-| PP pre-mutation cert force   | T2/T7       | -haydn-post-pipeliner-force-fail | post-pipeliner-mat-force-fail-unchanged.ll (landed) |
-| PP after allocate/clone      | T2          | named seat flags (not landed)  | open — needs product seats                 |
-| PP after exact commit fail   | T2          | named seat flags (not landed)  | open — PIPE-03                             |
-| PP after trip update fail    | T2          | named seat flags (not landed)  | open — PIPE-03                             |
-| PP after CFG/liveness update | T2          | named seat flags (not landed)  | open                                       |
-| Call arg/return preflight    | AR2/T7      | call-lowering transaction      | open — CG-04/PR-9                          |
-| Late MC recommit / filler    | AR4         | AsmPrinter/MC writers          | residual ban pins partial                  |
-| Writer/profile ELF           | AR4         | LLD/profile path               | open                                       |
+| ID      | Seat                              | Owning goal           | Status                                              |
+|---------|-----------------------------------|-----------------------|-----------------------------------------------------|
+| PF-CFG  | CFG blocks/edges preflight        | G-MULTISTAGE-DESIGN   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| PF-PHI  | PHIs / live-ins preflight         | G-MULTISTAGE-DESIGN   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| PF-TRIP | Trip-count / setup defs preflight | G-MULTISTAGE-DESIGN   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| PF-STAGE| Prologue/kernel/epilogue MI plan  | G-MULTISTAGE-DESIGN   | executable — two-iteration LCD/RecMII + distinct stage-MBB + force-fail |
+| PF-LIVE | Physical liveness / spills proof  | G-MULTISTAGE-DESIGN   | executable — alias/subreg LivePhys no-spill + region fixpoint + force-fail |
+| PF-ALT  | Transient alternatives plan       | G-MULTISTAGE-DESIGN   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| PF-BUNDLE| Bundle roots/members/order/comp  | G-MULTISTAGE-DESIGN   | executable — resourcesConverged + II retry + force-fail          |
+| PF-LATE | Late layout / relocation facts    | G-MULTISTAGE-DESIGN   | executable — HaydnMultiStageSMS host + force-fail seats          |
 
-Scaffolding rule
-----------------
-T7 owns lit/docs that *require* seats and pin what exists. Product flags for
-post-mutation seats are T2/AR ownership — do not invent force-fail behavior
-in tests. When seats land, add one lit per seat with OFF/force-fail
-byte-identity + verifier-clean CFG.
+Physical multistage journal / rollback seats (executable host present)
+--------------------------------------------------------------------------
+After first MIR edit every fallible step is journaled; failure restores
+byte-for-byte ordinary scheduled MIR/CFG/metadata and clears transient state.
+Force-fail seats are live on HaydnMultiStageSMS (G-MULTISTAGE-QUALIFY residual).
+
+| ID       | Seat                                  | Owning goal            | Status                                              |
+|----------|---------------------------------------|------------------------|-----------------------------------------------------|
+| JM-ALLOC | Allocate / clone / edge split         | G-MULTISTAGE-QUALIFY   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| JM-SPLICE| Prologue/kernel/epilogue materialize  | G-MULTISTAGE-QUALIFY   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| JM-COMMIT| Exact E96 cycle commit                | G-MULTISTAGE-QUALIFY   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| JM-TRIP  | Trip / setup update                   | G-MULTISTAGE-QUALIFY   | executable — HaydnMultiStageSMS host + force-fail seats          |
+| JM-LIVE  | Liveness / PHI / live-in update       | G-MULTISTAGE-QUALIFY   | executable — distinct seam after live-in rewrite (F5)          |
+| JM-ALT   | Transient alternate clear / stamp     | G-MULTISTAGE-QUALIFY   | executable — distinct seam after AltDescs.clear (F5)           |
+| JM-META  | Metadata / bundle order / completion  | G-MULTISTAGE-QUALIFY   | executable — distinct seam after SWPS stamp (F5)               |
+
+Scaffolding rule: implement the real AIE-aligned multistage host; do not fake it
+with the retired Stage-0 PostPipeliner/InterBlock path, a pre-RA BUNDLE, late
+physical semantic rediscovery, force-coissue, Fixup semantic peel repair, or
+invented golden padding. The policy flip is an ordered follow-on after independent
+qualification.

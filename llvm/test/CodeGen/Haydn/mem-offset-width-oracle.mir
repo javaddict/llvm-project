@@ -1,0 +1,140 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler \
+# RUN:   -debug-only=haydn-instr-info -verify-machineinstrs %t/prera.mir \
+# RUN:   -o /dev/null 2>&1 | FileCheck %s --check-prefix=ORACLE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -debug-only=haydn-instr-info -verify-machineinstrs %t/postra.mir \
+# RUN:   -o /dev/null 2>&1 | FileCheck %s --check-prefix=ORACLE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler \
+# RUN:   -debug-only=haydn-instr-info -verify-machineinstrs %t/fi-pre.mir \
+# RUN:   -o /dev/null 2>&1 | FileCheck %s --check-prefix=FI-PRE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=prologepilog,postmisched \
+# RUN:   -debug-only=haydn-instr-info -verify-machineinstrs %t/fi-pre.mir \
+# RUN:   -o /dev/null 2>&1 | FileCheck %s --check-prefix=FI-POST
+# REQUIRES: asserts
+#
+# Role: MIR — T-TII3 unified TII mem offset/width oracle (bytes everywhere,
+# enum-driven width).
+#
+# REGRESSION TEST: getMemOperandsWithOffsetWidth mixed byte vs element phase
+# and took access width from mnemonic substrings (default 4). A 64-bit access
+# classified as 4 bytes, or a post-PEI element index compared as a byte
+# offset, licensed false non-overlap in areMemAccessesTriviallyDisjoint.
+#
+# Contract:
+#   * Register-base scaled immediates are element indices
+#     (ISel + post-PEI). Oracle returns imm * width bytes.
+#   * FrameIndex extras are LLVM byte offsets until PEI rewrites them.
+#     Oracle does not scale FI extras. After PEI the same access is
+#     register-base + element index, scaled back to the same byte offset
+#     when the object sits at byte 0.
+#   * Width comes from a closed Haydn::LD32/ST32/… opcode table, never
+#     StringRef::contains on getName.
+#
+# Test design: the same element-index immediates on vreg (pre-RA scheduler)
+# and physreg (post-RA scheduler) must print identical byte-offset/width
+# lines. A second FI function pins that a +8 byte extra on ST32 is
+# byte-offset=8 before PEI (FI base, not scaled to 32). After PEI the MI
+# immediates are element indices 2 and 4; the oracle must print 8 and 16
+# bytes, not the raw element field.
+#
+# What breaks if this regresses: substring width or raw-imm offsets return,
+# FileCheck misses `byte-offset=16` / `precise(8)` for LD64, or FI+8 is
+# scaled to 32.
+
+#--- prera.mir
+--- |
+  define void @oracle_prera(ptr %p, i32 %v32, i64 %v64) {
+    ret void
+  }
+...
+---
+name:            oracle_prera
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $d0
+    %p:gpr32 = COPY $r1
+    %v32:gpr32 = COPY $r2
+    %v64:dr64 = COPY $d0
+    ; ORACLE-DAG: Haydn mem oracle: LD8 byte-offset=8 width=LocationSize::precise(1)
+    ; ORACLE-DAG: Haydn mem oracle: ST8 byte-offset=16 width=LocationSize::precise(1)
+    ; ORACLE-DAG: Haydn mem oracle: LD16 byte-offset=6 width=LocationSize::precise(2)
+    ; ORACLE-DAG: Haydn mem oracle: ST16 byte-offset=8 width=LocationSize::precise(2)
+    ; ORACLE-DAG: Haydn mem oracle: LD32 byte-offset=16 width=LocationSize::precise(4)
+    ; ORACLE-DAG: Haydn mem oracle: ST32 byte-offset=32 width=LocationSize::precise(4)
+    ; ORACLE-DAG: Haydn mem oracle: LD64 byte-offset=16 width=LocationSize::precise(8)
+    ; ORACLE-DAG: Haydn mem oracle: ST64 byte-offset=24 width=LocationSize::precise(8)
+    %ld8:gpr32 = LD8 %p, 8 :: (load (s8))
+    ST8 %v32, %p, 16 :: (store (s8))
+    %ld16:gpr32 = LD16 %p, 3 :: (load (s16))
+    ST16 %v32, %p, 4 :: (store (s16))
+    %ld32:gpr32 = LD32 %p, 4 :: (load (s32))
+    ST32 %v32, %p, 8 :: (store (s32))
+    %ld64:dr64 = LD64 %p, 2 :: (load (s64))
+    ST64 %v64, %p, 3 :: (store (s64))
+    RET implicit $r15
+
+#--- postra.mir
+--- |
+  define void @oracle_postra(ptr %p, i32 %v32, i64 %v64) {
+    ret void
+  }
+...
+---
+name:            oracle_postra
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $d0
+    ; Same element indices as prera.mir — oracle must print the same bytes.
+    $r3 = LD8 $r1, 8 :: (load (s8))
+    ST8 $r2, $r1, 16 :: (store (s8))
+    $r4 = LD16 $r1, 3 :: (load (s16))
+    ST16 $r2, $r1, 4 :: (store (s16))
+    $r5 = LD32 $r1, 4 :: (load (s32))
+    ST32 $r2, $r1, 8 :: (store (s32))
+    $d1 = LD64 $r1, 2 :: (load (s64))
+    ST64 $d0, $r1, 3 :: (store (s64))
+    RET implicit $r15
+
+#--- fi-pre.mir
+--- |
+  define void @oracle_fi() {
+    ret void
+  }
+...
+---
+name:            oracle_fi
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+stack:
+  - { id: 0, size: 32, alignment: 8 }
+body:             |
+  bb.0:
+    liveins: $r1
+    ; FI extra is bytes. Pre-PEI oracle must not scale 0/8 to 0/32.
+    ; After PEI the same stores are ST32 $r13, 2 and ST32 $r13, 4 (elements);
+    ; oracle must report 8 and 16 bytes, not the raw element field.
+    ; FI-PRE: Haydn mem oracle: ST32 byte-offset=0 width=LocationSize::precise(4)
+    ; FI-PRE: Haydn mem oracle: ST32 byte-offset=8 width=LocationSize::precise(4)
+    ; FI-POST: Haydn mem oracle: ST32 byte-offset=8 width=LocationSize::precise(4)
+    ; FI-POST: Haydn mem oracle: ST32 byte-offset=16 width=LocationSize::precise(4)
+    ST32 $r1, %stack.0, 0 :: (store (s32))
+    ST32 $r1, %stack.0, 8 :: (store (s32))
+    RET implicit $r15

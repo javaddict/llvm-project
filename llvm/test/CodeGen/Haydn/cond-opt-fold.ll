@@ -6,7 +6,7 @@
 ; zero-branch narrowing fire together through the full codegen pipeline.
 ;
 ; Bug being guarded against: When the selector emits CMP r, rA, rB followed
-; by BNEZ/BEQZ, the HaydnConditionOptimizer.foldCmpBranch step must rewrite
+; by BNEZ/BEQZ, the ISel cmp+zero-test step must rewrite
 ; the pair as a single two-register branch (BEQ/BNE/BLT/BGE/BLTU/BGEU). If
 ; one of the comparison operands happens to be the constant 0 (lowered to a
 ; MOVE32 from R0 or directly referencing R0), the subsequent
@@ -49,11 +49,11 @@ else:
 ; test asserts that the final branch is a single-register zero-test form
 ; not a 2-register BNE.
 ; CHECK-LABEL: fold_ne_zero:
-; CHECK-NOT: bne_w{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
+; CHECK-NOT: bne{{(\.s[012])?}} r{{[0-9]+}}, r{{[0-9]+}}
 ; SEQ32 + BNEZ to else (eq → else; fallthrough = then). Not BEQZ-primary.
 ; CHECK: seq32
-; CHECK: bnez_w{{(\.s[012])?}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: bnez{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 define void @fold_ne_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp ne i32 %a, 0
@@ -71,11 +71,11 @@ else:
 ;===--- icmp slt against zero (signed: %a < 0) ---===
 ; CHECK-LABEL: fold_slt_zero:
 ; Current form: SLT32 + XORI invert + BEQZ (T7.5 exact). Not 2-reg BLT.
-; CHECK-NOT: blt_w r{{[0-9]+}}, r{{[0-9]+}}
+; CHECK-NOT: blt r{{[0-9]+}}, r{{[0-9]+}}
 ; CHECK: slt32
 ; CHECK: xori32
-; CHECK: beqz_w{{(\.s[012])?}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: beqz{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 define void @fold_slt_zero(i32 %a, ptr %p) nounwind {
 entry:
   %c = icmp slt i32 %a, 0

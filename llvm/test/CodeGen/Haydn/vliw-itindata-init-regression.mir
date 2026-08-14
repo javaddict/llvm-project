@@ -7,6 +7,7 @@
 # REBASELINED : / pipeline reorder (ExpandPseudos/BitSimplify pre-scheduler + materialize at leaveRegion) — bundles regrouped, ops unchanged.
 # REBASELINED : dual-sched pre-RA — trailing NOP before JALR (delay-slot fill order).
 # REBASELINED : / FLEX cutover — ST32 renders as ST32_S0, ADD32 as ADD32_S1. test1 (two ST32) stays un-bundled (SLOT0_LS conflict preserved); test2 (ST32+ADD32) bundles (S0+S1).
+# REBASELINED 2026-08-13 W3 store mayLoad=0 — test2 leaveRegion order is ADD32_S2 then ST32_S0 (still S2+S0 co-issue; two ST32 remain unbundled).
 #
 # REGRESSION TEST: ItinData must be initialized for VLIW DFA + D-class format
 # compatibility (prior revision).
@@ -93,9 +94,9 @@ body:             |
     ; CHECK-LABEL: name: test_ls_conflict
     ; CHECK: liveins: $r0, $r1, $r2, $r3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32_S0 killed $r1, $r0, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_E{{[23]}}_E{{[0-2]}}_LOADSTORE0_RI6 killed $r1, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: NOP
-    ; CHECK-NEXT: ST32_S0 killed $r3, killed $r2, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_E{{[23]}}_E{{[0-2]}}_LOADSTORE0_RI6 killed $r3, killed $r2, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ST32 $r1, $r0, 0, implicit-def dead $sfr
     ST32 $r3, $r2, 0, implicit-def dead $sfr
@@ -141,12 +142,13 @@ body:             |
     ; ADD32 (Slot012_ALU) + ST32 (Slot0_LS) -- different DFA FUs.
     ; The DFA should allow them in the same bundle.
     ; Note: ADD32 has no register dependency with ST32 here (different regs).
+    ; W3 (store mayLoad=0): order is ADD32_S2 then ST32_S0; co-issue unchanged.
 
     ; CHECK-LABEL: name: test_alu_ls_compatible
     ; CHECK: liveins: $r0, $r1, $r2, $r3
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: ST32_S0 killed $r3, killed $r2, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r4 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_E{{[23]}}_E{{[0-2]}}_LOADSTORE0_RI6 killed $r3, killed $r2, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
     ST32 $r3, $r2, 0, implicit-def dead $sfr

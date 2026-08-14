@@ -1,0 +1,1028 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/load_addr_fi.mir -o - 2>&1 | FileCheck %s --check-prefix=RESIDUAL
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/setcbr_ok.mir -o - | FileCheck %s --check-prefix=SETCBR
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/setcbr_end_ok.mir -o - | FileCheck %s --check-prefix=SETCBRE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/load_addr_imm.mir -o - | FileCheck %s --check-prefix=ADDR
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/set_hwloop_ok.mir -o - | FileCheck %s --check-prefix=HWLOOP
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/set_hwloop_reg_ok.mir -o - | FileCheck %s --check-prefix=HWLOOPR
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/post_inc_ok.mir -o - | FileCheck %s --check-prefix=POSTINC
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/st_post_inc_ok.mir -o - | FileCheck %s --check-prefix=STPOST
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/pseudo_call_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=CALL
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vacopy_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=VACOPY
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/vaend_ok.mir -o - | FileCheck %s --check-prefix=VAEND
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/post_inc_mmo.mir -o - | FileCheck %s --check-prefix=MMO
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/ld64_post_inc_ok.mir -o - | FileCheck %s --check-prefix=LD64POST
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/st64_post_inc_ok.mir -o - | FileCheck %s --check-prefix=ST64POST
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/libcall_sdiv_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=LIBCALL
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/libcall_mul64_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=MUL64
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vastart_novarargs_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=VASTART
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/adjcallstack_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=ADJ
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vacopy_mmo.mir -o - 2>&1 | FileCheck %s --check-prefix=VACOPY_MMO
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/post_inc_split_mmo.mir -o - | FileCheck %s --check-prefix=SPLITMMO
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vaarg_i32_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=VAARG32
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vaarg_i64_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=VAARG64
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_abs64.mir -o - 2>&1 | FileCheck %s --check-prefix=ABS64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_not64.mir -o - 2>&1 | FileCheck %s --check-prefix=NOT64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_neg64.mir -o - 2>&1 | FileCheck %s --check-prefix=NEG64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_abs64s.mir -o - 2>&1 | FileCheck %s --check-prefix=ABS64SBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2abs32s.mir -o - 2>&1 | FileCheck %s --check-prefix=X2ABS32SBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2neg32.mir -o - 2>&1 | FileCheck %s --check-prefix=X2NEG32BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x4abs16.mir -o - 2>&1 | FileCheck %s --check-prefix=X4ABS16BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_nsa64.mir -o - 2>&1 | FileCheck %s --check-prefix=NSA64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_seq64.mir -o - 2>&1 | FileCheck %s --check-prefix=SEQ64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_neg64s.mir -o - 2>&1 | FileCheck %s --check-prefix=NEG64SBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2neg32s.mir -o - 2>&1 | FileCheck %s --check-prefix=X2NEG32SBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x4abs16s.mir -o - 2>&1 | FileCheck %s --check-prefix=X4ABS16SBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2abs32.mir -o - 2>&1 | FileCheck %s --check-prefix=X2ABS32BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_movt64.mir -o - 2>&1 | FileCheck %s --check-prefix=MOVT64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_log2.mir -o - 2>&1 | FileCheck %s --check-prefix=LOG2BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_popcount64.mir -o - 2>&1 | FileCheck %s --check-prefix=POPCOUNT64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_slt64.mir -o - 2>&1 | FileCheck %s --check-prefix=SLT64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_sle64.mir -o - 2>&1 | FileCheck %s --check-prefix=SLE64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_movf64.mir -o - 2>&1 | FileCheck %s --check-prefix=MOVF64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_nsaz64.mir -o - 2>&1 | FileCheck %s --check-prefix=NSAZ64BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_exp2.mir -o - 2>&1 | FileCheck %s --check-prefix=EXP2BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_recip.mir -o - 2>&1 | FileCheck %s --check-prefix=RECIPBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_sqrt.mir -o - 2>&1 | FileCheck %s --check-prefix=SQRTBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2hmax32.mir -o - 2>&1 | FileCheck %s --check-prefix=X2HMAX32BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2hmin32.mir -o - 2>&1 | FileCheck %s --check-prefix=X2HMIN32BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x4hmax16.mir -o - 2>&1 | FileCheck %s --check-prefix=X4HMAX16BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x4hmin16.mir -o - 2>&1 | FileCheck %s --check-prefix=X4HMIN16BAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2neg32_l.mir -o - 2>&1 | FileCheck %s --check-prefix=X2NEG32LBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_x2neg32s_l.mir -o - 2>&1 | FileCheck %s --check-prefix=X2NEG32SLBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_nsa32_l.mir -o - 2>&1 | FileCheck %s --check-prefix=NSA32LBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_nsaz32_l.mir -o - 2>&1 | FileCheck %s --check-prefix=NSAZ32LBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_nsa16_l.mir -o - 2>&1 | FileCheck %s --check-prefix=NSA16LBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_nsaz16_l.mir -o - 2>&1 | FileCheck %s --check-prefix=NSAZ16LBAN
+
+# Role: verifier — ExpandPseudos residual matrix. Relocated surfaces
+# (PseudoCALL / LIBCALL_* / VASTART / VACOPY / VAARG_* / ADJCALLSTACK) fail
+# closed here; product owners are CallLowering / legalizer / PEI.
+
+#--- load_addr_fi.mir
+--- |
+  define void @residual_load_addr_fi() { ret void }
+...
+---
+name:            residual_load_addr_fi
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; RESIDUAL: LOAD_ADDR operand kind is not expandable
+    ; RESIDUAL: LOAD_ADDR
+    $r1 = LOAD_ADDR %stack.0
+    RET implicit $r15
+stack:
+  - { id: 0, name: '', type: default, offset: 0, size: 4, alignment: 4 }
+
+#--- setcbr_ok.mir
+--- |
+  define void @expand_setcbr_clears() { ret void }
+...
+---
+name:            expand_setcbr_clears
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SETCBR: CSRW_W
+    ; SETCBR-NOT: SETCBR
+    SETCBR_BEGIN 0, $r1
+    RET implicit $r15
+
+#--- setcbr_end_ok.mir
+--- |
+  define void @expand_setcbr_end() { ret void }
+...
+---
+name:            expand_setcbr_end
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SETCBRE: CSRW_W
+    ; SETCBRE-NOT: SETCBR
+    SETCBR_END 1, $r1
+    RET implicit $r15
+
+#--- load_addr_imm.mir
+--- |
+  define void @expand_load_addr_imm() { ret void }
+...
+---
+name:            expand_load_addr_imm
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; ADDR-NOT: LOAD_ADDR
+    ; ADDR: ADDI32
+    $r1 = LOAD_ADDR 42
+    RET implicit $r15
+
+#--- set_hwloop_ok.mir
+--- |
+  define void @expand_set_hwloop() { ret void }
+...
+---
+name:            expand_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1, %bb.2
+    ; HWLOOP: SET_HWLOOP_W
+    ; HWLOOP-NOT: SET_HWLOOP{{$}}
+    SET_HWLOOP 0, %bb.1, %bb.2, 16
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+  bb.2:
+    RET implicit $r15
+
+#--- set_hwloop_reg_ok.mir
+--- |
+  define void @expand_set_hwloop_reg() { ret void }
+...
+---
+name:            expand_set_hwloop_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r4, $r15
+    successors: %bb.1, %bb.2
+    ; HWLOOPR: SET_HWLOOP_F2_W
+    ; HWLOOPR-NOT: SET_HWLOOP_REG
+    SET_HWLOOP_REG 0, %bb.1, %bb.2, $r4
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+  bb.2:
+    RET implicit $r15
+
+#--- post_inc_ok.mir
+--- |
+  define void @expand_post_inc() { ret void }
+...
+---
+name:            expand_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; POSTINC: S_LW_POST_IMM
+    ; POSTINC-NOT: LD32_POST_INC
+    $r1 = LD32_POST_INC $r2, 4, 0
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- st_post_inc_ok.mir
+--- |
+  define void @expand_st_post_inc() { ret void }
+...
+---
+name:            expand_st_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; STPOST: = ST32_POST 
+    ; STPOST-NOT: ST32_POST_INC
+    ST32_POST_INC $r1, $r2, 4, 0
+    RET implicit $r15, implicit $r2
+
+#--- pseudo_call_ok.mir
+--- |
+  declare void @callee()
+  define void @expand_pseudo_call() { ret void }
+...
+---
+name:            expand_pseudo_call
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CALL: residual expand-owned semantic pseudo
+    $r15 = PseudoCALL @callee, csr_haydn
+    RET implicit $r15
+
+#--- vacopy_ok.mir
+--- |
+  define void @expand_vacopy() { ret void }
+...
+---
+name:            expand_vacopy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; VACOPY: residual expand-owned semantic pseudo
+    VACOPY $r1, $r2
+    RET implicit $r15
+
+#--- vaend_ok.mir
+--- |
+  define void @expand_vaend() { ret void }
+...
+---
+name:            expand_vaend
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; VAEND-NOT: VAEND
+    ; VAEND: RET
+    VAEND $r1
+    RET implicit $r15
+
+#--- post_inc_mmo.mir
+--- |
+  define i32 @expand_post_inc_mmo(ptr %p) {
+    %v = load i32, ptr %p, align 4
+    ret i32 %v
+  }
+...
+---
+name:            expand_post_inc_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; MMO: S_LW_POST_IMM{{.*}}load
+    ; MMO-NOT: LD32_POST_INC
+    $r1 = LD32_POST_INC $r2, 4, 0 :: (load (s32) from %ir.p)
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- ld64_post_inc_ok.mir
+--- |
+  define i64 @expand_ld64_post_inc(ptr %p) {
+    %v = load i64, ptr %p, align 8
+    ret i64 %v
+  }
+...
+---
+name:            expand_ld64_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; LD64POST: D_LDW_POST_IMM{{.*}}load
+    ; LD64POST-NOT: LD64_POST_INC
+    $d0 = LD64_POST_INC $r2, 8, 0 :: (load (s64) from %ir.p)
+    RET implicit $r15, implicit $d0, implicit $r2
+
+#--- st64_post_inc_ok.mir
+--- |
+  define void @expand_st64_post_inc(ptr %p, i64 %v) {
+    store i64 %v, ptr %p, align 8
+    ret void
+  }
+...
+---
+name:            expand_st64_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $r2, $r15
+    ; ST64POST: = ST64_POST {{.*}}store
+    ; ST64POST-NOT: ST64_POST_INC
+    ST64_POST_INC $d0, $r2, 8, 0 :: (store (s64) into %ir.p)
+    RET implicit $r15, implicit $r2
+
+#--- libcall_sdiv_ok.mir
+--- |
+  define i32 @expand_libcall_sdiv(i32 %a, i32 %b) {
+    %r = sdiv i32 %a, %b
+    ret i32 %r
+  }
+...
+---
+name:            expand_libcall_sdiv
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r3, $r4, $r15
+    ; LIBCALL: residual expand-owned semantic pseudo
+    $r1 = LIBCALL_SDIV $r3, $r4, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit-def $r15
+    RET implicit $r15, implicit $r1
+
+#--- libcall_mul64_ok.mir
+--- |
+  define i64 @expand_libcall_mul64(i64 %a, i64 %b) {
+    %r = mul i64 %a, %b
+    ret i64 %r
+  }
+...
+---
+name:            expand_libcall_mul64
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d2, $d3, $r15
+    ; MUL64: residual expand-owned semantic pseudo
+    $d0 = LIBCALL_MUL64 $d2, $d3, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit-def $r15
+    RET implicit $r15, implicit $d0
+
+#--- vastart_novarargs_ok.mir
+--- |
+  define void @expand_vastart_novarargs() { ret void }
+...
+---
+name:            expand_vastart_novarargs
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; VASTART: residual expand-owned semantic pseudo
+    VASTART $r1
+    RET implicit $r15
+
+#--- adjcallstack_ok.mir
+--- |
+  define void @expand_adjcallstack() { ret void }
+...
+---
+name:            expand_adjcallstack
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; ADJ: residual expand-owned semantic pseudo
+    ADJCALLSTACKDOWN 0, 0, implicit-def $r13, implicit $r13
+    ADJCALLSTACKUP 0, 0, implicit-def $r13, implicit $r13
+    RET implicit $r15
+
+#--- vacopy_mmo.mir
+--- |
+  define void @expand_vacopy_mmo(ptr %d, ptr %s) {
+    ret void
+  }
+...
+---
+name:            expand_vacopy_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; VACOPY_MMO: residual expand-owned semantic pseudo
+    VACOPY $r1, $r2 :: (load store (s160))
+    RET implicit $r15
+
+#--- post_inc_split_mmo.mir
+--- |
+  define i32 @expand_post_inc_split_mmo(ptr %p) {
+    %v = load i32, ptr %p, align 4
+    ret i32 %v
+  }
+...
+---
+name:            expand_post_inc_split_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; Non-zero offset forces LD32 + ADDI32 split; MMO must land on LD32.
+    ; SPLITMMO: LD32{{.*}}load
+    ; SPLITMMO: ADDI32
+    ; SPLITMMO-NOT: LD32_POST_INC
+    $r1 = LD32_POST_INC $r2, 4, 4 :: (load (s32) from %ir.p)
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- vaarg_i32_ok.mir
+--- |
+  define i32 @expand_vaarg_i32(ptr %ap) {
+    %v = va_arg ptr %ap, i32
+    ret i32 %v
+  }
+...
+---
+name:            expand_vaarg_i32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; VAARG32: residual expand-owned semantic pseudo
+    $r1 = VAARG_I32 $r2
+    RET implicit $r15, implicit $r1
+
+#--- vaarg_i64_ok.mir
+--- |
+  define i64 @expand_vaarg_i64(ptr %ap) {
+    %v = va_arg ptr %ap, i64
+    ret i64 %v
+  }
+...
+---
+name:            expand_vaarg_i64
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; VAARG64: residual expand-owned semantic pseudo
+    $d0 = VAARG_I64 $r2
+    RET implicit $r15, implicit $d0
+
+#--- residual_abs64.mir
+--- |
+  define i64 @residual_abs64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_abs64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; ABS64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = ABS64 $d0
+    RET implicit $r15
+
+#--- residual_not64.mir
+--- |
+  define i64 @residual_not64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_not64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NOT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = NOT64 $d0
+    RET implicit $r15
+
+#--- residual_neg64.mir
+--- |
+  define i64 @residual_neg64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_neg64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NEG64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = NEG64 $d0
+    RET implicit $r15
+
+#--- residual_abs64s.mir
+--- |
+  define i64 @residual_abs64s_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_abs64s_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; ABS64SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = ABS64S $d0
+    RET implicit $r15
+
+#--- residual_x2abs32s.mir
+--- |
+  define <2 x i32> @residual_x2abs32s_logical(<2 x i32> %a) {
+    ret <2 x i32> %a
+  }
+...
+---
+name:            residual_x2abs32s_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2ABS32SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X2ABS32S $d0
+    RET implicit $r15
+
+#--- residual_x2neg32.mir
+--- |
+  define <2 x i32> @residual_x2neg32_logical(<2 x i32> %a) {
+    ret <2 x i32> %a
+  }
+...
+---
+name:            residual_x2neg32_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2NEG32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X2NEG32 $d0
+    RET implicit $r15
+
+#--- residual_x4abs16.mir
+--- |
+  define <4 x i16> @residual_x4abs16_logical(<4 x i16> %a) {
+    ret <4 x i16> %a
+  }
+...
+---
+name:            residual_x4abs16_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X4ABS16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X4ABS16 $d0
+    RET implicit $r15
+
+#--- residual_nsa64.mir
+--- |
+  define i32 @residual_nsa64_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_nsa64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NSA64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = NSA64 $d0
+    RET implicit $r15
+
+#--- residual_seq64.mir
+--- |
+  define i64 @residual_seq64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_seq64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; SEQ64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = SEQ64 $d0, implicit-def $sfr
+    RET implicit $r15
+
+#--- residual_neg64s.mir
+--- |
+  define i64 @residual_neg64s_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_neg64s_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NEG64SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = NEG64S $d0
+    RET implicit $r15
+
+#--- residual_x2neg32s.mir
+--- |
+  define <2 x i32> @residual_x2neg32s_logical(<2 x i32> %a) {
+    ret <2 x i32> %a
+  }
+...
+---
+name:            residual_x2neg32s_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2NEG32SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X2NEG32S $d0
+    RET implicit $r15
+
+#--- residual_x4abs16s.mir
+--- |
+  define <4 x i16> @residual_x4abs16s_logical(<4 x i16> %a) {
+    ret <4 x i16> %a
+  }
+...
+---
+name:            residual_x4abs16s_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X4ABS16SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X4ABS16S $d0
+    RET implicit $r15
+
+#--- residual_x2abs32.mir
+--- |
+  define <2 x i32> @residual_x2abs32_logical(<2 x i32> %a) {
+    ret <2 x i32> %a
+  }
+...
+---
+name:            residual_x2abs32_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2ABS32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X2ABS32 $d0
+    RET implicit $r15
+
+#--- residual_movt64.mir
+--- |
+  define i64 @residual_movt64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_movt64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; MOVT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = MOVT64 $d0, implicit $sfr
+    RET implicit $r15
+
+#--- residual_log2.mir
+--- |
+  define i32 @residual_log2_logical(i32 %a) {
+    ret i32 %a
+  }
+...
+---
+name:            residual_log2_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; LOG2BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = LOG2 $r1
+    RET implicit $r15
+
+#--- residual_popcount64.mir
+--- |
+  define i32 @residual_popcount64_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_popcount64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; POPCOUNT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = POPCOUNT64 $d0
+    RET implicit $r15
+
+#--- residual_slt64.mir
+--- |
+  define i64 @residual_slt64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_slt64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; SLT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = SLT64 $d0, implicit-def $sfr
+    RET implicit $r15
+
+#--- residual_sle64.mir
+--- |
+  define i64 @residual_sle64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_sle64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; SLE64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = SLE64 $d0, implicit-def $sfr
+    RET implicit $r15
+
+#--- residual_movf64.mir
+--- |
+  define i64 @residual_movf64_logical(i64 %a) {
+    ret i64 %a
+  }
+...
+---
+name:            residual_movf64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; MOVF64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = MOVF64 $d0, implicit $sfr
+    RET implicit $r15
+
+#--- residual_nsaz64.mir
+--- |
+  define i32 @residual_nsaz64_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_nsaz64_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NSAZ64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = NSAZ64 $d0
+    RET implicit $r15
+
+#--- residual_exp2.mir
+--- |
+  define i32 @residual_exp2_logical(i32 %a) {
+    ret i32 %a
+  }
+...
+---
+name:            residual_exp2_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; EXP2BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = EXP2 $r1
+    RET implicit $r15
+
+#--- residual_recip.mir
+--- |
+  define i32 @residual_recip_logical(i32 %a) {
+    ret i32 %a
+  }
+...
+---
+name:            residual_recip_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; RECIPBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = RECIP $r1
+    RET implicit $r15
+
+#--- residual_sqrt.mir
+--- |
+  define i32 @residual_sqrt_logical(i32 %a) {
+    ret i32 %a
+  }
+...
+---
+name:            residual_sqrt_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SQRTBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = SQRT $r1
+    RET implicit $r15
+
+#--- residual_x2hmax32.mir
+--- |
+  define i32 @residual_x2hmax32_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_x2hmax32_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2HMAX32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = X2HMAX32 $d0
+    RET implicit $r15
+
+#--- residual_x2hmin32.mir
+--- |
+  define i32 @residual_x2hmin32_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_x2hmin32_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2HMIN32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = X2HMIN32 $d0
+    RET implicit $r15
+
+#--- residual_x4hmax16.mir
+--- |
+  define i32 @residual_x4hmax16_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_x4hmax16_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X4HMAX16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = X4HMAX16 $d0
+    RET implicit $r15
+
+#--- residual_x4hmin16.mir
+--- |
+  define i32 @residual_x4hmin16_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_x4hmin16_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X4HMIN16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = X4HMIN16 $d0
+    RET implicit $r15
+
+#--- residual_x2neg32_l.mir
+--- |
+  define void @residual_x2neg32_l_logical(i64 %a) {
+    ret void
+  }
+...
+---
+name:            residual_x2neg32_l_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2NEG32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X2NEG32_L $d0
+    RET implicit $r15
+
+#--- residual_x2neg32s_l.mir
+--- |
+  define void @residual_x2neg32s_l_logical(i64 %a) {
+    ret void
+  }
+...
+---
+name:            residual_x2neg32s_l_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; X2NEG32SLBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $d0 = X2NEG32S_L $d0
+    RET implicit $r15
+
+#--- residual_nsa32_l.mir
+--- |
+  define i32 @residual_nsa32_l_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_nsa32_l_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NSA32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = NSA32_L $d0
+    RET implicit $r15
+
+#--- residual_nsaz32_l.mir
+--- |
+  define i32 @residual_nsaz32_l_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_nsaz32_l_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NSAZ32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = NSAZ32_L $d0
+    RET implicit $r15
+
+#--- residual_nsa16_l.mir
+--- |
+  define i32 @residual_nsa16_l_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_nsa16_l_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NSA16LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = NSA16_L $d0
+    RET implicit $r15
+
+#--- residual_nsaz16_l.mir
+--- |
+  define i32 @residual_nsaz16_l_logical(i64 %a) {
+    ret i32 0
+  }
+...
+---
+name:            residual_nsaz16_l_logical
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r15
+    ; NSAZ16LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    $r1 = NSAZ16_L $d0
+    RET implicit $r15

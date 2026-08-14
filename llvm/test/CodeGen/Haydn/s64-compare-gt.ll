@@ -23,8 +23,8 @@ define i32 @cmp_sgt_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; or32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %cmp = icmp sgt i64 %a, %b
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -44,8 +44,8 @@ define i32 @cmp_ugt_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; or32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %cmp = icmp ugt i64 %a, %b
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -67,8 +67,8 @@ define i32 @cmp_sle_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %cmp = icmp sle i64 %a, %b
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -89,8 +89,8 @@ define i32 @cmp_ule_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %cmp = icmp ule i64 %a, %b
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -112,8 +112,8 @@ define i32 @cmp_sge_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %cmp = icmp sge i64 %a, %b
   %r = zext i1 %cmp to i32
   ret i32 %r
@@ -134,8 +134,8 @@ define i32 @cmp_uge_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %cmp = icmp uge i64 %a, %b
   %r = zext i1 %cmp to i32
   ret i32 %r

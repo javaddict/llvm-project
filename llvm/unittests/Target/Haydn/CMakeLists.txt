@@ -18,6 +18,7 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_llvm_target_unittest(HaydnTests
+  HaydnAdmittedPerOpRecordTest.cpp
   HaydnAIEParityBundleTest.cpp
   HaydnAlternateDescriptorsTest.cpp
   HaydnBundleFormatSolverTest.cpp
@@ -30,6 +31,7 @@ add_llvm_target_unittest(HaydnTests
   HaydnFormatRegistryTest.cpp
   HaydnHWLoopContractsTest.cpp
   HaydnHazardRecognizerTest.cpp
+  HaydnLibcallNamesTest.cpp
   HaydnMCFormatsTest.cpp
   HaydnMaterializeMultiOpcodeTest.cpp
   HaydnMemoryCycleTest.cpp
@@ -38,3 +40,7 @@ add_llvm_target_unittest(HaydnTests
   HaydnRelocLayoutTest.cpp
   HaydnResourceRestrictionClassesTest.cpp
   )
+
+if(TARGET HaydnFormatERecordsCheck)
+  add_dependencies(HaydnTests HaydnFormatERecordsCheck)
+endif()

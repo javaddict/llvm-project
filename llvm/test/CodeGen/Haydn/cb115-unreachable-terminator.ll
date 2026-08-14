@@ -11,16 +11,16 @@
 
 define void @all_unreach() {
 ; CHECK-LABEL: all_unreach:
-; CHECK: jalr_w{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
+; CHECK: jalr{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
 ; CHECK: .Lfunc_end{{[0-9]+}}:
   unreachable
 }
 
 define i32 @maybe_unreach(i1 %c) {
 ; CHECK-LABEL: maybe_unreach:
-; CHECK: jalr_w{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
+; CHECK: jalr{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
 ; Unreachable arm must also RET — not an empty LBB before.Lfunc_end.
-; CHECK: jalr_w{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
+; CHECK: jalr{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
 ; CHECK: .Lfunc_end{{[0-9]+}}:
   br i1 %c, label %a, label %b
 a:
@@ -31,6 +31,6 @@ b:
 
 define void @empty_ret() {
 ; CHECK-LABEL: empty_ret:
-; CHECK: jalr_w{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
+; CHECK: jalr{{(\.s[012])?}}{{.*}}r0{{.*}}lr{{.*}}0
   ret void
 }

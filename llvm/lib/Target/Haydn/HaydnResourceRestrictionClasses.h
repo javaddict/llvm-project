@@ -28,7 +28,7 @@
 // Authority plan surfaces: PackLegality product rules 1–7; HaydnResourceCycle
 // same-issue-cycle adapter; HaydnHazardRecognizer ports/slots/WAW/locked DSP
 // and CSRW↔SET; MachinePipeliner DDG for class 2. Do not invent a second
-// product format row, multi-width object, pad-drop policy, FlexMap, or new
+// product format row, multi-width object, pad-drop policy, or new
 // pass/side-map from this catalog.
 //
 // Dedicated unit: unittests/Target/Haydn/HaydnResourceRestrictionClassesTest.cpp
@@ -131,6 +131,18 @@ inline constexpr unsigned ProductMaxInstrStageCycles = 1;
 /// product-enabled. Issue-alone (class 1) remains the only live rule.
 inline constexpr bool ProductDraftArctanMultiCycleLockEnabled = false;
 
+/// Published SIN_COS/ARCTAN dest OperandCycles (uimm4_max+2). Not scoreboard
+/// depth while the class-3 lock is off — clamp to issue-cycle ALU latency.
+inline constexpr unsigned SinCosScaffoldDataLatency = 17;
+
+/// Data latency that may size the HR scoreboard or stall auditor.
+inline constexpr unsigned clampPublishedDataLatency(unsigned Lat) {
+  if (!ProductDraftArctanMultiCycleLockEnabled &&
+      Lat >= SinCosScaffoldDataLatency)
+    return 1;
+  return Lat;
+}
+
 /// Operand-dependent format predicates beyond MCInstrDesc are not product-
 /// enabled either; SMS-HOOK keeps a fail-closed hook for when they land.
 inline constexpr bool ProductOperandDependentFormatPredicateEnabled = false;
@@ -177,6 +189,12 @@ static_assert(ProductMaxInstrStageCycles == 1,
               "product InstrStage cycles are single-cycle only");
 static_assert(!ProductDraftArctanMultiCycleLockEnabled,
               "draft ARCTAN multi-cycle lock is not product-enabled");
+static_assert(SinCosScaffoldDataLatency == 17,
+              "SinCos scaffold dest latency is uimm4_max+2");
+static_assert(clampPublishedDataLatency(17) == 1,
+              "SinCos scaffold does not size the product scoreboard");
+static_assert(clampPublishedDataLatency(2) == 2,
+              "load Data_Latency 2 is unchanged");
 static_assert(!ProductOperandDependentFormatPredicateEnabled,
               "operand-dependent format predicates are not product-enabled");
 

@@ -28,7 +28,7 @@ public:
 
   // Format E: PC is the parcel base, not a mid-parcel field byte offset.
   // Entry fields may sit at byte 6+; default MC P = frag+fixup_off mis-aligns
-  // hwloop ÷4 and halfword branch checks. Compensate like Xtensa l32r.
+  // hwloop ÷4 and byte branch checks. Compensate like Xtensa l32r.
   std::optional<bool> evaluateFixup(const MCFragment &, MCFixup &, MCValue &,
                                     uint64_t &Value) override;
 
@@ -36,12 +36,12 @@ public:
   bool mayNeedRelaxation(unsigned Opcode, ArrayRef<MCOperand> Operands,
                          const MCSubtargetInfo &STI) const override;
 
-  // No MC-layer compression relaxation (retired C_* shells).
+  // Format E has no MC-layer opcode relaxation.
   bool fixupNeedsRelaxationAdvanced(const MCFragment &, const MCFixup &,
                                     const MCValue &, uint64_t Value,
                                     bool Resolved) const override;
 
-  // Expand a compressed 16-bit instruction to its 32-bit equivalent.
+  // Format E has no MC-layer opcode relaxation.
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override;
 
@@ -53,11 +53,6 @@ public:
 
   /// Stamp production E96 ELF e_flags on every object (llvm-mc and llc).
   bool finishLayout() const override;
-
-private:
-  // Map a compressed opcode to its 32-bit equivalent.
-  // Returns the original opcode if no relaxation mapping exists.
-  unsigned getRelaxedOpcode(unsigned Opcode) const;
 };
 
 } // namespace llvm

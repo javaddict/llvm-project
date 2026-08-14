@@ -1,0 +1,89 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/ld32_mmo.mir -o - | FileCheck %s --check-prefix=LD32
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/st32_mmo.mir -o - | FileCheck %s --check-prefix=ST32
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/ld64_mmo.mir -o - | FileCheck %s --check-prefix=LD64
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/st64_mmo.mir -o - | FileCheck %s --check-prefix=ST64
+#
+# Role: verifier — leftover *_POST_INC residual expand (single ExpandPseudos
+# helper) transfers MachineMemOperands onto the real load/store. Product
+# form is selected at ISel (gisel/postinc-mmo.ll).
+
+#--- ld32_mmo.mir
+--- |
+  define i32 @early_ld32_mmo(ptr %p) {
+    %v = load i32, ptr %p, align 4
+    ret i32 %v
+  }
+...
+---
+name:            early_ld32_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; LD32: S_LW_POST_IMM{{.*}}load
+    ; LD32-NOT: LD32_POST_INC
+    $r1 = LD32_POST_INC $r2, 4, 0 :: (load (s32) from %ir.p)
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- st32_mmo.mir
+--- |
+  define void @early_st32_mmo(ptr %p, i32 %v) {
+    store i32 %v, ptr %p, align 4
+    ret void
+  }
+...
+---
+name:            early_st32_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; ST32: ST32_POST{{.*}}store
+    ; ST32-NOT: ST32_POST_INC
+    ST32_POST_INC $r1, $r2, 4, 0 :: (store (s32) into %ir.p)
+    RET implicit $r15, implicit $r2
+
+#--- ld64_mmo.mir
+--- |
+  define i64 @early_ld64_mmo(ptr %p) {
+    %v = load i64, ptr %p, align 8
+    ret i64 %v
+  }
+...
+---
+name:            early_ld64_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; LD64: D_LDW_POST_IMM{{.*}}load
+    ; LD64-NOT: LD64_POST_INC
+    $d0 = LD64_POST_INC $r2, 8, 0 :: (load (s64) from %ir.p)
+    RET implicit $r15, implicit $d0, implicit $r2
+
+#--- st64_mmo.mir
+--- |
+  define void @early_st64_mmo(ptr %p, i64 %v) {
+    store i64 %v, ptr %p, align 8
+    ret void
+  }
+...
+---
+name:            early_st64_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $r2, $r15
+    ; ST64: ST64_POST{{.*}}store
+    ; ST64-NOT: ST64_POST_INC
+    ST64_POST_INC $d0, $r2, 8, 0 :: (store (s64) into %ir.p)
+    RET implicit $r15, implicit $r2

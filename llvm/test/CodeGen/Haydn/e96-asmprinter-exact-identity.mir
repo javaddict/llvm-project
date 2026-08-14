@@ -1,13 +1,13 @@
 # RUN: rm -rf %t && split-file %s %t
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
-# RUN:   %t/missing_row.mir -o - 2>&1 | FileCheck %s --check-prefix=MISSING-ROW
+# RUN: llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/missing_row.mir -o - | FileCheck %s --check-prefix=COUNT-ROW
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/completion_mismatch.mir -o - 2>&1 | FileCheck %s --check-prefix=COMP-MISMATCH
 # REQUIRES: haydn-registered-target
 
-# Role: verifier — AsmPrinter serialize-only exact identity: durable
-# BundleFormatRowID is mandatory; present CompletionStateID must match
-# row + real membership (no filler reselection / member-count invent).
+# Role: verifier — E2 vs E3 is a bundle-level fact (stamp or child count).
+# A 1-child BUNDLE with no row stamp encodes as E2. Present
+# CompletionStateID must still match row + real membership.
 
 #--- missing_row.mir
 --- |
@@ -20,8 +20,8 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r0, $r1, $r15
-    ; MISSING-ROW: HaydnAsmPrinter: BUNDLE missing BundleFormatRowID
-    ; MISSING-ROW: refuse member-count / PacketFormats composite reselection
+    ; COUNT-ROW: add32
+    ; COUNT-ROW: jalr
     BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     }

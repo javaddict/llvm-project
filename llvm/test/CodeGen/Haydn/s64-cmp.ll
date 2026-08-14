@@ -43,10 +43,11 @@ define i32 @cmp_slt_i64(i64 %a, i64 %b) {
   ret i32 %r
 }
 
-; Test 64-bit comparison in branch
+; Test 64-bit comparison in branch. Identical empty then/else DCE the
+; compare (both paths ret void); pin the epilogue, not a dead seq32.
 define void @cmp_branch_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_branch_i64:
-; CHECK: seq32
+; CHECK: jalr
 entry:
   %cond = icmp eq i64 %a, %b
   br i1 %cond, label %then, label %else

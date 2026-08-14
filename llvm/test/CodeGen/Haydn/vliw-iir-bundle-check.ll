@@ -40,7 +40,7 @@ entry:
 ; ASM-LABEL: biquad_simple:
 ; ASM-DAG: mull
 ; ASM-DAG: sub32
-; ASM: jalr_w
+; ASM: jalr
 
 ; IIR biquad with memory load/store for state array.
 define void @biquad_with_state(i32 %xn, ptr nocapture %state) nounwind {
@@ -66,7 +66,7 @@ entry:
 ; ASM-DAG: mull
 ; ASM-DAG: sub32
 ; ASM-DAG: st32
-; ASM: jalr_w
+; ASM: jalr
 
 ; Block processing: apply biquad to N samples in a loop.
 define void @biquad_process_block(ptr nocapture %input, ptr nocapture %output,
@@ -113,9 +113,9 @@ exit:
 
 ; ASM-LABEL: biquad_process_block:
 ; ASM-DAG: mull
-; ASM-DAG: {{bnez_w|blt_w|beqz_w}}
+; ASM-DAG: {{bnez|blt|beqz}}
 ; ASM-DAG: mull
 ; ASM-DAG: sub32
 ; ASM-DAG: ld32
 ; ASM-DAG: st32
-; ASM-DAG: jalr_w
+; ASM-DAG: jalr

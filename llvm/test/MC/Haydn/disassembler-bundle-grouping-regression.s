@@ -43,7 +43,7 @@ add32 r1, r2, r3
 # FileCheck: each parcel is exactly one objdump line at +0x10.
 # Printer spacing between mnemonic and operands may vary; use {{.*}}.
 # High-entry-first print (CB-142 / #10). One grouped line per parcel.
-# CHECK: {{.*}}0: { nop; add32 r0, r1, r2; add64 d0, d1, d2 }
+# CHECK: {{.*}}0: { add32 r0, r1, r2; add64 d0, d1, d2 }
 # CHECK-NEXT: c: { add64 d0, d1, d2; add64 d3, d4, d5; add32 r0, r1, r2 }
 # CHECK-NEXT: {{.*}}18: { add32 r0, r1, r2; add64 d0, d1, d2; add64 d3, d4, d5 }
 # CHECK-NEXT: {{.*}}24: { nop; add32 r1, r2, r3 }

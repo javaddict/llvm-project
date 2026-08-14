@@ -54,11 +54,11 @@ body:             |
 # MIR-LABEL: name: late_mc_csrw_soft_edge
 # Exact-committed Full parcels (member setDesc after finalize).
 # MIR: BUNDLE 0
-# MIR: CSRW_W
+# MIR: CSRW_E2_E0_ALU0_I8
 # MIR: BUNDLE 0
 # MIR: SUBI32
 # MIR: BUNDLE 0
-# MIR: BNEZ_W
+# MIR: BNEZ_E2
 # MIR-NOT: SETCBR
 # MIR-NOT: LoopDec
 # MIR-NOT: LoopJNZ
@@ -100,7 +100,7 @@ body:             |
 
 # MIR-LABEL: name: late_mc_set_hwloop_final
 # MIR: BUNDLE 0
-# MIR: SET_HWLOOP_W
+# MIR: SET_HWLOOP_E2
 # MIR-NOT: {{^    SET_HWLOOP }}
 # MIR-NOT: LoopStart
 # MIR-NOT: SET_HWLOOP_REG

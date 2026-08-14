@@ -13,9 +13,9 @@
 
 #include "HaydnAsmPrinter.h"
 #include "Haydn.h"
-#include "HaydnBundle.h"
 #include "HaydnBundlePlan.h"
 #include "HaydnBundleVerify.h"
+#include "HaydnFormatERecords.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/bit.h"
 #include "HaydnInstrInfo.h"
@@ -25,9 +25,9 @@
 #include "MCTargetDesc/HaydnFixupKinds.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnInstPrinter.h"
-#include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "TargetInfo/HaydnTargetInfo.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -334,13 +334,44 @@ void HaydnAsmPrinter::registerSymbolicOperands(const MCInst &Inst) const {
   }
 }
 
+/// Wrap LUI/ADDI32/ORI32/ANDI32/XORI32 symbolic immediates as %hi12/%lo20
+/// so llc .s re-assembles with the same fixups as the opcode default.
+static void applyHiLoSpecifiers(MCInst &Inst, MCContext &Ctx,
+                                const MCInstrInfo &MII) {
+  for (unsigned I = 0, E = Inst.getNumOperands(); I != E; ++I) {
+    MCOperand &MO = Inst.getOperand(I);
+    if (MO.isInst() && MO.getInst()) {
+      applyHiLoSpecifiers(*const_cast<MCInst *>(MO.getInst()), Ctx, MII);
+      continue;
+    }
+    if (!MO.isExpr() || isa<MCSpecifierExpr>(MO.getExpr()))
+      continue;
+    std::string Log =
+        haydn::format_e::peelLogicalOpcodeName(MII.getName(Inst.getOpcode()));
+    uint16_t Spec = 0;
+    if (StringRef(Log).equals_insensitive("LUI"))
+      Spec = ELF::R_HAYDN_HI12;
+    else if (StringRef(Log).equals_insensitive("ADDI32") ||
+             StringRef(Log).equals_insensitive("ORI32") ||
+             StringRef(Log).equals_insensitive("ANDI32") ||
+             StringRef(Log).equals_insensitive("XORI32"))
+      Spec = ELF::R_HAYDN_LO20;
+    if (!Spec)
+      continue;
+    MO = MCOperand::createExpr(
+        MCSpecifierExpr::create(MO.getExpr(), Spec, Ctx));
+  }
+}
+
 void HaydnAsmPrinter::emitWrappedInst(const MCInst &Inst) {
   // Product encode path is Format E (12 B parcels). Standalone MCInst is
   // streamed for residual representation expands; CodeGen bundles already
   // emit Format E composite opcodes (BUNDLE_E96_*). registerSymbolicOperands
   // for Expr. No force-BUNDLE NOP-pad and no multi-width bare emit.
-  registerSymbolicOperands(Inst);
-  EmitToStreamer(*OutStreamer, Inst);
+  MCInst Out = Inst;
+  applyHiLoSpecifiers(Out, OutContext, *MF->getSubtarget().getInstrInfo());
+  registerSymbolicOperands(Out);
+  EmitToStreamer(*OutStreamer, Out);
 }
 
 // : print-time fixed-R12 AT helpers removed. VASTART/VACOPY expand via
@@ -462,18 +493,11 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       }
     }
   }
-  // Handle VLIW bundles: AIEBaseAsmPrinter.cpp:128-184 peer.
-  //
-  //   Bundle.add(children) → getFormatOrNull → Format E entry operands
-  //
-  // Placement is post-setDesc member Desc getSlotKind → Bundle SlotMap
-  // (AIEBaseMCFormats.cpp:66-75; AIEBundle.h:92-145). Residual multi-slot
-  // logicals use Bundle pickSlot tryAdd (same canAdd authority) — serialize
-  // only, not a second placement/encode path. Composite MC opcode is the
-  // product Format E row (BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY);
-  // Legacy full-width is never product-selected. Encode operand order is entry
-  // dag e0..eN; residual SlotMap may still name S0/S1/S2 FieldSlots so
-  // members are ordered by Bundle.getInstrs() with NOP pad to entry count.
+  // Handle VLIW bundles. AIE: children are already composite operand order;
+  // the bundle format TD picks the row. Haydn analogue: membership order is
+  // e0, e1, (e2). E2 vs E3 is the BUNDLE-root row stamp, else child count
+  // (3 reals → E96ThreeEntry, else E96TwoEntry). Do not re-run canAdd /
+  // PacketFormats on an already-formed BUNDLE and do not peel _S*.
   // one-to-one: only representation expands (B/RET/BR_JT/PseudoCALLIndirect).
   // Residual LOADI32/LOAD_ADDR/SETCBR/Loop* fail closed — no multi-cycle repair.
   if (MI->isBundle()) {
@@ -491,8 +515,8 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
                  "LoopDec/JNZ→SUBI32/BNEZ_W; LoopStart→SET_HWLOOP_*)");
     }
 
-    HaydnMCFormats Fmts;
-    Haydn::MCBundle Bundle(&Fmts);
+    SmallVector<MCInst *, 4> TypedKids;
+    SmallVector<const MachineInstr *, 4> RawKids;
 
     // AIEBaseAsmPrinter.cpp:143-154: verbose per-slot Spill/Reload comments
     // on BUNDLE children (base AsmPrinter only comments the BUNDLE header).
@@ -503,12 +527,31 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     for (MachineBasicBlock::const_instr_iterator E =
              MI->getParent()->instr_end();
          I != E && I->isInsideBundle(); ++I) {
- // Skip debug / pure meta. wraps real MIs as BUNDLE children.
+      // Skip debug / pure meta. wraps real MIs as BUNDLE children.
       // One-to-one representation expands only: B→BEQZ_W, RET/BR_JT/
       // PseudoCALLIndirect→JALR_W. Skipping Haydn::B as isPseudo() used to
       // turn singleton BUNDLEs into all-NOP parcels (MEMORY_FAULT).
       if (I->isDebugInstr() || I->isImplicitDef() || I->isKill() ||
           I->isCFIInstruction())
+        continue;
+      RawKids.push_back(&*I);
+    }
+    // Pad NOP beside real work is CompletionState (Finalize already erases
+    // it). A NOP-only BUNDLE is the architectural idle/stall parcel and
+    // must encode — skipping it leaves AllEntriesReal vs 0 typed kids.
+    auto isPadNop = [](unsigned Opc) {
+      return haydn::format_e::logicalOpcodeOrSelf(Opc) == Haydn::NOP;
+    };
+    bool HasNonNop = false;
+    for (const MachineInstr *Kid : RawKids) {
+      if (!isPadNop(Kid->getOpcode())) {
+        HasNonNop = true;
+        break;
+      }
+    }
+
+    for (const MachineInstr *I : RawKids) {
+      if (HasNonNop && isPadNop(I->getOpcode()))
         continue;
 
       if (VerboseSpillComments)
@@ -569,59 +612,27 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         MCInstLowering.Lower(&*I, *ChildInst);
       }
 
-      // AIE Bundle.add pre-condition: canAdd or fail closed (no emergency
-      // multi-parcel split — AIE assert Format / plan §3.1).
-      if (!Bundle.canAdd(ChildInst->getOpcode())) {
-        std::string Msg;
-        raw_string_ostream OS(Msg);
-        OS << "HaydnAsmPrinter: oversubscribed parcel (Bundle.canAdd "
-              "failed) after pack — Desc-only placement, fail-closed (B3.4; "
-              "AIEBaseAsmPrinter.cpp:162 assert Format peer). Fix PostRA "
-              "placement. Bundle MIR:\n";
-        MI->print(OS);
-        report_fatal_error(Twine(OS.str()));
-      }
-      Bundle.add(ChildInst);
+      // Membership order is the composite operand order. E2/E3 is a
+      // bundle-level fact (stamp or child count), not a canAdd replan.
+      TypedKids.push_back(ChildInst);
     }
 
-    // Unsupported single child with no format/slot (standalone escape) must
- // not silently become a 3×NOP parcel. Post- children are members or
-    // expandable pseudos; residual gaps fail closed.
-    if (Bundle.isStandalone()) {
-      std::string Msg;
-      raw_string_ostream OS(Msg);
-      OS << "HaydnAsmPrinter: standalone unsupported BUNDLE child (no "
-            "getSlotKind / format) — refuse silent drop (B3.4). Bundle MIR:\n";
-      MI->print(OS);
-      report_fatal_error(Twine(OS.str()));
-    }
-
-    // AIE: const VLIWFormat *Format = Bundle.getFormatOrNull(); assert(Format);
-    // Empty stall (all meta skipped) has OccupiedSlots==0; product Format E
-    // rows cover empty (getPacketFormats / productCovers).
-    const VLIWFormat *Format = Bundle.getFormatOrNull();
-    if (!Format) {
-      std::string Msg;
-      raw_string_ostream OS(Msg);
-      OS << "HaydnAsmPrinter: no covering packet format for OccupiedSlots="
-         << Bundle.getOccupiedSlots()
-         << " (getFormatOrNull null; AIEBaseAsmPrinter.cpp:162-163). "
-            "Bundle MIR:\n";
-      MI->print(OS);
-      report_fatal_error(Twine(OS.str()));
-    }
-
-    // Product composite: durable BUNDLE-root BundleFormatRowID is mandatory.
-    // No PacketFormats / member-count invent when the stamp is missing.
+    // Product composite: 3 reals are E3 at the bundle root. Otherwise
+    // keep the stamped row or default E2.
     unsigned CompositeOpc = 0;
     unsigned NumEntries = 2;
-    auto Row = haydn::bundle::getBundleRowID(*MI);
-    if (!Row) {
+    std::optional<haydn::bundle::BundleFormatRowID> Row =
+        haydn::bundle::getBundleRowID(*MI);
+    // Three reals cannot be E2. Child count at the bundle root wins over a
+    // stale E2 stamp; otherwise keep the stamp or default E2.
+    if (TypedKids.size() >= 3)
+      Row = haydn::bundle::BundleFormatRowID::E96ThreeEntry;
+    else if (!Row)
+      Row = haydn::bundle::BundleFormatRowID::E96TwoEntry;
+    if (TypedKids.size() > 3)
       report_fatal_error(
-          "HaydnAsmPrinter: BUNDLE missing BundleFormatRowID — "
-          "refuse member-count / PacketFormats composite reselection",
+          "HaydnAsmPrinter: BUNDLE has more than 3 real children",
           /*GenCrashDiag=*/false);
-    }
     if (*Row == haydn::format::BundleFormatRowID::E96ThreeEntry) {
       CompositeOpc = Haydn::BUNDLE_E96_THREE_ENTRY;
       NumEntries = 3;
@@ -633,15 +644,29 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
           "HaydnAsmPrinter: non-product BundleFormatRowID on BUNDLE root",
           /*GenCrashDiag=*/false);
     }
+    // Product emission gate: non-empty cycles authorize architectural NOP pad
+    // into MC only under full-slot product-legal completion (AllEntriesReal).
+    // Unqualified singleton/underfill stub IDs must never reach executable
+    // NOP fill as a substitute for open underfill/top-pad answers. Missing
+    // completion remains allowed on residual row-only MIR fixtures; product
+    // Finalize always stamps full-slot completion before this point.
     if (auto Comp = haydn::bundle::getBundleCompletionID(*MI)) {
-      const unsigned RealMembers =
-          static_cast<unsigned>(Bundle.getInstrs().size());
+      const unsigned RealMembers = static_cast<unsigned>(TypedKids.size());
+      if (RealMembers > 0 && haydn::bundle::isStubCompletion(*Comp))
+        report_fatal_error(
+            "HaydnAsmPrinter: unqualified stub CompletionStateID on "
+            "non-empty BUNDLE — CompletionStateID does not match row and "
+            "real member count (refuse filler reselection; refuse "
+            "executable singleton-stub fill; product uses full-slot "
+            "architectural NOP pad)",
+            /*GenCrashDiag=*/false);
       if (!haydn::bundle::isStubCompletion(*Comp) &&
           !haydn::bundle::isProductLegalCompletion(*Comp))
         report_fatal_error(
             "HaydnAsmPrinter: unknown CompletionStateID on BUNDLE root",
             /*GenCrashDiag=*/false);
-      if (*Comp != haydn::bundle::selectCompletionFor(*Row, RealMembers))
+      if (*Comp != haydn::bundle::selectCompletionForMembersAndPads(
+                       *Row, HasNonNop ? RealMembers : 0, !HasNonNop))
         report_fatal_error(
             "HaydnAsmPrinter: BUNDLE CompletionStateID does not match "
             "row and real member count — refuse filler reselection",
@@ -650,35 +675,18 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     assert((CompositeOpc == Haydn::BUNDLE_E96_TWO_ENTRY ||
             CompositeOpc == Haydn::BUNDLE_E96_THREE_ENTRY) &&
            "product live format must be Format E E2/E3 composite");
-    assert(Format->getSize() == haydn::bundle::productParcelBytes().Value &&
-           "product Format VLIW Size must match registry EncodedBytes");
 
     MCInst MCB;
     MCB.setOpcode(CompositeOpc);
 
-    // Format E entry dag order e0..eN. Residual SlotMap may still name S0/S1/S2
-    // FieldSlots, so stream Bundle.getInstrs() in add order and pad unused
-    // entries with NOP (table NopOpc when present). Full idle completion wire
-    // remains fail-closed in the MC encoder until golden idle registers.
-    const auto &Instrs = Bundle.getInstrs();
+    // Format E entry dag e0..eN is BUNDLE child order. Pad unused entries
+    // with architectural NOP. MC serializes the stamped/count-selected row.
     for (unsigned K = 0; K < NumEntries; ++K) {
-      MCInst *Instr = (K < Instrs.size()) ? Instrs[K] : nullptr;
-      if (!Instr) {
-        // Prefer exact entry-slot lookup when SlotMap already uses E2/E3 kinds.
-        MCSlotKind EntrySlot;
-        if (CompositeOpc == Haydn::BUNDLE_E96_TWO_ENTRY) {
-          EntrySlot = MCSlotKind(K == 0 ? MCSlotKind::Haydn_SLOT_E2_0
-                                        : MCSlotKind::Haydn_SLOT_E2_1);
-        } else {
-          EntrySlot = MCSlotKind(K == 0   ? MCSlotKind::Haydn_SLOT_E3_0
-                                 : K == 1 ? MCSlotKind::Haydn_SLOT_E3_1
-                                          : MCSlotKind::Haydn_SLOT_E3_2);
-        }
-        Instr = Bundle.at(EntrySlot);
-      }
+      MCInst *Instr = nullptr;
+      if (K < TypedKids.size())
+        Instr = TypedKids[K];
       if (!Instr) {
         Instr = OutContext.createMCInst();
-        // Product pad is logical NOP only — no residual NOP table reselection.
         Instr->setOpcode(Haydn::NOP);
       }
       MCB.addOperand(MCOperand::createInst(Instr));
@@ -686,6 +694,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
     // Register each child's Expr operands (e.g. JAL call targets) so undefined
     // extern symbols make it into.symtab. See registerSymbolicOperands.
+    applyHiLoSpecifiers(MCB, OutContext, *MF->getSubtarget().getInstrInfo());
     registerSymbolicOperands(MCB);
     EmitToStreamer(*OutStreamer, MCB);
     return;
@@ -703,8 +712,8 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   default:
     break;
   case Haydn::B: {
-    // Expand B pseudo to BEQZ_W R0, target (R0 is always zero, so this
-    // always branches). encoding_manual.md §5.5 (opcode 0x2C).
+    // Expand B pseudo to logical BEQZ_W R0, target (R0 is always zero, so
+    // this always branches). Format E encode.
     MCInst Tmp;
     Tmp.setOpcode(Haydn::BEQZ_W);
     // BEQZ_W: operand 0 = rs (GPR32), operand 1 = offset (brtarget_wide_i12)
@@ -725,7 +734,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // Expand RET pseudo to JALR_W R0, R15, 0
     // JALR_W rd, rs, target: jump to rs + target, store return address in rd.
     // rd = R0 (discard link address), rs = R15 (LR), target = 0 (no offset).
-    // encoding_manual.md §5.5 Class 001.
+    // Logical JALR_W; Format E encode.
     MCInst Tmp;
     Tmp.setOpcode(Haydn::JALR_W);
     Tmp.addOperand(MCOperand::createReg(Haydn::R0));  // rd = R0 (discard)

@@ -9,7 +9,7 @@
 # compiler model keeps (outs DR64:$rd),(ins DR64:$rsd)+Defs=[SFR] so materialize
 # does not hit "Explicit operand marked as def" (B1 R_CMP 0-def shape).
 #
-# MIR: unary SLT64_S1 with Defs=[SFR] must verify clean.
+# MIR: unary SLT64 with Defs=[SFR] must verify clean.
 
 ---
 name:            test_slt64_unary_setdesc_shape
@@ -19,10 +19,10 @@ registers:
 body:             |
   bb.0.entry:
     %0 = IMPLICIT_DEF
-    %0 = SLT64_S1 %0, implicit-def $sfr
+    %0 = SLT64 %0, implicit-def $sfr
     RET implicit $r0, implicit $r15
 ...
 
 # CHECK-LABEL: name: test_slt64_unary_setdesc_shape
-# CHECK: SLT64_S1 %{{[0-9]+}}{{(:dr64)?}}, implicit-def $sfr
+# CHECK: SLT64 %{{[0-9]+}}{{(:dr64)?}}, implicit-def $sfr
 # CHECK-NOT: Explicit operand marked as def

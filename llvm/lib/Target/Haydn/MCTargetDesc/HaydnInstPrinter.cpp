@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnInstPrinter.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnMCTargetDesc.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCExpr.h"
@@ -54,7 +55,23 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
       printAnnotation(O, Annot);
       return;
     }
-    // High entry first (`{ e2; e1; e0 }` / `{ e1; e0 }`), matching the
+        // Drop high-entry architectural NOP pads from the print face only when
+    // at least two real members remain. Dual single-unit packs commit as E3
+    // (unit cover) with a high-entry NOP pad for encode; the historical
+    // two-member brace face stays stable for dumps/FileCheck. Singleton E2
+    // size==2 `{ nop; real }` is preserved. Encode remains full-slot.
+    auto isPrintNop = [&](const MCInst *C) {
+      if (!C)
+        return true;
+      const unsigned CO = C->getOpcode();
+      if (CO == Haydn::NOP)
+        return true;
+      return StringRef(haydn::format_e::peelLogicalOpcodeName(MII.getName(CO)))
+          .equals_insensitive("NOP");
+    };
+    while (Children.size() > 2 && isPrintNop(Children.back()))
+      Children.pop_back();
+// High entry first (`{ e2; e1; e0 }` / `{ e1; e0 }`), matching the
     // BUNDLE_E96_* AsmStrings and the ISA bundle spelling (CB-142 / #10).
     // Children[] is still encode-order e0..eN from the composite operand dag.
     O << "\t{ ";
@@ -142,6 +159,14 @@ void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
 }
 
 void HaydnInstPrinter::printRegName(raw_ostream &O, MCRegister Reg) {
+  // Bounds-safe: generated getRegisterName asserts RegNo!=0 && RegNo<39.
+  // Hostile decode or a straddle-filled MCInst can carry NoRegister / an
+  // out-of-range id; never abort objdump — print a placeholder instead.
+  unsigned RegNo = Reg.id();
+  if (RegNo == 0 || RegNo >= 39) {
+    O << "<?>";
+    return;
+  }
   O << getRegisterName(Reg);
 }
 

@@ -46,7 +46,6 @@ include "HaydnCallingConv.td"
 // downstream.td adds them as needed)
 //===----------------------------------------------------------------------===//
 include "HaydnInstrInfo.td"
-include "HaydnInstrInfoC.td"
 include "HaydnInstrInfoAuto.td"
 
 //===----------------------------------------------------------------------===//

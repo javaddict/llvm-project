@@ -21,9 +21,9 @@ define i32 @vla_test(i32 %n) {
 ; The function must compile without error. We check that it produces
 ; valid instructions (sub32 for stack allocation, proper array accesses).
 ; CHECK: sub32
-; The VLA store may land as st32 (GPR source) or d_sw_l_with_imm (low-word
-; DR64 store) depending on whether the stored value is live in GPR32 or DR64.
-; CHECK: {{(st32|d_sw_l_with_imm)}}
+; The VLA store may land as st32, s_sw_post_imm (Format E POST member),
+; or d_sw_l_with_imm (low-word DR64 store).
+; CHECK: {{(st32|s_sw_post_imm|d_sw_l_with_imm)}}
 ; Indexed load of last element may be ld32 or fused s_lw_pre_reg.
 ; CHECK: {{(ld32|s_lw_pre_reg)}}
 entry:

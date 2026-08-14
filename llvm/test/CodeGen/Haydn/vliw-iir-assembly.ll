@@ -54,10 +54,10 @@ exit:
 ; ASM-DAG: subi32 sp, sp
 ; ASM-DAG: ld32
 ; ASM-DAG: mull
-; ASM-DAG: st32
+; ASM-DAG: {{st32|s_sw}}
 ; ASM-DAG: add32
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; The icmp slt back-edge materializes as slt32+bnez_w (unfused) because the
 ; SFR-strip lets the scheduler pack slt32 with the preceding st32.
-; ASM-DAG: bnez_w
-; ASM: jalr_w{{(\.s[012])?}} r0, lr, 0
+; ASM-DAG: bnez
+; ASM: jalr{{(\.s[012])?}} r0, lr, 0

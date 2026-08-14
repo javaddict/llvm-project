@@ -34,12 +34,12 @@
 # RT-DAG: add64{{.*}}d5, d2, d3
 { add32 r4, r0, r1; add64 d4, d0, d1; add64 d5, d2, d3 }
 
-# Mixed LD+ALU hard-root shape (disasm may use s_lw_with_imm synonym).
+# Mixed LD+ALU hard-root shape.
 # ASM: add32
 # CHECK-DAG: add32{{.*}}r4, r0, r1
-# CHECK-DAG: {{(ld32|s_lw_with_imm).*r5, r2}}
+# CHECK-DAG: ld32{{.*}}r5, r2
 # RT-DAG: add32{{.*}}r4, r0, r1
-# RT-DAG: {{(ld32|s_lw_with_imm).*r5, r2}}
+# RT-DAG: ld32{{.*}}r5, r2
 { add32 r4, r0, r1; ld32 r5, r2, 0; nop }
 
 # Demotion final reals as one-cycle parcels.

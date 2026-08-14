@@ -12,17 +12,16 @@
 # and are silently dropped (AsmPrinter skips isPseudo inside bundles)
 # producing WRONG CODE — missing loads/stores (the COPY-drop wrong-code).
 #
-# Fix: HaydnExpandPseudos::expandPseudosInBundles iterates bundle children
-# removes pseudos from bundles, expands them to real instructions inserted
-# before the BUNDLE, and removes empty bundles.
+# Fix: leftover *_POST_INC inside a BUNDLE still expands via the one
+# expandPostIncPseudo helper (product form is ISel; this MIR injects the
+# pseudo). Expansions insert before the BUNDLE; empty bundles are removed.
 #
-# (DB-named fused post-increment load) extended the in-bundle fallback
-# path: an LD32_POST_INC pseudo whose stride is encodable (imm6 in signed
-# range) now expands to a SINGLE real S_LW_POST_IMM with tied base-writeback
-# instead of the LD32 + ADDI32 split. The safety guarantee is unchanged: the
-# pseudo is still fully expanded out of the bundle into a real, encodable
-# instruction. ST32_POST_INC still expands to the 2-instruction ST32 + ADDI32
-# split because the current MC/silicon encoding has no fused store-post form.
+# Residual ExpandPseudos in-bundle seats prefer the same fused post-imm form
+# as ExpandPostIncEarly when Offset==0 and the scaled stride fits: LD32 →
+# S_LW_POST_IMM, ST32 → ST32_POST. Memory operands transfer onto the real
+# memop. Split LD/ST+ADDI remains the fallback for non-zero Offset or out of
+# range stride. Safety guarantee unchanged: no residual executable pseudo
+# inside a BUNDLE.
 #
 # If this test regresses (a POST_INC pseudo survives inside a BUNDLE), the
 # AsmPrinter will silently drop it and real loads/stores will be missing
@@ -108,9 +107,8 @@ body:             |
   bb.0.entry:
     liveins: $r1, $r3
 
-    ; ST32_POST_INC should be expanded before the bundle position.
-    ; CHECK: ST32 $r3, $r1, 0
-    ; CHECK-NEXT: $r1 = ADDI32_W{{(_S[012]_FLEX)?}} $r1, 4
+    ; ST32_POST_INC expands to fused ST32_POST when Offset==0 / stride fits.
+    ; CHECK: $r1 = ST32_POST $r3, $r1, 1
     ; CHECK-NOT: ST32_POST_INC
     ; CHECK-NOT: BUNDLE
     BUNDLE implicit-def dead $sfr {

@@ -61,7 +61,7 @@ define <2 x i32> @insert_elt_v2i32(<2 x i32> %v, i32 %val) nounwind {
 ; G-ABI-VEC: arg is DR; insert lane 1 via stack st32/ld64 (or move32 into high
 ; half). Both are correct legalizations of G_INSERT_VECTOR_ELT.
 ; CHECK-DAG: {{st32|move32}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = insertelement <2 x i32> %v, i32 %val, i32 1
   ret <2 x i32> %r
 }

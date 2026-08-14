@@ -2,14 +2,22 @@
 """Generate Format E tables + live TableGen members from golden JSON (once).
 
 Emits HaydnGenFormatERecords.inc, HaydnGenFormatESetDescLedger.inc,
-HaydnFormatsE96Members.td.inc (LIVE Inst{}), HaydnGenFormatEMemberOpcodes.inc.
+HaydnFormatsE96Members.td.inc (LIVE Inst{}), HaydnGenFormatEMemberOpcodes.inc,
+and the MC mnemonic round-trip harness (test/MC/Haydn/format-e-mnemonic-roundtrip.s).
 Product encode/decode: BUNDLE_E96 framing + tblgen on these members.
 
 Usage:
-  generate_format_e_records.py [--json PATH] [--xlsx-hash HEX] [--out-dir DIR]
-                               [--check]
+  generate_format_e_records.py [--json PATH] [--xlsx PATH]
+                               [--canonical-vectors PATH] [--xlsx-hash HEX]
+                               [--out-dir DIR] [--check]
+                               [--emit-mnemonic-roundtrip]
 
---check regenerates into memory and diffs against the committed files.
+--check regenerates into memory and diffs against the committed files, then
+fail-closes on XLSX↔JSON layout parity and canonical-vector ledger round-trip.
+It does not write, and it does not drive llvm-mc (ledger may_drive_llvm_mc_encode
+is false). Peer: BundleSim generate_catalog.py --check
+(bundlesim/isa/database/generate_catalog.py:483-485).
+The mnemonic harness is included in that diff (same regenerate-and-compare).
 """
 
 from __future__ import annotations
@@ -17,17 +25,22 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
+import zipfile
+import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-# Default golden location (plans tree). Overridable via --json.
-DEFAULT_JSON = Path(
-    "/ssd2/mhyang/haydn-plans/Database/golden/format_e_bit_layout_v2.json"
-)
+# Default golden location (plans tree). Overridable via --json / HAYDN_GOLDEN_DIR.
+DEFAULT_GOLDEN_DIR = Path("/ssd2/mhyang/haydn-plans/Database/golden")
+DEFAULT_JSON = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2.json"
+DEFAULT_XLSX = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2.xlsx"
+DEFAULT_CANONICAL = DEFAULT_GOLDEN_DIR / "format_e_canonical_vectors_v1.json"
 # Manifest pin for the companion XLSX (geometry authority pair).
 PINNED_XLSX_SHA256 = (
     "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af"
@@ -35,6 +48,10 @@ PINNED_XLSX_SHA256 = (
 PINNED_JSON_SHA256 = (
     "b0b477e585f9d464b8750472017d73c3f919e5358e0bda387dc6eeecb79509a4"
 )
+PINNED_CANONICAL_SHA256 = (
+    "6d403139d2530efbcee741456be330ce63843482d7fd372a18eab94cdfb728f9"
+)
+SSML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 # Catalog snapshot pins from the current JSON hash (manifest §5).
 PIN_UNIQUE_NON_NOP = 683
@@ -141,6 +158,7 @@ class TypeLayout:
     type_name: str
     type_code: int
     type_code_width: int
+    type_code_bits: BitRange
     opcode_bits: BitRange
     operand_fields: List[OperandField]
     reserved_text: str
@@ -277,11 +295,23 @@ def build_catalog(data: Dict[str, Any]) -> Catalog:
                 if not isinstance(unit_obj, dict) or "types" not in unit_obj:
                     continue
                 map_val = int(str(unit_obj["mapping_value"]).strip(), 2)
+                tcode_bits_t = parse_bits(unit_obj.get("type_code", ""))
+                if tcode_bits_t is None:
+                    raise SystemExit(
+                        f"missing type_code bits {mode}/{entry_key}/{unit_name}"
+                    )
+                tcode_bits = BitRange(tcode_bits_t[0], tcode_bits_t[1])
                 types = unit_obj["types"]
                 for type_name, type_obj in types.items():
                     tcode, twidth = type_code_width_from_bin(
                         type_obj["type_code_bin"]
                     )
+                    if twidth != tcode_bits.width:
+                        raise SystemExit(
+                            f"type_code_bin width {twidth} != unit type_code "
+                            f"{tcode_bits.width} at {mode}/{entry_key}/"
+                            f"{unit_name}/{type_name}"
+                        )
                     opc_bits_t = parse_bits(type_obj.get("opcode", ""))
                     if opc_bits_t is None:
                         raise SystemExit(
@@ -299,6 +329,7 @@ def build_catalog(data: Dict[str, Any]) -> Catalog:
                         type_name=type_name,
                         type_code=tcode,
                         type_code_width=twidth,
+                        type_code_bits=tcode_bits,
                         opcode_bits=opc_bits,
                         operand_fields=operands,
                         reserved_text=str(type_obj.get("reserved", "")),
@@ -985,6 +1016,12 @@ def field_operand_td(
         return name, f"AR:${name}", str(w)
     if kind == "REG_GPR":
         return name, f"GPR32:${name}", str(w)
+    pcrel = PCREL_OPERAND_TD.get(logu)
+    if kind == "IMM" and pcrel:
+        return name, f"{pcrel}:${name}", str(w)
+    wide_abs = WIDE_ABS_OPERAND_TD.get(logu)
+    if kind == "IMM" and wide_abs:
+        return name, f"{wide_abs}:${name}", str(w)
     if w == 1:
         ty = "uimm1"
     elif w == 2:
@@ -1075,8 +1112,480 @@ def emit_entry_bits_assign(lines, rec, lay, bit_names, entry_w, entry_lo, field_
     lines.append(f"  let {field_name} = {{" + ", ".join(parts) + "};")
 
 
+# Published R5 itinerary classes, keyed by the member's generated unit.
+# ALU0→Slot0_ALU, ALU1→Slot1_ALU, ALU2→Slot2_ALU, LOADSTORE0→Slot0_LS,
+# LOAD1→Slot1_LD, MAC0→Slot1_MAC, MAC1→Slot2_MAC. Dual-unit classes
+# (Slot012_ALU / Slot12_MAC) stay on logical opcodes in HaydnInstrFormats.td.
+UNIT_ITINERARY = {
+    "ALU0": "Slot0_ALU",
+    "ALU1": "Slot1_ALU",
+    "ALU2": "Slot2_ALU",
+    "LOADSTORE0": "Slot0_LS",
+    "LOAD1": "Slot1_LD",
+    "MAC0": "Slot1_MAC",
+    "MAC1": "Slot2_MAC",
+}
+
+# SIN_COS / ARCTAN: Constraints Data_Latency = uimm4+2. Conservative dest
+# bound is the published Slot*_ALU_SinCosLat class (OperandCycles 17).
+SINCOS_LOGICALS = frozenset({"SIN_COS", "ARCTAN"})
+SINCOS_ITINERARY = {
+    "ALU1": "Slot1_ALU_SinCosLat",
+    "ALU2": "Slot2_ALU_SinCosLat",
+}
+
+BRANCH_LOGICALS = frozenset(
+    {
+        "BEQ",
+        "BNE",
+        "BGE",
+        "BGEU",
+        "BLT",
+        "BLTU",
+        "BEQZ",
+        "BNEZ",
+        "BGEZ",
+        "BLTZ",
+    }
+)
+CALL_LOGICALS = frozenset({"JAL"})
+INDIRECT_CALL_LOGICALS = frozenset({"JALR"})
+# Catalog role `reg` (alias rt) is an SSA dest for these logicals. Golden
+# I8/I12/SFR_OUT rows name dest=rt; bit-layout still emits role `reg`.
+# Do not include branch `reg` (rs), CSRW, or MOVEGPR2SFR (SFR writers).
+DEST_REG_LOGICALS = frozenset(
+    {
+        "LUI",
+        "ZERO_GPR",
+        "ZERO_DR",
+        "CSRR",
+        "MOVESFR2GPR",
+    }
+)
+# GE96-03: compact and `_W` share byte PC+imm. Generated members must use
+# the WIDE PCRel operand class so reloc-bearing `_W_S0` can cut over
+# without a CHECK-only mnemonic rewrite. AsmString stays the golden name
+# (`jal`); llc after cutover matches objdump.
+PCREL_OPERAND_TD = {
+    "JAL": "brtarget_wide_i20",
+    "JALR": "calltarget_wide_ri12",
+    "BEQZ": "brtarget_wide_i12",
+    "BNEZ": "brtarget_wide_i12",
+    "BGEZ": "brtarget_wide_i12",
+    "BLTZ": "brtarget_wide_i12",
+    "BEQ": "brtarget_wide_ri12",
+    "BNE": "brtarget_wide_ri12",
+    "BGE": "brtarget_wide_ri12",
+    "BGEU": "brtarget_wide_ri12",
+    "BLT": "brtarget_wide_ri12",
+    "BLTU": "brtarget_wide_ri12",
+}
+# GE96: compact and `_W` share the Format E RI20 field. Generated members
+# use the WIDE absolute class so reloc-bearing `ADDI32_W`/`ORI32_W` can
+# cut over. AsmString stays the golden name (`addi32`/`ori32`).
+# SET_HWLOOP Off1/Off2 stay uimm6/uimm12: getExprFixupKind maps OpNo 1/2
+# to HWLoopOff1/Off2. Do not put hwloop_off* on members (Shift=2 would
+# fight the composite field).
+WIDE_ABS_OPERAND_TD = {
+    "ADDI32": "simm20_wide_abs",
+    "ORI32": "uimm20_wide_abs",
+    "ANDI32": "uimm20_wide_abs",
+    "XORI32": "uimm20_wide_abs",
+}
+LS_UNITS = frozenset({"LOADSTORE0", "LOAD1"})
+# Catalog WITH_IMM logical → user-facing matcher/print mnemonic. Inverse of
+# peelLogicalOpcodeName for the RI6 signed-offset forms. Word/dword WITH_REG
+# uses the documented 3-GPR user names. Byte/half `ld8_reg`/`ld16_reg` stay
+# catalog: those user spellings are simm16 FieldSlots, not 3-GPR members.
+LS_USER_MNEMONIC = {
+    "S_LW_WITH_IMM": "ld32",
+    "S_LW_WITH_REG": "ld32_reg",
+    "S_SW_WITH_IMM": "st32",
+    "S_SW_WITH_REG": "st32_reg",
+    "D_LDW_WITH_IMM": "ld64",
+    "D_LDW_WITH_REG": "ld64_reg",
+    "D_SDW_WITH_IMM": "st64",
+    "D_SDW_WITH_REG": "st64_reg",
+    "S_LBS_WITH_IMM": "ld8",
+    "S_LBU_WITH_IMM": "ldu8",
+    "S_SB_WITH_IMM": "st8",
+    "S_LHWS_WITH_IMM": "ld16",
+    "S_LHWU_WITH_IMM": "ldu16",
+    "S_SHW_WITH_IMM": "st16",
+}
+# Golden type names that are CSR / WFI / hwloop / SFR / AR / circular-buffer.
+SIDE_EFFECT_TYPES = frozenset(
+    {"SFR", "HINT", "HWLRIII", "HWLRIIR", "HWLRRRR", "AR", "CBRI", "CBRR"}
+)
+
+BLANKET_HAS_SIDE_EFFECTS_LET = (
+    "let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in"
+)
+MEMBER_E23_DEF_RE = re.compile(
+    r"^def\s+([A-Za-z0-9_]+_E[23]_[A-Za-z0-9_]+)\s*:"
+)
+
+
+@dataclass(frozen=True)
+class MemberEmitFlags:
+    """Per-member itinerary + MCID flags emitted on the wrapping `let`."""
+
+    itinerary: str
+    may_load: int
+    may_store: int
+    is_branch: int
+    is_terminator: int
+    is_call: int
+    is_indirect_branch: int
+    has_side_effects: int
+
+    def let_line(self) -> str:
+        parts = [
+            f"Itinerary = {self.itinerary}",
+            f"mayLoad = {self.may_load}",
+            f"mayStore = {self.may_store}",
+            f"isBranch = {self.is_branch}",
+            f"isTerminator = {self.is_terminator}",
+        ]
+        if self.is_call:
+            parts.append("isCall = 1")
+        if self.is_indirect_branch:
+            parts.append("isIndirectBranch = 1")
+        parts.extend(
+            [
+                f"hasSideEffects = {self.has_side_effects}",
+                "isCodeGenOnly = 0",
+                "isAsmParserOnly = 0",
+                'AsmVariantName = "e96member"',
+            ]
+        )
+        return "let " + ", ".join(parts) + " in {"
+
+
+def _logical_key(logical: str) -> str:
+    return logical.strip().upper()
+
+
+def _is_load_logical(key: str) -> bool:
+    return key.startswith(("D_L", "S_L", "PLD"))
+
+
+def _is_store_logical(key: str) -> bool:
+    return key.startswith(("D_S", "S_S", "WBAR"))
+
+
+def ls_has_tied_base_writeback(logical: str) -> bool:
+    """POST/PRE/BREV update the encoded dest2 base (FieldSlot `$rs = $rs_wb`)."""
+    key = _logical_key(logical)
+    return any(tag in key for tag in ("_POST_", "_PRE_", "_BREV_"))
+
+
+def ls_dest_is_ssa_def(logical: str, role: str) -> bool:
+    """Whether an encoded LS dest* wire is an LLVM SSA def.
+
+    Load dest1 is the loaded value. Encoded dest2 is always the base use
+    (WITH and POST/PRE/BREV). Store dest* are stored value / base uses.
+    POST/PRE/BREV writeback is a synthetic tied out (`dest2_wb`), not this
+    wire — see ls_has_tied_base_writeback.
+    """
+    key = _logical_key(logical)
+    if not role.startswith("dest"):
+        return False
+    if _is_store_logical(key) or not _is_load_logical(key):
+        return False
+    return role == "dest1"
+
+
+def member_gpr_is_ssa_def(logical: str, role: str, is_ls: bool) -> bool:
+    """Whether a generated member GPR/DR wire is an LLVM SSA def.
+
+    ALU/MAC dest* are defs. LS dest* follow ls_dest_is_ssa_def. Catalog
+    role `reg` (alias rt) is a def for JALR (link) and DEST_REG_LOGICALS
+    (LUI/ZERO_GPR/ZERO_DR/CSRR/MOVESFR2GPR). Do not treat branch `reg`
+    (rs), CSRW, or MOVEGPR2SFR as a def.
+    """
+    if role.startswith("dest"):
+        return (not is_ls) or ls_dest_is_ssa_def(logical, role)
+    if role != "reg":
+        return False
+    key = _logical_key(logical)
+    return key in INDIRECT_CALL_LOGICALS or key in DEST_REG_LOGICALS
+
+
+def classify_member_flags(rec: MemberRecord) -> MemberEmitFlags:
+    """Map unit/type/logical onto a published itinerary and closed flags.
+
+    Itinerary comes from the already-published R5 class for `rec.unit`
+    (SIN_COS/ARCTAN override via logical name). Load/store/branch flags
+    come from golden unit + logical; hasSideEffects=1 only for CSR / WFI /
+    hwloop / SFR / AR / CB types, control-transfer, or unknown.
+    """
+    key = _logical_key(rec.logical)
+    if key in SINCOS_LOGICALS:
+        itinerary = SINCOS_ITINERARY.get(rec.unit)
+        if itinerary is None:
+            raise SystemExit(
+                f"error: {rec.member_symbol}: {key} unit {rec.unit} has no "
+                "published SinCosLat itinerary"
+            )
+    else:
+        itinerary = UNIT_ITINERARY.get(rec.unit)
+        if itinerary is None:
+            raise SystemExit(
+                f"error: {rec.member_symbol}: unit {rec.unit} has no "
+                "published itinerary class"
+            )
+
+    is_load = rec.unit in LS_UNITS and _is_load_logical(key)
+    is_store = rec.unit in LS_UNITS and _is_store_logical(key)
+    if is_load and is_store:
+        raise SystemExit(
+            f"error: {rec.member_symbol}: logical {key} classified as "
+            "both load and store"
+        )
+
+    is_branch = key in BRANCH_LOGICALS
+    is_indirect = key in INDIRECT_CALL_LOGICALS
+    is_call = key in CALL_LOGICALS or is_indirect
+    is_terminator = is_branch or is_indirect
+
+    side = False
+    if rec.type_name in SIDE_EFFECT_TYPES:
+        side = True
+    elif key in ("CSRR", "CSRW", "ZERO_SFR"):
+        side = True
+    elif key.startswith("WFI") or key.startswith("SET_HWLOOP"):
+        side = True
+    elif key in ("MOVEGPR2SFR", "MOVESFR2GPR"):
+        side = True
+    elif is_branch or is_call or is_indirect:
+        # Match residual `_S*` CFG format classes (HaydnFormatsALU32.td
+        # HaydnFU_ALU32_S0_RI12/I12_ONE/I20 hasSideEffects=1).
+        side = True
+    elif rec.unit in LS_UNITS and not is_load and not is_store:
+        side = True
+
+    return MemberEmitFlags(
+        itinerary=itinerary,
+        may_load=1 if is_load else 0,
+        may_store=1 if is_store else 0,
+        is_branch=1 if is_branch else 0,
+        is_terminator=1 if is_terminator else 0,
+        is_call=1 if is_call else 0,
+        is_indirect_branch=1 if is_indirect else 0,
+        has_side_effects=1 if side else 0,
+    )
+
+
+def check_emitted_member_itineraries(text: str) -> None:
+    """Every E2/E3 member def must sit under a per-def Itinerary= let."""
+    if BLANKET_HAS_SIDE_EFFECTS_LET in text:
+        raise SystemExit(
+            "error: blanket hasSideEffects=1 wrapper still present in members td"
+        )
+    lines = text.splitlines()
+    missing: List[str] = []
+    seen = 0
+    for i, line in enumerate(lines):
+        m = MEMBER_E23_DEF_RE.match(line)
+        if not m:
+            continue
+        seen += 1
+        window = "\n".join(lines[max(0, i - 4) : i])
+        if "Itinerary =" not in window:
+            missing.append(m.group(1))
+        elif 'AsmVariantName = "e96member"' not in window:
+            missing.append(m.group(1) + "(AsmVariantName)")
+    if seen == 0:
+        raise SystemExit("error: no E2/E3 member defs in emitted members td")
+    if missing:
+        sample = ", ".join(missing[:8])
+        raise SystemExit(
+            f"error: {len(missing)} members lack Itinerary (e.g. {sample})"
+        )
+    if "mayLoad = 1" not in text:
+        raise SystemExit("error: no mayLoad=1 member emitted")
+    if "mayStore = 1" not in text:
+        raise SystemExit("error: no mayStore=1 member emitted")
+    if "isBranch = 1" not in text:
+        raise SystemExit("error: no isBranch=1 member emitted")
+    if "Slot1_ALU_SinCosLat" not in text or "Slot2_ALU_SinCosLat" not in text:
+        raise SystemExit("error: SIN_COS/ARCTAN SinCosLat itinerary missing")
+    if "def ADD32_E2_E0_ALU0_RR : HaydnEntryE2E0<(outs GPR32:$dest_0)," not in text:
+        raise SystemExit("error: ADD32 member dest must be an SSA out")
+    if "def X2MUL32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs DR64:$dest1_0, DR64:$dest2_3)," not in text:
+        raise SystemExit("error: dual-dest MAC member dest1/dest2 must be SSA outs")
+    if "def S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<(outs)," not in text:
+        raise SystemExit(
+            "error: S_SW_WITH_IMM dest1/dest2 are wire uses, not SSA outs"
+        )
+    if (
+        'def S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<(outs GPR32:$dest1_0), '
+        '(ins GPR32:$dest2_1, simm6:$imm_2), "ld32\\t$dest1_0, $dest2_1, $imm_2"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: S_LW_WITH_IMM dest1 must be SSA out and AsmString ld32"
+        )
+    if 'def MUL64_LL_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul64.ll\\t$dest_0, $src1_1, $src2_2"' not in text:
+        raise SystemExit(
+            "error: MAC member AsmString must use dotted user mnemonic mul64.ll"
+        )
+    if (
+        'def JAL_E2_E0_ALU0_I20 : HaydnEntryE2E0<(outs GPR32:$dest_0), '
+        '(ins brtarget_wide_i20:$imm_1), "jal\\t$dest_0, $imm_1"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: JAL member imm must be brtarget_wide_i20 (WIDE PCRel)"
+        )
+    if (
+        'def BEQZ_E2_E0_ALU0_I12 : HaydnEntryE2E0<(outs), '
+        '(ins GPR32:$reg_0, brtarget_wide_i12:$imm_1), "beqz\\t$reg_0, $imm_1"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: BEQZ member imm must be brtarget_wide_i12 (WIDE PCRel)"
+        )
+    if (
+        'def JALR_E2_E0_ALU0_RI12 : HaydnEntryE2E0<(outs GPR32:$reg_0), '
+        '(ins GPR32:$src_1, calltarget_wide_ri12:$imm_2), '
+        '"jalr\\t$reg_0, $src_1, $imm_2"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: JALR link (catalog role reg/rt) must be an SSA out"
+        )
+    if (
+        'def LUI_E2_E0_ALU0_I12 : HaydnEntryE2E0<(outs GPR32:$reg_0), '
+        '(ins uimm12:$imm_1), "lui\\t$reg_0, $imm_1"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: LUI catalog role reg/rt must be an SSA out"
+        )
+    if (
+        'def ZERO_GPR_E2_E0_ALU0_I8 : HaydnEntryE2E0<(outs GPR32:$reg_0), '
+        '(ins), "zero_gpr\\t$reg_0"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: ZERO_GPR catalog role reg/rt must be an SSA out"
+        )
+    if (
+        'def ADDI32_E2_E0_ALU0_RI20 : HaydnEntryE2E0<(outs GPR32:$dest_0), '
+        '(ins GPR32:$src_1, simm20_wide_abs:$imm_2), "addi32\\t$dest_0, $src_1, $imm_2"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: ADDI32 member imm must be simm20_wide_abs (WIDE LO20)"
+        )
+    if (
+        'def ORI32_E2_E0_ALU0_RI20 : HaydnEntryE2E0<(outs GPR32:$dest_0), '
+        '(ins GPR32:$src_1, uimm20_wide_abs:$imm_2), "ori32\\t$dest_0, $src_1, $imm_2"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: ORI32 member imm must be uimm20_wide_abs (WIDE LO20)"
+        )
+    if (
+        'def SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR : HaydnEntryE2E0<(outs), '
+        '(ins uimm1:$hwlr_sel_0, uimm6:$imm1_1, uimm12:$imm2_2, GPR32:$src_3), '
+        '"set_hwloop_f2\\t$hwlr_sel_0, $imm1_1, $imm2_2, $src_3"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: SET_HWLOOP_F2 Off1/Off2 stay uimm6/uimm12 "
+            "(getExprFixupKind maps HWLoopOff by OpNo)"
+        )
+    if (
+        "def S_LW_POST_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<"
+        "(outs GPR32:$dest1_0, GPR32:$dest2_wb), "
+        "(ins GPR32:$dest2_1, simm6:$imm_2), "
+        '"s_lw_post_imm\\t$dest1_0, $dest2_1, $imm_2"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: S_LW_POST_IMM dest2 must be a tied base use "
+            "(outs dest1, dest2_wb) (ins dest2, imm)"
+        )
+    if (
+        "def S_SW_POST_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<"
+        "(outs GPR32:$dest2_wb), "
+        "(ins GPR32:$dest1_0, GPR32:$dest2_1, simm6:$imm_2), "
+        '"s_sw_post_imm\\t$dest1_0, $dest2_1, $imm_2"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: S_SW_POST_IMM dest2 must be a tied base use "
+            "(outs dest2_wb) (ins dest1, dest2, imm)"
+        )
+    if (
+        "def S_LW_POST_REG_E2_E0_LOADSTORE0_RR : HaydnEntryE2E0<"
+        "(outs GPR32:$dest1_0, GPR32:$dest2_wb), "
+        "(ins GPR32:$dest2_1, GPR32:$src_2), "
+        '"s_lw_post_reg\\t$dest1_0, $dest2_1, $src_2"'
+        not in text
+    ):
+        raise SystemExit(
+            "error: S_LW_POST_REG dest2 must be a tied base use "
+            "(outs dest1, dest2_wb) (ins dest2, src)"
+        )
+    pins = (
+        (
+            "D_LW_POST_IMM_E2_E0_LOADSTORE0_RI6",
+            (
+                "Itinerary = Slot0_LS",
+                "mayLoad = 1",
+                "mayStore = 0",
+                'Constraints = "$dest2_1 = $dest2_wb"',
+            ),
+        ),
+        (
+            "S_SW_POST_IMM_E2_E0_LOADSTORE0_RI6",
+            (
+                "Itinerary = Slot0_LS",
+                "mayStore = 1",
+                "mayLoad = 0",
+                'Constraints = "$dest2_1 = $dest2_wb"',
+            ),
+        ),
+        (
+            "BEQ_E2_E0_ALU0_RI12",
+            ("Itinerary = Slot0_ALU", "isBranch = 1", "isTerminator = 1"),
+        ),
+        (
+            "SIN_COS_E3_E1_ALU1_RI4",
+            ("Itinerary = Slot1_ALU_SinCosLat",),
+        ),
+    )
+    found_pins = set()
+    for i, line in enumerate(lines):
+        m = MEMBER_E23_DEF_RE.match(line)
+        if not m:
+            continue
+        for name, needles in pins:
+            if m.group(1) != name:
+                continue
+            found_pins.add(name)
+            window = "\n".join(lines[max(0, i - 4) : i])
+            for needle in needles:
+                if needle not in window:
+                    raise SystemExit(
+                        f"error: {name} preceding let missing {needle!r}"
+                    )
+    missing_pins = [name for name, _ in pins if name not in found_pins]
+    if missing_pins:
+        raise SystemExit(f"error: pinned members not emitted: {missing_pins}")
+
+
 def emit_members_td_inc(cat: Catalog) -> str:
-    """LIVE TableGen format-member Inst defs — included by HaydnFormatsE96.td."""
+    """LIVE TableGen format-member Inst defs — included by HaydnFormatsE96.td.
+
+    Each member is wrapped in a per-def `let Itinerary=..., mayLoad=..., ...`
+    like AIE generated members (AIE2PSGenInstrInfo.td:12-13 default flags,
+    :550 mayLoad on LDA). No file-wide hasSideEffects=1.
+    """
     layouts = {l.layout_id: l for l in cat.layouts}
     lines: List[str] = []
     lines.append("//===-- HaydnFormatsE96Members.td.inc - LIVE E96 members -*-===//")
@@ -1145,29 +1654,181 @@ def emit_members_td_inc(cat: Catalog) -> str:
             else:
                 asm_ops = ", ".join(f"${n}" for n, _, _, _, v in bit_names if v)
 
-        ins = ", ".join(op_frags) if op_frags else ""
-        asm = rec.logical.lower()
+        asm = assembler_mnemonic(rec.logical, rec.unit)
         if asm_ops:
             asm = asm + "\\t" + asm_ops
 
-        lines.append("let isCodeGenOnly = 0, isAsmParserOnly = 0, hasSideEffects = 1 in")
+        # Dest roles: ALU/MAC dest* are SSA defs. LS layouts reuse dest1/dest2
+        # for data and base: load dest1 is a def, encoded dest2 is the base
+        # use, store dest* are uses. Catalog role `reg` (rt) is a def for
+        # JALR link and DEST_REG_LOGICALS. POST/PRE/BREV add a synthetic
+        # tied GPR writeback (`dest2_wb`) so NumDefs/NumOperands match
+        # FieldSlot `$rs = $rs_wb`.
+        is_ls = rec.unit in LS_UNITS
+        out_frags: List[str] = []
+        in_frags: List[str] = []
+        for frag in op_frags:
+            dollar = frag.find("$")
+            name = frag[dollar + 1 :] if dollar >= 0 else ""
+            role = name.split("_")[0].lower() if name else ""
+            if member_gpr_is_ssa_def(rec.logical, role, is_ls):
+                out_frags.append(frag)
+            else:
+                in_frags.append(frag)
+        constraints: Optional[str] = None
+        if is_ls and ls_has_tied_base_writeback(rec.logical):
+            dest2_ins = []
+            for frag in in_frags:
+                dollar = frag.find("$")
+                name = frag[dollar + 1 :] if dollar >= 0 else ""
+                if name.split("_")[0].lower() == "dest2":
+                    dest2_ins.append(frag)
+            if len(dest2_ins) != 1:
+                raise SystemExit(
+                    f"error: {rec.member_symbol} POST/PRE/BREV needs exactly "
+                    f"one dest2 use, got {len(dest2_ins)}"
+                )
+            dest2_frag = dest2_ins[0]
+            dest2_name = dest2_frag[dest2_frag.find("$") + 1 :]
+            dest2_cls = dest2_frag.split(":")[0]
+            wb_name = "dest2_wb"
+            if any(
+                frag.endswith("$" + wb_name) for frag in out_frags + in_frags
+            ):
+                raise SystemExit(
+                    f"error: {rec.member_symbol} dest2_wb name collides"
+                )
+            out_frags.append(f"{dest2_cls}:${wb_name}")
+            constraints = f"${dest2_name} = ${wb_name}"
+        outs = ", ".join(out_frags)
+        ins = ", ".join(in_frags)
+        outs_dag = f"(outs {outs})" if outs else "(outs)"
+        ins_dag = f"(ins {ins})" if ins else "(ins)"
+
+        flags = classify_member_flags(rec)
+        let = flags.let_line()
+        if constraints:
+            if not let.endswith(" in {"):
+                raise SystemExit(
+                    f"error: {rec.member_symbol} let_line missing ' in {{'"
+                )
+            let = let[:-5] + f', Constraints = "{constraints}" in {{'
+        lines.append(let)
         lines.append(
             f'def {rec.member_symbol} : {base}<'
-            f'(outs), (ins {ins}), "{asm}", []> {{'
+            f'{outs_dag}, {ins_dag}, "{asm}", []> {{'
         )
         for name, rh, rl, w, is_var in bit_names:
             if is_var:
                 lines.append(f"  bits<{w}> {name};")
         emit_entry_bits_assign(lines, rec, lay, bit_names, entry_w, entry_lo, inst_f)
         lines.append("}")
+        lines.append("}")
         lines.append("")
         count += 1
     lines.append(f"// Live non-NOP Format E members: {count}")
     lines.append("")
-    return "\n".join(lines) + "\n"
+    text = "\n".join(lines) + "\n"
+    check_emitted_member_itineraries(text)
+    return text
 
 
-def emit_member_opcodes_inc(cat: Catalog) -> str:
+LOGICAL_MATERIALIZE_RE = re.compile(
+    r"def\s*:\s*LogicalMaterialize<\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*\[([^\]]+)\]\s*>",
+    re.MULTILINE,
+)
+IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def parse_logical_materialize(path: Path) -> List[Tuple[str, str]]:
+    """Parse residual `_S*` member → logical pairs from LogicalMaterialize.
+
+    AIE peer: CodeGenFormat.cpp:146-163 emits AlternateInsts[] plus
+    getAlternateInstsOpcode switch (logical → members). This is the inverse
+    overlay for Haydn residual slot members still defined in TableGen.
+    """
+    text = path.read_text(encoding="utf-8")
+    pairs: List[Tuple[str, str]] = []
+    for m in LOGICAL_MATERIALIZE_RE.finditer(text):
+        logical = m.group(1)
+        for member in IDENT_RE.findall(m.group(2)):
+            if member == logical:
+                continue
+            pairs.append((member, logical))
+    if not pairs:
+        raise SystemExit(f"no LogicalMaterialize pairs in {path}")
+    return pairs
+
+
+TD_DEF_RE = re.compile(r"^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*:", re.MULTILINE)
+
+
+def collect_td_def_names(out_dir: Path) -> set:
+    """TableGen `def NAME :` identifiers in the Haydn target dir."""
+    names = set()
+    for path in sorted(out_dir.glob("*.td")) + sorted(out_dir.glob("*.td.inc")):
+        names.update(TD_DEF_RE.findall(path.read_text(encoding="utf-8")))
+    if not names:
+        raise SystemExit(f"no TableGen defs in {out_dir}")
+    return names
+
+
+def collect_member_to_logical(cat: Catalog, td_path: Path) -> Dict[str, str]:
+    """Dense member-opcode-name → logical-opcode-name map.
+
+    Sources: LogicalMaterialize residual `_S*` plus Format E member_symbol.
+    Format E members whose catalog logical is not a TableGen opcode are
+    omitted (fail-closed: lookup returns 0, never the member itself).
+    Fail-closed on a member claiming two logicals.
+    """
+    mapping: Dict[str, str] = {}
+    known = collect_td_def_names(td_path.parent)
+
+    def add(member: str, logical: str) -> None:
+        if not member or not logical or member == logical:
+            return
+        if not IDENT_RE.fullmatch(member) or not IDENT_RE.fullmatch(logical):
+            raise SystemExit(f"non-ident member→logical {member!r} → {logical!r}")
+        prev = mapping.get(member)
+        if prev is not None and prev != logical:
+            raise SystemExit(
+                f"member→logical conflict {member}: {prev} vs {logical}"
+            )
+        mapping[member] = logical
+
+    if not td_path.is_file():
+        raise SystemExit(f"LogicalMaterialize file not found: {td_path}")
+    mat_pairs = parse_logical_materialize(td_path)
+    for member, logical in mat_pairs:
+        add(member, logical)
+
+    known_logicals = known | {logical for _, logical in mat_pairs}
+    # Catalog names that are not themselves TableGen opcodes. Map members onto
+    # the TableGen-real logical TII already switches on (no string peel).
+    td_logical_aliases = {
+        "SET_HWLOOP_F2": "SET_HWLOOP_F2_W",
+    }
+    skipped = 0
+    for rec in cat.members:
+        if rec.is_nop:
+            continue
+        logical = sanitize_ident(rec.logical)
+        logical = td_logical_aliases.get(logical, logical)
+        if logical not in known_logicals:
+            skipped += 1
+            continue
+        add(rec.member_symbol, logical)
+
+    if not mapping:
+        raise SystemExit("empty member→logical map")
+    print(
+        f"member→logical pairs={len(mapping)} "
+        f"format_e_skipped_no_logical_opcode={skipped}"
+    )
+    return mapping
+
+
+def emit_member_opcodes_inc(cat: Catalog, member_to_logical: Dict[str, str]) -> str:
     lines: List[str] = []
     lines.append("//===-- HaydnGenFormatEMemberOpcodes.inc -*- C++ -*-===//")
     lines.append("// Auto-generated. DO NOT EDIT.")
@@ -1187,6 +1848,309 @@ def emit_member_opcodes_inc(cat: Catalog) -> str:
     )
     lines.append("#endif")
     lines.append("")
+
+    # AIE peer: inverse of AIEMCFormats::getAlternateInstsOpcode
+    # (AIEMCFormats.h:376-379; CodeGenFormat.cpp:155-163 generated switch).
+    # Hexagon packet children keep the architectural opcode (HexagonInstrInfo.cpp:390-397
+    # bundle walk); Haydn residual `_S*` / Format E members need this overlay.
+    by_logical: Dict[str, List[str]] = defaultdict(list)
+    for member, logical in member_to_logical.items():
+        by_logical[logical].append(member)
+    for members in by_logical.values():
+        members.sort()
+
+    lines.append("#ifdef GET_FORMAT_E_MEMBER_TO_LOGICAL")
+    lines.append("#undef GET_FORMAT_E_MEMBER_TO_LOGICAL")
+    lines.append(
+        f"static constexpr unsigned FormatEMemberToLogicalCount = "
+        f"{len(member_to_logical)}u;"
+    )
+    lines.append(
+        "static_assert(FormatEMemberToLogicalCount > 0u, \"member to logical pin\");"
+    )
+    lines.append(
+        "unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical("
+        "unsigned Opcode) {"
+    )
+    lines.append("  switch (Opcode) {")
+    lines.append("  default:")
+    lines.append("    return 0u;")
+    for logical in sorted(by_logical):
+        for member in by_logical[logical]:
+            lines.append(f"  case Haydn::{member}:")
+        lines.append(f"    return Haydn::{logical};")
+    lines.append("  }")
+    lines.append("}")
+    lines.append("#endif")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# MC mnemonic round-trip harness (one vector per product logical)
+# Peer: llvm/test/MC/Hexagon/v67_all.s (one mnemonic × assemble+objdump).
+# Operand print order matches emit_members_td_inc AsmString, not hypothesized
+# HaydnInstrInfoAuto.td (those stay isCodeGenOnly / auto-hypothesized-unencodable.s).
+# ---------------------------------------------------------------------------
+
+BRANCH_TARGET_LOGICALS = frozenset({
+    "BEQ", "BNE", "BGE", "BGEU", "BGEZ", "BLT", "BLTZ", "BLTU",
+    "BEQZ", "BNEZ", "JAL", "JALR",
+})
+
+
+def logical_print_mnemonic(logical: str) -> str:
+    """Objdump / coverage token: golden logical, lowercased (WFI<TBD> → wfi)."""
+    name = (logical or "").strip()
+    if name.upper().startswith("WFI"):
+        return "wfi"
+    return name.lower()
+
+
+def assembler_mnemonic(logical: str, unit: str) -> str:
+    """Matcher spelling. MAC lane suffixes use documented dotted aliases
+    (HaydnFormatsMAC.td / llvm/test/MC/Haydn/mac-instructions.s). LS WITH
+    forms print the user mnemonic (ld32 / st32), inverse of
+    peelLogicalOpcodeName."""
+    name = (logical or "").strip()
+    if name.upper().startswith("WFI"):
+        return "wfi"
+    if name == "PLDWWUA_POST":
+        return "pldwwua"
+    user = LS_USER_MNEMONIC.get(name.upper())
+    if user:
+        return user
+    mnem = name.lower()
+    if (unit or "").startswith("MAC") and "_" in mnem:
+        base, rest = mnem.split("_", 1)
+        return base + "." + rest.replace("_", ".")
+    return mnem
+
+
+# Documented matcher packets that differ from Format E member AsmString
+# operand count/order. Still the same logical mnemonic (or a known _w alias
+# that objdump prints as the logical). No hypothesized Auto.td encodings.
+_SPECIAL_PACKETS = {
+    "SET_HWLOOP": "{ set_hwloop_w 0, 16, 32, 4; nop; nop }",
+    "SET_HWLOOP_F2": "{ set_hwloop_f2_w 0, 16, 32, r1; nop; nop }",
+    "SET_HWLOOP_REG": "{ set_hwloop_reg_w 0, r1, r2, r3; nop; nop }",
+    "D_LQHWUA_POST": "{ d_lqhwua_post d0, 0, r1, r2, 0; nop; nop }",
+    "D_LTWUA_POST": "{ d_ltwua_post d0, 0, r1, r2, 0; nop; nop }",
+    "D_SQHWUA_POST": "{ d_sqhwua_post d0, 0, r1, r2, 0; nop; nop }",
+    "D_STWUA_POST": "{ d_stwua_post d0, 0, r1, r2, 0; nop; nop }",
+    "PLDWWUA_POST": "{ pldwwua 0, r1; nop; nop }",
+    "WBARWUA": "{ wbarwua 0, r1, 0; nop; nop }",
+    "MULL": "{ mull r1, r2, r1; nop; nop }",
+}
+
+# Product logicals whose matcher/placement cannot form a Format E parcel.
+# Do not invent encoding. Coverage still pins the name via # MNEM:.
+_UNENCODABLE_LOGICALS = frozenset({
+    "WFI<TBD>",  # serialize-only WFI_S0 refuses a complete parcel
+})
+
+
+def mnemonic_roundtrip_path(out_dir: Path) -> Path:
+    """llvm/test/MC/Haydn/format-e-mnemonic-roundtrip.s from Target/Haydn out-dir."""
+    return out_dir.parents[2] / "test" / "MC" / "Haydn" / "format-e-mnemonic-roundtrip.s"
+
+
+def _member_print_ops(rec: MemberRecord, lay: TypeLayout) -> List[Tuple[str, str, int]]:
+    """Return print-order (role, classify_alias kind, width) for one member.
+
+    Mirrors emit_members_td_inc: skip empty aliases; CSRW IMM then GPR;
+    dual-dest MAC dest1, dest2, src1, src2.
+    """
+    active = {role: (alias or "").strip() for role, alias in rec.operand_active}
+    ops: List[Tuple[str, str, int, str]] = []
+    for i, of in enumerate(lay.operand_fields):
+        alias = active.get(of.role, "")
+        if not alias:
+            continue
+        name, _frag, _bw = field_operand_td(of, i, alias, rec.logical)
+        kind = classify_alias(alias, of.role)
+        ops.append((of.role, kind, of.bits.width, name))
+
+    if rec.logical.upper() == "CSRW":
+        imm = [o for o in ops if "imm" in o[0].lower() or o[1] == "IMM"]
+        reg = [o for o in ops if o not in imm]
+        if imm and reg:
+            ops = imm + reg
+        return [(r, k, w) for r, k, w, _n in ops]
+
+    names_active = [(n, i) for i, (_r, _k, _w, n) in enumerate(ops)]
+    by = {n.split("_")[0]: i for n, i in names_active}
+    dual_order = ["dest1", "dest2", "src1", "src2"]
+    if all(k in by for k in dual_order) and len(names_active) == 4:
+        ops = [ops[by[k]] for k in dual_order]
+    return [(r, k, w) for r, k, w, _n in ops]
+
+
+def _fill_asm_token(
+    kind: str,
+    width: int,
+    role: str,
+    logical: str,
+    is_last: bool,
+    gpr_i: List[int],
+    dr_i: List[int],
+    first_dr: List[str],
+) -> str:
+    gprs = ("r1", "r2", "r3", "r4", "r5")
+    drs = ("d0", "d1", "d2", "d3", "d4")
+    if kind == "REG_DR":
+        tok = drs[dr_i[0] % len(drs)]
+        dr_i[0] += 1
+        if first_dr[0] is None:
+            first_dr[0] = tok
+        return tok
+    if kind == "REG_AR":
+        return "ar0"
+    if kind == "REG_GPR":
+        tok = gprs[gpr_i[0] % len(gprs)]
+        gpr_i[0] += 1
+        return tok
+    r = (role or "").lower()
+    logu = (logical or "").strip().upper()
+    if r in ("cbr_sel", "hwlr_sel", "ar_sel") or r.endswith("_sel"):
+        return "0"
+    if is_last and logu in BRANCH_TARGET_LOGICALS:
+        # Offset 0: `.` is rejected by the matcher; a file-wide label
+        # overflows simm12 and mis-decodes. Immediate 0 round-trips.
+        return "0"
+    if width <= 1:
+        return "0"
+    return "1"
+
+
+def asm_packet_for_logical(cat: Catalog, logical: str) -> Optional[str]:
+    """One complete `{ insn; nop; nop }` packet, or None if unencodable."""
+    if logical in _UNENCODABLE_LOGICALS:
+        return None
+    if logical in _SPECIAL_PACKETS:
+        return _SPECIAL_PACKETS[logical]
+    mids = cat.alternatives[logical]
+    rec = cat.members[mids[0]]
+    lay = cat.layouts[rec.layout_id]
+    ops = _member_print_ops(rec, lay)
+    gpr_i = [0]
+    dr_i = [0]
+    first_dr: List[Optional[str]] = [None]
+    # In-place DR+IMM: reuse dest for the first source DR.
+    inplace_dr = (
+        sum(1 for _r, k, _w in ops if k == "REG_DR") == 2
+        and any(k == "IMM" for _r, k, _w in ops)
+    )
+    toks: List[str] = []
+    for i, (role, kind, width) in enumerate(ops):
+        if kind == "REG_DR" and inplace_dr and first_dr[0] is not None:
+            toks.append(first_dr[0])
+            continue
+        toks.append(
+            _fill_asm_token(
+                kind,
+                width,
+                role,
+                logical,
+                i + 1 == len(ops),
+                gpr_i,
+                dr_i,
+                first_dr,
+            )
+        )
+    mnem = assembler_mnemonic(logical, rec.unit)
+    if toks:
+        insn = mnem + " " + ", ".join(toks)
+    else:
+        insn = mnem
+    return "{ " + insn + "; nop; nop }"
+
+
+def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
+    """Committed MC harness: one packet per unique non-NOP logical."""
+    logicals = list(cat.alternatives.keys())
+    if len(logicals) != PIN_UNIQUE_NON_NOP:
+        raise SystemExit(
+            f"mnemonic harness logicals {len(logicals)} != {PIN_UNIQUE_NON_NOP}"
+        )
+    unenc = [l for l in logicals if l in _UNENCODABLE_LOGICALS]
+    encodable_n = PIN_UNIQUE_NON_NOP - len(unenc)
+    lines: List[str] = []
+    lines.append(
+        "# RUN: %python %S/../../../utils/haydn/check_mc_mnemonic_coverage.py"
+    )
+    lines.append(
+        "# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | "
+        "FileCheck %s --check-prefix=ENC"
+    )
+    lines.append(
+        "# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && "
+        "llvm-objdump -d -z --no-show-raw-insn --triple=haydn-unknown-elf %t.o | "
+        "FileCheck %s --check-prefix=DIS"
+    )
+    lines.append("# REQUIRES: haydn-registered-target")
+    lines.append("#")
+    lines.append(
+        "# Auto-generated by FormatE/generate_format_e_records.py. DO NOT EDIT."
+    )
+    lines.append(
+        "# One Format E packet per product non-NOP logical from the golden"
+    )
+    lines.append(
+        "# member table. Packet form: { insn; nop; nop }. Bare nop is covered"
+    )
+    lines.append(
+        "# in nop-format-e-not-all-zero.s. Hypothesized Auto.td encodings are"
+    )
+    lines.append(
+        "# isCodeGenOnly and live in auto-hypothesized-unencodable.s, not here."
+    )
+    lines.append("#")
+    lines.append(
+        "# Role: object — assemble each product mnemonic, require a 12-byte"
+    )
+    lines.append(
+        "# non-all-zero parcel, and require objdump to print the logical name."
+    )
+    lines.append(
+        "# Peer: llvm/test/MC/Hexagon/v67_all.s (mnemonic × assemble+objdump)."
+    )
+    lines.append(
+        f"# ENC-COUNT-{encodable_n}: encoding: ["
+    )
+    lines.append(
+        "# ENC-NOT: encoding: "
+        "[0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]"
+    )
+    lines.append("")
+    lines.append(".text")
+    lines.append("")
+    for logical in logicals:
+        unit = ""
+        mids = cat.alternatives.get(logical) or []
+        if mids:
+            unit = cat.members[mids[0]].unit
+        cov_m = logical_print_mnemonic(logical)
+        print_m = assembler_mnemonic(logical, unit)
+        label = "rt_" + re.sub(r"[^A-Za-z0-9_]", "_", print_m)
+        packet = asm_packet_for_logical(cat, logical)
+        lines.append(f"# MNEM: {cov_m}")
+        if packet is None:
+            lines.append(
+                f"# UNENCODABLE: {logical} ({cov_m}) — no invented encoding"
+            )
+            lines.append("")
+            continue
+        lines.append(f"{label}:")
+        lines.append(packet)
+        lines.append(f"# DIS-LABEL: <{label}>:")
+        lines.append("# DIS: {{[ \\t]}}" + print_m + "{{[ \\t,;}]}}")
+        lines.append("")
+    if unenc:
+        lines.append("# UNENCODABLE product logicals (real matcher/placement gap):")
+        for logical in unenc:
+            lines.append(f"#   {logical} -> {logical_print_mnemonic(logical)}")
+        lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -1203,10 +2167,476 @@ def write_if_changed(path: Path, content: str) -> bool:
     return True
 
 
+# ---------------------------------------------------------------------------
+# Golden discovery + XLSX parse + canonical-vector round-trip (T-TII2)
+# ---------------------------------------------------------------------------
+
+
+def resolve_golden_dir() -> Path:
+    """HAYDN_GOLDEN_DIR / BUNDLESIM_GOLDEN_DIR, else the host plans-tree default."""
+    for key in ("HAYDN_GOLDEN_DIR", "BUNDLESIM_GOLDEN_DIR"):
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        p = Path(raw)
+        if (p / "format_e_bit_layout_v2.json").is_file():
+            return p
+        nested = p / "golden"
+        if (nested / "format_e_bit_layout_v2.json").is_file():
+            return nested
+    return DEFAULT_GOLDEN_DIR
+
+
+def deposit_bits(bits: int, val: int, lo: int, width: int) -> int:
+    mask = (1 << width) - 1
+    return (bits & ~(mask << lo)) | ((val & mask) << lo)
+
+
+def extract_bits(bits: int, lo: int, width: int) -> int:
+    return (bits >> lo) & ((1 << width) - 1)
+
+
+def le_hex_to_bits(hex_str: str) -> int:
+    raw = bytes.fromhex(hex_str)
+    bits = 0
+    for i, byte in enumerate(raw):
+        bits |= byte << (8 * i)
+    return bits
+
+
+def bits_to_le_hex(bits: int, nbytes: int) -> str:
+    return bytes((bits >> (8 * i)) & 0xFF for i in range(nbytes)).hex()
+
+
+def pack_member_bits(rec: MemberRecord, lay: TypeLayout) -> int:
+    """Pack header + map + type_code + opcode; operands stay zero (placement RT)."""
+    bits = 0x7  # format_indicator[2:0]
+    if rec.mode == "E3":
+        bits |= 1 << 3
+    bits = deposit_bits(bits, rec.unit_map, lay.map_bits.lo, lay.map_bits.width)
+    bits = deposit_bits(
+        bits, rec.type_code, lay.type_code_bits.lo, lay.type_code_bits.width
+    )
+    bits = deposit_bits(
+        bits, rec.opcode, lay.opcode_bits.lo, lay.opcode_bits.width
+    )
+    return bits
+
+
+def roundtrip_members(cat: Catalog) -> None:
+    """Every generated member encodes then inverse-decodes to the same MemberId."""
+    for rec in cat.members:
+        lay = cat.layouts[rec.layout_id]
+        bits = pack_member_bits(rec, lay)
+        mode = "E3" if extract_bits(bits, 3, 1) else "E2"
+        umap = extract_bits(bits, lay.map_bits.lo, lay.map_bits.width)
+        tcode = extract_bits(
+            bits, lay.type_code_bits.lo, lay.type_code_bits.width
+        )
+        opc = extract_bits(bits, lay.opcode_bits.lo, lay.opcode_bits.width)
+        key = (mode, rec.entry_idx, rec.unit, rec.type_name, opc)
+        mid = cat.inverse.get(key)
+        if (
+            mid != rec.member_id
+            or umap != rec.unit_map
+            or tcode != rec.type_code
+            or mode != rec.mode
+        ):
+            raise SystemExit(
+                f"member round-trip miss {rec.member_symbol} "
+                f"mid={mid} want={rec.member_id} map={umap}/{rec.unit_map} "
+                f"tcode={tcode}/{rec.type_code} mode={mode}/{rec.mode}"
+            )
+        hex12 = bits_to_le_hex(bits, 12)
+        if le_hex_to_bits(hex12) != bits:
+            raise SystemExit(
+                f"member LE hex round-trip miss {rec.member_symbol}"
+            )
+
+
+def _xlsx_shared_strings(zf: zipfile.ZipFile) -> List[str]:
+    root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+    out: List[str] = []
+    for si in root.findall("m:si", SSML_NS):
+        out.append("".join(t.text or "" for t in si.findall(".//m:t", SSML_NS)))
+    return out
+
+
+def _xlsx_sheet_cells(
+    zf: zipfile.ZipFile, sheet: str, strings: List[str]
+) -> Dict[int, Dict[str, str]]:
+    root = ET.fromstring(zf.read(sheet))
+    rows: Dict[int, Dict[str, str]] = {}
+    for cell in root.findall(".//m:c", SSML_NS):
+        ref = cell.get("r")
+        if not ref:
+            continue
+        m = re.match(r"([A-Z]+)(\d+)", ref)
+        if not m:
+            continue
+        kind = cell.get("t")
+        val_el = cell.find("m:v", SSML_NS)
+        if val_el is None or val_el.text is None:
+            val = ""
+        elif kind == "s":
+            val = strings[int(val_el.text)]
+        else:
+            val = val_el.text
+        rows.setdefault(int(m.group(2)), {})[m.group(1)] = val
+    return rows
+
+
+def _xlsx_col_a(rows: Dict[int, Dict[str, str]]) -> List[str]:
+    return [rows[r].get("A", "") for r in sorted(rows) if rows[r].get("A")]
+
+
+def parse_xlsx_type_layouts(xlsx_path: Path) -> List[Tuple[str, int, str, str, str]]:
+    """(mode, entry_idx, unit, type_code_bin, type_name) from hierarchy sheets."""
+    entry_re = re.compile(r"entry(\d+)\s*\[", re.I)
+    map_re = re.compile(r"map=([01]+)\s*→\s*([A-Z0-9]+)")
+    type_re = re.compile(r"\[([01]+)\]\s+(\S+)")
+
+    def parse(texts: List[str], mode: str) -> List[Tuple[str, int, str, str, str]]:
+        entry: Optional[int] = None
+        unit: Optional[str] = None
+        out: List[Tuple[str, int, str, str, str]] = []
+        for text in texts:
+            t = text.strip()
+            em = entry_re.search(t)
+            if em:
+                entry = int(em.group(1))
+                unit = None
+                continue
+            mm = map_re.search(t)
+            if mm:
+                unit = mm.group(2)
+                continue
+            tm = type_re.search(t)
+            if tm and entry is not None and unit:
+                out.append((mode, entry, unit, tm.group(1), tm.group(2)))
+        return out
+
+    with zipfile.ZipFile(xlsx_path) as zf:
+        strings = _xlsx_shared_strings(zf)
+        e2_rows = _xlsx_sheet_cells(zf, "xl/worksheets/sheet2.xml", strings)
+        e3_rows = _xlsx_sheet_cells(zf, "xl/worksheets/sheet3.xml", strings)
+    return parse(_xlsx_col_a(e2_rows), "E2") + parse(_xlsx_col_a(e3_rows), "E3")
+
+
+def parse_xlsx_overview_geometry(
+    xlsx_path: Path,
+) -> Tuple[Dict[str, str], List[Tuple[str, int, str, str]]]:
+    """Overview sheet: field bits plus (mode, entry_idx, map_bin, unit)."""
+    with zipfile.ZipFile(xlsx_path) as zf:
+        strings = _xlsx_shared_strings(zf)
+        rows = _xlsx_sheet_cells(zf, "xl/worksheets/sheet1.xml", strings)
+
+    fields: Dict[str, str] = {}
+    for r in sorted(rows):
+        name = (rows[r].get("A") or "").strip()
+        bits = (rows[r].get("B") or "").strip()
+        if name and bits.startswith("bit["):
+            fields[name] = bits.split()[0]
+
+    units: List[Tuple[str, int, str, str]] = []
+    mode = ""
+    entry_idx = -1
+    for r in sorted(rows):
+        a = (rows[r].get("A") or "").strip()
+        if a.startswith("§3"):
+            mode = "E2"
+            continue
+        if a.startswith("§4"):
+            mode = "E3"
+            continue
+        if a.startswith("entry") and mode:
+            em = re.match(r"entry(\d+)", a)
+            if em:
+                entry_idx = int(em.group(1))
+        fmap = (rows[r].get("F") or "").strip()
+        unit = (rows[r].get("G") or "").strip()
+        if mode and entry_idx >= 0 and re.fullmatch(r"[01]+", fmap) and unit:
+            units.append((mode, entry_idx, fmap, unit))
+    return fields, units
+
+
+def json_type_layout_keys(
+    data: Dict[str, Any],
+) -> List[Tuple[str, int, str, str, str]]:
+    keys: List[Tuple[str, int, str, str, str]] = []
+    for enk, mode in (("entry_num_0", "E2"), ("entry_num_1", "E3")):
+        for ek, ev in data[enk].items():
+            if not isinstance(ev, dict) or not ek.startswith("entry"):
+                continue
+            eidx = int(ek[len("entry") :])
+            for un, uo in ev.items():
+                if not isinstance(uo, dict) or "types" not in uo:
+                    continue
+                for tn, to in uo["types"].items():
+                    keys.append(
+                        (mode, eidx, un, str(to["type_code_bin"]).strip(), tn)
+                    )
+    return keys
+
+
+def json_unit_map_keys(
+    data: Dict[str, Any],
+) -> List[Tuple[str, int, str, str]]:
+    keys: List[Tuple[str, int, str, str]] = []
+    for enk, mode in (("entry_num_0", "E2"), ("entry_num_1", "E3")):
+        for ek, ev in data[enk].items():
+            if not isinstance(ev, dict) or not ek.startswith("entry"):
+                continue
+            eidx = int(ek[len("entry") :])
+            for un, uo in ev.items():
+                if not isinstance(uo, dict) or "mapping_value" not in uo:
+                    continue
+                keys.append((mode, eidx, str(uo["mapping_value"]).strip(), un))
+    return keys
+
+
+def check_xlsx_json_parity(xlsx_path: Path, data: Dict[str, Any]) -> None:
+    """Parse the golden XLSX (primary layout) against the JSON pair. No invention."""
+    fields, xlsx_units = parse_xlsx_overview_geometry(xlsx_path)
+    if fields.get("Total bundle") != "bit[95:0]":
+        raise SystemExit(f"XLSX Total bundle {fields.get('Total bundle')!r}")
+    if fields.get("Header") != "bit[5:0]":
+        raise SystemExit(f"XLSX Header {fields.get('Header')!r}")
+    if fields.get("Payload") != "bit[95:6]":
+        raise SystemExit(f"XLSX Payload {fields.get('Payload')!r}")
+    if int(data["bundle_bits"]) != 96 or int(data["payload_lsb"]) != 6:
+        raise SystemExit("JSON bundle/payload_lsb disagree with XLSX Overview")
+    if int(data["payload_budget_bits"]) != 90:
+        raise SystemExit("JSON payload_budget_bits != XLSX 90b")
+
+    json_units = json_unit_map_keys(data)
+    if sorted(xlsx_units) != sorted(json_units):
+        raise SystemExit(
+            f"XLSX/JSON unit-map mismatch xlsx={len(xlsx_units)} "
+            f"json={len(json_units)}"
+        )
+
+    xlsx_types = parse_xlsx_type_layouts(xlsx_path)
+    json_types = json_type_layout_keys(data)
+
+    def type_key(
+        t: Tuple[str, int, str, str, str],
+    ) -> Tuple[str, int, str, int, str]:
+        mode, eidx, unit, tcb, name = t
+        return (mode, eidx, unit, int(tcb, 2), name)
+
+    xset = set(map(type_key, xlsx_types))
+    jset = set(map(type_key, json_types))
+    if xset != jset:
+        raise SystemExit(
+            f"XLSX/JSON type-layout mismatch xlsx-only={len(xset - jset)} "
+            f"json-only={len(jset - xset)}"
+        )
+    if len(xlsx_types) != PIN_TYPE_LAYOUTS or len(json_types) != PIN_TYPE_LAYOUTS:
+        raise SystemExit(
+            f"type layout count xlsx={len(xlsx_types)} json={len(json_types)} "
+            f"pin={PIN_TYPE_LAYOUTS}"
+        )
+    for xt, jt in zip(
+        sorted(xlsx_types, key=type_key), sorted(json_types, key=type_key)
+    ):
+        if len(xt[3]) != len(jt[3]):
+            raise SystemExit(
+                f"type_code_bin width mismatch {xt} vs {jt}"
+            )
+    print(
+        f"OK XLSX↔JSON parity layouts={len(xlsx_types)} unit_maps={len(xlsx_units)}"
+    )
+
+
+def _walk_ledger_entries(obj: Any, path: str = "") -> Iterable[Tuple[str, Dict[str, Any]]]:
+    if isinstance(obj, dict):
+        if "id" in obj or "completion_state_id" in obj:
+            yield path, obj
+        for key, val in obj.items():
+            child = f"{path}.{key}" if path else str(key)
+            yield from _walk_ledger_entries(val, child)
+    elif isinstance(obj, list):
+        for i, val in enumerate(obj):
+            yield from _walk_ledger_entries(val, f"{path}[{i}]")
+
+
+def classify_header_bits(bits: int, nbytes: int) -> str:
+    if nbytes != 12:
+        return "malformed_framing"
+    indicator = extract_bits(bits, 0, 3)
+    reserved = extract_bits(bits, 4, 2)
+    if indicator != 0x7:
+        return "malformed_header"
+    if reserved != 0:
+        return "malformed_header_reserved"
+    return "header_ok"
+
+
+def check_canonical_vectors(path: Path, cat: Catalog) -> None:
+    """Consume every ledger entry. Honor may_drive_* — never invent hex or MC."""
+    sha = sha256_file(path)
+    if sha != PINNED_CANONICAL_SHA256:
+        raise SystemExit(
+            f"canonical-vector sha256 {sha} != pinned {PINNED_CANONICAL_SHA256}"
+        )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("may_drive_llvm_mc_encode") is not False:
+        raise SystemExit(
+            "canonical ledger may_drive_llvm_mc_encode must stay false; "
+            "importer --check does not drive llvm-mc"
+        )
+    if data.get("may_drive_lld_idle_pad") is not False:
+        raise SystemExit("canonical ledger may_drive_lld_idle_pad must stay false")
+    geom = data.get("geometry_contract") or {}
+    if int(geom.get("bundle_bits", -1)) != cat.bundle_bits:
+        raise SystemExit("canonical geometry_contract.bundle_bits != catalog")
+    if int(geom.get("parcel_bytes", -1)) != (cat.bundle_bits + 7) // 8:
+        raise SystemExit("canonical geometry_contract.parcel_bytes != catalog")
+    if geom.get("format_indicator") != "0b111":
+        raise SystemExit("canonical format_indicator != 0b111")
+    byte_order = (geom.get("byte_order_for_published_hex") or {}).get("convention")
+    if byte_order != "little_endian_bit0_in_byte0":
+        raise SystemExit(f"unexpected canonical byte-order convention {byte_order!r}")
+
+    oracle = ((data.get("authority") or {}).get("oracle_sha256")) or {}
+    if oracle.get("format_e_bit_layout_v2.json") != PINNED_JSON_SHA256:
+        raise SystemExit("canonical oracle JSON hash != pinned JSON")
+    if oracle.get("format_e_bit_layout_v2.xlsx") != PINNED_XLSX_SHA256:
+        raise SystemExit("canonical oracle XLSX hash != pinned XLSX")
+
+    n = 0
+    n_hex = 0
+    n_null = 0
+    for loc, entry in _walk_ledger_entries(data):
+        n += 1
+        ident = entry.get("id") or entry.get("completion_state_id") or loc
+        status = str(entry.get("status") or "")
+        hex12 = entry.get("wire_hex_le_12", None)
+        wire = entry.get("wire_hex", None)
+        kind = str(entry.get("kind") or "")
+
+        if status in ("OPEN_BLOCKED", "RECIPE_ONLY", "STUB_ONLY"):
+            if hex12 is not None:
+                raise SystemExit(
+                    f"{ident}: {status} published wire_hex_le_12={hex12!r}"
+                )
+            n_null += 1
+            continue
+
+        published = hex12 if hex12 is not None else wire
+        if published is None:
+            n_null += 1
+            if status == "MALFORMED_DEFINED" and kind.startswith("malformed_framing"):
+                # MAL_TRUNC_0 may use empty wire_hex rather than wire_hex_le_12.
+                published = wire if wire is not None else ""
+            elif status in ("MALFORMED_DEFINED", "ILLUSTRATION_ONLY"):
+                raise SystemExit(f"{ident}: {status} missing published hex")
+            else:
+                continue
+
+        if not isinstance(published, str):
+            raise SystemExit(f"{ident}: published hex is not a string")
+        if len(published) % 2 != 0:
+            raise SystemExit(f"{ident}: odd-length hex {published!r}")
+        raw = bytes.fromhex(published)
+        nbytes = len(raw)
+        bits = le_hex_to_bits(published) if published else 0
+        if published and bits_to_le_hex(bits, nbytes) != published.lower():
+            raise SystemExit(f"{ident}: LE hex round-trip miss")
+        n_hex += 1
+        cls = classify_header_bits(bits, nbytes)
+
+        if status == "ILLUSTRATION_ONLY":
+            if cls != "header_ok":
+                raise SystemExit(f"{ident}: illustration header not ok ({cls})")
+            mode = entry.get("mode")
+            entry_num = extract_bits(bits, 3, 1)
+            if mode == "E2" and entry_num != 0:
+                raise SystemExit(f"{ident}: E2 illustration entry_num={entry_num}")
+            if mode == "E3" and entry_num != 1:
+                raise SystemExit(f"{ident}: E3 illustration entry_num={entry_num}")
+            continue
+
+        if status == "MALFORMED_DEFINED":
+            if kind.startswith("malformed_framing"):
+                if nbytes == 12:
+                    raise SystemExit(
+                        f"{ident}: framing malformed claimed 12-byte parcel"
+                    )
+                if cls != "malformed_framing":
+                    raise SystemExit(f"{ident}: expected framing reject, got {cls}")
+            elif kind == "malformed_header" or "INDICATOR" in str(ident) or ident == "MAL_ALL_ZERO_12B":
+                if cls != "malformed_header":
+                    raise SystemExit(f"{ident}: expected indicator reject, got {cls}")
+            elif kind == "malformed_header_reserved":
+                if cls != "malformed_header_reserved":
+                    raise SystemExit(f"{ident}: expected reserved reject, got {cls}")
+            else:
+                raise SystemExit(f"{ident}: unhandled MALFORMED_DEFINED kind={kind!r}")
+            continue
+
+        raise SystemExit(f"{ident}: unhandled ledger status {status!r}")
+
+    if n == 0:
+        raise SystemExit("canonical ledger walked zero entries")
+    print(
+        f"OK canonical-vector ledger entries={n} hex={n_hex} null={n_null}"
+    )
+
+
+def diff_generated_targets(
+    targets: Dict[Path, str], *, quiet: bool = False
+) -> List[str]:
+    failed: List[str] = []
+    for path, content in targets.items():
+        if not path.is_file():
+            if not quiet:
+                print(f"MISSING {path}", file=sys.stderr)
+            failed.append(str(path))
+            continue
+        cur = path.read_text(encoding="utf-8")
+        if cur != content:
+            if not quiet:
+                print(f"OUT_OF_DATE {path}", file=sys.stderr)
+            failed.append(str(path))
+        elif not quiet:
+            print(f"OK {path}")
+    return failed
+
+
+def prove_flipped_byte_fails(targets: Dict[Path, str]) -> None:
+    """Acceptance: one flipped byte in a generated file is visible to --check."""
+    first = next(iter(targets))
+    if not first.is_file():
+        raise SystemExit(f"stale-flip probe needs committed file {first}")
+    with tempfile.TemporaryDirectory(prefix="haydn-fe-stale-") as tmp:
+        tmp_dir = Path(tmp)
+        mutated_targets: Dict[Path, str] = {}
+        for path, content in targets.items():
+            dest = tmp_dir / path.name
+            dest.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+            mutated_targets[dest] = content
+        victim = tmp_dir / first.name
+        text = victim.read_text(encoding="utf-8")
+        if not text:
+            raise SystemExit("stale-flip probe: empty generated file")
+        idx = min(len(text) // 2, len(text) - 1)
+        repl = "X" if text[idx] != "X" else "Y"
+        victim.write_text(text[:idx] + repl + text[idx + 1 :], encoding="utf-8")
+        if not diff_generated_targets(mutated_targets, quiet=True):
+            raise SystemExit(
+                "stale-flip probe: flipped generated byte was not detected"
+            )
+    print(f"OK stale-flip detector ({first.name})")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--json", type=Path, default=DEFAULT_JSON)
-    ap.add_argument("--xlsx-hash", default=PINNED_XLSX_SHA256)
+    ap.add_argument("--json", type=Path, default=None)
+    ap.add_argument("--xlsx", type=Path, default=None)
+    ap.add_argument("--canonical-vectors", type=Path, default=None)
+    ap.add_argument("--xlsx-hash", default=None)
     ap.add_argument(
         "--out-dir",
         type=Path,
@@ -1216,11 +2646,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument(
         "--check",
         action="store_true",
-        help="Verify committed outputs match regeneration (no write)",
+        help="Verify committed outputs, XLSX/JSON parity, canonical RT (no write)",
+    )
+    ap.add_argument(
+        "--emit-mnemonic-roundtrip",
+        action="store_true",
+        help="Write test/MC/Haydn/format-e-mnemonic-roundtrip.s (also written "
+        "on a normal generate; --check diffs it)",
     )
     args = ap.parse_args(argv)
 
-    json_path: Path = args.json
+    golden = resolve_golden_dir()
+    json_path: Path = args.json or (golden / "format_e_bit_layout_v2.json")
+    xlsx_path: Path = args.xlsx or (golden / "format_e_bit_layout_v2.xlsx")
+    canonical_path: Path = args.canonical_vectors or (
+        golden / "format_e_canonical_vectors_v1.json"
+    )
     if not json_path.is_file():
         print(f"error: golden JSON not found: {json_path}", file=sys.stderr)
         return 2
@@ -1232,10 +2673,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             file=sys.stderr,
         )
         return 2
-    xlsx_sha = args.xlsx_hash
+
+    if not xlsx_path.is_file():
+        print(f"error: golden XLSX not found: {xlsx_path}", file=sys.stderr)
+        return 2
+    xlsx_sha = sha256_file(xlsx_path)
     if xlsx_sha != PINNED_XLSX_SHA256:
         print(
-            f"error: XLSX sha256 pin {xlsx_sha} != pinned {PINNED_XLSX_SHA256}",
+            f"error: XLSX sha256 {xlsx_sha} != pinned {PINNED_XLSX_SHA256}",
+            file=sys.stderr,
+        )
+        return 2
+    if args.xlsx_hash is not None and args.xlsx_hash != xlsx_sha:
+        print(
+            f"error: --xlsx-hash {args.xlsx_hash} != file sha256 {xlsx_sha}",
             file=sys.stderr,
         )
         return 2
@@ -1243,37 +2694,50 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     data = json.loads(json_path.read_text(encoding="utf-8"))
     cat = build_catalog(data)
 
+    out_dir: Path = args.out_dir
+    member_to_logical = collect_member_to_logical(
+        cat, out_dir / "HaydnMultiSlotPseudo.td"
+    )
+
     records = emit_records_inc(cat, json_sha, xlsx_sha)
     ledger = emit_setdesc_ledger_inc(cat)
     members_td = emit_members_td_inc(cat)
-    member_opcodes = emit_member_opcodes_inc(cat)
+    member_opcodes = emit_member_opcodes_inc(cat, member_to_logical)
+    mnemonic_rt = emit_mnemonic_roundtrip_s(cat)
+    mnemonic_rt_path = mnemonic_roundtrip_path(out_dir)
 
-    out_dir: Path = args.out_dir
     targets = {
         out_dir / "HaydnGenFormatERecords.inc": records,
         out_dir / "HaydnGenFormatESetDescLedger.inc": ledger,
         out_dir / "HaydnFormatsE96Members.td.inc": members_td,
         out_dir / "HaydnGenFormatEMemberOpcodes.inc": member_opcodes,
+        mnemonic_rt_path: mnemonic_rt,
     }
 
     if args.check:
-        failed = False
-        for path, content in targets.items():
-            if not path.is_file():
-                print(f"MISSING {path}", file=sys.stderr)
-                failed = True
-                continue
-            cur = path.read_text(encoding="utf-8")
-            if cur != content:
-                print(f"OUT_OF_DATE {path}", file=sys.stderr)
-                failed = True
-            else:
-                print(f"OK {path}")
+        failed = bool(diff_generated_targets(targets))
         if failed:
+            return 1
+        try:
+            prove_flipped_byte_fails(targets)
+            check_xlsx_json_parity(xlsx_path, data)
+            roundtrip_members(cat)
+            print(
+                f"OK member encode→decode round-trip members={len(cat.members)}"
+            )
+            if not canonical_path.is_file():
+                raise SystemExit(
+                    f"canonical-vector ledger not found: {canonical_path}"
+                )
+            check_canonical_vectors(canonical_path, cat)
+        except SystemExit as exc:
+            msg = str(exc)
+            if msg and msg != "1":
+                print(f"error: {msg}", file=sys.stderr)
             return 1
         print(
             f"check passed: layouts={len(cat.layouts)} members={len(cat.members)} "
-            f"logicals={len(cat.alternatives)}"
+            f"logicals={len(cat.alternatives)} member_to_logical={len(member_to_logical)}"
         )
         return 0
 
@@ -1283,7 +2747,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     print(
         f"generated layouts={len(cat.layouts)} members={len(cat.members)} "
-        f"logicals={len(cat.alternatives)} json={json_sha[:12]}…"
+        f"logicals={len(cat.alternatives)} member_to_logical={len(member_to_logical)} "
+        f"json={json_sha[:12]}…"
     )
     return 0
 

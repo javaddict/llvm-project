@@ -1,5 +1,8 @@
 # REQUIRES: haydn
 # RUN: yaml2obj %S/Inputs/text16-e96.yaml -o %t.o
+# Stamp product EF_HAYDN_E96 (e_flags=0x1) on the yaml object. yaml2obj has
+# no Haydn e_flags bit names; LLD rejects unprofiled zero flags fail-closed.
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.o
 # RUN: ld.lld -T %S/haydn.ld %t.o -o %t
 # RUN: llvm-readobj -S %t | FileCheck %s
 #

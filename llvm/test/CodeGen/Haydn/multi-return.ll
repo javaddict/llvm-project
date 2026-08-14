@@ -20,7 +20,7 @@ define i32 @multi_ret_cond(i32 %x) nounwind {
 ; CHECK-LABEL: multi_ret_cond:
 ; CHECK-DAG: slt32
 ; CHECK-DAG: sub32
-; CHECK-DAG: {{beqz_w|bnez_w}}
+; CHECK-DAG: {{beqz|bnez}}
 entry:
   %cmp = icmp sgt i32 %x, 0
   br i1 %cmp, label %pos, label %neg
@@ -35,7 +35,7 @@ neg:
 define i32 @four_way_ret(i32 %x) nounwind {
 ; CHECK-LABEL: four_way_ret:
 ; CHECK-DAG: slt32
-; CHECK-DAG: {{beqz_w|bnez_w}}
+; CHECK-DAG: {{beqz|bnez}}
 entry:
   %cmp1 = icmp eq i32 %x, 0
   br i1 %cmp1, label %zero, label %check_pos
@@ -101,7 +101,7 @@ ret_mid:
 ;Void function with multiple returns
 define void @void_multi_ret(i32 %x) nounwind {
 ; CHECK-LABEL: void_multi_ret:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %x, 0
   br i1 %cmp, label %early, label %late

@@ -1,44 +1,37 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s 2>&1 | FileCheck %s
 
-; Role: semantic — — BranchRelaxation must relax WIDE conditional branches whose EMITTED distance exceeds the ±4KB FIXUP_HAYDN_WIDE_BranchSImm12.
+; Role: semantic — BranchRelaxation must relax WIDE conditional branches whose EMITTED distance exceeds the GE96-03 ±2048-byte FIXUP_HAYDN_WIDE_BranchSImm12.
 
-; REGRESSION TEST: — BranchRelaxation must relax WIDE conditional
-; branches whose EMITTED distance exceeds the ±4KB FIXUP_HAYDN_WIDE_BranchSImm12
-; field (encoding_manual.md §5.5 / §5.14 D1).
+; REGRESSION TEST: BranchRelaxation must relax WIDE conditional
+; branches whose EMITTED distance exceeds the GE96-03 ±2048-byte
+; FIXUP_HAYDN_WIDE_BranchSImm12 field.
 ;
-; Bug: HaydnInstrInfo::getInstSizeInBytes returned the TableGen Size field (4)
-; for standalone EW_32Bit ALU32/LS ops (ST32/LD32/SUBI32/ADD32/etc.) and
-; EW_64Bit ALU64/MAC ops (ADD64/OR64/MOVE32_DR_L/etc.). But the MC encoder
-; (HaydnMCCodeEmitter::encodeSingleInstruction) routes these through
-; emitMode0S0Bundle / emitMode0S1*Bundle / emitBundleWord, each of which emits
-; an 8-byte Mode-0/Mode-3 bundle word (encoding_manual.md §6 — the new encoding
-; retires the legacy bits[31:30]=01 32-bit format; any ALU32/LS that doesn't
-; fit G-format must ride in a single-child Mode-0 s0/s1 bundle). BranchRelaxation
-; summed 4 bytes per standalone op, measured branch distances ~half the real
-; emitted size, deemed every branch in range, and never relaxed. The WIDE
-; conditional branch then overflowed FIXUP_HAYDN_WIDE_BranchSImm12 (±4KB) at
-; MC-fixup time -> "relocation offset out of range".
+; Bug: HaydnInstrInfo::getInstSizeInBytes used to return TableGen Size (4)
+; or retired EncodedWidth tags, while the encoder emitted a different byte
+; count. BranchRelaxation then under-measured distances and never relaxed;
+; the WIDE conditional overflowed FIXUP_HAYDN_WIDE_BranchSImm12 at MC-fixup
+; time ("relocation offset out of range").
 ;
 ; This mirrors the compiler-rt adddf3.c / divdf3.c failure :
 ; adddf3: 623 bundles, Value=-4602 (1 overflow site)
 ; divdf3: 824 bundles, Value=-6408/-6430 (2 overflow sites)
 ; at a smaller, self-contained scale.
 ;
-; Fix: getInstSizeInBytes now returns the ACTUAL emitted byte count keyed on
-; EncodedWidth (TSFlags bits[4:3]): EW_16Bit=2, EW_48Bit=6, EW_32Bit=8
-; EW_64Bit=8 (the emitMode0S*Bundle / emitBundleWord routes). BUNDLE=8 and
-; isInsideBundle-child=0 short-circuits remain.
+; Fix: getInstSizeInBytes returns the product Format E parcel size
+; (EncodedBytes = 12) for a real instruction / BUNDLE root. Bundle children
+; charge 0 (the root already paid). Retired 2/6/8-byte EncodedWidth tags
+; are not a size model.
 ;
 ; Test design: a function with a conditional branch from entry to a late
 ; exit block, separated by 600 standalone volatile i32 stores. Each ST32
-; emits as a single-child Mode-0 s0 LS bundle = 8 bytes. The forward branch
-; entry→exit distance is ~4800 bytes — well over the ±4096 reach, so
-; BranchRelaxation must rewrite it. The KEY regression guard is the RUN line
-; itself: without the size-model fix, llc aborts with "relocation offset out
-; of range" and a non-zero exit code, failing the test. The CHECK additionally
-; pins the relaxed trampoline's indirect jump (jalr_w in a non-return context)
-; without relaxation the encoder rejects the offset before asm emission
-; finishes, so no jalr_w would appear in the dump.
+; is one Format E parcel (12 bytes). The forward branch entry→exit distance
+; is well over the ±2048-byte reach, so BranchRelaxation must rewrite it. The
+; KEY regression guard is the RUN line itself: without the size-model fix,
+; llc aborts with "relocation offset out of range" and a non-zero exit
+; code, failing the test. The CHECK additionally pins the relaxed
+; trampoline's indirect jump (jalr_w in a non-return context); without
+; relaxation the encoder rejects the offset before asm emission finishes,
+; so no jalr_w would appear in the dump.
 
 @arr = global [1024 x i32] zeroinitializer
 
@@ -48,7 +41,7 @@
 ; (LOADI32 + JALR via HaydnInstrInfo::insertIndirectBranch).
 define void @cb84_long_cond_branch(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: cb84_long_cond_branch:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %exit, label %pad

@@ -21,9 +21,10 @@ include "HaydnGeneric.td"
 // Flex format includes for asm-match. Phase 3 stripped
 // `.sN` from AsmStrings (bare `add32` / `ld32` / `x2mula32` / …); per-slot
 // defs share identical mnemonics. Slot is not in the mnemonic: member
-// getSlotKind / Bundle placement (AIE shape). Ambiguous matchables: first
-// match wins for standalone; decoder keeps all three slots (no isCodeGenOnly
-// on S1/S2).
+// getSlotKind / Bundle placement (AIE shape). Residual `_S*` FieldSlots
+// use AsmVariantName fieldslot and are not in the public matcher.
+// Decoder keeps S0/S1/S2 tries. Public logical AsmStrings use the same
+// user spelling as FieldSlots / assembler_mnemonic (MAC lane `_` → `.`).
 //
 // Mirrors the slot block in Haydn.td EXCEPT HaydnCompositeFormats.td is
 // intentionally omitted: the Format E composite is wider than 64 bits and
@@ -34,9 +35,9 @@ include "HaydnGeneric.td"
 //===----------------------------------------------------------------------===//
 include "llvm/Target/CodeGenFormat.td"
 include "HaydnSlots.td"
-include "HaydnFormatsALU32.td"  // ADD32_S1 (ALU32 s1)
-include "HaydnFormatsALU64.td"  // ADD64_S1 (ALU64 s1, DR64)
+include "HaydnFormatsALU32.td"  // remaining WFI/NOP/*_W FieldSlots
+include "HaydnFormatsALU64.td"  // residual MOVEI_H/L + SEXT32T64 FieldSlots
 include "HaydnFormatsLS.td"     // LD32_S0 (LS s0, imm6)
-include "HaydnFormatsLD.td"     // LD64_S1 (LD s1, DR64+GPR32 base)
-include "HaydnFormatsMAC.td"    // X2MULA32_S2 (MAC s2, RRRR accum)
+include "HaydnFormatsLD.td"     // LD-unit format classes; FieldSlots retired
+include "HaydnFormatsMAC.td"    // residual MAC FU classes (FieldSlots retired)
 def HaydnCodeGenFormat : CodeGenFormat {}

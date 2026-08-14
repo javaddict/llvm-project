@@ -8,7 +8,7 @@
 
 #include "HaydnBundle.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
-#include "MCTargetDesc/HaydnFormat.h"
+#include "MCTargetDesc/HaydnMCAsmInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "TargetInfo/HaydnTargetInfo.h"
@@ -262,8 +262,7 @@ public:
     return true;
   }
 
-  // 7-bit signed immediate for the 16-bit MOVI pattern (§2.2, pattern 0110)
-  // range -64..+63.
+  // 7-bit signed immediate. Range -64..+63.
   bool isSImm7() const {
     if (!isImm())
       return false;
@@ -274,8 +273,7 @@ public:
     return true;
   }
 
-  // 10-bit signed immediate for the 16-bit BRANCH pattern (§2.2, pattern 1000)
-  // range +-512 words; the fixup scales to byte units.
+  // 10-bit signed immediate. Range ±512; the fixup scales to byte units.
   bool isSImm10() const {
     if (!isImm())
       return false;
@@ -418,6 +416,8 @@ private:
 };
 
 class HaydnAsmParser : public MCTargetAsmParser {
+  SMLoc getLoc() const { return getParser().getTok().getLoc(); }
+
   // This tracks the parsing of operands during parseInstruction
   bool parseOperand(OperandVector &Operands);
 
@@ -434,6 +434,10 @@ class HaydnAsmParser : public MCTargetAsmParser {
   // Parse an immediate expression
   bool parseImmediate(OperandVector &Operands);
 
+  /// Parse `%hi12/%lo20/%pc_lo20(expr)` into an MCSpecifierExpr immediate.
+  bool parseOperandWithSpecifier(OperandVector &Operands);
+  bool parseExprWithSpecifier(const MCExpr *&Res, SMLoc &E);
+
   // Match and emit instruction
   bool matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                OperandVector &Operands, MCStreamer &Out,
@@ -443,13 +447,6 @@ class HaydnAsmParser : public MCTargetAsmParser {
   // Parse instruction
   bool parseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
-
-  // \returns the logical base opcode for a `_S<k>` format-member \p Opc, or
-  // \p Opc itself when it is not a member. Multi-slot members of one logical
-  // share one AsmString, so MatchInstructionImpl always resolves a bundle
-  // mnemonic to the FIRST member. De-materializing back to the logical lets
-  // the textual entry position choose the encode slot (CB-142 / #10).
-  unsigned getLogicalBaseOpcode(unsigned Opc);
 
   // Parse directive
   ParseStatus parseDirective(AsmToken ID) override;
@@ -501,28 +498,12 @@ private:
 
 } // end anonymous namespace
 
-// Strip `_S0`/`_S1`/`_S2` from a matched member opcode so composite entry
-// placement is driven by textual position, not the matcher's first-member pin.
-unsigned HaydnAsmParser::getLogicalBaseOpcode(unsigned Opc) {
-  StringRef Name = MII.getName(Opc);
-  StringRef Base = Name;
-  bool Stripped = false;
-  for (StringRef Suf : {"_S0", "_S1", "_S2"}) {
-    if (Base.ends_with(Suf)) {
-      Base = Base.drop_back(Suf.size());
-      Stripped = true;
-      break;
-    }
-  }
-  if (!Stripped)
-    return Opc;
-  if (Base.empty())
-    return Opc;
-  const unsigned Num = MII.getNumOpcodes();
-  for (unsigned Cand = 0; Cand < Num; ++Cand)
-    if (MII.getName(Cand) == Base)
-      return Cand;
-  return Opc;
+/// Generated members (`_E2_`/`_E3_`) and residual FieldSlots (`_S*`) are
+/// not public match results. Do not recover a logical name from a suffix.
+static bool isPrivatePlacementOpcode(StringRef Name) {
+  return Name.contains("_E2_") || Name.contains("_E3_") ||
+         Name.ends_with("_S0") || Name.ends_with("_S1") ||
+         Name.ends_with("_S2");
 }
 
 bool HaydnAsmParser::parseRegister(MCRegister &Reg, SMLoc &StartLoc,
@@ -652,6 +633,9 @@ bool HaydnAsmParser::parseOperand(OperandVector &Operands) {
     }
     return false;
 
+  case AsmToken::Percent:
+    return parseOperandWithSpecifier(Operands);
+
   case AsmToken::Identifier: {
     // Could be a register or an expression
     MCRegister Reg;
@@ -674,6 +658,39 @@ bool HaydnAsmParser::parseOperand(OperandVector &Operands) {
   default:
     return Error(StartLoc, "unexpected token in operand");
   }
+}
+
+bool HaydnAsmParser::parseOperandWithSpecifier(OperandVector &Operands) {
+  SMLoc S = getParser().getTok().getLoc();
+  SMLoc E;
+  if (parseToken(AsmToken::Percent, "expected '%' relocation specifier"))
+    return true;
+  const MCExpr *Expr = nullptr;
+  if (parseExprWithSpecifier(Expr, E))
+    return true;
+  Operands.push_back(HaydnOperand::CreateImm(Expr, S, E));
+  return false;
+}
+
+bool HaydnAsmParser::parseExprWithSpecifier(const MCExpr *&Res, SMLoc &E) {
+  SMLoc Loc = getParser().getTok().getLoc();
+  if (!getParser().getTok().is(AsmToken::Identifier))
+    return Error(Loc, "expected '%' relocation specifier");
+  StringRef Identifier = getParser().getTok().getIdentifier();
+  Haydn::Specifier Spec = Haydn::parseSpecifierName(Identifier);
+  if (!Spec)
+    return Error(Loc, "invalid relocation specifier");
+
+  getParser().Lex();
+  if (parseToken(AsmToken::LParen, "expected '('"))
+    return true;
+
+  const MCExpr *SubExpr = nullptr;
+  if (getParser().parseParenExpression(SubExpr, E))
+    return true;
+
+  Res = MCSpecifierExpr::create(SubExpr, Spec, getContext(), Loc);
+  return false;
 }
 
 bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
@@ -797,11 +814,11 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     if (Parser.getTok().is(AsmToken::EndOfStatement))
       Parser.Lex();
 
-    // Empty RealChildren = pure idle. Golden has no product-legal idle wire
-    // form yet — fail closed rather than inventing all-zero / dual-NOP fill.
-    if (RealChildren.empty())
-      return Error(NameLoc,
-                   "idle/all-nop bundle has no approved Format E completion");
+    // All-NOP text is the product idle cycle. Two entries are E2 {NOP, NOP};
+    // three pad to E3 then the encoder serializes the generated E2 idle
+    // parcel (canonicalFullSlotIdleParcel). Reject only `{ }` — not a cycle.
+    if (TextSlot == 0)
+      return Error(NameLoc, "empty bundle");
     if (TextSlot > 3)
       return Error(NameLoc, "Format E bundle supports at most three entries");
 
@@ -809,10 +826,6 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     // fillers): 3 text entries → E3, else E2. Single-entry `{ op }` carries
     // no positional information (encoder/e0 placement). Two or three entries
     // DO name entries positionally (high-first → reverse into e0..eN dag).
-    using namespace haydn::format;
-    const unsigned ProductBytes =
-        maxEncodedBytesInProfile(ObjectEncodingProfileID::E96).Value;
-    (void)ProductBytes;
     const unsigned NumEntries = TextSlot;
     const bool UseE3 = NumEntries == 3;
     const unsigned CompositeOpc =
@@ -823,11 +836,11 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
 
     SmallVector<MCInst *, 3> Entries(EntryCount, nullptr);
     for (auto [Child, Index] : RealChildren) {
-      // De-materialize matched `_S<k>` member → logical so position, not the
-      // matcher's first-member pin, owns the entry.
-      unsigned Base = getLogicalBaseOpcode(Child->getOpcode());
-      if (Base != 0)
-        Child->setOpcode(Base);
+      // Public match is already a catalog logical. Refuse generated
+      // members and residual FieldSlots; do not peel `_S*`.
+      if (isPrivatePlacementOpcode(MII.getName(Child->getOpcode())))
+        return Error(Child->getLoc(),
+                     "assembler matched a private placement opcode");
       unsigned EntryIdx = 0;
       if (Positional)
         EntryIdx = NumEntries - 1 - Index;
@@ -895,6 +908,8 @@ bool HaydnAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 
   switch (MatchResult) {
   case Match_Success:
+    if (isPrivatePlacementOpcode(MII.getName(Inst.getOpcode())))
+      return Error(IDLoc, "assembler matched a private placement opcode");
     Inst.setLoc(IDLoc);
     Out.emitInstruction(Inst, getSTI());
     return false;

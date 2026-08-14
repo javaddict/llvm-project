@@ -14,12 +14,17 @@
 
 #include "HaydnFormatERecords.h"
 #include "gtest/gtest.h"
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#define GET_INSTRINFO_ENUM
+#include "HaydnGenInstrInfo.inc"
+
+using namespace llvm;
 using namespace llvm::haydn::format_e;
 
 namespace {
@@ -29,6 +34,9 @@ TEST(HaydnFormatERecords, GoldenHashPins) {
                "b0b477e585f9d464b8750472017d73c3f919e5358e0bda387dc6eeecb79509a4");
   EXPECT_STREQ(FormatEXLSXSHA256,
                "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af");
+  // Canonical-vector SHA-256 is enforced by generate_format_e_records.py
+  // --check (PINNED_CANONICAL_SHA256 = 6d403139…b728f9). The ledger is a
+  // check input, not an encode table, so it is not emitted into the .inc.
 }
 
 TEST(HaydnFormatERecords, GeometryPinsFromGeneratedConstants) {
@@ -229,6 +237,130 @@ TEST(HaydnFormatERecords, GeometryMatchesRegistryProductParcel) {
   EXPECT_EQ(FormatEBundleBits, FormatEEncodedBytes * 8u);
   EXPECT_NE(FormatEMemberCount, 0u);
   EXPECT_NE(findAltSpan("ADD32"), nullptr);
+}
+
+TEST(HaydnFormatERecords, StoreLogicalsAreLoadStore0Only) {
+  // Golden count=2: E2 e0 + E3 e0 LOADSTORE0. Public ST8 peels to S_SB_WITH_IMM.
+  // FormatEUnit::LOADSTORE0 = 4 (not itinerary EU_LOADSTORE0 = 0).
+  const uint32_t LS0 = 1u << static_cast<unsigned>(FormatEUnit::LOADSTORE0);
+  EXPECT_EQ(peelLogicalOpcodeName("ST8"), "S_SB_WITH_IMM");
+  EXPECT_EQ(peelLogicalOpcodeName("ST8_S0"), "S_SB_WITH_IMM");
+  EXPECT_EQ(peelLogicalOpcodeName("D_SW_L_WITH_IMM_S2"), "D_SW_L_WITH_IMM");
+  // Earliest mode marker: E3-e2 must not peel as LOGICAL_E3.
+  EXPECT_EQ(peelLogicalOpcodeName("ADD32_E3_E2_ALU2_RR"), "ADD32");
+  EXPECT_EQ(peelLogicalOpcodeName("ADD32_E2_E0_ALU0_RR"), "ADD32");
+  EXPECT_EQ(unitMaskForLogical("D_SW_L_WITH_IMM", 0), LS0);
+  EXPECT_EQ(unitMaskForLogical("D_SW_L_WITH_IMM", 1), LS0);
+  EXPECT_EQ(unitMaskForLogical("S_SB_WITH_IMM", 0), LS0);
+  EXPECT_EQ(unitMaskForLogical("S_SB_WITH_IMM", 1), LS0);
+  const std::string DualStoreAlu[] = {"D_SW_L_WITH_IMM", "OR64",
+                                      "S_SB_WITH_IMM"};
+  EXPECT_FALSE(logicalsHaveUnitCover(DualStoreAlu));
+  const std::string StoreAlu[] = {"D_SW_L_WITH_IMM", "OR64"};
+  EXPECT_TRUE(logicalsHaveUnitCover(StoreAlu));
+}
+
+TEST(HaydnFormatERecords, CanonicalVectorGeometryAndHeaderHex) {
+  // Consumes format_e_canonical_vectors_v1.json geometry + published hex
+  // (STATUS.md five-file pin). Importer --check owns full ledger walk +
+  // XLSX parse; this unit pins the header facts the C++ tables must match.
+  EXPECT_EQ(FormatEBundleBits, 96u);
+  EXPECT_EQ(FormatEEncodedBytes, (FormatEBundleBits + 7u) / 8u);
+  EXPECT_EQ(FormatEIndicator, 0x7u);
+  EXPECT_EQ(FormatEHeaderReserved, 0x0u);
+
+  auto indicator = [](unsigned Byte0) { return Byte0 & 0x7u; };
+  auto entryNum = [](unsigned Byte0) { return (Byte0 >> 3) & 0x1u; };
+  auto reserved = [](unsigned Byte0) { return (Byte0 >> 4) & 0x3u; };
+
+  // MAL_ALL_ZERO_12B / MAL_INDICATOR_000: all-zero is not Format E.
+  EXPECT_NE(indicator(0x00), FormatEIndicator);
+  // STRUCT_E2_HEADER_ENVELOPE wire_hex_le_12 = 0700…00
+  EXPECT_EQ(indicator(0x07), FormatEIndicator);
+  EXPECT_EQ(entryNum(0x07), 0u);
+  EXPECT_EQ(reserved(0x07), FormatEHeaderReserved);
+  // STRUCT_E3_HEADER_ENVELOPE wire_hex_le_12 = 0f00…00
+  EXPECT_EQ(indicator(0x0f), FormatEIndicator);
+  EXPECT_EQ(entryNum(0x0f), 1u);
+  EXPECT_EQ(reserved(0x0f), FormatEHeaderReserved);
+  // MAL_E2_HEADER_RESERVED_01 wire_hex_le_12 = 1700…00
+  EXPECT_EQ(indicator(0x17), FormatEIndicator);
+  EXPECT_NE(reserved(0x17), FormatEHeaderReserved);
+}
+
+TEST(HaydnFormatERecords, MemberToLogicalGeneratedInverse) {
+  // T-TII6: generated member→logical inverse. AIE peer is
+  // AIEMCFormats::getAlternateInstsOpcode inverted (AIEMCFormats.h:376-379).
+  // Fail-closed: absent opcodes return 0, never the member itself.
+  using llvm::haydn::format_e::lookupGeneratedMemberToLogical;
+  using llvm::haydn::format_e::logicalOpcodeOrSelf;
+
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BEQ_W_S0), Haydn::BEQ_W);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BNEZ_W_S0), Haydn::BNEZ_W);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BEQ_E2_E0_ALU0_RI12),
+            Haydn::BEQ);
+
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::ADD32_E2_E0_ALU0_RR),
+            Haydn::ADD32);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BEQ_E2_E0_ALU0_RI12),
+            Haydn::BEQ);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BNEZ_E2_E0_ALU0_I12),
+            Haydn::BNEZ);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(
+                Haydn::SET_HWLOOP_E2_E0_ALU0_HWLRIII),
+            Haydn::SET_HWLOOP);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(
+                Haydn::SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR),
+            Haydn::SET_HWLOOP_F2_W);
+
+  EXPECT_EQ(logicalOpcodeOrSelf(Haydn::ADD32_E2_E0_ALU0_RR), Haydn::ADD32);
+  EXPECT_EQ(logicalOpcodeOrSelf(Haydn::BEQ_E2_E0_ALU0_RI12), Haydn::BEQ);
+  EXPECT_EQ(logicalOpcodeOrSelf(Haydn::ADD32), Haydn::ADD32);
+  EXPECT_EQ(logicalOpcodeOrSelf(Haydn::BEQ_W), Haydn::BEQ_W);
+
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::ADD32), 0u);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BEQ_W), 0u);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BEQ), 0u);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(0xFFFFFFFFu), 0u);
+  EXPECT_NE(lookupGeneratedMemberToLogical(Haydn::BEQ_E2_E0_ALU0_RI12),
+            Haydn::BEQ_E2_E0_ALU0_RI12);
+}
+
+TEST(HaydnFormatERecords, AssignThreeChildStoreLastE3) {
+  EXPECT_EQ(peelLogicalOpcodeName("ST64_S0"), "D_SDW_WITH_IMM");
+  const std::string Logs[3] = {"SRLI64", "SEXT32T64", "D_SDW_WITH_IMM"};
+  auto A = assignFormatEMemberEntries(Logs, /*Mode=*/1);
+  ASSERT_TRUE(A.has_value());
+  ASSERT_EQ(A->size(), 3u);
+  EXPECT_EQ((*A)[2].EntryIdx, 0u);
+  ASSERT_NE((*A)[2].Mem, nullptr);
+  EXPECT_EQ((*A)[2].Mem->Unit, static_cast<uint8_t>(FormatEUnit::LOADSTORE0));
+  EXPECT_NE((*A)[0].EntryIdx, (*A)[1].EntryIdx);
+  EXPECT_NE((*A)[0].EntryIdx, (*A)[2].EntryIdx);
+  EXPECT_NE((*A)[1].EntryIdx, (*A)[2].EntryIdx);
+}
+
+TEST(HaydnFormatERecords, AssignDualLoadE3) {
+  const std::string Logs[3] = {"SLT32", "D_LDW_WITH_IMM", "S_LW_WITH_IMM"};
+  auto A = assignFormatEMemberEntries(Logs, /*Mode=*/1);
+  ASSERT_TRUE(A.has_value());
+  bool SawLS0 = false;
+  bool SawLoad1 = false;
+  for (const FormatEEntryAssign &E : *A) {
+    ASSERT_NE(E.Mem, nullptr);
+    if (E.Mem->Unit == static_cast<uint8_t>(FormatEUnit::LOADSTORE0))
+      SawLS0 = true;
+    if (E.Mem->Unit == static_cast<uint8_t>(FormatEUnit::LOAD1))
+      SawLoad1 = true;
+  }
+  EXPECT_TRUE(SawLS0);
+  EXPECT_TRUE(SawLoad1);
+}
+
+TEST(HaydnFormatERecords, AssignTwoStoresRejected) {
+  const std::string Logs[2] = {"D_SDW_WITH_IMM", "S_SW_WITH_IMM"};
+  auto A = assignFormatEMemberEntries(Logs, /*Mode=*/1);
+  EXPECT_FALSE(A.has_value());
 }
 
 } // namespace

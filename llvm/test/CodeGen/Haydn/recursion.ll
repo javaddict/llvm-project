@@ -21,28 +21,27 @@ define i32 @factorial(i32 %n) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; slt32 r3, r2, r1 }
-; CHECK-NEXT:    { nop; bnez_w r3, .LBB0_2 }
+; CHECK-NEXT:    { nop; bnez r3, .LBB0_2 }
 ; CHECK-NEXT:  // %bb.1: // %base
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_3 }
 ; CHECK-NEXT:  .LBB0_2: // %recurse
 ; CHECK-NEXT:    { addi32 r2, r1, -1; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
-; CHECK-NEXT:    { nop; jal_w lr, factorial }
+; CHECK-NEXT:    { nop; jal lr, factorial }
 ; CHECK-NEXT:    { nop; mull r1, r8, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:  .LBB0_3: // %base
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp sle i32 %n, 1
   br i1 %cmp, label %base, label %recurse
@@ -62,15 +61,14 @@ define i32 @sum_to_n(i32 %n, i32 %acc) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r3, r1, r3 }
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
-; CHECK-NEXT:    { nop; beqz_w r3, .LBB1_2 }
+; CHECK-NEXT:    { nop; beqz r3, .LBB1_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
 ; CHECK-NEXT:    { addi32 r3, r1, -1; add32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
-; CHECK-NEXT:    { nop; jal_w lr, sum_to_n }
+; CHECK-NEXT:    { nop; jal lr, sum_to_n }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB1_3 }
 ; CHECK-NEXT:  .LBB1_2: // %done
@@ -78,8 +76,8 @@ define i32 @sum_to_n(i32 %n, i32 %acc) nounwind {
 ; CHECK-NEXT:  .LBB1_3: // %done
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp eq i32 %n, 0
   br i1 %cmp, label %done, label %recurse
@@ -98,22 +96,21 @@ define i32 @fib(i32 %n) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 12 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
 ; CHECK-NEXT:    { nop; st32 r9, r2, 1 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 2 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; slt32 r2, r2, r1 }
-; CHECK-NEXT:    { nop; beqz_w r2, .LBB2_2 }
+; CHECK-NEXT:    { nop; beqz r2, .LBB2_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
 ; CHECK-NEXT:    { addi32 r8, r1, -2; addi32 r2, r1, -1 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
-; CHECK-NEXT:    { nop; jal_w lr, fib }
+; CHECK-NEXT:    { nop; jal lr, fib }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, fib }
+; CHECK-NEXT:    { nop; jal lr, fib }
 ; CHECK-NEXT:    { nop; add32 r1, r9, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:  .LBB2_2: // %base
@@ -121,8 +118,8 @@ define i32 @fib(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp sle i32 %n, 1
   br i1 %cmp, label %base, label %recurse
@@ -144,23 +141,22 @@ define i32 @is_even(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; xori32 r2, r2, 1 }
-; CHECK-NEXT:    { nop; beqz_w r2, .LBB3_2 }
+; CHECK-NEXT:    { nop; beqz r2, .LBB3_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
-; CHECK-NEXT:    { nop; jal_w lr, is_odd }
+; CHECK-NEXT:    { nop; jal lr, is_odd }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB3_3 }
 ; CHECK-NEXT:  .LBB3_2: // %yes
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:  .LBB3_3: // %yes
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp eq i32 %n, 0
   br i1 %cmp, label %yes, label %recurse
@@ -178,14 +174,13 @@ define i32 @is_odd(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r3, r1, r2 }
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
-; CHECK-NEXT:    { nop; beqz_w r3, .LBB4_2 }
+; CHECK-NEXT:    { nop; beqz r3, .LBB4_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
-; CHECK-NEXT:    { nop; jal_w lr, is_even }
+; CHECK-NEXT:    { nop; jal lr, is_even }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB4_3 }
 ; CHECK-NEXT:  .LBB4_2: // %no
@@ -193,8 +188,8 @@ define i32 @is_odd(i32 %n) nounwind {
 ; CHECK-NEXT:  .LBB4_3: // %no
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp eq i32 %n, 0
   br i1 %cmp, label %no, label %recurse
@@ -212,22 +207,21 @@ define i32 @tree_sum(i32 %n) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 12 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
 ; CHECK-NEXT:    { nop; st32 r9, r2, 1 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 2 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; slt32 r2, r2, r1 }
-; CHECK-NEXT:    { nop; beqz_w r2, .LBB5_2 }
+; CHECK-NEXT:    { nop; beqz r2, .LBB5_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
 ; CHECK-NEXT:    { nop; srai32 r8, r1, 1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
-; CHECK-NEXT:    { nop; jal_w lr, tree_sum }
+; CHECK-NEXT:    { nop; jal lr, tree_sum }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, tree_sum }
+; CHECK-NEXT:    { nop; jal lr, tree_sum }
 ; CHECK-NEXT:    { nop; add32 r1, r9, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:  .LBB5_2: // %base
@@ -235,8 +229,8 @@ define i32 @tree_sum(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp sle i32 %n, 0
   br i1 %cmp, label %base, label %recurse

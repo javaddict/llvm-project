@@ -40,7 +40,7 @@
 ; With the fix, llc completes and emits the large-offset addressing sequence.
 ;
 ; The no-SP-motion invariant guards the WHOLE function body - the pre-fix
-; dynamic transient (subi32 sp,sp,8 / addi32_w sp,sp,8) must NOT reappear.
+; dynamic transient (subi32 sp,sp,8 / addi32 sp,sp,8) must NOT reappear.
 
 ; First line of defense: the pre-fix LLVM ERROR must NOT appear.
 ; CHECK-NOT: LLVM ERROR
@@ -48,12 +48,12 @@
 define i64 @dr64_pack_base_spill_overflow(i32 %a, i32 %n) nounwind {
 ; CHECK-LABEL: dr64_pack_base_spill_overflow:
 ; The no-SP-motion invariant: the pre-fix bug opened a dynamic transient with
-; `subi32 sp, sp, 8` before the pack and closed it with `addi32_w sp, sp, 8`
+; `subi32 sp, sp, 8` before the pack and closed it with `addi32 sp, sp, 8`
 ; after. These CHECK-NOT directives cover prologue -> pack -> epilogue. The
 ; legitimate prologue/epilogue SP adjust uses the FULL frame size (not 8), so
 ; the literal `sp, sp, 8` match stays green there.
 ; CHECK-NOT:    subi32    sp, sp, 8
-; CHECK-NOT:    addi32_w  sp, sp, 8
+; CHECK-NOT:    addi32  sp, sp, 8
 entry:
   ; var-sized alloca forces hasFP (FrameReg = FP).
   %slot = alloca i32, i32 %n
@@ -87,9 +87,9 @@ entry:
 ; as a residual cycle-forming pseudo child - see header). The materialised
 ; offset value carries the wide displacement that simm20 cannot encode.
 ; CHECK:       lui       r{{[0-9]+}}, {{[0-9]+}}
-; CHECK:       addi32_w  r{{[0-9]+}}, r{{[0-9]+}}, {{-?[0-9]+}}
+; CHECK:       addi32  r{{[0-9]+}}, r{{[0-9]+}}, {{-?[0-9]+}}
 ; CHECK:       add32     r{{[0-9]+}}, {{fp|sp}}, r{{[0-9]+}}
 
 ; Tail of the no-SP-motion window (pack -> epilogue).
 ; CHECK-NOT:   subi32    sp, sp, 8
-; CHECK-NOT:   addi32_w  sp, sp, 8
+; CHECK-NOT:   addi32  sp, sp, 8

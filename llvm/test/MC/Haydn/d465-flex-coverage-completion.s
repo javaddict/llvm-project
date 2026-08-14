@@ -7,27 +7,27 @@
 
 # REGRESSION TEST : Format E flex-coverage completion. The 9 opcodes
 # that previously hit the forcing function
-// CHECK: {{.*}}0: 87 43 1e 42 00 00 00 00 00 00 00 00 { nop; s_sb_with_imm r1, r2, 4 }
+// CHECK: {{.*}}0: 87 43 1e 42 00 00 00 00 00 00 00 00 { nop; st8 r1, r2, 4 }
 # ("opcode 'X' has no Format E form — add a _S<k>_FLEX def") now have flex
-// CHECK: c: 87 43 17 42 00 00 00 00 00 00 00 00 { nop; s_lbu_with_imm r1, r2, 4 }
+// CHECK: c: 87 43 17 42 00 00 00 00 00 00 00 00 { nop; ldu8 r1, r2, 4 }
 # variants and round-trip cleanly.
-// CHECK: {{.*}}18: 07 0d 16 02 08 00 00 00 00 00 00 00 { nop; bne r1, r2, 16 }
+// CHECK: {{.*}}18: 07 0d 16 02 08 00 00 00 00 00 00 00 { nop; bne r1, r2, 8 }
 #
-// CHECK: {{.*}}24: 07 0d 18 02 08 00 00 00 00 00 00 00 { nop; bge r1, r2, 16 }
+// CHECK: {{.*}}24: 07 0d 18 02 08 00 00 00 00 00 00 00 { nop; bge r1, r2, 8 }
 # Coverage added by :
 # Category A (new _S<k>_FLEX defs):
 # ST8_S0_FLEX (HaydnFormatsLS.td, codepoint 118)
-// CHECK: {{.*}}30: 07 0d 1a 02 08 00 00 00 00 00 00 00 { nop; blt r1, r2, 16 }
+// CHECK: {{.*}}30: 07 0d 1a 02 08 00 00 00 00 00 00 00 { nop; blt r1, r2, 8 }
 # LDU8_S0_FLEX (HaydnFormatsLS.td, codepoint 119)
-// CHECK: 3c: 07 0a 1c 00 08 00 00 00 00 00 00 00 { nop; bgez r1, 16 }
+// CHECK: 3c: 07 0a 1c 00 08 00 00 00 00 00 00 00 { nop; bgez r1, 8 }
 # ST64_POST_S1_FLEX (HaydnFormatsLS.td, codepoint 0b0110001 D_ST_RI6)
-// CHECK: {{.*}}48: 07 0a 1e 00 08 00 00 00 00 00 00 00 { nop; bltz r1, 16 }
+// CHECK: {{.*}}48: 07 0a 1e 00 08 00 00 00 00 00 00 00 { nop; bltz r1, 8 }
 # BNE_W/BGE_W/BGEU_W/BLT_W/BLTU_W_S0_FLEX (HaydnFormatsALU32.td, 79-83)
 // CHECK: {{.*}}54: 07 03 1a 00 20 00 00 00 00 00 00 00 { nop; csrw 32, r1 }
 # BGEZ_W/BLTZ_W_S0_FLEX (HaydnFormatsALU32.td, 84-85)
-// CHECK: {{.*}} { {{.*}}s_lw_with_imm{{.*}}r1, r2, 0{{.*}}s_lw_with_imm{{.*}}r3, r2, 8{{.*}} }
+// CHECK: {{.*}} { {{.*}}ld32{{.*}}r1, r2, 0{{.*}}ld32{{.*}}r3, r2, 8{{.*}} }
 # CSRW_W_S0_FLEX (HaydnFormatsALU32.td, codepoint 86)
-// CHECK: {{.*}} { {{.*}}d_ldw_with_imm{{.*}}d0, r2, 0{{.*}}d_ldw_with_imm{{.*}}d1, r2, 8{{.*}} }
+// CHECK: {{.*}} { {{.*}}ld64{{.*}}d0, r2, 0{{.*}}ld64{{.*}}d1, r2, 8{{.*}} }
 # LD32_S1_FLEX / LD64_S1_FLEX (HaydnFormatsLD.td, codepoints 62-63)
 // COM: CHECK: %t.o:	file format elf32-unknown
 # Category B (producer retired to legacy name with existing flex):

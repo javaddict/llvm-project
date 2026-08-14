@@ -31,32 +31,32 @@
 # accidental breakage of the non-suffixed path.
 
 # CHECK-LABEL: <f_st32_s0>:
-# CHECK: {{.*}}0: 87 43 fb cd 00 00 00 00 00 00 00 00 { nop; s_sw_with_imm lr, sp, 12 }
+# CHECK: {{.*}}0: 87 43 fb cd 00 00 00 00 00 00 00 00 { nop; st32 lr, sp, 12 }
 
 f_st32_s0:
   { st32 lr, sp, 12 }
 
 # CHECK-LABEL: <f_st32_legacy>:
-# CHECK: c: 87 43 fb cd 00 00 00 00 00 00 00 00 { nop; s_sw_with_imm lr, sp, 12 }
+# CHECK: c: 87 43 fb cd 00 00 00 00 00 00 00 00 { nop; st32 lr, sp, 12 }
 f_st32_legacy:
   { st32 lr, sp, 12 }
 
 # CHECK-LABEL: <f_ld32_s0>:
-# CHECK: {{.*}}18: 87 43 13 8d 00 00 00 00 00 00 00 00 { nop; s_lw_with_imm r1, sp, 8 }
+# CHECK: {{.*}}18: 87 43 13 8d 00 00 00 00 00 00 00 00 { nop; ld32 r1, sp, 8 }
 f_ld32_s0:
   { ld32 r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld32_legacy>:
-# CHECK: {{.*}}24: 87 43 13 8d 00 00 00 00 00 00 00 00 { nop; s_lw_with_imm r1, sp, 8 }
+# CHECK: {{.*}}24: 87 43 13 8d 00 00 00 00 00 00 00 00 { nop; ld32 r1, sp, 8 }
 f_ld32_legacy:
   { ld32 r1, sp, 8 }
 
 # CHECK-LABEL: <f_ld64_s0>:
-# CHECK: {{.*}}30: 87 43 02 0d 01 00 00 00 00 00 00 00 { nop; d_ldw_with_imm d0, sp, 16 }
+# CHECK: {{.*}}30: 87 43 02 0d 01 00 00 00 00 00 00 00 { nop; ld64 d0, sp, 16 }
 f_ld64_s0:
   { ld64 d0, sp, 16 }
 
 # CHECK-LABEL: <f_st64_s0>:
-# CHECK: 3c: 87 43 0a 0d 01 00 00 00 00 00 00 00 { nop; d_sdw_with_imm d0, sp, 16 }
+# CHECK: 3c: 87 43 0a 0d 01 00 00 00 00 00 00 00 { nop; st64 d0, sp, 16 }
 f_st64_s0:
   { st64 d0, sp, 16 }

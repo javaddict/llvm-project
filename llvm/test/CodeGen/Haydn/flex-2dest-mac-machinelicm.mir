@@ -47,7 +47,7 @@ body:             |
     ; X4MULA16S_S1 is the family-A crashing op: 2 defs (rtd1, rtd2) tied
     ; to 2 accumulator inputs (rta1, rta2), plus 2 sources (rsd1, rsd2). Before
     ; the desc said 6 operands but only 4 were present -> OOB. Now 6 = 6.
-    %4, %5 = X4MULA16S_S1 %0, %1, %2, %3
+    %4, %5 = X4MULA16S %0, %1, %2, %3
     $d0 = COPY %4
     $d1 = COPY %5
     RET implicit $d0, implicit $d1, implicit $r0, implicit $r15

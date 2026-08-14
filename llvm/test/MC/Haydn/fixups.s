@@ -8,22 +8,22 @@
 # Fail-closed: no positive ar_sel=2/3, all-zero product-NOP, or golden-unspecified branch-scale invent.
 
 # CHECK-LABEL: <.text>:
-# CHECK: {{.*}}0: 07 0d 04 01 06 00 00 00 00 00 00 00{{.*}}beq
+# CHECK: {{.*}}0: 07 0d 04 01 0c 00 00 00 00 00 00 00{{.*}}beq
 # CHECK-LABEL: <forward_label>:
 # CHECK: {{.*}}c: 07 8b 20 43 00 00 00 00 00 00 00 00{{.*}}add32
 # CHECK-LABEL: <backward_label>:
 # CHECK: {{.*}}18: 07 0d 56 06 00 00 00 00 00 00 00 00{{.*}}bne
-# CHECK: {{.*}}24: 07 0a 78 00 0c 00 00 00 00 00 00 00{{.*}}beqz
+# CHECK: {{.*}}24: 07 0a 78 00 18 00 00 00 00 00 00 00{{.*}}beqz
 # CHECK-LABEL: <backward_target>:
 # CHECK: {{.*}}30: 07 0a 8a 00 00 00 00 00 00 00 00 00{{.*}}bnez
 # CHECK-LABEL: <forward_target>:
 # CHECK: {{.*}}3c: 07 8b 90 ba 00 00 00 00 00 00 00 00{{.*}}add32
 # CHECK: {{.*}}48: 07 0e 08 00 00 00 00 00 00 00 00 00{{.*}}jal
-# CHECK: {{.*}}54: 87 43 33 04 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
-# CHECK: {{.*}}60: 87 43 5b 06 00 00 00 00 00 00 00 00{{.*}}s_sw_with_imm
+# CHECK: {{.*}}54: 87 43 33 04 00 00 00 00 00 00 00 00{{.*}}ld32
+# CHECK: {{.*}}60: 87 43 5b 06 00 00 00 00 00 00 00 00{{.*}}st32
 # CHECK-LABEL: <local_loop>:
 # CHECK: {{.*}}6c: 07 0d aa 0b 00 00 00 00 00 00 00 00{{.*}}blt
-# CHECK: {{.*}}78: 07 0d c8 00 42 00 00 00 00 00 00 00{{.*}}bge
+# CHECK: {{.*}}78: 07 0d c8 00 84 00 00 00 00 00 00 00{{.*}}bge
 # CHECK: {{.*}}84: 07 8b 10 11 00 00 00 00 00 00 00 00{{.*}}add32
 # CHECK: {{.*}}90: 07 8b 20 22 00 00 00 00 00 00 00 00{{.*}}add32
 # CHECK: {{.*}}9c: 07 8b 30 33 00 00 00 00 00 00 00 00{{.*}}add32

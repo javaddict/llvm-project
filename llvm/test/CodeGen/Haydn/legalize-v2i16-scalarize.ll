@@ -9,7 +9,7 @@
 define void @add_v2i16_mem(ptr %p, ptr %q, ptr %r) nounwind {
 ; CHECK-LABEL: add_v2i16_mem:
 ; CHECK: add32
-; CHECK: jalr_w
+; CHECK: jalr
   %a = load <2 x i16>, ptr %p
   %b = load <2 x i16>, ptr %q
   %s = add <2 x i16> %a, %b
@@ -18,7 +18,7 @@ define void @add_v2i16_mem(ptr %p, ptr %q, ptr %r) nounwind {
 }
 
 ; CHECK-LABEL: zext_v2i16_arg:
-; CHECK: jalr_w
+; CHECK: jalr
 define <2 x i32> @zext_v2i16_arg(<2 x i16> %x) nounwind {
   %e0 = extractelement <2 x i16> %x, i32 0
   %e1 = extractelement <2 x i16> %x, i32 1
@@ -30,7 +30,7 @@ define <2 x i32> @zext_v2i16_arg(<2 x i16> %x) nounwind {
 }
 
 ; CHECK-LABEL: take_v8i8:
-; CHECK: jalr_w
+; CHECK: jalr
 define <8 x i8> @take_v8i8(<8 x i8> %a, <8 x i8> %b) nounwind {
   %r = add <8 x i8> %a, %b
   ret <8 x i8> %r

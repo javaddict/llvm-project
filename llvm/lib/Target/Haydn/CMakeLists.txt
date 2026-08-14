@@ -46,28 +46,27 @@ add_llvm_target(HaydnCodeGen
   HaydnRegisterInfo.cpp
   HaydnPostRAScratch.cpp
   HaydnInstrInfo.cpp
+  HaydnPipelinerLoopInfo.cpp
   HaydnFrameLowering.cpp
   HaydnISelLowering.cpp
   HaydnAsmPrinter.cpp
   HaydnExpandPseudos.cpp
-  HaydnExpandPostIncEarly.cpp
   HaydnMCInstLower.cpp
   HaydnMachineFunctionInfo.cpp
   HaydnMachineScheduler.cpp
+  HaydnPostRAMultiStage.cpp
   HaydnPreRASchedStrategy.cpp
   HaydnSchedMutations.cpp
   HaydnPostRASchedStrategy.cpp
   HaydnFinalizeBundle.cpp
   HaydnVerifyBundles.cpp
+  HaydnBundleVerify.cpp
+  HaydnBundleFormatSolver.cpp
   HaydnLatencyStalls.cpp
   HaydnHazardRecognizer.cpp
   HaydnHardwareLoops.cpp
   HaydnFixupHwLoops.cpp
-  HaydnConditionOptimizer.cpp
-  HaydnCopyElim.cpp
-  HaydnPEIPeephole.cpp
   HaydnEnsureTerminators.cpp
-  HaydnBitSimplify.cpp
   HaydnAlternateDescriptors.cpp
 
   # GlobalISel sources
@@ -106,3 +105,48 @@ add_subdirectory(MCTargetDesc)
 add_subdirectory(AsmParser)
 add_subdirectory(Disassembler)
 add_subdirectory(TargetInfo)
+
+# T-TII2 / R1: fail-closed Format E importer --check (generated records +
+# XLSX↔JSON parity + canonical-vector ledger round-trip). Peer is BundleSim
+# generate_catalog.py --check wired as add_custom_target / add_test
+# (bundlesim/CMakeLists.txt:82-83 and :538-546). AIE has no golden importer;
+# formats come from TableGen -gen-instr-format (AIE/CMakeLists.txt:18) and
+# AIEMCFormats.h:45-47 generated includes.
+if(Python3_EXECUTABLE)
+  if(DEFINED ENV{HAYDN_GOLDEN_DIR} AND NOT "$ENV{HAYDN_GOLDEN_DIR}" STREQUAL "")
+    set(_HAYDN_GOLDEN_DIR "$ENV{HAYDN_GOLDEN_DIR}")
+  elseif(DEFINED ENV{BUNDLESIM_GOLDEN_DIR} AND NOT "$ENV{BUNDLESIM_GOLDEN_DIR}" STREQUAL "")
+    set(_HAYDN_GOLDEN_DIR "$ENV{BUNDLESIM_GOLDEN_DIR}")
+  else()
+    set(_HAYDN_GOLDEN_DIR "/ssd2/mhyang/haydn-plans/Database/golden")
+  endif()
+  if(EXISTS "${_HAYDN_GOLDEN_DIR}/golden/format_e_bit_layout_v2.json"
+     AND NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json")
+    set(_HAYDN_GOLDEN_DIR "${_HAYDN_GOLDEN_DIR}/golden")
+  endif()
+  add_custom_target(HaydnFormatERecordsCheck
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/FormatE/generate_format_e_records.py"
+            --check
+            --json "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json"
+            --xlsx "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.xlsx"
+            --canonical-vectors "${_HAYDN_GOLDEN_DIR}/format_e_canonical_vectors_v1.json"
+            --out-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "T-TII2: Format E importer --check (records + XLSX/JSON + canonical vectors)"
+    VERBATIM
+  )
+  add_custom_target(HaydnSchedRecordsCheck
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/FormatE/generate_sched_records.py"
+            --check
+            --json "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json"
+            --xlsx "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.xlsx"
+            --canonical-vectors "${_HAYDN_GOLDEN_DIR}/format_e_canonical_vectors_v1.json"
+            --constraints "${_HAYDN_GOLDEN_DIR}/VLIW_Engine_Compiler_Constraints.md"
+            --out-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Published itinerary generator --check (HaydnGenSchedRecords.inc)"
+    VERBATIM
+  )
+endif()

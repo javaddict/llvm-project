@@ -4,12 +4,15 @@
 
 # Role: MIR — Independent inverse verify accepts stamped product identity
 # without PacketFormats planner / fabricated plan fallbacks. Row + members
-# alone certificate EncodedBytes and encode-oracle canAdd; BundlePlan rebuild
-# uses makeProductPlan registry identity only (no planFromPacketFormats).
+# certificate EncodedBytes from generated inverse records; BundlePlan rebuild
+# uses makeProductPlan registry identity only (no forward planner).
 
 --- |
   define void @inverse_e2_two_real() { ret void }
   define void @inverse_e3_three_real() { ret void }
+  define void @inverse_e2_private_members() { ret void }
+  define void @inverse_e2_private_exact() { ret void }
+  define void @inverse_e2_residual_slots() { ret void }
 ...
 ---
 name:            inverse_e2_two_real
@@ -45,5 +48,60 @@ body:             |
       $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
       $r7 = XOR32 $r2, $r3, implicit-def dead $sfr
       $r8 = OR32 $r4, $r5, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            inverse_e2_private_members
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    ; CHECK-LABEL: name: inverse_e2_private_members
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: ADD32_E2_E0_ALU0_RR
+    ; CHECK: ADDI32_E2_E1_ALU1_RI20
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            inverse_e2_private_exact
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    ; CHECK-LABEL: name: inverse_e2_private_exact
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: ADD32_E2_E0_ALU0_RR
+    ; CHECK: ADDI32_E2_E1_ALU1_RI20
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            inverse_e2_residual_slots
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    ; Two logical ALU32s — E2 e0-only, so inverse accepts E3 restamp.
+    ; CHECK-LABEL: name: inverse_e2_residual_slots
+    ; CHECK: BUNDLE {{[01]}}, 0
+    ; CHECK: ADD32
+    ; CHECK: XOR32
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
     }
     RET implicit $r15

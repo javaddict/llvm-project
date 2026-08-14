@@ -8,7 +8,7 @@
 
 define void @test_memcpy_small(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_small:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 16, i1 false)
   ret void
 }
@@ -24,7 +24,7 @@ define void @test_memcpy_large(ptr %dst, ptr %src, i32 %size) {
 ;memcpy with volatile
 define void @test_memcpy_volatile(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_volatile:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 8, i1 true)
   ret void
 }
@@ -64,7 +64,7 @@ define void @test_memset_small(ptr %dst) {
 ;memcpy with alignment
 define void @test_memcpy_aligned(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_aligned:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
 ; May use wider loads/stores due to alignment
   call void @llvm.memcpy.p0.p0.i32(ptr align 8 %dst, ptr align 8 %src, i32 64, i1 false)
   ret void
@@ -89,8 +89,8 @@ define void @test_bzero(ptr %dst, i32 %size) {
 ;Multiple memory ops in sequence
 define void @test_multi_memops(ptr %dst1, ptr %dst2, ptr %src, i32 %size) {
 ; CHECK-LABEL: test_multi_memops:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
-; CHECK: jal_w{{(\.s[012])?}} lr, memset
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memset
   call void @llvm.memcpy.p0.p0.i32(ptr %dst1, ptr %src, i32 %size, i1 false)
   call void @llvm.memset.p0.i32(ptr %dst2, i8 0, i32 %size, i1 false)
   ret void
@@ -100,7 +100,7 @@ define void @test_multi_memops(ptr %dst1, ptr %dst2, ptr %src, i32 %size) {
 define void @test_memcpy_struct(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_struct:
 ; Copy 12-byte struct
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 12, i1 false)
   ret void
 }
@@ -110,7 +110,7 @@ define void @test_checked_memcpy(ptr %dst, ptr %src, i32 %requested, i32 %max_si
 ; CHECK-LABEL: test_checked_memcpy:
 ; llvm.umin.i32 → minu32 (stale mid-file umin marker removed)
 ; CHECK:       minu32{{(\.s[012])?}}
-; CHECK:       jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK:       jal{{(\.s[012])?}} lr, memcpy
   %safe_size = call i32 @llvm.umin.i32(i32 %requested, i32 %max_size)
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 %safe_size, i1 false)
   ret void

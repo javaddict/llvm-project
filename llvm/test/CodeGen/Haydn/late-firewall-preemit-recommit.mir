@@ -49,14 +49,15 @@ body:             |
     successors: %bb.1
 
     ; CHECK-LABEL: name: late_bare_recommit
-    ; Empty-cycle tryAdd: ADD32 → ADD32_S2, NOP → NOP_S0, BEQZ → BEQZ_S0
-    ; CHECK: BUNDLE 0
-    ; CHECK: ADD32_S2
-    ; CHECK: BUNDLE 0
+    ; Empty-cycle tryAdd then MemberId: ADD32 → generated ADD32_E*
+    ; member (E2 or E3 singleton). Reloc BEQZ → BEQZ_E2_E0. NOP stays NOP_S0.
+    ; CHECK: BUNDLE
+    ; CHECK: ADD32_E{{[23]}}_E{{[0-2]}}_
+    ; CHECK: BUNDLE
     ; CHECK: NOP_S0
-    ; CHECK: BUNDLE 0
-    ; CHECK: BEQZ_S0
-    ; CHECK: BUNDLE 0
+    ; CHECK: BUNDLE
+    ; CHECK: BEQZ_E2_E0_ALU0_I12
+    ; CHECK: BUNDLE
     ; CHECK: B %bb.1
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     NOP
@@ -102,7 +103,7 @@ body:             |
     ; CHECK: BUNDLE 0
     ; CHECK: JALR
     BUNDLE 0 {
-      $r2 = ADDI32_S2 $r0, 10, implicit-def dead $sfr
+      $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     }
     BUNDLE 0 {
       $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

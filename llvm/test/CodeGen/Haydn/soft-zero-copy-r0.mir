@@ -1,17 +1,11 @@
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-copy-elim \
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-cp -mcp-use-is-copy-instr \
 # RUN:     -verify-machineinstrs -o - %s | FileCheck %s
 
-# Role: MIR — durable rule 31 — soft-zero R0: Silicon does not hardwire R0=0.
-
-# Durable soft-zero R0 rule:
-# Silicon does not hardwire R0=0. HaydnCopyElim must NEVER delete non-identity
-# COPY / MOVE32 / OR32 bank-copies *into* R0 as "dead", even when a later def
-# of R0 makes local deadness analysis true.
-#
-# Linker far veneers and JALR rd=R0 write a real link value into R0; keeping
-# those writes (and any explicit re-zero COPY/MOVE into R0) is load-bearing
-# for the soft-zero invariant across mid-fn far branches and epilogue CSR
-# restore. True identity forms (src == dst) remain removable.
+# Role: MIR — durable soft-zero R0: silicon does not hardwire R0=0.
+# Generic MCP(UseCopyInstr) must NEVER delete COPY / MOVE32 / OR32 bank-copies
+# *into* R0 (reserved). HaydnCopyElim is deleted; do not treat R0 as a
+# hardwired sink. Overlapping identity COPY r0,r0 is also kept (MCP skips
+# reserved and overlapping src/dst copies).
 
 --- |
   define void @soft_zero_copy_r0() nounwind { ret void }
@@ -42,7 +36,7 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r15
 
-    ; Locally "dead" (R0 redefined before use) — must KEEP.
+    ; Locally "dead" (R0 redefined before use) — must KEEP (reserved dest).
     ; CHECK: $r0 = COPY $r1
     ; CHECK: $r0 = ADDI32 $r2, 0
     $r0 = COPY $r1
@@ -72,7 +66,7 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r15
 
-    ; MOVE32 into R0 is also a soft-zero write — keep even if dead.
+    ; MOVE32 into R0 is a copy via isCopyInstrImpl — keep (reserved dest).
     ; CHECK: $r0 = MOVE32 $r1, $r1
     ; CHECK: $r0 = ADDI32 $r2, 0
     $r0 = MOVE32 $r1, $r1
@@ -102,7 +96,7 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r15
 
-    ; OR32 bank-copy into R0 — never eliminate as dead.
+    ; OR32 bank-copy into R0 — keep (reserved dest).
     ; CHECK: $r0 = OR32 $r1, $r1
     ; CHECK: $r0 = ADDI32 $r2, 0
     $r0 = OR32 $r1, $r1, implicit-def dead $sfr
@@ -132,8 +126,8 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r15
 
-    ; Identity COPY r0,r0 is a pure no-op and may still be removed.
-    ; CHECK-NOT: $r0 = COPY $r0
+    ; MCP keeps overlapping/reserved identity COPY; HaydnCopyElim used to drop it.
+    ; CHECK: $r0 = COPY $r0
     ; CHECK: $r1 = ADDI32 $r1, 1
     $r0 = COPY $r0
     $r1 = ADDI32 $r1, 1, implicit-def dead $sfr

@@ -10,7 +10,7 @@
 ; then BNE_W).
 ;
 ; Shape: far forward conditional after a soft-div call. The padding stores
-; push the branch past ±4KB WIDE_BranchSImm12 so BranchRelaxation rewrites it.
+; push the branch past GE96-03 ±2048-byte WIDE_BranchSImm12 so BranchRelaxation rewrites it.
 ; Without the analyzeBranch fix, llc aborts; with it, we get a relaxed form
 ; (inverted near cond + far B / indirect).
 
@@ -64,4 +64,4 @@ entry:
 ; Soft-div call must be present.
 ; CHECK: jal{{(_w)?}}
 ; Function must compile (no BranchRelaxation assert) and return.
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}

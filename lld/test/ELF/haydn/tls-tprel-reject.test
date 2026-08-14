@@ -1,0 +1,69 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %s -o %t.o
+# Stamp product EF_HAYDN_E96 (e_flags=0x1). yaml2obj has no Haydn e_flags bit
+# names; LLD rejects unprofiled zero flags fail-closed.
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.o
+# RUN: llvm-readobj -r %t.o | FileCheck %s --check-prefix=OBJ
+# RUN: not ld.lld %t.o -o %t.out --section-start=.text=0x10000 2>&1 | FileCheck %s --check-prefix=ERR
+
+# REGRESSION TEST: R_HAYDN_TPREL_HI20/LO16 must be a link error.
+#
+# Bug: lld/ELF/Arch/Haydn.cpp getRelExpr mapped TPREL_HI20/LO16 to R_ABS, so a
+# TLS reloc linked as an absolute address with no diagnostic (thread_local
+# silently wrong). Golden has no TLS model.
+#
+# Fix: getRelExpr/relocate fail closed. The object keeps R_HAYDN_TPREL_* (not
+# rewritten to R_HAYDN_32). If this regresses to R_ABS, `not ld.lld` fails
+# because the link succeeds. Type 0x9/0xa are R_HAYDN_TPREL_HI20/LO16
+# (Haydn.def); yaml2obj has no Haydn reloc names.
+
+# OBJ: Relocations [
+# OBJ:   R_HAYDN_TPREL_HI20 tls_var
+# OBJ:   R_HAYDN_TPREL_LO16 tls_var
+# OBJ-NOT: R_HAYDN_32
+
+# ERR: Haydn TLS TPREL relocations are unsupported
+# ERR: refusing silent R_ABS
+# ERR-NOT: error: {{.*}}undefined
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    Content: '070000000000000000000000'
+  - Name:    .tdata
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_WRITE, SHF_TLS ]
+    AddressAlign: 4
+    Content: '00000000'
+  - Name:    .rela.text
+    Type:    SHT_RELA
+    Link:    .symtab
+    Info:    .text
+    Relocations:
+      - Offset: 0
+        Symbol: tls_var
+        Type:   0x9
+      - Offset: 4
+        Symbol: tls_var
+        Type:   0xA
+Symbols:
+  - Name:    _start
+    Section: .text
+    Value:   0
+    Size:    12
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC
+  - Name:    tls_var
+    Section: .tdata
+    Value:   0
+    Size:    4
+    Binding: STB_GLOBAL
+    Type:    STT_TLS
