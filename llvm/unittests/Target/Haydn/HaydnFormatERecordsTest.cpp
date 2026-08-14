@@ -25,8 +25,10 @@ using namespace llvm::haydn::format_e;
 namespace {
 
 TEST(HaydnFormatERecords, GoldenHashPins) {
+  // Repaired golden: delivery b0b477e5… + --fix-operand-mapping (76 mapping
+  // rows re-derived from Syntax; bit geometry untouched). See the generator.
   EXPECT_STREQ(FormatEJSONSHA256,
-               "b0b477e585f9d464b8750472017d73c3f919e5358e0bda387dc6eeecb79509a4");
+               "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9");
   EXPECT_STREQ(FormatEXLSXSHA256,
                "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af");
 }
