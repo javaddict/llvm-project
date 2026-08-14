@@ -37,7 +37,15 @@ HaydnMCAsmInfo::HaydnMCAsmInfo(const Triple &TargetTriple) {
       haydn::format::maxEncodedBytesInProfile(
           haydn::format::ObjectEncodingProfileID::E96)
           .Value;
-  MinInstAlignment = ProductBytes;
+  // MinInstAlignment reaches exactly one place: the DWARF line program's
+  // minimum_instruction_length, the unit MCDwarf DIVIDES address advances by.
+  // ProductBytes (12) is only exact while every advance is a whole number of
+  // parcels — functions align to 4 (the largest power of two dividing 12), so
+  // any perturbation (hand asm, .balign, section starts) yields advances that
+  // truncate and every later line address drifts. 1 costs a slightly larger
+  // line table and is exact for every address; dwarf-line-bundle-addresses.s
+  // compares the numbers directly.
+  MinInstAlignment = 1;
   MaxInstLength = ProductBytes;
 
   // Do not let AsmPrinter::emitAlignment(MF, &F) promote function alignment
