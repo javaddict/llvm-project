@@ -377,12 +377,17 @@ TEST(HaydnMaterializeMultiOpcode, BrevLoadMembersAreSetDescTargets) {
 // firewall for any residual bare MI.
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
-  // Empty-cycle tryAdd prefers S2 (same as post-RA HR).
+  // CLOSED singleton takes the documented default row (ProductDefaultRowID =
+  // E96TwoEntry; singleton-bundle-formatid.mir pins the same BUNDLE 0). The
+  // former expectation here (entry 2) pinned the OPEN-cycle S2-first fill
+  // heuristic leaking into the late firewall — that is CB-152b, settled for
+  // the doc/MIR side. The preferred E2-committable state lands on e0.
   HaydnMCFormats Fmts;
   auto C = commitLateProductCycle(Haydn::ADD32, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->LogicalOpcode, Haydn::ADD32);
-  EXPECT_TRUE(formatEMemberOccupiesEntry(C->MemberOpcode, 2));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(C->MemberOpcode, 0));
+  EXPECT_EQ(C->Plan.Row, haydn::bundle::BundleFormatRowID::E96TwoEntry);
   EXPECT_TRUE(C->NeedsSetDesc);
   EXPECT_TRUE(isProductBundleRow(C->Plan.Row));
   EXPECT_EQ(C->Plan.Bytes.Value, productParcelBytes().Value);
@@ -390,7 +395,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
 
   auto SetDesc = lateSingletonSetDescOpcode(Haydn::ADD32, Fmts);
   ASSERT_TRUE(SetDesc.has_value());
-  EXPECT_TRUE(formatEMemberOccupiesEntry(*SetDesc, 2));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(*SetDesc, 0));
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNOP) {
@@ -492,7 +497,12 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleBEQZ) {
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleMatchesEmptyTryAdd) {
-  // Firewall must use the same empty-cycle tryAdd as post-RA, not a 2nd theory.
+  // The firewall shares the empty-cycle tryAdd expansion — same candidate
+  // set, same legality — but a CLOSED singleton settles on the documented
+  // E2 default row (CB-152b), so the committed member is the preferred
+  // E2-committable state when one exists, not necessarily the raw open-cycle
+  // (S2-first) pick. Assert set-membership plus the row policy rather than
+  // pointer-equality with the open-cycle heuristic.
   HaydnMCFormats Fmts;
   for (unsigned Logical :
        {Haydn::ADD32, Haydn::XOR32, Haydn::LD32, Haydn::ST32, Haydn::ADDI32,
@@ -501,8 +511,22 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleMatchesEmptyTryAdd) {
     ASSERT_TRUE(tryAddProduct(S, Fmts, Logical)) << "logical " << Logical;
     auto C = commitLateProductCycle(Logical, Fmts);
     ASSERT_TRUE(C.has_value());
-    EXPECT_EQ(C->MemberOpcode, S.Members[0].MemberOpcode)
-        << "late empty-cycle member must match pure tryAdd for " << Logical;
+    // The late member must still be one of the logical's alternatives (no
+    // second theory of legality)...
+    const std::vector<unsigned> *Alts =
+        Fmts.getAlternateInstsOpcode(Logical);
+    if (Alts) {
+      EXPECT_TRUE(llvm::is_contained(*Alts, C->MemberOpcode) ||
+                  C->MemberOpcode == Logical)
+          << "late member not in alt set for " << Logical;
+    } else {
+      EXPECT_EQ(C->MemberOpcode, S.Members[0].MemberOpcode);
+    }
+    // ...and a closed singleton with any E2-committable state stamps the
+    // documented default row.
+    if (formatECompositeSlotIsE2(Fmts.getSlotKind(C->MemberOpcode)))
+      EXPECT_EQ(C->Plan.Row, haydn::bundle::BundleFormatRowID::E96TwoEntry)
+          << "logical " << Logical;
   }
 }
 

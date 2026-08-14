@@ -762,9 +762,13 @@ body:             |
   ; large-frame spill of liveins/CSRs still present; zero member loss.
   ; POST-LABEL: name: hard_bundle_dual_ld_large_frame
   ; POST-DAG: frame-setup SUBI32
-  ; POST-DAG: ST32{{.*}}$r{{[89]}}
+  ; (Committed typed members carry catalog names in post-finalize MIR: the
+  ; CSR spill stores are S_SW_WITH_IMM members, the dual loads commit as the
+  ; E2 e1/e0 pair of S_LW_WITH_IMM members — residual `_S*` spellings are
+  ; retired.)
+  ; POST-DAG: S_SW_WITH_IMM{{.*}}$r{{[89]}}
   ; POST: BUNDLE{{.*}}{
-  ; POST-NEXT: ${{r[0-9]+}} = LD32_S{{[01]}}
-  ; POST-NEXT: ${{r[0-9]+}} = LD32_S{{[01]}}
+  ; POST-NEXT: ${{r[0-9]+}} = S_LW_WITH_IMM_E2_E{{[01]}}
+  ; POST-NEXT: ${{r[0-9]+}} = S_LW_WITH_IMM_E2_E{{[01]}}
   ; POST-NEXT: }
 ...

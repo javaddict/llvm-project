@@ -94,8 +94,10 @@
 
 # CONT-POST-LABEL: name: sms_shoulduse_multistage_mac
 # CONT-POST-DAG: SEQ32
-# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
-# CONT-POST-DAG: ${{r[0-9]+}} = LD32_S{{[012]}}
+# (Committed typed members carry catalog names post-commit — the loads land
+# as S_LW_WITH_IMM placements; residual `_S*` spellings are retired.)
+# CONT-POST-DAG: ${{r[0-9]+}} = S_LW_WITH_IMM_E{{[23]}}_E{{[012]}}
+# CONT-POST-DAG: ${{r[0-9]+}} = S_LW_WITH_IMM_E{{[23]}}_E{{[012]}}
 # CONT-POST-NOT: MOV_GPR_TO_DR64
 
 # CONT-STATS-NOT: SMS kernel same-cycle groups materialized as logical BUNDLE
