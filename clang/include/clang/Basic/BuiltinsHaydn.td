@@ -75,8 +75,8 @@ class ImmCheckType<int lo, int hi> {
 def ImmCheck0_15 : ImmCheckType<0, 15>;  // uimm4 — X4 16-bit lane / seli
 def ImmCheck0_31 : ImmCheckType<0, 31>;  // uimm5 — X2 32-bit lane shift
 def ImmCheck0_63 : ImmCheckType<0, 63>;  // uimm6 — 64-bit / pack shift
-def ImmCheck0_1  : ImmCheckType<0, 1>;   // 1-bit selects; ar_sel legal domain {0,1}
-def ImmCheck0_3  : ImmCheckType<0, 3>;   // 2-bit selects (cbr pair / legacy wire width)
+def ImmCheck0_1  : ImmCheckType<0, 1>;   // 1-bit selects (dir/cbr)
+def ImmCheck0_3  : ImmCheckType<0, 3>;   // 2-bit selects (ar_sel, CB-149 restored)
 def ImmCheckSimm6 : ImmCheckType<-32, 31>; // simm6 — LS POST/PRE/WITH element index
 def ImmCheckSimm8 : ImmCheckType<-128, 127>; // simm8 — CB IMM stride element index
 // Full signed imm32 (MOVEI_H/L): require ICE; any int32 value is in range.
@@ -2699,7 +2699,7 @@ def pldwwua : HaydnBuiltin<"void(int, void const*)", "agu"> {
   let PublicName = "pldwwua";
   let PublicPrototype = "void(int, void const*)";
   let Mnemonic = "PLDWWUA_POST";
-  let ImmChecks = [ImmCheck<0, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<0, ImmCheck0_3>];
   let Semantics = "pre-load aligned double-word block into aligned register for subsequent unaligned access.";
 }
 def d_lqhwua_post : HaydnBuiltin<"int64_t(void const*, int, int, int)", "agu"> {
@@ -2709,7 +2709,7 @@ def d_lqhwua_post : HaydnBuiltin<"int64_t(void const*, int, int, int)", "agu"> {
   let PublicPrototype = "int64_t(void const*, int, int, int)";
   let Mnemonic = "D_LQHWUA_POST";
   // ptr, ar_sel, stride, dir_sel
-  let ImmChecks = [ImmCheck<1, ImmCheck0_1>, ImmCheck<3, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<1, ImmCheck0_3>, ImmCheck<3, ImmCheck0_1>];
   let Semantics = "load quad half words with hardware unaligned access mechanism. handles accesses where the data is 2-byte aligned but not necessarily 8-byte aligned.";
 }
 def d_ltwua_post : HaydnBuiltin<"int64_t(void const*, int, int, int)", "agu"> {
@@ -2718,7 +2718,7 @@ def d_ltwua_post : HaydnBuiltin<"int64_t(void const*, int, int, int)", "agu"> {
   let PublicName = "d_ltwua_post";
   let PublicPrototype = "int64_t(void const*, int, int, int)";
   let Mnemonic = "D_LTWUA_POST";
-  let ImmChecks = [ImmCheck<1, ImmCheck0_1>, ImmCheck<3, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<1, ImmCheck0_3>, ImmCheck<3, ImmCheck0_1>];
   let Semantics = "load two words with hardware unaligned access mechanism. handles accesses where the data is 4-byte aligned but not necessarily 8-byte aligned.";
 }
 def flar : HaydnBuiltin<"void(int)", "agu"> {
@@ -2727,7 +2727,7 @@ def flar : HaydnBuiltin<"void(int)", "agu"> {
   let PublicName = "flar";
   let PublicPrototype = "void(int)";
   let Mnemonic = "FLAR";
-  let ImmChecks = [ImmCheck<0, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<0, ImmCheck0_3>];
   let Semantics = "flush the target aligned register.";
 }
 def wbarwua : HaydnBuiltin<"void(int, void*, int)", "agu"> {
@@ -2737,7 +2737,7 @@ def wbarwua : HaydnBuiltin<"void(int, void*, int)", "agu"> {
   let PublicPrototype = "void(int, void*, int)";
   let Mnemonic = "WBARWUA";
   // ar_sel, ptr, dir_sel
-  let ImmChecks = [ImmCheck<0, ImmCheck0_1>, ImmCheck<2, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<0, ImmCheck0_3>, ImmCheck<2, ImmCheck0_1>];
   let Semantics = "write back the rest data of the aligned register with hardware unaligned access mechanism. and, flush the target aligned register. rs must be the post-incremented value from the last D_STWUA_POST /...";
 }
 def d_sqhwua_post : HaydnBuiltin<"void(int64_t, void*, int, int, int)", "agu"> {
@@ -2747,7 +2747,7 @@ def d_sqhwua_post : HaydnBuiltin<"void(int64_t, void*, int, int, int)", "agu"> {
   let PublicPrototype = "void(int64_t, void*, int, int, int)";
   let Mnemonic = "D_SQHWUA_POST";
   // data, ptr, ar_sel, stride, dir_sel
-  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<4, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<2, ImmCheck0_3>, ImmCheck<4, ImmCheck0_1>];
   let Semantics = "store quad half words with hardware unaligned access mechanism, post-increment. handles accesses where the data is 2-byte aligned but not necessarily 8-byte aligned. bytes before the first data ele...";
 }
 def d_stwua_post : HaydnBuiltin<"void(int64_t, void*, int, int, int)", "agu"> {
@@ -2756,7 +2756,7 @@ def d_stwua_post : HaydnBuiltin<"void(int64_t, void*, int, int, int)", "agu"> {
   let PublicName = "d_stwua_post";
   let PublicPrototype = "void(int64_t, void*, int, int, int)";
   let Mnemonic = "D_STWUA_POST";
-  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<4, ImmCheck0_1>];
+  let ImmChecks = [ImmCheck<2, ImmCheck0_3>, ImmCheck<4, ImmCheck0_1>];
   let Semantics = "store two words hardware unaligned access mechanism, post-increment. handles accesses where the data is 4-byte aligned but not necessarily 8-byte aligned. bytes before the first data element within...";
 }
 // BREV loads: frexp pair {data, new_ptr} (same AGU model as CB loads).

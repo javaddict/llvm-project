@@ -119,35 +119,23 @@ int64_t test_sin_cos_bad(int phase) {
 // C0.4 / G-SEMA-INTRIN: UA ar_sel/dir are ImmArg encoding fields.
 // Constant ar_sel legal; runtime ar_sel fails Sema (switch wrappers in
 // haydn_dsp.h / haydn.h specials for NatureDSP ar&=3).
-// KNOWN GAP (merge audit 2026-08-14, ledger CB-149): this base models only
-// AR0/AR1, so ar_sel Sema range is [0, 1] — but the golden ar_sel fields are
-// 2 BITS (four ARs) and the NatureDSP compat surface documents ar&=3.
-// These expectations pin the CURRENT 2-AR compiler; restoring AR2/AR3
-// reopens them to [0, 3] / ar_sel 2..3 legal.
+// CB-149 closed: the full 2-bit ar_sel domain (AR0..AR3) is restored —
+// golden field width 2 bits, BundleSim executes int64_t ar[4], NatureDSP
+// documents ar&=3.
 void test_flar_const_ok(void) {
   __builtin_haydn_flar(0);
-  __builtin_haydn_flar(1);
+  __builtin_haydn_flar(3);
 }
 void test_flar_runtime_bad(int ar) {
   // expected-error@+1 {{argument to '__builtin_haydn_flar' must be a constant integer}}
   __builtin_haydn_flar(ar);
 }
 void test_flar_range_bad(void) {
-  // expected-error@+1 {{argument value 4 is outside the valid range [0, 1]}}
+  // expected-error@+1 {{argument value 4 is outside the valid range [0, 3]}}
   __builtin_haydn_flar(4);
-}
-void test_flar_ar23_gap(void) {
-  // Golden-legal, rejected on this base (CB-149).
-  // expected-error@+1 {{argument value 3 is outside the valid range [0, 1]}}
-  __builtin_haydn_flar(3);
 }
 void test_pldwwua_const_ok(const void *p) {
   __builtin_haydn_pldwwua(0, p);
-  __builtin_haydn_pldwwua(1, p);
-}
-void test_pldwwua_ar23_gap(const void *p) {
-  // Golden-legal, rejected on this base (CB-149).
-  // expected-error@+1 {{argument value 2 is outside the valid range [0, 1]}}
   __builtin_haydn_pldwwua(2, p);
 }
 void test_pldwwua_runtime_bad(int ar, const void *p) {

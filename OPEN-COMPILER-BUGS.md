@@ -32,11 +32,26 @@
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
-> | **CB-149** | P2 | ISA surface | Only AR0/AR1 modeled, but golden `ar_sel` fields are 2 BITS (four ARs) and the NatureDSP compat surface documents `ar&=3`. Builtins with ar_sel 2..3 are rejected in Sema ([0, 1]); this line's own pre-merge Sema tests still expected [0, 3]. Restoring AR2/AR3 = RegisterInfo + calling conv + RA audit; Sema tests carry `KNOWN GAP (CB-149)` markers at the exact sites to reopen. |
 > | **CB-151** | P2 | AR-ua encode | The D-side unaligned-window post ops (`d_ltwua_post` family: dest, ar_sel, rbase, rdelta, dir) encode through the bag-by-class member binding into shorter AR-shape members, silently dropping/permuting operands — self-consistent through this toolchain's decoder, rejected by BundleSim's golden catalog ("operand kind disagrees", cb100_ar_unaligned red as the tracking signal). This line's own `ar-unaligned-roundtrip.s` is `XFAIL: *` with "encode residual" in its OWNER note. Closing it needs the member-selection/ledger-signature gating this line planned ("MCInstrDesc gating") — note the generator's canonicalizer pins same-class permutations against the MAJORITY member signature, which cannot see a family that is consistently permuted against the LOGICAL's operand order. |
 > | **CB-150** | P3 | AE tier machinery | Tip mid-stream state, pre-existing at 1c740f0d5708: `ae-tier-audit.test` inventory counts drift (macros=600 surface=673 td_tiers=661), `ae-compat-tier-closure.c`, and `ae-compat-selp24-f24-satshift.c` expecting `llvm.smax`-shaped compat IR the current headers no longer produce. Needs the tier inventory regeneration workflow (owner's machine) — not guessed at in the merge. |
 >
 > 
+### Closed — CB-149 AR2/AR3 restored (2026-08-14, user decision)
+
+The full 2-bit ar_sel domain is back: AR2/AR3 registers (64-bit, keeping
+this line's width), the AR class, the five selector ArRegs tables and
+their ArSel guards, the clang register-name list, and the seven ar_sel
+ImmChecks (0_1 → 0_3; the dir_sel and setcbr checks are genuinely 1-bit
+and stay). The interim retirement note claimed the architectural file
+was AR0/AR1 "until golden classifies unused codes" — the classification
+we have is the execution oracle: BundleSim's semantic model executes
+`int64_t ar[4]`, the golden field is 2 bits, NatureDSP documents ar&=3,
+and this line's own pre-retirement Sema tests expected [0, 3]. Verified:
+ar_sel 2/3 round-trip assemble→objdump and compile→encode from the C
+builtins (`pldwwua 2`, `flar 3`, `wbarwua 3`); Sema tests reopened to
+[0, 3]. Execution coverage of ar2/3 UA streams lands when CB-151's
+encode residual closes.
+
 ### Closed — CB-134 compile hang (verified fixed, 2026-08-14 merge audit)
 
 The five hang files (`20001111-1`, `20170401-1`, `20180921-1`, `950809-1`,
