@@ -63,6 +63,8 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace llvm {
 
@@ -896,6 +898,119 @@ inline unsigned auctionFocusFillScore(ArrayRef<unsigned> BaseOpcodes,
   if (!A)
     return BaseOpcodes.size();
   return A->IssuedCount;
+}
+
+/// Score-only twin of auctionFocusFillScore, same value by construction
+/// (CB-153a). The score consumes ONLY IssuedCount — the size of the densest
+/// legal subset containing the focus. IssuedCount ranks first among the
+/// auction tie-breaks, so the score equals BaseN + (largest focus-containing
+/// subset size legal in ANY acceptance order), falling back to BaseN when
+/// none is. This twin therefore walks sizes largest-first, tries the same
+/// acceptance orders per subset as the auction (legality's exact set solve is
+/// order-insensitive, but its exactPackOneOpcodeCycle FALLBACK is a
+/// sequential Bundle add, so any-order acceptance must be preserved), and
+/// returns at the first legal hit. What it never runs is the auction's
+/// per-order Cand.Exact = exactSolveProductOpcodes rematch — that feeds
+/// tie-breaks below IssuedCount, which the score cannot observe. The full
+/// auction cost ~2.3 ms per score on wide ready lists (every order of every
+/// subset, each solving exact legality once for the oracle and once for the
+/// rematch); the twin is bounded by the same subset/order walk minus the
+/// rematch, and the largest-first early exit usually ends it in a few tests.
+/// Optional cross-call memo for auctionFocusFillScoreOnly: "is Base plus this
+/// ready-opcode multiset legal in ANY acceptance order" keyed by the Base
+/// sequence, a ~0u separator, and the SORTED chosen ready opcodes. Any-order
+/// legality is order-invariant in the chosen ready ops by definition (every
+/// order is tried before answering no), and Base stays in sequence order in
+/// the key because the auction never permutes it.
+struct AuctionAnyOrderLegalMemo {
+  struct Hash {
+    size_t operator()(const std::vector<unsigned> &V) const {
+      return static_cast<size_t>(llvm::hash_combine_range(V.begin(), V.end()));
+    }
+  };
+  std::unordered_map<std::vector<unsigned>, bool, Hash> Map;
+};
+
+inline unsigned
+auctionFocusFillScoreOnly(ArrayRef<unsigned> BaseOpcodes,
+                          ArrayRef<unsigned> ReadyOpcodes,
+                          const HaydnMCFormats &Fmts,
+                          AuctionAnyOrderLegalMemo *LegalMemo = nullptr) {
+  const unsigned BaseN = BaseOpcodes.size();
+  if (ReadyOpcodes.empty() || BaseN > Haydn::ISSUE_SLOT_COUNT)
+    return BaseN;
+  const unsigned Cap = Haydn::ISSUE_SLOT_COUNT - BaseN;
+  const unsigned ReadyN = std::min<unsigned>(ReadyOpcodes.size(),
+                                             MaxReadySubsetAuctionReady);
+  if (Cap == 0 || ReadyN == 0)
+    return BaseN; // Focus-containing subsets cannot fit: auction nullopt.
+
+  SmallVector<unsigned, 3> CycleOps;
+  auto orderIsLegal = [&](ArrayRef<unsigned> Idxs) {
+    CycleOps.clear();
+    CycleOps.append(BaseOpcodes.begin(), BaseOpcodes.end());
+    for (unsigned I : Idxs)
+      CycleOps.push_back(ReadyOpcodes[I]);
+    return opcodesFormOneLegalCycle(CycleOps, Fmts);
+  };
+  auto anyOrderLegal = [&](SmallVectorImpl<unsigned> &P) {
+    if (orderIsLegal(P))
+      return true;
+    const unsigned Bits = P.size();
+    SmallVector<unsigned, 3> C(Bits, 0);
+    unsigned I = 0;
+    while (I < Bits) { // Heap's algorithm, as in auctionReadySubsetCycle.
+      if (C[I] < I) {
+        if ((I & 1) == 0)
+          std::swap(P[0], P[I]);
+        else
+          std::swap(P[C[I]], P[I]);
+        if (orderIsLegal(P))
+          return true;
+        ++C[I];
+        I = 0;
+      } else {
+        C[I] = 0;
+        ++I;
+      }
+    }
+    return false;
+  };
+
+  for (unsigned Size = std::min(Cap, ReadyN); Size >= 1; --Size) {
+    const unsigned Full = 1u << ReadyN;
+    for (unsigned Mask = 1; Mask < Full; Mask += 2) { // bit 0 (focus) set
+      if (static_cast<unsigned>(llvm::popcount(Mask)) != Size)
+        continue;
+      SmallVector<unsigned, 3> Idxs;
+      for (unsigned I = 0; I < ReadyN; ++I)
+        if (Mask & (1u << I))
+          Idxs.push_back(I);
+
+      if (LegalMemo) {
+        std::vector<unsigned> Key;
+        Key.reserve(BaseN + 1 + Idxs.size());
+        Key.assign(BaseOpcodes.begin(), BaseOpcodes.end());
+        Key.push_back(~0u);
+        const size_t At = Key.size();
+        for (unsigned I : Idxs)
+          Key.push_back(ReadyOpcodes[I]);
+        std::sort(Key.begin() + At, Key.end());
+        auto It = LegalMemo->Map.find(Key);
+        const bool Legal =
+            It != LegalMemo->Map.end() ? It->second : anyOrderLegal(Idxs);
+        if (It == LegalMemo->Map.end())
+          LegalMemo->Map.emplace(std::move(Key), Legal);
+        if (Legal)
+          return BaseN + Size;
+        continue;
+      }
+
+      if (anyOrderLegal(Idxs))
+        return BaseN + Size;
+    }
+  }
+  return BaseN;
 }
 
 //===----------------------------------------------------------------------===//

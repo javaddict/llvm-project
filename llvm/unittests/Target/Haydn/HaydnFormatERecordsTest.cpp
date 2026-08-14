@@ -30,8 +30,15 @@ using namespace llvm::haydn::format_e;
 namespace {
 
 TEST(HaydnFormatERecords, GoldenHashPins) {
+  // REPAIRED golden, not the delivery: b0b477e5... is the as-delivered
+  // layout whose mapping rows carry the known generation defect (the 76
+  // src1/src2 rows; sole live-member delta X4SEL16_E3_E1_ALU1_RRR). The
+  // importer pins 8465132c... — the delivery after the two deterministic
+  // repair passes (--fix-operand-mapping / --fix-read-ports), byte-for-byte
+  // reproducible from the delivered files. This pin must move together with
+  // PINNED_JSON_SHA256 in generate_format_e_records.py.
   EXPECT_STREQ(FormatEJSONSHA256,
-               "b0b477e585f9d464b8750472017d73c3f919e5358e0bda387dc6eeecb79509a4");
+               "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9");
   EXPECT_STREQ(FormatEXLSXSHA256,
                "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af");
   // Canonical-vector SHA-256 is enforced by generate_format_e_records.py

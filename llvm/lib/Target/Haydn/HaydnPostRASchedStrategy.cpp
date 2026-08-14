@@ -108,6 +108,12 @@ STATISTIC(NumPostRAAltDescLeakFatals,
 STATISTIC(NumPostRAResourceAdmissionPinsHeld,
           "Number of post-RA enterMBB checks that held fail-closed per-op "
           "resource admission (product closed until golden import)");
+STATISTIC(NumAuctionScoreCalls,
+          "Number of ready-subset auction score requests (post-SU-sweep-cache)");
+STATISTIC(NumAuctionOpcodeMemoHits,
+          "Number of auction scores served by the opcode-multiset memo");
+STATISTIC(NumAuctionSolves,
+          "Number of auction scores that ran the subset/permutation solve");
 
 static cl::opt<bool> EnableHaydnPostRAReadySubsetAuction(
     "haydn-postra-ready-subset-auction", cl::init(true), cl::Hidden,
@@ -136,8 +142,11 @@ static unsigned countMultiMemberHardRoots(MachineBasicBlock &MBB) {
   return Count;
 }
 
+HaydnPostRASchedStrategy::~HaydnPostRASchedStrategy() = default;
+
 HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
-    : PostGenericScheduler(C) {
+    : PostGenericScheduler(C),
+      LegalMemo(std::make_unique<haydn::bundle::AuctionAnyOrderLegalMemo>()) {
   // Cache the Haydn TII from the MachineFunction's subtarget. enterMBB runs
   // BEFORE the base scheduler calls initialize(DAG), so the DAG member is
   // still null when enterMBB first fires — get TII from the context instead.
@@ -154,13 +163,30 @@ static bool isBundleSkippable(const MachineInstr &MI);
 /// ReadyOpcodes with Focus first, then other Available (non-skippable) ops.
 /// Returns auction fill score for Focus (IssuedCount of densest legal subset
 /// that includes Focus).
-static unsigned scoreReadySubsetAuction(SchedBoundary &Zone, SUnit *Focus) {
+///
+/// Memoized (CB-153a). The auction result used here is ONLY IssuedCount of
+/// the best subset that contains the focus, and auctionReadySubsetCycle
+/// enumerates every acceptance order of every subset, so for a fixed Base
+/// sequence the score cannot depend on the ORDER of the non-focus ready ops:
+/// any subset that is legal in some order is found regardless of how the
+/// ready list happened to be ordered, and IssuedCount ranks first among the
+/// tie-breaks. (The order-sensitive tie-breaks pick WHICH equally-dense
+/// auction wins; they never change the count.) The Ready list construction
+/// below — focus first, then the first MaxReadySubsetAuctionReady-1 eligible
+/// Available entries in queue order — is unchanged, so the truncated multiset
+/// the auction sees is exactly what it saw before; only recomputation of an
+/// identical pure function is skipped. Base stays in sequence order in the
+/// key (it is not permuted by the auction).
+static unsigned scoreReadySubsetAuction(
+    SchedBoundary &Zone, SUnit *Focus,
+    std::unordered_map<std::vector<unsigned>, unsigned,
+                       HaydnPostRASchedStrategy::AuctionScoreKeyHash> &Memo,
+    haydn::bundle::AuctionAnyOrderLegalMemo &LegalMemo) {
   if (!Focus || !Focus->getInstr() || !Zone.HazardRec ||
       !Zone.HazardRec->isEnabled())
     return 0;
 
   auto *HR = static_cast<HaydnHazardRecognizer *>(Zone.HazardRec);
-  HaydnMCFormats Fmts;
 
   SmallVector<unsigned, 3> Base;
   const haydn::bundle::CycleState &Pref =
@@ -182,7 +208,43 @@ static unsigned scoreReadySubsetAuction(SchedBoundary &Zone, SUnit *Focus) {
     if (Ready.size() >= haydn::bundle::MaxReadySubsetAuctionReady)
       break;
   }
-  return haydn::bundle::auctionFocusFillScore(Base, Ready, Fmts);
+
+  // Canonical key: Base in order | ~0u separator | focus | sorted rest.
+  // ~0u is not a valid opcode, so the separator cannot collide with content.
+  std::vector<unsigned> Key;
+  Key.reserve(Base.size() + 1 + Ready.size());
+  Key.assign(Base.begin(), Base.end());
+  Key.push_back(~0u);
+  Key.push_back(Ready[0]);
+  {
+    const size_t RestAt = Key.size();
+    Key.insert(Key.end(), Ready.begin() + 1, Ready.end());
+    std::sort(Key.begin() + RestAt, Key.end());
+  }
+
+  ++NumAuctionScoreCalls;
+  auto It = Memo.find(Key);
+  if (It != Memo.end()) {
+    ++NumAuctionOpcodeMemoHits;
+    return It->second;
+  }
+
+  ++NumAuctionSolves;
+  HaydnMCFormats Fmts;
+  const unsigned Score =
+      haydn::bundle::auctionFocusFillScoreOnly(Base, Ready, Fmts, &LegalMemo);
+  Memo.emplace(std::move(Key), Score);
+  return Score;
+}
+
+SUnit *HaydnPostRASchedStrategy::pickNode(bool &IsTopNode) {
+  // One pickNode = cycle settle (pickOnlyChoice / pending release) followed by
+  // the candidate sweep(s); HR state and each zone's Available set are
+  // constant across the sweeps, so per-(SU, zone) scores are fixed here.
+  SweepSUScore[0].clear();
+  SweepSUScore[1].clear();
+  SweepSUScoreCycle[0] = SweepSUScoreCycle[1] = ~0u;
+  return PostGenericScheduler::pickNode(IsTopNode);
 }
 
 bool HaydnPostRASchedStrategy::tryCandidate(SchedCandidate &Cand,
@@ -202,8 +264,23 @@ bool HaydnPostRASchedStrategy::tryCandidate(SchedCandidate &Cand,
     // When comparing cross-zone candidates AtTop may differ; score each in its
     // own zone. Same-zone picks (the common pickNodeFromQueue path) share Zone.
     SchedBoundary &CandZone = Cand.AtTop ? Top : Bot;
-    const unsigned TryScore = scoreReadySubsetAuction(Zone, TryCand.SU);
-    const unsigned CandScore = scoreReadySubsetAuction(CandZone, Cand.SU);
+    auto scoreOnce = [&](SchedBoundary &Z, const SchedCandidate &C) {
+      const unsigned ZIdx = C.AtTop ? 1 : 0;
+      auto &M = SweepSUScore[ZIdx];
+      if (SweepSUScoreCycle[ZIdx] != Z.getCurrCycle()) {
+        M.clear();
+        SweepSUScoreCycle[ZIdx] = Z.getCurrCycle();
+      }
+      auto It = M.find(C.SU);
+      if (It != M.end())
+        return It->second;
+      const unsigned S =
+          scoreReadySubsetAuction(Z, C.SU, AuctionScoreCache, *LegalMemo);
+      M.try_emplace(C.SU, S);
+      return S;
+    };
+    const unsigned TryScore = scoreOnce(Zone, TryCand);
+    const unsigned CandScore = scoreOnce(CandZone, Cand);
     if (TryScore != CandScore) {
       if (TryScore > CandScore) {
         TryCand.Reason = ResourceDemand;
@@ -272,6 +349,8 @@ void HaydnPostRASchedStrategy::bumpCycleForBundles(
 
 void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
   CurrentMBB = MBB;
+  AuctionScoreCache.clear();
+  LegalMemo->Map.clear();
   // Dual-load packing is HR tryAddProduct PlacementAlternatives → setDesc
   // members (AIEHazardRecognizer.cpp:389; AIEMachineScheduler.cpp:1121-1132).
   // No promoteLoadsToSlot1 / AlternateSlots residual (AIE

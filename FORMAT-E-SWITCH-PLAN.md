@@ -4355,4 +4355,11 @@ with both directions of the history in its header):
 * CoreMark: PASS, 563,224 committed bundles vs round 1's 517,586
   (+8.8%, CB-153b).
 * Haydn lit battery: 880 discovered, 9 red — the eight CB-152
-  finalize-cohort tests plus CB-150. HaydnTests 437/437.
+  finalize-cohort tests plus CB-150. HaydnTests: recorded as 437/437 at
+  the time, which was a MISCOUNT — the grep pattern matched gtest's
+  plural "FAILED TESTS" but its singular "1 FAILED TEST" summary, so
+  GoldenHashPins (the wave unittest still pinning the DELIVERY golden
+  hash b0b477e5... that round 2 had repointed to the repaired
+  8465132c... everywhere else) sat red unnoticed. Pin re-pointed with
+  the repair rationale; suite now 459/459 (count from the gtest tail,
+  not a grep). Read the tail, don't pattern-match victory.
