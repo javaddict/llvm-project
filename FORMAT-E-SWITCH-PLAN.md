@@ -4219,14 +4219,40 @@ architecture rather than transplanted:
   still pinning R_HAYDN_32 after his own FieldLsb fix restored the typed
   relocs. All aligned to the measured law in this merge.
 
-### Verification state at merge
+### Verification state at merge (final, 2026-08-14)
 
-CodeGen+MC Haydn lit 701/701, lld/haydn 28/28, HaydnTests 437/437 (his
-tip: 682/695 · 26/28 · 417/432). haydn_encoding.py --check: 3686
-placements / 126 shapes, self-consistent. Execution gates (BundleSim
-ctest, gcc-c-torture, CoreMark after the § 2 libc+BSP rebuild) are the
-next step and the § 2 rule stands: without that rebuild the simulator
-suite proves nothing.
+All after the § 2 libc+BSP rebuild with the merged compiler
+(llvm-libc-merge-build; sysroot installed beside the merged clang;
+simulator/build-merge configured on the merged toolchain):
+
+```
+llvm+clang+lld Haydn lit   770 discovered / 3 failed — all three CB-150
+                           (this base's AE tier machinery, mid-stream at
+                           its own tip; ledgered, not guessed at)
+HaydnTests                 437/437   (tip: 417/432)
+BundleSim ctest            222/223   (the one red is cb100_ar_unaligned,
+                           the deliberate CB-151 tracking signal)
+gcc-c-torture -O3          1417 PASS / 0 FAIL (97 lit-unsupported)
+CoreMark e2e               PASS
+encoding --check           3686 placements / 126 shapes, self-consistent
+encoding roundtrip         3686/3686, operands included
+Dhrystone                  not run — its qualification source path
+                           (/home/ckchen/benchmark/…) does not exist on
+                           this machine; it was never part of the
+                           recorded baseline either
+```
+
+The second validation round also fixed on this base: ARCTAN (and every
+golden-placeable pseudo) now emits at -O0 as a product singleton; the
+Bundle<MCInst> fixed-slot paths keep member history so
+syncSlotMapFromPreferred cannot underflow; aligned(N) on functions is
+honored end-to-end (AsmPrinter consults F.getAlign, the lld
+sh_addralign clamp is gone — its premise died when the simulator
+started accepting zero-fill gaps); libc's fscanf entrypoint is back
+(the BundleSim plat override it pointed to was retired on the
+simulator side). Simulator-side (local commit 841a570): the ELF
+validator accepts EF_HAYDN_E96, and cb100's hand asm moved to this
+toolchain's AGU surface.
 
 ### Known-open on this base
 
