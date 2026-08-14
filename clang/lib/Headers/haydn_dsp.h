@@ -3075,8 +3075,12 @@ static inline ae_int16x4 __ae_sraa16(ae_int16x4 a, int s) {
 #define AE_SUBADD32_HL_LH(a, b) haydn_x2subadd32s((a), (b))
 #define AE_SUBADD32S_HL_LH(a, b) haydn_x2subadd32s((a), (b))
 /* Dual-64 lane add — no Haydn map. Transitional scalar body only when
- * __HAYDN_ALLOW_INEXACT_AE; default fail-closed at residual quarantine. */
+ * __HAYDN_ALLOW_INEXACT_AE; default fail-closed (never silent scalar no-op). */
+#if defined(__HAYDN_ALLOW_INEXACT_AE)
 #define AE_ADD64X2_(a, b) ((ae_int64)((a) + (b)))
+#else
+#define AE_ADD64X2_(...) __HAYDN_AE_UNSUPPORTED_EXPR(AE_ADD64X2_)
+#endif
 #define AE_ADDANDSUBRNG16RAS_S0(a, b) AE_ADDANDSUBRNG16RAS_S1(a, b)
 /* Dual-24 non-sat add — X2ADD32; never scalar (a)+(b) high-lane drop. */
 #define AE_ADDP24(a, b) \
@@ -7057,13 +7061,17 @@ uintptr_t XT_ADDX8(int scale, uintptr_t ptr) {
 
 // AE_ADD64X2_vector(a, b): HiFi dual-64-bit lane-wise add (no cross-lane
 //   carry). Haydn ae_int64x2 is a single DR64 bag — there is no exact dual-64
-//   storage or lane-wise add. The scalar i64 body below is KNOWN silent-wrong
+//   storage or lane-wise add. The scalar i64 body is KNOWN silent-wrong
 //   (cross-lane carry when low half overflows) and is kept only for
-//   __HAYDN_ALLOW_INEXACT_AE transitional NatureDSP -c. Default mode
-//   redefines this to __HAYDN_AE_UNSUPPORTED_EXPR (permanent product
+//   __HAYDN_ALLOW_INEXACT_AE transitional NatureDSP -c. Default is
+//   fail-closed via __HAYDN_AE_UNSUPPORTED_EXPR (permanent product
 //   decision; not EMULATED — do not bag-alias dual-64).
 //   Research: ae-to-haydn-mapping AE_ADD64X2_vector MISSING (128-bit dual-64).
+#if defined(__HAYDN_ALLOW_INEXACT_AE)
 #define AE_ADD64X2_vector(a, b) ((ae_int64x2)((ae_int64)(a) + (ae_int64)(b)))
+#else
+#define AE_ADD64X2_vector(...) __HAYDN_AE_UNSUPPORTED_EXPR(AE_ADD64X2_vector)
+#endif
 
 //---- AE_S16X4_XP / AE_S32X2_XP / AE_S32X2F24_XP 3-arg overload ----------
 // matop fast kernels call these in 3-arg form: AE_S16X4_XP(val, ptr, inc).
@@ -7331,25 +7339,18 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
 //===----------------------------------------------------------------------===//
 // Residual silent-wrong quarantine — fail closed unless ALLOW_INEXACT
 //
-// Overrides any earlier public AE maps that silently alias a different
-// direction, width, lane, or arithmetic. Transitional NatureDSP -c may define
-// __HAYDN_ALLOW_INEXACT_AE to keep the inexact bodies defined above.
-// MULZAAFD / L16X4_RIC / L32X2_RIC / L32X2F24_RIC / LA*_RIC / SELP24 /
-// SEL24 / SEL32 / dual-24 NEG|ADD|SUB|NEGSP|ADDSP|SUBSP are EXACT;
-// F24X2_SRAI / SRAI24 / F32X2_SRAI dual ASR are EXACT; SRAS32/SLAS32 SAR
-// dual shifts are EXACT; dual-24 unaligned circular LA/SA F24 IC/XC +
-// POS_PC/NEG_PC are EXACT (AR + CBR; NEG seed == POS seed); L16_XC +
-// saturating left-shifts + SRA64_32 + MAXABS16S are EMULATED. Permanent
-// residual: AE_ADD64X2_ / AE_ADD64X2_vector only (no dual-64 ISA map).
-// Do not add new silent aliases.
+// Dual-64 ADD64X2_* are fail-closed at their definition sites (no early
+// silent scalar body under default). This late pin re-affirms the closed
+// UNSUPPORTED set so mid-header redefines cannot reintroduce a no-op.
+// Transitional NatureDSP -c may define __HAYDN_ALLOW_INEXACT_AE for the
+// inexact bodies above. MULZAAFD / reverse-CB / SELP24 / dual-24 ALU /
+// dual ASR / LA-SA IC-XC / POS_PC-NEG_PC are EXACT; soft sat-left +
+// MAXABS16S stay EMULATED. Permanent residual: AE_ADD64X2_ /
+// AE_ADD64X2_vector only (no dual-64 ISA map). Do not add silent aliases.
 //===----------------------------------------------------------------------===//
 #if !defined(__HAYDN_ALLOW_INEXACT_AE)
 
-/* AE_L16_XC EMULATED / reverse-CB+IC+SELP24+dual-24 EXACT — not quarantined. */
-
-/* Permanent UNSUPPORTED: no bag dual-64. Hexagon peer is fail-closed /
- * feature-gated — not a silent scalar alias. Plain AE_ADD64X2_ joins
- * AE_ADD64X2_vector (same silent scalar-i64 carry class). */
+/* Permanent UNSUPPORTED: no bag dual-64. Fail-closed, not silent scalar. */
 #undef AE_ADD64X2_
 #define AE_ADD64X2_(...) __HAYDN_AE_UNSUPPORTED_EXPR(AE_ADD64X2_)
 #undef AE_ADD64X2_vector

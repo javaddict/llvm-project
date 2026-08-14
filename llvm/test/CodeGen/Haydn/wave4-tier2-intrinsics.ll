@@ -4,7 +4,7 @@
 
 ; Updated for native DR64 shift (sll64/srl64/sra64)
 ; RE-FILED REGRESSION : the second RUN line (full ASM pipeline)
-; was removed because it hits the SEQ64_S1 MachineVerifier abort that
+; was removed because it hits the SEQ64 MachineVerifier abort that
 ; regressed in the Flex cutover — same root cause as
 ; dr64-compare-intrinsics.ll and other DR64 R_CMP tests (see XFAIL comment
 ; there). The first RUN line (MIR at -stop-after=instruction-select) is

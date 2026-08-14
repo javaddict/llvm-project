@@ -48,12 +48,48 @@ def parse_public_ae_inlines(text: str) -> dict[str, str]:
 
 
 def parse_td_tiers(text: str) -> dict[str, tuple[str, str]]:
+    """Parse HaydnAeCompatDef records (single-line ';' or multi-line '{')."""
     out: dict[str, tuple[str, str]] = {}
+    # AE-P0 and residual class use multi-line bodies (OracleId/DirImm/MemEffect).
+    # A trailing ';' only matches the old single-line form and silently drops
+    # those records — untagged surface then fails closed for the wrong reason.
     pat = re.compile(
-        r'def\s+(AE_[A-Za-z0-9_]+)\s*:\s*HaydnAeCompatDef\s*<\s*"([^"]+)"\s*,\s*"([^"]*)"\s*>\s*;'
+        r'def\s+(AE_[A-Za-z0-9_]+)\s*:\s*HaydnAeCompatDef\s*<\s*"([^"]+)"\s*,\s*"([^"]*)"\s*>\s*[;{]'
     )
     for m in pat.finditer(text):
         out[m.group(1)] = (m.group(2), m.group(3))
+    return out
+
+
+def parse_td_oracle_fields(text: str) -> dict[str, dict[str, str]]:
+    """Parse DeclKind/OracleId/DirImm/SoftState/MemEffect from multi-line bodies."""
+    out: dict[str, dict[str, str]] = {}
+    # Match def ... HaydnAeCompatDef<...> { ... } or bare ;
+    rec = re.compile(
+        r'def\s+(AE_[A-Za-z0-9_]+)\s*:\s*HaydnAeCompatDef\s*<\s*"([^"]+)"\s*,\s*"([^"]*)"\s*>\s*(?:;|\{([^}]*)\})',
+        re.M,
+    )
+    for m in rec.finditer(text):
+        name = m.group(1)
+        body = m.group(4) or ""
+        fields: dict[str, str] = {
+            "tier": m.group(2),
+            "lowering": m.group(3),
+            "DeclKind": "",
+            "OracleId": "",
+            "DirImm": "-1",
+            "SoftState": "0",
+            "MemEffect": "0",
+        }
+        for key in ("DeclKind", "OracleId"):
+            km = re.search(r'let\s+' + key + r'\s*=\s*"([^"]*)"\s*;', body)
+            if km:
+                fields[key] = km.group(1)
+        for key in ("DirImm", "SoftState", "MemEffect"):
+            km = re.search(r'let\s+' + key + r'\s*=\s*(-?\d+)\s*;', body)
+            if km:
+                fields[key] = km.group(1)
+        out[name] = fields
     return out
 
 
@@ -1037,6 +1073,129 @@ def main(argv: list[str]) -> int:
     for sym in ("AE_TRUNCA32X2F64S","AE_CVTQ56A32S","AE_CVT16X4","AE_CVT16X4_1ARG","AE_SLAA64S","AE_TRUNCA32F64S","AE_SA64POS_FP","AE_SA64NEG_FP"):
         if sym in tiers and tiers[sym][1] in ("", "residual", "none", "overload", "c-op", "header"):
             errors.append(f"{sym} P0 recipe must not be placeholder {tiers[sym][1]!r}")
+
+    # Empty public macro body is fail-closed (availability must be explicit).
+    empty_bodies = sorted(n for n, b in macros.items() if not b.strip())
+    if empty_bodies:
+        errors.append(
+            f"{len(empty_bodies)} public AE_* macros have empty bodies (sample): "
+            + ", ".join(empty_bodies[:12])
+        )
+
+    # Typed public inventory fields (availability/immediates/effects/oracle).
+    fields = parse_td_oracle_fields(td)
+    if len(fields) != len(tiers):
+        errors.append(
+            f"typed-field parse count {len(fields)} != tier count {len(tiers)}"
+        )
+    # Full authored OracleId floor: every EXACT/EMULATED public op must carry a
+    # TD-authored OracleId (synthesis-only labels are not qualification).
+    # Permanent UNSUPPORTED dual-64 ADD64X2_* stay without OracleId.
+    n_oracle = sum(
+        1
+        for _sym, f in fields.items()
+        if (f.get("OracleId") or "").strip()
+    )
+    # 673 inventory - 2 UNSUPPORTED = 671 authored registrations.
+    if n_oracle < 671:
+        errors.append(
+            f"typed OracleId inventory count {n_oracle} < full EXACT+EMULATED floor 671"
+        )
+    n_exact_oracle = sum(
+        1
+        for _sym, f in fields.items()
+        if f.get("tier") == "EXACT" and (f.get("OracleId") or "").strip()
+    )
+    if n_exact_oracle < 70:
+        errors.append(
+            f"EXACT OracleId count {n_exact_oracle} < EXACT floor 70"
+        )
+    for sym, f in fields.items():
+        tier = f.get("tier")
+        oid = (f.get("OracleId") or "").strip()
+        if tier in ("EXACT", "EMULATED") and not oid:
+            errors.append(f"{tier} {sym} missing authored OracleId")
+        if tier == "UNSUPPORTED" and oid:
+            errors.append(f"UNSUPPORTED {sym} must not author OracleId (got {oid!r})")
+    # AE-P0 contract: non-empty OracleId + typed DirImm on store-finish.
+    ae0_oracles = {
+        "AE_TRUNCA32X2F64S": "ae0.trunca32x2f64s",
+        "AE_TRUNCA32F64S": "ae0.trunca32f64s",
+        "AE_CVTQ56A32S": "ae0.cvtq56a32s",
+        "AE_CVT16X4": "ae0.cvt16x4",
+        "AE_CVT16X4_1ARG": "ae0.cvt16x4_1arg",
+        "AE_SLAA64S": "ae0.slaa64s",
+        "AE_SA64POS_FP": "ae0.sa64pos_fp",
+        "AE_SA64NEG_FP": "ae0.sa64neg_fp",
+    }
+    for sym, oid in ae0_oracles.items():
+        if sym not in fields:
+            errors.append(f"AE-P0 {sym} missing from typed TD inventory")
+            continue
+        got = fields[sym].get("OracleId", "")
+        if got != oid:
+            errors.append(
+                f"AE-P0 {sym} OracleId is {got!r}, want {oid!r}"
+            )
+    if "AE_SA64POS_FP" in fields and fields["AE_SA64POS_FP"].get("DirImm") != "0":
+        errors.append(
+            f"AE_SA64POS_FP DirImm is {fields['AE_SA64POS_FP'].get('DirImm')!r}, want '0'"
+        )
+    if "AE_SA64NEG_FP" in fields and fields["AE_SA64NEG_FP"].get("DirImm") != "1":
+        errors.append(
+            f"AE_SA64NEG_FP DirImm is {fields['AE_SA64NEG_FP'].get('DirImm')!r}, want '1'"
+        )
+    if "AE_SA64NEG_FP" in fields and fields["AE_SA64NEG_FP"].get("MemEffect") != "1":
+        errors.append("AE_SA64NEG_FP MemEffect must be 1 (store-finish)")
+    if "AE_SA64POS_FP" in fields and fields["AE_SA64POS_FP"].get("MemEffect") != "1":
+        errors.append("AE_SA64POS_FP MemEffect must be 1 (store-finish)")
+    # Soft sat-left residual must not keep bare 'header' placeholder recipes.
+    for sym in ("AE_SLAA32S", "AE_SLAA16S", "AE_SLAI32S", "AE_SLAI16S"):
+        if sym in tiers and tiers[sym][1] in ("", "header"):
+            errors.append(
+                f"{sym} lowering is placeholder {tiers[sym][1]!r}; want soft sat token"
+            )
+    # Soft-sat residual public oracles (value/object evidence class).
+    softsat_oracles = {
+        "AE_SLAA32S": "softsat.slaa32s",
+        "AE_SLAI32S": "softsat.slaa32s",
+        "AE_SLAS32S": "softsat.slaa32s",
+        "AE_SLAA16S": "softsat.slaa16s",
+        "AE_SLAI16S": "softsat.slaa16s",
+        "AE_SLAI24S": "softsat.slai24s",
+        "AE_F64_SLAIS": "softsat.f64_slais",
+        "AE_F64_SLAS": "softsat.f64_slais",
+        "AE_F32X2_SLAIS": "softsat.f32x2_slais",
+    }
+    for sym, oid in softsat_oracles.items():
+        if sym not in fields:
+            errors.append(f"softsat residual {sym} missing from typed TD inventory")
+            continue
+        got = fields[sym].get("OracleId", "")
+        if got != oid:
+            errors.append(
+                f"softsat residual {sym} OracleId is {got!r}, want {oid!r}"
+            )
+
+    # Empty-body fail-closed: EXACT/EMULATED macros must expand to a real body;
+    # permanent UNSUPPORTED dual-64 must use __HAYDN_AE_UNSUPPORTED (not silent).
+    for sym, body in macros.items():
+        b = (body or "").strip()
+        if not b or b in ("(void)0", "((void)0)", "do {} while(0)", "do { } while (0)"):
+            errors.append(f"public AE macro {sym} has empty/no-op body (fail-closed required)")
+    for sym in ("AE_ADD64X2_", "AE_ADD64X2_vector"):
+        body = macros.get(sym, "")
+        if "__HAYDN_AE_UNSUPPORTED" not in body and "unsupported" not in body.lower():
+            # parse_public_ae_macros may keep only the first #define; re-scan windows.
+            win = ""
+            pos = dsp.rfind(f"#define {sym}")
+            if pos >= 0:
+                win = dsp[pos : pos + 200]
+            if "__HAYDN_AE_UNSUPPORTED" not in win:
+                errors.append(
+                    f"{sym} must fail-closed via __HAYDN_AE_UNSUPPORTED under default"
+                )
+
     if errors:
         print("ae-compat-tier-audit FAILED:", file=sys.stderr)
         for e in errors:

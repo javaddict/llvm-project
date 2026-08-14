@@ -25,6 +25,9 @@ _Static_assert(HAYDN_COMPAT_UNSUPPORTED == 3, "unsupported tier ordinal");
  * haydn_dsp.h and BuiltinsHaydn.td HaydnAeCompat to move together. */
 _Static_assert(HAYDN_AE_COMPAT_TAG_COUNT >= 600,
                "AE compat tier inventory must cover the full public AE surface");
+/* Named value/object oracle floor: AE-P0 set (and aliases) must not shrink. */
+_Static_assert(HAYDN_AE_ORACLE_COUNT >= 8,
+               "AE value/object oracle inventory floor");
 /* Permanent dual-64 quarantine is the only UNSUPPORTED pair under product law. */
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_ == HAYDN_COMPAT_UNSUPPORTED &&
                    HAYDN_COMPAT_TIER_AE_ADD64X2_vector ==
@@ -41,6 +44,18 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_CVT16X4 == HAYDN_COMPAT_EMULATED, "CVT16");
 _Static_assert(HAYDN_COMPAT_TIER_AE_CVT16X4_1ARG == HAYDN_COMPAT_EMULATED, "CVT16_1");
 _Static_assert(HAYDN_COMPAT_TIER_AE_SLAA64S == HAYDN_COMPAT_EMULATED, "SLAA64S");
 _Static_assert(HAYDN_COMPAT_TIER_AE_SA64NEG_FP == HAYDN_COMPAT_EMULATED, "SA64NEG");
+/* Typed public inventory: AE-P0 oracle/availability + store-finish immediates/effects. */
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_TRUNCA32X2F64S, "ae0.trunca32x2f64s") == 0, "trunca oracle");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_CVTQ56A32S, "ae0.cvtq56a32s") == 0, "cvtq56 oracle");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_CVT16X4, "ae0.cvt16x4") == 0, "cvt16 oracle");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_CVT16X4_1ARG, "ae0.cvt16x4_1arg") == 0, "cvt16_1 oracle");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_SLAA64S, "ae0.slaa64s") == 0, "slaa64s oracle");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_SA64POS_FP, "ae0.sa64pos_fp") == 0, "sa64pos oracle");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_SA64NEG_FP, "ae0.sa64neg_fp") == 0, "sa64neg oracle");
+_Static_assert(HAYDN_AE_DIRIMM_AE_SA64POS_FP == 0, "SA64POS dir0");
+_Static_assert(HAYDN_AE_DIRIMM_AE_SA64NEG_FP == 1, "SA64NEG dir1");
+_Static_assert(HAYDN_AE_MEMEFFECT_AE_SA64POS_FP == 1, "SA64POS mem");
+_Static_assert(HAYDN_AE_MEMEFFECT_AE_SA64NEG_FP == 1, "SA64NEG mem");
 #if defined(__HAYDN_ALLOW_INEXACT_AE)
 _Static_assert(__HAYDN_AE_COMPAT_STRICT == 0, "inexact transitional mode");
 #else
