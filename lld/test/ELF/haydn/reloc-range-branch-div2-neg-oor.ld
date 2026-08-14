@@ -1,8 +1,8 @@
-/* WIDE_BranchSImm12 ÷2 negative one-past pin: branch@0x11010 → target@0x10000
- * (byte distance -4112 exceeds signed-12 after ÷2 → long-branch thunk). */
+/* GE96-03 negative one-past: -2056 is below the signed-12 byte window
+ * -> long-branch thunk. */
 SECTIONS {
   . = 0x10000;
   .text.tgt : { *(.text.tgt) }
-  . = 0x11010;
+  . = 0x10808;
   .text : { *(.text) }
 }

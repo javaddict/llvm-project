@@ -31,10 +31,56 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-134** | **P1** | compile hang | `20001111-1`, `20170401-1`, `20180921-1`, `950809-1`, `960312-1` (lit UNSUPPORTED hang skip) |
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
+> | **CB-152** | P3 | wave finalize mid-stream | Eight hand-written tests red at the second-wave tip (11b1d70b4111), one cohort: the finalize-rewrites-members work landed while its own pins lagged. (a) Bare-mnemonic expectations (`ADD32`, `NOP`, `LD64`) no longer match the committed member names now living in post-finalize MIR (singleton-bundle-formatid, postmisched-stall-idle-nop, bundle-invariant-verify, postmisched-inlineasm-layout-size, format-bundle-through-ra, sms-handoff-bundle-through-ra, hwloop-naturedsp-postinc-packetize). (b) Some singletons commit `BUNDLE 1` (E3 row) where the code's own `ProductDefaultRowID` documents E2 — policy or bug, owner's call, so these were NOT re-pinned to current behavior. (c) `postmisched-hard-root-cross-boundary-replay` trips the machine verifier: `F2MULAA32R_HHLL_E3_E2_MAC1_RR` member Desc lacks the accumulator tie its MI shape carries ("Explicit def tied to explicit use without tie constraint") — the MAC-accumulator member arity work is unfinished. Settle the row policy and the tied-MAC member Desc, then re-pin the cohort. |
+> | **CB-151** | P2 | AR-ua encode | The D-side unaligned-window post ops (`d_ltwua_post` family: dest, ar_sel, rbase, rdelta, dir) encode through the bag-by-class member binding into shorter AR-shape members, silently dropping/permuting operands — self-consistent through this toolchain's decoder, rejected by BundleSim's golden catalog ("operand kind disagrees", cb100_ar_unaligned red as the tracking signal). This line's own `ar-unaligned-roundtrip.s` is `XFAIL: *` with "encode residual" in its OWNER note. Closing it needs the member-selection/ledger-signature gating this line planned ("MCInstrDesc gating") — note the generator's canonicalizer pins same-class permutations against the MAJORITY member signature, which cannot see a family that is consistently permuted against the LOGICAL's operand order. |
+> | **CB-150** | P3 | AE tier machinery | Tip mid-stream state, pre-existing at 1c740f0d5708: `ae-tier-audit.test` inventory counts drift (macros=600 surface=673 td_tiers=661), `ae-compat-tier-closure.c`, and `ae-compat-selp24-f24-satshift.c` expecting `llvm.smax`-shaped compat IR the current headers no longer produce. Needs the tier inventory regeneration workflow (owner's machine) — not guessed at in the merge. |
 >
 > 
+### Closed — CB-149 AR2/AR3 restored (2026-08-14, user decision)
+
+The full 2-bit ar_sel domain is back: AR2/AR3 registers (64-bit, keeping
+this line's width), the AR class, the five selector ArRegs tables and
+their ArSel guards, the clang register-name list, and the seven ar_sel
+ImmChecks (0_1 → 0_3; the dir_sel and setcbr checks are genuinely 1-bit
+and stay). The interim retirement note claimed the architectural file
+was AR0/AR1 "until golden classifies unused codes" — the classification
+we have is the execution oracle: BundleSim's semantic model executes
+`int64_t ar[4]`, the golden field is 2 bits, NatureDSP documents ar&=3,
+and this line's own pre-retirement Sema tests expected [0, 3]. Verified:
+ar_sel 2/3 round-trip assemble→objdump and compile→encode from the C
+builtins (`pldwwua 2`, `flar 3`, `wbarwua 3`); Sema tests reopened to
+[0, 3]. Execution coverage of ar2/3 UA streams lands when CB-151's
+encode residual closes.
+
+### Closed — CB-134 compile hang (verified fixed, 2026-08-14 merge audit)
+
+The five hang files (`20001111-1`, `20170401-1`, `20180921-1`, `950809-1`,
+`960312-1`) all compile cleanly at -O2 AND -O3 (`-std=gnu89
+-Wno-everything -ffreestanding`, 90 s budget, exit 0 each). The fixes were
+already on this line: the 2026-08-07 picks of the GISel legalizer
+sub-byte-store livelock fix and the 64-bit vector MMO alignment fix are
+exactly the pair that closed CB-134 on the haydn line. This entry had
+simply never been re-verified after the picks.
+
+### Merged from the haydn line (2026-08-14) — haydn-on-mhyang
+
+See FORMAT-E-SWITCH-PLAN.md § 10 for the full account. Fix-relevant
+deltas landed by the merge, all verified on this base:
+
+| Item | What |
+|------|------|
+| Golden repin | Records regenerated from the repaired layout JSON (8465132c…). One live member changes: `X4SEL16_E3_E1_ALU1_RRR` had src1 hardwired 0 and a DR64 class on the GPR rs field. The same row's permuted field roles would encode rsd1/rsd2 swapped through the bag-by-class binding — generator now canonicalizes such members' (ins) order, pinned fail-closed. Test `x4sel16-e3-mapping-canonical.s` pins bytes for both states. |
+| Golden placement law in the solver | The residual-slot solver accepted cycles with no (entry, unit) assignment and serialization fail-closed — the bf16mul "Format E one-parcel placement failed" crash. `haydnFormatEPlacementFeasible` (SDR over the generated catalog, same normalization as encode placement) refines every exact expand; `commitProduct` honors the refined row mask. Reproducer compiles at -O2 -filetype=obj: `two-store-placement-serialize.ll`. Unit law pins: two stores never co-issue; third MAC rejected; ld/ld/mac packs; SET_HWLOOP pairs with ADDI32, never ADD32. |
+| Byte-scaled mem offsets + `areMemAccessesTriviallyDisjoint` | Plain LD/ST forms returned element indices; cross-width interval math was unsound both ways. All plain forms now scale; the disjointness hook (CB-148 on the haydn line) rides on top. Measured: bqriir32x32_df1 packs 131 ops in 115 bundles (was 118). |
+| CB-144 ported (was live here) | `G_EXTRACT/INSERT_VECTOR_ELT` widen the element out of i1; the S1 `clampMaxNumElements` rows (assert-only, CB-130's lesson) removed. |
+| pr28982 freeze hang ported (was live here) | `G_FREEZE` clamps its vector result; a `<16 x s32>` value no longer exists for consumers to chase in a loop. `freeze-wide-vector-no-hang.ll`. |
+| Splice RAW fix | `spliceSkippablesForCycle` checked only defs; a skippable could be hoisted above its own producer. Symmetric predicate + range-exact hoist/sink ported. |
+| DWARF line unit | `MinInstAlignment` 12 → 1: advances that are not whole parcels truncate and every later line address drifts (functions align to 4). `dwarf-line-bundle-addresses.s`. |
+| `tryCSEConstantDR64` guards | The ADDI32/LOADI32 operand-kind aborts (frame index in the source, @global in the imm slot) now decline with a debug line. |
+| Tip-stale tests aligned | 15 unit tests red against this line's own 08-10 entry-capacity/Option-A semantics; 2 lld tests still pinning `R_HAYDN_32` after typed `R_HAYDN_HWLoopOff1/2` returned. All aligned to measured law. |
+| Tooling ported | `utils/haydn_encoding.py` (DB authority: --check 3686/126 self-consistent on this base), `haydn_vacuous_not.py` (reports 161 vacuous CHECK-NOTs here — corpus cleanup is follow-up), `haydn_ae_audit.py` (589 macros, 0 findings). `haydn_pack_probe.py` not ported (parses the retired encoding TD). |
+
 ### Closed — CB-137 / CB-138 / CB-140 SFR-class 2-op encoding (2026-08-10)
 
 Same root: compiler emitted **3-DR** forms (`RR_DDD` / `x2seq32 d0, d0, d1`) for

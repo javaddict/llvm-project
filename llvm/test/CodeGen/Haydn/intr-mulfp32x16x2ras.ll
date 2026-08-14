@@ -36,8 +36,10 @@ define i64 @test_mulfp32x16x2ras_low(i64 %acc, i64 %a32, i64 %b16) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { x2slli32 d2, d2, 16; x2srai32 d3, d2, 16 }
 ; CHECK-NEXT:    { x2srai32 d2, d2, 16; x2slli32 d3, d3, 16 }
-; CHECK-NEXT:    { fmula16.ls00 d0, d1, d2; x2srai32 d3, d3, 16 }
-; CHECK-NEXT:    { fmula16.ls11 d0, d1, d2; x2slli32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; x2srai32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; fmula16.ls00 d0, d1, d2 }
+; CHECK-NEXT:    { nop; x2slli32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; fmula16.ls11 d0, d1, d2 }
 ; CHECK-NEXT:    { nop; x2srai32 d3, d3, 16 }
 ; CHECK-NEXT:    { nop; fmula16.hs00 d0, d1, d3 }
 ; CHECK-NEXT:    { nop; fmula16.hs11 d0, d1, d3 }

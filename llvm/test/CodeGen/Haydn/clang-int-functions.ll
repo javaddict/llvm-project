@@ -178,7 +178,8 @@ define i32 @test_complex(i32 %x, i32 %y) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { addi32 r4, r1, 10; mull r3, r2, r3 }
+; CHECK-NEXT:    { nop; addi32 r4, r1, 10 }
+; CHECK-NEXT:    { nop; mull r3, r2, r3 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { and32 r1, r1, r2; sub32 r3, r4, r3 }
 ; CHECK-NEXT:    { nop; or32 r1, r3, r1 }

@@ -1,4 +1,7 @@
-# RUN: %python %S/../../../lib/Target/Haydn/FormatE/generate_format_e_records.py --check
+# The importer --check gate lives in format-e-records-check.s (gated on the
+# haydn-golden-canonical feature — the canonical ledger exists only on
+# the plans machine). This test keeps the environment-free content
+# checks against the committed generated files.
 # RUN: FileCheck %s --check-prefix=LOAD --input-file=%S/../../../lib/Target/Haydn/HaydnFormatsE96Members.td.inc
 # RUN: FileCheck %s --check-prefix=STORE --input-file=%S/../../../lib/Target/Haydn/HaydnFormatsE96Members.td.inc
 # RUN: FileCheck %s --check-prefix=BEQ --input-file=%S/../../../lib/Target/Haydn/HaydnFormatsE96Members.td.inc

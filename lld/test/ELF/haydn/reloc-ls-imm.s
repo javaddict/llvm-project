@@ -10,7 +10,8 @@
 # RELOCS: R_HAYDN_LS_IMM nearby
 #
 # Constant `ld32 r0, r1, 12` encodes 87 43 03 c1 00 00 00 00 00 00 00 00.
-# CHECK: {{.*}}0: 87 43 03 c1 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm{{.*}}r0, r1, 12
+# (This base's disassembler prints the logical mnemonic.)
+# CHECK: {{.*}}0: 87 43 03 c1 00 00 00 00 00 00 00 00{{.*}}{{ld32|s_lw_with_imm}}{{.*}}r0, r1, 12
 
 .globl _start
 _start:

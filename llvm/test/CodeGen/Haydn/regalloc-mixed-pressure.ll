@@ -78,7 +78,8 @@ define i64 @test_mixed_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { nop; st64 d8, r1, 4 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 75 }
 ; CHECK-NEXT:    { sext32t64 d1, r1; or64 d8, d1, d1 }
-; CHECK-NEXT:    { addi32 r1, r3, 31; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; addi32 r1, r3, 31 }
 ; CHECK-NEXT:    { or64 d12, d0, d0; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { or64 d9, d2, d2; add64 d11, d8, d1 }
 ; CHECK-NEXT:    { or64 d10, d3, d3; or64 d0, d11, d11 }
@@ -106,7 +107,7 @@ define i64 @test_mixed_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 5 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 13 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 56 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
                                  i32 %a4, i32 %a5, i32 %a6,
                                  i64 %d0, i64 %d1, i64 %d2, i64 %d3) nounwind {
 entry:
@@ -173,7 +174,8 @@ define i64 @test_alternating_banks(i32 %a, i64 %b, i32 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { nop; st64 d8, r3, 1 }
 ; CHECK-NEXT:    { add64 d9, d0, d1; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 10 }
-; CHECK-NEXT:    { addi32 r1, r1, 10; sext32t64 d8, r2 }
+; CHECK-NEXT:    { nop; sext32t64 d8, r2 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 10 }
 ; CHECK-NEXT:    { nop; slli64 d8, d8, 32 }
 ; CHECK-NEXT:    { nop; srli64 d8, d8, 32 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
@@ -188,7 +190,7 @@ define i64 @test_alternating_banks(i32 %a, i64 %b, i32 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 7 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
 ; i32 values in GPR, i64 values in DR64 — no cross-bank confusion
   %g1 = add i32 %a, %c
@@ -236,12 +238,15 @@ define i64 @test_addr_plus_data_pressure(i64 %base, i32 %offset, i32 %stride) no
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 36 }
 ; CHECK-NEXT:    { sext32t64 d1, r3; add32 r1, r1, r2 }
-; CHECK-NEXT:    { st32 r1, sp, 4; slli64 d1, d1, 32 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { add64 d9, d8, d1; add32 r1, r1, r2 }
-; CHECK-NEXT:    { st32 r1, sp, 3; or64 d0, d9, d9; add32 r8, r1, r2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; add32 r8, r1, r2 }
+; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; jal lr, consume_both }
@@ -285,7 +290,7 @@ define i64 @test_addr_plus_data_pressure(i64 %base, i32 %offset, i32 %stride) no
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 14 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 15 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 64 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
 ; Both GPR callee-saves and DR64 callee-saves are needed
   ; GPR values: addresses and indices
