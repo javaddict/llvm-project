@@ -6345,16 +6345,17 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_pldwwua: {
     // void pldwwua(ar_sel, ptr) — G_INTRINSIC_W_SIDE_EFFECTS:
     // op(0)=id, op(1)=ar_sel ImmArg, op(2)=ptr. Writes AR[ar_sel].
-    // Architectural AR file is AR0/AR1 only; ar_sel>1 is fail-closed.
+    // Full 2-bit ar_sel domain (CB-149): AR0..AR3.
     uint64_t ArSel = 0;
     Register PtrReg = I.getOperand(2).getReg();
-    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 1) {
-      LLVM_DEBUG(dbgs() << "PLDWWUA: ar_sel must be constant 0..1\n");
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 3) {
+      LLVM_DEBUG(dbgs() << "PLDWWUA: ar_sel must be constant 0..3\n");
       return false;
     }
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
-    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1,
+                                       Haydn::AR2, Haydn::AR3};
     MachineInstr *MI = MIB.buildInstr(PLDWWUA)
                            .addReg(PtrReg)
                            .addImm(static_cast<int64_t>(ArSel))
@@ -6367,13 +6368,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_flar: {
     // void flar(ar_sel) — op(0)=id, op(1)=ar_sel ImmArg
     // Model Def of ARn so PostRA pack cannot co-issue two AR writers on the
-    // same stream (AR WRITE_CONFLICT). ar_sel>1 fail-closed (AR0/AR1 only).
+    // same stream (AR WRITE_CONFLICT). Full 2-bit ar_sel domain (CB-149).
     uint64_t ArSel = 0;
-    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 1) {
-      LLVM_DEBUG(dbgs() << "FLAR: ar_sel must be constant 0..1\n");
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 3) {
+      LLVM_DEBUG(dbgs() << "FLAR: ar_sel must be constant 0..3\n");
       return false;
     }
-    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1,
+                                       Haydn::AR2, Haydn::AR3};
     MachineInstr *MI =
         MIB.buildInstr(FLAR)
             .addImm(static_cast<int64_t>(ArSel))
@@ -6388,7 +6390,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // op(0)=id, op(1)=ar_sel, op(2)=ptr, op(3)=dir_sel
     uint64_t ArSel = 0, DirSel = 0;
     Register PtrReg = I.getOperand(2).getReg();
-    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 1 ||
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 3 ||
         !getConstOpZExt(I.getOperand(3), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "WBARWUA: ar_sel/dir_sel must be constant\n");
       return false;
@@ -6396,7 +6398,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     // Logical: (outs), (ins GPR32:$rs, uimm2:$ar_sel, uimm1:$dir_sel)
-    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1,
+                                       Haydn::AR2, Haydn::AR3};
     MachineInstr *MI = MIB.buildInstr(WBARWUA)
                            .addReg(PtrReg)
                            .addImm(static_cast<int64_t>(ArSel))
@@ -6421,7 +6424,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     Register PtrReg = I.getOperand(2).getReg();
     Register StrideReg = I.getOperand(4).getReg();
     uint64_t ArSel = 0, DirSel = 0;
-    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 1 ||
+    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 3 ||
         !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "D_*UA_POST load: ar_sel/dir_sel must be const\n");
       return false;
@@ -6432,7 +6435,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
-    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1,
+                                       Haydn::AR2, Haydn::AR3};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *MI = MIB.buildInstr(Opc)
                            .addDef(DstReg)
@@ -6459,7 +6463,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     Register PtrReg = I.getOperand(2).getReg();
     Register StrideReg = I.getOperand(4).getReg();
     uint64_t ArSel = 0, DirSel = 0;
-    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 1 ||
+    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 3 ||
         !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "D_*UA_POST store: ar_sel/dir_sel must be const\n");
       return false;
@@ -6470,7 +6474,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
     if (StrideReg.isVirtual())
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
-    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1,
+                                       Haydn::AR2, Haydn::AR3};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *MI = MIB.buildInstr(Opc)
                            .addDef(WbReg, RegState::Dead)

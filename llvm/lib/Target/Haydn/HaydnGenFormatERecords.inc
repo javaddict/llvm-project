@@ -9,7 +9,7 @@
 
 #ifdef GET_FORMAT_E_GOLDEN_PINS
 #undef GET_FORMAT_E_GOLDEN_PINS
-static constexpr const char FormatEJSONSHA256[] = "b0b477e585f9d464b8750472017d73c3f919e5358e0bda387dc6eeecb79509a4";
+static constexpr const char FormatEJSONSHA256[] = "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9";
 static constexpr const char FormatEXLSXSHA256[] = "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af";
 static constexpr unsigned FormatEBundleBits = 96u;
 static constexpr unsigned FormatEPayloadBudgetBits = 90u;

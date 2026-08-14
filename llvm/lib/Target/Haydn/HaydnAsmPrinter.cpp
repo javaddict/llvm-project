@@ -72,34 +72,26 @@ bool HaydnAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   PendingHwloopEndLabels.clear();
   PendingHwloopStartLabels.clear();
 
-  // Cap MF alignment to the product-legal max (largest 2^k | EncodedBytes).
-  // IR may still carry aligned(N) for __alignof__ folding; object layout must
-  // not honor N that break Format E parcel geometry.
-  const unsigned ParcelBytes =
-      haydn::format::maxEncodedBytesInProfile(
-          haydn::format::ObjectEncodingProfileID::E96)
-          .Value;
-  const Align ProductFnAlign(1u << llvm::countr_zero(ParcelBytes));
-  if (MF.getAlignment() > ProductFnAlign)
-    MF.setAlignment(ProductFnAlign);
-
   return AsmPrinter::runOnMachineFunction(MF);
 }
 
 void HaydnAsmPrinter::emitFunctionEntryLabel() {
-  // HasFunctionAlignment is false (HaydnMCAsmInfo): emit product-legal
-  // alignment here without consulting F->getAlign(), which may be a user
-  // attribute larger than the Format E power-of-two cap.
+  // HasFunctionAlignment is false (HaydnMCAsmInfo): emit alignment here.
+  // User alignment (aligned(N)) is a LANGUAGE guarantee — the pointer's low
+  // bits are observable — so it is honored, not capped to the parcel
+  // power-of-two. The capping rationale (non-parcel pads at LLD boundaries)
+  // is obsolete: BundleSim's coverage walk accepts zero-byte gaps by looking
+  // at the bytes (CB-146), the product link runs -ffunction-sections so the
+  // pad is inter-section zero fill, and inside a single .text a non-parcel
+  // align still fail-closes in writeNopData rather than silently
+  // misaligning (cb146_overaligned_function exercises the honored path).
   const TargetLowering *TLI = MF->getSubtarget().getTargetLowering();
   Align A = std::max(MF->getAlignment(), TLI->getMinFunctionAlignment());
-  const unsigned ParcelBytes =
-      haydn::format::maxEncodedBytesInProfile(
-          haydn::format::ObjectEncodingProfileID::E96)
-          .Value;
-  const Align ProductFnAlign(1u << llvm::countr_zero(ParcelBytes));
-  if (A > ProductFnAlign)
-    A = ProductFnAlign;
-  // emitAlignment without GV so getGVAlignment cannot re-promote to IR align.
+  // HasFunctionAlignment=false bypasses the generic header's getGVAlignment,
+  // which is where F.getAlign() normally promotes MF alignment — consult it
+  // here or aligned(N) never reaches the object.
+  if (MaybeAlign FnAlign = MF->getFunction().getAlign())
+    A = std::max(A, *FnAlign);
   emitAlignment(A);
   AsmPrinter::emitFunctionEntryLabel();
 }

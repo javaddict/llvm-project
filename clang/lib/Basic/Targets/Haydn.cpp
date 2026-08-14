@@ -212,8 +212,8 @@ ArrayRef<const char *> HaydnTargetInfo::getGCCRegNames() const {
       // DR64: D0-D15
       "d0",  "d1",  "d2",  "d3",  "d4",  "d5",  "d6",  "d7",
       "d8",  "d9",  "d10", "d11", "d12", "d13", "d14", "d15",
-      // AR: AR0–AR1 only (architectural 2×64-bit file)
-      "ar0", "ar1",
+      // AR: AR0–AR3 (4×64-bit AGU file; full 2-bit ar_sel domain, CB-149)
+      "ar0", "ar1", "ar2", "ar3",
   };
   return llvm::ArrayRef(GCCRegNames);
 }

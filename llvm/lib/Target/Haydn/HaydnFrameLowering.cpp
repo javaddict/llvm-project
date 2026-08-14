@@ -679,7 +679,7 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
     }
   }
 
-  // AR0–AR1 are caller-saved: not in CSR_Haydn. No prologue save.
+  // AR0–AR3 are caller-saved: not in CSR_Haydn. No prologue save.
   // Product UA residual uses AR as scratch for PLDWWUA/FLAR/….
 
   // Emit CFI directives.
@@ -877,7 +877,7 @@ void HaydnFrameLowering::emitEpilogue(MachineFunction &MF,
   // Restore callee-saved registers in reverse order of saving
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
 
-  // AR0–AR1 caller-saved: nothing to restore.
+  // AR0–AR3 caller-saved: nothing to restore.
 
   // Restore callee-saved DR64 registers (D8-D15).
   // No stride base-pointer optimization in the epilogue: a PEI scratch

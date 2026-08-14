@@ -3441,7 +3441,7 @@ static constexpr FormatESetDescLedgerRec FormatESetDescLedger[] = {
   {108, 9, 0, 0, 0, 4, 0, "X4SEL16", "X4SEL16_E2_E0_ALU0_RRR", "dest:rtd:4;src1:rsd1:4;src2:rsd2:4;src3:rs:4"},
   {1605, 45, 1, 0, 2, 4, 0, "X4SEL16", "X4SEL16_E3_E0_ALU2_RRR", "dest:rtd:4;src1:rsd1:4;src2:rsd2:4;src3:rs:4"},
   {1803, 56, 1, 0, 0, 4, 0, "X4SEL16", "X4SEL16_E3_E0_ALU0_RRR", "dest:rtd:4;src1:rsd1:4;src2:rsd2:4;src3:rs:4"},
-  {2497, 78, 1, 1, 1, 4, 1, "X4SEL16", "X4SEL16_E3_E1_ALU1_RRR", "dest:rtd:4;src1:rsd2|rsd1:4;src2:rsd2:4;src3:rsd1:4"},
+  {2497, 78, 1, 1, 1, 4, 1, "X4SEL16", "X4SEL16_E3_E1_ALU1_RRR", "dest:rtd:4;src1:rsd2:4;src2:rs:4;src3:rsd1:4"},
   {2695, 89, 1, 1, 0, 4, 0, "X4SEL16", "X4SEL16_E3_E1_ALU0_RRR", "dest:rtd:4;src1:rsd1:4;src2:rsd2:4;src3:rs:4"},
   {3334, 109, 1, 2, 2, 4, 0, "X4SEL16", "X4SEL16_E3_E2_ALU2_RRR", "dest:rtd:4;src1:rsd1:4;src2:rsd2:4;src3:rs:4"},
   {3532, 120, 1, 2, 0, 4, 0, "X4SEL16", "X4SEL16_E3_E2_ALU0_RRR", "dest:rtd:4;src1:rsd1:4;src2:rsd2:4;src3:rs:4"},
