@@ -104,8 +104,7 @@ define i32 @non_leaf(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
 ; CHECK-NEXT:    { nop; jal lr, extern; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r1, 1; nop }
+; CHECK-NEXT:    { addi32 r1, r1, 1; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
@@ -154,8 +153,8 @@ define i32 @leaf_multi_alloca(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { addi32 r2, sp, 12; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r2, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r2, r2, 0; nop; nop }
-; CHECK-NEXT:    { addi32 r1, sp, 8; nop }
+; CHECK-NEXT:    { s_lw_with_imm r2, r2, 0; addi32 r1, sp, 8 }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 0 }
 ; CHECK-NEXT:    { s_lw_with_imm r1, r1, 0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }

@@ -580,40 +580,77 @@ TEST(HaydnBundleFormatSolver, TwoMACUnitsRejectThird) {
 //===----------------------------------------------------------------------===//
 
 // The two product rows have disjoint slot sets ({P20,P21} vs {P30,P31,P32}),
-// so no occupancy is covered by both and the FIRST member placed decides the
-// format for the whole cycle. tryAdd walks alternatives by descending slot bit,
-// so anything holding a P3x placement takes E3 at once.
+// so no occupancy is covered by both and the first member placed would decide
+// the format for the whole cycle if the walk never reconsidered. It does:
+// tryAdd tries alternatives by descending slot bit, and when none fits it
+// re-solves the cycle from scratch rather than rejecting.
 //
 // ADDI32 has no P3x placement at all — a wide immediate only fits a 2-entry
-// entry — so after ADD32 has taken P32 it can never join, even though
-// {ADDI32, ADD32} is a legal 2-entry bundle. This is a density loss, not an
-// illegal bundle, and it is the reproducer for CB-147.
-TEST(HaydnBundleFormatSolver, CB147_E3FirstLocksOutE2OnlyADDI32) {
+// entry — so after ADD32 has taken P32 there is exactly one way to seat both,
+// and it requires MOVING ADD32 to its single E2 placement. This is CB-147, and
+// what makes it worth a test is that the move is the dangerous half: every
+// placed member already has a published alternate descriptor.
+TEST(HaydnBundleFormatSolver, CB147_ReSolveSeatsE2OnlyADDI32) {
   HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
 
-  // Order that loses: the flexible op goes first and takes E3.
+  // The order that used to lose: the flexible op goes first and takes E3.
   {
     CycleState S = makeProductCycleState();
     ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
-    EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P32))
-        << "descending walk takes the highest slot, which is E3-only";
-    EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ADDI32))
-        << "ADDI32 is E2-only; the cycle is already committed to E3";
-    EXPECT_EQ(S.memberCount(), 1u);
+    ASSERT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P32))
+        << "descending walk still takes the highest slot when it is free";
+    ASSERT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P32_ALU0);
+
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADDI32))
+        << "ADDI32 is E2-only, so seating it requires re-solving the cycle";
+    EXPECT_EQ(S.memberCount(), 2u);
+    EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E2));
+
+    // The whole point: member 0 MOVED. ADD32 has exactly one E2 placement, so
+    // the assignment is forced and can be named rather than merely bounded.
+    EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_P20_ALU0)
+        << "the already-placed member must be relocated, not left at P32";
+    EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADDI32_P21_ALU1);
+    EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::ADD32)
+        << "a re-solve moves placements, never logical identity";
+    EXPECT_EQ(S.Members[1].LogicalOpcode, Haydn::ADDI32);
   }
 
-  // Same two instructions, other order: both fit, in E2. The pair is legal —
-  // only the placement order made it look otherwise.
+  // Other order: greedy already works, so nothing is re-solved and nothing
+  // moves. This is the half that must stay byte-identical to the old behaviour.
   {
     CycleState S = makeProductCycleState();
     ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADDI32));
-    EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT_P21))
+    EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADDI32_P21_ALU1)
         << "ADDI32's highest placement is P21, which commits the cycle to E2";
-    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32))
-        << "ADD32 has a P20 placement, so it can still join an E2 cycle";
+    ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
     EXPECT_EQ(S.memberCount(), 2u);
     EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E2));
+    EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADDI32_P21_ALU1)
+        << "greedy succeeded, so the first member must not have moved";
   }
+}
+
+// A re-solve must not manufacture capacity. Three MACs still cannot issue
+// (two units), and a fourth op still cannot enter a full 3-entry cycle — the
+// search is exhaustive over assignments, not over the machine.
+TEST(HaydnBundleFormatSolver, CB147_ReSolveDoesNotInventCapacity) {
+  HaydnMCFormatsWithMII Fmts(llvm::haydn::test::getMCInstrInfo());
+
+  CycleState S = makeProductCycleState();
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::X2MUL32));
+  EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::X2MUL32))
+      << "MAC0 and MAC1 are the only two units; no assignment seats a third";
+  EXPECT_EQ(S.memberCount(), 2u) << "reject must leave state unchanged";
+
+  CycleState T = makeProductCycleState();
+  for (unsigned I = 0; I < 3; ++I)
+    ASSERT_TRUE(tryAddProduct(T, Fmts, Haydn::ADD32)) << "ADD32 #" << I;
+  EXPECT_FALSE(tryAddProduct(T, Fmts, Haydn::ADD32))
+      << "a 3-entry cycle is full; re-solving cannot seat a fourth";
+  EXPECT_EQ(T.memberCount(), 3u);
+  EXPECT_EQ(T.OccupiedSlots, SlotBits(Haydn::SLOT_SET_E3));
 }
 
 } // namespace

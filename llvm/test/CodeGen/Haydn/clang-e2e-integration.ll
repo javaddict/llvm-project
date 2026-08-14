@@ -423,8 +423,7 @@ define i32 @if_else(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { slt32 r4, r2, r1; sub32 r3, r1, r2; nop }
-; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
-; CHECK-NEXT:    { xori32 r4, r4, 1; nop }
+; CHECK-NEXT:    { xori32 r4, r4, 1; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { movt32 r3, r1, r4; nop; nop }
 ; CHECK-NEXT:    { move32 r1, r3; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -626,13 +625,11 @@ define i32 @sum_loop(i32 %n) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32 r2, r1; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
+; CHECK-NEXT:    { addi32 r1, r0, 0; move32 r2, r1 }
 ; CHECK-NEXT:    { move32 r3, r1; nop; nop }
 ; CHECK-NEXT:  .LBB17_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { add32 r1, r1, r3; nop; nop }
-; CHECK-NEXT:    { addi32 r3, r3, 1; nop }
+; CHECK-NEXT:    { addi32 r3, r3, 1; add32 r1, r1, r3 }
 ; CHECK-NEXT:    { slt32 r4, r3, r2; nop; nop }
 ; CHECK-NEXT:    { bnez r4, .LBB17_1; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
@@ -677,9 +674,8 @@ define i32 @nested_loop(i32 %n) {
 ; CHECK-NEXT:  .LBB18_2: // %inner
 ; CHECK-NEXT:    // Parent Loop BB18_1 Depth=1
 ; CHECK-NEXT:    // => This Inner Loop Header: Depth=2
-; CHECK-NEXT:    { move32 r2, r7; nop; nop }
+; CHECK-NEXT:    { addi32 r6, r6, 1; move32 r2, r7 }
 ; CHECK-NEXT:    { add32 r7, r2, r5; add32 r5, r5, r4; nop }
-; CHECK-NEXT:    { addi32 r6, r6, 1; nop }
 ; CHECK-NEXT:    { slt32 r12, r6, r1; nop; nop }
 ; CHECK-NEXT:    { bnez r12, .LBB18_2; nop; nop }
 ; CHECK-NEXT:  // %bb.3: // %outer_latch
@@ -728,8 +724,7 @@ define i32 @loop_break(i32 %n, i32 %limit) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32 r3, r1; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
+; CHECK-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; CHECK-NEXT:    { move32 r4, r1; nop; nop }
 ; CHECK-NEXT:  .LBB19_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -738,8 +733,7 @@ define i32 @loop_break(i32 %n, i32 %limit) {
 ; CHECK-NEXT:    { bnez r5, .LBB19_3; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %body
 ; CHECK-NEXT:    // in Loop: Header=BB19_1 Depth=1
-; CHECK-NEXT:    { add32 r1, r1, r4; nop; nop }
-; CHECK-NEXT:    { addi32 r4, r4, 1; nop }
+; CHECK-NEXT:    { addi32 r4, r4, 1; add32 r1, r1, r4 }
 ; CHECK-NEXT:    { slt32 r5, r4, r3; nop; nop }
 ; CHECK-NEXT:    { bnez r5, .LBB19_1; nop; nop }
 ; CHECK-NEXT:  .LBB19_3: // %exit
@@ -813,15 +807,14 @@ define i64 @min64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { move32_dr_h r2, d0; move32_dr_l r3, d1; nop }
 ; CHECK-NEXT:    { move32_dr_h r4, d1; move32_dr_l r1, d0; nop }
 ; CHECK-NEXT:    { sltu32 r5, r2, r4; seq32 r6, r2, r4; nop }
-; CHECK-NEXT:    { sltu32 r7, r1, r3; nop; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; sltu32 r7, r1, r3 }
 ; CHECK-NEXT:    { and32 r6, r7, r6; nop; nop }
 ; CHECK-NEXT:    { or32 r5, r5, r6; nop; nop }
 ; CHECK-NEXT:    { movt32 r3, r1, r5; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r4, r2, r5 }
+; CHECK-NEXT:    { movt32 r4, r2, r5; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
@@ -839,15 +832,14 @@ define i64 @loadstore64(ptr %p, i64 %v) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { s_lw_with_imm r3, r1, 0; nop; nop }
-; CHECK-NEXT:    { addi32 r2, r1, 4; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { s_lw_with_imm r4, r2, 0; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r3, r1, 0; addi32 r2, r1, 4 }
+; CHECK-NEXT:    { s_lw_with_imm r4, r2, 0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sw_h_with_imm d0, r2, 0 }
-; CHECK-NEXT:    { addi32 sp, sp, 8; or64 d0, d1, d1 }
+; CHECK-NEXT:    { or64 d0, d1, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
@@ -1124,18 +1116,15 @@ define i32 @struct_loop(ptr %arr, i32 %n) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32 r3, r1; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r0, 0; addi32 r3, r3, 8 }
-; CHECK-NEXT:    { move32 r4, r1; nop; nop }
+; CHECK-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
+; CHECK-NEXT:    { addi32 r3, r3, 8; move32 r4, r1 }
 ; CHECK-NEXT:  .LBB35_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { s_lw_with_imm r5, r3, -2; nop; s_lw_with_imm r6, r3, -1 }
 ; CHECK-NEXT:    { s_lw_post_imm r7, r3, 3; nop; nop }
-; CHECK-NEXT:    { add32 r5, r5, r6; nop; nop }
+; CHECK-NEXT:    { addi32 r4, r4, 1; add32 r5, r5, r6 }
 ; CHECK-NEXT:    { add32 r5, r5, r7; nop; nop }
-; CHECK-NEXT:    { add32 r1, r1, r5; nop; nop }
-; CHECK-NEXT:    { addi32 r4, r4, 1; nop }
-; CHECK-NEXT:    { slt32 r5, r4, r2; nop; nop }
+; CHECK-NEXT:    { add32 r1, r1, r5; slt32 r5, r4, r2; nop }
 ; CHECK-NEXT:    { bnez r5, .LBB35_1; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -1181,35 +1170,18 @@ define i32 @accumulate_global(i32 %n) {
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, 12
-; CHECK-NEXT:    { lui r3, g_counter; lui r5, g_data; nop }
-; CHECK-NEXT:    { addi32 r3, r3, g_counter; addi32 r5, r5, g_data }
-; CHECK-NEXT:    { move32 r2, r1; s_lw_with_imm r1, r3, 0; nop }
-; CHECK-NEXT:    { s_lw_with_imm r6, r5, 0; nop; nop }
-; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { addi32 r4, r0, 0; add32 r1, r1, r6 }
-; CHECK-NEXT:    { addi32 r4, r4, 1; addi32 r5, r5, 4 }
-; CHECK-NEXT:    { addi32 r6, r0, 2; nop }
-; CHECK-NEXT:    { slt32 r6, r2, r6; nop; nop }
-; CHECK-NEXT:    { bnez r6, .LBB36_2; nop; nop }
+; CHECK-NEXT:    { lui r3, g_counter; move32 r2, r1; nop }
+; CHECK-NEXT:    { addi32 r3, r3, g_counter; lui r4, g_data }
+; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; addi32 r4, r4, g_data }
+; CHECK-NEXT:    { addi32 r5, r0, 0; nop }
 ; CHECK-NEXT:  .LBB36_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:  // #<swps> loop bb.1 @accumulate_global
-; CHECK-NEXT:  // #<swps> II=3 cycles per pipeline stage (SMS schedule)
-; CHECK-NEXT:  // #<swps> stages=2
-; CHECK-NEXT:  // #<swps> ops=9 (non-meta at SMS)
-; CHECK-NEXT:  // #<swps> ResMII=3
-; CHECK-NEXT:  // #<swps> RecMII=1
-; CHECK-NEXT:  // #<swps> MII=max(res,rec)=3
-; CHECK-NEXT:  // #<swps> AchievedII=6 (kernel parcels)
-; CHECK-NEXT:  // #<swps> verdict=schedule-limited
-; CHECK-NEXT:    { s_lw_with_imm r6, r5, 0; nop; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
-; CHECK-NEXT:    { add32 r1, r1, r6; nop; nop }
-; CHECK-NEXT:    { addi32 r5, r5, 4; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { slt32 r6, r4, r2; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r6, r4, 0; addi32 r5, r5, 1 }
+; CHECK-NEXT:    { nop; nop; nop }
+; CHECK-NEXT:    { addi32 r4, r4, 4; add32 r1, r1, r6 }
+; CHECK-NEXT:    { slt32 r6, r5, r2; nop; s_sw_with_imm r1, r3, 0 }
 ; CHECK-NEXT:    { bnez r6, .LBB36_1; nop; nop }
-; CHECK-NEXT:  .LBB36_2:
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
+; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; jal lr, extern_sink; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm lr, sp, 3; nop; nop }
@@ -1246,54 +1218,78 @@ define i64 @checksum(ptr %arr, i32 %n) {
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; The latch materializes as slt32+bnez (unfused), not blt.
 ; CHECK-LABEL: checksum:
-; CHECK:       // #<spill-kpi> @checksum spills=2 spill-bytes=8 reloads=2 reload-bytes=8
+; CHECK:       // #<spill-kpi> @checksum spills=3 spill-bytes=12 reloads=3 reload-bytes=12
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { addi32 r3, sp, 8; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r9, r3, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, r3, 1 }
-; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    .cfi_offset r8, 12
-; CHECK-NEXT:    .cfi_offset r9, 8
+; CHECK-NEXT:    { subi32 sp, sp, 24; nop }
+; CHECK-NEXT:    { addi32 r3, sp, 12; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r10, r3, 0 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r9, r3, 1 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, r3, 2 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 24
+; CHECK-NEXT:    .cfi_offset r8, 20
+; CHECK-NEXT:    .cfi_offset r9, 16
+; CHECK-NEXT:    .cfi_offset r10, 12
 ; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 0 }
-; CHECK-NEXT:    { addi32 r3, r0, 0; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
+; CHECK-NEXT:    { addi32 r6, r1, 4; s_sw_with_imm r3, sp, 0 }
+; CHECK-NEXT:    { addi32 r3, r0, 0; addi32 r5, r0, 0 }
+; CHECK-NEXT:    { addi32 r5, r5, 1; s_sw_with_imm r3, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; s_lw_with_imm r7, r1, 0 }
+; CHECK-NEXT:    { addi32 sp, sp, 8; s_lw_with_imm r6, r6, 0 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; move32_dr_h r4, d0 }
+; CHECK-NEXT:    { move32_dr_l r3, d0; nop; s_sw_with_imm r7, sp, 0 }
+; CHECK-NEXT:    { addi32 r1, r1, 8; s_sw_with_imm r6, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { addi32 r3, r0, 0; move32_dr_l r4, d1 }
-; CHECK-NEXT:    { move32_dr_h r5, d1; or64 d0, d1, d1; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { move32_dr_h r7, d1; move32_dr_l r6, d1; nop }
+; CHECK-NEXT:    { seq32 r8, r7, r4; slt32 r12, r7, r4; sub64 d1, d0, d1 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; sltu32 r9, r6, r3 }
+; CHECK-NEXT:    { and32 r8, r9, r8; move32_dr_h r9, d1; nop }
+; CHECK-NEXT:    { or32 r12, r12, r8; move32_dr_l r8, d1; or64 d1, d0, d0 }
+; CHECK-NEXT:    { movt32 r6, r8, r12; nop; nop }
+; CHECK-NEXT:    { movt32 r7, r9, r12; nop; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r6, sp, 0 }
+; CHECK-NEXT:    { addi32 r6, r0, 2; s_sw_with_imm r7, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { slt32 r6, r2, r6; nop; nop }
+; CHECK-NEXT:    { bnez r6, .LBB37_2; nop; nop }
 ; CHECK-NEXT:  .LBB37_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { s_lw_with_imm r7, r1, 0; nop; nop }
-; CHECK-NEXT:    { addi32 r6, r1, 4; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { s_lw_with_imm r6, r6, 0; nop; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r7, sp, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r6, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; nop; nop }
+; CHECK-NEXT:  // #<swps> loop bb.1 @checksum
+; CHECK-NEXT:  // #<swps> II=6 cycles per pipeline stage (SMS schedule)
+; CHECK-NEXT:  // #<swps> stages=2
+; CHECK-NEXT:  // #<swps> ops=22 (non-meta at SMS)
+; CHECK-NEXT:  // #<swps> ResMII=6
+; CHECK-NEXT:  // #<swps> RecMII=1
+; CHECK-NEXT:  // #<swps> MII=max(res,rec)=6
+; CHECK-NEXT:  // #<swps> AchievedII=17 (kernel parcels)
+; CHECK-NEXT:  // #<swps> verdict=schedule-limited
+; CHECK-NEXT:    { s_lw_with_imm r7, r1, 0; addi32 r6, r1, 4 }
+; CHECK-NEXT:    { s_lw_with_imm r6, r6, 0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { add64 d1, d1, d2; nop; s_sw_with_imm r7, sp, 0 }
+; CHECK-NEXT:    { addi32 r1, r1, 8; s_sw_with_imm r6, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { move32_dr_h r7, d2; move32_dr_l r6, d2; nop }
-; CHECK-NEXT:    { seq32 r8, r7, r5; slt32 r12, r7, r5; sub64 d2, d1, d2 }
-; CHECK-NEXT:    { addi32 sp, sp, 8; sltu32 r9, r6, r4 }
-; CHECK-NEXT:    { and32 r8, r9, r8; move32_dr_h r9, d2; nop }
-; CHECK-NEXT:    { or32 r12, r12, r8; move32_dr_l r8, d2; nop }
-; CHECK-NEXT:    { movt32 r6, r8, r12; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r7, r9, r12 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r6, sp, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r7, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; nop; nop }
-; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r1, 8; add64 d0, d0, d2 }
-; CHECK-NEXT:    { addi32 r3, r3, 1; addi32 sp, sp, 8 }
-; CHECK-NEXT:    { slt32 r6, r3, r2; nop; nop }
-; CHECK-NEXT:    { bnez r6, .LBB37_1; nop; nop }
-; CHECK-NEXT:  // %bb.2: // %exit
+; CHECK-NEXT:    { move32_dr_l r6, d2; move32_dr_h r7, d2; nop }
+; CHECK-NEXT:    { seq32 r12, r7, r4; sltu32 r9, r6, r3; sub64 d2, d0, d2 }
+; CHECK-NEXT:    { and32 r12, r9, r12; slt32 r9, r7, r4; nop }
+; CHECK-NEXT:    { or32 r12, r9, r12; move32_dr_l r9, d2; nop }
+; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r6, r9, r12 }
+; CHECK-NEXT:    { move32_dr_h r10, d2; nop; s_sw_with_imm r6, sp, 0 }
+; CHECK-NEXT:    { addi32 r5, r5, 1; movt32 r7, r10, r12 }
+; CHECK-NEXT:    { slt32 r8, r5, r2; nop; s_sw_with_imm r7, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { bnez r8, .LBB37_1; nop; nop }
+; CHECK-NEXT:    { beqz r0, .LBB37_3; nop; nop }
+; CHECK-NEXT:  .LBB37_2:
+; CHECK-NEXT:    { or64 d1, d0, d0; nop; nop }
+; CHECK-NEXT:  .LBB37_3:
+; CHECK-NEXT:    { add64 d0, d1, d2; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r9, sp, 2; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r8, sp, 3; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
+; CHECK-NEXT:    { s_lw_with_imm r10, sp, 3; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r9, sp, 4; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r8, sp, 5; nop; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 24; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
 entry:
   br label %loop
@@ -1330,17 +1326,15 @@ define i32 @struct_conditional(ptr %arr, i32 %n, i32 %threshold) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32 r4, r1; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r0, 0; addi32 r4, r4, 4 }
-; CHECK-NEXT:    { move32 r5, r1; nop; nop }
+; CHECK-NEXT:    { addi32 r1, r0, 0; move32 r4, r1 }
+; CHECK-NEXT:    { addi32 r4, r4, 4; move32 r5, r1 }
 ; CHECK-NEXT:  .LBB38_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { s_lw_with_imm r6, r4, -1; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r6, r4, -1; addi32 r5, r5, 1 }
 ; CHECK-NEXT:    { s_lw_post_imm r7, r4, 2; nop; nop }
 ; CHECK-NEXT:    { slt32 r6, r3, r6; nop; nop }
 ; CHECK-NEXT:    { add32 r7, r1, r7; nop; nop }
 ; CHECK-NEXT:    { movt32 r1, r7, r6; nop; nop }
-; CHECK-NEXT:    { addi32 r5, r5, 1; nop }
 ; CHECK-NEXT:    { slt32 r6, r5, r2; nop; nop }
 ; CHECK-NEXT:    { bnez r6, .LBB38_1; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit

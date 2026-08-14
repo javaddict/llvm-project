@@ -52,9 +52,8 @@ define i64 @mul_i64_with_use(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { slli64 d0, d0, 32; slli64 d4, d4, 32; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { srli64 d0, d0, 32; srli64 d3, d3, 32; srli64 d4, d4, 32 }
 ; CHECK-NEXT:    { mul64_ulul d5, d0, d3; mul64_ulul d0, d0, d4; nop }
-; CHECK-NEXT:    { mul64_ulul d1, d1, d3; nop; nop }
-; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r0, 32; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { mul64_ulul d1, d1, d3; addi32 r1, r0, 32 }
+; CHECK-NEXT:    { addi32 sp, sp, 8; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { sll64 d0, d0, r1; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d5, d0; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d2; nop; nop }
@@ -145,11 +144,10 @@ define i32 @sdiv_const(i32 %a) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { srai32 r2, r1, 31; nop; nop }
+; CHECK-NEXT:    { addi32 r3, r0, 0; srai32 r2, r1, 31 }
 ; CHECK-NEXT:    { srli32 r2, r2, 29; nop; nop }
 ; CHECK-NEXT:    { add32 r2, r1, r2; nop; nop }
 ; CHECK-NEXT:    { srai32 r2, r2, 3; nop; nop }
-; CHECK-NEXT:    { addi32 r3, r0, 0; nop }
 ; CHECK-NEXT:    { movt32 r2, r1, r3; nop; nop }
 ; CHECK-NEXT:    { sub32 r1, r3, r2; nop; nop }
 ; CHECK-NEXT:    { movt32 r2, r1, r3; nop; nop }
@@ -169,8 +167,8 @@ define i32 @udiv_const(i32 %a) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { lui r2, 3277; nop; nop }
-; CHECK-NEXT:    { addi32 r2, r2, -209715; addi32 r3, r0, 0 }
+; CHECK-NEXT:    { addi32 r3, r0, 0; lui r2, 3277 }
+; CHECK-NEXT:    { addi32 r2, r2, -209715; nop }
 ; CHECK-NEXT:    { muluuh r2, r1, r2; nop; nop }
 ; CHECK-NEXT:    { srli32 r2, r2, 3; nop; nop }
 ; CHECK-NEXT:    { movt32 r2, r1, r3; nop; nop }

@@ -63,8 +63,8 @@ define void @stream_store_i32(ptr %out, i32 %n) nounwind {
 ; ASM-NEXT:    // Label of block must be emitted
 ; ASM-NEXT:    .p2align 2
 ; ASM-NEXT:  .LLhwloop_start0:
-; ASM-NEXT:    { nop; nop; s_sw_post_imm r3, r1, 1 }
-; ASM-NEXT:    { addi32 r3, r3, 1; nop }
+; ASM-NEXT:    { addi32 r3, r3, 1; s_sw_post_imm r3, r1, 1 }
+; ASM-NEXT:    { nop; nop; nop }
 ; ASM-NEXT:    .p2align 2
 ; ASM-NEXT:  .LLhwloop_end0:
 ; ASM-NEXT:    { nop; nop; nop }
@@ -138,20 +138,18 @@ define void @stream_store_i64(ptr %out, i32 %n) nounwind {
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 0 }
 ; ASM-NEXT:    { addi32 r4, r0, 0; nop }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 1 }
-; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; ASM-NEXT:    { addi32 sp, sp, 8; addi32 r4, r0, 1 }
-; ASM-NEXT:    { subi32 sp, sp, 8; nop }
+; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
+; ASM-NEXT:    { subi32 sp, sp, 8; addi32 r4, r0, 1 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 0 }
 ; ASM-NEXT:    { addi32 r4, r0, 0; nop }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 1 }
-; ASM-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
-; ASM-NEXT:    { addi32 sp, sp, 8; nop }
+; ASM-NEXT:    { d_ldw_with_imm d1, sp, 0; addi32 sp, sp, 8 }
+; ASM-NEXT:    { nop; nop; nop }
 ; ASM-NEXT:    { mula64_ll d0, d1, d1; nop; nop }
 ; ASM-NEXT:    { nop; nop; nop }
 ; ASM-NEXT:  .LBB1_2: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
-; ASM-NEXT:    { nop; nop; d_sdw_post_imm d0, r1, 1 }
-; ASM-NEXT:    { addi32 r3, r3, 1; nop }
+; ASM-NEXT:    { addi32 r3, r3, 1; d_sdw_post_imm d0, r1, 1 }
 ; ASM-NEXT:    { slt32 r4, r3, r2; nop; nop }
 ; ASM-NEXT:    { bnez r4, .LBB1_2; nop; nop }
 ; ASM-NEXT:  .LBB1_3: // %exit
@@ -245,8 +243,8 @@ define void @stream_store_i32_stride8(ptr %out, i32 %n) nounwind {
 ; ASM-NEXT:    // Label of block must be emitted
 ; ASM-NEXT:    .p2align 2
 ; ASM-NEXT:  .LLhwloop_start1:
-; ASM-NEXT:    { nop; nop; s_sw_post_imm r3, r1, 2 }
-; ASM-NEXT:    { addi32 r3, r3, 1; nop }
+; ASM-NEXT:    { addi32 r3, r3, 1; s_sw_post_imm r3, r1, 2 }
+; ASM-NEXT:    { nop; nop; nop }
 ; ASM-NEXT:    .p2align 2
 ; ASM-NEXT:  .LLhwloop_end1:
 ; ASM-NEXT:    { nop; nop; nop }

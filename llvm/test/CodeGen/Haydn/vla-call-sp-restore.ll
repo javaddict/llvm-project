@@ -35,8 +35,8 @@ define i32 @vla_call_sp_restore(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm fp, r2, 1 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, r2, 2 }
 ; CHECK-NEXT:    { addi32 fp, sp, 24; nop }
-; CHECK-NEXT:    { slli32 r1, r1, 2; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r1, 7; addi32 r2, r0, -8 }
+; CHECK-NEXT:    { addi32 r2, r0, -8; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { addi32 r1, r1, 7; nop }
 ; CHECK-NEXT:    { and32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { sub32 r8, sp, r1; nop; nop }
 ; CHECK-NEXT:    { move32 r1, r8; nop; nop }

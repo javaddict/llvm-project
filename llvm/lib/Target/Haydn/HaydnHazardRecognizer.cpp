@@ -17,6 +17,7 @@
 #include "HaydnInstrInfo.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
@@ -78,6 +79,12 @@ void llvm::applyFormatOrdering(Haydn::MachineBundle &Bundle,
 }
 
 #define DEBUG_TYPE "haydn-hazard-rec"
+
+STATISTIC(NumTryAddRejects,
+          "Number of candidates the cycle's placement solver rejected");
+STATISTIC(NumMembersRelocated,
+          "Already-placed cycle members moved by a re-solve, and re-stamped "
+          "(CB-147)");
 
 namespace {
 // CSRW↔SET_HWLOOP same-bundle hazard (spec §5.10, line 365 of
@@ -389,6 +396,7 @@ void HaydnHazardRecognizer::Reset() {
   CurrentCycleHasHwloopCsrw = false;
   CurrentCycleMemOps.clear();
   CurrentCycleState = makeProductCycleState();
+  CurrentCycleMIs.clear();
   TRI = nullptr;
 }
 
@@ -577,6 +585,17 @@ void HaydnHazardRecognizer::commitPlacementForEmit(MachineInstr *MI) {
   const unsigned Opc = MI->getOpcode();
   if (!hasPlacementAlternatives(Fmts, Opc))
     return;
+
+  // Snapshot the member opcodes so a re-solve can be detected. tryAdd is
+  // allowed to MOVE an already-accepted member to a different (slot, unit)
+  // when that is the only way to fit the newcomer (CB-147), and every member
+  // already carries a published alternate descriptor — so any mover has to be
+  // re-stamped here or leaveRegion would setDesc it to the slot it left.
+  SmallVector<unsigned, 3> Before;
+  Before.reserve(CurrentCycleState.Members.size());
+  for (const haydn::bundle::CycleMember &M : CurrentCycleState.Members)
+    Before.push_back(M.MemberOpcode);
+
   if (!tryAddProduct(CurrentCycleState, Fmts, Opc)) {
     // getHazardType should have rejected; still tolerate empty-escape /
     // race by leaving state unchanged.
@@ -590,7 +609,26 @@ void HaydnHazardRecognizer::commitPlacementForEmit(MachineInstr *MI) {
     // AIE AIEHazardRecognizer.cpp:389 — record selected member opcode for
     // leaveRegion setDesc materialize (AIEAlternateDescriptors.h:39-44).
     AltDescs->setAlternateDescriptor(MI, Member.MemberOpcode, *TII);
+
+    // Re-stamp the movers. CurrentCycleMIs is parallel to
+    // CurrentCycleState.Members by construction (both appended here, both
+    // cleared together at cycle end), which is what lets a member index find
+    // its instruction. Holding these pointers is safe for exactly the reason
+    // AltDescs already holds them: nothing replaces a MachineInstr between
+    // here and leaveRegion's materializeMultiOpcodeInstrs.
+    assert(CurrentCycleMIs.size() == Before.size() &&
+           "cycle MI list drifted from the solver's member list");
+    for (unsigned I = 0, E = Before.size(); I != E; ++I) {
+      const unsigned Now = CurrentCycleState.Members[I].MemberOpcode;
+      if (Now == Before[I])
+        continue;
+      LLVM_DEBUG(dbgs() << "commitPlacementForEmit: re-solve moved member " << I
+                        << " from opc " << Before[I] << " to " << Now << "\n");
+      AltDescs->setAlternateDescriptor(CurrentCycleMIs[I], Now, *TII);
+      ++NumMembersRelocated;
+    }
   }
+  CurrentCycleMIs.push_back(MI);
 }
 
 ScheduleHazardRecognizer::HazardType
@@ -748,6 +786,10 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
     const unsigned Opc = MI->getOpcode();
     if (hasPlacementAlternatives(Fmts, Opc) &&
         !canTryAddProduct(CurrentCycleState, Fmts, Opc)) {
+      // Reaching here now means genuinely infeasible, not merely unlucky:
+      // tryAdd re-solves the cycle before rejecting (CB-147). Measured on
+      // gcc-c-torture, adding the re-solve took this from 2507 to 518.
+      ++NumTryAddRejects;
       LLVM_DEBUG({
         dbgs() << "tryAdd hazard for ";
         MI->print(dbgs());
@@ -853,6 +895,7 @@ void HaydnHazardRecognizer::AdvanceCycle() {
   CurrentCycleHasHwloopCsrw = false;
   CurrentCycleMemOps.clear();
   CurrentCycleState = makeProductCycleState();
+  CurrentCycleMIs.clear();
   Scoreboard.advance();
 }
 
@@ -864,6 +907,7 @@ void HaydnHazardRecognizer::RecedeCycle() {
   CurrentCycleHasHwloopCsrw = false;
   CurrentCycleMemOps.clear();
   CurrentCycleState = makeProductCycleState();
+  CurrentCycleMIs.clear();
   Scoreboard.recede();
 }
 

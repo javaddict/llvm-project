@@ -28,8 +28,14 @@
 define i32 @extract_v2i1(<2 x i32> %a, <2 x i32> %b, i32 %i) {
 ; CHECK-LABEL: extract_v2i1:
 ; Two lanes compared separately: the vector of i1 does not survive.
+; Two separate positive assertions, deliberately NOT a same-line one: the
+; point is that the lane compares exist as scalars, not that the packer
+; happened to put them in one bundle. Which bundle each lands in is a
+; scheduling detail, and pinning it made this test fail on a pure density
+; improvement (CB-147). Naming the same-line directive in this comment
+; would re-arm it -- FileCheck reads directives out of comments.
 ; CHECK: sltu32
-; CHECK-SAME: sltu32
+; CHECK: sltu32
 ; The index is masked to the lane count and scaled to the element's byte size.
 ; CHECK: andi32
 ; CHECK: slli32

@@ -41,11 +41,11 @@ define dso_local i32 @vone(i32 %n,...) nounwind {
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r1, 3 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r6, r1, 4 }
 ; CHECK-NEXT:    { nop; nop; s_sw_pre_imm r7, r1, 5 }
-; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d0, r2, 0 }
+; CHECK-NEXT:    { addi32 r1, sp, 12; d_sdw_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d1, r2, 1 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d2, r2, 2 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_pre_imm d3, r2, 3 }
-; CHECK-NEXT:    { addi32 r1, sp, 12; addi32 r2, sp, 72 }
+; CHECK-NEXT:    { addi32 r2, sp, 72; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 0 }
 ; CHECK-NEXT:    { addi32 r2, sp, 72; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 1 }
@@ -64,16 +64,16 @@ define dso_local i32 @vone(i32 %n,...) nounwind {
 ; CHECK-NEXT:  .LBB0_1: // %entry
 ; CHECK-NEXT:    { s_lw_with_imm r3, r1, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r4, r3, 0; nop; nop }
-; CHECK-NEXT:    { addi32 r2, r3, 8; nop }
+; CHECK-NEXT:    { s_lw_with_imm r4, r3, 0; addi32 r2, r3, 8 }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r4, r0; nop; s_sw_with_imm r2, r1, 0 }
 ; CHECK-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; CHECK-NEXT:  .LBB0_2: // %entry
 ; CHECK-NEXT:    { s_lw_with_imm r2, r1, 3; nop; s_lw_with_imm r3, r1, 1 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { add32 r3, r3, r2; nop; nop }
+; CHECK-NEXT:    { addi32 r2, r2, 4; add32 r3, r3, r2 }
 ; CHECK-NEXT:    { s_lw_with_imm r4, r3, 0; nop; nop }
-; CHECK-NEXT:    { addi32 r2, r2, 4; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r4, r0; nop; s_sw_with_imm r2, r1, 3 }
 ; CHECK-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; CHECK-NEXT:  .LBB0_3: // %entry

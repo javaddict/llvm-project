@@ -20,17 +20,17 @@ define void @vabs_v2i32(ptr %p) nounwind {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { d_ldw_with_imm d0, r1, 0; nop; nop }
-; CHECK-NEXT:    { addi32 r2, r0, 31; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { d_ldw_with_imm d0, r1, 0; addi32 r2, r0, 31 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { move32_dr_l r2, d1; move32_dr_h r3, d1; nop }
 ; CHECK-NEXT:    { x2sra32 d1, d0, r2; nop; nop }
 ; CHECK-NEXT:    { x2add32 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor64 d0, d0, d1; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; d_sdw_with_imm d0, r1, 0 }
+; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
