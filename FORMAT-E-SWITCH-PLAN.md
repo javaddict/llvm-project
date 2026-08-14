@@ -19,39 +19,34 @@ Companion documents:
 
 ### Branches
 
-| Repo | Branch | Head | Builds? |
+| Repo | Branch | Head | State |
 |---|---|---|---|
-| `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `6107f7edec50` | **Re-measured 2026-08-14 on this head: llvm lit 604/620 with ZERO failures (8 XFAIL, 8 unsupported), `HaydnTests` 256/256, BundleSim ctest 226/226, gcc-c-torture 1417/0 at -O3, CoreMark e2e PASS, clang 1428/1475 zero failures, `--check` and round-trip 3686/3686 both green.** The older counts this row used to carry (lit 573/591, `HaydnTests` 253/253) were real but stale — re-run rather than believed. Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
-| `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
-| `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
-| `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
+| `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **The only branch. The format E switch landed on it in `37932ae027aa` (2026-08-14), a merge of `haydn-formate-switch-mc`.** Fully green: llvm lit 604/620 zero failures, `HaydnTests` 256/256, clang 1428/1475 zero failures, `--check` + round-trip 3686/3686, BundleSim ctest 226/226, gcc-c-torture 1417 PASS / 0 FAIL at -O3, CoreMark e2e PASS. |
+| `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | ctest **226/226**. The § 5.5 executor port is done; the old "41/221, the rest failing in the un-ported executor" is retired. |
+| `llvm-project` | `haydn-formate-switch-mc` | `6107f7edec50` | **merged into `haydn` and no longer the place to work.** Fully contained (`git merge-base --is-ancestor formate-mc haydn`). Kept as a ref, not deleted. |
+| `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; subsumed by `-mc`, and so by `haydn` |
 
-`haydn` is the trunk. Everything on it is green and committed; work from it.
+**`haydn` is the trunk, and since `37932ae027aa` that is finally true of the
+code as well as the prose.** Work from it.
 
-**Check `git log haydn -1` before believing anything in this file.**
-Both branches are pushed to `fork` as of `81a7b7a1c641` / this commit, so the
-"local only" warnings above are cleared — but the hashes still age, and the
-counts in this table have been wrong before (the last one said 33 where `git
-rev-list --count` said 31). The
-`haydn` row above deliberately carries no hash: a previous revision of this
-table was 13 commits stale, and a session started by re-deriving work that was
-already done. The `-mc` hash is given because that branch moves in deliberate
-steps, but verify it too.
+#### The split this merge closed, because the shape of it is worth knowing
 
-**And check the hash against the REMOTE, not the local branch.** A later
-session hit the same trap from the other side: this table was correct and the
-*clone* was stale. Local `haydn-formate-switch-mc` still pointed at the
-pre-rebase WIP (`f7e173347bb4`, the state preserved as
-`backup/mc-preformate-20260807`) while the branch the table names lived only on
-`fork/haydn-formate-switch-mc`, 24 commits further on. Working from the local
-ref would have redone the `LUI` and tied-writeback fixes. `git log
-fork/haydn-formate-switch-mc -1`, and note the remote holding this work is
-named **`fork`** — `origin` is upstream `llvm/llvm-project`.
+Before the merge the two branches had diverged **by file, not by feature**: all
+58 of `haydn`'s commits since the merge base were `[docs]` touching only this
+file and `TODO.md`, while all 92 on `-mc` carried the code, the tests and the
+ledger — 418 files. So the trunk held the narrative and the branch held the
+work, and "work from `haydn`" would have built a compiler with none of the
+format E switch in it. An earlier revision of this section said "**this file
+only exists on `haydn`**; the copy on `-mc` is 500 lines behind" — which was
+true, and was the visible half of a split that also ran the other way.
 
-**This file only exists on `haydn`.** The copy on `-mc` is 500 lines behind and
-is not the one to read or edit; the trunk's is authoritative even for work that
-lives entirely on `-mc`.
+That accident is also why it merged clean: `-mc` never touched this file or
+`TODO.md` after the merge base and `haydn` never touched
+`OPEN-COMPILER-BUGS.md`, so each file's authoritative version won on its own,
+`git merge-tree` reported no conflicts, and the merged tree differed from `-mc`
+in exactly those two markdown files. **Both documents now live on `haydn`.**
+There is no longer a branch to cross-check before editing either one.
+
 
 All three branches are on the `github` remote. The pre-rebase states of the two
 WIP branches are preserved as the tags `backup/wip-preformate-20260807` and
