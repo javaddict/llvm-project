@@ -13,16 +13,16 @@ define void @hwloop_t3(ptr nocapture %p, i32 %n) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { addi32 r3, r3, 1; st32_post r3, r1, 1 }
+; CHECK-NEXT:    { addi32 r3, r3, 1; s_sw_post_imm r3, r1, 1 }
 ; CHECK-NEXT:    { nop; sltu32 r4, r3, r2 }
-; CHECK-NEXT:    { nop; bnez_w r4, .LBB0_1 }
+; CHECK-NEXT:    { nop; bnez r4, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:

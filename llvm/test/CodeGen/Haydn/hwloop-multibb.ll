@@ -1,26 +1,28 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=DEFAULT
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
 
-; Role: MIR — multi-BB Role B residual is intentionally soft.
+; Role: semantic — multi-BB KPI seat for Role-A OFF qualification.
+; Multi-BB formation is FUTURE/KPI-gated greenfield (never Role-B physical
+; rediscovery). Product default OFF; even under HWON, multi-BB side-effect
+; control flow must stay soft (no set_hwloop). Single-BB Role A is covered
+; by hwloop-rolea-*. This file only pins the multi-BB decline seat.
 
-; REGRESSION TEST: multi-BB Role B residual is intentionally soft.
-;
-; History: GAP-4 taught the recognizer multi-BB trip resolution, and
-; Role B briefly converted multi-BB soft loops to SET_HWLOOP_REG. That path
-; is declined (AIE-aligned): multi-BB ZOL residual has open correctness
-; issues (CoreMark bitextract nested ZOL; lc_dp_lis wrong exit). Single-BB
-; Role A/B ZOL remains product. Multi-BB stays as soft back-edge.
-;
-; This test locks the decline: multi-BB body with side-effect branches must
-; NOT form SET_HWLOOP; a soft conditional back-edge remains.
-;
-; Reference: ~/haydn-plans/decisions/-hwloop-recognizer-broaden-g2-g3-g4.md
+target triple = "haydn-unknown-elf"
 
-define void @gap4_multibb_calls(ptr %dst, ptr readonly %src, i32 %n) nounwind {
-; CHECK-LABEL: name: gap4_multibb_calls
-; CHECK-NOT:   SET_HWLOOP
-; Soft multi-BB residual (any cond back-edge form):
-; CHECK:       {{BLT|BGE|BNEZ|BEQZ|BLTU|BGEU}}
+; Multi-BB body with stores in both arms — resists if-conversion and must
+; not arm SET under DEFAULT OFF or HWON.
+define void @multibb_side_effect_stores(ptr %dst, ptr readonly %src, i32 %n) nounwind {
+; DEFAULT-LABEL: multibb_side_effect_stores:
+; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       jalr
+;
+; HWON-LABEL: multibb_side_effect_stores:
+; HWON-NOT:   set_hwloop
+; Soft multi-BB residual (any cond back-edge form remains):
+; HWON:       {{blt|bge|bnez|beqz|bltu|bgeu}}
+; HWON:       jalr
 entry:
   br label %loop
 
@@ -51,12 +53,20 @@ exit:
   ret void
 }
 
-; Variant: a two-way branch with arithmetic in each arm (also resists
-; if-conversion). Confirms the multibb conversion is not specific to stores.
-define i32 @gap4_multibb_arith(ptr readonly %src, i32 %n, i32 %k) nounwind {
-; CHECK-LABEL: name: gap4_multibb_arith
-; Arith shape may if-convert; GAP-4 primary coverage is gap4_multibb_calls.
-; CHECK:       {{SET_HWLOOP|BLT|BGE|BNEZ}}
+; Two-way branch with arithmetic in each arm. If if-converted to single-BB,
+; Role-A may legally arm SET under HWON; the KPI seat is only that multi-BB
+; control never invents multi-BB formation. Pin: never more than one SET for
+; this shape, and DEFAULT stays soft.
+define i32 @multibb_arith_arms(ptr readonly %src, i32 %n, i32 %k) nounwind {
+; DEFAULT-LABEL: multibb_arith_arms:
+; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       jalr
+;
+; HWON-LABEL: multibb_arith_arms:
+; If-converted single-BB may form Role A; multi-BB residual must not invent
+; a second nested multi-BB SET path. At most one SET (or none if still multi-BB).
+; HWON-NOT:   set_hwloop{{.*}}set_hwloop
+; HWON:       jalr
 entry:
   br label %loop
 

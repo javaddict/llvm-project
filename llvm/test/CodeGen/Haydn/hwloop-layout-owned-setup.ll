@@ -19,7 +19,7 @@ define dso_local void @count_store(ptr nocapture writeonly %p, i32 %n) {
 ; Inclusive END remains product law.
 ; CHECK: LLhwloop_end{{[0-9]*}}
 ; Soft back-edge must not remain once the hardware loop forms.
-; CHECK-NOT: beqz_w
+; CHECK-NOT: beqz
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %for.body.preheader, label %for.end

@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Post-PEI safety net: every succ-empty MBB must have a terminator.
+// Pre-PEI safety net (addPostRegAlloc): every succ-empty MBB must have a
+// terminator. Correctness ownership — does not call skipFunction.
 //
 // IRTranslator leaves empty MBBs for `unreachable` when TrapUnreachable is
 // off (no G_TRAP). PEI only inserts epilogues on return blocks, so mid-function

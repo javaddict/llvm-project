@@ -138,9 +138,9 @@ body:             |
 # DEMOTE-NOT: LoopJNZ
 # DEMOTE-NOT: LoopStart
 # Trip materialize + exact-committed Format E singleton soft edge.
-# DEMOTE: ADDI32_W
+# DEMOTE: ADDI32_E2_E0_ALU0_RI20
 # DEMOTE: SUBI32
-# DEMOTE: BNEZ_W
+# DEMOTE: BNEZ_E2
 # DEMOTE: bb.3.exit
 # DEMOTE: RET
 
@@ -215,7 +215,7 @@ body:             |
 # COISSUE-NOT: SET_HWLOOP
 # COISSUE: ADD32
 # COISSUE: SUBI32
-# COISSUE: BNEZ_W
+# COISSUE: BNEZ_E2
 # COISSUE-NOT: LoopDec
 # COISSUE-NOT: LoopJNZ
 # COISSUE: bb.3.exit
@@ -276,7 +276,7 @@ body:             |
     RET implicit killed $r15
 
 # KEEP-LABEL: name: keep_shorten
-# KEEP: SET_HWLOOP_W
+# KEEP: SET_HWLOOP_E2
 # KEEP-NOT: LoopDec
 # KEEP-NOT: LoopJNZ
 # KEEP-NOT: SUBI32

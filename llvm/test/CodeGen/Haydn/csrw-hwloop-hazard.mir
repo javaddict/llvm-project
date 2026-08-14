@@ -26,12 +26,10 @@
 # REGRESSION TEST : CSRW targeting CSR 0x20-0x25 (HWLR_BEGIN/END/COUNT)
 # must NOT be packetized into the same bundle as any SET_HWLOOP variant.
 #
-# Spec (Database/hypo_encoding/encoding_manual.md §5.10, line 365):
-# "[CSRW] Also must not target CSR addresses 0x20-0x25 (HWLR_BEGIN/END/COUNT)
-# in the same bundle as SET_HWLOOP, SET_HWLOOP_F2, or SET_HWLOOP_REG."
-# Golden source: Database/VLIW_Engine_Compiler_Constraints.md (CSRs 0x20-0x25 =
-# the two hardware-loop slots' BEGIN/END/COUNT registers). A same-cycle CSRW to
-# one of those addresses would race the implicit HWLR write that SET_HWLOOP
+# Spec: golden/VLIW_Engine_Compiler_Constraints.md — CSRW must not target
+# CSR addresses 0x20-0x25 (HWLR_BEGIN/END/COUNT) in the same bundle as
+# SET_HWLOOP / SET_HWLOOP_F2 / SET_HWLOOP_REG. A same-cycle CSRW to one of
+# those addresses would race the implicit HWLR write that SET_HWLOOP
 # performs, so the packetizer must serialize them into separate bundles.
 #
 # Why this test uses CSRW_W + SET_HWLOOP_W (the 48-bit wide forms):

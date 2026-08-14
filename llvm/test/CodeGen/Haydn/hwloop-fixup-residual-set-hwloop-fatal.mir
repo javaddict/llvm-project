@@ -1,0 +1,89 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/imm.mir -o - 2>&1 | FileCheck %s --check-prefix=IMM
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/reg.mir -o - 2>&1 | FileCheck %s --check-prefix=REG
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/bundle.mir -o - 2>&1 | FileCheck %s --check-prefix=BUNDLE
+
+# Role: verifier — FixupHwLoops fatals on residual generic SET_HWLOOP{,_REG}.
+
+# REGRESSION TEST: in-pass generic SET_HWLOOP rewrite was deleted (F22).
+# ExpandPseudos owns SET_HWLOOP → SET_HWLOOP_W and SET_HWLOOP_REG →
+# SET_HWLOOP_F2_W (top-level only). Hexagon Fixup matches architectural
+# LOOP only (HexagonFixupHwLoops.cpp:75-81) then range-rechecks (136-148).
+# Haydn Fixup fatals if a MIR test injects generics without ExpandPseudos,
+# including bundled interiors (instrs() walk). If this regresses to a silent
+# rewrite, residual generics hide an ExpandPseudos miss until late MC.
+
+#--- imm.mir
+--- |
+  define dso_local void @residual_imm() {
+  entry:
+    ret void
+  }
+...
+---
+name:            residual_imm
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1
+    ; IMM: residual SET_HWLOOP{,_REG}
+    SET_HWLOOP 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
+    RET implicit $r15
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- reg.mir
+--- |
+  define dso_local void @residual_reg() {
+  entry:
+    ret void
+  }
+...
+---
+name:            residual_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    successors: %bb.1
+    ; REG: residual SET_HWLOOP{,_REG}
+    SET_HWLOOP_REG 0, %bb.1, %bb.1, $r2, implicit-def dead $sfr
+    RET implicit $r15
+  bb.1:
+    liveins: $r2, $r15
+    RET implicit $r15
+
+#--- bundle.mir
+--- |
+  define dso_local void @residual_bundled() {
+  entry:
+    ret void
+  }
+...
+---
+name:            residual_bundled
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    successors: %bb.1
+    ; BUNDLE: residual SET_HWLOOP{,_REG}
+    BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      SET_HWLOOP 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+  bb.1:
+    liveins: $r4, $r15
+    RET implicit $r15

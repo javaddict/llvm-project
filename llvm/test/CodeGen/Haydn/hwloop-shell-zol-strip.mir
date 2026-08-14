@@ -1,17 +1,14 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
-# Role: MIR — Role A shell strip (unified classifyZOLBody): PseudoLoopEnd is MCID::Meta — must match opcode, not isMetaInstruction.
+# Role: MIR — store-only shell expands (not strip). Empty bodies are stripped
+# elsewhere; stripping a shell would drop memset/calloc work to a single store.
 
-# Role A shell strip (unified classifyZOLBody):
-# PseudoLoopEnd is MCID::Meta — must match opcode, not isMetaInstruction.
-# Shell = PLE + ≤2 stores/copies/imms, no load/compute → strip LoopStart+PLE.
-# HiFi never freezes a store-only ZOL while real work lives outside (poly/alog).
-#
 # CHECK-LABEL: name: shell_store_only
+# CHECK: SET_HWLOOP_F2_W
 # CHECK-NOT: LoopStart
-# CHECK-NOT: PseudoLoopEnd
 # CHECK: ST32
+# CHECK: PseudoLoopEnd
 
 --- |
   define dso_local void @shell_store_only(ptr %p) {
@@ -34,7 +31,6 @@ body:             |
     successors: %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0
-    ; LoopStart: (GPR32 trip, simm6 adj) — body found via successor PLE.
     LoopStart $r1, 0
     NOP
     NOP
@@ -44,7 +40,6 @@ body:             |
     successors: %bb.1, %bb.2
     liveins: $r1, $r0, $r15
 
-    ; Store-only shell (soft-zero r0) — no load/compute.
     ST32 $r0, $r1, 0
     PseudoLoopEnd %bb.1
 

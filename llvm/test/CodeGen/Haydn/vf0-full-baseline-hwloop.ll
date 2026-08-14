@@ -9,7 +9,7 @@
 ; DEFAULT pins soft-branch residual. HWON re-derives intended ZOL contract.
 ;
 ; HWON setup floor (cycle-primary):
-;   * set_hwloop_f2_w emitted (Role A / expand)
+;   * set_hwloop_f2 emitted (Role A / expand)
 ;   * InterveningCycles=2 size-bearing parcels after SET before body label
 ;   * Inclusive END (END labels last body cycle)
 ;   * Fixed zero spill-kpi on this kernel
@@ -25,8 +25,8 @@ define i32 @vf0_full_hwloop_baseline(i32 %n, ptr %p) {
 ; DEFAULT:       { nop; subi32 sp, sp, 8 }
 ; DEFAULT:       .cfi_def_cfa_offset 8
 ; DEFAULT-NOT:   set_hwloop
-; DEFAULT:       bnez_w
-; DEFAULT:       jalr_w
+; DEFAULT:       bnez
+; DEFAULT:       jalr
 ;
 ; HWON-LABEL: vf0_full_hwloop_baseline:
 ; HWON:       // #<spill-kpi> @vf0_full_hwloop_baseline spills=0 spill-bytes=0 reloads=0 reload-bytes=0
@@ -35,7 +35,7 @@ define i32 @vf0_full_hwloop_baseline(i32 %n, ptr %p) {
 ; HWON:       { nop; subi32 sp, sp, 8 }
 ; HWON:       .cfi_def_cfa_offset 8
 ; HWON:       // %bb.1: // %loop.preheader
-; HWON:       set_hwloop_f2_w
+; HWON:       set_hwloop_f2
 ; Two size-bearing parcels after SET (InterveningCycles=2).
 ; HWON-NEXT:  {
 ; HWON-NEXT:  {
@@ -44,7 +44,7 @@ define i32 @vf0_full_hwloop_baseline(i32 %n, ptr %p) {
 ; HWON:       LLhwloop_end
 ; Soft back-edge must not remain for a formed ZOL.
 ; HWON-NOT:   bnez_w
-; HWON:       jalr_w
+; HWON:       jalr
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %loop, label %exit

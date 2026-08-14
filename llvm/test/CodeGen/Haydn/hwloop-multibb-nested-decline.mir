@@ -1,13 +1,12 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
-# Role: MIR — Role B declines all multi-BB convert (AIE refuses multi-BB ZOL at IR).
-
-# Role B declines all multi-BB convert (AIE refuses multi-BB ZOL at IR).
-# Nested outer SET around inner ZOL also broke CoreMark bitextract; multi-BB
-# DP residual (lc_dp_lis) wrong-answer under Role B multi-BB convert.
+# Role: MIR — multi-BB outer soft; single-BB inner Role-A expand only.
 #
-# Inner: Role A (LoopStart + PLE) → expand to SET sel=1.
+# Multi-BB formation remains KPI-gated greenfield (no post-RA rediscovery).
+# Nested outer SET around multi-BB residual is never formed here.
+#
+# Inner: retained Role A (LoopStart + PLE) → expand to SET sel=1.
 # Outer: multi-BB soft residual → must stay soft (no SET sel=0).
 #
 # CHECK-LABEL: name: multibb_nested_decline
@@ -81,7 +80,7 @@ body:             |
     $r7 = ADDI32_W $r0, 1
     $r4 = ADD32 $r4, $r7
     $r5 = SEQ32 $r4, $r1
-    ; Soft outer back-edge — must remain after Role B declines multi-BB+nested.
+    ; Soft outer back-edge — multi-BB residual must remain (KPI-gated).
     BEQZ_W killed $r5, %bb.1
     B %bb.4
 

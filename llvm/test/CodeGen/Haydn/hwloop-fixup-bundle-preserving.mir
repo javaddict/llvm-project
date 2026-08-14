@@ -56,7 +56,7 @@ body:             |
   ; CHECK-NEXT:     SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
   ; CHECK-NEXT:     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
   ; CHECK-NEXT:   }
-  ; CHECK-NEXT:   BUNDLE 0, 2 {
+  ; CHECK-NEXT:   BUNDLE 0, 0 {
   ; CHECK-NEXT:     NOP_S0
   ; CHECK-NEXT:   }
   ; CHECK-NEXT:   NOP

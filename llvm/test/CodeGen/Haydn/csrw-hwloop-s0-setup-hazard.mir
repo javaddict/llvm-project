@@ -1,0 +1,85 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# REGRESSION TEST: committed SET_HWLOOP_*_S0 members must still trip the
+# CSRW↔SET_HWLOOP same-cycle hazard.
+#
+# Bug: HaydnHazardRecognizer used a local five-opcode setup list
+# (logical SET_HWLOOP / SET_HWLOOP_REG / SET_HWLOOP_W / SET_HWLOOP_F2_W /
+# SET_HWLOOP_REG_W only). TII isHardwareLoopSetupOpcode is the sole list and
+# also covers *_S0 members plus LoopStart. A committed SET_HWLOOP_W_S0 was
+# treated as a non-setup op, so a same-cycle CSRW to HWLR 0x20-0x25 was not
+# hazarded.
+#
+# Why this test: postmisched input already has the selected-member opcode
+# SET_HWLOOP_W_S0 (leaveRegion setDesc shape), paired with CSRW_W to HWLR
+# 0x20. CSRW_W stays logical so UnmodeledSideEffects on the member does not
+# DAG-serialize the pair before the recognizer (same lesson as
+# csrw-hwloop-hazard.mir). The gate must reject coissue. Control uses CSR
+# 0x10 (outside 0x20-0x25) so the setup predicate does not over-reject.
+#
+# What breaks if this regresses: SET_HWLOOP_W_S0 + CSRW_W 32 share a BUNDLE
+# (CHECK-NOT: BUNDLE fails). Hardware races the implicit HWLR write against
+# the CSRW of HWLR_BEGIN/END/COUNT.
+
+--- |
+  define void @s0_csrw_hwlr_set_no_bundle() { ret void }
+  define void @s0_csrw_non_hwlr_set_survives() { ret void }
+...
+---
+name:            s0_csrw_hwlr_set_no_bundle
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+
+    ; CHECK-LABEL: name: s0_csrw_hwlr_set_no_bundle
+    ; CHECK: liveins: $r1, $r15
+    ; CHECK-NEXT: {{^ +$}}
+    ; Standalone sequence (not wrapped in BUNDLE). HWLOOP-SU may insert NOP
+    ; after SET before the JALR boundary.
+    ; CHECK-NEXT: SET_HWLOOP_W_S0 0, %bb.0, %bb.0, 1
+    ; CHECK-NEXT: CSRW_W{{(_S0)?}} 32, $r1, implicit-def $sfr
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: $r0 = JALR{{(_S0)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    CSRW_W 32, $r1, implicit-def $sfr
+    SET_HWLOOP_W_S0 0, %bb.0, %bb.0, 1
+
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            s0_csrw_non_hwlr_set_survives
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+
+    ; CHECK-LABEL: name: s0_csrw_non_hwlr_set_survives
+    ; Non-HWLR CSR 0x10 is outside 0x20-0x25; both instructions survive.
+    ; CHECK-DAG: CSRW_W{{(_S0)?}} 16, $r1, implicit-def $sfr
+    ; CHECK-DAG: SET_HWLOOP_W_S0 0, %bb.0, %bb.0, 1
+    ; CHECK: $r0 = JALR{{(_S0)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    CSRW_W 16, $r1, implicit-def $sfr
+    SET_HWLOOP_W_S0 0, %bb.0, %bb.0, 1
+
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

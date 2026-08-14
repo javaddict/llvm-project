@@ -35,7 +35,7 @@ body:             |
     liveins: $r1, $r2, $r3, $r4, $r7, $r8, $r9, $r10, $r11, $r12, $r15
     successors: %bb.1
 
-    SET_HWLOOP 0, %bb.2, %bb.2, 8
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
     NOP
     NOP
     NOP
@@ -65,7 +65,7 @@ body:             |
     NOP
 
   ; Mention every demote counter candidate (R11..R1, R12). Prefer empty for
-  ; imm SET_HWLOOP; pickCounterReg has nowhere free → demote returns false.
+  ; imm SET_HWLOOP_W; pickCounterReg has nowhere free → demote returns false.
   bb.2.body:
     liveins: $r1, $r2, $r3, $r4, $r7, $r8, $r9, $r10, $r11, $r12
     successors: %bb.3

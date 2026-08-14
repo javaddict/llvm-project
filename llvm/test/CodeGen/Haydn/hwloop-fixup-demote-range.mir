@@ -17,12 +17,12 @@
 #
 # demote_uimm6: spacer MBB between preheader and header makes StartOff > 252
 # even with only InterveningCycles (=3) NOPs after SET. Shorten cannot pull
-# spacer MIs into the preheader, so the product path demotes: SET_HWLOOP is
+# spacer MIs into the preheader, so the product path demotes: SET_HWLOOP_W is
 # erased and the latch gets a countable back-edge (subi32 + bnez_w).
 #
 # shorten_uimm6: many NOPs after SET in the *same* preheader — StartOff would
 # exceed uimm6, but shorten moves them before SET while keeping Following >=
-# InterveningCycles (3; SetupIssueDistance=4). SET_HWLOOP is retained
+# InterveningCycles (3; SetupIssueDistance=4). SET_HWLOOP_W is retained
 # (both product and debug-off).
 
 --- |
@@ -61,7 +61,7 @@ body:             |
     $r0 = frame-setup XOR32 $r0, $r0
     ; Immediate trip count 8; header==latch is %bb.2. Three NOPs =
     ; InterveningCycles (VF0 SetupIssueDistance=4).
-    SET_HWLOOP 0, %bb.2, %bb.2, 8
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
     NOP
     NOP
     NOP
@@ -105,7 +105,7 @@ body:             |
 
 # CHECK-LABEL: name: demote_uimm6
 # Product demote-first: final-real soft countable edge (not erase-only).
-# PRODUCT-NOT: SET_HWLOOP
+# PRODUCT-NOT: SET_HWLOOP_W
 # PRODUCT-NOT: LoopDec
 # PRODUCT-NOT: LoopJNZ
 # Each soft-edge MI is an exact-committed ProductFormatID singleton.
@@ -114,7 +114,7 @@ body:             |
 # PRODUCT: BUNDLE 0
 # PRODUCT: BNEZ_W
 # Debug demote OFF: erase-setup only — no soft edge (once-through risk).
-# DEBUGOFF-NOT: SET_HWLOOP
+# DEBUGOFF-NOT: SET_HWLOOP_W
 # DEBUGOFF-NOT: LoopDec
 # DEBUGOFF-NOT: LoopJNZ
 # DEBUGOFF-NOT: SUBI32
@@ -132,7 +132,7 @@ body:             |
     successors: %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0
-    SET_HWLOOP 0, %bb.1, %bb.1, 8
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
     ; 20 NOPs after SET (320 B) — over uimm6; shorten pulls them before SET
     ; leaving ≥3 for t−3.
     NOP
@@ -169,7 +169,7 @@ body:             |
     RET implicit killed $r15
 
 # CHECK-LABEL: name: shorten_uimm6
-# Residual generic SET_HWLOOP is rewritten to final wide form when kept.
+# Residual generic SET_HWLOOP_W is rewritten to final wide form when kept.
 # CHECK: SET_HWLOOP_W
 # CHECK-NOT: LoopDec
 # CHECK-NOT: LoopJNZ

@@ -23,7 +23,7 @@ define void @ii_hwloop_multibb(ptr %dst, ptr readonly %src, i32 %n) {
 ; CHECK-LABEL: ii_hwloop_multibb:
 ; CHECK-NOT:   set_hwloop
 ; Software back-edge (form may be fused blt_w or slt+bnez — either is fine).
-; CHECK:       {{blt_w|bnez_w|beqz_w}}
+; CHECK:       {{blt|bnez|beqz}}
 entry:
   br label %loop
 

@@ -9,37 +9,53 @@
 ; Format E typed HWLoopOff reloc path is closed. Product default keeps
 ; -haydn-enable-hwloops OFF until BundleSim e2e ZOL formation is green.
 ; DEFAULT pins soft-branch residual. HWON re-derives the intended ZOL
-; contract under the flag: set_hwloop_f2_w, start/end labels, soft edge gone.
+; contract under the flag: set_hwloop_f2, start/end labels, soft edge gone.
 
+define i32 @hwloop_basic(ptr %p) {
 ; DEFAULT-LABEL: hwloop_basic:
 ; DEFAULT:       // %bb.0: // %entry
 ; DEFAULT-NEXT:    { nop; xor32 r0, r0, r0 }
 ; DEFAULT-NEXT:    { nop; subi32 sp, sp, 8 }
 ; DEFAULT-NEXT:    .cfi_def_cfa_offset 8
 ; DEFAULT-NEXT:    { nop; move32 r2, r1 }
-; DEFAULT-NEXT:    { nop; ld32 r2, r2, 0 }
-; DEFAULT-NEXT:    { nop; addi32_w r1, r0, 0 }
-; DEFAULT-NEXT:    { nop; addi32_w r3, r0, 10 }
-; DEFAULT-NEXT:    { nop; move32 r4, r1 }
+; DEFAULT-NEXT:    { nop; addi32 r1, r0, 0 }
+; DEFAULT-NEXT:    { ld32 r2, r2, 0; move32 r4, r1 }
+; DEFAULT-NEXT:    { nop; addi32 r3, r0, 10 }
 ; DEFAULT-NEXT:  .LBB0_1: // %loop
 ; DEFAULT-NEXT:    // =>This Inner Loop Header: Depth=1
 ; DEFAULT-NEXT:    { addi32 r4, r4, 1; add32 r1, r1, r2 }
 ; DEFAULT-NEXT:    { nop; sltu32 r5, r4, r3 }
-; DEFAULT-NEXT:    { nop; bnez_w r5, .LBB0_1 }
+; DEFAULT-NEXT:    { nop; bnez r5, .LBB0_1 }
 ; DEFAULT-NEXT:  // %bb.2: // %exit
 ; DEFAULT-NEXT:    { nop; xor32 r0, r0, r0 }
-; DEFAULT-NEXT:    { nop; addi32_w sp, sp, 8 }
-; DEFAULT:    { nop; jalr_w r0, lr, 0 }
-
+; DEFAULT-NEXT:    { nop; addi32 sp, sp, 8 }
+; DEFAULT-NEXT:    .cfi_def_cfa sp, 0
+; DEFAULT-NEXT:    { nop; jalr r0, lr, 0 }
+;
 ; HWON-LABEL: hwloop_basic:
-; HWON:       set_hwloop_f2_w
-; HWON-DAG:   .LLhwloop_start
-; HWON-DAG:   .LLhwloop_end
-; HWON-NOT:   bnez_w
-; HWON:       jalr_w
-
-
-define i32 @hwloop_basic(ptr %p) {
+; HWON:       // %bb.0: // %entry
+; HWON-NEXT:    { nop; xor32 r0, r0, r0 }
+; HWON-NEXT:    { nop; subi32 sp, sp, 8 }
+; HWON-NEXT:    .cfi_def_cfa_offset 8
+; HWON-NEXT:    { nop; addi32 r3, r0, 10 }
+; HWON-NEXT:    { nop; set_hwloop_f2 1, .LLhwloop_start0, .LLhwloop_end0, r3 }
+; HWON-NEXT:    { nop; addi32 r2, r0, 0 }
+; HWON-NEXT:    { nop; nop }
+; HWON-NEXT:    { nop; nop }
+; HWON-NEXT:  .LBB0_1: // %loop
+; HWON-NEXT:    // =>This Inner Loop Header: Depth=1
+; HWON-NEXT:    // Label of block must be emitted
+; HWON-NEXT:  .LLhwloop_start0:
+; HWON-NEXT:    { nop; ld32 r3, r1, 0 }
+; HWON-NEXT:    { nop; nop }
+; HWON-NEXT:  .LLhwloop_end0:
+; HWON-NEXT:    { nop; add32 r2, r2, r3 }
+; HWON-NEXT:  // %bb.2: // %exit
+; HWON-NEXT:    { nop; move32 r1, r2 }
+; HWON-NEXT:    { nop; xor32 r0, r0, r0 }
+; HWON-NEXT:    { nop; addi32 sp, sp, 8 }
+; HWON-NEXT:    .cfi_def_cfa sp, 0
+; HWON-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 
