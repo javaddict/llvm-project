@@ -121,6 +121,11 @@ struct AeCompatEntry {
   std::string Name;     // AE_* symbol (record name)
   std::string Tier;     // EXACT | EMULATED | UNSUPPORTED
   std::string Lowering; // free-text native/composite summary
+  std::string DeclKind; // macro | inline | alias | overload (optional)
+  std::string OracleId; // value/object oracle id (empty when unregistered)
+  int DirImm = -1;      // store/UA direction ImmArg: -1 none, 0 pos, 1 neg
+  bool SoftState = false;
+  bool MemEffect = false;
 };
 
 static std::string upperSnake(StringRef N) {
@@ -420,6 +425,141 @@ static std::vector<BuiltinEntry> collect(const RecordKeeper &Records) {
   return Entries;
 }
 
+/// Word-boundary token match: avoids false positives such as "load" inside
+/// "overload". Tokens are alnum/_ runs compared case-insensitively.
+static bool hasFieldToken(StringRef Field, StringRef Tok) {
+  if (Field.empty() || Tok.empty())
+    return false;
+  auto isWord = [](char C) {
+    return std::isalnum(static_cast<unsigned char>(C)) || C == '_';
+  };
+  StringRef Rest = Field;
+  while (!Rest.empty()) {
+    while (!Rest.empty() && !isWord(Rest.front()))
+      Rest = Rest.drop_front();
+    if (Rest.empty())
+      break;
+    size_t Len = 0;
+    while (Len < Rest.size() && isWord(Rest[Len]))
+      ++Len;
+    if (Rest.take_front(Len).equals_insensitive(Tok))
+      return true;
+    Rest = Rest.drop_front(Len);
+  }
+  return false;
+}
+
+/// Addressing-mode suffix used by AE load/store public names (not SLA/SRA/SEL).
+static bool aeNameHasAddressingMode(StringRef Name) {
+  StringRef Stem = Name;
+  if (Stem.starts_with("AE_"))
+    Stem = Stem.drop_front(3);
+  auto startsAny = [&](std::initializer_list<const char *> Pfx) {
+    for (const char *P : Pfx)
+      if (Stem.starts_with(P))
+        return true;
+    return false;
+  };
+  if (startsAny({"SEL", "SLA", "SRA", "SLL", "SRL", "SUB", "SAT", "SLAS",
+                 "SRAS", "SLAI", "SRAI", "SLLI", "SRLI", "ROUND", "TRUN",
+                 "MIN", "MAX", "MOV", "MUL", "NSA", "ABS", "AND", "OR",
+                 "XOR", "NOT", "NEG", "ADD", "CVT", "EQ", "LT", "LE",
+                 "GT", "GE", "NLT", "NZA", "ZERO", "SEXT", "ZEXT", "SHORT",
+                 "PK", "DIV", "REM", "BREV", "CAL", "CONJ", "CMUL", "DB",
+                 "SHA", "RAND", "SQRT", "SIN", "COS", "F64", "F32", "F16",
+                 "F24"}))
+    return false;
+  bool LoadStoreFamily =
+      Stem.starts_with("LA") || Stem.starts_with("SA") || Stem.starts_with("L") ||
+      Stem.starts_with("S");
+  if (!LoadStoreFamily)
+    return false;
+  return Name.ends_with("_I") || Name.ends_with("_X") || Name.ends_with("_IP") ||
+         Name.ends_with("_XP") || Name.ends_with("_XC") ||
+         Name.ends_with("_IC") || Name.ends_with("_RIC") ||
+         Name.ends_with("_RIP") || Name.ends_with("_PC") ||
+         Name.ends_with("_IU") || Name.ends_with("_XU") ||
+         Name.ends_with("_FP") || Name.ends_with("_PP") ||
+         Name.contains("_BREV_");
+}
+
+/// Synthesize residual typed inventory fields when TD omits them.
+/// Explicit TD values always win. Synthesized OracleId strings are inventory
+/// labels only — residual pure/memory/MAC/state family representatives must
+/// author OracleId in TD (requireOracle pins below). UNSUPPORTED stays without
+/// oracle (empty-body fail-closed quarantine). No FormatID/slot/AltDesc.
+static void synthesizeAeCompatDefaults(AeCompatEntry &E) {
+  if (E.DeclKind.empty()) {
+    if (E.Lowering == "overload")
+      E.DeclKind = "overload";
+    else if (E.Lowering == "inline")
+      E.DeclKind = "inline";
+    else if (E.Lowering == "alias")
+      E.DeclKind = "alias";
+    else
+      E.DeclKind = "macro";
+  }
+
+  // Residual OracleId inventory label: every EXACT/EMULATED public op gets a
+  // stable id when TD omits one. Labels are not independent evidence; residual
+  // pure/memory/MAC/state family representatives must author OracleId in TD.
+  // Curated prefixes (exact./ae0./softsat./state.) remain as authored in TD.
+  if (E.OracleId.empty() &&
+      (E.Tier == "EXACT" || E.Tier == "EMULATED")) {
+    StringRef Stem = E.Name;
+    if (Stem.starts_with("AE_"))
+      Stem = Stem.drop_front(3);
+    std::string Suffix;
+    Suffix.reserve(Stem.size());
+    for (char C : Stem)
+      Suffix.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(C))));
+    if (E.Tier == "EXACT")
+      E.OracleId = "exact." + Suffix;
+    else
+      E.OracleId = "emu." + Suffix;
+  }
+
+  // MemEffect: structured name + lowering tokens; never substring "load"
+  // inside "overload".
+  if (!E.MemEffect) {
+    StringRef L = E.Lowering;
+    bool FromLowering =
+        hasFieldToken(L, "ldw") || hasFieldToken(L, "sdw") ||
+        hasFieldToken(L, "ldw_cb_imm") || hasFieldToken(L, "sdw_cb_imm") ||
+        hasFieldToken(L, "la64_step") || hasFieldToken(L, "sa64_step") ||
+        hasFieldToken(L, "la16x4_step") || hasFieldToken(L, "sa16x4_step") ||
+        hasFieldToken(L, "la64_pp") || hasFieldToken(L, "sa64pos") ||
+        hasFieldToken(L, "zalign64") || hasFieldToken(L, "cbr_step") ||
+        hasFieldToken(L, "mem") || hasFieldToken(L, "load") ||
+        hasFieldToken(L, "store") || hasFieldToken(L, "postinc") ||
+        hasFieldToken(L, "soft_rev_postinc") ||
+        L.contains_insensitive("la64_step") ||
+        L.contains_insensitive("sa64_step") ||
+        L.contains_insensitive("ldw_cb_imm") ||
+        L.contains_insensitive("sdw_cb_imm") ||
+        L.contains_insensitive("la16x4_step") ||
+        L.contains_insensitive("sa16x4_step") ||
+        L.contains_insensitive("sa64pos") ||
+        L.contains_insensitive("soft_rev_postinc");
+    if (FromLowering || aeNameHasAddressingMode(E.Name))
+      E.MemEffect = true;
+  }
+
+  // SoftState: ambient SAR/CBR/align state consumers.
+  if (!E.SoftState) {
+    StringRef L = E.Lowering;
+    StringRef N = E.Name;
+    if (hasFieldToken(L, "sar") || hasFieldToken(L, "cbr") ||
+        hasFieldToken(L, "cbr_step") || hasFieldToken(L, "zalign") ||
+        L.contains_insensitive("cbr_step") ||
+        L.contains_insensitive("zalign") || N == "AE_SLAS32" ||
+        N == "AE_SRAS32" || N == "AE_SLAS32S" || N == "AE_SLAS64S" ||
+        N == "AE_F64_SLAS" || N.contains("_SLAS") || N.contains("_SRAS"))
+      E.SoftState = true;
+  }
+}
+
 /// Fail-closed AE compat tier validation (product law + width mismatch).
 static void validateAeCompat(const AeCompatEntry &E) {
   if (E.Name.empty() || !StringRef(E.Name).starts_with("AE_"))
@@ -712,6 +852,13 @@ static std::vector<AeCompatEntry> collectAeCompat(const RecordKeeper &Records) {
       continue;
     E.Tier = R->getValueAsString("CompatTier").str();
     E.Lowering = R->getValueAsString("CompatLowering").str();
+    E.DeclKind = R->getValueAsString("DeclKind").str();
+    E.OracleId = R->getValueAsString("OracleId").str();
+    E.DirImm = static_cast<int>(R->getValueAsInt("DirImm"));
+    E.SoftState = R->getValueAsBit("SoftState");
+    E.MemEffect = R->getValueAsBit("MemEffect");
+    // Residual defaults fill empty TD fields; explicit TD values win.
+    synthesizeAeCompatDefaults(E);
     if (!Seen.insert(E.Name).second)
       PrintFatalError("HaydnIntrin: duplicate HaydnAeCompat record '" + E.Name +
                       "'");
@@ -952,6 +1099,222 @@ static std::vector<AeCompatEntry> collectAeCompat(const RecordKeeper &Records) {
   requireNonPlaceholder("AE_TRUNCA32F64S", "satsr64");
   requireNonPlaceholder("AE_SA64POS_FP", "dir0");
   requireNonPlaceholder("AE_SA64NEG_FP", "dir1");
+  // Soft sat-left residual (32/16): typed soft helper, not bare "header".
+  requireNonPlaceholder("AE_SLAA32S", "slaa32s");
+  requireNonPlaceholder("AE_SLAA16S", "slaa16s");
+  requireNonPlaceholder("AE_SLAI32S", "slaa32s");
+  requireNonPlaceholder("AE_SLAI16S", "slaa16s");
+
+  // AE-P0 oracle inventory: every P0 public op must name an independent
+  // value/object oracle id (empty oracle is fail-closed for these symbols).
+  auto requireOracle = [&](StringRef Sym, StringRef Id) {
+    auto It = llvm::find_if(
+        Out, [&](const AeCompatEntry &E) { return E.Name == Sym; });
+    if (It == Out.end())
+      PrintFatalError("HaydnIntrin: missing AE-P0 record '" + Sym.str() + "'");
+    if (It->OracleId != Id)
+      PrintFatalError("HaydnIntrin: " + Sym.str() + " OracleId must be '" +
+                      Id.str() + "' (got '" + It->OracleId + "')");
+  };
+  requireOracle("AE_TRUNCA32X2F64S", "ae0.trunca32x2f64s");
+  requireOracle("AE_TRUNCA32F64S", "ae0.trunca32f64s");
+  requireOracle("AE_CVTQ56A32S", "ae0.cvtq56a32s");
+  requireOracle("AE_CVT16X4", "ae0.cvt16x4");
+  requireOracle("AE_CVT16X4_1ARG", "ae0.cvt16x4_1arg");
+  requireOracle("AE_SLAA64S", "ae0.slaa64s");
+  requireOracle("AE_SA64POS_FP", "ae0.sa64pos_fp");
+  requireOracle("AE_SA64NEG_FP", "ae0.sa64neg_fp");
+
+  // Residual pure/memory/MAC/state family: TD-authored OracleId registrations
+  // only. Synthesis-only inventory labels do not qualify these seats;
+  // empty-body dual-64 ADD64X2_* remains without OracleId. Peer expansion
+  // beyond family representatives is also pinned to authored ids.
+  // Pure residual family.
+  requireOracle("AE_ADD32", "emu.add32");
+  requireOracle("AE_SUB32", "emu.sub32");
+  requireOracle("AE_ADD32S", "emu.add32s");
+  requireOracle("AE_SUB32S", "emu.sub32s");
+  requireOracle("AE_ABS32S", "emu.abs32s");
+  requireOracle("AE_NEG32S", "emu.neg32s");
+  requireOracle("AE_MAX32", "emu.max32");
+  requireOracle("AE_MIN32", "emu.min32");
+  requireOracle("AE_MAXABS32S", "emu.maxabs32s");
+  requireOracle("AE_ADD16", "emu.add16");
+  requireOracle("AE_SUB16", "emu.sub16");
+  requireOracle("AE_ADD16S", "emu.add16s");
+  requireOracle("AE_SUB16S", "emu.sub16s");
+  requireOracle("AE_ABS16S", "emu.abs16s");
+  requireOracle("AE_NEG16S", "emu.neg16s");
+  requireOracle("AE_MAX16", "emu.max16");
+  requireOracle("AE_MIN16", "emu.min16");
+  requireOracle("AE_OR32", "emu.or32");
+  requireOracle("AE_AND32", "emu.and32");
+  requireOracle("AE_XOR32", "emu.xor32");
+  requireOracle("AE_NOT32", "emu.not32");
+  requireOracle("AE_OR16", "emu.or16");
+  requireOracle("AE_AND16", "emu.and16");
+  requireOracle("AE_ZERO16", "emu.zero16");
+  requireOracle("AE_ZERO32", "emu.zero32");
+  requireOracle("AE_ZERO64", "emu.zero64");
+  requireOracle("AE_MOV", "emu.mov");
+  requireOracle("AE_ADD64", "emu.add64");
+  requireOracle("AE_ADD64S", "emu.add64s");
+  requireOracle("AE_ABS64", "emu.abs64");
+  requireOracle("AE_ABS64S", "emu.abs64s");
+  requireOracle("AE_AND64", "emu.and64");
+  requireOracle("AE_SLAI32", "emu.slai32");
+  requireOracle("AE_SLLI32", "emu.slli32");
+  requireOracle("AE_SRAI32", "emu.srai32");
+  requireOracle("AE_SRLI32", "emu.srli32");
+  // Memory residual family + post-inc / indexed peers.
+  requireOracle("AE_L32X2_I", "emu.l32x2_i");
+  requireOracle("AE_S32X2_I", "emu.s32x2_i");
+  requireOracle("AE_L16X4_I", "emu.l16x4_i");
+  requireOracle("AE_L32X2_IP", "emu.l32x2_ip");
+  requireOracle("AE_S32X2_IP", "emu.s32x2_ip");
+  requireOracle("AE_L16X4_IP", "emu.l16x4_ip");
+  requireOracle("AE_S16X4_IP", "emu.s16x4_ip");
+  requireOracle("AE_L32_IP", "emu.l32_ip");
+  requireOracle("AE_S32_L_IP", "emu.s32_l_ip");
+  requireOracle("AE_L32X2_X", "emu.l32x2_x");
+  requireOracle("AE_S32X2_X", "emu.s32x2_x");
+  // MAC residual family + peer MAC.
+  requireOracle("AE_MULP32X2", "emu.mulp32x2");
+  requireOracle("AE_MULFP32X2RAS", "emu.mulfp32x2ras");
+  requireOracle("AE_MULAFP32X2RAS", "emu.mulafp32x2ras");
+  requireOracle("AE_MUL16JS", "emu.mul16js");
+  requireOracle("AE_MUL64_SS_LL", "emu.mul64_ss_ll");
+  requireOracle("AE_MULS32X2", "emu.muls32x2");
+  requireOracle("AE_MUL64_SS_HH", "emu.mul64_ss_hh");
+  requireOracle("AE_MULA64_SS_LL", "emu.mula64_ss_ll");
+  requireOracle("AE_MUL32X16_L0", "emu.mul32x16_l0");
+  requireOracle("AE_MULA32X16_L0", "emu.mula32x16_l0");
+  // State residual family.
+  requireOracle("AE_SLAS32", "exact.slas32");
+  requireOracle("AE_SRAS32", "exact.sras32");
+  requireOracle("AE_SLAS32S", "softsat.slaa32s");
+  requireOracle("AE_SAR", "state.sar");
+  requireOracle("AE_ABS32", "emu.abs32");
+  requireOracle("AE_NEG32", "emu.neg32");
+  requireOracle("AE_NEG64S", "emu.neg64s");
+  requireOracle("AE_SLLI64", "emu.slli64");
+  requireOracle("AE_SRLI64", "emu.srli64");
+  requireOracle("AE_MOV64", "emu.mov64");
+  requireOracle("AE_EQ64", "emu.eq64");
+  requireOracle("AE_LT64", "emu.lt64");
+  requireOracle("AE_LE64", "emu.le64");
+  requireOracle("AE_SRAA32", "emu.sraa32");
+  requireOracle("AE_SRAA16", "emu.sraa16");
+  requireOracle("AE_SRAI64", "emu.srai64");
+  requireOracle("AE_SLLA32", "emu.slla32");
+  requireOracle("AE_SLAA32", "emu.slaa32");
+  requireOracle("AE_SLAI64", "emu.slai64");
+  requireOracle("AE_F32X2_SLAIS", "softsat.f32x2_slais");
+  requireOracle("AE_L32X2_XP", "emu.l32x2_xp");
+  requireOracle("AE_S32X2_XP", "emu.s32x2_xp");
+  requireOracle("AE_L16X4_X", "emu.l16x4_x");
+  requireOracle("AE_L32_XP", "emu.l32_xp");
+  requireOracle("AE_L16_IP", "emu.l16_ip");
+  requireOracle("AE_S16X4_X", "emu.s16x4_x");
+  requireOracle("AE_L16X4_XP", "emu.l16x4_xp");
+
+  // Store-finish immediates/effects are typed inventory fields.
+  auto requireDirMem = [&](StringRef Sym, int Dir) {
+    auto It = llvm::find_if(
+        Out, [&](const AeCompatEntry &E) { return E.Name == Sym; });
+    if (It == Out.end())
+      return;
+    if (It->DirImm != Dir)
+      PrintFatalError("HaydnIntrin: " + Sym.str() + " DirImm must be " +
+                      std::to_string(Dir) + " (got " +
+                      std::to_string(It->DirImm) + ")");
+    if (!It->MemEffect)
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " MemEffect must be set (store-finish)");
+  };
+  requireDirMem("AE_SA64POS_FP", 0);
+  requireDirMem("AE_SA64NEG_FP", 1);
+
+  // Residual family effect quarantine: memory reps must set MemEffect; state
+  // reps must set SoftState (authored or residual default from name/lowering).
+  auto requireMem = [&](StringRef Sym) {
+    auto It = llvm::find_if(
+        Out, [&](const AeCompatEntry &E) { return E.Name == Sym; });
+    if (It == Out.end())
+      PrintFatalError("HaydnIntrin: missing residual mem record '" + Sym.str() +
+                      "'");
+    if (!It->MemEffect)
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " MemEffect must be set (memory residual family)");
+  };
+  auto requireSoft = [&](StringRef Sym) {
+    auto It = llvm::find_if(
+        Out, [&](const AeCompatEntry &E) { return E.Name == Sym; });
+    if (It == Out.end())
+      PrintFatalError("HaydnIntrin: missing residual state record '" +
+                      Sym.str() + "'");
+    if (!It->SoftState)
+      PrintFatalError("HaydnIntrin: " + Sym.str() +
+                      " SoftState must be set (state residual family)");
+  };
+  requireMem("AE_L32X2_I");
+  requireMem("AE_S32X2_I");
+  requireMem("AE_L16X4_I");
+  requireMem("AE_L32X2_IP");
+  requireMem("AE_S32X2_IP");
+  requireMem("AE_L16X4_IP");
+  requireMem("AE_S16X4_IP");
+  requireMem("AE_L32_IP");
+  requireMem("AE_S32_L_IP");
+  requireMem("AE_L32X2_X");
+  requireMem("AE_S32X2_X");
+  requireMem("AE_L32X2_XP");
+  requireMem("AE_S32X2_XP");
+  requireMem("AE_L16X4_X");
+  requireMem("AE_L32_XP");
+  requireMem("AE_L16_IP");
+  requireMem("AE_S16X4_X");
+  requireMem("AE_L16X4_XP");
+  requireSoft("AE_SLAS32");
+  requireSoft("AE_SRAS32");
+  requireSoft("AE_SLAS32S");
+  requireSoft("AE_SAR");
+
+  // Full public EXACT+EMULATED surface: every row must name a value/object
+  // oracle id (empty oracle is fail-closed; UNSUPPORTED stays empty).
+  unsigned NExactOracle = 0, NEmuOracle = 0, NPublicOracle = 0;
+  for (const AeCompatEntry &E : Out) {
+    if (E.Tier == "UNSUPPORTED") {
+      if (!E.OracleId.empty())
+        PrintFatalError("HaydnIntrin: UNSUPPORTED '" + E.Name +
+                        "' must not register OracleId (empty-body quarantine)");
+      continue;
+    }
+    if (E.Tier != "EXACT" && E.Tier != "EMULATED")
+      continue;
+    if (E.OracleId.empty())
+      PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                      "' requires non-empty OracleId");
+    if (E.DeclKind.empty())
+      PrintFatalError("HaydnIntrin: " + E.Tier + " '" + E.Name +
+                      "' requires non-empty DeclKind");
+    ++NPublicOracle;
+    if (E.Tier == "EXACT")
+      ++NExactOracle;
+    else
+      ++NEmuOracle;
+  }
+  if (NExactOracle == 0)
+    PrintFatalError("HaydnIntrin: EXACT oracle inventory is empty");
+  // Full public surface floor: inventory size minus permanent UNSUPPORTED pair.
+  // Shrink reopens silent un-oracled EMULATED holes under default product law.
+  constexpr unsigned kPublicOracleFloor = 671;
+  if (NPublicOracle < kPublicOracleFloor)
+    PrintFatalError("HaydnIntrin: public EXACT+EMULATED OracleId inventory " +
+                    std::to_string(NPublicOracle) + " < floor " +
+                    std::to_string(kPublicOracleFloor) +
+                    " (exact=" + std::to_string(NExactOracle) +
+                    " emulated=" + std::to_string(NEmuOracle) + ")");
 
   for (const AeCompatEntry &E : Out) {
     if (E.Tier != "EXACT" && E.Tier != "EMULATED")
@@ -1001,13 +1364,49 @@ static void emitAeCompatTiers(raw_ostream &OS,
   OS << "\n#define HAYDN_AE_COMPAT_TAG_COUNT " << Compat.size() << "\n";
   OS << "/* AE compat summary: exact=" << NExact << " emulated=" << NEmu
      << " unsupported=" << NUnsup << " total=" << Compat.size() << " */\n\n";
+
+  // Typed public inventory: availability/oracle, immediates, effects.
+  // Full EXACT+EMULATED surface emits OracleId/DeclKind (residual defaults
+  // synthesized when TD omits). UNSUPPORTED keeps empty OracleId (fail-closed
+  // empty-body quarantine). DirImm -1 means no direction ImmArg.
+  unsigned NOracle = 0;
+  for (const AeCompatEntry &E : Compat) {
+    if (!E.OracleId.empty()) {
+      OS << "#define HAYDN_AE_ORACLE_" << E.Name << " \"" << E.OracleId
+         << "\"\n";
+      ++NOracle;
+    }
+  }
+  // Count of public AE_* rows with a named value/object oracle id.
+  // Empty OracleId remains legal for unregistered residual; AE-P0 is
+  // fail-closed above. CI pins HAYDN_AE_ORACLE_COUNT against shrinkage.
+  OS << "\n#define HAYDN_AE_ORACLE_COUNT " << NOracle << "\n\n";
+  for (const AeCompatEntry &E : Compat) {
+    if (!E.DeclKind.empty())
+      OS << "#define HAYDN_AE_DECLKIND_" << E.Name << " \"" << E.DeclKind
+         << "\"\n";
+  }
+  OS << "\n";
+  for (const AeCompatEntry &E : Compat) {
+    if (E.DirImm >= 0)
+      OS << "#define HAYDN_AE_DIRIMM_" << E.Name << " " << E.DirImm << "\n";
+  }
+  OS << "\n";
+  for (const AeCompatEntry &E : Compat) {
+    if (E.MemEffect)
+      OS << "#define HAYDN_AE_MEMEFFECT_" << E.Name << " 1\n";
+    if (E.SoftState)
+      OS << "#define HAYDN_AE_SOFTSTATE_" << E.Name << " 1\n";
+  }
+  OS << "\n";
 }
 
 /// Emit HAYDN_AE_COMPAT manifest rows (tier + lowering) for CI.
 static void emitAeCompatManifest(raw_ostream &OS,
                                  ArrayRef<AeCompatEntry> Compat) {
   OS << "\n//=== AE NatureDSP compat tier+lowering (HaydnAeCompat) ===//\n"
-        "// Columns: HAYDN_AE_COMPAT,<ae_name>,<tier>,<lowering>\n"
+        "// Columns: HAYDN_AE_COMPAT,<ae_name>,<tier>,<lowering>,"
+        "<declkind>,<oracle>,<dirimm>,<mem>,<soft>\n"
         "// Fail-closed: product-law tiers; no FormatID/slot/AltDesc.\n";
   auto esc = [](StringRef S) {
     std::string O;
@@ -1028,7 +1427,9 @@ static void emitAeCompatManifest(raw_ostream &OS,
     else
       ++NUnsup;
     OS << "HAYDN_AE_COMPAT," << esc(E.Name) << "," << esc(E.Tier) << ","
-       << esc(E.Lowering) << "\n";
+       << esc(E.Lowering) << "," << esc(E.DeclKind) << "," << esc(E.OracleId)
+       << "," << E.DirImm << "," << (E.MemEffect ? 1 : 0) << ","
+       << (E.SoftState ? 1 : 0) << "\n";
   }
   OS << "// AE_compat_summary: exact=" << NExact << " emulated=" << NEmu
      << " unsupported=" << NUnsup << " total=" << Compat.size() << "\n";

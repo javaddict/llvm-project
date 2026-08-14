@@ -21,6 +21,12 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_CVTQ56A32S == HAYDN_COMPAT_EMULATED, "");
 _Static_assert(HAYDN_COMPAT_TIER_AE_CVT16X4 == HAYDN_COMPAT_EMULATED, "");
 _Static_assert(HAYDN_COMPAT_TIER_AE_SLAA64S == HAYDN_COMPAT_EMULATED, "");
 _Static_assert(HAYDN_COMPAT_TIER_AE_SA64NEG_FP == HAYDN_COMPAT_EMULATED, "");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_TRUNCA32X2F64S, "ae0.trunca32x2f64s") == 0, "");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_CVTQ56A32S, "ae0.cvtq56a32s") == 0, "");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_SA64NEG_FP, "ae0.sa64neg_fp") == 0, "");
+_Static_assert(HAYDN_AE_DIRIMM_AE_SA64NEG_FP == 1, "SA64NEG dir1");
+_Static_assert(HAYDN_AE_DIRIMM_AE_SA64POS_FP == 0, "SA64POS dir0");
+_Static_assert(HAYDN_AE_ORACLE_COUNT >= 8, "AE-P0 oracle inventory floor");
 _Static_assert(__HAYDN_AE_COMPAT_STRICT == 1, "strict default");
 
 // Host oracle: (int32_t)1 << 16 = 65536. Constant-zero body fails this pin.

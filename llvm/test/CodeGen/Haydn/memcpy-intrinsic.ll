@@ -11,7 +11,7 @@
 
 define void @test_memcpy(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 16, i1 false)
   ret void
 }
@@ -19,7 +19,7 @@ define void @test_memcpy(ptr %dst, ptr %src) {
 ;memcpy with constant size
 define void @test_memcpy_const(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_const:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 4, i1 false)
   ret void
 }
@@ -27,7 +27,7 @@ define void @test_memcpy_const(ptr %dst, ptr %src) {
 ;memset
 define void @test_memset(ptr %dst) {
 ; CHECK-LABEL: test_memset:
-; CHECK: jal_w{{(\.s[012])?}} lr, memset
+; CHECK: jal{{(\.s[012])?}} lr, memset
   call void @llvm.memset.p0.i32(ptr %dst, i8 42, i32 16, i1 false)
   ret void
 }
@@ -35,7 +35,7 @@ define void @test_memset(ptr %dst) {
 ;memset with variable size
 define void @test_memset_var(ptr %dst, i8 %val, i32 %n) {
 ; CHECK-LABEL: test_memset_var:
-; CHECK: jal_w{{(\.s[012])?}} lr, memset
+; CHECK: jal{{(\.s[012])?}} lr, memset
   call void @llvm.memset.p0.i32(ptr %dst, i8 %val, i32 %n, i1 false)
   ret void
 }
@@ -43,7 +43,7 @@ define void @test_memset_var(ptr %dst, i8 %val, i32 %n) {
 ;Small memcpy (single word - still libcall for baremetal)
 define void @test_memcpy_small(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_small:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 4, i1 false)
   ret void
 }
@@ -53,7 +53,7 @@ define void @test_memcpy_small(ptr %dst, ptr %src) {
 
 define void @test_memcpy_struct(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_memcpy_struct:
-; CHECK: jal_w{{(\.s[012])?}} lr, memcpy
+; CHECK: jal{{(\.s[012])?}} lr, memcpy
   call void @llvm.memcpy.p0.p0.i32(ptr %dst, ptr %src, i32 12, i1 false)
   ret void
 }
@@ -61,7 +61,7 @@ define void @test_memcpy_struct(ptr %dst, ptr %src) {
 ;memset zero (bzero pattern)
 define void @test_memset_zero(ptr %dst, i32 %n) {
 ; CHECK-LABEL: test_memset_zero:
-; CHECK: jal_w{{(\.s[012])?}} lr, memset
+; CHECK: jal{{(\.s[012])?}} lr, memset
   call void @llvm.memset.p0.i32(ptr %dst, i8 0, i32 %n, i1 false)
   ret void
 }

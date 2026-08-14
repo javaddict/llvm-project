@@ -1571,11 +1571,12 @@ def int_haydn_x4sel16 : Haydn_Intrinsic<"haydn_x4sel16",
 //===----------------------------------------------------------------------===//
 // MOVDA family — GPR32 <-> DR64 lane transfers.
 //
-// The Haydn ISA has no native cross-bank move (see ISA-10). Each intrinsic
-// lowers to the existing MOV_GPR_TO_DR64 / MOV_DR64_TO_GPR pseudos, which
-// expand to SP-spill sequences in HaydnInstrInfo.cpp (5 instrs/transfer).
-// Exposed as intrinsics so NatureDSP kernels using AE_MOVDA* can port
-// 1:1 without rewriting the data-movement shape.
+// The Haydn ISA has no native GPR->DR lane-insert (ISA-63; golden has only
+// MOVE32_DR_L/H for DR->GPR extract). Each movda intrinsic lowers to
+// MOV_GPR_TO_DR64. Two live GPR halves expand post-RA through the
+// per-function DR64PackFI slot (ST32 lo, ST32 hi, LD64) — a memory
+// round-trip, not a register insert. One-half-R0 packs stay stackless
+// (SEXT+shift). movad32_{low,high} select native MOVE32_DR_L/H.
 //
 //   llvm.haydn.movda32(x: i32)         -> i64   ; place i32 in low lane, high=0
 //   llvm.haydn.movda32x2(lo: i32, hi: i32) -> i64 ; place 2x i32 into the two lanes
@@ -1913,6 +1914,12 @@ def int_haydn_sin_cos : Haydn_Intrinsic<"haydn_sin_cos",
 // C2.3 / G-MEM-INTRIN: Golden LS ordinary Mem — IntrArgMemOnly+NoCapture so
 // AA sees argmem only (co-issue-ready). MMO flags are MOLoad/MOStore (not
 // volatile); CB/UA StateMem use MOVolatile in getTgtMemIntrinsic.
+//
+// IntrHasSideEffects is for hidden AR/CBR/SFR only (UA/CB/BREV above).
+// Ordinary POST/PRE/WITH writeback is SSA {data, new_ptr} plus argmem.
+// These defs still carry IntrHasSideEffects as a QoR residual: a fully
+// dead post-inc load cannot DCE. Dropping the flag on this family is
+// the remaining F37 action; do not drop it on UA/CB/BREV.
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_d_ldw_post_imm : DefaultAttrsIntrinsic<

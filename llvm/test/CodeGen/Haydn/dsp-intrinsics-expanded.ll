@@ -48,8 +48,8 @@ define i64 @test_mul64_ss_lh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.lh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.ss.lh(<2 x i32> %bc.1, <2 x i32> %bc.2)
@@ -64,8 +64,8 @@ define i64 @test_mul64_ss_hl(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.hl d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.3 = bitcast i64 %a to <2 x i32>
   %bc.4 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.ss.hl(<2 x i32> %bc.3, <2 x i32> %bc.4)
@@ -80,8 +80,8 @@ define i64 @test_mul64_ss_hh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.hh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.5 = bitcast i64 %a to <2 x i32>
   %bc.6 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.ss.hh(<2 x i32> %bc.5, <2 x i32> %bc.6)
@@ -100,8 +100,8 @@ define i64 @test_mul64_su_lul(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.lul d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.7 = bitcast i64 %a to <2 x i32>
   %bc.8 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.su.lul(<2 x i32> %bc.7, <2 x i32> %bc.8)
@@ -116,8 +116,8 @@ define i64 @test_mul64_su_ulh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.ulh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.9 = bitcast i64 %a to <2 x i32>
   %bc.10 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.su.ulh(<2 x i32> %bc.9, <2 x i32> %bc.10)
@@ -132,8 +132,8 @@ define i64 @test_mul64_su_uhl(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.uhl d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.11 = bitcast i64 %a to <2 x i32>
   %bc.12 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.su.uhl(<2 x i32> %bc.11, <2 x i32> %bc.12)
@@ -148,8 +148,8 @@ define i64 @test_mul64_su_uhh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.uhh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.13 = bitcast i64 %a to <2 x i32>
   %bc.14 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.su.uhh(<2 x i32> %bc.13, <2 x i32> %bc.14)
@@ -168,8 +168,8 @@ define i64 @test_mul64_us_luh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.luh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.15 = bitcast i64 %a to <2 x i32>
   %bc.16 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.us.luh(<2 x i32> %bc.15, <2 x i32> %bc.16)
@@ -184,8 +184,8 @@ define i64 @test_mul64_us_uhuh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.uhuh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.17 = bitcast i64 %a to <2 x i32>
   %bc.18 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.us.uhuh(<2 x i32> %bc.17, <2 x i32> %bc.18)
@@ -200,8 +200,8 @@ define i64 @test_mul64_us_hul(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.hul d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.19 = bitcast i64 %a to <2 x i32>
   %bc.20 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.us.hul(<2 x i32> %bc.19, <2 x i32> %bc.20)
@@ -216,8 +216,8 @@ define i64 @test_mul64_us_uhul(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.uhul d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.21 = bitcast i64 %a to <2 x i32>
   %bc.22 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.us.uhul(<2 x i32> %bc.21, <2 x i32> %bc.22)
@@ -236,8 +236,8 @@ define i64 @test_mul64_uu_uluh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.uluh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.23 = bitcast i64 %a to <2 x i32>
   %bc.24 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.uu.uluh(<2 x i32> %bc.23, <2 x i32> %bc.24)
@@ -252,8 +252,8 @@ define i64 @test_mul64_uu_ulul(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.ulul d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.25 = bitcast i64 %a to <2 x i32>
   %bc.26 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.uu.ulul(<2 x i32> %bc.25, <2 x i32> %bc.26)
@@ -268,8 +268,8 @@ define i64 @test_mul64_uu_ull(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.ull d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.27 = bitcast i64 %a to <2 x i32>
   %bc.28 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.uu.ull(<2 x i32> %bc.27, <2 x i32> %bc.28)
@@ -284,8 +284,8 @@ define i64 @test_mul64_uu_ulh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.ulh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.29 = bitcast i64 %a to <2 x i32>
   %bc.30 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mul64.uu.ulh(<2 x i32> %bc.29, <2 x i32> %bc.30)
@@ -308,8 +308,8 @@ define i64 @test_mula64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.ll d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.31 = bitcast i64 %a to <2 x i32>
   %bc.32 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.ss.ll(i64 %acc, <2 x i32> %bc.31, <2 x i32> %bc.32)
@@ -324,8 +324,8 @@ define i64 @test_mula64_ss_lh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.lh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.33 = bitcast i64 %a to <2 x i32>
   %bc.34 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.ss.lh(i64 %acc, <2 x i32> %bc.33, <2 x i32> %bc.34)
@@ -340,8 +340,8 @@ define i64 @test_mula64_ss_hl(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.hl d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.35 = bitcast i64 %a to <2 x i32>
   %bc.36 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.ss.hl(i64 %acc, <2 x i32> %bc.35, <2 x i32> %bc.36)
@@ -356,8 +356,8 @@ define i64 @test_mula64_ss_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.hh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.37 = bitcast i64 %a to <2 x i32>
   %bc.38 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.ss.hh(i64 %acc, <2 x i32> %bc.37, <2 x i32> %bc.38)
@@ -376,8 +376,8 @@ define i64 @test_mula64_su_lul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.lul d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.39 = bitcast i64 %a to <2 x i32>
   %bc.40 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.su.lul(i64 %acc, <2 x i32> %bc.39, <2 x i32> %bc.40)
@@ -392,8 +392,8 @@ define i64 @test_mula64_su_ulh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.ulh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.41 = bitcast i64 %a to <2 x i32>
   %bc.42 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.su.ulh(i64 %acc, <2 x i32> %bc.41, <2 x i32> %bc.42)
@@ -408,8 +408,8 @@ define i64 @test_mula64_su_uhl(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.uhl d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.43 = bitcast i64 %a to <2 x i32>
   %bc.44 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.su.uhl(i64 %acc, <2 x i32> %bc.43, <2 x i32> %bc.44)
@@ -424,8 +424,8 @@ define i64 @test_mula64_su_uhh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.uhh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.45 = bitcast i64 %a to <2 x i32>
   %bc.46 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.su.uhh(i64 %acc, <2 x i32> %bc.45, <2 x i32> %bc.46)
@@ -444,8 +444,8 @@ define i64 @test_mula64_us_luh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.luh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.47 = bitcast i64 %a to <2 x i32>
   %bc.48 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.us.luh(i64 %acc, <2 x i32> %bc.47, <2 x i32> %bc.48)
@@ -460,8 +460,8 @@ define i64 @test_mula64_us_uhuh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.uhuh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.49 = bitcast i64 %a to <2 x i32>
   %bc.50 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.us.uhuh(i64 %acc, <2 x i32> %bc.49, <2 x i32> %bc.50)
@@ -476,8 +476,8 @@ define i64 @test_mula64_us_hul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.hul d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.51 = bitcast i64 %a to <2 x i32>
   %bc.52 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.us.hul(i64 %acc, <2 x i32> %bc.51, <2 x i32> %bc.52)
@@ -492,8 +492,8 @@ define i64 @test_mula64_us_uhul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.uhul d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.53 = bitcast i64 %a to <2 x i32>
   %bc.54 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.us.uhul(i64 %acc, <2 x i32> %bc.53, <2 x i32> %bc.54)
@@ -512,8 +512,8 @@ define i64 @test_mula64_uu_uluh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.uluh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.55 = bitcast i64 %a to <2 x i32>
   %bc.56 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.uu.uluh(i64 %acc, <2 x i32> %bc.55, <2 x i32> %bc.56)
@@ -528,8 +528,8 @@ define i64 @test_mula64_uu_ulul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.ulul d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.57 = bitcast i64 %a to <2 x i32>
   %bc.58 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.uu.ulul(i64 %acc, <2 x i32> %bc.57, <2 x i32> %bc.58)
@@ -544,8 +544,8 @@ define i64 @test_mula64_uu_ull(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.ull d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.59 = bitcast i64 %a to <2 x i32>
   %bc.60 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.uu.ull(i64 %acc, <2 x i32> %bc.59, <2 x i32> %bc.60)
@@ -560,8 +560,8 @@ define i64 @test_mula64_uu_ulh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mula64.ulh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.61 = bitcast i64 %a to <2 x i32>
   %bc.62 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.mula64.uu.ulh(i64 %acc, <2 x i32> %bc.61, <2 x i32> %bc.62)
@@ -585,8 +585,8 @@ define i64 @test_muls64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; muls64.ll d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.63 = bitcast i64 %a to <2 x i32>
   %bc.64 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.muls64.ss.ll(i64 %acc, <2 x i32> %bc.63, <2 x i32> %bc.64)
@@ -601,8 +601,8 @@ define i64 @test_muls64_ss_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; muls64.hh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.65 = bitcast i64 %a to <2 x i32>
   %bc.66 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.muls64.ss.hh(i64 %acc, <2 x i32> %bc.65, <2 x i32> %bc.66)
@@ -617,8 +617,8 @@ define i64 @test_muls64_su_lul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; muls64.lul d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.67 = bitcast i64 %a to <2 x i32>
   %bc.68 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.muls64.su.lul(i64 %acc, <2 x i32> %bc.67, <2 x i32> %bc.68)
@@ -633,8 +633,8 @@ define i64 @test_muls64_us_luh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; muls64.luh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.69 = bitcast i64 %a to <2 x i32>
   %bc.70 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.muls64.us.luh(i64 %acc, <2 x i32> %bc.69, <2 x i32> %bc.70)
@@ -649,8 +649,8 @@ define i64 @test_muls64_uu_uluh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; muls64.uluh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.71 = bitcast i64 %a to <2 x i32>
   %bc.72 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.muls64.uu.uluh(i64 %acc, <2 x i32> %bc.71, <2 x i32> %bc.72)
@@ -673,8 +673,8 @@ define i64 @test_mulas64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulas64.ll d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulas64.ss.ll(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -687,8 +687,8 @@ define i64 @test_mulas64_su_lul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulas64.lul d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulas64.su.lul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -701,8 +701,8 @@ define i64 @test_mulas64_us_luh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulas64.luh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulas64.us.luh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -715,8 +715,8 @@ define i64 @test_mulas64_uu_uluh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulas64.uluh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulas64.uu.uluh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -737,8 +737,8 @@ define i64 @test_mulss64_ss_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulss64.ll d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulss64.ss.ll(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -751,8 +751,8 @@ define i64 @test_mulss64_su_lul(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulss64.lul d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulss64.su.lul(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -765,8 +765,8 @@ define i64 @test_mulss64_us_luh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulss64.luh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulss64.us.luh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -779,8 +779,8 @@ define i64 @test_mulss64_uu_uluh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulss64.uluh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulss64.uu.uluh(i64 %acc, i64 %a, i64 %b)
   ret i64 %r
 }
@@ -801,8 +801,8 @@ define i32 @test_add32s(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32s r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.add32s(i32 %a, i32 %b)
   ret i32 %r
 }
@@ -815,8 +815,8 @@ define i32 @test_sub32s(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; sub32s r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.sub32s(i32 %a, i32 %b)
   ret i32 %r
 }
@@ -829,8 +829,8 @@ define i32 @test_abs32s(i32 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; abs32s r1, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.abs32s(i32 %a)
   ret i32 %r
 }
@@ -843,8 +843,8 @@ define i32 @test_neg32s(i32 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; neg32s r1, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.neg32s(i32 %a)
   ret i32 %r
 }
@@ -863,8 +863,8 @@ define i64 @test_add64s(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add64s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.add64s(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -877,8 +877,8 @@ define i64 @test_sub64s(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; sub64s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.sub64s(i64 %a, i64 %b)
   ret i64 %r
 }
@@ -905,8 +905,8 @@ define i64 @test_fmul32s_ll(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmul32s.ll d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.73 = bitcast i64 %a to <2 x i32>
   %bc.74 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.ll(<2 x i32> %bc.73, <2 x i32> %bc.74)
@@ -921,8 +921,8 @@ define i64 @test_fmul32s_lh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmul32s.lh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.75 = bitcast i64 %a to <2 x i32>
   %bc.76 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.lh(<2 x i32> %bc.75, <2 x i32> %bc.76)
@@ -937,8 +937,8 @@ define i64 @test_fmul32s_hh(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmul32s.hh d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.77 = bitcast i64 %a to <2 x i32>
   %bc.78 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmul32s.hh(<2 x i32> %bc.77, <2 x i32> %bc.78)
@@ -960,8 +960,8 @@ define i64 @test_fmula32s_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmula32s.ll d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.79 = bitcast i64 %a to <2 x i32>
   %bc.80 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmula32s.ll(i64 %acc, <2 x i32> %bc.79, <2 x i32> %bc.80)
@@ -976,8 +976,8 @@ define i64 @test_fmula32s_lh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmula32s.lh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.81 = bitcast i64 %a to <2 x i32>
   %bc.82 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmula32s.lh(i64 %acc, <2 x i32> %bc.81, <2 x i32> %bc.82)
@@ -992,8 +992,8 @@ define i64 @test_fmula32s_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmula32s.hh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.83 = bitcast i64 %a to <2 x i32>
   %bc.84 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmula32s.hh(i64 %acc, <2 x i32> %bc.83, <2 x i32> %bc.84)
@@ -1017,8 +1017,8 @@ define i64 @test_fmuls32s_ll(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmuls32s.ll d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.85 = bitcast i64 %a to <2 x i32>
   %bc.86 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmuls32s.ll(i64 %acc, <2 x i32> %bc.85, <2 x i32> %bc.86)
@@ -1033,8 +1033,8 @@ define i64 @test_fmuls32s_lh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmuls32s.lh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.87 = bitcast i64 %a to <2 x i32>
   %bc.88 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmuls32s.lh(i64 %acc, <2 x i32> %bc.87, <2 x i32> %bc.88)
@@ -1049,8 +1049,8 @@ define i64 @test_fmuls32s_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; fmuls32s.hh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.89 = bitcast i64 %a to <2 x i32>
   %bc.90 = bitcast i64 %b to <2 x i32>
   %r = call i64 @llvm.haydn.fmuls32s.hh(i64 %acc, <2 x i32> %bc.89, <2 x i32> %bc.90)
@@ -1075,8 +1075,8 @@ define i32 @test_mull(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.mull(i32 %a, i32 %b)
   ret i32 %r
 }
@@ -1089,8 +1089,8 @@ define i32 @test_mulssh(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulssh r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.mulssh(i32 %a, i32 %b)
   ret i32 %r
 }
@@ -1103,8 +1103,8 @@ define i32 @test_mulsuh(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulsuh r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.mulsuh(i32 %a, i32 %b)
   ret i32 %r
 }
@@ -1117,8 +1117,8 @@ define i32 @test_muluuh(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; muluuh r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.muluuh(i32 %a, i32 %b)
   ret i32 %r
 }
@@ -1140,8 +1140,8 @@ define i32 @test_mulq31(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulssh r1, r2, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.mulq31(i32 %a, i32 %b, i32 %c)
   ret i32 %r
 }
@@ -1157,8 +1157,8 @@ define i32 @test_macq31(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.macq31(i32 %a, i32 %b, i32 %c)
   ret i32 %r
 }
@@ -1173,8 +1173,8 @@ define i64 @test_mulq63(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mul64.ll d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulq63(i64 %a, i64 %b, i64 %c)
   ret i64 %r
 }
@@ -1189,8 +1189,8 @@ define i32 @test_mac32(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.mac32(i32 %a, i32 %b, i32 %c)
   ret i32 %r
 }
@@ -1213,8 +1213,8 @@ define <2 x i32> @test_x2add32s(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2add32s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2add32s(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -1227,8 +1227,8 @@ define <2 x i32> @test_x2sub32s(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2sub32s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2sub32s(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -1241,8 +1241,8 @@ define <2 x i32> @test_x2addsub32s(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2addsub32s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call <2 x i32> @llvm.haydn.x2addsub32s(<2 x i32> %a,<2 x i32> %b)
   ret <2 x i32> %r
 }
@@ -1255,8 +1255,8 @@ define <4 x i16> @test_x4add16s(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4add16s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call <4 x i16> @llvm.haydn.x4add16s(<4 x i16> %a,<4 x i16> %b)
   ret <4 x i16> %r
 }
@@ -1269,8 +1269,8 @@ define <4 x i16> @test_x4sub16s(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4sub16s d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call <4 x i16> @llvm.haydn.x4sub16s(<4 x i16> %a,<4 x i16> %b)
   ret <4 x i16> %r
 }
@@ -1293,8 +1293,8 @@ define i64 @test_x2mula32(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2mula32 d0, d1, d2, d3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.91 = bitcast i64 %a to <2 x i32>
   %bc.92 = bitcast i64 %b to <2 x i32>
   %r = call { i64, i64 } @llvm.haydn.x2mula32(i64 %acc, i64 %acc2, <2 x i32> %bc.91, <2 x i32> %bc.92)
@@ -1310,8 +1310,8 @@ define i64 @test_x2muls32(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2muls32 d0, d1, d2, d3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.93 = bitcast i64 %a to <2 x i32>
   %bc.94 = bitcast i64 %b to <2 x i32>
   %r = call { i64, i64 } @llvm.haydn.x2muls32(i64 %acc, i64 %acc2, <2 x i32> %bc.93, <2 x i32> %bc.94)
@@ -1327,8 +1327,8 @@ define i64 @test_x4mula16(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4mula16 d0, d1, d2, d3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.95 = bitcast i64 %a to <4 x i16>
   %bc.96 = bitcast i64 %b to <4 x i16>
   %r = call { i64, i64 } @llvm.haydn.x4mula16(i64 %acc, i64 %acc2, <4 x i16> %bc.95, <4 x i16> %bc.96)
@@ -1344,8 +1344,8 @@ define i64 @test_x4muls16(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4muls16 d0, d1, d2, d3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.97 = bitcast i64 %a to <4 x i16>
   %bc.98 = bitcast i64 %b to <4 x i16>
   %r = call { i64, i64 } @llvm.haydn.x4muls16(i64 %acc, i64 %acc2, <4 x i16> %bc.97, <4 x i16> %bc.98)
@@ -1361,8 +1361,8 @@ define i64 @test_x4mula16s(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4mula16s d0, d1, d2, d3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.99 = bitcast i64 %a to <4 x i16>
   %bc.100 = bitcast i64 %b to <4 x i16>
   %r = call { i64, i64 } @llvm.haydn.x4mula16s(i64 %acc, i64 %acc2, <4 x i16> %bc.99, <4 x i16> %bc.100)
@@ -1378,8 +1378,8 @@ define i64 @test_x4muls16s(i64 %acc, i64 %acc2, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4muls16s d0, d1, d2, d3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.101 = bitcast i64 %a to <4 x i16>
   %bc.102 = bitcast i64 %b to <4 x i16>
   %r = call { i64, i64 } @llvm.haydn.x4muls16s(i64 %acc, i64 %acc2, <4 x i16> %bc.101, <4 x i16> %bc.102)
@@ -1409,8 +1409,8 @@ define i32 @test_nsa32(i32 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nsa32 r1, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.nsa32(i32 %a)
   ret i32 %r
 }
@@ -1423,8 +1423,8 @@ define i32 @test_nsau32(i32 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nsau32 r1, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.nsau32(i32 %a)
   ret i32 %r
 }
@@ -1451,8 +1451,8 @@ define i64 @test_mul64_chain(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add64 d0, d2, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.103 = bitcast i64 %a to <2 x i32>
   %bc.104 = bitcast i64 %b to <2 x i32>
   %p1 = call i64 @llvm.haydn.mul64.ss.ll(<2 x i32> %bc.103, <2 x i32> %bc.104)
@@ -1474,8 +1474,8 @@ define i32 @test_sat_chain(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; add32s r1, r1, r2 }
 ; CHECK-NEXT:    { nop; sub32s r1, r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %s1 = call i32 @llvm.haydn.add32s(i32 %a, i32 %b)
   %r = call i32 @llvm.haydn.sub32s(i32 %s1, i32 %c)
   ret i32 %r
@@ -1495,8 +1495,8 @@ define i64 @test_fmul_fmula_chain(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add64 d0, d3, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %bc.107 = bitcast i64 %a to <2 x i32>
   %bc.108 = bitcast i64 %b to <2 x i32>
   %p1 = call i64 @llvm.haydn.fmul32s.ll(<2 x i32> %bc.107, <2 x i32> %bc.108)
@@ -1521,8 +1521,8 @@ define <2 x i32> @test_simd_chain(<2 x i32> %a, <2 x i32> %b, <2 x i32> %c) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add64 d0, d4, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %v1 = call <2 x i32> @llvm.haydn.x2add32s(<2 x i32> %a,<2 x i32> %b)
   %v1_i = bitcast <2 x i32> %v1 to i64
   %b_i  = bitcast <2 x i32> %b to i64
@@ -1548,8 +1548,8 @@ define i32 @test_nsa_chain(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nsau32 r2, r2; nsa32 r1, r1 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %v1 = call i32 @llvm.haydn.nsa32(i32 %a)
   %v2 = call i32 @llvm.haydn.nsau32(i32 %b)
   %r = add i32 %v1, %v2
@@ -1569,8 +1569,8 @@ define i64 @test_mixed_banks(i32 %a, i32 %b, i64 %c, i64 %d) {
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
 ; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %hi = call i32 @llvm.haydn.mulssh(i32 %a, i32 %b)
   %bc.113 = bitcast i64 %c to <2 x i32>
   %bc.114 = bitcast i64 %d to <2 x i32>
@@ -1599,8 +1599,8 @@ define i32 @test_qformat_chain(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r3, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
   %q1 = call i32 @llvm.haydn.mulq31(i32 %a, i32 %b, i32 %c)
   %r = call i32 @llvm.haydn.macq31(i32 %q1, i32 %b, i32 %a)
   ret i32 %r

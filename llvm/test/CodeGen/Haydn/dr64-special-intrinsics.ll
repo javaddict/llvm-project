@@ -149,7 +149,7 @@ declare <2 x i32> @llvm.haydn.x4cmul16.f2(<4 x i16>)
 declare <2 x i32> @llvm.haydn.x4cmul16s.f2(<4 x i16>)
 define dso_local i64 @test_x4cmul16_f2(i64 %a) {
 ; CHECK-LABEL: test_x4cmul16_f2:
-; CHECK: x4cmul16_f2
+; CHECK: x4cmul16.f2
   %bc.4 = bitcast i64 %a to <4 x i16>
   %call.5 = call <2 x i32> @llvm.haydn.x4cmul16.f2(<4 x i16> %bc.4)
   %r = bitcast <2 x i32> %call.5 to i64

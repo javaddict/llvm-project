@@ -92,7 +92,7 @@ body:             |
     ;
     ; PACK-LABEL: name: pack_csrw_with_alu
     ; PACK-DAG: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; PACK-DAG: $r4 = ADD32_S{{[012]}} {{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
+    ; PACK-DAG: $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
     ; PACK-NOT: SETCBR
     ; PACK-NOT: {{^    CSRW_W }}
     ; PACK-NOT: {{^    ADD32 }}
@@ -169,7 +169,7 @@ body:             |
     ; DIRECT-LABEL: name: direct_csrw_multi_mi
     ; One-SFR-writer law: CSRW and flag-writing ADD32 cannot co-issue.
     ; DIRECT: CSRW_W_S0 44, {{.*}}$r1, implicit-def {{(dead )?}}$sfr, implicit-def $cbr0
-    ; DIRECT-NEXT: $r4 = ADD32_S{{[012]}} {{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
+    ; DIRECT-NEXT: $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
     ; DIRECT-NOT: SETCBR
     ; DIRECT-NOT: {{^    CSRW_W }}
     CSRW_W 44, $r1, implicit-def dead $sfr, implicit-def $cbr0
