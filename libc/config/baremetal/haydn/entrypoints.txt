@@ -137,10 +137,11 @@ set(TARGET_LIBC_ENTRYPOINTS
     libc.src.stdio.fputc
     libc.src.stdio.fputs
     libc.src.stdio.fread
-    # fscanf: provided by BundleSim plat/stdio_extras.c (fgets+vsscanf).
-    # Baremetal StreamReader+raw_match(" ") mis-handles non-space lead-in on
-    # Haydn freestanding; plat override is the product path for torture.
-    # libc.src.stdio.fscanf
+    # fscanf comes from libc again: the plat/stdio_extras.c override was
+    # retired on the simulator side once the haydn line re-enabled this
+    # entrypoint, so a merged stack with it commented out linked nothing at
+    # all. The volatile-pushback guard in vfscanf_internal.h stays.
+    libc.src.stdio.fscanf
     libc.src.stdio.fwrite
     libc.src.stdio.getchar
     libc.src.stdio.printf

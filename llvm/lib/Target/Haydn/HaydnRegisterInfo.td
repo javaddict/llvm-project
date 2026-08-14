@@ -70,11 +70,13 @@ def D14 : HaydnReg<14, "d14">, DwarfRegNum<[30]>;
 def D15 : HaydnReg<15, "d15">, DwarfRegNum<[31]>;
 
 //===----------------------------------------------------------------------===//
-// AR: Aligned Registers (AR0–AR1) — 2×64-bit AGU residual streams
-// Architectural file is AR0/AR1 only. Encoding field ar_sel is still 2 bits on
-// the wire; product-visible selectors outside {0,1} stay fail-closed until
-// golden classifies unused codes (reserved / illegal / future).
-// DWARF 34–35 intentionally unused (retired compiler-visible AR2/AR3).
+// AR: Aligned Registers (AR0–AR3) — 4×64-bit AGU residual streams
+// Restored to the full 2-bit ar_sel domain (CB-149): the golden field is
+// 2 bits, BundleSim's semantic model executes int64_t ar[4], the NatureDSP
+// compat surface documents ar&=3, and this line's own pre-retirement Sema
+// tests expected [0, 3]. The interim AR0/AR1-only retirement was fail-closed
+// pending a golden classification of codes 2..3 that never arrived; the
+// execution oracle is the classification we have.
 //===----------------------------------------------------------------------===//
 
 class HaydnARReg<bits<2> Enc, string n> : Register<n> {
@@ -83,6 +85,8 @@ class HaydnARReg<bits<2> Enc, string n> : Register<n> {
 
 def AR0 : HaydnARReg<0, "ar0">, DwarfRegNum<[32]>;
 def AR1 : HaydnARReg<1, "ar1">, DwarfRegNum<[33]>;
+def AR2 : HaydnARReg<2, "ar2">, DwarfRegNum<[34]>;
+def AR3 : HaydnARReg<3, "ar3">, DwarfRegNum<[35]>;
 
 //===----------------------------------------------------------------------===//
 // Control/Special Registers
@@ -150,7 +154,7 @@ def DR64 : RegisterClass<"Haydn",
 // there is no AR spill. ISel pins AR0/AR1 as physregs (implicit defs). Peer:
 // AIE unspillable sparse classes, Hexagon CtrRegs, RISCV VCSR.
 def AR : RegisterClass<"Haydn",
-  [i64], 64, (add AR0, AR1)
+  [i64], 64, (add AR0, AR1, AR2, AR3)
 > {
   let isAllocatable = 0;
   let RegInfos = RegInfoByHwMode<

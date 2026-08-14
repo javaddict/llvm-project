@@ -188,22 +188,6 @@ public:
     }
   }
 
-  // Clamp executable input-section sh_addralign to the product-legal max
-  // (largest power-of-two divisor of EncodedBytes). Higher request alignments
-  // (e.g. residual objects with aligned(256) functions) would force LLD pads
-  // of size ≡ 4 or 8 (mod parcel) between input sections and break Format E
-  // parcel geometry. Defense-in-depth for hand asm / pre-clamp objects;
-  // CodeGen/AsmPrinter also refuse to emit those alignments.
-  void scanSection(InputSectionBase &sec) override {
-    if (sec.flags & SHF_EXECINSTR) {
-      const unsigned Parcel = productParcelEncodedBytes().Value;
-      const uint32_t MaxPow2Align = 1u << llvm::countr_zero(Parcel);
-      if (sec.addralign > MaxPow2Align)
-        sec.addralign = MaxPow2Align;
-    }
-    TargetInfo::scanSection(sec);
-  }
-
   void relocate(uint8_t *loc, const Relocation &rel,
                 uint64_t val) const override {
     RelType type = rel.type;

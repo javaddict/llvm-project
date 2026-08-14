@@ -905,8 +905,21 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .minScalar(0, S32)
       .maxScalar(0, S64);
 
-  // G_FREEZE is a no-op — always legal for any type.
-  getActionDefinitionsBuilder(G_FREEZE).alwaysLegal();
+  // G_FREEZE narrows with its type before it is anything else. It was
+  // `alwaysLegal()`, which let a <16 x s32> exist as a VALUE — and nothing
+  // else in the target can hold one, so every consumer narrowed it locally
+  // and something re-merged the pieces to feed the next consumer. That is a
+  // loop the legalizer has no reason to leave: gcc-c-torture pr28982a/b at
+  // -O2 reached 356505 legalizations and register numbers past %300000
+  // without finishing, and clang hung. The wide vector has to stop existing
+  // at its PRODUCER — chasing it at the consumers does not converge.
+  //
+  // No S1 clamp: one element is not a smaller vector (CB-130).
+  getActionDefinitionsBuilder(G_FREEZE)
+      .clampMaxNumElements(0, S32, 2)
+      .clampMaxNumElements(0, S16, 4)
+      .clampMaxNumElements(0, S8, 8)
+      .alwaysLegal();
 
   // 1 type idx, 1 imm idx (scale/width)
   getActionDefinitionsBuilder({
@@ -1048,23 +1061,56 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // G_EXTRACT_VECTOR_ELT: custom for v2i32 and v4i16.
   // Expanded in legalizeCustom to G_UNMERGE_VALUES + optional shift.
   getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
+      // A vector of i1 has no representation at all, and the generic lowering
+      // cannot help: with a variable index it spills the vector to the stack,
+      // and lowerExtractInsertVectorElt gives up on an element that is not
+      // byte-sized. So `extractelement <2 x i1> %c, i32 %i` reported "unable
+      // to legalize" (CB-144) — reachable from ordinary C, since a vector
+      // icmp feeding a variable-indexed read is all it takes.
+      //
+      // Widening the RESULT is enough. widenScalar on type index 0 anyexts
+      // the source vector's elements to match and truncates the result back,
+      // so the whole thing becomes an s32 extract from a <N x s32> — a shape
+      // the rules below already handle — and the i1 disappears before
+      // anything has to represent it. No S1 clamp on the source: one element
+      // is not a smaller vector (CB-130), and after the widen no <N x s1>
+      // survives to need it.
+      .widenScalarIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0] == S1 && Query.Types[1].isFixedVector() &&
+                   Query.Types[1].getElementType() == S1;
+          },
+          [=](const LegalityQuery &Query) {
+            (void)Query;
+            return std::make_pair(0, S32);
+          })
       .customFor({{S32, V2I32}, {S16, V4I16}})
       // Residual SLP: fewer-elements on the source vector first so generic
       // lower does not unmerge a v16 and re-create extracts (legalizer hang).
       .clampMaxNumElements(1, S32, 2)
       .clampMaxNumElements(1, S16, 4)
       .clampMaxNumElements(1, S8, 8)
-      .clampMaxNumElements(1, S1, 1)
       .lower();
 
   // G_INSERT_VECTOR_ELT: custom for v2i32 and v4i16.
   // Expanded in legalizeCustom to G_UNMERGE_VALUES + shift/mask/merge.
   getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+      // Same as the extract above: widen the element type out of i1 first.
+      // Type index 0 is the RESULT VECTOR here, so widening it carries the
+      // source vector and the inserted value with it.
+      .widenScalarIf(
+          [=](const LegalityQuery &Query) {
+            return Query.Types[0].isFixedVector() &&
+                   Query.Types[0].getElementType() == S1;
+          },
+          [=](const LegalityQuery &Query) {
+            return std::make_pair(
+                0, LLT::fixed_vector(Query.Types[0].getNumElements(), S32));
+          })
       .customFor({{V2I32, S32}, {V4I16, S16}})
       .clampMaxNumElements(0, S32, 2)
       .clampMaxNumElements(0, S16, 4)
       .clampMaxNumElements(0, S8, 8)
-      .clampMaxNumElements(0, S1, 1)
       .lower();
 
   //===--------------------------------------------------------------------===

@@ -1,5 +1,6 @@
 # RUN: %python %S/../../../lib/Target/Haydn/FormatE/generate_format_e_records.py --check
 # REQUIRES: haydn-registered-target
+# REQUIRES: haydn-golden-canonical
 #
 # REGRESSION TEST: T-TII2 / R1 — importer --check is the A0 fail-closed gate
 # for generated Format E records, XLSX↔JSON layout parity, and the canonical-
