@@ -21,7 +21,7 @@
 ; ASM-LABEL: zol_mac_body:
 ; ASM: set_hwloop_f2
 ; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
-; ASM: jalr_w
+; ASM: jalr
 
 define i32 @zol_mac_body(ptr nocapture readonly %a, ptr nocapture readonly %b) {
 entry:

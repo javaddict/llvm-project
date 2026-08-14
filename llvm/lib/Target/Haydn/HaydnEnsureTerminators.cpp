@@ -20,7 +20,9 @@
 //
 // Placement: addPostRegAlloc (pre-PEI) so invented RET can receive
 // prologue/epilogue. FrameLowering may also plant RET on empty entry as a
-// belt; this pass is the invariant enforcer.
+// belt; this pass is the invariant enforcer. Runs for optnone and every other
+// function (no skipFunction) so mid-function unreachable arms cannot fall
+// through into the next symbol after PEI.
 //
 //===----------------------------------------------------------------------===//
 
@@ -58,8 +60,12 @@ void HaydnEnsureTerminators::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool HaydnEnsureTerminators::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
-    return false;
+  // Correctness path: never call skipFunction. Generic PostMachineScheduler
+  // may still quality-skip optnone (no reorder); dead-end terminator insertion
+  // is target-local ownership that must run for every function so PEI can
+  // attach epilogues and product emission never falls through empty MBBs into
+  // the next symbol. Never change generic skipFunction semantics for quality
+  // passes.
 
   const HaydnInstrInfo *TII =
       MF.getSubtarget<HaydnSubtarget>().getInstrInfo();

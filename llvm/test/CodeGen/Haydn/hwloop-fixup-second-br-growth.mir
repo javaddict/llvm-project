@@ -29,6 +29,10 @@
 #   Same setup gap + three mid-block JAL_W (isCall, long-reach; not still-
 #   relaxable short BR subjects). Off1 still holds and growth budget is zero
 #   → SET retained (no false demote on non-relaxable control).
+#
+# keep_soft_exit_after_ple:
+#   Role-A latch keeps PseudoLoopEnd + soft-exit B after END. Post-PLE B is
+#   past HWLR_END and must not charge EndGrowth (no false demote).
 
 --- |
   define dso_local void @growth_budget_demote(ptr nocapture writeonly %out) {
@@ -75,6 +79,16 @@
     ret void
   }
 
+  define dso_local void @keep_soft_exit_after_ple(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
 ...
 ---
 name:            growth_budget_demote
@@ -82,14 +96,14 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   ; PRODUCT-LABEL: name: growth_budget_demote
-  ; PRODUCT-NOT: SET_HWLOOP
+  ; PRODUCT-NOT: SET_HWLOOP_W
   ; PRODUCT: ADDI32_W
   ; PRODUCT: SUBI32
   ; PRODUCT: BNEZ_W
   ; PRODUCT: RET
   ;
   ; DEBUGOFF-LABEL: name: growth_budget_demote
-  ; DEBUGOFF-NOT: SET_HWLOOP
+  ; DEBUGOFF-NOT: SET_HWLOOP_W
   ; DEBUGOFF-NOT: SUBI32
   ; DEBUGOFF-NOT: BNEZ_W
   ; DEBUGOFF: RET
@@ -100,7 +114,7 @@ body:             |
     $r0 = frame-setup XOR32 $r0, $r0
     ; Imm trip; header==latch is %bb.4. Two following NOPs =
     ; InterveningCycles, plus pad so StartOff leaves BeginMargin < 3×48.
-    SET_HWLOOP 0, %bb.4, %bb.4, 8
+    SET_HWLOOP_W 0, %bb.4, %bb.4, 8, implicit-def dead $sfr
     NOP
     NOP
     NOP
@@ -151,7 +165,7 @@ body:             |
   ; CHECK-NEXT:   liveins: $r1, $r0, $r15
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
-  ; CHECK-NEXT:   SET_HWLOOP_W 0, %bb.2, %bb.2, 8
+  ; CHECK-NEXT:   SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
   ; CHECK-NEXT:   NOP
   ; CHECK-NEXT:   NOP
   ; CHECK-NEXT: {{  $}}
@@ -179,7 +193,7 @@ body:             |
     successors: %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0
-    SET_HWLOOP 0, %bb.2, %bb.2, 8
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
     NOP
     NOP
 
@@ -214,7 +228,7 @@ body:             |
   ; CHECK-NEXT:   liveins: $r1, $r0, $r15
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
-  ; CHECK-NEXT:   SET_HWLOOP_W 0, %bb.4, %bb.4, 8
+  ; CHECK-NEXT:   SET_HWLOOP_W 0, %bb.4, %bb.4, 8, implicit-def dead $sfr
   ; CHECK-NEXT:   NOP
   ; CHECK-NEXT:   NOP
   ; CHECK-NEXT: {{  $}}
@@ -254,7 +268,7 @@ body:             |
     successors: %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0
-    SET_HWLOOP 0, %bb.4, %bb.4, 8
+    SET_HWLOOP_W 0, %bb.4, %bb.4, 8, implicit-def dead $sfr
     NOP
     NOP
 
@@ -287,3 +301,39 @@ body:             |
     liveins: $r15
     RET implicit killed $r15
 
+...
+---
+name:            keep_soft_exit_after_ple
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; CHECK-LABEL: name: keep_soft_exit_after_ple
+  ; CHECK: SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+  ; CHECK-NOT: SUBI32
+  ; CHECK-NOT: BNEZ_W
+  ; CHECK: PseudoLoopEnd %bb.1
+  ; CHECK: B %bb.2
+  ; CHECK: RET
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+
+  ; Role-A latch: body work + PLE + soft-exit B past END. Post-PLE B must not
+  ; charge EndGrowth (HWLR_END is the last body cycle before PLE).
+  bb.1.body:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1, %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    PseudoLoopEnd %bb.1
+    B %bb.2
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15

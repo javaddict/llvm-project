@@ -1,0 +1,361 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/trip_r0.mir -o - 2>&1 | FileCheck %s --check-prefix=TRIP
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/body_with_call.mir -o - 2>&1 | FileCheck %s --check-prefix=CALL
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/multi_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=MEXIT
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/nested_setup.mir -o - 2>&1 | FileCheck %s --check-prefix=NEST
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/multi_ple.mir -o - 2>&1 | FileCheck %s --check-prefix=MPLE
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/missing_self_edge.mir -o - 2>&1 | FileCheck %s --check-prefix=SELF
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/missing_ple.mir -o - 2>&1 | FileCheck %s --check-prefix=NOPLE
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/non_successor_body.mir -o - 2>&1 | FileCheck %s --check-prefix=NSUCC
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/incomplete_operands.mir -o - 2>&1 | FileCheck %s --check-prefix=OPS
+
+# Role: MIR — incomplete Role-A retained seats reject fail-closed before mutation.
+# Covers trip reg / call / multi-exit / nested setup / multi-PLE / missing
+# self-edge / missing PLE / non-successor layout invent (successor-only body).
+
+# TRIP: incomplete Role-A retained state rejected before mutation
+# TRIP: trip reg not a physical GPR
+# CALL: body contains call/indirect/return
+# MEXIT: body must have exactly one non-self exit
+# NEST: body contains nested LoopStart/SET_HWLOOP
+# MPLE: body must carry exactly one PseudoLoopEnd
+# SELF: body missing self back-edge
+# NOPLE: no body MBB
+# NSUCC: no body MBB
+# OPS: incomplete LoopStart operands
+
+#--- trip_r0.mir
+--- |
+  define dso_local void @trip_r0(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            trip_r0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    LoopStart $r0, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r0, $r15
+    ST32 $r0, $r1, 0
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- body_with_call.mir
+--- |
+  define dso_local void @body_with_call(ptr %p) {
+  entry:
+    br label %body
+  body:
+    call void @ext(ptr %p)
+    br label %exit
+  exit:
+    ret void
+  }
+  declare void @ext(ptr)
+...
+---
+name:            body_with_call
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    $r15 = JAL_W @ext, csr_haydn, implicit-def $r1, implicit $r1, implicit-def $r15
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- multi_exit.mir
+--- |
+  define dso_local void @multi_exit(ptr %p, i32 %c) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br i1 undef, label %exit, label %alt
+  exit:
+    ret void
+  alt:
+    ret void
+  }
+...
+---
+name:            multi_exit
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2, %bb.3
+    liveins: $r1, $r2, $r15
+    ST32 $r0, $r1, 0
+    BNEZ_W $r2, %bb.3
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+  bb.3.alt:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- nested_setup.mir
+--- |
+  define dso_local void @nested_setup(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            nested_setup
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ST32 $r0, $r1, 0
+    LoopStart $r2, 0
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- multi_ple.mir
+--- |
+  define dso_local void @multi_ple(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            multi_ple
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    ST32 $r0, $r1, 0
+    PseudoLoopEnd %bb.1
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- missing_self_edge.mir
+--- |
+  define dso_local void @missing_self_edge(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            missing_self_edge
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.2
+    liveins: $r1, $r15
+    ST32 $r0, $r1, 0
+    PseudoLoopEnd %bb.2
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- missing_ple.mir
+--- |
+  define dso_local void @missing_ple(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            missing_ple
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1
+    liveins: $r1, $r15
+    ST32 $r0, $r1, 0
+    B %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- non_successor_body.mir
+# Layout-order next MBB carries PLE but is NOT a CFG successor of the
+# preheader. Successor-only resolution must not invent that body.
+--- |
+  define dso_local void @non_successor_body(ptr %p) {
+  entry:
+    br label %exit
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            non_successor_body
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.2
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+    B %bb.2
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    ST32 $r0, $r1, 0
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- incomplete_operands.mir
+--- |
+  define dso_local void @incomplete_operands(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            incomplete_operands
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    ; Deliberately incomplete retained seat: adj not an immediate.
+    LoopStart $r2, %bb.1
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    ST32 $r0, $r1, 0
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15

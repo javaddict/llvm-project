@@ -73,7 +73,7 @@ define void @fir_xcorr32x32_circular(ptr noalias %r, i32 %xbase,
 ; CHECK-NO-LIBCALL-NOT: __udivsi3
 ; CHECK-NO-LIBCALL-NOT: __divsi3
 ; CHECK-NO-LIBCALL-NOT: __muldi3
-; Hwloop forms on this circular CB-intrinsic FIR path (set_hwloop_f2_w).
+; Hwloop forms on this circular CB-intrinsic FIR path (set_hwloop_f2).
 ; CHECK-HWLOOP: set_hwloop
 
 entry:

@@ -80,10 +80,16 @@
 //     hardware form only when residual Off1/Off2 margins cover both sums.
 //     The second BranchRelaxation must not invalidate that acceptance.
 //
-// Pipeline (no free AT invent; no multi-BB convert invent):
-//   Role A IR prefer; expand LoopStart→SET before post-RA pack; Role B residual
-//   opt-in; Fixup: intervening pad → order-preserving shorten → demote-first
-//   final-real SUBI32/BNEZ_W.
+// Pipeline (no free AT invent; no ad hoc multi-BB conversion):
+//   SCEV-proven IR + retained LoopStart→SET expansion before post-RA pack only;
+//   incomplete retained seats reject fail-closed before mutation (fatal);
+//   post-RA semantic rediscovery helpers stay deleted; multi-BB is a separate
+//   SCEV/CFG extension. Multi-stage SMS is an active target and qualifies first
+//   with hardware loops OFF; their combined interaction qualifies afterward.
+//   Formation owns software-loop demotion (encodability or soft edge before
+//   layout lock-in). Fixup: intervening pad → order-preserving shorten →
+//   range recheck; residual generic setup fatals; late range may still call
+//   the formation demote helper for already-committed wide forms.
 //
 //===----------------------------------------------------------------------===//
 
@@ -121,12 +127,21 @@ static_assert(ProductParcelBytes > 0,
 inline constexpr unsigned Offset1Bits = 6;  // uimm6 → START
 inline constexpr unsigned Offset2Bits = 12; // uimm12 → END
 
-// Max forward PC-relative distances in bytes (field × 4). Displacement scale
-// is <<2 (byte distance must be divisible by 4); not absolute Align(4).
+// Displacement scale for Off1/Off2 immediates: field encodes (byte_delta >> 2).
+// Byte distance must be divisible by DisplacementScale. Absolute target
+// alignment remains the 2-byte bundle minimum — not absolute Align(4).
+inline constexpr int64_t DisplacementScale = 4; // <<2
+
+// Max forward PC-relative distances in bytes (field × DisplacementScale).
 inline constexpr int64_t MaxStartOffsetBytes =
-    ((static_cast<int64_t>(1) << Offset1Bits) - 1) * 4; // 252
+    ((static_cast<int64_t>(1) << Offset1Bits) - 1) * DisplacementScale; // 252
 inline constexpr int64_t MaxEndOffsetBytes =
-    ((static_cast<int64_t>(1) << Offset2Bits) - 1) * 4; // 16380
+    ((static_cast<int64_t>(1) << Offset2Bits) - 1) * DisplacementScale; // 16380
+
+static_assert(DisplacementScale == 4, "SET_HWLOOP off scale is <<2");
+static_assert(MaxStartOffsetBytes % DisplacementScale == 0 &&
+                  MaxEndOffsetBytes % DisplacementScale == 0,
+              "offset ceilings must be scale-aligned");
 
 // Safety margin so Fixup's size estimate does not pass a value that AsmPrinter
 // later rejects (label placement, late bundles). Prefer demote over MC fail.
@@ -265,6 +280,93 @@ static_assert(MinBodySpanBytes ==
                   static_cast<int64_t>(MinBodyBundles - 1) * ProductParcelBytes,
               "MinBodySpanBytes = (MinBodyBundles-1) × product parcel");
 static_assert(MinCount == 1, "activated COUNT must be >= 1");
+
+//===----------------------------------------------------------------------===//
+// Product selector domain (retained-state path)
+//===----------------------------------------------------------------------===//
+//
+// SET_HWLOOP carries a selector that names which HWLR slot is programmed.
+// Only sel in {0,1} is available on the product retained-state path:
+//   * InnermostProductSelector (= 1): preferred for single-BB ZOL expand
+//   * OuterProductSelector     (= 0): reserved-no-consumer product seat
+// Values outside this domain stay unavailable and fail-closed at expand/fixup
+// (never invent extra CSR/selector identities). Multi-block formation is a
+// separate SCEV/CFG extension and does not widen the selector domain.
+//===----------------------------------------------------------------------===//
+
+/// Inclusive product selector range. Only these values may arm SET_HWLOOP.
+inline constexpr int64_t ProductSelectorMin = 0;
+inline constexpr int64_t ProductSelectorMax = 1;
+
+/// Preferred selector for innermost single-BB Role-A expand.
+inline constexpr int64_t InnermostProductSelector = 1;
+
+/// Reserved-no-consumer product selector 0. Not a nesting free-list companion;
+/// no live consumer. Innermost expand arms selector 1 only.
+inline constexpr int64_t OuterProductSelector = 0;
+
+/// True iff Sel is in the product selector domain {0,1}.
+inline constexpr bool isProductSelector(int64_t Sel) {
+  return Sel >= ProductSelectorMin && Sel <= ProductSelectorMax;
+}
+
+static_assert(isProductSelector(InnermostProductSelector),
+              "innermost product selector must be in domain");
+static_assert(isProductSelector(OuterProductSelector),
+              "outer product selector must be in domain");
+static_assert(!isProductSelector(2) && !isProductSelector(3) &&
+                  !isProductSelector(-1),
+              "out-of-domain selectors stay unavailable");
+
+//===----------------------------------------------------------------------===//
+// Product CSR / relocation / COUNT fail-closed helpers
+//===----------------------------------------------------------------------===//
+//
+// Product programs HWLR state only through SET_HWLOOP with a product selector.
+// Free CSR-address invent for HWLR_BEGIN/END/COUNT is unavailable and must
+// never be emitted by the retained-state path. Displacement bytes that are not
+// divisible by DisplacementScale, or that exceed field ceilings, demote /
+// reject fail-closed rather than inventing an alternate encoding.
+//===----------------------------------------------------------------------===//
+
+/// True iff \p OffBytes is a non-negative, scale-aligned displacement that
+/// fits in a uimm\p FieldBits field after >>2.
+inline constexpr bool isEncodableDisplacement(int64_t OffBytes,
+                                              unsigned FieldBits) {
+  if (OffBytes < 0 || DisplacementScale <= 0)
+    return false;
+  if ((OffBytes % DisplacementScale) != 0)
+    return false;
+  const int64_t Max =
+      ((static_cast<int64_t>(1) << FieldBits) - 1) * DisplacementScale;
+  return OffBytes <= Max;
+}
+
+/// True iff START/END displacements are both encodable under Off1/Off2 law.
+inline constexpr bool offsetsMeetImmRelocLaw(int64_t StartOff, int64_t EndOff) {
+  return isEncodableDisplacement(StartOff, Offset1Bits) &&
+         isEncodableDisplacement(EndOff, Offset2Bits);
+}
+
+/// True iff a statically known COUNT may activate a hardware loop.
+inline constexpr bool countMeetsMinLaw(int64_t Count) {
+  return Count >= static_cast<int64_t>(MinCount);
+}
+
+static_assert(isEncodableDisplacement(0, Offset1Bits),
+              "zero START displacement is encodable");
+static_assert(isEncodableDisplacement(MaxStartOffsetBytes, Offset1Bits),
+              "max START displacement is encodable");
+static_assert(!isEncodableDisplacement(1, Offset1Bits),
+              "non-scale START displacement stays unavailable");
+static_assert(!isEncodableDisplacement(MaxStartOffsetBytes + DisplacementScale,
+                                        Offset1Bits),
+              "over-max START displacement stays unavailable");
+static_assert(offsetsMeetImmRelocLaw(MinSetupBytes,
+                                     MinSetupBytes + MinBodySpanBytes),
+              "min legal geometry must meet reloc law");
+static_assert(countMeetsMinLaw(MinCount) && !countMeetsMinLaw(0),
+              "COUNT floor is MinCount");
 
 /// Inclusive body parcel count from StartOff/EndOff (END = last cycle start).
 /// Returns 0 if offsets are unordered or unaligned to the product parcel.

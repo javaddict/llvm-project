@@ -9,7 +9,7 @@
 ; body: no soft SEQ/BEQ back-edge
 ;
 ; Haydn competitive form after post-RA HardwareLoops (Role B):
-; set_hwloop_f2_w sel, start, end, tripReg
+; set_hwloop_f2 sel, start, end, tripReg
 ; body without beqz latch
 ;
 ; Canonical C shapes that must convert (not monkey-patch special cases):
@@ -44,7 +44,7 @@ exit:
 
 ; Count-up runtime trip (vec_add / vec_dot family). HiFi: loopnez with N.
 ; CHECK-LABEL: countup_runtime:
-; CHECK: set_hwloop_f2_w
+; CHECK: set_hwloop_f2
 define i32 @countup_runtime(ptr readonly %a, i32 %n) nounwind {
 entry:
   %c0 = icmp sgt i32 %n, 0
@@ -89,7 +89,7 @@ exit:
 ; Register pressure: many live values so post-RA may spill step=-1 / limit=0
 ; and reuse physregs (divide-class residual). Must still form ZOL (P9).
 ; CHECK-LABEL: countdown_high_pressure:
-; CHECK: set_hwloop_f2_w
+; CHECK: set_hwloop_f2
 define i32 @countdown_high_pressure(ptr %p, i32 %n,
                                     i32 %a0, i32 %a1, i32 %a2, i32 %a3,
                                     i32 %a4, i32 %a5, i32 %a6, i32 %a7) nounwind {

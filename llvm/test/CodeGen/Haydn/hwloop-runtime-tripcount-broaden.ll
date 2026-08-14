@@ -7,7 +7,7 @@
 ;
 ; HiFi contract: trip is a preheader fact then ZOL. Pre-RA HardwareLoops
 ; converts the dominant count-up init=0 bump=1 form today. Other Cases are
-; covered post-RA by hwloop-hifi-oracle-countdown.ll (O2 asm set_hwloop_f2_w).
+; covered post-RA by hwloop-hifi-oracle-countdown.ll (O2 asm set_hwloop_f2).
 ;
 ; Do not pin ADDI32 vs ADDI32_W or physreg numbers.
 

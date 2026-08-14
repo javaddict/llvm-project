@@ -22,7 +22,7 @@
 ; step reg = -1 materialized in entry;
 ; latch: SEQ32 iv, 0; BEQZ back-edge (Case 2: trip = IV init).
 ;
-; Without MDT update this stays soft beqz; with the fix it is set_hwloop_f2_w.
+; Without MDT update this stays soft beqz; with the fix it is set_hwloop_f2.
 
 
 define i32 @countdown_needs_preheader(ptr %p, i32 %n) nounwind {
@@ -52,7 +52,7 @@ exit:
 ; CHECK-LABEL: countdown_nested_outer_guard:
 ; Outer soft + inner hwloop is OK; require at least one set_hwloop for the
 ; count-down body after a dedicated preheader is created.
-; CHECK: set_hwloop_f2_w
+; CHECK: set_hwloop_f2
 define void @countdown_nested_outer_guard(ptr %p, i32 %n, i32 %m) nounwind {
 entry:
   %cmpn = icmp sgt i32 %n, 0

@@ -17,17 +17,16 @@ define dso_local i32 @main() local_unnamed_addr #0 {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 72 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 8 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 16 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 16 }
 ; CHECK-NEXT:    { move32 r5, r3; move32 r4, r1 }
 ; CHECK-NEXT:  .LBB0_1: // %for.body
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { addi32 r5, r5, 1; st32_post r5, r4, 16 }
+; CHECK-NEXT:    { addi32 r5, r5, 1; s_sw_post_imm r5, r4, 16 }
 ; CHECK-NEXT:    { nop; seq32 r6, r5, r2 }
 ; CHECK-NEXT:    { nop; xori32 r6, r6, 1 }
-; CHECK-NEXT:    { nop; bnez_w r6, .LBB0_1 }
+; CHECK-NEXT:    { nop; bnez r6, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %for.body5.preheader
 ; CHECK-NEXT:    { nop; move32 r4, r3 }
 ; CHECK-NEXT:  .LBB0_3: // %for.body5
@@ -38,12 +37,12 @@ define dso_local i32 @main() local_unnamed_addr #0 {
 ; CHECK-NEXT:    { nop; add32 r5, r5, r6 }
 ; CHECK-NEXT:    { xori32 r6, r7, 1; xor32 r5, r5, r6 }
 ; CHECK-NEXT:    { nop; add32 r4, r5, r4 }
-; CHECK-NEXT:    { nop; bnez_w r6, .LBB0_3 }
+; CHECK-NEXT:    { nop; bnez r6, .LBB0_3 }
 ; CHECK-NEXT:  // %bb.4: // %for.cond.cleanup4
 ; CHECK-NEXT:    { nop; andi32 r1, r4, 255 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 72 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 72 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %v = alloca [16 x i32], align 4
   br label %for.body

@@ -24,17 +24,18 @@
 // demote / fatal over wrong trip at SET (CoreMark MEMORY_FAULT @ post-inc).
 //
 // Product narrative: demote-first, NOT erase-only.
-// Role B already removed the software back-edge when forming ZOL. Erasing
-// SET alone on a *live* body yields a once-through fallthrough (wrong-code).
+// Generic HardwareLoops + Role A expand (HaydnHardwareLoops) already replaced
+// the software back-edge with LoopStart/PseudoLoopEnd. Erasing SET alone on a
+// *live* body yields a once-through fallthrough (wrong-code).
 // Product recovery is final-real SUBI32+BNEZ_W when a free counter exists;
 // live demote failure is fatal. demote OFF is debug-only (force erase-setup).
 //
 // Scheduling-unit / layout contracts:
 // • Bundle-preserving: never unconditional SET unbundle; erase SET member only.
 // • Final-real demotion (no residual LoopDec/LoopJNZ after late commit).
-// • Residual generic SET_HWLOOP{,_REG} rewrite to SET_HWLOOP_{W,F2_W} before
-//   keep/pad/shorten so second BR / late commit never see cycle-forming
-//   setup pseudos (ExpandPseudos peer; defense when MIR tests inject generics).
+// • Residual generic SET_HWLOOP{,_REG} is fatal. ExpandPseudos owns the
+//   rewrite to SET_HWLOOP_{W,F2_W}; Fixup is Hexagon-style range recheck /
+//   pad / fatal only (HexagonFixupHwLoops.cpp:75-81, 136-148).
 // • Sum still-relaxable branch growth in SET→BEGIN/SET→END vs Off margins.
 // • Every Fixup-created real MI (deficit NOP pads, demote trip materialize,
 //   stack-counter LD/ST glue, SUBI32+BNEZ_W soft edge, exit B) uses the shared
@@ -69,8 +70,9 @@
 // • CountReg = trip Prefer if body does not non-countdown-def it;
 // else scavenge a reg not mentioned in any loop block.
 // • Materialize trip into CountReg at the SET site when needed.
-// • Strip residual countdown of CountReg from the latch (Role B
-// leftover Prefer+=-1), then always install SUBI32+BNEZ_W.
+// • Strip residual countdown of CountReg from the latch (generic
+// HardwareLoops LoopDec / leftover Prefer+=-1 that Role A expand does
+// not consume), then always install SUBI32+BNEZ_W.
 // Never BNEZ-only, never double-dec.
 // • SET_HWLOOP imm: materialize into a free reg via ADDI, then
 // SUBI32+BNEZ_W.
@@ -121,7 +123,8 @@ using namespace llvm;
 
 // Product demote policy: default ON — demote-first, not erase-only.
 // Out-of-range / unencodable SET must not drop control and leave a single-pass
-// body (Role B already removed the software back-edge). Recovery ladder:
+// body (generic HardwareLoops + Role A expand already replaced the software
+// back-edge). Recovery ladder:
 // a) demoteToSoftwareLoop (final-real SUBI32+BNEZ_W) when free counter exists
 // b) Header/Latch dead → erase-setup only is OK (body gone)
 // c) live body but demote cannot install soft edge → report_fatal_error
@@ -212,10 +215,11 @@ private:
   // move, etc.). Pure residual countdown (Reg+=-1 / Reg-=1) is allowed.
   static bool regClobberedNonCountdownIn(Register Reg,
                                          const LoopBlockSet &Blocks);
-  // True if \p MI is a residual countdown step of \p Reg (Role B leftover).
+  // True if \p MI is a residual countdown step of \p Reg (generic
+  // HardwareLoops LoopDec or leftover Prefer+=-1).
   static bool isCountdownStepOf(const MachineInstr &MI, Register Reg);
-  // Erase residual countdown steps of \p Reg from \p Latch (so LoopDec is
-  // the sole dec). Walk instrs for BUNDLE interiors.
+  // Erase residual countdown steps of \p Reg from \p Latch so demote's
+  // SUBI32+BNEZ_W is the sole decrement. Walk instrs for BUNDLE interiors.
   static void stripResidualCountdown(MachineBasicBlock *Latch, Register Reg);
 
   // Pick a free GPR for soft-loop countdown at \p InsertPt in \p Preheader.
@@ -296,31 +300,6 @@ FunctionPass *llvm::createHaydnFixupHwLoopsPass() {
 // Formation pads (HaydnHardwareLoops, pre-pack) stay bare logical NOPs so the
 // post-RA pack owns the first commit. Fixup is post-pack / PreEmit only and
 // must not leave residual bare real MIs for the firewall to invent.
-//
-// Residual generic setup forms → final wide forms (ExpandPseudos peer).
-// Operand structure is identical (sel + 2×brtarget + cnt/rs). Do not invent
-// REG_W / member opcodes here — pack setDesc owns placement members.
-static bool normalizeResidualSetupToFinalWide(MachineInstr &SetMI,
-                                              const HaydnInstrInfo &TII) {
-  switch (SetMI.getOpcode()) {
-  case Haydn::SET_HWLOOP:
-    assert(SetMI.getNumOperands() >= 4 && SetMI.getOperand(0).isImm() &&
-           SetMI.getOperand(1).isMBB() && SetMI.getOperand(2).isMBB() &&
-           SetMI.getOperand(3).isImm() &&
-           "SET_HWLOOP shape: sel, start, end, cnt");
-    SetMI.setDesc(TII.get(Haydn::SET_HWLOOP_W));
-    return true;
-  case Haydn::SET_HWLOOP_REG:
-    assert(SetMI.getNumOperands() >= 4 && SetMI.getOperand(0).isImm() &&
-           SetMI.getOperand(1).isMBB() && SetMI.getOperand(2).isMBB() &&
-           SetMI.getOperand(3).isReg() &&
-           "SET_HWLOOP_REG shape: sel, start, end, rs");
-    SetMI.setDesc(TII.get(Haydn::SET_HWLOOP_F2_W));
-    return true;
-  default:
-    return false;
-  }
-}
 
 // Shared exact-late surface lives in HaydnBundleMaterialize.h
 // (lateProductMemberOpcode / finalizeExactLateSingleton). Fixup pads and
@@ -1357,10 +1336,9 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
         if (MI.isBundle())
           continue;
         unsigned Opc = MI.getOpcode();
-        if (Opc == Haydn::NOP || Opc == Haydn::LUI || Opc == Haydn::LUI_S0 ||
-            Opc == Haydn::ADDI32_W || Opc == Haydn::ADDI32_W_S0 ||
-            Opc == Haydn::JALR_W || Opc == Haydn::JALR_W_S0 ||
-            Opc == Haydn::JALR || Opc == Haydn::B)
+        const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(Opc);
+        if (Log == Haydn::NOP || Log == Haydn::LUI || Log == Haydn::ADDI32_W ||
+            Log == Haydn::JALR_W || Log == Haydn::JALR || Log == Haydn::B)
           continue;
         // Real work — not a trampoline.
         return false;
@@ -1562,7 +1540,8 @@ bool HaydnFixupHwLoops::demoteToSoftwareLoop(MachineInstr &SetMI,
   }
 
   // Strip residual countdown of CountReg *before* erasing SET / rewriting
-  // latch, while Latch is still intact. (Role B leaves Prefer+=-1.)
+  // latch, while Latch is still intact. Generic HardwareLoops may leave
+  // LoopDec / Prefer+=-1; Role A expand does not consume them.
   if (!UseStackCounter)
     stripResidualCountdown(Latch, CountReg);
   else if (Prefer.isPhysical())
@@ -1716,27 +1695,37 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   // topLevelForLayout) walk around BUNDLE interiors; eraseHardwareSetup
   // removes only the SET member via eraseInstrSafe.
 
-  // Final wide forms before keep/pad/shorten (ExpandPseudos peer). Safe when
-  // SET is mid-bundle: setDesc only; no membership change.
-  if (normalizeResidualSetupToFinalWide(SetMI, TII))
-    Changed = true;
-
   // Dead body / stale MBB operands (contract §1)
   // SET_HWLOOP with %bb.-1: body was erased after convert. Erase setup only.
+  // Product selector domain is {0,1}: out-of-domain sel stays unavailable and
+  // demotes/erases fail-closed (never invent extra CSR/selector identities).
   {
     unsigned Opc = SetMI.getOpcode();
     if (TII.isHardwareLoopSetupOpcode(Opc) && Opc != Haydn::LoopStart) {
-      if (SetMI.getNumOperands() >= 3 && SetMI.getOperand(1).isMBB() &&
-          SetMI.getOperand(2).isMBB()) {
-        MachineBasicBlock *H = SetMI.getOperand(1).getMBB();
-        MachineBasicBlock *L = SetMI.getOperand(2).getMBB();
-        if (!isLiveMBB(MF, H) || !isLiveMBB(MF, L)) {
-          LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: stale Header/Latch "
-                               "(%bb.-1 or foreign) — erase SET only\n");
-          return eraseHardwareSetup(SetMI);
-        }
-      } else {
+      if (SetMI.getNumOperands() < 4 || !SetMI.getOperand(0).isImm() ||
+          !SetMI.getOperand(1).isMBB() || !SetMI.getOperand(2).isMBB()) {
         // Malformed SET — erase rather than emit.
+        return eraseHardwareSetup(SetMI);
+      }
+      const int64_t Sel = SetMI.getOperand(0).getImm();
+      if (!haydn::hwloop::isProductSelector(Sel)) {
+        LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: out-of-domain selector "
+                          << Sel << " — demote-first / erase fail-closed\n");
+        if (EnableHaydnHwLoopDemote) {
+          if (demoteToSoftwareLoop(SetMI, TII))
+            return true;
+          report_fatal_error(
+              "HaydnFixupHwLoops: unsupported SET_HWLOOP selector cannot "
+              "demote to software loop; refusing erase-only once-through",
+              /*gen_crash_diag=*/false);
+        }
+        return eraseHardwareSetup(SetMI);
+      }
+      MachineBasicBlock *H = SetMI.getOperand(1).getMBB();
+      MachineBasicBlock *L = SetMI.getOperand(2).getMBB();
+      if (!isLiveMBB(MF, H) || !isLiveMBB(MF, L)) {
+        LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: stale Header/Latch "
+                             "(%bb.-1 or foreign) — erase SET only\n");
         return eraseHardwareSetup(SetMI);
       }
     } else if (Opc == Haydn::LoopStart) {
@@ -1868,6 +1857,10 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
       return true;
     if (EndOff > MaxOff2Bytes)
       return true;
+    // Reloc law: Off1/Off2 encode byte_delta >> 2. Non-scale or over-field
+    // distances stay unavailable and demote fail-closed (no invent).
+    if (!haydn::hwloop::offsetsMeetImmRelocLaw(StartOff, EndOff))
+      return true;
     // Strict END > BEGIN; body parcels BEGIN..END inclusive >= MinBodyBundles.
     if (!haydn::hwloop::bodyMeetsMinLaw(StartOff, EndOff))
       return true;
@@ -1878,8 +1871,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
     // Imm trip COUNT must be >= MinCount when statically known.
     if (TII.isHardwareLoopImmTripOpcode(SetMI.getOpcode()) &&
         SetMI.getNumOperands() >= 4 && SetMI.getOperand(3).isImm() &&
-        SetMI.getOperand(3).getImm() <
-            static_cast<int64_t>(haydn::hwloop::MinCount))
+        !haydn::hwloop::countMeetsMinLaw(SetMI.getOperand(3).getImm()))
       return true;
     return false;
   };
@@ -1964,7 +1956,10 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
       return G;
     };
     // Inclusive=false: stop at ToMBB begin (BEGIN label = first real).
-    // Inclusive=true: walk all of ToMBB (END includes last body cycle).
+    // Inclusive=true: charge through the last body cycle only. HWLR_END is the
+    // last size-bearing body parcel; soft-exit B/cond after PseudoLoopEnd sit
+    // past END and cannot grow Off2. Charging them false-demotes dense Role-A
+    // single-BB forms that keep an explicit B to a non-layout soft exit.
     auto sumStillRelaxableGrowth =
         [&](MachineBasicBlock::iterator FromIt, const MachineBasicBlock *ToMBB,
             bool InclusiveTo) -> int64_t {
@@ -1980,6 +1975,11 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
         auto Begin = (&MBB == Pre) ? FromIt : MBB.begin();
         for (auto I = Begin, E = MBB.end(); I != E; ++I) {
           if (&MBB == ToMBB && !InclusiveTo && I == ToMBB->begin())
+            return Growth;
+          // Inclusive END window ends at the ZOL latch meta: do not charge
+          // PseudoLoopEnd or any terminator after it (post-END soft exit).
+          if (&MBB == ToMBB && InclusiveTo &&
+              I->getOpcode() == Haydn::PseudoLoopEnd)
             return Growth;
           Growth += countBranchGrowthIn(*I);
         }
@@ -2090,6 +2090,21 @@ bool HaydnFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
       *static_cast<const HaydnInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
   bool Changed = false;
+  // Residual generic SET_HWLOOP{,_REG} is ExpandPseudos' rewrite. Hexagon
+  // Fixup matches architectural LOOP only (HexagonFixupHwLoops.cpp:75-81)
+  // then range-rechecks (136-148). Haydn Fixup fatals on leftovers; MIR that
+  // injects generics must run ExpandPseudos first.
+  for (const MachineBasicBlock &MBB : MF) {
+    for (const MachineInstr &MI : MBB.instrs()) {
+      unsigned Opc = MI.getOpcode();
+      if (Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG)
+        report_fatal_error(
+            "HaydnFixupHwLoops: residual SET_HWLOOP{,_REG} — ExpandPseudos "
+            "must rewrite to SET_HWLOOP_{W,F2_W} before Fixup",
+            /*gen_crash_diag=*/false);
+    }
+  }
+
   // Layout ownership only: sequentialize illegal SET trip-reg coissue before
   // Off/Following walks. Semantic multi-stage peel repair is forbidden —
   // post-pipeliner either refuses before mutation or commits a valid loop.
