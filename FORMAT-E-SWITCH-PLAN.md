@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `252293cfcae8` **pushed** | **Re-measured 2026-08-12 on this head: llvm lit 603/619 with ZERO failures (8 XFAIL, 8 unsupported), `HaydnTests` 255/255, clang 1428/1475 zero failures, `--check` and round-trip 3686/3686 both green.** The older counts this row used to carry (lit 573/591, `HaydnTests` 253/253) were real but stale — re-run rather than believed. Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `605b078bfd75` | **Re-measured 2026-08-14 on this head: llvm lit 603/619 with ZERO failures (8 XFAIL, 8 unsupported), `HaydnTests` 256/256, BundleSim ctest 226/226, gcc-c-torture 1417/0 at -O3, clang 1428/1475 zero failures, `--check` and round-trip 3686/3686 both green.** The older counts this row used to carry (lit 573/591, `HaydnTests` 253/253) were real but stale — re-run rather than believed. Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -3118,26 +3118,84 @@ writer — so do not read the whole gap as recoverable.
 **Every bundle emitted is legal.** The cost is density and the accuracy of the
 scheduler's cost model, which is why this is P3 and not a correctness item.
 
-#### Why it was recorded instead of fixed, and what the trap is
+#### FIXED — `tryAdd` re-solves the cycle, and the trap was real but payable
 
-The obvious fix — make `tryAdd` re-solve the cycle instead of appending greedily
-— **is unsafe as stated**, and the reason is worth carrying: `tryAdd` accepting
-instruction N is not the end of the transaction.
-`HaydnHazardRecognizer::commitPlacementForEmit` stamps
+The fix is the one this section called unsafe, done safely. **`tryAdd` now
+re-solves the cycle over its existing members plus the newcomer before
+rejecting.** Greedy is kept as the fast path and runs first, so every cycle it
+already packed is packed **identically**; the search only runs where there used
+to be a rejection, and it walks each member's alternatives in the same
+descending-slot order, so the first solution it finds *is* the greedy one
+wherever greedy worked. The change can only add acceptances.
+
+Measured before building anything, and again after:
+
+| | before | after |
+|---|---:|---:|
+| solver rejections | 2507 | **518** |
+| of those, greedy-only (an assignment existed) | 1961 | **0** |
+| bundles over 250 torture files | 14622 | **14355** |
+| ops/bundle | 1.1126 | **1.1333** |
+| real ops emitted | 16269 | 16269 |
+
+Same work, 267 fewer parcels — **−1.83%**. What is left rejecting is genuinely
+infeasible.
+
+**The trap was real, and the way past it was to pay it rather than avoid it.**
+`tryAdd` accepting instruction N is not the end of the transaction:
+`commitPlacementForEmit` stamps
 `AltDescs->setAlternateDescriptor(MI, Member.MemberOpcode, *TII)` for **each
-instruction as it is accepted**. A re-solve that relocated an earlier member
-would leave that member's stamp naming the old slot and unit, and
-`materializeMultiOpcodeInstrs` would `setDesc` it there — **a genuinely wrong
-bundle**, which is a strictly worse failure than the lost density it was meant
-to buy back. Re-stamping requires `CycleState` to know each member's
-`MachineInstr`, and holding those is the thing § 6 says not to do.
+instruction as it is accepted**, so a re-solve that relocates an earlier member
+leaves that member's stamp naming the slot it vacated, and
+`materializeMultiOpcodeInstrs` would `setDesc` it there — a genuinely wrong
+bundle, strictly worse than the density it buys. So the recognizer keeps
+`CurrentCycleMIs` parallel to the solver's member list and **re-stamps every
+mover**. That path is hot, not a corner case: **683 relocations** over the same
+corpus, which is also why a mistake there would have been loud rather than
+subtle.
 
-The contained alternative is a **scheduler preference, not a solver change**:
-when the cycle is empty, issue the most format-constrained ready instruction
-first, since whichever goes first sets the family and the constrained one has
-fewer options. That is `HaydnPostRASchedStrategy`, it moves every schedule, and
-it needs the full suite plus torture behind it — a piece of work, not a
-drive-by.
+Holding those `MachineInstr *` is safe for exactly the reason
+`HaydnAlternateDescriptors` already holds the same pointers for the whole
+region — nothing replaces a `MachineInstr` between the stamp and
+`materializeMultiOpcodeInstrs` — and they are dropped with the cycle.
+**Facts-not-pointers still stands for anything that outlives a cycle** (see
+`CurrentCycleMemOps`, which stores facts precisely because it does).
+
+`CycleState` gained `SeedFormatMask` because a re-solve re-decides every
+placement and must seed from the frontier the cycle *started* with;
+`FeasibleFormatMask` has already been narrowed by the assignment being thrown
+away.
+
+**Verified by execution before any expectation was regenerated** — which is the
+whole point of § 5.4's warning. BundleSim `ctest` **226/226** and
+`gcc-c-torture -O3` **1417 PASS / 0 FAIL**, both after the § 2 libc + BSP
+rebuild. `NumScheduledCyclesSplit` is **0**, so the recognizer and the finalizer
+agree on every cycle it packed. Only then were the 54 autogenerated lit tests
+regenerated.
+
+The scheduler-preference alternative this section proposed
+(`HaydnPostRASchedStrategy` picking the most format-constrained ready
+instruction first) was **not needed** and is not implemented: the solver change
+subsumes it and costs nothing at schedule level.
+
+#### Three hand-written tests needed judgement, and one found a new trap
+
+The 54 autogenerated tests are bookkeeping. The three hand-written ones were
+not, and one of them is a trap worth its own entry (§ 6.17):
+
+* **`pei-scratch-caller-saved-only.ll`** asserted that no callee-saved GPR is
+  used as a stack base, and fired on
+  `{ addi32 r8, r0, 0; s_sw_with_imm r1, sp, 0 }`. **Not a regression** — that
+  is `r8 = r0 + 0`, and the `sp` the pattern matched belongs to the *other
+  instruction in the bundle*. `{{.*}}` spanned the `;`. The property it cares
+  about still holds (the base is `r1`). Patterns there now use `[^;]` so they
+  cannot leave the instruction they are about.
+* **The two GISel i1-vector tests** pinned both lane compares to one bundle with
+  a same-line directive. Which bundle each lands in is a scheduling detail and
+  not what those tests are about; they now assert the two compares separately.
+* **`bqriir32x32_df1-e2e.ll`**'s hwloop distance moved 708 → 696, exactly one
+  parcel. That test already anticipated this and states the invariant it wants —
+  real distances, neither zero — which still holds.
 
 ---
 
@@ -3460,6 +3518,39 @@ The standing gate `utils/haydn_vacuous_not.py` catches only the fourth kind: a
 negative assertion naming something nothing can emit. Nothing catches these
 four. And note what § 6.15 turned out to be — the gate was reading zero files,
 so for most of this migration nothing caught the fourth kind either.
+
+### 6.17 A line is a BUNDLE, so `{{.*}}` matches across instructions
+
+On most targets one assembly line is one instruction, and a pattern like
+
+```
+addi32{{.*}}r8,{{.*}}sp
+```
+
+reads as "an `addi32` whose destination is `r8` and whose base is `sp`". **Here
+it does not.** A line is a bundle of up to three independent instructions
+separated by `;`, and `.` matches the separator, so that pattern also matches
+
+```
+{ addi32 r8, r0, 0; s_sw_with_imm r1, sp, 0 }
+```
+
+where the `r8` comes from one instruction and the `sp` from another that has
+nothing to do with it. `pei-scratch-caller-saved-only.ll` asserted "no
+callee-saved GPR is used as a stack base" this way and reported a violation on
+CB-147's density improvement — a **false alarm**: the base was still `r1`, and
+two unrelated instructions had merely become co-issued.
+
+**Use `{{[^;]*}}` whenever the parts of a pattern must belong to the same
+instruction.** The negative forms are the dangerous ones: a positive assertion
+that spans members usually just stops matching and you investigate, while a
+negative one starts matching and reports a bug that is not there. Either way the
+answer is the same — a pattern about one instruction must not be able to leave
+it.
+
+This is the sibling of § 6.16: there, prose became a directive; here, one
+instruction's operands became another's. Both come from reading a bundle as if
+it were a line.
 
 ### 6.8 Adding a regression case trips the manifest gate
 
