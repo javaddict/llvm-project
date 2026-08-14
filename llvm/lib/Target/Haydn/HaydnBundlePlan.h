@@ -293,6 +293,29 @@ selectProductRowForMemberCount(unsigned MemberCount) {
   return BundleFormatRowID::E96TwoEntry;
 }
 
+/// Row selection honoring an allowed-row mask (the solver's refined
+/// FeasibleFormatMask). Golden placement can forbid E2 for pairs whose only
+/// E2 seats collide (E2 e0 hosts the general ops; e1 hosts the RI20/I32,
+/// LOAD1 and MAC1 families), so the member-count preference must be able to
+/// fall through to the other product row. Returns nullopt when no allowed
+/// product row has capacity — a plan the serializer could not place.
+inline constexpr std::optional<BundleFormatRowID>
+selectProductRowForMask(unsigned MemberCount, uint64_t AllowedRowMask) {
+  const BundleFormatRowID Preferred =
+      selectProductRowForMemberCount(MemberCount);
+  if (AllowedRowMask & formatRowBit(Preferred))
+    return Preferred;
+  const BundleFormatRowID Other =
+      Preferred == BundleFormatRowID::E96ThreeEntry
+          ? BundleFormatRowID::E96TwoEntry
+          : BundleFormatRowID::E96ThreeEntry;
+  const unsigned OtherEntries =
+      Other == BundleFormatRowID::E96ThreeEntry ? 3u : 2u;
+  if ((AllowedRowMask & formatRowBit(Other)) && MemberCount <= OtherEntries)
+    return Other;
+  return std::nullopt;
+}
+
 /// Select completion for \p Row given real member count.
 /// Full fill → AllEntriesReal (product-legal). Idle/singleton/underfill →
 /// golden stubs (fail-closed for product emit until idle/pad law closes).
@@ -511,6 +534,19 @@ inline BundlePlan makeProductPlan(SlotBits Occupied,
   return P;
 }
 
+/// makeProductPlan honoring an allowed-row mask (see selectProductRowForMask).
+inline std::optional<BundlePlan>
+makeProductPlanForMask(SlotBits Occupied, ArrayRef<unsigned> Members,
+                       uint64_t AllowedRowMask) {
+  const auto Row = selectProductRowForMask(Members.size(), AllowedRowMask);
+  if (!Row)
+    return std::nullopt;
+  BundlePlan P = makeProductPlan(Occupied, Members);
+  P.Row = *Row;
+  P.Completion = selectCompletionFor(P.Row, Members.size());
+  return P;
+}
+
 /// Tests-only explicit architectural stall (idle stub completion).
 inline BundlePlan makeStallPlan() {
   BundlePlan P = makeProductPlan(/*Occupied=*/0, /*Members=*/{});
@@ -543,17 +579,26 @@ makePlanFromVLIWFormat(const VLIWFormat &F, SlotBits Occupied,
 /// from registry. Does not require a single Full row covering SLOT_ALL.
 inline std::optional<BundlePlan>
 planFromPacketFormats(const PacketFormats &Packets, SlotBits Occupied,
-                      ArrayRef<unsigned> Members = {}) {
+                      ArrayRef<unsigned> Members = {},
+                      uint64_t AllowedRowMask = ProductFormatMask) {
   if (!productCovers(Packets, Occupied))
     return std::nullopt;
   // Prefer exact entry-slot cover when the row is product EncodedBytes-sized.
   // Residual / synthetic short/long Size rows are not product plans — fall
-  // back to registry-sized makeProductPlan (row select by member count).
+  // back to registry-sized makeProductPlan (row select by member count,
+  // constrained to the caller's allowed rows — the solver's refined mask).
   if (const VLIWFormat *F = Packets.getFormat(Occupied)) {
-    if (auto P = makePlanFromVLIWFormat(*F, Occupied, Members))
-      return P;
+    if (auto P = makePlanFromVLIWFormat(*F, Occupied, Members)) {
+      if (const auto Row =
+              selectProductRowForMask(Members.size(), AllowedRowMask)) {
+        P->Row = *Row;
+        P->Completion = selectCompletionFor(P->Row, Members.size());
+        return P;
+      }
+      return std::nullopt;
+    }
   }
-  return makeProductPlan(Occupied, Members);
+  return makeProductPlanForMask(Occupied, Members, AllowedRowMask);
 }
 
 } // namespace bundle

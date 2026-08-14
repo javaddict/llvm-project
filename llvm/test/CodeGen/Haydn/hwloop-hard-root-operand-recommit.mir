@@ -66,10 +66,8 @@ body:             |
   ; POST-NEXT:   successors: %bb.1(0x80000000)
   ; POST-NEXT:   liveins: $r0, $r1, $r15
   ; POST-NEXT: {{  $}}
-  ; POST-NEXT:   BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit killed $r1 {
-  ; POST-NEXT:     $r4 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-  ; POST-NEXT:     SET_HWLOOP_W_S0 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
-  ; POST-NEXT:   }
+  ; POST-NEXT:   SET_HWLOOP_W 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+  ; POST-NEXT:   $r4 = ADDI32_W $r0, 7, implicit-def dead $sfr
   ; POST-NEXT:   NOP_S0
   ; POST-NEXT:   NOP_S0
   ; POST-NEXT:   NOP_S0
@@ -86,10 +84,8 @@ body:             |
   ; FIX-NEXT:   successors: %bb.1(0x80000000)
   ; FIX-NEXT:   liveins: $r0, $r1, $r15
   ; FIX-NEXT: {{  $}}
-  ; FIX-NEXT:   BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit killed $r1 {
-  ; FIX-NEXT:     $r4 = ADD32_S2 $r0, killed $r1, implicit-def dead $sfr
-  ; FIX-NEXT:     SET_HWLOOP_W_S0 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
-  ; FIX-NEXT:   }
+  ; FIX-NEXT:   SET_HWLOOP_W 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+  ; FIX-NEXT:   $r4 = ADDI32_W $r0, 7, implicit-def dead $sfr
   ; FIX-NEXT:   NOP_S0
   ; FIX-NEXT:   NOP_S0
   ; FIX-NEXT:   NOP_S0
@@ -107,10 +103,16 @@ body:             |
     liveins: $r0, $r1, $r15
     successors: %bb.1
 
-    ; Stale coissued SET+ADD hard root: missing $r4 def on the BUNDLE root.
+    ; Stale coissued SET+ADDI hard root: missing $r4 def on the BUNDLE root.
+    ; Golden placement seats SET only at E2 e0/ALU0, so an ADD32 partner
+    ; (also e0/ALU0-only in E2) could never serialize; ADDI32 (E2 e1
+    ; RI20/ALU1) is the golden-legal partner. The wide ADDI32_W form carries
+    ; no residual alternatives, so postmisched dissolves the stale root into
+    ; two serializable singles rather than restamping it — the contract here
+    ; is that no unserializable root shell survives.
     BUNDLE implicit-def dead $sfr, implicit killed $r0 {
       SET_HWLOOP_W 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r4 = ADDI32_W $r0, 7, implicit-def dead $sfr
     }
     NOP
     NOP

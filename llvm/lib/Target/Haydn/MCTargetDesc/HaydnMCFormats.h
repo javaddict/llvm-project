@@ -40,6 +40,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <cstddef>
 #include <map>
+#include <utility>
 #include <unordered_map>
 
 namespace llvm {
@@ -477,6 +478,27 @@ public:
 // \returns the slot index (0/1/2) encoded in \p Opc's `_S<k>` name
 // suffix, or -1 if \p Opc is not a format-member opcode.
 int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII);
+
+/// Golden placement feasibility for one issue cycle's logical opcodes:
+/// {E2 feasible, E3 feasible}. Feasible = a system of distinct
+/// representatives exists over the generated Format E catalog — distinct
+/// entries, distinct units, each opcode drawn from its golden (mode, entry)
+/// unit menu. This is the same law the MC serializer enforces fail-closed
+/// (findFormatEMember / placement DFS); the packing solver folds it into the
+/// row frontier so a slot-legal cycle can never dead-end at emit ("one-parcel
+/// placement failed"). Opcodes outside the golden catalog impose no demand.
+/// Opcode names resolve through the same formatELogicalName normalization as
+/// encode placement (residual `_S*`, `_W`, committed `_E2_/_E3_` members,
+/// legacy public mnemonics). Defined in HaydnMCCodeEmitter.cpp with the
+/// generated tables.
+std::pair<bool, bool>
+haydnFormatEPlacementFeasible(ArrayRef<unsigned> LogicalOpcodes);
+
+/// True iff \p Opcode resolves to a golden Format E catalog logical (its
+/// placement menus are known). Alt-having opcodes that return false here are
+/// the fail-open residue of haydnFormatEPlacementFeasible — unit tests pin
+/// that set empty.
+bool haydnFormatEHasGoldenPlacement(unsigned Opcode);
 
 // `HaydnMCFormats` subclass that normalizes member opcodes before consulting
 // alts-derived getLegalSlots. Constructed by the MC encoder (holds MCInstrInfo).

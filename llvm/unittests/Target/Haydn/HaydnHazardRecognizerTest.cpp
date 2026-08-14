@@ -642,9 +642,10 @@ TEST(HaydnPortModelTest, PreRAProductFeasibleFormatMaskFullOnly) {
   // the generated Full row covers the occupancy (productFeasibleFormatMask).
   const uint64_t MaskAll =
       HaydnPreRASchedStrategy::productFeasibleFormatMask(Haydn::SLOT_ALL);
-  // Either Full covers SLOT_ALL (mask == ProductFormatMask) or reports 0
-  // if occupancy is infeasible — never a private compact bit.
-  EXPECT_TRUE(MaskAll == 0 || MaskAll == ProductFormatMask);
+  // Three occupied slots exceed E2's entries: E3-only (or 0 if the row
+  // cannot cover the occupancy) — never a private compact bit.
+  EXPECT_TRUE(MaskAll == 0 ||
+              MaskAll == formatRowBit(BundleFormatRowID::E96ThreeEntry));
 }
 
 //===----------------------------------------------------------------------===//
@@ -689,7 +690,9 @@ TEST(HaydnHazardRecognizerTest, MatchingFrontierConstrainedThenFlexBothWays) {
     EXPECT_TRUE(AfterST.Feasible);
     EXPECT_GE(AfterST.SuccessorMatchings, 1u);
     EXPECT_EQ(AfterST.FreeSlotsPreferred, 1u);
-    EXPECT_EQ(AfterST.FeasibleFormatMask, ProductFormatMask);
+    // ST32 + ADD32 both seat E2 only at e0: the pair is E3-only.
+    EXPECT_EQ(AfterST.FeasibleFormatMask,
+              formatRowBit(BundleFormatRowID::E96ThreeEntry));
   }
 
   // ADD first (preferred may claim any field), then ST still packable via
@@ -702,7 +705,9 @@ TEST(HaydnHazardRecognizerTest, MatchingFrontierConstrainedThenFlexBothWays) {
     EXPECT_TRUE(AfterADD.Feasible);
     EXPECT_GE(AfterADD.SuccessorMatchings, 1u);
     EXPECT_EQ(AfterADD.FreeSlotsPreferred, 1u);
-    EXPECT_EQ(AfterADD.FeasibleFormatMask, ProductFormatMask);
+    // Same pair, same law: E3-only.
+    EXPECT_EQ(AfterADD.FeasibleFormatMask,
+              formatRowBit(BundleFormatRowID::E96ThreeEntry));
   }
 }
 
@@ -743,7 +748,9 @@ TEST(HaydnHazardRecognizerTest, MatchingFrontierThreeReadyRematchADD32_2xADD64) 
   EXPECT_TRUE(Add64First.Feasible);
   EXPECT_GE(Add64First.SuccessorMatchings, 1u);
   EXPECT_EQ(Add64First.FreeSlotsPreferred, 1u);
-  EXPECT_EQ(Add64First.FeasibleFormatMask, ProductFormatMask);
+  // ADD32 + ADD64: both E2 rows are e0/ALU0 — E3-only.
+  EXPECT_EQ(Add64First.FeasibleFormatMask,
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
 
   // After ADD32+ADD64 exact, second ADD64 remains packable via rematch
   // (preferred would have dead-ended). Three-member cycle retained.
@@ -756,7 +763,8 @@ TEST(HaydnHazardRecognizerTest, MatchingFrontierThreeReadyRematchADD32_2xADD64) 
       << "matching frontier must rematch so second ADD64 stays feasible";
   EXPECT_GE(Add64Second.SuccessorMatchings, 1u);
   EXPECT_EQ(Add64Second.FreeSlotsPreferred, 0u);
-  EXPECT_EQ(Add64Second.FeasibleFormatMask, ProductFormatMask);
+  EXPECT_EQ(Add64Second.FeasibleFormatMask,
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
 
   // Commit the third: preferred survivor has 3 members; ADD32 rematched to S0.
   ASSERT_TRUE(exactTryAddProduct(AfterTwo, Fmts, Haydn::ADD64));
@@ -920,7 +928,9 @@ TEST(HaydnPortModelTest, PreRASMSHandoffPackabilityOracleSurface) {
     unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
                       Haydn::ADD32};
     EXPECT_TRUE(HaydnPreRASchedStrategy::productResMIIFailsQualification(Ops));
-    EXPECT_FALSE(HaydnPreRASchedStrategy::productQualKernelExactlyPackable(Ops));
+    // Option A containment: a finite exhaustive cover stays packable even
+    // while greedy overestimates.
+    EXPECT_TRUE(HaydnPreRASchedStrategy::productQualKernelExactlyPackable(Ops));
   }
 
   // N > MaxExhaustiveProductResMIIOps: exhaustive falls back to greedy.
@@ -1201,7 +1211,9 @@ TEST(HaydnPortModelTest, PreRASoftExitQoRFloorsAndExactPack) {
     unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
                       Haydn::ADD32};
     EXPECT_TRUE(S::productResMIIFailsQualification(Ops));
-    EXPECT_FALSE(S::productQualKernelExactlyPackable(Ops));
+    // Option A containment: finite exhaustive cover — packable despite the
+    // greedy overestimate.
+    EXPECT_TRUE(S::productQualKernelExactlyPackable(Ops));
     EXPECT_EQ(S::productExhaustiveResMII(Ops), 2u);
     EXPECT_EQ(S::productSoftExitIIFloor(Ops, 0, 0), 2u);
   }

@@ -348,6 +348,32 @@ tryApplyAlt(const CycleState &S, unsigned LogicalOpc,
   return N;
 }
 
+/// Strip product rows whose golden (entry, unit) assignment cannot exist for
+/// \p Members (distinct entries, distinct units, per the generated placement
+/// catalog — haydnFormatEPlacementFeasible). The MC serializer enforces the
+/// identical law fail-closed, so refining here keeps every solver accept
+/// serializable: two LOADSTORE0-only stores never share a cycle, a third
+/// MAC-only op never joins two that already hold MAC0/MAC1. Slot occupancy
+/// alone cannot see either case — residual S0/S1/S2 are abstract labels, not
+/// golden entries. Members outside the catalog impose no demand (the
+/// serializer fail-closes on them independently).
+inline uint64_t refineMaskByGoldenPlacement(uint64_t Mask,
+                                            ArrayRef<CycleMember> Members) {
+  if (!(Mask & ProductFormatMask) || Members.empty())
+    return Mask;
+  SmallVector<unsigned, 3> Logicals;
+  Logicals.reserve(Members.size());
+  for (const CycleMember &M : Members)
+    Logicals.push_back(M.LogicalOpcode);
+  const std::pair<bool, bool> RowOK = haydnFormatEPlacementFeasible(Logicals);
+  uint64_t Out = Mask;
+  if (!RowOK.first)
+    Out &= ~formatRowBit(BundleFormatRowID::E96TwoEntry);
+  if (!RowOK.second)
+    Out &= ~formatRowBit(BundleFormatRowID::E96ThreeEntry);
+  return Out;
+}
+
 /// Exact expand: every candidate × every PlacementAlternative under \p CoverMask;
 /// replace \p Cands with the nondominated successor set.
 /// \returns true and mutates \p Cands on accept; false leaves \p Cands unchanged.
@@ -365,8 +391,12 @@ inline bool exactTryAddWithCover(CycleCandidateSet &Cands,
   CycleCandidateSet Next;
   for (const CycleState &S : Cands) {
     for (const PlacementAlternative &Alt : Alts) {
-      if (auto N = tryApplyAlt(S, LogicalOpc, Alt, CoverMask))
-        insertNondominatedCandidate(Next, std::move(*N));
+      if (auto N = tryApplyAlt(S, LogicalOpc, Alt, CoverMask)) {
+        N->FeasibleFormatMask =
+            refineMaskByGoldenPlacement(N->FeasibleFormatMask, N->Members);
+        if (N->FeasibleFormatMask != 0)
+          insertNondominatedCandidate(Next, std::move(*N));
+      }
     }
   }
   if (Next.empty())
@@ -387,8 +417,10 @@ inline bool canExactTryAddWithCover(ArrayRef<CycleState> Cands,
     return false;
   for (const CycleState &S : Cands) {
     for (const PlacementAlternative &Alt : Alts) {
-      if (tryApplyAlt(S, LogicalOpc, Alt, CoverMask))
-        return true;
+      if (auto N = tryApplyAlt(S, LogicalOpc, Alt, CoverMask)) {
+        if (refineMaskByGoldenPlacement(N->FeasibleFormatMask, N->Members) != 0)
+          return true;
+      }
     }
   }
   return false;
@@ -523,7 +555,11 @@ commitProduct(const CycleState &S, const PacketFormats &Packets) {
   if (!(S.FeasibleFormatMask & ProductFormatMask))
     return std::nullopt;
   // Stall / non-empty: transitional composite must cover OccupiedSlots.
-  return planFromPacketFormats(Packets, S.OccupiedSlots, Logicals);
+  // Row selection honors the refined FeasibleFormatMask — golden placement
+  // can forbid the member-count-preferred row (e.g. two general ops whose
+  // only E2 seats are both e0 commit as a 2-member E3).
+  return planFromPacketFormats(Packets, S.OccupiedSlots, Logicals,
+                               S.FeasibleFormatMask);
 }
 
 /// Convenience commit via temporary formats view.

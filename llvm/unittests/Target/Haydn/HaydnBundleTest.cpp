@@ -652,27 +652,33 @@ TEST(HaydnBundleTest, B41_GetFeasibleFormatMaskAfterAddAndReserve) {
   R.reserveByOpcode(Haydn::ADD32);
   R.reserveByOpcode(Haydn::ADD32);
   EXPECT_EQ(R.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
-  EXPECT_EQ(R.getFeasibleFormatMask(), ProductFormatMask)
-      << "saturated Full still covers SLOT_ALL";
+  EXPECT_EQ(R.getFeasibleFormatMask(),
+            formatRowBit(BundleFormatRowID::E96ThreeEntry))
+      << "three members exceed E2's two entries: E3-only frontier";
   EXPECT_FALSE(R.canAdd(Haydn::ADD32));
 }
 
-TEST(HaydnBundleTest, B41_ResourceCycleThreeADD32KeepFullFrontier) {
+TEST(HaydnBundleTest, B41_ResourceCycleThreeADD32NarrowToE3) {
   // AIE AIEHazardRecognizer.cpp:173-214 ResourceCycle canReserve/reserve.
-  // Three ADD32 reserves keep ProductFormatMask; fourth canReserve false.
+  // ADD32's only E2 seat is e0/ALU0, so the frontier narrows to E3 as soon
+  // as a second ADD32 lands; fourth canReserve false.
   HaydnResourceCycle RC;
   EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
   EXPECT_EQ(RC.getOccupiedSlots(), 0u);
 
+  const uint64_t WantMask[3] = {
+      ProductFormatMask, formatRowBit(BundleFormatRowID::E96ThreeEntry),
+      formatRowBit(BundleFormatRowID::E96ThreeEntry)};
   for (unsigned I = 0; I < 3; ++I) {
     ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32)) << "ADD32 #" << I;
     RC.reserveByOpcode(Haydn::ADD32);
-    EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask) << "after #" << I;
+    EXPECT_EQ(RC.getFeasibleFormatMask(), WantMask[I]) << "after #" << I;
   }
   EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
   EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD32))
       << "fourth ADD32 must not fit once S0|S1|S2 reserved";
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getFeasibleFormatMask(),
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
   // ADD64 is S1|S2 only — also saturated.
   EXPECT_FALSE(RC.canReserveByOpcode(Haydn::ADD64));
 
@@ -748,8 +754,10 @@ TEST(HaydnBundleTest, B42_ResourceCycleLiveState_ThreeADD32Members) {
     EXPECT_EQ(RC.getOccupiedSlots(), RC.getCycleState().OccupiedSlots);
   }
   EXPECT_EQ(RC.getOccupiedSlots(), SlotBits(Haydn::SLOT_ALL));
-  // Product size-1: live mask still Full; occupancy rebuild agrees.
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+  // Three members: E3-only (entry capacity); occupancy rebuild agrees since
+  // popcount alone already strips E2 at three slots.
+  EXPECT_EQ(RC.getFeasibleFormatMask(),
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
   EXPECT_EQ(RC.getFeasibleFormatMask(),
             productFeasibleFormatMask(RC.getOccupiedSlots()));
   // Slot order S2 → S1 → S0 (same as HR tryAdd).
@@ -885,12 +893,14 @@ TEST(HaydnBundleTest, SMS_MatchingFrontier_MultiCandidateAfterOneADD32) {
   }
   EXPECT_EQ(Seen, SlotBits(Haydn::SLOT_ALL));
 
-  // Second ADD32 still expands the full frontier (not preferred-only).
+  // Second ADD32 still expands the full candidate set, but the golden seats
+  // two ADD32 only in E3 (both E2 rows are e0/ALU0).
   ASSERT_TRUE(RC.canReserveByOpcode(Haydn::ADD32));
   RC.reserveByOpcode(Haydn::ADD32);
   EXPECT_EQ(RC.getMemberCount(), 2u);
   EXPECT_GE(RC.getMatchingFrontierSize(), 1u);
-  EXPECT_EQ(RC.getMatchingFrontierFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getMatchingFrontierFormatMask(),
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
 }
 
 // SMS ResourceCycle frontier ≡ pure exactTryAddProduct candidate set (HR peer).
@@ -959,7 +969,8 @@ TEST(HaydnBundleTest, B42_ResourceCycleLDLDMACPacksOneCycle) {
       << RC.getOccupiedSlots();
   RC.reserveByOpcode(Haydn::X2MULA32);
   EXPECT_EQ(RC.getMemberCount(), 3u);
-  EXPECT_EQ(RC.getFeasibleFormatMask(), ProductFormatMask);
+  EXPECT_EQ(RC.getFeasibleFormatMask(),
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
   EXPECT_EQ(RC.getFeasibleFormatMask(), RC.getCycleState().FeasibleFormatMask);
 }
 
@@ -1226,7 +1237,9 @@ TEST(HaydnBundleTest, SMSSoftExitQoRFloorsAndExactPack) {
     unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
                       Haydn::ADD32};
     EXPECT_TRUE(productResMIIFailsQualification(Ops));
-    EXPECT_FALSE(RC::qualKernelExactlyPackable(Ops));
+    // Option A containment: a finite exhaustive cover is product-legal, so
+    // the body stays "exactly packable" even while greedy overestimates.
+    EXPECT_TRUE(RC::qualKernelExactlyPackable(Ops));
     EXPECT_EQ(computeExhaustiveProductResMII(Ops), 2u);
     EXPECT_EQ(RC::softExitIIFloor(Ops, 0, 0), 2u);
   }
@@ -1308,7 +1321,9 @@ TEST(HaydnBundleTest, SMSHandoff_QualKernelPackabilityOracleSurface) {
     unsigned Ops[] = {Haydn::ST32, Haydn::ST32, Haydn::ADD32, Haydn::ADD32,
                       Haydn::ADD32};
     EXPECT_TRUE(productResMIIFailsQualification(Ops));
-    EXPECT_FALSE(HaydnResourceCycle::qualKernelExactlyPackable(Ops));
+    // Option A containment: finite exhaustive cover — packable despite the
+    // greedy overestimate.
+    EXPECT_TRUE(HaydnResourceCycle::qualKernelExactlyPackable(Ops));
   }
 
   // N > MaxExhaustiveProductResMIIOps: exhaustive falls back to greedy.

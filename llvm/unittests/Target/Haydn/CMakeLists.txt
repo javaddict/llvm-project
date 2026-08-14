@@ -37,4 +37,5 @@ add_llvm_target_unittest(HaydnTests
   HaydnRegisterInfoTest.cpp
   HaydnRelocLayoutTest.cpp
   HaydnResourceRestrictionClassesTest.cpp
+  HaydnTestsTargetInit.cpp
   )

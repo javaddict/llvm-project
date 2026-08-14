@@ -85,11 +85,18 @@
 ; BASE-NOT: SMS-HOOK: reject
 ; BASE-NOT: unsupported SMS-HOOK resource class
 ; BASE-NOT: Unable to analyzeLoop
-; BASE-NOT: SMS-RESMII: reject
 ; BASE-NOT: SMS-HANDOFF: reject
+;
+; The 10-op independent-loads body trips the RESMII overestimate gate under
+; golden placement (one LOADSTORE0 + one LOAD1 per cycle): left-to-right
+; greedy dead-ends at 5 while the exhaustive partition still packs 4.
+; Metrics-only — II/QOR stay driven by the exhaustive oracle; each ranking
+; arm asserts the reject positively below so BASE keeps full-stream silence
+; for the other reject classes.
 
 ; --- PROD frozen ResMII/II/soft-exit (product ranking) ---
-; PROD-DAG: SMS-RESMII: body_ops=10 greedy=4 exhaustive=4 overestimate=0
+; PROD-DAG: SMS-RESMII: body_ops=10 greedy=5 exhaustive=4 overestimate=1
+; PROD-DAG: SMS-RESMII: reject — greedy overestimates exhaustive oracle by 1
 ; PROD-DAG: SMS-HANDOFF: metrics-only freeze
 ; PROD-DAG: SMS-HANDOFF: qual-kernel body_ops=10 coissue_packable=0 exact_packable=1 exhaustive=4
 ; PROD-DAG: SMS-QOR: soft_exit_ii_floor=6 format_resmii=4 port_resmii=6 exact_packable=1 body_ops=10
@@ -110,7 +117,8 @@
 ; PROD-DAG: Schedule Found? 1 (II=4)
 
 ; --- GEN frozen ResMII/II/soft-exit (matching-frontier OFF residual) ---
-; GEN-DAG: SMS-RESMII: body_ops=10 greedy=4 exhaustive=4 overestimate=0
+; GEN-DAG: SMS-RESMII: body_ops=10 greedy=5 exhaustive=4 overestimate=1
+; GEN-DAG: SMS-RESMII: reject — greedy overestimates exhaustive oracle by 1
 ; GEN-DAG: SMS-HANDOFF: metrics-only freeze
 ; GEN-DAG: SMS-HANDOFF: qual-kernel body_ops=10 coissue_packable=0 exact_packable=1 exhaustive=4
 ; GEN-DAG: SMS-QOR: soft_exit_ii_floor=6 format_resmii=4 port_resmii=6 exact_packable=1 body_ops=10
@@ -131,7 +139,8 @@
 ; GEN-DAG: Schedule Found? 1 (II=4)
 
 ; --- RP frozen ResMII/II/soft-exit (finer-rp OFF residual) ---
-; RP-DAG: SMS-RESMII: body_ops=10 greedy=4 exhaustive=4 overestimate=0
+; RP-DAG: SMS-RESMII: body_ops=10 greedy=5 exhaustive=4 overestimate=1
+; RP-DAG: SMS-RESMII: reject — greedy overestimates exhaustive oracle by 1
 ; RP-DAG: SMS-HANDOFF: metrics-only freeze
 ; RP-DAG: SMS-HANDOFF: qual-kernel body_ops=10 coissue_packable=0 exact_packable=1 exhaustive=4
 ; RP-DAG: SMS-QOR: soft_exit_ii_floor=6 format_resmii=4 port_resmii=6 exact_packable=1 body_ops=10
@@ -208,7 +217,8 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; PROD-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PROD-NEXT:    { nop; ld32 r8, sp, 3 }
 ; PROD-NEXT:    { nop; addi32_w sp, sp, 16 }
-; PROD:    { nop; jalr_w r0, lr, 0 }
+; PROD-NEXT:    .cfi_def_cfa sp, 0
+; PROD-NEXT:    { nop; jalr_w r0, lr, 0 }
 ;
 ; GEN-LABEL: sms_ilp_independent_loads:
 ; GEN:       // %bb.0: // %entry
@@ -234,7 +244,8 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; GEN-NEXT:    { nop; xor32 r0, r0, r0 }
 ; GEN-NEXT:    { nop; ld32 r8, sp, 3 }
 ; GEN-NEXT:    { nop; addi32_w sp, sp, 16 }
-; GEN:    { nop; jalr_w r0, lr, 0 }
+; GEN-NEXT:    .cfi_def_cfa sp, 0
+; GEN-NEXT:    { nop; jalr_w r0, lr, 0 }
 ;
 ; RP-LABEL: sms_ilp_independent_loads:
 ; RP:       // %bb.0: // %entry
@@ -260,7 +271,8 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; RP-NEXT:    { nop; xor32 r0, r0, r0 }
 ; RP-NEXT:    { nop; ld32 r8, sp, 3 }
 ; RP-NEXT:    { nop; addi32_w sp, sp, 16 }
-; RP:    { nop; jalr_w r0, lr, 0 }
+; RP-NEXT:    .cfi_def_cfa sp, 0
+; RP-NEXT:    { nop; jalr_w r0, lr, 0 }
 ;
 ; ASM-LABEL: sms_ilp_independent_loads:
 ; ASM:       // %bb.0: // %entry
@@ -286,7 +298,8 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; ld32 r8, sp, 3 }
 ; ASM-NEXT:    { nop; addi32_w sp, sp, 16 }
-; ASM:    { nop; jalr_w r0, lr, 0 }
+; ASM-NEXT:    .cfi_def_cfa sp, 0
+; ASM-NEXT:    { nop; jalr_w r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_ilp_independent_loads
 ; HANDOFF: bb.1.entry:
 ; HANDOFF-NEXT:   successors: %bb.2(0x80000000)
@@ -368,7 +381,8 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; BASE-NEXT:    { nop; add32 r1, r5, r4 }
 ; BASE-NEXT:    { nop; xor32 r0, r0, r0 }
 ; BASE-NEXT:    { nop; addi32_w sp, sp, 8 }
-; BASE:    { nop; jalr_w r0, lr, 0 }
+; BASE-NEXT:    .cfi_def_cfa sp, 0
+; BASE-NEXT:    { nop; jalr_w r0, lr, 0 }
 ;
 ; ASM-LABEL: sms_critical_path_chain:
 ; ASM:       // %bb.0: // %entry
@@ -389,7 +403,8 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; ASM-NEXT:    { nop; add32 r1, r5, r4 }
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; addi32_w sp, sp, 8 }
-; ASM:    { nop; jalr_w r0, lr, 0 }
+; ASM-NEXT:    .cfi_def_cfa sp, 0
+; ASM-NEXT:    { nop; jalr_w r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_critical_path_chain
 ; HANDOFF: bb.1.entry:
 ; HANDOFF-NEXT:   successors: %bb.2(0x80000000)
@@ -457,7 +472,8 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; POST-NEXT:   $r1 = ADD32 killed $r5, killed $r4
 ; POST-NEXT:   $r0 = frame-destroy XOR32 $r0, $r0
 ; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
-; POST:   $r0 = JALR_W $r15, 0, implicit $r15, implicit killed $r1, implicit $r15
+; POST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
+; POST-NEXT:   $r0 = JALR_W $r15, 0, implicit $r15, implicit killed $r1, implicit $r15
 entry:
   br label %loop
 loop:
@@ -501,7 +517,8 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; BASE-NEXT:    { nop; add32 r1, r4, r5 }
 ; BASE-NEXT:    { nop; xor32 r0, r0, r0 }
 ; BASE-NEXT:    { nop; addi32_w sp, sp, 8 }
-; BASE:    { nop; jalr_w r0, lr, 0 }
+; BASE-NEXT:    .cfi_def_cfa sp, 0
+; BASE-NEXT:    { nop; jalr_w r0, lr, 0 }
 ;
 ; ASM-LABEL: sms_ilp_dual_acc:
 ; ASM:       // %bb.0: // %entry
@@ -522,7 +539,8 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; ASM-NEXT:    { nop; add32 r1, r4, r5 }
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; addi32_w sp, sp, 8 }
-; ASM:    { nop; jalr_w r0, lr, 0 }
+; ASM-NEXT:    .cfi_def_cfa sp, 0
+; ASM-NEXT:    { nop; jalr_w r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_ilp_dual_acc
 ; HANDOFF: bb.1.entry:
 ; HANDOFF-NEXT:   successors: %bb.2(0x80000000)
@@ -586,7 +604,8 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; POST-NEXT:   $r1 = ADD32 killed $r4, killed $r5
 ; POST-NEXT:   $r0 = frame-destroy XOR32 $r0, $r0
 ; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
-; POST:   $r0 = JALR_W $r15, 0, implicit $r15, implicit killed $r1, implicit $r15
+; POST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
+; POST-NEXT:   $r0 = JALR_W $r15, 0, implicit $r15, implicit killed $r1, implicit $r15
 entry:
   br label %loop
 loop:

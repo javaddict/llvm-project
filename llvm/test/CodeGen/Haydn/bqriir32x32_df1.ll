@@ -106,7 +106,8 @@ define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 6 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   ; Load coefficients from struct (all Q30 fixed-point)
   %b0ptr = getelementptr %bqriir32_df1_state, ptr %st, i32 0, i32 0
@@ -261,7 +262,8 @@ define void @bqriir32x32_df1_cascade(ptr %sections, i32 %nsec,
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 6 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
                                        ptr %r, ptr %x, i32 %N) {
 entry:
   %cmp0 = icmp sgt i32 %nsec, 0
@@ -309,9 +311,9 @@ define i32 @main() {
 ; CHECK-NEXT:    { nop; addi32_w r8, r8, output_buf }
 ; CHECK-NEXT:    { nop; lui r3, input_buf }
 ; CHECK-NEXT:    { nop; addi32_w r9, r0, 8 }
+; CHECK-NEXT:    { nop; lui r10, section1 }
 ; CHECK-NEXT:    { nop; addi32_w r1, r1, section0 }
 ; CHECK-NEXT:    { nop; addi32_w r3, r3, input_buf }
-; CHECK-NEXT:    { nop; lui r10, section1 }
 ; CHECK-NEXT:    { move32 r4, r9; move32 r2, r8 }
 ; CHECK-NEXT:    { nop; addi32_w r10, r10, section1 }
 ; CHECK-NEXT:    { nop; jal_w lr, bqriir32x32_df1_single }
@@ -329,7 +331,8 @@ define i32 @main() {
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   ; Process section 0: input_buf -> output_buf
   call void @bqriir32x32_df1_single(ptr @section0, ptr @output_buf,

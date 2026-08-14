@@ -30,6 +30,7 @@
 
 #include "HaydnMCCodeEmitter.h"
 #include "HaydnFormatERecords.h"
+#include "TargetInfo/HaydnTargetInfo.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnFixupKinds.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
@@ -43,6 +44,7 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/CommandLine.h"
@@ -53,6 +55,7 @@
 #include <cstring>
 #include <functional>
 #include <optional>
+#include <atomic>
 #include <string>
 
 #define DEBUG_TYPE "haydn-mccodeemitter"
@@ -649,6 +652,118 @@ static const FormatEMemberRec *findFormatEMember(StringRef Logical, uint8_t Mode
   return Fallback;
 }
 
+//===----------------------------------------------------------------------===//
+// Golden placement feasibility oracle (solver-side entry/unit law)
+//===----------------------------------------------------------------------===//
+//
+// The packing solver works in the residual S0/S1/S2 slot space; slots are
+// abstract labels, not golden entries. A slot-legal cycle can still have no
+// (entry, unit) assignment under the golden catalog — two stores are both
+// LOADSTORE0-only (an entry-menu collision), and a third X2MUL32 has no free
+// MAC unit (a unit collision). Serialization fail-closes on such cycles
+// (attemptMode DFS above), so the solver must refuse them up front or the
+// compiler dies at emit ("one-parcel placement failed").
+//
+// haydnFormatEPlacementFeasible answers, per row mode, whether a system of
+// distinct representatives exists: distinct entries, distinct units, each
+// member drawn from its golden (mode, entry) unit menu. Menus are built once
+// per process from FormatEMembers via the same formatELogicalName
+// normalization the encode placement uses, so solver accepts and
+// serialization successes stay the same set.
+
+static_assert(llvm::haydn::format_e::FormatEUnitCount <= 8,
+              "unit menus are uint8_t bitmasks");
+
+// Per-logical golden placement menus (unit bitmask per mode/entry).
+struct FormatEPlacementMenus {
+  uint8_t E2Entry[2] = {0, 0};
+  uint8_t E3Entry[3] = {0, 0, 0};
+  bool Real = false;
+};
+
+// Standalone MCInstrInfo for opcode-name lookup on paths that carry no MII
+// (post-RA HR / SMS / Bundle solver probes). Never latches a failed lookup:
+// registration (LLVMInitializeHaydnTargetMC) may run after the first probe
+// in unit-test processes.
+static const MCInstrInfo *formatEPlacementMII() {
+  static std::atomic<const MCInstrInfo *> Cached{nullptr};
+  if (const MCInstrInfo *II = Cached.load(std::memory_order_acquire))
+    return II;
+  const MCInstrInfo *Fresh = getTheHaydnTarget().createMCInstrInfo();
+  if (!Fresh)
+    return nullptr;
+  const MCInstrInfo *Expected = nullptr;
+  if (!Cached.compare_exchange_strong(Expected, Fresh,
+                                      std::memory_order_acq_rel))
+    delete Fresh;
+  return Cached.load(std::memory_order_acquire);
+}
+
+static ArrayRef<FormatEPlacementMenus>
+formatEPlacementTable(const MCInstrInfo &MII) {
+  static const std::vector<FormatEPlacementMenus> Table = [&MII] {
+    using namespace llvm::haydn::format_e;
+    std::vector<FormatEPlacementMenus> T(MII.getNumOpcodes());
+    for (unsigned Opc = 0, E = MII.getNumOpcodes(); Opc != E; ++Opc) {
+      // Multi-slot pseudos (_MSP) carry their base opcode's placement demand
+      // through the solver's rematch paths; they expand before serialization,
+      // so emit-side formatELogicalName never needs (and does not get) this
+      // peel.
+      StringRef Name = MII.getName(Opc);
+      Name.consume_back("_MSP");
+      const std::string Log = formatELogicalName(Name);
+      if (Log.empty() || StringRef(Log).equals_insensitive("NOP"))
+        continue;
+      const FormatEAltSpan *Span = findAltSpan(Log.c_str());
+      if (!Span)
+        continue;
+      FormatEPlacementMenus M;
+      M.Real = true;
+      for (unsigned I = 0; I < Span->Count; ++I) {
+        const FormatEMemberRec &R =
+            FormatEMembers[FormatEAltMemberIds[Span->Begin + I]];
+        if (R.IsNop || R.Unit >= 8)
+          continue;
+        if (R.Mode == 0 && R.EntryIdx < 2)
+          M.E2Entry[R.EntryIdx] |= uint8_t(1u << R.Unit);
+        else if (R.Mode == 1 && R.EntryIdx < 3)
+          M.E3Entry[R.EntryIdx] |= uint8_t(1u << R.Unit);
+      }
+      T[Opc] = M;
+    }
+    return T;
+  }();
+  return Table;
+}
+
+// Distinct-entry / distinct-unit assignment search (<=3 members; mirrors the
+// attemptMode DFS below). Members without golden menus impose no demand here
+// — serialization fail-closes on them independently.
+static bool formatEPlacementSDR(ArrayRef<const FormatEPlacementMenus *> Ms,
+                                bool E3, unsigned Idx, uint8_t UsedEntries,
+                                uint8_t UsedUnits) {
+  if (Idx == Ms.size())
+    return true;
+  if (!Ms[Idx])
+    return formatEPlacementSDR(Ms, E3, Idx + 1, UsedEntries, UsedUnits);
+  const uint8_t *PerEntry = E3 ? Ms[Idx]->E3Entry : Ms[Idx]->E2Entry;
+  const unsigned EntryCount = E3 ? 3 : 2;
+  for (unsigned Ent = 0; Ent < EntryCount; ++Ent) {
+    if (UsedEntries & (1u << Ent))
+      continue;
+    unsigned Avail = PerEntry[Ent] & ~unsigned(UsedUnits);
+    while (Avail) {
+      const unsigned U = Avail & -Avail;
+      Avail &= Avail - 1;
+      if (formatEPlacementSDR(Ms, E3, Idx + 1,
+                              uint8_t(UsedEntries | (1u << Ent)),
+                              uint8_t(UsedUnits | U)))
+        return true;
+    }
+  }
+  return false;
+}
+
 /// Serialize-as-is only when every real is already a committed Format E
 /// member for its (mode, entry). That is the post-RA setDesc product shape.
 /// Bare logical / residual `_S*` hand-asm falls through to DFS placement.
@@ -1002,6 +1117,39 @@ static std::string formatELogicalName(StringRef Name) {
 // and calls getBinaryCodeForInstr — do not reintroduce hand field packers.
 
 } // end anonymous namespace (Format E placement helpers)
+
+std::pair<bool, bool>
+llvm::haydnFormatEPlacementFeasible(ArrayRef<unsigned> LogicalOpcodes) {
+  if (LogicalOpcodes.empty())
+    return {true, true};
+  const MCInstrInfo *MII = formatEPlacementMII();
+  if (!MII)
+    return {true, true}; // MC target not registered — no refinement possible
+  const ArrayRef<FormatEPlacementMenus> Table = formatEPlacementTable(*MII);
+  SmallVector<const FormatEPlacementMenus *, 3> Ms;
+  for (unsigned Opc : LogicalOpcodes) {
+    const FormatEPlacementMenus *M =
+        Opc < Table.size() && Table[Opc].Real ? &Table[Opc] : nullptr;
+    Ms.push_back(M);
+  }
+  const bool E2 =
+      LogicalOpcodes.size() <= 2 &&
+      formatEPlacementSDR(Ms, /*E3=*/false, 0, /*UsedEntries=*/0,
+                          /*UsedUnits=*/0);
+  const bool E3 =
+      LogicalOpcodes.size() <= 3 &&
+      formatEPlacementSDR(Ms, /*E3=*/true, 0, /*UsedEntries=*/0,
+                          /*UsedUnits=*/0);
+  return {E2, E3};
+}
+
+bool llvm::haydnFormatEHasGoldenPlacement(unsigned Opcode) {
+  const MCInstrInfo *MII = formatEPlacementMII();
+  if (!MII)
+    return false;
+  const ArrayRef<FormatEPlacementMenus> Table = formatEPlacementTable(*MII);
+  return Opcode < Table.size() && Table[Opcode].Real;
+}
 
 // MemberId → Haydn::<E96 member opcode> (generated with live TD members).
 #define GET_FORMAT_E_MEMBER_OPCODES

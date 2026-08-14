@@ -418,12 +418,14 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteSoftEdge) {
   // LoopJNZ). Shared empty-cycle exact-commit must accept both as product
   // singletons so late creators can setDesc + finalize before the second
   // BranchRelaxation. Member choice is the same surface object encode sees
-  // (prefer high slots S2→S1→S0; BNEZ_W is S0-only).
+  // (prefer high slots; SUBI32 is an E2-only golden logical whose residual
+  // S2 alt is dropped — no E2 e2 — so its late member is S1; BNEZ_W is
+  // S0-only).
   HaydnMCFormats Fmts;
   auto Dec = commitLateProductCycle(Haydn::SUBI32, Fmts);
   ASSERT_TRUE(Dec.has_value());
   EXPECT_EQ(Dec->LogicalOpcode, Haydn::SUBI32);
-  EXPECT_EQ(Dec->MemberOpcode, Haydn::SUBI32_S2);
+  EXPECT_EQ(Dec->MemberOpcode, Haydn::SUBI32_S1);
   EXPECT_TRUE(Dec->NeedsSetDesc);
   // FE8: BundlePlan.FID residual field is removed; Format E row identity is
   // the stamped BundleFormatRowID via stampBundleCommit.
@@ -441,7 +443,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteSoftEdge) {
   EXPECT_EQ(Br->Plan.Bytes.Value, productParcelBytes().Value);
 
   // lateProductMemberOpcode is the shared hook late creators call.
-  EXPECT_EQ(lateProductMemberOpcode(Haydn::SUBI32), Haydn::SUBI32_S2);
+  EXPECT_EQ(lateProductMemberOpcode(Haydn::SUBI32), Haydn::SUBI32_S1);
   EXPECT_EQ(lateProductMemberOpcode(Haydn::BNEZ_W), Haydn::BNEZ_W_S0);
 }
 

@@ -30,11 +30,11 @@ body:             |
   ; CHECK-NEXT:   successors: %bb.1(0x80000000)
   ; CHECK-NEXT:   liveins: $r1, $r2, $r15
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   SET_HWLOOP_W_S0 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
   ; CHECK-NEXT:   BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit killed $r1, implicit killed $r2 {
   ; CHECK-NEXT:     $r3 = ADD32_S2 killed $r1, killed $r2, implicit-def dead $sfr
   ; CHECK-NEXT:     NOP_S0
   ; CHECK-NEXT:   }
+  ; CHECK-NEXT:   SET_HWLOOP_W_S0 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
   ; CHECK-NEXT:   NOP_S0
   ; CHECK-NEXT:   NOP_S0
   ; CHECK-NEXT: {{  $}}

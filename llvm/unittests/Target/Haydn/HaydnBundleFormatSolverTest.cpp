@@ -31,6 +31,9 @@
 #include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "TargetInfo/HaydnTargetInfo.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/MC/MCInst.h"
 #include "gtest/gtest.h"
@@ -83,7 +86,10 @@ TEST(HaydnBundleFormatSolver, ProductAuthorityIsGeneratedPacketFormats) {
   CycleState S = makeProductCycleState(Packets);
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
-  EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
+  // Golden placement: ST32 and ADD64 both seat E2 only at e0 (LOADSTORE0 /
+  // ALU0), so the pair's only product row is E3. The occupancy-only frontier
+  // (no member history) cannot see that and stays full.
+  EXPECT_EQ(S.FeasibleFormatMask, formatRowBit(BundleFormatRowID::E96ThreeEntry));
   EXPECT_EQ(productFeasibleFormatMask(Packets, S.OccupiedSlots),
             ProductFormatMask);
 
@@ -92,12 +98,14 @@ TEST(HaydnBundleFormatSolver, ProductAuthorityIsGeneratedPacketFormats) {
   EXPECT_TRUE(Plan->isProductLegal());
   EXPECT_EQ(Plan->Bytes, productParcelBytes());
   EXPECT_EQ(Plan->memberCount(), 2u);
-  EXPECT_EQ(Plan->Row, BundleFormatRowID::E96TwoEntry);
+  // Row selection honors the refined mask: a 2-member cycle the golden
+  // forbids in E2 commits as a 2-member E3.
+  EXPECT_EQ(Plan->Row, BundleFormatRowID::E96ThreeEntry);
 
-  // Covering mask keeps E2|E3 frontier under transitional SLOT occupancy.
+  // Entry capacity: three occupied slots exceed E2's two entries.
   EXPECT_EQ(coveringFormatMaskFromPackets(Packets, Haydn::SLOT_ALL,
                                           ProductFormatMask),
-            ProductFormatMask);
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
   EXPECT_EQ(coveringFormatMaskFromPackets(Packets, Haydn::SLOT0,
                                           /*AllowedMask=*/0),
             0u);
@@ -114,10 +122,11 @@ TEST(HaydnBundleFormatSolver, OneFullRowReachesHRSMSRAHintCommitSize) {
   EncodedBytes Size = productParcelBytes();
   EXPECT_EQ(vliwFormatSizeAsBytes(Prod->getSize()), Size);
 
-  // HR / SMS row frontier (pre-setDesc).
+  // HR / SMS row frontier (pre-setDesc). Three occupied slots exceed E2's
+  // two entries, so the full-occupancy frontier is E3 only.
   EXPECT_EQ(productFeasibleFormatMask(Packets, 0), ProductFormatMask);
   EXPECT_EQ(productFeasibleFormatMask(Packets, Haydn::SLOT_ALL),
-            ProductFormatMask);
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
 
   // RA-hint thin eligibility (product PacketFormats present).
   EXPECT_TRUE(productRAHintEligible(Packets));
@@ -391,8 +400,9 @@ TEST(HaydnBundleFormatSolver, ProductFeasibleFormatMaskEmptyOccupied) {
             ProductFormatMask);
   EXPECT_EQ(productFeasibleFormatMask(Packets, Haydn::SLOT1 | Haydn::SLOT2),
             ProductFormatMask);
+  // Entry capacity strips E2 at three occupied slots.
   EXPECT_EQ(productFeasibleFormatMask(Packets, Haydn::SLOT_ALL),
-            ProductFormatMask);
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
   // Convenience overload agrees.
   EXPECT_EQ(productFeasibleFormatMask(/*Occupied=*/0), ProductFormatMask);
 
@@ -402,7 +412,7 @@ TEST(HaydnBundleFormatSolver, ProductFeasibleFormatMaskEmptyOccupied) {
       ProductFormatMask);
   EXPECT_EQ(makeProductCycleStateFromOccupied(Packets, Haydn::SLOT_ALL)
                 .FeasibleFormatMask,
-            ProductFormatMask);
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
 }
 
 TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
@@ -413,8 +423,12 @@ TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32));
   EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ST32));
-  EXPECT_EQ(S.FeasibleFormatMask, ProductFormatMask);
-  EXPECT_EQ(productFeasibleFormatMask(S.OccupiedSlots), S.FeasibleFormatMask);
+  // ADD32 and ST32 both seat E2 only at e0: the pair narrows to E3.
+  EXPECT_EQ(S.FeasibleFormatMask,
+            formatRowBit(BundleFormatRowID::E96ThreeEntry));
+  // The occupancy-only rebuild has no member history, so it keeps the wider
+  // frontier — member-refined state is strictly stronger.
+  EXPECT_EQ(productFeasibleFormatMask(S.OccupiedSlots), ProductFormatMask);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1043,6 +1057,114 @@ TEST(HaydnBundleFormatSolver, VF24_ClosestLegalIllegalAndPreferredOrder) {
     ASSERT_EQ(FR.size(), 3u);
     EXPECT_EQ(FR[0], SlotBits(Haydn::SLOT0));
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Golden placement refinement — the entry/unit SDR law
+// (refineMaskByGoldenPlacement / haydnFormatEPlacementFeasible)
+//===----------------------------------------------------------------------===//
+//
+// Residual S0/S1/S2 slots are abstract labels, not golden entries. These
+// tests pin the cases where slot occupancy alone accepts a cycle that has no
+// (entry, unit) assignment — the cycles serialization fail-closes on
+// ("Format E one-parcel placement failed"). Target/MC registration is
+// process-wide (HaydnTestsTargetInit.cpp), so the oracle is always live here.
+
+// Two stores are both LOADSTORE0-only in every row: entry-menu collision.
+// This is the bf16mul E2 placement crash shape (D_SW_H + ST8 co-scheduled).
+TEST(HaydnBundleFormatSolver, GoldenPlacementTwoStoresNeverCoIssue) {
+  HaydnMCFormats Fmts;
+  const auto Direct = haydnFormatEPlacementFeasible(
+      {Haydn::D_SW_H_WITH_IMM, Haydn::ST8});
+  EXPECT_FALSE(Direct.first);
+  EXPECT_FALSE(Direct.second);
+
+  CycleCandidateSet C = makeProductCandidateSet(Fmts.getPacketFormats());
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::D_SW_H_WITH_IMM));
+  EXPECT_FALSE(canExactTryAddProduct(C, Fmts, Haydn::ST8));
+  EXPECT_FALSE(exactTryAddProduct(C, Fmts, Haydn::ST8));
+}
+
+// X2MUL32's placements are MAC0@E2e0/E3e0/E3e1 and MAC1@E2e1/E3e2: two fit
+// (MAC0+MAC1), a third has no free MAC unit anywhere.
+TEST(HaydnBundleFormatSolver, GoldenPlacementThirdMACRejected) {
+  HaydnMCFormats Fmts;
+  CycleCandidateSet C = makeProductCandidateSet(Fmts.getPacketFormats());
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::X2MUL32));
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::X2MUL32));
+  EXPECT_FALSE(canExactTryAddProduct(C, Fmts, Haydn::X2MUL32));
+  EXPECT_FALSE(exactTryAddProduct(C, Fmts, Haydn::X2MUL32));
+
+  const auto Two =
+      haydnFormatEPlacementFeasible({Haydn::X2MUL32, Haydn::X2MUL32});
+  EXPECT_TRUE(Two.second) << "two MACs pack in E3 (MAC0 + MAC1)";
+  const auto Three = haydnFormatEPlacementFeasible(
+      {Haydn::X2MUL32, Haydn::X2MUL32, Haydn::X2MUL32});
+  EXPECT_FALSE(Three.first);
+  EXPECT_FALSE(Three.second);
+}
+
+// LOADSTORE0 + LOAD1 + MAC is the classic legal 3-wide: refinement must not
+// reject it (B42_ResourceCycleLDLDMACPacksOneCycle is the live-path peer).
+TEST(HaydnBundleFormatSolver, GoldenPlacementLdLdMacStillPacks) {
+  HaydnMCFormats Fmts;
+  CycleCandidateSet C = makeProductCandidateSet(Fmts.getPacketFormats());
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::LD32));
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::LD32));
+  EXPECT_TRUE(exactTryAddProduct(C, Fmts, Haydn::X2MULA32));
+
+  // But a third load has no third load-capable unit.
+  const auto ThreeLoads = haydnFormatEPlacementFeasible(
+      {Haydn::LD32, Haydn::LD32, Haydn::LD32});
+  EXPECT_FALSE(ThreeLoads.first);
+  EXPECT_FALSE(ThreeLoads.second);
+}
+
+// ADD32's only E2 placement is e0/ALU0, so two ADD32 need E3 (ALU2 + ALU1);
+// SET_HWLOOP seats only at E2 e0/ALU0, so its legal co-issue partner must
+// take E2 e1 (RI20/ALU1 or LOAD1) — ADDI32 qualifies, ADD32 does not.
+TEST(HaydnBundleFormatSolver, GoldenPlacementRowMenusMeasured) {
+  const auto AddAdd =
+      haydnFormatEPlacementFeasible({Haydn::ADD32, Haydn::ADD32});
+  EXPECT_FALSE(AddAdd.first) << "both E2 placements are e0/ALU0";
+  EXPECT_TRUE(AddAdd.second);
+
+  const auto SetAdd =
+      haydnFormatEPlacementFeasible({Haydn::SET_HWLOOP_W, Haydn::ADD32});
+  EXPECT_FALSE(SetAdd.first) << "SET and ADD32 both need E2 e0/ALU0";
+  EXPECT_FALSE(SetAdd.second) << "SET_HWLOOP has no E3 placement";
+
+  const auto SetAddi =
+      haydnFormatEPlacementFeasible({Haydn::SET_HWLOOP_W, Haydn::ADDI32_W});
+  EXPECT_TRUE(SetAddi.first) << "SET@e0/ALU0 + ADDI32@e1/ALU1 is legal E2";
+  EXPECT_FALSE(SetAddi.second) << "SET_HWLOOP has no E3 placement";
+}
+
+// Every opcode with placement alternatives must resolve to a golden catalog
+// logical — an alt-haver outside the catalog would be fail-open in the
+// refinement and fail-closed at serialization. Pin the residue empty.
+TEST(HaydnBundleFormatSolver, GoldenPlacementCoversEveryAltHaver) {
+  HaydnMCFormats Fmts;
+  std::unique_ptr<MCInstrInfo> MII(
+      getTheHaydnTarget().createMCInstrInfo());
+  ASSERT_TRUE(MII);
+  std::string Missing;
+  unsigned Count = 0;
+  for (unsigned Opc = 0; Opc < Haydn::INSTRUCTION_LIST_END; ++Opc) {
+    if (!hasPlacementAlternatives(Fmts, Opc) ||
+        haydnFormatEHasGoldenPlacement(Opc))
+      continue;
+    // NOP is exempt by decision (underfill; every entry seats one). Pseudos
+    // without catalog rows (WFI) expand before serialization; the serializer
+    // fail-closes on them as the backstop.
+    if (MII->getName(Opc) == "NOP" || MII->get(Opc).isPseudo())
+      continue;
+    ++Count;
+    Missing += " ";
+    Missing += MII->getName(Opc);
+  }
+  EXPECT_EQ(Count, 0u)
+      << "alt-having opcodes lack golden placement menus:" << Missing;
 }
 
 } // namespace

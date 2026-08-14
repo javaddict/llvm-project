@@ -232,15 +232,22 @@ TEST(HaydnBundleMaterializeTest, FourAluSplitToTwoCycles) {
   expectValidSplit(Ops, Fmts, 2, 2);
 }
 
-TEST(HaydnBundleMaterializeTest, SixAluSplitToTwoFullCycles) {
+TEST(HaydnBundleMaterializeTest, SixAluSplitAddiTailsSingleton) {
   HaydnMCFormats Fmts;
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32,
                     Haydn::SUB32, Haydn::NEG32, Haydn::ADDI32};
-  expectValidSplit(Ops, Fmts, 2, 2);
+  // ADDI32's only golden row is E2 (RI20 at e1), so any cycle holding it has
+  // at most two members and its partner must seat e0. Greedy order reaches
+  // ADDI32 after {SUB32, NEG32} opened the second cycle, so it tails as a
+  // singleton: 3 + 2 + 1. Three cycles is also the optimum for this multiset
+  // (one op is E2-bound: ceil((6-2)/3) + 1).
+  expectValidSplit(Ops, Fmts, 3, 3);
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
-  ASSERT_EQ(Cycles.size(), 2u);
+  ASSERT_EQ(Cycles.size(), 3u);
   EXPECT_EQ(Cycles[0].Opcodes.size(), 3u);
-  EXPECT_EQ(Cycles[1].Opcodes.size(), 3u);
+  EXPECT_EQ(Cycles[1].Opcodes.size(), 2u);
+  EXPECT_EQ(Cycles[2].Opcodes.size(), 1u);
+  EXPECT_EQ(Cycles[2].Opcodes[0], unsigned(Haydn::ADDI32));
 }
 
 TEST(HaydnBundleMaterializeTest, SevenAluSplitToThreeCycles) {
