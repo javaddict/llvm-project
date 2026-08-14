@@ -377,6 +377,15 @@ public:
       const MachineInstr &MI, SmallVectorImpl<const MachineOperand *> &BaseOps,
       int64_t &Offset, bool &OffsetIsScalable, LocationSize &Width,
       const TargetRegisterInfo *TRI) const override;
+
+  // Two accesses off the same base whose [offset, offset+width) ranges do not
+  // meet cannot alias. The base class default returns false for everything,
+  // and that is not merely conservative: MachinePipeliner asserts this agrees
+  // with its own base+offset reasoning, so a target that leaves it
+  // unimplemented and enables the swing pipeliner can abort the compiler
+  // rather than lose precision (CB-148 on the pre-merge line).
+  bool areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
+                                       const MachineInstr &MIb) const override;
 };
 
 } // namespace llvm

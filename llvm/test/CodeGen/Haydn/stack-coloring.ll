@@ -47,8 +47,8 @@ define void @two_allocas() nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; nop }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   %p1 = alloca i32
   %p2 = alloca i32
@@ -87,7 +87,7 @@ define void @three_allocas() nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   %p1 = alloca i32
   %p2 = alloca i32
@@ -125,7 +125,7 @@ define i32 @alloca_loop(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   %p = alloca i32
   store i32 0, ptr %p
@@ -166,7 +166,7 @@ define void @nested_alloca() nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   %p1 = alloca i32
   %p2 = alloca i32
@@ -193,13 +193,13 @@ define i32 @large_alloca() nounwind {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32_w r2, r0, 99 }
 ; CHECK-NEXT:    { nop; st32 r2, r1, 7 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { ld32 r1, r1, 7; ld32 r2, r1, 0 }
+; CHECK-NEXT:    { nop; ld32 r2, r1, 0 }
+; CHECK-NEXT:    { nop; ld32 r1, r1, 7 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 40 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   %arr = alloca [8 x i32]
   %p0 = getelementptr [8 x i32], ptr %arr, i32 0, i32 0
@@ -234,7 +234,7 @@ define i32 @cond_alloca(i1 %flag) nounwind {
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   %p = alloca i32
   br i1 %flag, label %t, label %f
@@ -279,7 +279,7 @@ define i64 @alloca_i64() nounwind {
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
 entry:
   %p = alloca i64
   store i64 12345678, ptr %p

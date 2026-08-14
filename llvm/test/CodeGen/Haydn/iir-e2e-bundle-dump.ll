@@ -99,7 +99,11 @@ entry:
 ; Load state values from struct pointer via R7 (7th arg, preserved)
 ; ASM: ld32{{.*}}{{r[0-9]+|fp}}, r7, 0
 
-; Coefficient multiplies (mull).
+; Coefficient multiplies (mull), with two of the r7-based state stores now
+; free to interleave ahead of them (areMemAccessesTriviallyDisjoint knows the
+; state slots are disjoint from the sample loads).
+; ASM-DAG: st32{{[^;}]*}}r7,
+; ASM-DAG: st32{{[^;}]*}}r7,
 ; ASM: mull
 ; ASM: mull
 ; ASM: mull
@@ -112,11 +116,9 @@ entry:
 ; ASM: sub32
 ; ASM: sub32
 
-; State update stores (still using R7 as base — the regression guard).
-; The selector interleaves state stores with multiplies, so we use CHECK-DAG
-; to verify r7-based stores exist regardless of ordering.
-; ASM-DAG: st32{{.*}}{{r[0-9]+|fp}}, r7,
-; ASM-DAG: st32{{.*}}{{r[0-9]+|fp}}, r7,
+; Final state-update store (still using R7 as base — the regression guard;
+; the other two moved up beside the multiplies, checked above).
+; ASM-DAG: st32{{[^;}]*}}r7,
 
 ; Return value: the final sub32 leaves the result directly in r1 (no separate
 ; move needed). Epilogue returns via jalr_w.

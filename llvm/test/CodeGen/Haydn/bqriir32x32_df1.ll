@@ -93,11 +93,8 @@ define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
 ; CHECK-NEXT:    { nop; bnez_w r10, .LBB0_2 }
 ; CHECK-NEXT:  // %bb.3: // %for.end.latch
 ; CHECK-NEXT:    { nop; st32 r6, r1, 5 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r12, r1, 6 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r9, r1, 7 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r8, r1, 8 }
 ; CHECK-NEXT:  .LBB0_4: // %for.end
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
