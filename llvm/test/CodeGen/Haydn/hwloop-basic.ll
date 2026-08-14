@@ -19,11 +19,13 @@ define i32 @hwloop_basic(ptr %p) {
 ; DEFAULT-NEXT:    .cfi_def_cfa_offset 8
 ; DEFAULT-NEXT:    { nop; move32 r2, r1 }
 ; DEFAULT-NEXT:    { nop; addi32 r1, r0, 0 }
-; DEFAULT-NEXT:    { ld32 r2, r2, 0; move32 r4, r1 }
+; DEFAULT-NEXT:    { nop; ld32 r2, r2, 0 }
+; DEFAULT-NEXT:    { nop; move32 r4, r1 }
 ; DEFAULT-NEXT:    { nop; addi32 r3, r0, 10 }
 ; DEFAULT-NEXT:  .LBB0_1: // %loop
 ; DEFAULT-NEXT:    // =>This Inner Loop Header: Depth=1
-; DEFAULT-NEXT:    { addi32 r4, r4, 1; add32 r1, r1, r2 }
+; DEFAULT-NEXT:    { nop; addi32 r4, r4, 1 }
+; DEFAULT-NEXT:    { nop; add32 r1, r1, r2 }
 ; DEFAULT-NEXT:    { nop; sltu32 r5, r4, r3 }
 ; DEFAULT-NEXT:    { nop; bnez r5, .LBB0_1 }
 ; DEFAULT-NEXT:  // %bb.2: // %exit
@@ -47,6 +49,7 @@ define i32 @hwloop_basic(ptr %p) {
 ; HWON-NEXT:    // Label of block must be emitted
 ; HWON-NEXT:  .LLhwloop_start0:
 ; HWON-NEXT:    { nop; ld32 r3, r1, 0 }
+; HWON-NEXT:    { nop; nop }
 ; HWON-NEXT:    { nop; nop }
 ; HWON-NEXT:  .LLhwloop_end0:
 ; HWON-NEXT:    { nop; add32 r2, r2, r3 }

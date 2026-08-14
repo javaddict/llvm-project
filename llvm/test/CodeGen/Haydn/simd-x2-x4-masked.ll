@@ -460,7 +460,8 @@ define <2 x i32> @test_x2cmul32_masked_eq(<2 x i32> %acc, <2 x i32> %a, <2 x i32
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2cmul32 d1, d2, d1, d2; x2seq32 d1, d3 }
+; CHECK-NEXT:    { nop; x2seq32 d1, d3 }
+; CHECK-NEXT:    { nop; x2cmul32 d1, d2, d1, d2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

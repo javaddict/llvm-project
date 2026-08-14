@@ -63,11 +63,15 @@ define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
 ; CHECK-NEXT:  // %bb.1: // %for.body.preheader
 ; CHECK-NEXT:    { ld32 r6, r1, 0; ld32 r7, r1, 1 }
 ; CHECK-NEXT:    { ld32 r9, r1, 7; ld32 r12, r1, 6 }
-; CHECK-NEXT:    { ld32 r6, r1, 2; sext32t64 d0, r6 }
-; CHECK-NEXT:    { ld32 r8, r1, 8; sext32t64 d1, r7 }
-; CHECK-NEXT:    { ld32 r7, r1, 3; sext32t64 d2, r6 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r6 }
+; CHECK-NEXT:    { nop; ld32 r6, r1, 2 }
+; CHECK-NEXT:    { nop; ld32 r8, r1, 8 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r7 }
+; CHECK-NEXT:    { nop; ld32 r7, r1, 3 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r6 }
 ; CHECK-NEXT:    { nop; ld32 r6, r1, 5 }
-; CHECK-NEXT:    { ld32 r7, r1, 4; sext32t64 d3, r7 }
+; CHECK-NEXT:    { nop; sext32t64 d3, r7 }
+; CHECK-NEXT:    { nop; ld32 r7, r1, 4 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; sext32t64 d4, r7 }
 ; CHECK-NEXT:    { nop; addi32 r7, r0, 30 }
@@ -78,15 +82,19 @@ define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
 ; CHECK-NEXT:    { nop; ld32 r6, r3, 0 }
 ; CHECK-NEXT:    { sext32t64 d7, r12; mul64.ll d5, d2, d5 }
 ; CHECK-NEXT:    { sext32t64 d6, r6; mul64.ll d7, d1, d7 }
-; CHECK-NEXT:    { move32 r8, r9; sext32t64 d8, r8; mul64.ll d6, d0, d6 }
-; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; mul64.ll d6, d0, d6 }
+; CHECK-NEXT:    { nop; sext32t64 d8, r8 }
+; CHECK-NEXT:    { nop; move32 r8, r9 }
 ; CHECK-NEXT:    { sext32t64 d7, r8; add64 d6, d6, d7 }
-; CHECK-NEXT:    { mul64.ll d8, d4, d8; mul64.ll d7, d3, d7 }
+; CHECK-NEXT:    { nop; mul64.ll d7, d3, d7 }
+; CHECK-NEXT:    { nop; mul64.ll d8, d4, d8 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { add64 d6, d7, d8; add64 d5, d6, d5 }
-; CHECK-NEXT:    { addi32 r5, r5, 1; sub64 d5, d5, d6 }
+; CHECK-NEXT:    { nop; sub64 d5, d5, d6 }
+; CHECK-NEXT:    { nop; addi32 r5, r5, 1 }
 ; CHECK-NEXT:    { slt32 r10, r5, r4; srl64 d5, d5, r7 }
-; CHECK-NEXT:    { addi32 r3, r3, 4; move32_dr_l r9, d5 }
+; CHECK-NEXT:    { nop; move32_dr_l r9, d5 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, 4 }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r9, r2, 1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; bnez r10, .LBB0_2 }

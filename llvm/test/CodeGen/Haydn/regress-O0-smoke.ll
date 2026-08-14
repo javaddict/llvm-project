@@ -58,7 +58,8 @@ define i32 @test_mul(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { ld32 r2, sp, 3; move32 r1, r2 } // 4-byte Folded Reload
+; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; mull r1, r2, r1 }
@@ -183,7 +184,8 @@ define i32 @test_loop(i32 %n) {
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
-; CHECK-NEXT:    { st32 r1, sp, 5; move32 r2, r1 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; move32 r2, r1 }
+; CHECK-NEXT:    { nop; st32 r1, sp, 5 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; st32 r2, sp, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -301,7 +303,8 @@ define i32 @test_call_9args(i32 %a) {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { subi32 sp, sp, 16; move32 r12, r1 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; move32 r12, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }

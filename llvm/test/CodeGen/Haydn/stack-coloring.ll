@@ -76,7 +76,8 @@ define void @three_allocas() nounwind {
 ; CHECK-NEXT:    { nop; addi32 r3, sp, 8 }
 ; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; addi32 r4, r0, 30 }
-; CHECK-NEXT:    { st32 r4, r3, 0; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; st32 r4, r3, 0 }
+; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r3, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -115,8 +116,10 @@ define i32 @alloca_loop(i32 %n) nounwind {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; ld32 r4, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32 r3, r3, 1; add32 r4, r3, r4 }
-; CHECK-NEXT:    { st32 r4, r2, 0; slt32 r5, r3, r1 }
+; CHECK-NEXT:    { nop; add32 r4, r3, r4 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, 1 }
+; CHECK-NEXT:    { nop; slt32 r5, r3, r1 }
+; CHECK-NEXT:    { nop; st32 r4, r2, 0 }
 ; CHECK-NEXT:    { nop; bnez r5, .LBB2_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }

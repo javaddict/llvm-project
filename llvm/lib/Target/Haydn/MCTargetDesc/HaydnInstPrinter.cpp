@@ -159,11 +159,14 @@ void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
 }
 
 void HaydnInstPrinter::printRegName(raw_ostream &O, MCRegister Reg) {
-  // Bounds-safe: generated getRegisterName asserts RegNo!=0 && RegNo<39.
-  // Hostile decode or a straddle-filled MCInst can carry NoRegister / an
-  // out-of-range id; never abort objdump — print a placeholder instead.
+  // Bounds-safe: generated getRegisterName asserts RegNo!=0 && RegNo in
+  // range. Hostile decode or a straddle-filled MCInst can carry NoRegister /
+  // an out-of-range id; never abort objdump — print a placeholder instead.
+  // The bound is the GENERATED register count — a literal here silently
+  // banished every register whose enum value moved when AR2/AR3 came back
+  // (CB-149): lr printed as <?> in every epilogue.
   unsigned RegNo = Reg.id();
-  if (RegNo == 0 || RegNo >= 39) {
+  if (RegNo == 0 || RegNo >= Haydn::NUM_TARGET_REGS) {
     O << "<?>";
     return;
   }

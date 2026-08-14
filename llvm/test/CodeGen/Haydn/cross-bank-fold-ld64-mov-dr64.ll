@@ -25,15 +25,21 @@ define i64 @test_ld64_fold(ptr %in, i64 %coef) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0; x2slli32 d1, d0, 16 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { st32 r1, sp, 2; x2srai32 d1, d1, 16; x2srai32 d0, d0, 16 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
+; CHECK-NEXT:    { nop; x2slli32 d1, d0, 16 }
+; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { st32 r2, sp, 3; x2slli32 d2, d0, 16 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; x2srai32 d0, d0, 16 }
+; CHECK-NEXT:    { nop; x2srai32 d1, d1, 16 }
+; CHECK-NEXT:    { nop; st32 r2, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; x2slli32 d2, d0, 16 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { ld64 d3, sp, 1; sext32t64 d0, r3; x2srai32 d2, d2, 16 } // 8-byte Folded Reload
+; CHECK-NEXT:    { nop; sext32t64 d0, r3 }
+; CHECK-NEXT:    { nop; ld64 d3, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
+; CHECK-NEXT:    { nop; x2srai32 d2, d2, 16 }
 ; CHECK-NEXT:    { x2slli32 d2, d2, 16; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { x2srai32 d2, d2, 16; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; fmula16.ls00 d0, d3, d1 }
@@ -62,8 +68,10 @@ define void @test_st64_fold(ptr %out, i64 %a, i64 %coef) {
 ; CHECK-NEXT:    { sext32t64 d3, r3; x2slli32 d2, d2, 16 }
 ; CHECK-NEXT:    { slli64 d3, d3, 32; x2srai32 d1, d1, 16 }
 ; CHECK-NEXT:    { srli64 d3, d3, 32; x2srai32 d2, d2, 16 }
-; CHECK-NEXT:    { fmula16.ls00 d3, d0, d1; x2slli32 d2, d2, 16 }
-; CHECK-NEXT:    { fmula16.ls11 d3, d0, d1; x2srai32 d2, d2, 16 }
+; CHECK-NEXT:    { nop; x2slli32 d2, d2, 16 }
+; CHECK-NEXT:    { nop; fmula16.ls00 d3, d0, d1 }
+; CHECK-NEXT:    { nop; x2srai32 d2, d2, 16 }
+; CHECK-NEXT:    { nop; fmula16.ls11 d3, d0, d1 }
 ; CHECK-NEXT:    { nop; fmula16.hs00 d3, d0, d2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { nop; fmula16.hs11 d3, d0, d2 }

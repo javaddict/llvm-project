@@ -1,4 +1,7 @@
-# RUN: %python %S/../../../lib/Target/Haydn/FormatE/generate_sched_records.py --check
+# The importer --check gate lives in sched-resource-truth-homes.s (gated on the
+# haydn-golden-canonical feature — the canonical ledger exists only on
+# the plans machine). This test keeps the environment-free content
+# checks against the committed generated files.
 # RUN: FileCheck %s --check-prefix=SCHED --input-file=%S/../../../lib/Target/Haydn/HaydnSchedule.td
 # RUN: FileCheck %s --check-prefix=GEN --input-file=%S/../../../lib/Target/Haydn/HaydnGenSchedRecords.inc
 # RUN: not grep -F 'def Slot12_ALU_AccLat' %S/../../../lib/Target/Haydn/HaydnSchedule.td

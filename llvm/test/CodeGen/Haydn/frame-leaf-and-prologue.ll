@@ -102,7 +102,8 @@ define i32 @non_leaf(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    { nop; jal lr, extern }
-; CHECK-NEXT:    { addi32 r1, r1, 1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }

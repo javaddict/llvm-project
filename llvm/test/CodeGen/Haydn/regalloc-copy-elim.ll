@@ -81,7 +81,7 @@ define i64 @test_dr64_copy_or64(i64 %a) nounwind {
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 9 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
 ; DR64 operations should use OR64 for copies, not ADD64 with GPR registers
   %v1 = call i64 @get_i64()
@@ -142,7 +142,7 @@ define i64 @test_dr64_many_copies(i64 %a, i64 %b, i64 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 4 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 11 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 48 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
 ; DR64 copies should use or64 (not add64 with GPR zero reg)
   %v1 = add i64 %a, 1
@@ -169,7 +169,7 @@ define i32 @test_no_identity_copy(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
 ; Should not have a COPY r1, r1 or MOVE32 r1, r1
   ret i32 %x
@@ -185,7 +185,7 @@ define i64 @test_no_dr64_identity(i64 %x) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
 ; Returning %x directly in D0 — no OR64 d0, d0, d0 needed
   ret i64 %x
@@ -249,7 +249,7 @@ define i64 @test_copy_elim_stress() nounwind {
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 7 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 17 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 72 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %c1 = call i64 @get_i64()
   %c2 = call i64 @get_i64()
@@ -286,7 +286,8 @@ define i32 @test_gpr_copy_elim_stress() nounwind {
 ; CHECK-NEXT:    { nop; st32 r9, r1, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r1, 5 }
 ; CHECK-NEXT:    { nop; jal lr, get_i32 }
-; CHECK-NEXT:    { st32 r1, sp, 3; xor32 r0, r0, r0 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; jal lr, get_i32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -328,7 +329,7 @@ define i32 @test_gpr_copy_elim_stress() nounwind {
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 8 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 9 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %c1 = call i32 @get_i32()
   %c2 = call i32 @get_i32()

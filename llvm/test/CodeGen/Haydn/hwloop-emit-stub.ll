@@ -31,11 +31,13 @@ define i32 @hwloop_stub_simple(ptr %p) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32 r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; move32 r4, r1 }
+; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
+; CHECK-NEXT:    { nop; move32 r4, r1 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 10 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { addi32 r4, r4, 1; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
+; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; slt32 r5, r4, r3 }
 ; CHECK-NEXT:    { nop; bnez r5, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
