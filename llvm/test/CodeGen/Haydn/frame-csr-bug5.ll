@@ -24,7 +24,7 @@ define i32 @bug5_main(i32 %argc) {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 32 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 32 }
 ; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
 ; CHECK-NEXT:    { nop; st64 d8, sp, 3 }
@@ -32,34 +32,35 @@ define i32 @bug5_main(i32 %argc) {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
 ; CHECK-NEXT:    .cfi_offset d8, -16
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r4, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; lui r2, g }
+; CHECK-NEXT:    { nop; lui r2, %hi12(g) }
 ; CHECK-NEXT:    { nop; lui r4, 1025 }
-; CHECK-NEXT:    { nop; addi32_w r4, r4, -131072 }
+; CHECK-NEXT:    { nop; addi32 r4, r4, -131072 }
 ; CHECK-NEXT:    { nop; st32 r4, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r2, r2, g }
+; CHECK-NEXT:    { nop; addi32 r2, r2, %lo20(g) }
+; CHECK-NEXT:    { nop; addi32 r3, r2, 4 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d8, r2, 0 }
-; CHECK-NEXT:    { nop; addi32_w r3, r2, 4 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d8, r3, 0 }
-; CHECK-NEXT:    { nop; jal_w lr, helper }
+; CHECK-NEXT:    { nop; jal lr, helper }
 ; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; move32 r8, r1 }
-; CHECK-NEXT:    { nop; jal_w lr, __fixdfsi }
+; CHECK-NEXT:    { nop; jal lr, __fixdfsi }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r8, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 8 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 9 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 40 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %a = fmul double 1.500000e+00, 2.500000e+00     ; constant-folded double temp on stack
   store double %a, ptr @g

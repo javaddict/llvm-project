@@ -171,20 +171,10 @@ def xor_allones_boolean : GICombineRule<
   (apply [{ applyXorAllOnesBoolean(*${root}, MRI, B, Observer, ${matchinfo}); }])
 >;
 
-// G_MUL x, (pow2±1) s32 strength-reduce (mul_to_shl covers pure pow2 only).
-def mul_to_shift_matchdata : GIDefMatchData<"std::pair<Register, uint64_t>">;
-def mul_to_shift_sub : GICombineRule<
-  (defs root:$root, mul_to_shift_matchdata:$matchinfo),
-  (match (wip_match_opcode G_MUL):$root,
-         [{ return matchMulToShiftSub(*${root}, MRI, ${matchinfo}); }]),
-  (apply [{ applyMulToShiftSub(*${root}, MRI, B, Observer, ${matchinfo}); }])
->;
-def mul_to_shift_add : GICombineRule<
-  (defs root:$root, mul_to_shift_matchdata:$matchinfo),
-  (match (wip_match_opcode G_MUL):$root,
-         [{ return matchMulToShiftAdd(*${root}, MRI, ${matchinfo}); }]),
-  (apply [{ applyMulToShiftAdd(*${root}, MRI, B, Observer, ${matchinfo}); }])
->;
+// G_MUL x, (pow2±1) is not rewritten to shift-add/sub. Haydn has 1-slot
+// MULL (MAC), so SHL+ADD/SUB is two ALU ops vs one MAC issue — an
+// unconditional pessimization. Generic mul_to_shl (pure pow2) stays in
+// trivial_combines: SLLI is one ALU vs one MAC and packs on ALU0/1/2.
 
 // G_SEXT(G_ZEXT x) -> G_ZEXT x (wider). Not in cast_of_cast_combines.
 def sext_of_zext : GICombineRule<
@@ -194,7 +184,7 @@ def sext_of_zext : GICombineRule<
   (apply [{ applySExtOfZExt(*${root}, MRI, B, Observer, ${matchinfo}); }])
 >;
 
-// Priority: xor folds before boolean rewrite; shift-sub before shift-add.
+// Priority: xor folds before boolean rewrite.
 def haydn_post_residual_combines : GICombineGroup<[
   sub_of_neg,
   bswap_of_bswap,
@@ -202,8 +192,6 @@ def haydn_post_residual_combines : GICombineGroup<[
   double_not,
   and_or_disjoint_or,
   xor_allones_boolean,
-  mul_to_shift_sub,
-  mul_to_shift_add,
   sext_of_zext,
 ]>;
 
@@ -264,6 +252,7 @@ def HaydnPreLegalizerCombiner : GICombiner<
 //   KEEP (TD-registered match/apply only):
 //   - form_agu_inc_mem -> matchCombineAGUIncMem / applyIncMem
 //   - haydn_post_residual match/apply free functions
+//     (mul_to_shift_add/sub deleted: 1-slot MULL vs SHL+ADD pessimization)
 //   DELETED:
 //   - sanitizeCastCopies post-legal repair path (producers fixed at Pre)
 //   - free-form AGU switch after tryCombineAllImpl

@@ -57,7 +57,7 @@ body:             |
 # no frame; the initial CFA comes from the CIE, no per-function
 # cfi_def_cfa_offset needed).
 # ZERO_GPR pseudo retired -> XOR32 $r0, $r0 (x^x=0), frame-setup.
-# Flex cutover: XOR32 -> XOR32_S0 (slot-suffixed Flex form).
+# Flex cutover: XOR32 -> XOR32 (slot-suffixed Flex form).
 # CHECK: frame-setup XOR32 $r0, $r0
 # PostRAScratchFI may force a small frame even for otherwise frameless
 # leaves when R12 is allocatable. Accept either no-SUBI32 or SUBI32 for that slot.
@@ -90,7 +90,7 @@ body:             |
 # Prologue: R0 zero (XOR32) + SP decrement (4 bytes rounded to 8).
 # (SFR-strip) removed implicit-def $sfr from frame-setup SUBI32/ADDI32
 # (non-flag ALU ops no longer define SFR). Rebaselined.
-# Flex cutover: XOR32/SUBI32 -> XOR32_S0/SUBI32_S0.
+# Flex cutover: XOR32/SUBI32 -> XOR32/SUBI32_S0.
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{8|16}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{8|16}}

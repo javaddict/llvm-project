@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 //
 // Baremetal / freestanding Haydn ILP32 ABI for LLDB (BundleSim gdb-remote).
-// Register names/order for unwind follow DWARF (R0–R15 + AR0/AR1). Remote
+// DWARF names/order: R0–R15, D0–D15, AR0/AR1 (HaydnRegisterInfo.td). Remote
 // RSP may also expose PC/AR/DR/HWLR/CBR via qRegisterInfo / target.xml.
+// Returns: i32/ptr in R1, i64/f64/64-bit SIMD in D0 (RetCC_Haydn).
+// Callee-saved: R8–R11, FP/R14, LR/R15, SP, D8–D15.
 //
 //===----------------------------------------------------------------------===//
 
@@ -57,6 +59,13 @@ public:
     // Format E96 bundle addresses are 2-byte aligned at minimum.
     return (pc & 0x1) == 0;
   }
+
+  bool GetPointerReturnRegister(const char *&name) override;
+
+  bool GetFallbackRegisterLocation(
+      const lldb_private::RegisterInfo *reg_info,
+      lldb_private::UnwindPlan::Row::AbstractRegisterLocation &unwind_regloc)
+      override;
 
   const lldb_private::RegisterInfo *
   GetRegisterInfoArray(uint32_t &count) override;

@@ -23,7 +23,8 @@
 ; Each must:
 ; 1. Decrement SP (subi32 sp, sp, <N>)
 ; 2. Emit `.cfi_def_cfa_offset <N>` with N > 0 (the load-bearing CHECK)
-; 3. NOT emit `.cfi_def_cfa_register fp` (proves hasFP is false)
+; 3. NOT emit `.cfi_def_cfa fp, 0` / `.cfi_def_cfa_register fp`
+;    (proves hasFP is false; FP-frame CFA is `.cfi_def_cfa fp, 0`)
 ; 4. Restore SP in the epilogue (addi32{{(_w)?}} sp, sp, <N>)
 
 define i32 @stack_locals(i32 %x) {
@@ -33,19 +34,19 @@ define i32 @stack_locals(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 12 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; addi32_w r3, sp, 8 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 42 }
+; CHECK-NEXT:    { nop; addi32 r3, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; ld32 r2, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %a = alloca i32
   %b = alloca i32
   store i32 %x, ptr %a
@@ -62,14 +63,14 @@ define i32 @fixed_alloca(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p = alloca i32, i32 4
   store i32 %x, ptr %p
   %v = load i32, ptr %p
@@ -82,19 +83,19 @@ define i32 @locals_and_alloca(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 28 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 28 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; addi32_w r3, sp, 12 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 7 }
+; CHECK-NEXT:    { nop; addi32 r3, sp, 12 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 7 }
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; ld32 r2, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %a = alloca i32
   %p = alloca i32, i32 4
   store i32 %x, ptr %a

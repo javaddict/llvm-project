@@ -9,7 +9,7 @@
 // Haydn GlobalISel target generic-opcode definitions. Kept separate from
 // HaydnGISel.td (which holds selection Pat patterns for regular 1:1 maps).
 // This file follows the AArch64/RISCV convention (*InstrGISel.td) for
-// declaring target generic ops (G_MULA64*, G_HAYDN_*INC_*).
+// declaring target generic ops (G_MULA64*, G_HAYDN_MUL64_WIDEN*, G_HAYDN_*INC_*).
 //
 // A target generic op has isPreIselOpcode = true, so the selector routes it
 // past the "already selected" early-return (gated on the MCID::PreIselOpcode
@@ -43,8 +43,8 @@ class HaydnGenericInstruction : GenericInstruction {
 // legalizer's zext×zext → MUL64_ULUL policy (mul-widen-i32-to-i64-native.ll).
 //
 // Forming pre-legalizer is mandatory: the legalizer replaces G_MUL<s64> with
-// a native MUL64_*, so this is the only pass that sees the G_MUL+G_ADD shape.
-// Selected to Haydn::MULA64_LL / MULA64_ULUL (tied acc, all operands DR64).
+// G_HAYDN_MUL64_WIDEN{,U}, so this is the only pass that sees the G_MUL+G_ADD
+// shape. Selected to Haydn::MULA64_LL / MULA64_ULUL (tied acc, all DR64).
 // formMACs / PostSelect MAC densify is FATED — do not revive.
 def G_MULA64 : HaydnGenericInstruction {
   let OutOperandList = (outs type0:$rd);
@@ -59,6 +59,29 @@ def G_MULA64U : HaydnGenericInstruction {
   let InOperandList = (ins type0:$ra, type0:$rs1, type0:$rs2);
   let hasSideEffects = 0;
   let isCommutable = 1;  // rs1 <-> rs2 commute
+}
+
+// G_HAYDN_MUL64_WIDEN / G_HAYDN_MUL64_WIDENU -- 32x32->64 widening multiply.
+// The legalizer rewrites G_MUL<s64> when both operands are G_SEXT / G_ZEXT /
+// G_ANYEXT of s32 (AIE G_AIE_* shape: target-generic, then select):
+//   SEXT x SEXT                 -> G_HAYDN_MUL64_WIDEN  -> MUL64_LL
+//   ZEXT/ANYEXT x ZEXT/ANYEXT   -> G_HAYDN_MUL64_WIDENU -> MUL64_ULUL
+// True 64x64 G_MUL is a schoolbook of three unsigned widening muls.
+// Legalizer must not construct Haydn::MUL64_*. Selection of these opcodes
+// is the C++ selector residual (same home as G_MULA64*); no ISD node, so
+// HaydnGISel.td Pat cannot match them.
+def G_HAYDN_MUL64_WIDEN : HaydnGenericInstruction {
+  let OutOperandList = (outs type0:$rd);
+  let InOperandList = (ins type0:$rs1, type0:$rs2);
+  let hasSideEffects = 0;
+  let isCommutable = 1;
+}
+
+def G_HAYDN_MUL64_WIDENU : HaydnGenericInstruction {
+  let OutOperandList = (outs type0:$rd);
+  let InOperandList = (ins type0:$rs1, type0:$rs2);
+  let hasSideEffects = 0;
+  let isCommutable = 1;
 }
 
 //===----------------------------------------------------------------------===//

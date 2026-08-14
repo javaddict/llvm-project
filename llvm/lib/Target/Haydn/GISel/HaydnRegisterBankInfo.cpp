@@ -133,9 +133,15 @@ HaydnRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     // 64-bit SIMD (v2i32/v4i16/v8i8) and s64 → DR64. Residual 32-bit SLP
     // vectors (v4i8/v2i16) and smaller scalars use GPR32 width slots.
     if (OpTy.isValid()) {
-      if (OpTy.getSizeInBits() == 64)
-        OpMappings[Idx] = &ValMappings[4]; // DR64
-      else
+      if (OpTy.getSizeInBits() == 64) {
+        const TargetRegisterClass *RC = MRI.getRegClassOrNull(Reg);
+        assert((!RC || RC != &Haydn::ARRegClass) &&
+               "64-bit AR operand must not map to DR64 by size");
+        if (RC == &Haydn::ARRegClass)
+          OpMappings[Idx] = &ValMappings[5]; // AR
+        else
+          OpMappings[Idx] = &ValMappings[4]; // DR64
+      } else
         OpMappings[Idx] = &ValMappings[gprMappingIdxForSize(OpTy.getSizeInBits())];
     } else {
       OpMappings[Idx] = &ValMappings[3]; // GPR32 default

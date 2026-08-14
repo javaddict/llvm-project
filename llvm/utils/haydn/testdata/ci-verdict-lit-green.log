@@ -1,0 +1,7 @@
+-- Testing: 10 tests, 4 workers --
+Testing Time: 0.12s
+
+Total Discovered Tests: 10
+  Unsupported      :   1 (10.00%)
+  Passed           :   5 (50.00%)
+  Expectedly Failed:   4 (40.00%)

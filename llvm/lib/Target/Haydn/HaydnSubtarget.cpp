@@ -316,10 +316,12 @@ void HaydnSubtarget::initLibcallLoweringInfo(
   Info.setLibcallImpl(RTLIB::ATOMIC_FETCH_NAND_16,
                       RTLIB::impl___atomic_fetch_nand_16);
 
-  // Soft-float (no FPU): compiler-rt arithmetic/compare/convert + libm
-  // rounding/min/max. Keep in sync with HaydnTargetLowering setLibcallImpl
-  // (GISel LegalizerHelper::createLibcall reads TLI; LibcallLoweringInfo
-  // feeds IR-level expands). Baremetal defaults leave floorf/fminf unset.
+  // Soft-float (no FPU): compiler-rt arithmetic/compare/convert + libm.
+  // This is the ONE Haydn libcall-name table. TargetLoweringBase constructs
+  // TLI.Libcalls via this hook, so GISel createLibcall (TLI.getLibcallName)
+  // and IR-level LibcallLoweringInfo share the same names. Haydn is not a
+  // SystemRuntimeLibrary / isDefaultLibcallArch, so baremetal defaults leave
+  // libm and even compiler-rt arith unset until registered here.
   Info.setLibcallImpl(RTLIB::ADD_F32, RTLIB::impl___addsf3);
   Info.setLibcallImpl(RTLIB::SUB_F32, RTLIB::impl___subsf3);
   Info.setLibcallImpl(RTLIB::MUL_F32, RTLIB::impl___mulsf3);
@@ -362,7 +364,43 @@ void HaydnSubtarget::initLibcallLoweringInfo(
   Info.setLibcallImpl(RTLIB::FPEXT_F32_F64, RTLIB::impl___extendsfdf2);
   Info.setLibcallImpl(RTLIB::FPROUND_F64_F32, RTLIB::impl___truncdfsf2);
 
+  // IEEE half ↔ f32/f64. compiler-rt symbols exist (__extendhfsf2 etc.).
+  // Haydn CC has no f16; the legalizer custom path passes integer bits in a
+  // GPR32 (compiler-rt without COMPILER_RT_HAS_FLOAT16 is uint16_t).
+  Info.setLibcallImpl(RTLIB::FPEXT_F16_F32, RTLIB::impl___extendhfsf2);
+  Info.setLibcallImpl(RTLIB::FPEXT_F16_F64, RTLIB::impl___extendhfdf2);
+  Info.setLibcallImpl(RTLIB::FPROUND_F32_F16, RTLIB::impl___truncsfhf2);
+  Info.setLibcallImpl(RTLIB::FPROUND_F64_F16, RTLIB::impl___truncdfhf2);
+
   // libm (compile succeeds; missing libm → link error, not legalizer crash)
+  Info.setLibcallImpl(RTLIB::REM_F32, RTLIB::impl_fmodf);
+  Info.setLibcallImpl(RTLIB::REM_F64, RTLIB::impl_fmod);
+  Info.setLibcallImpl(RTLIB::SQRT_F32, RTLIB::impl_sqrtf);
+  Info.setLibcallImpl(RTLIB::SQRT_F64, RTLIB::impl_sqrt);
+  Info.setLibcallImpl(RTLIB::FMA_F32, RTLIB::impl_fmaf);
+  Info.setLibcallImpl(RTLIB::FMA_F64, RTLIB::impl_fma);
+  Info.setLibcallImpl(RTLIB::SIN_F32, RTLIB::impl_sinf);
+  Info.setLibcallImpl(RTLIB::SIN_F64, RTLIB::impl_sin);
+  Info.setLibcallImpl(RTLIB::COS_F32, RTLIB::impl_cosf);
+  Info.setLibcallImpl(RTLIB::COS_F64, RTLIB::impl_cos);
+  Info.setLibcallImpl(RTLIB::EXP_F32, RTLIB::impl_expf);
+  Info.setLibcallImpl(RTLIB::EXP_F64, RTLIB::impl_exp);
+  Info.setLibcallImpl(RTLIB::LOG_F32, RTLIB::impl_logf);
+  Info.setLibcallImpl(RTLIB::LOG_F64, RTLIB::impl_log);
+  Info.setLibcallImpl(RTLIB::LOG2_F32, RTLIB::impl_log2f);
+  Info.setLibcallImpl(RTLIB::LOG2_F64, RTLIB::impl_log2);
+  Info.setLibcallImpl(RTLIB::LOG10_F32, RTLIB::impl_log10f);
+  Info.setLibcallImpl(RTLIB::LOG10_F64, RTLIB::impl_log10);
+  Info.setLibcallImpl(RTLIB::POW_F32, RTLIB::impl_powf);
+  Info.setLibcallImpl(RTLIB::POW_F64, RTLIB::impl_pow);
+  Info.setLibcallImpl(RTLIB::POWI_F32, RTLIB::impl___powisf2);
+  Info.setLibcallImpl(RTLIB::POWI_F64, RTLIB::impl___powidf2);
+  Info.setLibcallImpl(RTLIB::TRUNC_F32, RTLIB::impl_truncf);
+  Info.setLibcallImpl(RTLIB::TRUNC_F64, RTLIB::impl_trunc);
+  Info.setLibcallImpl(RTLIB::ROUND_F32, RTLIB::impl_roundf);
+  Info.setLibcallImpl(RTLIB::ROUND_F64, RTLIB::impl_round);
+  Info.setLibcallImpl(RTLIB::ROUNDEVEN_F32, RTLIB::impl_roundevenf);
+  Info.setLibcallImpl(RTLIB::ROUNDEVEN_F64, RTLIB::impl_roundeven);
   Info.setLibcallImpl(RTLIB::FLOOR_F32, RTLIB::impl_floorf);
   Info.setLibcallImpl(RTLIB::FLOOR_F64, RTLIB::impl_floor);
   Info.setLibcallImpl(RTLIB::CEIL_F32, RTLIB::impl_ceilf);

@@ -14,10 +14,10 @@ define void @cfi_sp_cfa_object_offset() {
 ; CHECK:       .cfi_def_cfa_offset [[SS:[0-9]+]]
 ; Offsets must be negative (or zero) CFA-relative — never positive SP-relative.
 ; CHECK:       .cfi_offset {{[a-z0-9]+}}, -
-; CHECK:       jal_w
+; CHECK:       jal
 ; Epilogue restores CFA to entry SP.
 ; CHECK:       .cfi_def_cfa {{sp|r13}}, 0
-; CHECK:       jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK:       jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   call void @use(i32 1)
   call void @use(i32 2)

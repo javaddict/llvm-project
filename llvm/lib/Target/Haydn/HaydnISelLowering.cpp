@@ -20,7 +20,6 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicsHaydn.h"
-#include "llvm/IR/RuntimeLibcalls.h"
 
 using namespace llvm;
 
@@ -46,22 +45,12 @@ HaydnTargetLowering::HaydnTargetLowering(const TargetMachine &TM,
   // Compute register properties
   computeRegisterProperties(STI.getRegisterInfo());
 
-  // Soft-float libm family: baremetal leaves floorf/fminf unset; GISel
-  // createLibcall reads TLI.getLibcallName. Mirror of
-  // HaydnSubtarget::initLibcallLoweringInfo. copysign is .lower (bit trick),
-  // not a libcall.
-  setLibcallImpl(RTLIB::FLOOR_F32, RTLIB::impl_floorf);
-  setLibcallImpl(RTLIB::FLOOR_F64, RTLIB::impl_floor);
-  setLibcallImpl(RTLIB::CEIL_F32, RTLIB::impl_ceilf);
-  setLibcallImpl(RTLIB::CEIL_F64, RTLIB::impl_ceil);
-  setLibcallImpl(RTLIB::RINT_F32, RTLIB::impl_rintf);
-  setLibcallImpl(RTLIB::RINT_F64, RTLIB::impl_rint);
-  setLibcallImpl(RTLIB::NEARBYINT_F32, RTLIB::impl_nearbyintf);
-  setLibcallImpl(RTLIB::NEARBYINT_F64, RTLIB::impl_nearbyint);
-  setLibcallImpl(RTLIB::FMIN_F32, RTLIB::impl_fminf);
-  setLibcallImpl(RTLIB::FMIN_F64, RTLIB::impl_fmin);
-  setLibcallImpl(RTLIB::FMAX_F32, RTLIB::impl_fmaxf);
-  setLibcallImpl(RTLIB::FMAX_F64, RTLIB::impl_fmax);
+  // Soft-float / libm names live in HaydnSubtarget::initLibcallLoweringInfo
+  // (the one table). TargetLoweringBase already applied that hook to
+  // TLI.Libcalls during this constructor's base init, so GISel
+  // createLibcall / TLI.getLibcallName see the same registrations. Do not
+  // re-list a subset here — that was the split-brain that left frem/sqrt/…
+  // as shipping ICEs. copysign is .lower (bit trick), not a libcall.
 
   // Haydn has no native atomic instructions. CLAUDE.md mandates
   // "atomics as libcalls": atomic ops lower to __atomic_* runtime calls
@@ -391,6 +380,17 @@ bool HaydnTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
   case Intrinsic::haydn_d_sqhwua_post:
   case Intrinsic::haydn_d_stwua_post:
     return setHaydnMemIntrinsic(Info, I, MVT::i64, 1, StatefulStoreF);
+
+  // llvm.va_copy(dest, src): 5×i32 structured va_list (20 bytes).
+  case Intrinsic::vacopy: {
+    Info.opc = ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = EVT::getIntegerVT(I.getContext(), 160);
+    Info.ptrVal = I.getArgOperand(0);
+    Info.offset = 0;
+    Info.align = Align(4);
+    Info.flags = MachineMemOperand::MOLoad | MachineMemOperand::MOStore;
+    return true;
+  }
 
   default:
     return false;

@@ -14,7 +14,7 @@
 define i32 @take_big(ptr %s) nounwind {
 ; CHECK-LABEL: take_big:
 ; CHECK: ld32
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %a = getelementptr %Big, ptr %s, i32 0, i32 0
   %v0 = load i64, ptr %a
@@ -29,7 +29,7 @@ entry:
 define void @make_big(ptr sret(%Big) %out, i64 %x) nounwind {
 ; CHECK-LABEL: make_big:
 ; CHECK: {{d_sw|st}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %a = getelementptr %Big, ptr %out, i32 0, i32 0
   store i64 %x, ptr %a
@@ -39,8 +39,8 @@ entry:
 ; Call passes the aggregate as a plain pointer (no byval memcpy into CC slots).
 define i32 @call_take_big(ptr %p) nounwind {
 ; CHECK-LABEL: call_take_big:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, take_big
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jal{{(\.s[012])?}} {{.*}}, take_big
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %r = call i32 @take_big(ptr %p)
   ret i32 %r
@@ -51,7 +51,7 @@ define i64 @sum_big_fields(ptr %s) nounwind {
 ; CHECK-LABEL: sum_big_fields:
 ; CHECK: ld32
 ; CHECK: {{add64|add32}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %p0 = getelementptr %Big, ptr %s, i32 0, i32 0
   %p1 = getelementptr %Big, ptr %s, i32 0, i32 1

@@ -10,7 +10,7 @@
 ; The MatInt dest must not be r1/r2 (return regs). Accept r3-r7 or r12.
 ; CHECK-NOT:   addi32{{.*}}r1, r0, {{[0-9][0-9][0-9][0-9]+}}
 ; CHECK-NOT:   addi32{{.*}}r2, r0, {{[0-9][0-9][0-9][0-9]+}}
-; CHECK:       jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK:       jalr{{(\.s[012])?}} r0, lr, 0
 define i32 @large_scalar_ret(i32 %a, i32 %b) {
   %buf = alloca [20000 x i32], align 8
   %p = getelementptr [20000 x i32], ptr %buf, i32 0, i32 19999
@@ -23,7 +23,7 @@ define i32 @large_scalar_ret(i32 %a, i32 %b) {
 ; CHECK-LABEL: large_two_i32_ret:
 ; CHECK-NOT:   addi32{{.*}}r1, r0, {{[0-9][0-9][0-9][0-9]+}}
 ; CHECK-NOT:   addi32{{.*}}r2, r0, {{[0-9][0-9][0-9][0-9]+}}
-; CHECK:       jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK:       jalr{{(\.s[012])?}} r0, lr, 0
 define { i32, i32 } @large_two_i32_ret(i32 %a, i32 %b) {
   %buf = alloca [20000 x i32], align 8
   %p = getelementptr [20000 x i32], ptr %buf, i32 0, i32 19999

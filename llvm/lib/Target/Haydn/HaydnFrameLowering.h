@@ -31,6 +31,11 @@ public:
   // bytes — do not confuse code alignment with SP ABI. Call-frame
   // adjustments always round up to this StackAlign (see
   // eliminateCallFramePseudoInstr + CallLowering).
+  //
+  // Static MaxAlign > StackAlign(8): after FP = incoming SP, realign SP
+  // with AND32 of a MatInt(-MaxAlign) mask (RISCVFrameLowering.cpp:1142-1153
+  // ANDI overlay; ANDI32 is uimm20 ZEXT so the mask is a scavenged GPR).
+  // VLAs + realign stay fail-closed: no BP (folded into FP).
   explicit HaydnFrameLowering(const HaydnSubtarget &STI)
       : TargetFrameLowering(StackGrowsDown,
                             /*StackAlignment=*/Align(8),
@@ -58,15 +63,25 @@ public:
                                            RegScavenger *RS) const override;
 
   // Match scavenger FI base to the FI base used for locals (Hexagon-style
-  // useFPForScavengingIndex). hasFP → near FP (incoming-SP side) even under
-  // stack realignment; !hasFP → late near final SP. Keeps emergency FIs in
-  // scaled-simm6 reach so scavenging spills do not re-enter EFI rebases.
+  // useFPForScavengingIndex). hasFP && !realign → near FP (incoming-SP
+  // side). Realign uses post-AND SP for non-fixed locals
+  // (RISCVFrameLowering.cpp:1428-1467), so scavenger FIs sit late near
+  // final SP (TargetFrameLoweringImpl.cpp:150-157). !hasFP → late SP.
   bool allocateScavengingFrameIndexesNearIncomingSP(
       const MachineFunction &MF) const override;
 
   // Enable shrink-wrapping so the prologue/epilogue are placed at the optimal
   // points (first use of callee-saved registers) rather than always at entry/exit.
   bool enableShrinkWrapping(const MachineFunction &MF) const override;
+
+  // Reject a shrink-wrap save point when PEI would need a scratch GPR
+  // (large SP adjust) and no call-clobbered register is free at block
+  // start. Peer: AArch64FrameLowering.cpp:932-970 / PPCFrameLowering.cpp:551-555.
+  bool canUseAsPrologue(const MachineBasicBlock &MBB) const override;
+
+  // Same at the epilogue insertion point (before first terminator / return),
+  // with RetCC R1/R2 excluded. Peer: PPCFrameLowering.cpp:558-561.
+  bool canUseAsEpilogue(const MachineBasicBlock &MBB) const override;
 
   // Override to prevent PEI from inserting default individual spill stores.
   // Our emitPrologue handles optimized spill sequences (ST32_POST_INC).

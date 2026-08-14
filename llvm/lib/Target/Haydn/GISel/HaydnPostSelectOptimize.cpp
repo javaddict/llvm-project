@@ -32,8 +32,6 @@
 
 using namespace llvm;
 
-STATISTIC(NumSextMovFolds,
-          "Number of MOV_GPR_TO_DR64 sext-shape folded to SEXT_GPR32_TO_DR64");
 STATISTIC(NumLaneStoreFolds,
           "Number of MOVE32_DR + ST32 folded to D_SW_L/H_WITH_IMM"); // NOLINT
 STATISTIC(NumDR64ConstCSE,
@@ -62,25 +60,6 @@ bool HaydnPostSelectOptimize::runOnMachineFunction(MachineFunction &MF) {
 //===----------------------------------------------------------------------===//
 // Cross-bank peeps (lane-store + DR const CSE + identity pack elide).
 //===----------------------------------------------------------------------===//
-
-bool HaydnPostSelectOptimize::tryFoldSextMovToDirect(MachineInstr &MovInst,
-                                                     MachineRegisterInfo &MRI,
-                                                     const HaydnInstrInfo &TII) {
-  // Historically this folded `MOV_GPR_TO_DR64 %dr, %x, %x` → SEXT_GPR32_TO_DR64.
-  // That is wrong as a general rewrite:
-  // * MOV_GPR_TO_DR64 lo,hi means bit-pack: rd = (hi<<32)|lo (dual-lane
-  // G_BUILD_VECTOR splat uses x,x to put the same word in both lanes).
-  // * SEXT_GPR32_TO_DR64 means sign-extend: hi = all-ones if x<0.
-  // For x = INT_MIN (0x80000000), pack is 0x8000000080000000 but sext is
-  // 0xFFFFFFFF80000000 — x2abs32s then fails the INT_MIN sat check
-  // (BundleSim intrin_x2simd exit 6).
-  // G_SEXT i32→i64 already selects SEXT_GPR32_TO_DR64 directly. Leave
-  // MOV_GPR_TO_DR64(x,x) for true dual-lane replicate / pack.
-  (void)MovInst;
-  (void)MRI;
-  (void)TII;
-  return false;
-}
 
 bool HaydnPostSelectOptimize::tryFoldMove32DrToSw(MachineInstr &MovInst,
                                                    MachineRegisterInfo &MRI,
@@ -329,11 +308,9 @@ bool HaydnPostSelectOptimize::elideCrossBankRoundTrips(MachineFunction &MF) {
           continue;
         unsigned Opc = MI->getOpcode();
         if (Opc == Haydn::MOV_GPR_TO_DR64) {
-          // Identity recombine first (avoids SP expand), then const CSE,
-          // then sext stub (pack≠sext; see tryFoldSextMovToDirect).
+          // Identity recombine first (avoids SP expand), then const CSE.
           if (tryElideIdentityPack(*MI, MRI, TII) ||
-              tryCSEConstantDR64(*MI, MRI, TII) ||
-              tryFoldSextMovToDirect(*MI, MRI, TII)) {
+              tryCSEConstantDR64(*MI, MRI, TII)) {
             Changed = true;
             LocalChanged = true;
           }

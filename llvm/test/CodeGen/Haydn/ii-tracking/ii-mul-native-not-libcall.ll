@@ -47,8 +47,8 @@ define i64 @ii_mul_native_not_libcall(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; sext32t64 d1, r2 }
 ; CHECK-NEXT:    { nop; mul64.ll d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64

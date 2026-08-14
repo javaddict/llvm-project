@@ -4,8 +4,9 @@
 
 # Test that 64-bit integer operations are legalized via DR64 instructions
 # s64 add/sub should remain legal (handled by DR64)
-# s64 mul is custom-lowered to a native schoolbook sequence of MUL64_LL
-# partials (true 64x64) -- no LIBCALL_MUL64 / __muldi3.
+# s64 mul is custom-lowered to a native schoolbook of G_HAYDN_MUL64_WIDENU
+# partials (true 64x64) -- no LIBCALL_MUL64 / __muldi3. Selection to
+# MUL64_ULUL is instruction-select, not this pass.
 # s64 bitwise/shift/cmp operations are legal, selector handles DR64 mapping
 
 ---
@@ -42,17 +43,19 @@ body:             |
 name:            test_mul_s64
 legalized:       false
 # CHECK-LABEL: name: test_mul_s64
-# True 64x64 mul lowers to the native schoolbook sequence (G7/): unmerge
-# both operands, zero-extend the four halves, three MUL64_ULUL partials (LL/LH/HL)
-# add the cross partials, shift left 32, add the low partial. No
-# LIBCALL_MUL64 / __muldi3.
+# True 64x64 mul lowers to the native schoolbook sequence: unmerge both
+# operands, zero-extend the four halves, three G_HAYDN_MUL64_WIDENU partials
+# (LL/LH/HL), add the cross partials, shift left 32, add the low partial.
+# No LIBCALL_MUL64 / __muldi3. MUL64_ULUL is selected later.
 # CHECK-NOT: LIBCALL_MUL64
+# CHECK-NOT: MUL64_LL
+# CHECK-NOT: MUL64_ULUL
 # CHECK: G_UNMERGE_VALUES
 # CHECK: G_UNMERGE_VALUES
 # CHECK: G_ZEXT
-# CHECK: MUL64_ULUL
-# CHECK: MUL64_ULUL
-# CHECK: MUL64_ULUL
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK: G_HAYDN_MUL64_WIDENU
+# CHECK: G_HAYDN_MUL64_WIDENU
 # CHECK: G_SHL
 body:             |
   bb.0.entry:

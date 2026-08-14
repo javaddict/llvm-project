@@ -30,7 +30,7 @@
 
 define i64 @trunc_of_ext_identity(i1 zeroext %b, i64 %x) nounwind {
 ; CHECK-LABEL: trunc_of_ext_identity:
-; CHECK:      jalr_w{{(\.s[012])?}}
+; CHECK:      jalr{{(\.s[012])?}}
   %b2 = select i1 %b, i32 2, i32 0           ; materialize a non-trivial i32
   %e1 = zext i32 %b2 to i64                  ; zext i32 -> i64
   %t1 = trunc i64 %e1 to i32                 ; trunc back to i32 : identity
@@ -44,7 +44,7 @@ define i64 @trunc_of_ext_identity(i1 zeroext %b, i64 %x) nounwind {
 ; Second shape: bool -> int -> i64 shift-amount, the literal yarpgen pattern.
 define i64 @bool_to_int_to_i64_shift(i1 zeroext %b, i64 %x) nounwind {
 ; CHECK-LABEL: bool_to_int_to_i64_shift:
-; CHECK:      jalr_w{{(\.s[012])?}}
+; CHECK:      jalr{{(\.s[012])?}}
   %z1 = zext i1 %b to i32                    ; bool -> int
   %e1 = sext i32 %z1 to i64                  ; int -> long long
   %t1 = trunc i64 %e1 to i32                 ; trunc: identity (dest == ext input)

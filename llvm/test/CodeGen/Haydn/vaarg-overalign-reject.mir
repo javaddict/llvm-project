@@ -1,0 +1,28 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:     -run-pass=instruction-select -verify-machineinstrs %s -o - 2>&1 \
+# RUN:     | FileCheck %s
+
+# Role: verifier — G_VAARG align > 8 fails closed at select.
+
+--- |
+  define void @vaarg_overalign(ptr %ap) {
+    ret void
+  }
+...
+---
+name: vaarg_overalign
+legalized: true
+regBankSelected: true
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: gpr32regbank }
+  - { id: 1, class: gpr32regbank }
+body: |
+  bb.0:
+    liveins: $r1
+    %0:gpr32regbank(p0) = COPY $r1
+    ; CHECK: {{cannot select|Cannot select|unable to select}}
+    %1:gpr32regbank(s32) = G_VAARG %0(p0), 16
+    $r1 = COPY %1(s32)
+    RET implicit $r15, implicit $r1
+...

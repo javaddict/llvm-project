@@ -1,59 +1,17 @@
 Haydn lit XFAIL owner / failure ledger
 Durable map for live XFAIL directives under CodeGen/Haydn + MC/Haydn.
 Re-query live files before citing counts.
-No golden invention: branch-scale / idle-pad / ar_sel class residuals stay owner-blocked.
-One-SFR-writer product law landed: PackRuleDualDeadImplicitSfrIllegal; dual-dead
-packing MIR rebaselined for sequential flag-writing ALUs (no dual dead $sfr coissue).
-Stamp: 2026-08-09 T4-TEST-CONTRACTS ledger hygiene (TOTAL matches 4 live XFAIL
-directives — all STATUS=blocked branch-scale / ar_sel; no golden invent). Prior
-open hard-root / hwloop / SET demotion residuals already un-XFAIL under live
-product rebaseline. format-e-records-check.s A0 pin green. No leftover
-show-encoding-only MC product residual (encode→obj→disasm contracts in place).
+Stamp: 2026-08-14 M7 GE96-03 closed (branch/call field = byte PC+imm).
+  Remaining live XFAIL is GE96-09 ar_sel only. GE96-03 tests are product
+  PASS (cb89/cb94/reloc-range-branch). Mechanical parity:
+  llvm/utils/haydn/check_xfail_ledger.py (+ lit pin
+  xfail-owner-ledger-selfcheck.ll). Update this ledger in the same change as
+  any add/remove of a live XFAIL directive.
 
-TOTAL: 4
+TOTAL: 1
 
 PATH: llvm/test/MC/Haydn/ar-unaligned-roundtrip.s
-  OWNER:   AR unaligned / ar_sel class residual
+  OWNER:   GE96-09 (ar_sel=2/3 classification)
   FAILURE: ar_sel 2/3 product class unspecified; encode residual
-  STATUS:  blocked
-  ROLE:    object — AR unaligned MC encode/disasm for product-legal ar_sel 0/1 only; no ar_sel=2/3 golden invent.
-
-PATH: llvm/test/MC/Haydn/cb89-branch-byte-imm-print.s
-  OWNER:   branch PC-rel wire scale (golden unspecified)
-  FAILURE: positive branch-scale claim residual; no golden invent
-  STATUS:  blocked
-  ROLE:    object — conditional branch and JAL immediates printed as PC-relative offsets; scale golden open.
-
-PATH: llvm/test/MC/Haydn/cb94-bne-w-external-reloc.s
-  OWNER:   branch PC-rel wire scale (golden unspecified)
-  FAILURE: positive branch-scale claim residual; no golden invent
-  STATUS:  blocked
-  ROLE:    object — Unresolved external RI12 BNE_W reloc kind residual; scale golden open.
-
-PATH: llvm/test/MC/Haydn/reloc-range-branch-div2-boundaries.s
-  OWNER:   branch PC-rel wire scale (golden unspecified)
-  FAILURE: positive branch-scale claim residual; no golden invent
-  STATUS:  blocked
-  ROLE:    object — fail-closed residual for WIDE branch PC-rel range tables.
-
-# Closed this stamp (un-XFAIL; live product rebaseline only — no golden invent):
-#   llvm/test/CodeGen/Haydn/format-bundle-through-ra.mir
-#   llvm/test/CodeGen/Haydn/hwloop-fixup-second-br-growth.mir
-#   llvm/test/CodeGen/Haydn/hwloop-object-demotion-e2e.mir
-#   llvm/test/CodeGen/Haydn/postmisched-hard-root-exact-commit.mir
-#   llvm/test/CodeGen/Haydn/vf0-full-baseline-hwloop.ll
-#   llvm/test/CodeGen/Haydn/vf5-late-mc-hard-root-object-identity.mir
-#   llvm/test/MC/Haydn/reloc-range-hwloop-div4-boundaries.s
-# Closed prior (un-XFAIL; live product rebaseline only — no golden invent):
-#   llvm/test/CodeGen/Haydn/bqriir32x32_df1-e2e.ll (object dump residual; live
-#     Format E mnemonics already green under product path — ledger catch-up)
-#   llvm/test/MC/Haydn/cb82-jalr-imm12-signed-decode.s (JALR imm12 simm12 decode)
-#   llvm/test/MC/Haydn/cb90-set-hwloop-f2-bundle128-decode.s
-#   llvm/test/MC/Haydn/vf0-full-setup-floor-object.s
-#   llvm/test/CodeGen/Haydn/postmisched-object-demotion-e2e.mir
-#   llvm/test/CodeGen/Haydn/iir-e2e-bundle-dump.ll
-# Prior closed (code already fixed / CHECK rebaseline):
-#   llvm/test/CodeGen/Haydn/vf5-late-mc-object-demotion-finals.mir
-#   llvm/test/MC/Haydn/vf5-one-to-one-csrw-demotion-roundtrip.s
-#   llvm/test/MC/Haydn/vf5-hard-root-multi-member-roundtrip.s
-# Generator A0 drift pin remains: llvm/test/MC/Haydn/format-e-records-check.s
+  STATUS:  unsupported / alignment-open
+  LIVE_GOAL: G-OBJECT-ABI / G-TEST-EVIDENCE

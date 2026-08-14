@@ -135,7 +135,8 @@ public:
                                  const SchedRegion &Region) const override;
 
   // Enable generic SSA EarlyIfConversion (speculate + insertSelect → MOVT/MOVF).
-  // Preferred over post-RA GenMux Pattern 2 (Hexagon/AIE-style). See.
+  // Preferred over post-RA GenMux Pattern 2 (Hexagon/AIE-style). See
+  // plans/archive/2026-08-13-d490/DECISION-D490-early-ifconv-retire-genmux.md.
   bool enableEarlyIfConversion() const override { return true; }
 
   // The WindowScheduler (upstream's newer SMS fallback) crashes on
@@ -185,7 +186,7 @@ public:
   }
   // PostLegalizerCombiner not implemented for M0 - uses base class default
 
-  const unsigned XLen = 32;
+  static constexpr unsigned XLen = 32;
 
   // Override libcall lowering to use standard compiler-rt functions
   void initLibcallLoweringInfo(class LibcallLoweringInfo &Info) const override;

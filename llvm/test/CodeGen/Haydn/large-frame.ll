@@ -23,7 +23,7 @@ define i32 @large_frame() {
 ; CHECK:       sub
 ; The access to the local array must use a scavenged/ materialized address.
 ; Just verify the function compiles and returns.
-; CHECK:       jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK:       jalr{{(\.s[012])?}} r0, lr, 0
   %buf = alloca [16385 x i32], align 8
   %p = getelementptr [16385 x i32], ptr %buf, i32 0, i32 16384
   store i32 42, ptr %p

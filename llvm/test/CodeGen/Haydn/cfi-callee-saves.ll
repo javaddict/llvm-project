@@ -14,7 +14,7 @@ define void @cfi_test() {
 ; CHECK:       .cfi_def_cfa_offset [[SS:[0-9]+]]
 ; Offsets must be negative CFA-relative — never positive SP-relative.
 ; CHECK:       .cfi_offset {{[a-z0-9]+}}, -
-; CHECK:       jal_w
+; CHECK:       jal
 entry:
   call void @use(i32 1)
   call void @use(i32 2)

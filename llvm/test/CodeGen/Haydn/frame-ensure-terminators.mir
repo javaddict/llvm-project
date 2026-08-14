@@ -1,0 +1,52 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-ensure-terminators \
+# RUN:     -verify-machineinstrs -o - %s | FileCheck %s
+
+# Role: MIR — every succ-empty MBB gets a RET; existing RET is not doubled.
+
+--- |
+  define void @dead_end() nounwind { unreachable }
+  define void @already_ret() nounwind { ret void }
+...
+---
+# CHECK-LABEL: name: dead_end
+name:            dead_end
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0:
+    ; CHECK: RET
+    ; CHECK-NOT: RET
+...
+---
+# CHECK-LABEL: name: already_ret
+name:            already_ret
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK: RET
+    ; CHECK-NOT: RET
+    RET implicit $r15

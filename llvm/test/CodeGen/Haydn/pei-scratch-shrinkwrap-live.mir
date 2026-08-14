@@ -1,0 +1,108 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     -verify-machineinstrs -simplify-mir %s -o - | FileCheck %s
+#
+# Role: MIR — T-ABI3 / D4: getPEIScratchReg uses live regs at the insertion
+# point, not entry live-ins. Used-reg fallback deleted (fail-closed).
+#
+# REGRESSION: Shrink-wrapped non-entry prologue with every call-clobbered GPR
+# (R1–R7, R12) live must not FrameSetup-def any of them.
+#
+# Bug: getPEIScratchReg filtered on MF.front() live-ins, then returned the
+# first ABI-safe register even if it was live at the (non-entry) prologue
+# point — silent clobber of a live caller-saved (stride base / MatInt dest).
+# Fix: LivePhysRegs at MBBI (AArch64 findScratchNonCalleeSaveRegister /
+# PPC findScratchRegister). No free scratch → skip stride, never pick a
+# live register.
+#
+# Test design: YAML savePoint/restorePoint force the PEI prologue onto the
+# late block (the shrink-wrap shape) while every call-clobbered GPR is
+# live-in there. Two+ GPR CSRs (R8, R9, LR) would have taken the
+# stride-scratch path. If the bug returns, FrameSetup defs a live r2/r12
+# as the stride base.
+
+--- |
+  target triple = "haydn-unknown-elf"
+
+  define i32 @shrinkwrap_all_caller_saved_live(i32 %c, i32 %a, i32 %b, i32 %d, i32 %e, i32 %f, i32 %g) nounwind {
+  entry:
+    %cmp = icmp eq i32 %c, 0
+    br i1 %cmp, label %early, label %late
+  early:
+    ret i32 42
+  late:
+    call void @clobber()
+    ret i32 %a
+  }
+
+  declare void @clobber()
+...
+---
+name:            shrinkwrap_all_caller_saved_live
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+  hasCalls:        true
+  adjustsStack:    true
+  maxCallFrameSize: 0
+  savePoint:
+    - point: '%bb.2'
+  restorePoint:
+    - point: '%bb.2'
+body:             |
+  bb.0.entry:
+    successors: %bb.1(0x30000000), %bb.2(0x50000000)
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
+
+    ; Keep R12 live into the late block so every call-clobbered GPR is live
+    ; at a non-entry prologue (R12 is not an argument).
+    $r12 = OR32 $r7, $r7, implicit-def dead $sfr
+    ; cond != 0 → late; fallthrough is early.
+    BNEZ_W $r1, %bb.2
+
+  bb.1.early:
+    liveins: $r15
+    $r1 = ADDI32 $r0, 42, implicit-def dead $sfr
+    RET implicit $r15, implicit $r1
+
+  bb.2.late:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+
+    ; CSR uses: shrink-wrap save point. Consume every live caller-saved so
+    ; liveness is real (not a dead live-in the scavenger could ignore).
+    $r8 = ADD32 $r2, $r4, implicit-def dead $sfr
+    $r9 = ADD32 $r3, $r5, implicit-def dead $sfr
+    $r1 = ADD32 $r1, $r6, implicit-def dead $sfr
+    $r1 = ADD32 $r1, $r7, implicit-def dead $sfr
+    $r1 = ADD32 $r1, $r12, implicit-def dead $sfr
+    ADJCALLSTACKDOWN 0, 0, implicit-def $r13, implicit $r13
+    $r15 = JAL_W @clobber, csr_haydn, implicit-def dead $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def $r15
+    ADJCALLSTACKUP 0, 0, implicit-def $r13, implicit $r13
+    $r1 = ADD32 $r8, $r9, implicit-def dead $sfr
+    RET implicit $r15, implicit $r1
+
+...
+
+# CHECK-LABEL: name: shrinkwrap_all_caller_saved_live
+# Forced non-entry save point: entry must not carry the CSR prologue.
+# CHECK: bb.0.entry:
+# CHECK-NOT: frame-setup SUBI32
+# CHECK: bb.1.early:
+# CHECK: bb.2.late:
+# CHECK: liveins:
+# All caller-saved live at this non-entry prologue: FrameSetup must not
+# def any of them (old used-reg fallback would pick r2/r12 as stride base).
+# CHECK-NOT: $r1 = frame-setup
+# CHECK-NOT: $r2 = frame-setup
+# CHECK-NOT: $r3 = frame-setup
+# CHECK-NOT: $r4 = frame-setup
+# CHECK-NOT: $r5 = frame-setup
+# CHECK-NOT: $r6 = frame-setup
+# CHECK-NOT: $r7 = frame-setup
+# CHECK-NOT: $r12 = frame-setup
+# CHECK: $r13 = frame-setup SUBI32
+# CHECK: $r8 = ADD32 $r2, $r4

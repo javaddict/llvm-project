@@ -35,7 +35,7 @@
 ;   ST32     scr , base, 0    (low GPR32 half at byte 0)
 ;   ST32     scr , base, 1    (high GPR32 half at byte +4)
 ;   LD64     dst , base, 0    (DR64 reload at byte 0)
-; The pre-fix dynamic SP transient (subi32 sp / addi32_w sp mid-function)
+; The pre-fix dynamic SP transient (subi32 sp / addi32 sp mid-function)
 ; must NOT reappear -- that broke the no-SP-motion invariant (CB
 ; mac_mula64_all exit 11). The CHECK-NOT directives below guard against it.
 ;
@@ -49,13 +49,13 @@ define i64 @dr64_pack_overflow(i32 %a, i32 %n) nounwind {
 ; CHECK-LABEL: dr64_pack_overflow:
 ; The no-SP-motion invariant guards the WHOLE function body. The pre-fix bug
 ; opened the dynamic transient with `subi32 sp, sp, 8` BEFORE the pack and
-; closed it with `addi32_w sp, sp, 8` AFTER; these CHECK-NOT directives sit
+; closed it with `addi32 sp, sp, 8` AFTER; these CHECK-NOT directives sit
 ; before the first positive pack check (covering prologue → pack) and after
 ; the last (covering pack → epilogue). The legitimate prologue/epilogue SP
 ; adjust uses the FULL frame size (not 8), so the literal `sp, sp, 8` match
 ; stays green there.
 ; CHECK-NOT:    subi32    sp, sp, 8
-; CHECK-NOT:    addi32_w  sp, sp, 8
+; CHECK-NOT:    addi32  sp, sp, 8
 entry:
   ; var-sized alloca forces hasFP (FrameReg = FP). Static locals push
   ; DR64PackFI past the simm6 element range from FP.
@@ -80,11 +80,11 @@ entry:
 ; ERROR above) AND the short-form element-indexed ST32 from FP at large
 ; element (the overflow shape) must NOT appear -- that would mean the fatal
 ; path was silently downgraded instead of using the scavenged base.
-; CHECK:       addi32_w  [[BASE:r[0-9]+]], fp, -{{[0-9]+}}
+; CHECK:       addi32  [[BASE:r[0-9]+]], fp, -{{[0-9]+}}
 ; CHECK:       st32      r{{[0-9]+}}, [[BASE]], 0
 ; CHECK:       st32      r{{[0-9]+}}, [[BASE]], 1
 ; CHECK:       ld64      d{{[0-9]+}}, [[BASE]], 0
 
 ; Tail of the no-SP-motion window (pack → epilogue).
 ; CHECK-NOT:   subi32    sp, sp, 8
-; CHECK-NOT:   addi32_w  sp, sp, 8
+; CHECK-NOT:   addi32  sp, sp, 8

@@ -7,8 +7,7 @@
 //===----------------------------------------------------------------------===//
 // \file
 // Post-select peepholes (O1). Product elideCrossBankRoundTrips (ON O1):
-// lane-store, DR-constant CSE, identity GPR↔DR pack recombine. Pack-shape
-// MOV is not folded to SEXT (tryFoldSextMovToDirect — pack ≠ sign-extend).
+// lane-store, DR-constant CSE, identity GPR↔DR pack recombine.
 // Prefer end-to-end DR64; no GPR-pair aliasing of DR64.
 //===----------------------------------------------------------------------===//
 
@@ -38,13 +37,8 @@ public:
 
 private:
   // Live peeps: lane-store (MOVE32_DR + ST32 → D_SW_*), DR64 const CSE,
-  // identity pack recombine, and (stub) sext-shape MOV (pack≠sext).
+  // identity pack recombine.
   bool elideCrossBankRoundTrips(MachineFunction &MF);
-
-  // Historically folded MOV_GPR_TO_DR64(x,x) → SEXT; wrong for dual-lane pack.
-  // Stub returns false; G_SEXT i32→i64 selects SEXT_GPR32_TO_DR64 directly.
-  bool tryFoldSextMovToDirect(MachineInstr &MovInst, MachineRegisterInfo &MRI,
-                              const HaydnInstrInfo &TII);
 
   // MOVE32_DR_L/H + ST32 → D_SW_L/H_WITH_IMM (lane-store).
   bool tryFoldMove32DrToSw(MachineInstr &MovInst, MachineRegisterInfo &MRI,

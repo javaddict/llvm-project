@@ -8,9 +8,18 @@
 // pointer-sized. Emitting byval makes GlobalISel memcpy aggregate contents
 // into 8-byte slots (va-arg-22 overlap / garbage pointers).
 
+struct Tiny {
+  int x; // 4 bytes — still Indirect (not coerced into R1)
+};
+
 struct Big {
   long long a, b, c, d; // 32 bytes — does not fit in R1–R2 / D0
 };
+
+// T-ABI7 current law: ALL C aggregates are Indirect, including a single int.
+// CHECK: define dso_local i32 @take_tiny(ptr {{[^,]*}}%{{[^)]+}})
+// CHECK-NOT: byval
+int take_tiny(struct Tiny s) { return s.x; }
 
 // CHECK: define dso_local i32 @take_big(ptr {{[^,]*}}%{{[^)]+}})
 // CHECK-NOT: byval

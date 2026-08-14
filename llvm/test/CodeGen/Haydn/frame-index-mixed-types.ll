@@ -14,28 +14,27 @@ define void @mixed_allocas() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 28 }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 42 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 28 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 42 }
 ; CHECK-NEXT:    { nop; st32 r4, r1, 0 }
 ; CHECK-NEXT:    { nop; lui r1, 3402 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, 331776 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 331776 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 20 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 232 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 20 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 232 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r3, r2, 4 }
+; CHECK-NEXT:    { nop; addi32 r3, r2, 4 }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r2, 0 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r3, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p32 = alloca i32
   %p64 = alloca i64
   store i32 42, ptr %p32
@@ -53,16 +52,16 @@ define void @i32_only_allocas() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 12 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 12 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
 ; CHECK-NEXT:    { nop; st32 r3, r1, 0 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 2 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p1 = alloca i32
   %p2 = alloca i32
   store i32 1, ptr %p1
@@ -79,25 +78,24 @@ define void @i64_only_allocas() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r3, 2145 }
-; CHECK-NEXT:    { nop; addi32_w r3, r3, -139399 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, -139399 }
 ; CHECK-NEXT:    { nop; st32 r3, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 24 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 28744 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 28744 }
 ; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r2, r1, 4 }
+; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p = alloca i64
   store i64 123456789012345, ptr %p
   ret void

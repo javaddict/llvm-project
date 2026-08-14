@@ -15,6 +15,7 @@
 #include "Haydn.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/STLExtras.h"
@@ -30,6 +31,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #define DEBUG_TYPE "haydn-reginfo"
 
@@ -220,18 +222,18 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   bool OffsetLegal =
       IsTrackedLS ? isLegalScaledSimm6(OffsetVal, Scale) : isInt<16>(OffsetVal);
 
-  // Scratch for large FI offsets: always a vreg; scavengeFrameVirtualRegs
-  // assigns a phys reg (may spill once to an emergency FI). R12 is a normal
-  // allocatable GPR (AIE model: no free AT). requiresFrameIndexScavenging
-  // means PEI does not pass RS here — RISC-V model, no nested phys scavenge
-  // inside eliminateFrameIndex.
+  // Scratch for large FI offsets. Always a vreg: PEI FrameIndexVirtualScavenging
+  // (RS == nullptr on the first replaceFrameIndices walk) and nested scavenger
+  // spill of an emergency FI (RS != nullptr, hasNoVRegs already true) both
+  // need one. scavengeFrameVirtualRegs assigns the physreg. R12 is a normal
+  // allocatable GPR (AIE: no free AT).
   //
-  // Post-PEI callers (e.g. branch-relax manual spill of the emergency FI)
-  // only hit this path when the FI offset is illegal; emergency FIs are
-  // placed near FP/SP so they stay in scaled simm6 and skip this path.
+  // hasNoVRegs is true for the whole of PEI (asserted before CSR spill), so it
+  // is not a post-PEI signal. gcc-c-torture multi-ix.c ICE'd when a fail-closed
+  // treated RS != nullptr as "after PEI". Post-PEI leftover vregs fail the
+  // verifier; do not abort the nested PEI scavenger.
   auto getScratch = [&]() -> Register {
-    MachineRegisterInfo &MRI = MF.getRegInfo();
-    return MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    return MF.getRegInfo().createVirtualRegister(&Haydn::GPR32RegClass);
   };
 
   if (!OffsetLegal && RegOpc) {
