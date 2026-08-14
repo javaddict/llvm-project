@@ -35,15 +35,27 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNPOSTRASCHEDSTRATEGY_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
 namespace llvm {
 
 class HaydnInstrInfo;
 class MachineInstr;
+
+namespace haydn {
+namespace bundle {
+struct AuctionAnyOrderLegalMemo;
+} // namespace bundle
+} // namespace haydn
 
 // Post-RA scheduler strategy that forms VLIW bundles in leaveRegion/leaveMBB.
 // Bundling is driven by the scheduled SUs' zone-local ready cycles
@@ -54,7 +66,7 @@ class HaydnPostRASchedStrategy : public PostGenericScheduler {
 public:
   HaydnPostRASchedStrategy(const MachineSchedContext *C);
 
-  ~HaydnPostRASchedStrategy() override = default;
+  ~HaydnPostRASchedStrategy() override;
 
   // Stash CurrentMBB for leaveMBB materialize (DAG BB is not publicly
   // accessible). Count multi-member BUNDLE roots at entry for metrics only
@@ -64,9 +76,19 @@ public:
   // Override tryCandidate: (1) bounded ready-subset cycle auction ranks denser
   // co-issue fills first (issue-width-3 exact product subsets of Available +
   // current cycle base); (2) prefer memory as the cycle's first issue to hide
-  // load latency while still allowing a ready MAC/ALU to beat a second load
+  // load latency while still allowing a ready MAC/ALU to beat a non-load
   // once a load is already best — dual-load + MAC co-issue for hot-loop fill.
   bool tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand) override;
+
+  // Clear the per-pick SU score cache, then delegate. Within one pickNode the
+  // HR cycle state and each zone's Available set are constant across the
+  // candidate sweep(s) — cycle advances happen before the sweep (pickOnlyChoice
+  // / release) and emission happens after pickNode returns — so an SU's
+  // auction score is a fixed value there. tryCandidate re-scores the incumbent
+  // on every comparison, which stays quadratic even with the opcode-key memo;
+  // this cache makes each (SU, zone) score at most one real computation per
+  // pick (CB-153a, second layer).
+  SUnit *pickNode(bool &IsTopNode) override;
 
   // Mark that the current region was actually scheduled (the base drive loop
   // calls exitRegion even for skipped regions — MachineScheduler.cpp:862-866).
@@ -114,6 +136,43 @@ private:
   // leaveRegion appends each region's bundles here; leaveMBB materializes
   // them and clears it.
   SmallVector<CycleBundle> MBBBundles;
+
+public:
+  struct AuctionScoreKeyHash {
+    size_t operator()(const std::vector<unsigned> &V) const {
+      return static_cast<size_t>(hash_combine_range(V.begin(), V.end()));
+    }
+  };
+  // Memo for the tryCandidate ready-subset auction score. The score is the
+  // IssuedCount of the densest legal subset containing the focus op, and the
+  // auction tries every acceptance order of every subset, so the result is a
+  // pure function of (Base sequence, focus opcode, MULTISET of the other
+  // ready opcodes) — see scoreReadySubsetAuction for the key layout and the
+  // order-invariance argument. tryCandidate re-ranks the whole Available
+  // queue on every pick and re-scores the incumbent on every comparison,
+  // which made the auction O(picks x queue x 2^Ready x perms x legality
+  // solve) and 99% of a 30-second compile on straight-line thousands-of-MI
+  // regions (CB-153a). Keyed on canonicalized opcode vectors, hit rate is
+  // near-total there. Cleared per MBB (purity makes that hygiene, not a
+  // correctness requirement).
+  std::unordered_map<std::vector<unsigned>, unsigned, AuctionScoreKeyHash>
+      AuctionScoreCache;
+
+  // Any-order legality memo shared across auctions of one MBB (cleared with
+  // AuctionScoreCache in enterMBB). Owned by pointer: the memo type lives in
+  // HaydnBundleMaterialize.h, which this header does not pull in.
+  std::unique_ptr<haydn::bundle::AuctionAnyOrderLegalMemo> LegalMemo;
+
+  // Per-pick (SU, zone) score cache; [0] = Bot, [1] = Top. Cleared at pickNode
+  // entry (an emission between picks changes the HR base) and additionally
+  // tagged with the zone's CurrCycle at fill time: the base pickNode do-while
+  // can re-enter pickOnlyChoice after popping an already-scheduled SU and bump
+  // the cycle mid-pick, which resets the HR — a stale score must not survive
+  // that. See pickNode / tryCandidate.
+  SmallDenseMap<const SUnit *, unsigned, 32> SweepSUScore[2];
+  unsigned SweepSUScoreCycle[2] = {~0u, ~0u};
+
+private:
 
   const HaydnInstrInfo *HII = nullptr;
 

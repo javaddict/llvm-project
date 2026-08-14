@@ -664,3 +664,77 @@ TEST(HaydnBundleMaterializeTest, AuctionOverwidthBaseNullopt) {
 }
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// score-only auction twin equivalence (CB-153a)
+//===----------------------------------------------------------------------===//
+
+// auctionFocusFillScoreOnly exists so post-RA tryCandidate ranking does not
+// pay the full auction's per-order exact-rematch (which the score never
+// reads). Its contract is VALUE EQUALITY with auctionFocusFillScore on every
+// input; this test enforces that over a systematic sweep of real opcodes
+// covering ALU / E2-only immediate / load / store / MAC / 64-bit families,
+// with and without base members, so any future drift between the twins (or
+// an order-sensitivity change in the legality oracle that breaks the twin's
+// single-walk assumption) fails here rather than as a silent scheduling
+// change.
+TEST(HaydnBundleMaterializeTest, ScoreOnlyTwinMatchesFullAuction) {
+  HaydnMCFormats Fmts;
+  const unsigned Pool[] = {Haydn::ADD32,  Haydn::XOR32, Haydn::ADDI32,
+                           Haydn::LD32,   Haydn::LD64,  Haydn::ST32,
+                           Haydn::ST64,   Haydn::X2MULA32};
+  const unsigned N = std::size(Pool);
+
+  auto check = [&](ArrayRef<unsigned> Base, ArrayRef<unsigned> Ready) {
+    AuctionAnyOrderLegalMemo Memo;
+    const unsigned Full = auctionFocusFillScore(Base, Ready, Fmts);
+    const unsigned Lean = auctionFocusFillScoreOnly(Base, Ready, Fmts);
+    const unsigned LeanMemo =
+        auctionFocusFillScoreOnly(Base, Ready, Fmts, &Memo);
+    // Memoized twice: second pass must serve from the memo identically.
+    const unsigned LeanMemo2 =
+        auctionFocusFillScoreOnly(Base, Ready, Fmts, &Memo);
+    EXPECT_EQ(Full, Lean) << "twin drift (no memo)";
+    EXPECT_EQ(Full, LeanMemo) << "twin drift (memo cold)";
+    EXPECT_EQ(Full, LeanMemo2) << "twin drift (memo warm)";
+  };
+
+  // Ready singles, pairs, triples over the pool (with repetition), base empty.
+  for (unsigned A = 0; A < N; ++A) {
+    check({}, {Pool[A]});
+    for (unsigned B = 0; B < N; ++B) {
+      unsigned R2[] = {Pool[A], Pool[B]};
+      check({}, R2);
+      for (unsigned C = 0; C < N; ++C) {
+        unsigned R3[] = {Pool[A], Pool[B], Pool[C]};
+        check({}, R3);
+      }
+    }
+  }
+
+  // One base member from each family, ready pairs.
+  for (unsigned Bi = 0; Bi < N; ++Bi)
+    for (unsigned A = 0; A < N; ++A)
+      for (unsigned B = 0; B < N; ++B) {
+        unsigned Base1[] = {Pool[Bi]};
+        unsigned R2[] = {Pool[A], Pool[B]};
+        check(Base1, R2);
+      }
+
+  // Two base members (cycle nearly full), ready singles.
+  {
+    unsigned Base2[] = {Haydn::LD32, Haydn::X2MULA32};
+    for (unsigned A = 0; A < N; ++A)
+      check(Base2, {Pool[A]});
+  }
+
+  // Wide ready list (> cap, mixed families) exercising the 8-entry bound.
+  {
+    unsigned Wide[] = {Haydn::ST32, Haydn::ADD32,    Haydn::ADDI32,
+                       Haydn::LD32, Haydn::X2MULA32, Haydn::ST64,
+                       Haydn::LD64, Haydn::XOR32};
+    check({}, Wide);
+    unsigned Base1[] = {Haydn::ST32};
+    check(Base1, Wide);
+  }
+}
