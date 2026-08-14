@@ -64,12 +64,28 @@ knowing if it is ever done again:
   works is a two-pointer merge of the two sides that **never reorders within a
   side** — dependency order wins wherever a rebase left a date out of sequence.
 
-**Every abbreviated commit hash in this file and in `OPEN-COMPILER-BUGS.md` was
-renumbered** (41 here, 5 there) because linearizing changed every SHA. The
-pre-linearization history — the SHAs those citations were originally written
-against — is `backup/haydn-premerge-linearize-20260814`. **Hashes quoted inside
-commit MESSAGES were not repaired and cannot be**, so a hash in a message older
-than 2026-08-14 may name a commit that is only in that tag.
+**Every abbreviated commit hash was renumbered** — 41 in this file, 5 in
+`OPEN-COMPILER-BUGS.md`, and **18 quoted inside commit messages**. The
+pre-linearization history is `backup/haydn-premerge-linearize-20260814` and the
+state before the message repair is `backup/haydn-premsgfix-20260814`.
+
+**The message citations were first written off as unrepairable, and that was
+wrong.** The argument was that fixing them changes those commits' SHAs, which
+invalidates the fix — but it does not, because **a message can only cite an
+ancestor**: nothing can quote a hash that did not exist when it was written. So
+rebuilding oldest-first terminates. By the time a commit is rebuilt, every hash
+it names already has its final SHA, and nothing later has been written yet.
+Checked before doing it rather than argued: **18 repairable, 0 circular.**
+
+That rewrite is also much safer than the linearization it followed. Only
+*messages* change, so every tree is reused verbatim, `git commit-tree` needs no
+worktree, and a conflict is not possible. Verified after: tree identical, the
+author-date sequence identical, and the only subject that changed is § 5.16's,
+which literally contains a hash.
+
+**One citation is deliberately left dangling.** `6f0d97cf0e10` is the parked WIP
+tip that was never merged; it is correct for a message to name it, and it lives
+in `backup/wip-parked-20260814`.
 
 
 The pre-rebase states of the two WIP branches are preserved as the tags
