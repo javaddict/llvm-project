@@ -21,8 +21,7 @@ define i32 @postinc_stream_i32(ptr %p, i32 %n) {
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { move32 r3, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, r0, 0; nop }
+; ASM-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; ASM-NEXT:    { slt32 r4, r1, r2; nop; nop }
 ; ASM-NEXT:    { xori32 r4, r4, 1; nop }
 ; ASM-NEXT:    { bnez r4, .LBB0_3; nop; nop }
@@ -136,8 +135,7 @@ define i32 @postdec_stream_i32(ptr %p, i32 %n) {
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { move32 r3, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, r0, 0; nop }
+; ASM-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; ASM-NEXT:    { slt32 r4, r1, r2; nop; nop }
 ; ASM-NEXT:    { xori32 r4, r4, 1; nop }
 ; ASM-NEXT:    { bnez r4, .LBB1_3; nop; nop }
@@ -252,8 +250,7 @@ define i32 @preinc_stream_i32(ptr %p, i32 %n) {
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { move32 r3, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, r0, 0; nop }
+; ASM-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; ASM-NEXT:    { slt32 r4, r1, r2; nop; nop }
 ; ASM-NEXT:    { xori32 r4, r4, 1; nop }
 ; ASM-NEXT:    { bnez r4, .LBB2_3; nop; nop }
@@ -371,11 +368,10 @@ define i64 @postinc_stream_i64(ptr %p, i32 %n) {
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
 ; ASM-NEXT:    { subi32 sp, sp, 8; addi32 r4, r0, 0 }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 0 }
-; ASM-NEXT:    { addi32 r4, r0, 0; addi32 r3, r0, 0 }
-; ASM-NEXT:    { slt32 r3, r3, r2; nop; s_sw_with_imm r4, sp, 1 }
-; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; ASM-NEXT:    { addi32 sp, sp, 8; xori32 r3, r3, 1 }
+; ASM-NEXT:    { addi32 r3, r0, 0; s_sw_with_imm r4, sp, 0 }
+; ASM-NEXT:    { addi32 r4, r0, 0; slt32 r3, r3, r2 }
+; ASM-NEXT:    { xori32 r3, r3, 1; s_sw_with_imm r4, sp, 1 }
+; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; ASM-NEXT:    { bnez r3, .LBB3_3; nop; nop }
 ; ASM-NEXT:  // %bb.1: // %loop.preheader
 ; ASM-NEXT:    { nop; set_hwloop_f2 1, .LLhwloop_start3, .LLhwloop_end3, r2; nop }
@@ -597,8 +593,7 @@ define i32 @postinc_stream_i8(ptr %p, i32 %n) {
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { move32 r3, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, r0, 0; nop }
+; ASM-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; ASM-NEXT:    { slt32 r4, r1, r2; nop; nop }
 ; ASM-NEXT:    { xori32 r4, r4, 1; nop }
 ; ASM-NEXT:    { bnez r4, .LBB5_3; nop; nop }
@@ -615,10 +610,9 @@ define i32 @postinc_stream_i8(ptr %p, i32 %n) {
 ; ASM-NEXT:    { move32 r4, r3; nop; nop }
 ; ASM-NEXT:    { s_lbu_pre_reg r5, r4, r2; nop; nop }
 ; ASM-NEXT:    { nop; nop; nop }
-; ASM-NEXT:    { add32 r1, r1, r5; nop; nop }
 ; ASM-NEXT:    .p2align 2
 ; ASM-NEXT:  .LLhwloop_end5:
-; ASM-NEXT:    { addi32 r2, r2, 1; nop }
+; ASM-NEXT:    { addi32 r2, r2, 1; add32 r1, r1, r5 }
 ; ASM-NEXT:  .LBB5_3: // %exit
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { addi32 sp, sp, 8; nop }
@@ -718,8 +712,7 @@ define i32 @postinc_stream_i16(ptr %p, i32 %n) {
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { move32 r3, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, r0, 0; nop }
+; ASM-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; ASM-NEXT:    { slt32 r4, r1, r2; nop; nop }
 ; ASM-NEXT:    { xori32 r4, r4, 1; nop }
 ; ASM-NEXT:    { bnez r4, .LBB6_3; nop; nop }
@@ -835,8 +828,7 @@ define i32 @postinc_stream_i8_sext(ptr %p, i32 %n) {
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { move32 r3, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, r0, 0; nop }
+; ASM-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; ASM-NEXT:    { slt32 r4, r1, r2; nop; nop }
 ; ASM-NEXT:    { xori32 r4, r4, 1; nop }
 ; ASM-NEXT:    { bnez r4, .LBB7_3; nop; nop }
@@ -853,10 +845,9 @@ define i32 @postinc_stream_i8_sext(ptr %p, i32 %n) {
 ; ASM-NEXT:    { move32 r4, r3; nop; nop }
 ; ASM-NEXT:    { s_lbs_pre_reg r5, r4, r2; nop; nop }
 ; ASM-NEXT:    { nop; nop; nop }
-; ASM-NEXT:    { add32 r1, r1, r5; nop; nop }
 ; ASM-NEXT:    .p2align 2
 ; ASM-NEXT:  .LLhwloop_end7:
-; ASM-NEXT:    { addi32 r2, r2, 1; nop }
+; ASM-NEXT:    { addi32 r2, r2, 1; add32 r1, r1, r5 }
 ; ASM-NEXT:  .LBB7_3: // %exit
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { addi32 sp, sp, 8; nop }
@@ -956,8 +947,7 @@ define i32 @postinc_stream_i16_sext(ptr %p, i32 %n) {
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { move32 r3, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, r0, 0; nop }
+; ASM-NEXT:    { addi32 r1, r0, 0; move32 r3, r1 }
 ; ASM-NEXT:    { slt32 r4, r1, r2; nop; nop }
 ; ASM-NEXT:    { xori32 r4, r4, 1; nop }
 ; ASM-NEXT:    { bnez r4, .LBB8_3; nop; nop }
@@ -1074,11 +1064,10 @@ define i64 @postinc_reg_stride_i64(ptr %p, i32 %n, i32 %step) {
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
 ; ASM-NEXT:    { subi32 sp, sp, 8; addi32 r5, r0, 0 }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 0 }
-; ASM-NEXT:    { addi32 r5, r0, 0; addi32 r4, r0, 0 }
-; ASM-NEXT:    { slt32 r4, r4, r2; nop; s_sw_with_imm r5, sp, 1 }
-; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; ASM-NEXT:    { addi32 sp, sp, 8; xori32 r4, r4, 1 }
+; ASM-NEXT:    { addi32 r4, r0, 0; s_sw_with_imm r5, sp, 0 }
+; ASM-NEXT:    { addi32 r5, r0, 0; slt32 r4, r4, r2 }
+; ASM-NEXT:    { xori32 r4, r4, 1; s_sw_with_imm r5, sp, 1 }
+; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; ASM-NEXT:    { bnez r4, .LBB9_3; nop; nop }
 ; ASM-NEXT:  // %bb.1: // %loop.preheader
 ; ASM-NEXT:    { nop; set_hwloop_f2 1, .LLhwloop_start9, .LLhwloop_end9, r2; nop }

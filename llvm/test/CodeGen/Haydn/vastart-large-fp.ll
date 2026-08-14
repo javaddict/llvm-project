@@ -24,17 +24,15 @@ define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; FP-NEXT:    { addi32 fp, sp, 1096; nop }
 ; FP-NEXT:    { addi32 r1, fp, -24; nop }
 ; FP-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 0 }
-; FP-NEXT:    { nop; nop; s_sw_with_imm r3, r1, 1 }
-; FP-NEXT:    { nop; nop; s_sw_with_imm r4, r1, 2 }
+; FP-NEXT:    { addi32 r2, fp, -1088; s_sw_with_imm r3, r1, 1 }
+; FP-NEXT:    { addi32 r3, r0, 1; s_sw_with_imm r4, r1, 2 }
 ; FP-NEXT:    { nop; nop; s_sw_with_imm r5, r1, 3 }
 ; FP-NEXT:    { nop; nop; s_sw_with_imm r6, r1, 4 }
-; FP-NEXT:    { nop; nop; s_sw_with_imm r7, r1, 5 }
-; FP-NEXT:    { addi32 r1, fp, -56; addi32 r3, r0, 1 }
+; FP-NEXT:    { addi32 r1, fp, -56; s_sw_with_imm r7, r1, 5 }
 ; FP-NEXT:    { nop; nop; d_sdw_with_imm d0, r1, 0 }
 ; FP-NEXT:    { nop; nop; d_sdw_with_imm d1, r1, 1 }
 ; FP-NEXT:    { nop; nop; d_sdw_with_imm d2, r1, 2 }
-; FP-NEXT:    { nop; nop; d_sdw_with_imm d3, r1, 3 }
-; FP-NEXT:    { addi32 r2, fp, -1088; addi32 r1, fp, -1092 }
+; FP-NEXT:    { addi32 r1, fp, -1092; d_sdw_with_imm d3, r1, 3 }
 ; FP-NEXT:    { nop; nop; s_sb_with_imm r3, r2, 0 }
 ; FP-NEXT:    { or32 r3, fp, fp; nop; nop }
 ; FP-NEXT:    { nop; nop; s_sw_with_imm r3, r1, 0 }
@@ -55,16 +53,16 @@ define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; FP-NEXT:  .LBB0_1: // %entry
 ; FP-NEXT:    { s_lw_with_imm r4, r1, 0; nop; nop }
 ; FP-NEXT:    { nop; nop; nop }
-; FP-NEXT:    { s_lw_with_imm r5, r4, 0; nop; nop }
-; FP-NEXT:    { addi32 r3, r4, 8; nop }
+; FP-NEXT:    { s_lw_with_imm r5, r4, 0; addi32 r3, r4, 8 }
+; FP-NEXT:    { nop; nop; nop }
 ; FP-NEXT:    { add32 r1, r5, r0; nop; s_sw_with_imm r3, r1, 0 }
 ; FP-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; FP-NEXT:  .LBB0_2: // %entry
 ; FP-NEXT:    { s_lw_with_imm r3, r1, 3; nop; s_lw_with_imm r4, r1, 1 }
 ; FP-NEXT:    { nop; nop; nop }
-; FP-NEXT:    { add32 r4, r4, r3; nop; nop }
+; FP-NEXT:    { addi32 r3, r3, 4; add32 r4, r4, r3 }
 ; FP-NEXT:    { s_lw_with_imm r5, r4, 0; nop; nop }
-; FP-NEXT:    { addi32 r3, r3, 4; nop }
+; FP-NEXT:    { nop; nop; nop }
 ; FP-NEXT:    { add32 r1, r5, r0; nop; s_sw_with_imm r3, r1, 3 }
 ; FP-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; FP-NEXT:  .LBB0_3: // %entry
@@ -86,17 +84,15 @@ define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; OMIT-NEXT:    { subi32 sp, sp, 1096; nop }
 ; OMIT-NEXT:    { addi32 r1, sp, 1072; nop }
 ; OMIT-NEXT:    { nop; nop; s_sw_with_imm r2, r1, 0 }
-; OMIT-NEXT:    { nop; nop; s_sw_with_imm r3, r1, 1 }
-; OMIT-NEXT:    { nop; nop; s_sw_with_imm r4, r1, 2 }
+; OMIT-NEXT:    { addi32 r2, sp, 16; s_sw_with_imm r3, r1, 1 }
+; OMIT-NEXT:    { addi32 r3, r0, 1; s_sw_with_imm r4, r1, 2 }
 ; OMIT-NEXT:    { nop; nop; s_sw_with_imm r5, r1, 3 }
 ; OMIT-NEXT:    { nop; nop; s_sw_with_imm r6, r1, 4 }
-; OMIT-NEXT:    { nop; nop; s_sw_with_imm r7, r1, 5 }
-; OMIT-NEXT:    { addi32 r1, sp, 1040; addi32 r3, r0, 1 }
+; OMIT-NEXT:    { addi32 r1, sp, 1040; s_sw_with_imm r7, r1, 5 }
 ; OMIT-NEXT:    { nop; nop; d_sdw_with_imm d0, r1, 0 }
 ; OMIT-NEXT:    { nop; nop; d_sdw_with_imm d1, r1, 1 }
 ; OMIT-NEXT:    { nop; nop; d_sdw_with_imm d2, r1, 2 }
-; OMIT-NEXT:    { nop; nop; d_sdw_with_imm d3, r1, 3 }
-; OMIT-NEXT:    { addi32 r2, sp, 16; addi32 r1, sp, 12 }
+; OMIT-NEXT:    { addi32 r1, sp, 12; d_sdw_with_imm d3, r1, 3 }
 ; OMIT-NEXT:    { nop; nop; s_sb_with_imm r3, r2, 0 }
 ; OMIT-NEXT:    { addi32 r3, sp, 1096; nop }
 ; OMIT-NEXT:    { nop; nop; s_sw_with_imm r3, r1, 0 }
@@ -117,16 +113,16 @@ define i32 @sum_large_fp(i32 %n, ...) nounwind {
 ; OMIT-NEXT:  .LBB0_1: // %entry
 ; OMIT-NEXT:    { s_lw_with_imm r4, r1, 0; nop; nop }
 ; OMIT-NEXT:    { nop; nop; nop }
-; OMIT-NEXT:    { s_lw_with_imm r5, r4, 0; nop; nop }
-; OMIT-NEXT:    { addi32 r3, r4, 8; nop }
+; OMIT-NEXT:    { s_lw_with_imm r5, r4, 0; addi32 r3, r4, 8 }
+; OMIT-NEXT:    { nop; nop; nop }
 ; OMIT-NEXT:    { add32 r1, r5, r0; nop; s_sw_with_imm r3, r1, 0 }
 ; OMIT-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; OMIT-NEXT:  .LBB0_2: // %entry
 ; OMIT-NEXT:    { s_lw_with_imm r3, r1, 3; nop; s_lw_with_imm r4, r1, 1 }
 ; OMIT-NEXT:    { nop; nop; nop }
-; OMIT-NEXT:    { add32 r4, r4, r3; nop; nop }
+; OMIT-NEXT:    { addi32 r3, r3, 4; add32 r4, r4, r3 }
 ; OMIT-NEXT:    { s_lw_with_imm r5, r4, 0; nop; nop }
-; OMIT-NEXT:    { addi32 r3, r3, 4; nop }
+; OMIT-NEXT:    { nop; nop; nop }
 ; OMIT-NEXT:    { add32 r1, r5, r0; nop; s_sw_with_imm r3, r1, 3 }
 ; OMIT-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; OMIT-NEXT:  .LBB0_3: // %entry

@@ -101,21 +101,20 @@ define void @biquad_process_block(ptr nocapture %input, ptr nocapture %output,
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r10, r12, 2 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r9, r12, 3 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r8, r12, 4 }
-; ASM-NEXT:    { move32 r12, r1; nop; nop }
-; ASM-NEXT:    { addi32 r1, sp, 40; addi32 r8, sp, 48 }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 3 } // 4-byte Folded Spill
+; ASM-NEXT:    { addi32 r1, sp, 40; move32 r12, r1 }
+; ASM-NEXT:    { addi32 r8, sp, 48; s_sw_with_imm r4, sp, 3 } // 4-byte Folded Spill
 ; ASM-NEXT:    // 4-byte Spill
 ; ASM-NEXT:    { s_lw_with_imm r4, r1, 0; nop; s_lw_with_imm r8, r8, 0 }
 ; ASM-NEXT:    { addi32 r9, r0, 0; s_sw_with_imm r3, sp, 4 } // 4-byte Folded Spill
 ; ASM-NEXT:    // 4-byte Spill
 ; ASM-NEXT:  .LBB2_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
-; ASM-NEXT:    { s_lw_with_imm r1, sp, 3; nop; nop } // 4-byte Folded Reload
+; ASM-NEXT:    { s_lw_with_imm r1, sp, 3; addi32 r9, r9, 1 } // 4-byte Folded Reload
 ; ASM-NEXT:    // 4-byte Reload
 ; ASM-NEXT:    { s_lw_with_imm r10, r12, 0; nop; s_lw_with_imm r11, r8, 0 }
 ; ASM-NEXT:    { nop; nop; nop }
 ; ASM-NEXT:    { s_lw_with_imm fp, r8, 1; mull r3, r1, r10; nop }
-; ASM-NEXT:    { mull r1, r5, r11; nop; nop }
+; ASM-NEXT:    { mull r1, r5, r11; addi32 r12, r12, 4 }
 ; ASM-NEXT:    { add32 r1, r3, r1; mull r3, r6, fp; nop }
 ; ASM-NEXT:    { s_lw_with_imm fp, r8, 2; add32 r1, r1, r3; nop }
 ; ASM-NEXT:    { nop; nop; nop }
@@ -123,14 +122,13 @@ define void @biquad_process_block(ptr nocapture %input, ptr nocapture %output,
 ; ASM-NEXT:    { nop; nop; nop }
 ; ASM-NEXT:    { sub32 r1, r1, r3; mull r3, r4, fp; nop }
 ; ASM-NEXT:    { sub32 r1, r1, r3; nop; nop }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r1, r2, 0 }
+; ASM-NEXT:    { addi32 r2, r2, 4; s_sw_with_imm r1, r2, 0 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r10, r8, 0 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r11, r8, 1 }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r1, r8, 2 }
 ; ASM-NEXT:    { s_lw_with_imm r1, sp, 4; nop; nop } // 4-byte Folded Reload
 ; ASM-NEXT:    // 4-byte Reload
-; ASM-NEXT:    { addi32 r9, r9, 1; addi32 r2, r2, 4 }
-; ASM-NEXT:    { addi32 r12, r12, 4; s_sw_with_imm fp, r8, 3 }
+; ASM-NEXT:    { nop; nop; s_sw_with_imm fp, r8, 3 }
 ; ASM-NEXT:    { slt32 r1, r9, r1; nop; nop }
 ; ASM-NEXT:    { bnez r1, .LBB2_1; nop; nop }
 ; ASM-NEXT:  // %bb.2: // %exit

@@ -142,17 +142,15 @@ define i32 @test_indirect_many_args(ptr %fp, i32 %a) {
 ; CHECK-NEXT:    .cfi_offset r10, 28
 ; CHECK-NEXT:    .cfi_offset lr, 24
 ; CHECK-NEXT:    { addi32 r9, r0, 8; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { move32 r10, sp; nop; nop }
-; CHECK-NEXT:    { move32 r9, r1; nop; s_sw_post_imm r9, r10, 2 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r10, 0 }
-; CHECK-NEXT:    { addi32 r8, r0, 1; addi32 r12, r0, 2 }
-; CHECK-NEXT:    { addi32 r3, r0, 3; addi32 r4, r0, 4 }
-; CHECK-NEXT:    { addi32 r5, r0, 5; addi32 r6, r0, 6 }
-; CHECK-NEXT:    { addi32 r7, r0, 7; move32 r1, r8 }
+; CHECK-NEXT:    { addi32 r8, r0, 1; move32 r10, sp }
+; CHECK-NEXT:    { addi32 r12, r0, 2; s_sw_post_imm r9, r10, 2 }
+; CHECK-NEXT:    { addi32 r3, r0, 3; s_sw_with_imm r2, r10, 0 }
+; CHECK-NEXT:    { addi32 r4, r0, 4; addi32 r5, r0, 5 }
+; CHECK-NEXT:    { addi32 r6, r0, 6; addi32 r7, r0, 7 }
+; CHECK-NEXT:    { move32 r9, r1; move32 r1, r8; nop }
 ; CHECK-NEXT:    { move32 r2, r12; nop; nop }
 ; CHECK-NEXT:    { nop; jalr lr, r9, 0; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 16; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm lr, sp, 6; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm r10, sp, 7; nop; nop }

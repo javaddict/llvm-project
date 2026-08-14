@@ -159,12 +159,11 @@ define i64 @select_i64(i1 %cond, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { move32_dr_l r2, d1; move32_dr_h r3, d1; nop }
 ; CHECK-NEXT:    { andi32 r1, r1, 1; move32_dr_l r4, d0 }
-; CHECK-NEXT:    { movt32 r2, r4, r1; move32_dr_h r5, d0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r3, r5, r1 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 0 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r2, r4, r1 }
+; CHECK-NEXT:    { move32_dr_h r5, d0; nop; s_sw_with_imm r2, sp, 0 }
+; CHECK-NEXT:    { movt32 r3, r5, r1; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }

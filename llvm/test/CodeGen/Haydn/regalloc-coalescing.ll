@@ -90,9 +90,8 @@ define i32 @test_phi_coalescing(i32 %x, i1 %cond) nounwind {
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { not32 r2, r2; nop; nop }
-; CHECK-NEXT:    { addi32 r3, r1, 10; addi32 r1, r1, 20 }
-; CHECK-NEXT:    { andi32 r2, r2, 1; nop }
+; CHECK-NEXT:    { addi32 r3, r1, 10; not32 r2, r2 }
+; CHECK-NEXT:    { addi32 r1, r1, 20; andi32 r2, r2, 1 }
 ; CHECK-NEXT:    { movt32 r3, r1, r2; nop; nop }
 ; CHECK-NEXT:    { addi32 r1, r3, 1; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }

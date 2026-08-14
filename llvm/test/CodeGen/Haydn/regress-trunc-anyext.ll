@@ -49,9 +49,8 @@ define i32 @test_trunc_s32_to_s1(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { seq32 r2, r1, r2; sltu32 r1, r1, r4; nop }
-; CHECK-NEXT:    { slt32 r3, r4, r3; nop; nop }
-; CHECK-NEXT:    { xori32 r1, r1, 1; xori32 r3, r3, 1 }
-; CHECK-NEXT:    { xori32 r2, r2, 1; nop }
+; CHECK-NEXT:    { xori32 r1, r1, 1; slt32 r3, r4, r3 }
+; CHECK-NEXT:    { xori32 r3, r3, 1; xori32 r2, r2, 1 }
 ; CHECK-NEXT:    { movt32 r3, r1, r2; nop; nop }
 ; CHECK-NEXT:    { not32 r1, r3; nop; nop }
 ; CHECK-NEXT:    { andi32 r1, r1, 1; nop }
@@ -166,12 +165,11 @@ define i64 @test_anyext_i1_condition_i64_select(i32 %a, i32 %b, i64 %x, i64 %y) 
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { move32_dr_l r3, d1; move32_dr_h r4, d1; nop }
 ; CHECK-NEXT:    { seq32 r1, r1, r2; move32_dr_l r2, d0; nop }
-; CHECK-NEXT:    { movt32 r3, r2, r1; move32_dr_h r5, d0; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r4, r5, r1 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 0 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r3, r2, r1 }
+; CHECK-NEXT:    { move32_dr_h r5, d0; nop; s_sw_with_imm r3, sp, 0 }
+; CHECK-NEXT:    { movt32 r4, r5, r1; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }

@@ -49,18 +49,16 @@ define void @biquad_block(ptr %in, ptr %out, ptr %coeffs, i32 %N) nounwind {
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    { s_lw_post_imm r5, r3, 1; nop; nop }
 ; ASM-NEXT:    { nop; nop; nop }
-; ASM-NEXT:    { s_lw_with_imm r3, r3, 0; nop; nop }
-; ASM-NEXT:    { addi32 r6, r0, 0; nop }
+; ASM-NEXT:    { s_lw_with_imm r3, r3, 0; addi32 r6, r0, 0 }
+; ASM-NEXT:    { nop; nop; nop }
 ; ASM-NEXT:  .LBB0_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
-; ASM-NEXT:    { s_lw_with_imm r7, r1, 0; nop; nop }
+; ASM-NEXT:    { s_lw_with_imm r7, r1, 0; addi32 r6, r6, 1 }
 ; ASM-NEXT:    { nop; nop; nop }
-; ASM-NEXT:    { mull r12, r5, r7; nop; nop }
+; ASM-NEXT:    { mull r12, r5, r7; addi32 r1, r1, 4 }
 ; ASM-NEXT:    { mull r7, r3, r7; nop; nop }
 ; ASM-NEXT:    { add32 r7, r12, r7; nop; nop }
-; ASM-NEXT:    { nop; nop; s_sw_post_imm r7, r2, 1 }
-; ASM-NEXT:    { addi32 r6, r6, 1; addi32 r1, r1, 4 }
-; ASM-NEXT:    { slt32 r7, r6, r4; nop; nop }
+; ASM-NEXT:    { slt32 r7, r6, r4; nop; s_sw_post_imm r7, r2, 1 }
 ; ASM-NEXT:    { bnez r7, .LBB0_1; nop; nop }
 ; ASM-NEXT:  // %bb.2: // %exit
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }

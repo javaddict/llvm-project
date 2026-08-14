@@ -43,8 +43,8 @@ define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { nop; nop; s_sw_post_imm r3, r1, 1 }
-; CHECK-NEXT:    { addi32 r3, r3, 1; nop }
+; CHECK-NEXT:    { addi32 r3, r3, 1; s_sw_post_imm r3, r1, 1 }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_end0:
 ; CHECK-NEXT:    { nop; nop; nop }

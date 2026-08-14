@@ -57,9 +57,9 @@ define double @negd(double noundef %a) {
 ; CHECK-NEXT:    { lui r1, 2048; nop; nop }
 ; CHECK-NEXT:    { addi32 r1, r1, 0; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; xor64 d0, d0, d1 }
+; CHECK-NEXT:    { xor64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
@@ -80,9 +80,9 @@ define double @fabsd_test(double noundef %a) {
 ; CHECK-NEXT:    { lui r1, 2048; nop; nop }
 ; CHECK-NEXT:    { addi32 r1, r1, -1; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; and64 d0, d0, d1 }
+; CHECK-NEXT:    { and64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }

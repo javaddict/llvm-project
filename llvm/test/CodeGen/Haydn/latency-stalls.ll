@@ -64,9 +64,8 @@ define i32 @postinc_walk(ptr %p, i32 %n) nounwind {
 ; O0-NEXT:    // 4-byte Reload
 ; O0-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 4 } // 4-byte Folded Spill
 ; O0-NEXT:    // 4-byte Spill
-; O0-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 5 } // 4-byte Folded Spill
+; O0-NEXT:    { addi32 r1, r0, 0; s_sw_with_imm r2, sp, 5 } // 4-byte Folded Spill
 ; O0-NEXT:    // 4-byte Spill
-; O0-NEXT:    { addi32 r1, r0, 0; nop }
 ; O0-NEXT:    { move32 r2, r1; nop; s_sw_with_imm r1, sp, 7 } // 4-byte Folded Spill
 ; O0-NEXT:    // 4-byte Spill
 ; O0-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 6 } // 4-byte Folded Spill
@@ -78,10 +77,9 @@ define i32 @postinc_walk(ptr %p, i32 %n) nounwind {
 ; O0-NEXT:    // 4-byte Reload4-byte Reload
 ; O0-NEXT:    { s_lw_with_imm r3, sp, 6; nop; s_lw_with_imm r1, sp, 4 } // 8-byte Folded Reload
 ; O0-NEXT:    // 4-byte Reload4-byte Reload
-; O0-NEXT:    { s_lbu_with_imm r5, r4, 0; nop; nop }
+; O0-NEXT:    { s_lbu_with_imm r5, r4, 0; addi32 r4, r4, 1 }
 ; O0-NEXT:    { nop; nop; nop }
-; O0-NEXT:    { add32 r3, r3, r5; nop; nop }
-; O0-NEXT:    { addi32 r4, r4, 1; addi32 r2, r2, 1 }
+; O0-NEXT:    { addi32 r2, r2, 1; add32 r3, r3, r5 }
 ; O0-NEXT:    { seq32 r1, r2, r1; nop; s_sw_with_imm r3, sp, 2 } // 4-byte Folded Spill
 ; O0-NEXT:    // 4-byte Spill
 ; O0-NEXT:    { xori32 r1, r1, 1; s_sw_with_imm r4, sp, 5 } // 4-byte Folded Spill

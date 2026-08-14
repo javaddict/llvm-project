@@ -139,13 +139,12 @@ define i64 @conditional_mac(i64 %a, i64 %b, i64 %c, i32 %flag) {
 ; CHECK-NEXT:    { addi32 r2, r0, 0; mul64_ll d3, d0, d1 }
 ; CHECK-NEXT:    { seq32 r1, r1, r2; add64 d3, d3, d2; mul64_ll d0, d0, d2 }
 ; CHECK-NEXT:    { move32_dr_l r2, d3; move32_dr_h r3, d3; add64 d0, d0, d1 }
-; CHECK-NEXT:    { move32_dr_l r4, d0; move32_dr_h r5, d0; nop }
-; CHECK-NEXT:    { movt32 r2, r4, r1; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; movt32 r3, r5, r1 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; move32_dr_l r4, d0 }
+; CHECK-NEXT:    { movt32 r2, r4, r1; move32_dr_h r5, d0; nop }
+; CHECK-NEXT:    { movt32 r3, r5, r1; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
@@ -173,29 +172,27 @@ define i64 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r5, r0, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 0 }
-; CHECK-NEXT:    { addi32 r5, r0, 0; addi32 r4, r0, 0 }
+; CHECK-NEXT:    { addi32 r4, r0, 0; s_sw_with_imm r5, sp, 0 }
+; CHECK-NEXT:    { addi32 r5, r0, 0; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:  .LBB8_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { s_lw_with_imm r12, r2, 0; nop; s_lw_with_imm r6, r1, 0 }
-; CHECK-NEXT:    { addi32 r5, r1, 4; addi32 r7, r2, 4 }
+; CHECK-NEXT:    { s_lw_with_imm r12, r2, 0; addi32 r7, r2, 4 }
+; CHECK-NEXT:    { addi32 r5, r1, 4; s_lw_with_imm r6, r1, 0 }
 ; CHECK-NEXT:    { s_lw_with_imm r5, r5, 0; nop; s_lw_with_imm r7, r7, 0 }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r2, r2, 8 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r6, sp, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r1, r1, 8 }
-; CHECK-NEXT:    { slt32 r5, r4, r3; nop; s_sw_with_imm r12, sp, 0 }
+; CHECK-NEXT:    { addi32 r4, r4, 1; s_sw_with_imm r6, sp, 0 }
+; CHECK-NEXT:    { addi32 r1, r1, 8; s_sw_with_imm r5, sp, 1 }
+; CHECK-NEXT:    { d_ldw_with_imm d1, sp, 0; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; slt32 r5, r4, r3 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r12, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r7, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; nop; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d2, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { mul64_ll d1, d1, d2; nop; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { bnez r5, .LBB8_1; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }

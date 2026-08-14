@@ -146,8 +146,10 @@ body:             |
     ; CHECK-LABEL: name: test2_inplace_rw_independent
     ; CHECK: liveins: $r0, $r1, $r2
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2 = ADD32_P32_ALU0 killed $r2, $r0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r3 = ADDI32_P21_ALU1 killed $r1, 5, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 0, implicit-def $r3, implicit-def dead $sfr, implicit-def $r2, implicit killed $r1, implicit killed $r2, implicit $r0 {
+    ; CHECK-NEXT:   $r3 = ADDI32_P21_ALU1 killed $r1, 5, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r2 = ADD32_P20_ALU0 killed $r2, $r0, implicit-def dead $sfr
+    ; CHECK-NEXT: }
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r2, $r0, implicit-def dead $sfr

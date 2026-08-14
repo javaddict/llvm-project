@@ -52,10 +52,10 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { add32 r5, r5, r6; nop; s_sw_with_imm r7, r1, 0 }
 ; CHECK-NEXT:    { add32 r4, r4, r6; nop; s_sw_with_imm r5, r2, 0 }
-; CHECK-NEXT:    { nop; nop; s_sw_post_imm r4, r3, 1 }
+; CHECK-NEXT:    { addi32 r2, r2, 4; s_sw_post_imm r4, r3, 1 }
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { addi32 r2, r2, 4; addi32 r1, r1, 4 }
+; CHECK-NEXT:    { addi32 r1, r1, 4; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }

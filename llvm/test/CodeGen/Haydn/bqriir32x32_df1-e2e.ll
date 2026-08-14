@@ -159,14 +159,16 @@ for.end:
 ; standalone reproductions are hwloop-fixup-reserved-bit.s and
 ; d486-hwloop-fieldlsb-bundle128.s.
 ;
-; 96 and 708 are the distances from the instruction to .LLhwloop_start0 and
-; .LLhwloop_end0 in bytes — 8 and 59 parcels. They will move if the function's
+; 96 and 696 are the distances from the instruction to .LLhwloop_start0 and
+; .LLhwloop_end0 in bytes — 8 and 58 parcels. They will move if the function's
 ; schedule changes; the invariant is that they are the real distances and that
 ; neither is 0. They last moved from 132/960 when SEXT32T64 stopped being
 ; marked isPseudo: pseudos are not packetized, so each sign-extend used to
 ; occupy a bundle alone, and four of them now share bundles with the loads
-; they sit next to.
-; BUNDLE-DAG: set_hwloop_f2{{.*}}1, 96, 708, r4
+; they sit next to. The end distance then moved 708 -> 696, one parcel, when
+; CB-147 let the placement solver re-seat an already-placed member instead
+; of rejecting the newcomer: the loop body packs one bundle tighter.
+; BUNDLE-DAG: set_hwloop_f2{{.*}}1, 96, 696, r4
 ; BUNDLE-NOT: <unknown>
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 ;
