@@ -21,17 +21,17 @@ Companion documents:
 
 | Repo | Branch | Head | State |
 |---|---|---|---|
-| `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **The only branch. The format E switch landed on it in `37932ae027aa` (2026-08-14), a merge of `haydn-formate-switch-mc`.** Fully green: llvm lit 604/620 zero failures, `HaydnTests` 256/256, clang 1428/1475 zero failures, `--check` + round-trip 3686/3686, BundleSim ctest 226/226, gcc-c-torture 1417 PASS / 0 FAIL at -O3, CoreMark e2e PASS. |
+| `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **The only branch, and a single linear line — no merge commits.** The format E switch landed here on 2026-08-14. Fully green: llvm lit 604/620 zero failures, `HaydnTests` 256/256, clang 1428/1475 zero failures, `--check` + round-trip 3686/3686, BundleSim ctest 226/226, gcc-c-torture 1417 PASS / 0 FAIL at -O3, CoreMark e2e PASS. |
 | `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | ctest **226/226**. The § 5.5 executor port is done; the old "41/221, the rest failing in the un-ported executor" is retired. |
-| `llvm-project` | ~~`haydn-formate-switch-mc`~~ | `6107f7edec50` | **merged and then DELETED** (local and `fork`, 2026-08-14). Nothing was lost and nothing needed a backup tag: that commit is the merge's **second parent**, so every commit on it stays permanently reachable from `haydn`. `git rev-list --count fork/haydn-formate-switch-mc ^fork/haydn` was **0** before the delete. To read it again: `git log 6107f7edec50`. |
-| `llvm-project` | ~~`haydn-formate-switch-wip`~~ | `6f0d97cf0e10` | **DELETED 2026-08-14**, but it was NOT simply "subsumed" — see below. 20 of its 21 commits past `backup/wip-preformate-20260807` came in with the merge; its **tip did not**, and is preserved as the tag `backup/wip-parked-20260814`. |
+| `llvm-project` | ~~`haydn-formate-switch-mc`~~ | was `6107f7edec50` | **DELETED 2026-08-14.** Nothing was lost: every commit it carried is now part of `haydn`'s single line (it was first merged, and the merge was then linearized away). Proven before deleting — `git rev-list --count fork/haydn-formate-switch-mc ^fork/haydn` was **0**. Its old SHAs no longer name commits in this history; they live in `backup/haydn-premerge-linearize-20260814`. |
+| `llvm-project` | ~~`haydn-formate-switch-wip`~~ | was `6f0d97cf0e10` | **DELETED 2026-08-14**, but it was NOT simply "subsumed" — see below. 20 of its 21 commits past `backup/wip-preformate-20260807` came in with `-mc`; its **tip did not**, and is preserved as the tag `backup/wip-parked-20260814`. |
 
-**`haydn` is the trunk, and since `37932ae027aa` that is finally true of the
-code as well as the prose.** Work from it.
+**`haydn` is the trunk, and since 2026-08-14 that is finally true of the code
+as well as the prose.** Work from it.
 
-#### The split this merge closed, because the shape of it is worth knowing
+#### The split this closed, because the shape of it is worth knowing
 
-Before the merge the two branches had diverged **by file, not by feature**: all
+Before they were joined the two branches had diverged **by file, not by feature**: all
 58 of `haydn`'s commits since the merge base were `[docs]` touching only this
 file and `TODO.md`, while all 92 on `-mc` carried the code, the tests and the
 ledger — 418 files. So the trunk held the narrative and the branch held the
@@ -40,12 +40,36 @@ format E switch in it. An earlier revision of this section said "**this file
 only exists on `haydn`**; the copy on `-mc` is 500 lines behind" — which was
 true, and was the visible half of a split that also ran the other way.
 
-That accident is also why it merged clean: `-mc` never touched this file or
-`TODO.md` after the merge base and `haydn` never touched
-`OPEN-COMPILER-BUGS.md`, so each file's authoritative version won on its own,
-`git merge-tree` reported no conflicts, and the merged tree differed from `-mc`
-in exactly those two markdown files. **Both documents now live on `haydn`.**
-There is no longer a branch to cross-check before editing either one.
+That accident is also why joining them was clean: `-mc` never touched this file
+or `TODO.md` after the merge base and `haydn` never touched
+`OPEN-COMPILER-BUGS.md`, so each file's authoritative version won on its own and
+nothing conflicted. **Both documents now live on `haydn`.** There is no longer a
+branch to cross-check before editing either one.
+
+#### The history is linear, and what that cost
+
+The join was first recorded as a merge commit and then **linearized**: all 153
+commits replayed in author-date order onto the merge base, so the history is one
+line with **no merge commits**. Two things make that safe to have done and worth
+knowing if it is ever done again:
+
+* **The content did not move.** The replayed tree is byte-identical to the tree
+  the gate had already passed — verified by comparing tree hashes, not by
+  re-reading files. The gate was then re-run on the linear history anyway.
+* **Sorting purely by date does not work.** One commit on the code side
+  (`[Haydn] Absorb the database's AR shapes onto the format E switch`) is
+  authored a day *before* its own parent, because it was replayed off the WIP
+  branch and kept its original author date. A global date sort put it ahead of
+  its parent and the first cherry-pick conflicted immediately. The order that
+  works is a two-pointer merge of the two sides that **never reorders within a
+  side** — dependency order wins wherever a rebase left a date out of sequence.
+
+**Every abbreviated commit hash in this file and in `OPEN-COMPILER-BUGS.md` was
+renumbered** (41 here, 5 there) because linearizing changed every SHA. The
+pre-linearization history — the SHAs those citations were originally written
+against — is `backup/haydn-premerge-linearize-20260814`. **Hashes quoted inside
+commit MESSAGES were not repaired and cannot be**, so a hash in a message older
+than 2026-08-14 may name a commit that is only in that tag.
 
 
 The pre-rebase states of the two WIP branches are preserved as the tags
@@ -708,7 +732,7 @@ indeed unchanged. Three other things were not, and all three are silent:
   bytes are not a NOP bundle but a different format's. Needs a real
   `BUNDLE_E2` built through the encoder.
 * **`lld/ELF/Arch/HaydnThunks.cpp` held a THIRD one, and it is the one that
-  hid longest** — fixed in `6801aff730c7`. `writeBundle128LE` wrote two
+  hid longest** — fixed in `6bdabe8d803d`. `writeBundle128LE` wrote two
   `uint64`s, `size()` returned 48, parcels went at 0/16/32, and the three
   instructions were hand-written 64-bit constants. It lives in lld, so a grep
   for `HaydnBundlePlan.h`'s symbols never reaches it and **no compiler-side
@@ -1513,7 +1537,7 @@ generated members — 47 today, and it should only ever shrink.
 
 ### 5.7 The unit axis is not threaded — first finding from the restored gate
 
-`HaydnTests` compiles again as of `9e631c69a630` (578 errors to 0) and runs
+`HaydnTests` compiles again as of `b897d75ea33d` (578 errors to 0) and runs
 **142 of 253**. The 111 failures are deliberately NOT regenerated: an
 expectation rewritten to match the new code records only what the new code
 did, and the whole value of this gate is that it disagrees. They need triage
@@ -1539,7 +1563,7 @@ first concrete instance: a slot-only packer builds a bundle the hardware
 cannot issue. It is silent in every other gate — the bundle is well-formed,
 it encodes, it round-trips, and only the unit assignment is illegal.
 
-**Fixed in `a9fbb2b69207`**, verified on real codegen rather than in
+**Fixed in `597801192e9d`**, verified on real codegen rather than in
 principle:
 
 ```
@@ -1703,7 +1727,7 @@ The image-derivation decision still holds and is still needed: it is what
 recovers the *placement* at relocation time, in both MC and lld. It is simply
 an input to the table lookup rather than a correction applied on top of one.
 
-#### Fixed in `ac69b2a41b89` — a generated table, shared with lld
+#### Fixed in `de19bca4f3b5` — a generated table, shared with lld
 
 Option 2 was taken: the placement is derived from the image, so no new
 `R_HAYDN_*` types and a re-delivered layout keeps working. But the geometry
@@ -1773,11 +1797,11 @@ than predicted.
 
 #### The byte base is in the ADDEND too, and a veneer does not cancel it
 
-**Found in `6801aff730c7`, after the thunk emitter was rewritten (§ 5.2) and
+**Found in `6bdabe8d803d`, after the thunk emitter was rewritten (§ 5.2) and
 its veneer finally decoded. The target was still four bytes past the symbol.**
 
 This is the other half of "a branch resolves from the bundle, not from the
-entry it sits in" (`14afcf2e79a5`), and it is the half that only bites a
+entry it sits in" (`c14078c3339d`), and it is the half that only bites a
 consumer computing an absolute address:
 
 * the emitter puts the entry's byte base into the **addend**, and the
@@ -1809,7 +1833,7 @@ Two things worth carrying forward:
 
 ### 5.9 Function alignment: a 12-byte parcel cannot align to 16
 
-**Fixed in `44e86ce31e76`.** Object emission went from **134 of 430** CodeGen
+**Fixed in `ca005be89073`.** Object emission went from **134 of 430** CodeGen
 tests to **424** — the same 424 that produce assembly.
 
 #### The measurement that hid it
@@ -1897,7 +1921,7 @@ They are one item: **the generator emits plain `simmN` where the logical had a
 purpose-built operand class, and everything that class carried is lost.**
 Scaling and fixup kind are two symptoms; there may be more.
 
-**Fixed in `3de4fbe4fe26`, but only partly, and the boundary matters.** The
+**Fixed in `b358e14e9259`, but only partly, and the boundary matters.** The
 member now inherits the logical's operand class, with two restrictions,
 because a wrong inherit mis-encodes silently:
 
@@ -1919,7 +1943,7 @@ Net effect is four member definitions, all `SET_HWLOOP` / `SET_HWLOOP_F2`, and
 `set_hwloop` now emits `R_HAYDN_HWLoopOff1/Off2` instead of two
 `R_HAYDN_32`. lld 10/24 → 11/24.
 
-#### § 6.10 is CLOSED — `6ee3d25bde2c`
+#### § 6.10 is CLOSED — `c884e1ce7eea`
 
 The earlier expectation that this would close § 6.10 was wrong. Branch
 immediates still take a plain `simm12` and store the byte offset **raw**, so
@@ -1976,7 +2000,7 @@ is the first gate that exercises the others — which is what § 5.4 meant by
 ### 5.11 Logical and member operand lists must agree, or the encoder reads the wrong one
 
 **`lui r1, sym` emitted no relocation at all** and encoded its immediate as 0.
-Fixed in `afc345108f57`; lld 11/24 → 12/24.
+Fixed in `b1b950547b32`; lld 11/24 → 12/24.
 
 The database says `LUI rt, imm12` — two operands. The logical said
 `(outs GPR32:$rd), (ins GPR32:$rs, uimm12:$imm)` — three, with every caller
@@ -2008,7 +2032,7 @@ counts is not enough** — see "the measurement was crediting a tie that never
 happened" below, and `SEQ64`, which has two operands on both sides and still
 mis-encodes because they mean different things.
 
-#### The tied-writeback half, fixed in `2686a95478c5`
+#### The tied-writeback half, fixed in `9ed26f2cc23d`
 
 The largest single group. A logical with `Constraints = "$rs = $rs_wb"`
 presents **four** operands — the tied register once as an out and once as an
@@ -2028,7 +2052,7 @@ tied in, copies the `Constraints`. 202 member definitions.
 builds the MCInst against the member, so the two agreed. Only **compiled** code
 was wrong, and only in the operands after the tie.
 
-#### The generator was deciding defs by spelling — fixed in `032d9cffcbbc`
+#### The generator was deciding defs by spelling — fixed in `26370cf02c39`
 
 **`X2SEQ32` was the thread that unravelled it, and the suspicion recorded here
 was right: the dest-by-field-name rule was wrong.** It called an operand an out
@@ -2139,11 +2163,11 @@ The four shapes, and what each cost:
 
 | Shape | n | Fixed in | Cost |
 |---|---:|---|---|
-| SFR compares with no destination | 9 | `b6c960be45ee` | intrinsics and builtins become void (§ 7) |
-| an extra dead operand | 5 | `b6c960be45ee` | **NOT `.td` only — see below** |
-| `Behavior` reads a port the database omits | 6 | `fb3fd13bebed` | a database repair, not a `.td` one |
-| an accumulator the logical never declared | 91 | `5185d0634df6`, `91a58cebd7aa`, `1240fd66d030` | 87 intrinsic prototypes gain the accumulator |
-| operand order against the Syntax | 3 | `7cf1079b8505` | `.td` plus four GISel construction sites |
+| SFR compares with no destination | 9 | `d3b8af57efac` | intrinsics and builtins become void (§ 7) |
+| an extra dead operand | 5 | `d3b8af57efac` | **NOT `.td` only — see below** |
+| `Behavior` reads a port the database omits | 6 | `ad03d0b4a86d` | a database repair, not a `.td` one |
+| an accumulator the logical never declared | 91 | `f87120340f6e`, `358739d19303`, `c5004f82c0a0` | 87 intrinsic prototypes gain the accumulator |
+| operand order against the Syntax | 3 | `a64cd1a686ec` | `.td` plus four GISel construction sites |
 
 **The first two changed the generated encoding by not one byte.** The members
 already had the right shape — the generator takes an operand's role from the
@@ -2178,7 +2202,7 @@ ternary intrinsic + `selectAccMAC` all along — so this was a rename onto an
 existing vocabulary rather than a design.
 
 `MOVEI_H`/`MOVEI_L` turned out to be the same shape and are fixed in
-`1240fd66d030`. They write one half of the destination and preserve the other,
+`c5004f82c0a0`. They write one half of the destination and preserve the other,
 and with a one-argument intrinsic the preserved half was undefined — so the
 pair could not do the one thing their builtin documentation describes, because
 two independent defs cannot be chained onto one register:
@@ -2279,7 +2303,7 @@ Anything the Behavior does not place is a hard error rather than a default;
 defaulting is what produced this. Over 683 instructions it classifies 77
 immediate fields with nothing left over.
 
-Fixed in `97032fac576b`: `LUI` (`{imm12, 20'b0}`) and `ANDI32` / `ORI32` /
+Fixed in `7cac01fb0b97`: `LUI` (`{imm12, 20'b0}`) and `ANDI32` / `ORI32` /
 `XORI32` (`ZEXT32(imm20)`), 13 member defs. `andi32 r1, r2, 1048575` printed
 as `-1`, which reads as `rs & 0xFFFFFFFF` rather than `rs & 0xFFFFF`.
 
@@ -2333,7 +2357,7 @@ for the same reason no gate saw it: **`--emit roundtrip` never applies a
 fixup**. It round-trips the placement's own bits, and a fixup writes over them
 afterwards.
 
-#### Fixed in `00c3cb33aa65` — the key could not tell two fields apart
+#### Fixed in `aed9c9de841d` — the key could not tell two fields apart
 
 § 5.8's table is keyed on `(FieldSize, entry count, entry index, mapping)`.
 **That does not identify a field.** `SET_HWLOOP_F2` carries a 6-bit and a
@@ -2467,7 +2491,7 @@ The code says so, and was right when it was written:
 the switch lands, and expect the first real bundles to be where it earns or
 loses trust."* This is that moment, and the hinted path loses.
 
-#### Fixed in `33a9d51d5d48`, on the answer it was held for
+#### Fixed in `08a144aa56cc`, on the answer it was held for
 
 **A NOP occupies no unit.** That was the open hardware question and it is
 decided. It is also what makes the fix cheap: padding stays wherever it lands,
@@ -2523,7 +2547,7 @@ thing that compiles libc and links a real image, and it found defects no lit
 test reaches. The suite does not pass and cannot until § 5.5 lands; what it
 gives is a list of things that were broken before the executor ever mattered.
 
-#### Compiler defects it found (fixed, `ab6edfc93755`)
+#### Compiler defects it found (fixed, `c2a7f4d92d5a`)
 
 * **`HaydnPostSelectOptimize::tryCSEConstantDR64` aborted on a frame index.**
   It matches an OPCODE and then reads operand kinds, and `ADDI32
@@ -2582,7 +2606,7 @@ defects below were reachable only by running a program; every one of them was
 invisible to lit, and two were invisible because the test that covered them
 checked a shape instead of a number.
 
-#### 1. PEI put byte offsets in a scaled field — `a62c08e148e4`
+#### 1. PEI put byte offsets in a scaled field — `1207787d2b88`
 
 `emitCSRStore` / `emitCSRLoad` handed the raw byte offset to a
 `simm6:$scaled_imm`, whose field holds ELEMENTS. `emitCSRLoad` is the one that
@@ -2595,7 +2619,7 @@ garbage and the program died at its first return — 73 bundles into `return 7`.
 this. A sweep of every `BuildMI` of a scaled LS opcode says these two were the
 last unconverted sites.
 
-#### 2. lld dropped the entry base at a thunk — `954e14c86add`
+#### 2. lld dropped the entry base at a thunk — `3c47276ece84`
 
 A branch resolves from the BUNDLE; the relocation points at the ENTRY. The
 emitter puts the entry's byte base in the addend so `S + A − P` cancels it.
@@ -2609,7 +2633,7 @@ parcels — so the fix is the seam that exists rather than a new one.
 `thunk-addend.s` should have caught this and did not: `lui{{.*}}r0,` matches
 any immediate, and the file never compares an address to anything.
 
-#### 3. Every DWARF line address rounded down to 16 — `6de296c0ac37`
+#### 3. Every DWARF line address rounded down to 16 — `7476a026f969`
 
 `MinInstAlignment = 16` reaches exactly one place: the line program's
 `minimum_instruction_length`, the unit MCDwarf DIVIDES address advances by.
@@ -2617,7 +2641,7 @@ A `.loc` three bundles in reported 0x20 for an instruction at 0x24. It is 1
 now, not 12 — functions align to 4, so not every advance is a whole parcel and
 12 would bring the truncation back for exactly those cases.
 
-#### 4. 48 real instructions were still `isPseudo` — `14561e08a6f5`
+#### 4. 48 real instructions were still `isPseudo` — `48c963aa7901`
 
 `let isPseudo = 1 in {` at `HaydnInstrInfoAuto.td:2925` covers everything after
 it that does not opt out. Format E generates members for 48 of those logicals,
@@ -2755,7 +2779,7 @@ the ones the pre-RA scheduler reads. It cannot be done by editing the format
 classes: **a format is an encoding shape and `Available` is a machine fact, and
 they are not the same partition.** `Slot12_ALU` alone covered defs belonging to
 `Unit_ALU0ALU1ALU2_L1` (104), `Unit_MAC0MAC1_L2` (70) and `Unit_MAC0MAC1_L1`
-(38). Derived per def from the database, 512 retargeted (`6f37a306084f`).
+(38). Derived per def from the database, 512 retargeted (`51c24ca3e2d7`).
 
 One fact the database cannot state, and it is load-bearing:
 `Slot12_MAC_AccFirst` carries per-operand cycles `[2, 2, 1, 1]` — the
@@ -2778,7 +2802,7 @@ It produced no wrong answers, and that is why it lasted: legality comes from
 the placement search (§ 7), so the packer kept rejecting what the hardware
 rejects. What was lost is the scheduler's ability to stop proposing those
 cycles — B4's "at most one store per bundle" was invisible to it.
-`83959145aafd`.
+`144a622c6f8f`.
 
 #### The tests were pinning an instruction set that does not exist
 
@@ -2787,7 +2811,7 @@ for them by name; 27 `.mir` tests named the opcodes. **They passed because the
 dead defs survived as parse-only shells with no format E member** — they cannot
 be encoded, so nothing those lines tested was reachable.
 
-Moved to the live spellings (`3dd56bf31023`), and **the immediate had to be
+Moved to the live spellings (`080486f5b000`), and **the immediate had to be
 rechosen rather than converted**: it is an element index in a `simm6` field, so
 `ld32 r6, r7, 1024` is 256 elements and does not fit at all. The values walk 0,
 ±1, ±2 and the ends of the field. Both load/store MC files now say plainly what
@@ -2843,7 +2867,7 @@ the pattern worth naming: **a claim about which check is approximate is not
 cheaper to guess than to measure**, and both guesses here pointed at code that
 was already right.
 
-*Store/load overlap — genuinely missing.* `2cddbe292469`.
+*Store/load overlap — genuinely missing.* `3f5f9b21dc6f`.
 
 > § Constraints: "Within the same bundle, a store and a load must not target
 > overlapping memory addresses. … the hardware detects the conflict and raises
@@ -2876,7 +2900,7 @@ information" and every caller assumed the worst.
 `clang` **hung** at -O2 on gcc-c-torture `pr28982a`/`pr28982b`: 356505
 legalizations, register numbers past `%300000`, no end. Recorded in § 5.17 as a
 separate open bug when it turned out not to be evidence for keeping CB-130's
-clamp; this is it. `d8801579a60c`.
+clamp; this is it. `f905e7be8c03`.
 
 `G_FREEZE` was **`alwaysLegal()`**, so a `<16 x i32>` was allowed to exist as a
 VALUE — and nothing else in the target can hold one. Every consumer narrowed it
@@ -2912,7 +2936,7 @@ terminate, with it the whole thing legalizes in 119 steps.
 
 `clampMaxNumElements(…, S1, 1)` was still in `G_EXTRACT_VECTOR_ELT`,
 `G_INSERT_VECTOR_ELT` and `G_CONCAT_VECTORS` — the construct that **can only
-assert**, unreached rather than working. Removed (`f1ce318e671d`); no test
+assert**, unreached rather than working. Removed (`2ede04445ecb`); no test
 moves, which is the expected result and also the reason not to have left them.
 
 Behind them is a real gap, visible now instead of disguised:
@@ -2928,7 +2952,7 @@ stopped. The default set is `-bit-reversed,-circular-buffer,-simd`, and 168
 wrapper BODIES call builtins needing one of the absent three, so the include
 failed before the user had written any code. It had been worked around
 consumer-side: BundleSim's `run_c` passes `-mcpu=haydn`, which turns the
-features on and hides it. `6197e624fce4`.
+features on and hides it. `6696e07b98e6`.
 
 **The per-op feature expression was already parsed into `Entry::Features` and
 simply not used at emission.** It is now an `__attribute__((target(...)))` per
@@ -2978,7 +3002,7 @@ extract from a `<N x s1>` becomes an `s32` extract from a `<N x s32>` — a shap
 the existing rules already handle, and byte-sized, so the stack lowering
 applies. `G_INSERT_VECTOR_ELT` takes the same treatment, where type index 0 is
 the result VECTOR and carries the source and the inserted value with it.
-`5237bc54de12`.
+`beeab09f3522`.
 
 **Verified by execution, not by reading the schedule.** The simulator runs both
 lanes of both operand orders through the lowered extract and the answers are
@@ -3876,7 +3900,7 @@ already the tested carrier of the member→logical fold.
   at all: GISel allocated a dead vreg for it, and every caller in `haydn_dsp.h`
   already discarded it and read the flags back. Same call as the AR prototypes
   below, and for a stronger reason — those changed shape, this one never had
-  the shape it advertised. Done in `b6c960be45ee`.
+  the shape it advertised. Done in `d3b8af57efac`.
 * **The AR intrinsic prototypes change; the source break is accepted.** The
   re-delivered database dropped the second base register and the direction
   select and made the post-increment a fixed +8. `pldwwua` → `PLDWWUA_POST`
@@ -3906,8 +3930,8 @@ already the tested carrier of the member→logical fold.
 
 ## 8. Open questions needing a human
 
-1. **~~`haydn_dsp.h` has not been updated~~ — DONE in `e7343a1b21b9` and
-   `909715a0c654`, and it was not one file.**
+1. **~~`haydn_dsp.h` has not been updated~~ — DONE in `1d26e4382186` and
+   `badd67cd03a9`, and it was not one file.**
    The five AR helpers now take `(ar, p)` / `(data, ar, p)` / `sa64pos(ar, p)`,
    the 15 live call sites lost their `8, 0`, and `haydn_ae_sa64pos`'s 8-way
    `switch ((ar << 1) | dir)` is a 4-way `switch (ar & 3)`. The four dead
@@ -3931,7 +3955,7 @@ already the tested carrier of the member→logical fold.
    * **`specialPublicShape()` in `HaydnIntrinEmitter.cpp` had its own table**,
      still handing out 4- and 5-argument shapes. It wins *before*
      `PublicPrototype` is parsed, so `checkPublicProtoArity` — added in
-     `ada04a83cd37` for exactly this failure mode — never saw it. The only
+     `ecbb96c630d0` for exactly this failure mode — never saw it. The only
      thing that noticed was `capi-op-closure-matrix.c` failing to compile the
      probe it generates. That hole is now closed: `resolvePublicShape` applies
      the same rule to the special table, and reintroducing a wrong arity there
