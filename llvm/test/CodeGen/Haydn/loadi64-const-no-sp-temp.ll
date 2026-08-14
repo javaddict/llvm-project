@@ -26,7 +26,7 @@
 ;
 ; Test design: a leaf comparing an incoming i64 against 979 (Hi==0 ->
 ; register-only zero-extend path). This leaf still has a prologue
-; `subi32 sp,sp,8` / epilogue `addi32_w sp,sp,8`: that is the BASELINE emergency
+; `subi32 sp,sp,8` / epilogue `addi32 sp,sp,8`: that is the BASELINE emergency
 ; scavenger slot (processFunctionBeforeFrameFinalized reserves one 4-byte EFI,
 ; 8-aligned, for every function with a RegScavenger -- deliberate, "same
 ; insurance as ARM without a free IP"). It is NOT the forbidden transient.
@@ -44,8 +44,8 @@ define i32 @i64_cmp_const_979(i64 %x) nounwind {
 ; CHECK: sext32t64 d{{[0-9]+}}, r{{[0-9]+}}
 ; CHECK: slli64 d{{[0-9]+}}, d{{[0-9]+}}, 32
 ; CHECK: srli64 d{{[0-9]+}}, d{{[0-9]+}}, 32
-; CHECK-NOT: addi32_w{{.*}} sp, sp, 8
-; CHECK: addi32_w sp, sp, 8
+; CHECK-NOT: addi32{{.*}} sp, sp, 8
+; CHECK: addi32 sp, sp, 8
 entry:
   %c = icmp eq i64 %x, 979
   %r = zext i1 %c to i32

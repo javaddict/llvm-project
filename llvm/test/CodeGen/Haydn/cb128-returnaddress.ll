@@ -7,14 +7,14 @@
 define ptr @ra_depth0() {
 ; CHECK-LABEL: ra_depth0:
 ; CHECK: {{move32|lr}}
-; CHECK: jalr_w
+; CHECK: jalr
   %r = call ptr @llvm.returnaddress(i32 0)
   ret ptr %r
 }
 
 define ptr @ra_depth1() {
 ; CHECK-LABEL: ra_depth1:
-; CHECK: jalr_w
+; CHECK: jalr
   %r = call ptr @llvm.returnaddress(i32 1)
   ret ptr %r
 }

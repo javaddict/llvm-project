@@ -47,7 +47,7 @@ define void @simd_v4i16_load_store(ptr %ptr, <4 x i16> %val) nounwind {
 ; G-ABI-VEC: <4 x i16> lives in DR; store is dual d_sw_{l,h}_with_imm (or
 ; ST64 / ST32 pair after peephole). Accept any of these encodings.
 ; CHECK-DAG: {{d_sw_l_with_imm|st64|st32}}
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %loaded = load <4 x i16>, ptr %ptr
   store <4 x i16> %val, ptr %ptr
   ret void

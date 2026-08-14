@@ -1,0 +1,50 @@
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:     -run-pass=regbankselect,instruction-select -verify-machineinstrs \
+# RUN:     %s -o - | FileCheck %s
+
+# Role: MIR — T-GS6: under-aligned s64 load/store split MMOs are 4 bytes at offsets 0/4.
+
+# REGRESSION TEST: T-GS6 split-access MMOs (per-half size/offset).
+#
+# Bug: misaligned s64 G_LOAD/G_STORE split cloned the original 8-byte MMO onto
+# both LD32/ST32 halves, so AA and the post-RA scheduler saw the wrong size
+# and offset.
+# Fix: MachineFunction::getMachineMemOperand(MMO, Offset, 4) at 0 and 4
+# (AArch64InstructionSelector.cpp:1996-2033 getWithOffset + Size).
+# If cloneMemRefs returns, both halves print `(load (s64)` / `(store (s64)`.
+
+---
+name:            split_s64_load_align4
+legalized:       true
+regBankSelected: false
+tracksRegLiveness: true
+# CHECK-LABEL: name: split_s64_load_align4
+# CHECK: LD32 {{.*}} :: (load (s32))
+# CHECK: LD32 {{.*}} :: (load (s32) from unknown-address + 4)
+# CHECK-NOT: :: (load (s64)
+body:             |
+  bb.0:
+    liveins: $r1
+    %p:_(p0) = COPY $r1
+    %v:_(s64) = G_LOAD %p(p0) :: (load (s64), align 4)
+    $d0 = COPY %v(s64)
+    RET implicit $d0, implicit $r15
+...
+
+---
+name:            split_s64_store_align4
+legalized:       true
+regBankSelected: false
+tracksRegLiveness: true
+# CHECK-LABEL: name: split_s64_store_align4
+# CHECK: ST32 {{.*}} :: (store (s32))
+# CHECK: ST32 {{.*}} :: (store (s32) into unknown-address + 4)
+# CHECK-NOT: :: (store (s64)
+body:             |
+  bb.0:
+    liveins: $r1, $d0
+    %p:_(p0) = COPY $r1
+    %v:_(s64) = COPY $d0
+    G_STORE %v(s64), %p(p0) :: (store (s64), align 4)
+    RET implicit $r15
+...

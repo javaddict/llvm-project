@@ -1,0 +1,197 @@
+Haydn source / golden authority anchor inventory (G-SOURCE-ALIGNMENT / T7-ARTIFACT)
+==========================================================================================
+Stamp: 2026-08-13 T7-RUNTIME-TOOLCHAIN restamp
+  (same-artifact Clang/LLD/sysroot/libm/loader/BundleSim/debugger tuple;
+   ARTIFACT.decode Functional_Model shim+model hashes; libm required on
+   install/restamp; owned c-e2e/cfi/debug/baremetal seats in coverage pin;
+   prior T7 run_c linker identity + five-file catalog pin retained)
+Audited backend baseline: re-query live HEAD before authority edits
+  (do not treat this stamp as a frozen product qualification claim)
+Re-verify line anchors against the live tree before every authority edit.
+
+Golden five-file set: see STATUS.md SHA-256 table only.
+Consumer catalog provenance: BundleSim isa/database/generated/GOLDEN_INPUTS.sha256
+  pins the same five files; generate_catalog.py reads format_e_bit_layout_v2.json
+  only (retired seven per-slot JSONs and 17-file ledger are not inputs).
+
+Pipeline ownership anchors (current implementation)
+---------------------------------------------------
+| Claim | Source anchor | Live pin |
+|---|---|---|
+| PostRA + Finalize + Verify inserted all opt levels | HaydnTargetMachine.cpp addPreSched2 / addPreEmitPass | llc-pipeline-haydn.ll early+late Finalize/Verify |
+| Early Finalize/Verify after postmisched (no skip) | HaydnTargetMachine.cpp addPreSched2 | llc-pipeline-haydn.ll O0/O123-NEXT |
+| LatencyStalls then late Finalize/Verify (PreEmit) | HaydnTargetMachine.cpp addPreEmitPass | llc-pipeline-haydn.ll Latency+late seats |
+| PostMachineScheduler skipFunction (quality only) | MachineScheduler.cpp PostMachineSchedulerLegacy | authority-o0-vs-optnone-commit.ll SKIP-OPTNONE |
+| FinalizeBundle NO skipFunction (commit ownership) | HaydnFinalizeBundle.cpp::runOnMachineFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT |
+| VerifyBundles NO skipFunction (emission gate) | HaydnVerifyBundles.cpp::runOnMachineFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT |
+| skipFunction = optnone / pass gate | Pass.cpp FunctionPass::skipFunction | authority-o0-vs-optnone-commit.ll SKIP-OPTNONE |
+| LatencyStalls never skipFunction | HaydnLatencyStalls.cpp::runOnMachineFunction | latency-stalls.ll |
+| Plain O0 commits Format-E BUNDLE (row+completion) | postmisched + finalize path | authority-o0-vs-optnone-commit.ll PLAIN |
+| optnone also commits Format-E BUNDLE (no-reorder) | finalize no-skip path | authority-o0-vs-optnone-commit.ll OPT + ASM |
+| optnone bare after postmisched (quality skip) | PostMachineScheduler skipFunction | authority-o0-vs-optnone-commit.ll SKIP-OPTNONE/PACK |
+| Indep multi plain packs BUNDLE 0,0 (AllEntriesReal) | postmisched multi-MI pack | authority-o0-vs-optnone-commit.ll PACK/PLAIN indep_plain |
+| Indep multi optnone sequential BUNDLE 0,2 only | Finalize no-reorder singleton | authority-o0-vs-optnone-commit.ll PLAIN/OPT indep_optnone |
+| Multi-op plain O0 / optnone both commit only | Finalize no-reorder + Verify bare ban | authority-o0-vs-optnone-commit.ll multi_*/indep_* |
+| Mixed BUNDLE + bare encode refuse (all funcs) | HaydnVerifyBundles HasCommittedCycle gate | authority-o0-vs-optnone-commit.ll PLAIN-NOT bare |
+| Singleton/no-reorder completion is full-slot architectural NOP pad (AllEntriesReal; not underfill invent) | Finalize/Verify/AsmPrinter AllEntriesReal path | authority-o0-vs-optnone-commit.ll BUNDLE 0, 0 |
+| Full-fill multi-MI is product-legal (not invent) | AllEntriesReal completion | authority-o0-vs-optnone-commit.ll BUNDLE 0, 0 |
+| Residual cycle-forming pseudos fail closed | isResidualCycleFormingPseudo | late-mc-residual-printer-matrix.mir |
+| Inverse FormatID corruption reject | haydn-verify-bundles | bundle-corruption-matrix.mir NO-IMM/BAD-ID |
+| Inverse member capacity / completion match | HaydnBundleVerify.h verifyCommittedBundle | bundle-corruption-matrix.mir E2-OVER/BAD-COMP/OVER-ISSUE |
+| Inverse accept stamped E2/E3 product identity | verifyCommittedBundle accept path | e96-bundle-inverse-verify.mir |
+| Committed private serialize-as-is + DFS re-place refuse | HaydnMCCodeEmitter trySerializeFormatECompositeAsIs; HaydnBundleVerify.h lookupPrivateFormatEMember | bundle-corruption-matrix.mir PRIV-REPLACE; e96-exact-serialize-standalone-boundary.s |
+| Residual FieldSlot setDesc as-is private MemberId cutover | trySerializeFormatECompositeAsIs composite-position entry (not suffix) | mc-exact-private-member-residual-as-is.mir; e96-mc-exact-private-member-cutover.s |
+| Finalize residual FieldSlot → private MemberId | HaydnFinalizeBundle cutoverBundleFieldSlots | e96-finalize-memberid-cutover.mir |
+| Residual/private roots require typed completion | verifyCommittedBundle missing CompletionStateID | e96-mandatory-residual-completion.mir |
+| Dual residual Mode retry then one real-order swap; no residual free-DFS | buildFormatEPlacedComposite residual Mode+swap path (suffix never pins entry) | e96-residual-fullpack-serialize.mir |
+| OracleId floor on EXACT+EMULATED AE inventory | BuiltinsHaydn.td OracleId; HaydnIntrinEmitter requireOracle | compat/ae-public-residual-oracle-matrix.c; ae-compat-tier-audit.py floor |
+| Early post-inc MMO transfer on GISel memops | HaydnCallLowering / post-inc legalize path | expand-postinc-early-mmo.mir |
+
+Phase-firewall inventory (no issue-cycle/format identity crosses RA)
+-------------------------------------------------------------------
+Structural barrier (primary): zero pre-RA BuildMI(BUNDLE)/MIBundleBuilder; all
+finalizeBundle + stampBundleCommit seats are post-PostMachineScheduler only;
+pre-RA HR cannot record members (IsPreRA / AltDescs guard); AltDescs cleared
+after materialize. Live supplementary pins (not a permanent sole barrier):
+| Claim | Source / pin |
+|---|---|
+| SMS StageCount>1 reject / no freeze through RA | sms-handoff-bundle-through-ra.mir |
+| USAD mutual-WAR no pre-RA freeze | sms-usad-mutual-war-no-prera-freeze.ll |
+| Late pre-emit recommit firewall | late-firewall-preemit-recommit.mir |
+| Residual: accept-path StageCount==1 pin + widened BUNDLE patterns | G-ORDINARY-SCHEDULER / residual |
+
+DG-OPTNONE residual (correctness passes must not skip)
+------------------------------------------------------
+| Pass | skipFunction? | Status |
+|---|---|---|
+| HaydnFinalizeBundle | NO | landed; pin authority-o0-vs-optnone-commit.ll |
+| HaydnVerifyBundles | NO | landed; optnone bare + mixed committed/bare gate |
+| HaydnLatencyStalls | NO | landed |
+| HaydnEnsureTerminators | NO (pre-PEI correctness) | open-goals-w8; cb115-unreachable-terminator.ll + llc-pipeline |
+| Generic PostMachineScheduler | YES (quality only) | intentional; not commit ownership |
+
+Underfill / top-pad: incomplete-fill invent remains fail-closed when golden is
+silent. Full-bundle idle (architectural NOP in every member of a legal format)
+is ordinary format-feasible fill, not golden invent.
+
+
+Hardware-loop / multi-stage product boundaries (G-HWLOOP-ROLE-A hygiene)
+------------------------------------------------------------------------
+| Claim | Source anchor | Live pin / state |
+|---|---|---|
+| -haydn-enable-hwloops default OFF | HaydnTargetMachine.cpp EnableHaydnHardwareLoops cl::init(false) 107+ | hwloop-basic.ll DEFAULT |
+| SCEV-proven IR TTI single-BB + CFG/trip purity | HaydnTargetTransformInfo.cpp isHardwareLoopProfitable 144+ | hwloop-basic.ll HWON / multi-BB decline |
+| Current multi-BB IR decline (separate extension) | TTI isHardwareLoopProfitable L->getNumBlocks()>1 154+ | hwloop-multibb.ll CHECK-NOT SET_HWLOOP |
+| Retained-state MIR expand + incomplete reject fatal | HaydnHardwareLoops.cpp expandRoleALoopStarts / rejectIncompleteRoleA | hwloop-rolea-preflight-demote.mir expand; hwloop-rolea-preflight-reject.mir fatal |
+| Retained-state EndGrowth stops at PseudoLoopEnd | HaydnFixupHwLoops.cpp sumStillRelaxableGrowth InclusiveTo | hwloop-fixup-second-br-growth.mir keep_soft_exit_after_ple |
+| Incomplete retained seats reject pre-mutation | rejectIncompleteRoleA report_fatal_error (no structural demote lie) | hwloop-rolea-preflight-reject.mir TRIP/CALL/MEXIT |
+| Late physical semantic reconstruction helpers deleted | HaydnHardwareLoops.cpp retained-state expand only (~474 LOC); no convertToHardwareLoop | product shape STATUS.md; no MachineLoopInfo dep |
+| P0/P3/P6 gated on EnableHaydnHardwareLoops | HaydnTargetMachine addPreISel 307+ / addPreSched2 416+ / addPreEmitPass 493+ | llc-pipeline-haydn.ll (flag OFF) |
+| Multi-stage post-RA host present (default OFF) | HaydnPostRAMultiStage + HaydnScheduleDAGMI::schedule; -haydn-enable-multistage-sms=false; PF-*/JM-* seats | sms-multistage-host-default-off.ll; PostRAMultiStageHostPins |
+| Multistage×hwloop combined | both independent qualifications required first | ordered follow-on qualification |
+| HWLR CSR final identity open | golden only | GE96-08 open |
+| ar_sel 2/3 classification open | golden only | GE96-09 open |
+| Final branch/reloc/growth equations open | golden only | GE96-03 open |
+
+ABI / bank / runtime anchors
+----------------------------
+| Claim | Source anchor | Owning goal |
+|---|---|---|
+| Stack alignment 8 | HaydnFrameLowering.h StackAlignment=Align(8) | G-BACKEND-CORRECTNESS |
+| R0 reserved soft-zero | HaydnRegisterInfo.cpp getReservedRegs | G-BACKEND-CORRECTNESS |
+| R12 allocatable caller-saved | HaydnRegisterInfo.cpp getReservedRegs (not reserved) | G-BACKEND-CORRECTNESS |
+| AR0/AR1 only; ar_sel 2/3 fail-closed | HaydnRegisterInfo.td; GE96-09 | G-OBJECT-ABI |
+| Separate GPR/DR/AR banks | HaydnRegisterBanks.td | G-BACKEND-CORRECTNESS |
+| Soft-float / ILP32 baremetal | clang Targets/Haydn.cpp setABI(ilp32) | G-RUNTIME-TOOLCHAIN |
+
+Live XFAIL (TOTAL=4): GE96-03 x3 + GE96-09 x1 — Inputs/XFAIL-OWNER-LEDGER.txt
+Mechanical parity pin: llvm/utils/haydn/check_xfail_ledger.py
+(xfail-owner-ledger-selfcheck.ll). Aggregate gate parser pin:
+llvm/utils/haydn/parse_lit_summary.py (parse-lit-summary-selfcheck.ll).
+
+Debug / unwind / disasm surfaces (G-DEBUG-OBSERVABILITY / T7-AUTHORITY-TEST-DEBUG)
+-------------------------------------------------------------------------------
+Two register-number namespaces (do not equate them):
+  * DWARF DwarfRegNum (HaydnRegisterInfo.td): R0-R15=0-15, D0-D15=16-31,
+    AR0=32, AR1=33, SFR=36, CSR=37, CBR0/1=38/39.
+  * Remote LLDB/GDB RSP (BundleSim haydn_debug.h / lldb_rsp.c): r0-r15=0-15,
+    pc=16, ar0-ar3=17-20, dr0-dr15=21-36, HWLR=37-42, CBR=43-46.
+    Compiler productizes AR0/AR1 only; remote AR2/AR3 exist, while product
+    classes for ar_sel=2/3 are outside the current GE96-09-supported scope.
+
+| Claim | Source anchor | Live pin |
+|---|---|---|
+| DWARF GPR R0-R15 nums 0-15 | HaydnRegisterInfo.td DwarfRegNum | DebugInfo/Haydn/basic-dwarf.ll |
+| CIE CFA = R13 (SP) + 0 | HaydnMCTargetDesc / FrameLowering | debug-info.ll FRAME; cfi-callee-saves.ll |
+| RA column = 15 (LR) | HaydnMCTargetDesc InitHaydnMCRegisterInfo(R15) | DebugInfo/Haydn/eh-frame.s |
+| CFA-relative .cfi_offset (negative) | FrameLowering getObjectOffset | cfi-cfa-object-offset.ll |
+| CFIFixup product-enabled | Options.EnableCFIFixup | cfi-fixup-enabled.ll |
+| Hostile objdump / OOB printer no-crash | InstPrinter / Disassembler | d432-objdump-crt0-no-crash.s; printer-oob-*; hostile-byte-surface.s |
+| Bounds-safe printRegName (no assert on bad RegNo) | HaydnInstPrinter::printRegName | hostile-byte-surface.s; printer-oob-* |
+| Hostile short residual lengths 1..11 + Format-E-looking headers | Disassembler / objdump | hostile-byte-surface.s Case C/D2/G (T7 growth) |
+| Hostile leading short residual + misaligned multi-window stream | Disassembler / objdump | hostile-byte-surface.s Case H (T7-AUTHORITY-TEST-DEBUG) |
+| Hostile mid-stream odd residual + EOF mid-parcel | Disassembler / objdump | hostile-byte-surface.s Case I (open-goals-w6) |
+| Multi-FDE frame-chain (SP-CFA + FP-CFA) | FrameLowering CFI + CIE RA=15 | unwind-frame-chain.ll (ASM/FRAME/EH) |
+| Nested 3-level SP/FP + mixed FP↔SP frame-chain | FrameLowering CFI multi-FDE | unwind-frame-chain.ll outer2_* / mixed_fp_calls_sp / mixed_sp_calls_fp |
+| Remote reg-map names ar0/dr0 resolve | BundleSim bundlesim/include/bundlesim/haydn_debug.h + bundlesim/src/lldb/lldb_rsp.c | scripts/lldb_feature_matrix.sh; lldb_haydn_smoke.sh |
+| Parcel step-inst (Format E 12B unit) | BundleSim LLDB stub step = one E96 record | lldb_feature_matrix.sh STEP_* oracle |
+| Residual: deeper hostile decode classes / LLDB step residual same-PC | G-DEBUG-OBSERVABILITY open | frame-chain 3-level + mixed SP↔FP + hostile 1..11 + Case H/I; more growth as defects appear |
+
+Retired live-owner IDs forbidden as goals: G-TEST-CONTRACTS, G-DECISION-GUARD,
+PIPE-*, AR-track IDs. Inventory may name residual AR0 items for synchronization.
+
+Product profile / dependence / geometry seats (G-ECOSYSTEM-CONSUMERS / G-TEST-EVIDENCE)
+--------------------------------------------------------------------------------------
+| Claim | Source anchor | Live pin |
+|---|---|---|
+| Product ELF e_flags = EF_HAYDN_E96 (0x1) | HaydnAsmBackend::finishLayout; BUNDLESIM_EF_HAYDN_E96 | eflags-e96-product-profile.{s,ll} |
+| Consumer rejects zero/wrong e_flags | BundleSim elf_validator | bundlesim_test_elf (flags=0/0x2/0x3) |
+| Illegal dual-store co-issue refuse | MC one-parcel placement (serialize-only) | MC/Haydn/bundle-dependence-reject.s |
+| Non-12B exec section / record reject | frontend_pipeline + code_image | test_frontend_pipeline (size 11/16) |
+
+Physical multistage inventory (active target; host absent)
+-----------------------------------------------------------
+Closed seat IDs only — full tables live in FAULT-INJECTION-SEATS.txt and
+CORRUPTION-MATRIX.txt; design text in topics/scheduling/TOPIC.md.
+  Preflight: PF-CFG, PF-PHI, PF-TRIP, PF-STAGE, PF-LIVE, PF-ALT, PF-BUNDLE, PF-LATE
+  Journal/rollback: JM-ALLOC, JM-SPLICE, JM-COMMIT, JM-TRIP, JM-LIVE, JM-ALT, JM-META
+Every multistage product seat is open / inventory-only and is implemented with
+the active physical host. Never fake force-fail evidence, revive Stage-0
+densification or late physical semantic rediscovery, or flip policy default ON.
+
+open-goals-w0 multi-track residual landings (honest pins; not full exits)
+------------------------------------------------------------------------
+| Claim | Source anchor | Live pin |
+|---|---|---|
+| Symmetric CC/ABI preflight (calls/formals/returns/flags) | HaydnCallLowering.cpp isSupportedCallingConv / hasUnsupportedABIArgFlags | gisel/unsupported-cc-reject.ll CALL/FORMAL/NEST/RETCC |
+| FmtALU64Unary fabricated sequential encodings retired | HaydnInstrInfo.td HaydnInst isPseudo shells; private *_S1/*_S2 members | abs64s-not-pseudo.ll; nsa-rgd-not-pseudo.ll |
+| Post-RA PortModel admission single authority | HaydnPostRASchedStrategy.cpp haydnProductResourceAdmissionPinsHold | phase-firewall-no-prera-bundle.ll STATS pin |
+| measure_sched_artifact object/P8 + compiler identity | llvm/utils/haydn/measure_sched_artifact.py | freestanding dual-run when toolchain healthy |
+| Residual pure/memory/MAC/state OracleId authored | BuiltinsHaydn.td OracleId; HaydnIntrinEmitter requireOracle | compat/ae-public-residual-oracle-matrix.c |
+| Empty-body ADD64X2_* remain fail-closed | BuiltinsHaydn.td UNSUPPORTED | residual-oracle-matrix STRICT |
+
+
+
+| Byval caller isolation (private FI + word ld/st; preflight before CALLSEQ) | HaydnCallLowering.cpp isolateByValArgument + lowerCall | byval-caller-isolation.ll + language-coverage-matrix.ll sup_byval_caller |
+
+Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN / T7-ARTIFACT)
+----------------------------------------------------------------------------------------------------
+| Claim | Source anchor | Live pin |
+|---|---|---|
+| XFAIL ledger parity unexplained=0 | Inputs/XFAIL-OWNER-LEDGER.txt | check_xfail_ledger.py + xfail-owner-ledger-selfcheck.ll |
+| lit summary Failed ≠ Expectedly Failed | llvm/utils/haydn/parse_lit_summary.py | parse-lit-summary-selfcheck.ll + --self-test |
+| Freestanding ARTIFACT 64-hex + libc/libm | $sysroot/ARTIFACT.json | product_coverage_pin.sh; full-gate restamp |
+| Five-file catalog authority + GOLDEN_INPUTS pin | BundleSim isa/database/generated/GOLDEN_INPUTS.sha256 | check_golden_pin.sh; product_coverage_pin; full-gate |
+| Catalog generate from layout only (no 7-slot/17-file) | generate_catalog.py + instruction_catalog_generated.inc | generate_catalog --check; ARTIFACT.catalog.complete |
+| ARTIFACT.catalog five-file + retired_inputs_consumed=false | record_haydn_artifact_set.py build_catalog_block | check_haydn_artifact_set.sh; product_coverage_pin |
+| ARTIFACT.decode Functional_Model + model hashes | record_haydn_artifact_set.py build_decode_block | check_isa_pin_discipline.sh; product_coverage; full-gate DECODE FM |
+| ARTIFACT.consumer loader+debugger (lldb) | record_haydn_artifact_set.py build_consumer_block | full-gate toolchain_hashes; product_coverage decode/consumer |
+| Exact V1-V5 artifact tuple template | Inputs/V1-V5-ARTIFACT-MANIFEST.template.txt | five-file golden + catalog + decode + lldb/loader fields |
+| EF_HAYDN_E96=0x1 provisional consumer agreement | HaydnAsmBackend + BundleSim | eflags-e96-product-profile.{s,ll}; no external alloc invent |
+| NatureDSP product library (expand default) | naturedsp-haydn product_library_pin | MIN_TEXT + e_flags + artifact_id; residual-beyond-approved.txt census |
+| Aggregate monorepo product coverage seat | llvm/utils/haydn/product_coverage_pin.sh | ledger+ARTIFACT+catalog+decode+NatureDSP+owned c-e2e/cfi/debug lit |
+| run_c linker resolve (ld.lld or lld) + ctest toolchain env | BundleSim run_c_process/run_c_tools + regression CMakeLists | full-gate ctest; bundlesim_reg_* inherit HAYDN_BIN PATH |
+| libm.a required on sysroot install/restamp | install_haydn_sysroot.sh | check_haydn_artifact_set required components |
+| LLDB pointer return = r1; volatile unwind undefined | lldb ABISysV_haydn | GetPointerReturnRegister / GetFallbackRegisterLocation |
+| DG0 DecisionGuard product registry | absent by design | Inputs/* + ledger/parser + product_coverage_pin only; no G-DECISION-GUARD revive |
+| Authority inventory residual (this track) | G-RUNTIME-TOOLCHAIN T7-ARTIFACT | keep stamps/IDs synchronized on every product-shape edit; no invent |

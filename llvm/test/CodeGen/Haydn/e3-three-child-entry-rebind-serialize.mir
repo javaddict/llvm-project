@@ -1,0 +1,96 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %s -o %t.fin.mir
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t.fin.mir -o %t.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   -filetype=obj %s -o %t.skip.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.skip.o | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: a 3-child residual BUNDLE is E3 at the bundle root
+# (child count), not a FieldSlot suffix or MC DFS. Both Finalize and
+# skip-Finalize must emit ONE Format E parcel — never sequential E2
+# singleton split.
+#
+# encodeBundle stamps BUNDLE_E96_THREE_ENTRY when there are 3 reals,
+# BUNDLE_E96_TWO_ENTRY otherwise. Composite operand order is e0, e1, (e2).
+# FieldSlot suffixes do not pin entries. Illegal packs (two ST32) still
+# fail closed elsewhere.
+#
+# Test design: three 3-child residual hard roots. Positive path runs
+# Finalize then object dump. Skip-Finalize path encodes from bundle
+# child count and must dump the same logical mnemonics.
+
+--- |
+  define void @store_last_srli_sext_st64() { ret void }
+  define void @alu_then_dual_load() { ret void }
+  define void @and_move_st32() { ret void }
+...
+---
+# [SRLI64; SEXT_GPR32_TO_DR64; ST64] — ST only at E3 e0. bqriir32x32_df1-e2e.
+name:            store_last_srli_sext_st64
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $r3, $r4, $r15
+    BUNDLE 1, 0, implicit-def $d1, implicit-def $d2, implicit-def dead $sfr, implicit $d1, implicit $r3, implicit $d0, implicit $r4 {
+      $d1 = SRLI64 $d1, 1, implicit-def dead $sfr
+      $d2 = SEXT_GPR32_TO_DR64 $r3, implicit-def dead $sfr
+      ST64 $d0, $r4, 16, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+# CHECK-LABEL: <store_last_srli_sext_st64>:
+# CHECK-DAG: srli64
+# CHECK-DAG: sext32t64
+# CHECK-DAG: {{d_sdw|st64}}
+# CHECK: jalr
+# CHECK-NOT: <unknown>
+
+...
+---
+# [SLT32; LD64; LD32] — dual load unit split. c-e2e-bundle-dump.
+name:            alu_then_dual_load
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3, $r4, $r6, $r15
+    BUNDLE 1, 0, implicit-def $r1, implicit-def $d0, implicit-def $r5, implicit-def dead $sfr, implicit $r2, implicit $r3, implicit $r4, implicit $r6 {
+      $r1 = SLT32 $r2, $r3, implicit-def dead $sfr
+      $d0 = LD64 $r4, 0, implicit-def dead $sfr
+      $r5 = LD32 $r6, 4, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+# CHECK-LABEL: <alu_then_dual_load>:
+# CHECK-DAG: slt32
+# CHECK-DAG: {{d_ldw|ld64}}
+# CHECK-DAG: {{s_lw|ld32}}
+# CHECK: jalr
+# CHECK-NOT: <unknown>
+
+...
+---
+# [AND32; MOVE32_DR_L; ST32] — ST only at E3 e0. resid_slaa64s_one.
+name:            and_move_st32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3, $d0, $r6, $r5, $r15
+    BUNDLE 1, 0, implicit-def $r1, implicit-def $r4, implicit-def dead $sfr, implicit $r2, implicit $r3, implicit $d0, implicit $r6, implicit $r5 {
+      $r1 = AND32 $r2, $r3, implicit-def dead $sfr
+      $r4 = MOVE32_DR_L $d0, implicit-def dead $sfr
+      ST32 $r6, $r5, 0, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+# CHECK-LABEL: <and_move_st32>:
+# CHECK-DAG: and32
+# CHECK-DAG: move32_dr_l
+# CHECK-DAG: {{s_sw|st32}}
+# CHECK: jalr
+# CHECK-NOT: <unknown>

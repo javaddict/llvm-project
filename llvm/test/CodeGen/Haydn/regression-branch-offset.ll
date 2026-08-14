@@ -22,8 +22,8 @@ define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_eq:
 ; CHECK: seq32
 ; CHECK: xori32
-; CHECK: bnez_w{{(\.s[012])?}}
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}, extern_fn
+; CHECK: bnez{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}} {{.*}}, extern_fn
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %end
@@ -39,7 +39,7 @@ end:
 define void @branch_ne(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ne:
 ; CHECK: seq32
-; CHECK: bnez_w{{(\.s[012])?}}
+; CHECK: bnez{{(\.s[012])?}}
 entry:
   %cmp = icmp ne i32 %a, %b
   br i1 %cmp, label %then, label %end
@@ -55,7 +55,7 @@ define void @branch_slt(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_slt:
 ; CHECK: slt32
 ; CHECK: xori32
-; CHECK: bnez_w{{(\.s[012])?}}
+; CHECK: bnez{{(\.s[012])?}}
 entry:
   %cmp = icmp slt i32 %a, %b
   br i1 %cmp, label %then, label %end
@@ -71,7 +71,7 @@ define void @branch_ult(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ult:
 ; CHECK: sltu32
 ; CHECK: xori32
-; CHECK: bnez_w{{(\.s[012])?}}
+; CHECK: bnez{{(\.s[012])?}}
 entry:
   %cmp = icmp ult i32 %a, %b
   br i1 %cmp, label %then, label %end
@@ -87,7 +87,7 @@ define i32 @branch_large_offset(i32 %x) nounwind {
 ; CHECK-LABEL: branch_large_offset:
 ; CHECK: slt32
 ; CHECK: xori32
-; CHECK: bnez_w{{(\.s[012])?}}
+; CHECK: bnez{{(\.s[012])?}}
 entry:
   %cmp = icmp sgt i32 %x, 0
   br i1 %cmp, label %pos, label %neg
@@ -112,7 +112,7 @@ define i32 @branch_inverted(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_inverted:
 ; CHECK: slt32
 ; CHECK: xori32
-; CHECK: bnez_w{{(\.s[012])?}}
+; CHECK: bnez{{(\.s[012])?}}
 ; This shape (br i1 %cmp; less: ret; geq: ret) has NO Join block, so
 ; HaydnGenMux Phase 2 (tryConvertBranchCMOV) correctly bails — it requires
 ; Join->pred_size==2. The backend emits slt32+xori32+bnez_w, which preserves

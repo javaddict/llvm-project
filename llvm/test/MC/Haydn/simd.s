@@ -17,8 +17,8 @@
 # CHECK: {{.*}}54: 47 02 b1 dc 0e 00 00 00 00 00 00 00{{.*}}x2mul32
 # CHECK: {{.*}}60: 07 0b ec 0f 00 00 00 00 00 00 00 00{{.*}}x4add16
 # CHECK: {{.*}}6c: 47 02 1c 32 04 00 00 00 00 00 00 00{{.*}}x4mul16
-# CHECK: {{.*}}78: 87 43 12 01 00 00 00 00 00 00 00 00{{.*}}d_ldw_with_imm
-# CHECK: {{.*}}84: 87 43 22 82 00 00 00 00 00 00 00 00{{.*}}d_ldw_with_imm
+# CHECK: {{.*}}78: 87 43 12 01 00 00 00 00 00 00 00 00{{.*}}ld64
+# CHECK: {{.*}}84: 87 43 22 82 00 00 00 00 00 00 00 00{{.*}}ld64
 # CHECK-NOT: <unknown>
 
 # Immediate-form SLLI64/SRLI64/SRAI64 and 4-operand MAC32 AsmParser gaps

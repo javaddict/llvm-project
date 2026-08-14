@@ -12,6 +12,12 @@
 // slots (formats) are valid, and a slot can be occupied exactly once. This is
 // the format-first tablegen foundation.
 //
+// AIE canAdd (AIEBundle.h:62-105) is empty-escape + slot ConflictBits +
+// isFormatAvailable. Haydn overlays Format E unit injectivity on the same
+// gate: seven execution units are injective and are not encoded entry
+// identity (stores exist only at LOADSTORE0 e0). canAdd / exactTryAddProduct
+// share opcodesHaveFormatEUnitCover.
+//
 // A bundle holds instructions in three partially redundant representations:
 // the instructions in original issue order
 // a map indexed by slot number
@@ -98,6 +104,26 @@ public:
       return false;
     if (!FormatInterface->isSupportedInstruction(Opcode))
       return false;
+    // Overlay on AIEBundle.h:62-105 canAdd: Format E unit injectivity
+    // (units ≠ encoded entries). Residual FieldSlots S0 vs S2 are not
+    // permission for two LOADSTORE0-only stores in one issue cycle.
+    {
+      SmallVector<unsigned, 4> Ops;
+      if (!Instrs.empty()) {
+        Ops.reserve(Instrs.size() + 1);
+        for (I *Inst : Instrs)
+          Ops.push_back(Inst->getOpcode());
+      } else if (!PackingCandidates.empty()) {
+        const haydn::bundle::CycleState &Pref =
+            haydn::bundle::selectPreferredCandidate(PackingCandidates);
+        Ops.reserve(Pref.Members.size() + 1);
+        for (const haydn::bundle::CycleMember &Mem : Pref.Members)
+          Ops.push_back(Mem.LogicalOpcode);
+      }
+      Ops.push_back(Opcode);
+      if (!haydn::bundle::opcodesHaveFormatEUnitCover(Ops))
+        return false;
+    }
     return pickSlot(Opcode).has_value();
   }
   bool canAdd(const I *Instr) const { return canAdd(Instr->getOpcode()); }
@@ -222,25 +248,34 @@ public:
 
   // Return a covering VLIWFormat for OccupiedSlots, if any.
   // AIE peer: AIEBundle.h:150-156 getFormatOrNull via PacketFormats::getFormat.
-  // Prefer exact entry-slot cover; fall back to a product representative when
-  // occupancy is transitional legacy SLOT bits (product identity is Format E).
+  // Exact PacketFormats entry-slot cover wins. Transitional FieldSlots /
+  // residual S* occupancy is not entry-bit identity: resolve the Format E
+  // composite from the surviving FeasibleFormatMask (preferred packing
+  // candidate when present) via selectProductRow + productVLIWFormatForRow.
+  // Never stamp the empty-cover product representative after a miss.
   const VLIWFormat *getFormatOrNull(unsigned Size = 0) const {
     assert(!isStandalone());
     const PacketFormats &PF = FormatInterface->getPacketFormats();
     if (Size) {
       if (const VLIWFormat *F = PF.getFormatBySize(OccupiedSlots, Size))
         return F;
-      // Size filter is exact: only fall back to product when EncodedBytes match.
-      if (Size == haydn::bundle::productParcelBytes().Value &&
-          haydn::bundle::productCovers(PF, OccupiedSlots))
-        return haydn::bundle::productVLIWFormat(PF);
-      return nullptr;
-    }
-    if (const VLIWFormat *F = PF.getFormat(OccupiedSlots))
+      // Size filter is exact: only resolve transitional cover when EncodedBytes
+      // match the product parcel.
+      if (Size != haydn::bundle::productParcelBytes().Value)
+        return nullptr;
+    } else if (const VLIWFormat *F = PF.getFormat(OccupiedSlots)) {
       return F;
-    if (haydn::bundle::productCovers(PF, OccupiedSlots))
-      return haydn::bundle::productVLIWFormat(PF);
-    return nullptr;
+    }
+    if (!haydn::bundle::productCovers(PF, OccupiedSlots))
+      return nullptr;
+    uint64_t Mask =
+        haydn::bundle::productFeasibleFormatMask(PF, OccupiedSlots);
+    if (!PackingCandidates.empty())
+      Mask = haydn::bundle::selectPreferredCandidate(PackingCandidates)
+                 .FeasibleFormatMask;
+    const haydn::bundle::BundleFormatRowID Row =
+        haydn::bundle::selectProductRow(Mask, size());
+    return haydn::bundle::productVLIWFormatForRow(PF, Row);
   }
 
   // Feasible FormatID frontier for current OccupiedSlots (logical only).
@@ -338,7 +373,8 @@ private:
     SlotBits HintBit = residualSlotKindToFieldSlots(HintSlot);
     if (!HintBit)
       return false;
-    HaydnMCFormats SolverFmts;
+    const HaydnMCFormats &SolverFmts =
+        static_cast<const HaydnMCFormats &>(*FormatInterface);
     SmallVector<PlacementAlternative, 4> Alts;
     if (!enumeratePlacementAlternatives(SolverFmts, Opcode, Alts))
       return false;
@@ -375,7 +411,8 @@ private:
 
  // PlacementAlternative + exact product expand (; AIE alt try
     // strengthened). Alts-only — no getLegalSlots no-alt fallback.
-    HaydnMCFormats SolverFmts;
+    const HaydnMCFormats &SolverFmts =
+        static_cast<const HaydnMCFormats &>(*FormatInterface);
     if (!hasPlacementAlternatives(SolverFmts, Opcode))
       return std::nullopt;
     if (!haydn::bundle::canExactTryAddProduct(PackingCandidates, SolverFmts,
@@ -417,7 +454,8 @@ private:
       return;
     }
 
-    HaydnMCFormats SolverFmts;
+    const HaydnMCFormats &SolverFmts =
+        static_cast<const HaydnMCFormats &>(*FormatInterface);
     if (hasPlacementAlternatives(SolverFmts, Opcode)) {
  // Exact commit: expand all nondominated successors.
       bool Ok =
@@ -480,7 +518,8 @@ private:
               FormatInterface->getPacketFormats(), OccupiedSlots));
       return;
     }
-    HaydnMCFormats SolverFmts;
+    const HaydnMCFormats &SolverFmts =
+        static_cast<const HaydnMCFormats &>(*FormatInterface);
     if (!hasPlacementAlternatives(SolverFmts, Opcode))
       return;
     bool Ok =

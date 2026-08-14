@@ -8,10 +8,10 @@
 # Fail-closed: no positive ar_sel=2/3, all-zero product-NOP, or golden-unspecified branch-scale invent.
 
 # CHECK-LABEL: <.text>:
-# CHECK: {{.*}}0: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
-# CHECK: {{.*}}c: 87 43 23 03 01 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
-# CHECK: {{.*}}18: 87 43 43 85 03 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
-# CHECK: {{.*}}24: 87 43 c3 40 02 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
+# CHECK: {{.*}}0: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}ld32
+# CHECK: {{.*}}c: 87 43 23 03 01 00 00 00 00 00 00 00{{.*}}ld32
+# CHECK: {{.*}}18: 87 43 43 85 03 00 00 00 00 00 00 00{{.*}}ld32
+# CHECK: {{.*}}24: 87 43 c3 40 02 00 00 00 00 00 00 00{{.*}}ld32
 
 ld32 r0, r1, 0
 

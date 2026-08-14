@@ -17,25 +17,25 @@
 // CHECK: { mula64.ull d9, d10, d11 } // encoding: [0x47,0x41,0x99,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { muls64.hh d0, d1, d2 } // encoding: [0x47,0x19,0x0a,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { muls64.ll d3, d4, d5 } // encoding: [0x47,0x01,0x3a,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { mulss64_hh d6, d7, d8 } // encoding: [0x47,0x99,0x6a,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { mulss64_ll d9, d10, d11 } // encoding: [0x47,0x81,0x9a,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { mulas64_hh d0, d1, d2 } // encoding: [0x47,0x99,0x09,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { mulas32_hhll d3, d4, d5 } // encoding: [0x47,0xe1,0x3d,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { mulaa32_hhll d6, d7, d8 } // encoding: [0x47,0xc1,0x6d,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { mulss32_hhll d9, d10, d11 } // encoding: [0x47,0xd1,0x9d,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { smula16s_00 d0, d1, d2 } // encoding: [0x47,0x01,0x05,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { smula16s_33 d3, d4, d5 } // encoding: [0x47,0x19,0x35,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { smula16_00 d6, d7, d8 } // encoding: [0x47,0x01,0x64,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { smuls16s_00 d9, d10, d11 } // encoding: [0x47,0x81,0x95,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { smuls16_33 d12, d13, d14 } // encoding: [0x47,0x99,0xc4,0xed,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmul16_hs00 d0, d1, d2 } // encoding: [0x47,0x89,0x00,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmul16_ls33 d3, d4, d5 } // encoding: [0x47,0x51,0x30,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmul32s_hh d6, d7, d8 } // encoding: [0x47,0x11,0x6b,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmul32s_ll d9, d10, d11 } // encoding: [0x47,0x01,0x9b,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmula16_hs00 d0, d1, d2 } // encoding: [0x47,0x89,0x01,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmula32s_hh d3, d4, d5 } // encoding: [0x47,0x31,0x3b,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmuls16_hs00 d6, d7, d8 } // encoding: [0x47,0x89,0x62,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { fmuls32s_hh d9, d10, d11 } // encoding: [0x47,0x51,0x9b,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { mulss64.hh d6, d7, d8 } // encoding: [0x47,0x99,0x6a,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { mulss64.ll d9, d10, d11 } // encoding: [0x47,0x81,0x9a,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { mulas64.hh d0, d1, d2 } // encoding: [0x47,0x99,0x09,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { mulas32.hhll d3, d4, d5 } // encoding: [0x47,0xe1,0x3d,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { mulaa32.hhll d6, d7, d8 } // encoding: [0x47,0xc1,0x6d,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { mulss32.hhll d9, d10, d11 } // encoding: [0x47,0xd1,0x9d,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { smula16s.00 d0, d1, d2 } // encoding: [0x47,0x01,0x05,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { smula16s.33 d3, d4, d5 } // encoding: [0x47,0x19,0x35,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { smula16.00 d6, d7, d8 } // encoding: [0x47,0x01,0x64,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { smuls16s.00 d9, d10, d11 } // encoding: [0x47,0x81,0x95,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { smuls16.33 d12, d13, d14 } // encoding: [0x47,0x99,0xc4,0xed,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmul16.hs00 d0, d1, d2 } // encoding: [0x47,0x89,0x00,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmul16.ls33 d3, d4, d5 } // encoding: [0x47,0x51,0x30,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmul32s.hh d6, d7, d8 } // encoding: [0x47,0x11,0x6b,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmul32s.ll d9, d10, d11 } // encoding: [0x47,0x01,0x9b,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmula16.hs00 d0, d1, d2 } // encoding: [0x47,0x89,0x01,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmula32s.hh d3, d4, d5 } // encoding: [0x47,0x31,0x3b,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmuls16.hs00 d6, d7, d8 } // encoding: [0x47,0x89,0x62,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { fmuls32s.hh d9, d10, d11 } // encoding: [0x47,0x51,0x9b,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { mul16aq d0, d1, d2 } // encoding: [0x47,0x09,0x07,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { mul16zaq d3, d4, d5 } // encoding: [0x47,0x01,0x37,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { sra64 d0, d0, r1 } // encoding: [0x07,0x0b,0x06,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
@@ -54,39 +54,39 @@
 // ROUNDTRIP: {{.*}}c: 47 09 38 34 00 00 00 00 00 00 00 00 { 	nop; 	mulssh	r3, r4, r3 }
 // ROUNDTRIP: {{.*}}18: 47 11 68 67 00 00 00 00 00 00 00 00 { 	nop; 	mulsuh	r6, r7, r6 }
 // ROUNDTRIP: {{.*}}24: 47 19 98 9a 00 00 00 00 00 00 00 00 { 	nop; 	muluuh	r9, r10, r9 }
-// ROUNDTRIP: {{.*}}30: 47 99 08 21 00 00 00 00 00 00 00 00 { 	nop; 	mul64_hh	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}3c: 47 91 38 54 00 00 00 00 00 00 00 00 { 	nop; 	mul64_hl	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}48: 47 89 68 87 00 00 00 00 00 00 00 00 { 	nop; 	mul64_lh	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}54: 47 81 98 ba 00 00 00 00 00 00 00 00 { 	nop; 	mul64_ll	d9, d10, d11 }
-// ROUNDTRIP: {{.*}}60: 47 d9 c8 ed 00 00 00 00 00 00 00 00 { 	nop; 	mul64_uhh	d12, d13, d14 }
-// ROUNDTRIP: {{.*}}6c: 47 d1 f8 10 00 00 00 00 00 00 00 00 { 	nop; 	mul64_uhl	d15, d0, d1 }
-// ROUNDTRIP: {{.*}}78: 47 c9 28 43 00 00 00 00 00 00 00 00 { 	nop; 	mul64_ulh	d2, d3, d4 }
-// ROUNDTRIP: {{.*}}84: 47 c1 58 76 00 00 00 00 00 00 00 00 { 	nop; 	mul64_ull	d5, d6, d7 }
-// ROUNDTRIP: {{.*}}90: 47 19 09 21 00 00 00 00 00 00 00 00 { 	nop; 	mula64_hh	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}9c: 47 01 39 54 00 00 00 00 00 00 00 00 { 	nop; 	mula64_ll	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}a8: 47 59 69 87 00 00 00 00 00 00 00 00 { 	nop; 	mula64_uhh	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}b4: 47 41 99 ba 00 00 00 00 00 00 00 00 { 	nop; 	mula64_ull	d9, d10, d11 }
-// ROUNDTRIP: {{.*}}c0: 47 19 0a 21 00 00 00 00 00 00 00 00 { 	nop; 	muls64_hh	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}cc: 47 01 3a 54 00 00 00 00 00 00 00 00 { 	nop; 	muls64_ll	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}d8: 47 99 6a 87 00 00 00 00 00 00 00 00 { 	nop; 	mulss64_hh	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}e4: 47 81 9a ba 00 00 00 00 00 00 00 00 { 	nop; 	mulss64_ll	d9, d10, d11 }
-// ROUNDTRIP: {{.*}}f0: 47 99 09 21 00 00 00 00 00 00 00 00 { 	nop; 	mulas64_hh	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}fc: 47 e1 3d 54 00 00 00 00 00 00 00 00 { 	nop; 	mulas32_hhll	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}108: 47 c1 6d 87 00 00 00 00 00 00 00 00 { 	nop; 	mulaa32_hhll	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}114: 47 d1 9d ba 00 00 00 00 00 00 00 00 { 	nop; 	mulss32_hhll	d9, d10, d11 }
-// ROUNDTRIP: {{.*}}120: 47 01 05 21 00 00 00 00 00 00 00 00 { 	nop; 	smula16s_00	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}12c: 47 19 35 54 00 00 00 00 00 00 00 00 { 	nop; 	smula16s_33	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}138: 47 01 64 87 00 00 00 00 00 00 00 00 { 	nop; 	smula16_00	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}144: 47 81 95 ba 00 00 00 00 00 00 00 00 { 	nop; 	smuls16s_00	d9, d10, d11 }
-// ROUNDTRIP: {{.*}}150: 47 99 c4 ed 00 00 00 00 00 00 00 00 { 	nop; 	smuls16_33	d12, d13, d14 }
-// ROUNDTRIP: {{.*}}15c: 47 89 00 21 00 00 00 00 00 00 00 00 { 	nop; 	fmul16_hs00	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}168: 47 51 30 54 00 00 00 00 00 00 00 00 { 	nop; 	fmul16_ls33	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}174: 47 11 6b 87 00 00 00 00 00 00 00 00 { 	nop; 	fmul32s_hh	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}180: 47 01 9b ba 00 00 00 00 00 00 00 00 { 	nop; 	fmul32s_ll	d9, d10, d11 }
-// ROUNDTRIP: {{.*}}18c: 47 89 01 21 00 00 00 00 00 00 00 00 { 	nop; 	fmula16_hs00	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}198: 47 31 3b 54 00 00 00 00 00 00 00 00 { 	nop; 	fmula32s_hh	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}1a4: 47 89 62 87 00 00 00 00 00 00 00 00 { 	nop; 	fmuls16_hs00	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}1b0: 47 51 9b ba 00 00 00 00 00 00 00 00 { 	nop; 	fmuls32s_hh	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}30: 47 99 08 21 00 00 00 00 00 00 00 00 { 	nop; 	mul64.hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}3c: 47 91 38 54 00 00 00 00 00 00 00 00 { 	nop; 	mul64.hl	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}48: 47 89 68 87 00 00 00 00 00 00 00 00 { 	nop; 	mul64.lh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}54: 47 81 98 ba 00 00 00 00 00 00 00 00 { 	nop; 	mul64.ll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}60: 47 d9 c8 ed 00 00 00 00 00 00 00 00 { 	nop; 	mul64.uhh	d12, d13, d14 }
+// ROUNDTRIP: {{.*}}6c: 47 d1 f8 10 00 00 00 00 00 00 00 00 { 	nop; 	mul64.uhl	d15, d0, d1 }
+// ROUNDTRIP: {{.*}}78: 47 c9 28 43 00 00 00 00 00 00 00 00 { 	nop; 	mul64.ulh	d2, d3, d4 }
+// ROUNDTRIP: {{.*}}84: 47 c1 58 76 00 00 00 00 00 00 00 00 { 	nop; 	mul64.ull	d5, d6, d7 }
+// ROUNDTRIP: {{.*}}90: 47 19 09 21 00 00 00 00 00 00 00 00 { 	nop; 	mula64.hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}9c: 47 01 39 54 00 00 00 00 00 00 00 00 { 	nop; 	mula64.ll	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}a8: 47 59 69 87 00 00 00 00 00 00 00 00 { 	nop; 	mula64.uhh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}b4: 47 41 99 ba 00 00 00 00 00 00 00 00 { 	nop; 	mula64.ull	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}c0: 47 19 0a 21 00 00 00 00 00 00 00 00 { 	nop; 	muls64.hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}cc: 47 01 3a 54 00 00 00 00 00 00 00 00 { 	nop; 	muls64.ll	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}d8: 47 99 6a 87 00 00 00 00 00 00 00 00 { 	nop; 	mulss64.hh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}e4: 47 81 9a ba 00 00 00 00 00 00 00 00 { 	nop; 	mulss64.ll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}f0: 47 99 09 21 00 00 00 00 00 00 00 00 { 	nop; 	mulas64.hh	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}fc: 47 e1 3d 54 00 00 00 00 00 00 00 00 { 	nop; 	mulas32.hhll	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}108: 47 c1 6d 87 00 00 00 00 00 00 00 00 { 	nop; 	mulaa32.hhll	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}114: 47 d1 9d ba 00 00 00 00 00 00 00 00 { 	nop; 	mulss32.hhll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}120: 47 01 05 21 00 00 00 00 00 00 00 00 { 	nop; 	smula16s.00	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}12c: 47 19 35 54 00 00 00 00 00 00 00 00 { 	nop; 	smula16s.33	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}138: 47 01 64 87 00 00 00 00 00 00 00 00 { 	nop; 	smula16.00	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}144: 47 81 95 ba 00 00 00 00 00 00 00 00 { 	nop; 	smuls16s.00	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}150: 47 99 c4 ed 00 00 00 00 00 00 00 00 { 	nop; 	smuls16.33	d12, d13, d14 }
+// ROUNDTRIP: {{.*}}15c: 47 89 00 21 00 00 00 00 00 00 00 00 { 	nop; 	fmul16.hs00	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}168: 47 51 30 54 00 00 00 00 00 00 00 00 { 	nop; 	fmul16.ls33	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}174: 47 11 6b 87 00 00 00 00 00 00 00 00 { 	nop; 	fmul32s.hh	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}180: 47 01 9b ba 00 00 00 00 00 00 00 00 { 	nop; 	fmul32s.ll	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}18c: 47 89 01 21 00 00 00 00 00 00 00 00 { 	nop; 	fmula16.hs00	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}198: 47 31 3b 54 00 00 00 00 00 00 00 00 { 	nop; 	fmula32s.hh	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}1a4: 47 89 62 87 00 00 00 00 00 00 00 00 { 	nop; 	fmuls16.hs00	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}1b0: 47 51 9b ba 00 00 00 00 00 00 00 00 { 	nop; 	fmuls32s.hh	d9, d10, d11 }
 // ROUNDTRIP: {{.*}}1bc: 47 09 07 21 00 00 00 00 00 00 00 00 { 	nop; 	mul16aq	d0, d1, d2 }
 // ROUNDTRIP: {{.*}}1c8: 47 01 37 54 00 00 00 00 00 00 00 00 { 	nop; 	mul16zaq	d3, d4, d5 }
 // ROUNDTRIP: {{.*}}1d4: 07 0b 06 10 00 00 00 00 00 00 00 00 { 	nop; 	sra64	d0, d0, r1 }
@@ -194,55 +194,55 @@ muls64.hh d0, d1, d2
 
 muls64.ll d3, d4, d5
 
-mulss64_hh d6, d7, d8
+mulss64.hh d6, d7, d8
 
-mulss64_ll d9, d10, d11
+mulss64.ll d9, d10, d11
 
 #===----------------------------------------------------------------------===
 # 32x32→64 Accumulator operations (MULAS64 / MULAA32 / MULSS32)
 #===----------------------------------------------------------------------===
 
-mulas64_hh d0, d1, d2
+mulas64.hh d0, d1, d2
 
-mulas32_hhll d3, d4, d5
+mulas32.hhll d3, d4, d5
 
-mulaa32_hhll d6, d7, d8
+mulaa32.hhll d6, d7, d8
 
-mulss32_hhll d9, d10, d11
+mulss32.hhll d9, d10, d11
 
 #===----------------------------------------------------------------------===
 # 16-bit Sum-of-Products (SMULA / SMULS)
 #===----------------------------------------------------------------------===
 
-smula16s_00 d0, d1, d2
+smula16s.00 d0, d1, d2
 
-smula16s_33 d3, d4, d5
+smula16s.33 d3, d4, d5
 
-smula16_00 d6, d7, d8
+smula16.00 d6, d7, d8
 
-smuls16s_00 d9, d10, d11
+smuls16s.00 d9, d10, d11
 
-smuls16_33 d12, d13, d14
+smuls16.33 d12, d13, d14
 
 #===----------------------------------------------------------------------===
 # Fractional Multiply (FMUL / FMULA / FMULS)
 #===----------------------------------------------------------------------===
 
-fmul16_hs00 d0, d1, d2
+fmul16.hs00 d0, d1, d2
 
-fmul16_ls33 d3, d4, d5
+fmul16.ls33 d3, d4, d5
 
-fmul32s_hh d6, d7, d8
+fmul32s.hh d6, d7, d8
 
-fmul32s_ll d9, d10, d11
+fmul32s.ll d9, d10, d11
 
-fmula16_hs00 d0, d1, d2
+fmula16.hs00 d0, d1, d2
 
-fmula32s_hh d3, d4, d5
+fmula32s.hh d3, d4, d5
 
-fmuls16_hs00 d6, d7, d8
+fmuls16.hs00 d6, d7, d8
 
-fmuls32s_hh d9, d10, d11
+fmuls32s.hh d9, d10, d11
 
 #===----------------------------------------------------------------------===
 # Accumulator operations (MUL16AQ / MUL16ZAQ)

@@ -13,8 +13,8 @@ define void @t_trap() noreturn {
 }
 
 ; CHECK-LABEL: t_ubsantrap:
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}abort
-; CHECK: jal_w{{(\.s[012])?}} {{.*}}abort
+; CHECK: jal{{(\.s[012])?}} {{.*}}abort
+; CHECK: jal{{(\.s[012])?}} {{.*}}abort
 define void @t_ubsantrap() noreturn {
   call void @llvm.ubsantrap(i8 1)
   unreachable

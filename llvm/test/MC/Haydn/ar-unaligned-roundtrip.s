@@ -35,7 +35,7 @@
 # REQUIRES: haydn-registered-target
 # XFAIL: *
 # Residual: FileCheck / idle-pad / reloc geometry still open under Format E cutover.
-# XFAIL-OWNER: AR unaligned / ar_sel class residual | ar_sel 2/3 product class unspecified; encode residual
+# XFAIL-OWNER: GE96-09 ar_sel 2/3 class residual | product-legal ar_sel 0/1 only; no golden invent
 
 # Role: object — AR unaligned MC encode/disasm for product-legal ar_sel 0/1 only.
 

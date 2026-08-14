@@ -1,8 +1,9 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
 
-; Role: semantic — ABS64S must emit (real FmtALU64Unary), not a dropped isPseudo stub.
+; Role: semantic — ABS64S must emit via setDesc member materialize, not a
+; dropped residual logical shell.
 
-; ABS64S must emit (real FmtALU64Unary), not a dropped isPseudo stub.
+; ABS64S logical is non-encoding; private *_S1/*_S2 members must emit.
 ; Historical EMPTY_SEL: BundleSim intrin_sat64 failed at the first abs64s check.
 
 declare i64 @llvm.haydn.abs64s(i64)

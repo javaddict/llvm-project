@@ -14,13 +14,13 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; st64 d0, sp, 1 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 2 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 7 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_1 }
@@ -34,7 +34,7 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { seq32 r1, r1, r4; slt32 r5, r1, r4 }
 ; CHECK-NEXT:    { nop; seq32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; bnez_w r1, .LBB0_3 }
+; CHECK-NEXT:    { nop; bnez r1, .LBB0_3 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_2 }
 ; CHECK-NEXT:  .LBB0_2: // %while.body
 ; CHECK-NEXT:    // in Loop: Header=BB0_1 Depth=1
@@ -43,9 +43,9 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; ld32 r1, sp, 7 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
-; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %while.cond
 
@@ -69,13 +69,13 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; st64 d0, sp, 1 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 2 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 7 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB1_1 }
@@ -90,7 +90,7 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r4 }
 ; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; bnez_w r1, .LBB1_3 }
+; CHECK-NEXT:    { nop; bnez r1, .LBB1_3 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB1_2 }
 ; CHECK-NEXT:  .LBB1_2: // %while.body
 ; CHECK-NEXT:    // in Loop: Header=BB1_1 Depth=1
@@ -99,9 +99,9 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; ld32 r1, sp, 7 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
-; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %while.cond
 
@@ -125,13 +125,13 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; st64 d0, sp, 1 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 2 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 7 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB2_1 }
@@ -146,7 +146,7 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { slt32 r1, r1, r5; seq32 r3, r5, r1 }
 ; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; bnez_w r1, .LBB2_3 }
+; CHECK-NEXT:    { nop; bnez r1, .LBB2_3 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB2_2 }
 ; CHECK-NEXT:  .LBB2_2: // %while.body
 ; CHECK-NEXT:    // in Loop: Header=BB2_1 Depth=1
@@ -155,9 +155,9 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; ld32 r1, sp, 7 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
-; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %while.cond
 

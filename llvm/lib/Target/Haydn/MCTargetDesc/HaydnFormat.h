@@ -301,9 +301,23 @@ ArrayRef<BundleFormatRowDesc> rowsOfFamily(BundleFormatID Format);
 /// Header indicator bits for Format E (geometry constant on the family).
 inline constexpr unsigned FormatEIndicatorBits = 0x7u; // low 3 bits = 111
 
+/// Golden minimum alignment of every bundle address, in bytes.
+/// Distinct from EncodedBytes (parcel length) and from function alignment
+/// (largest 2^k that divides EncodedBytes). DWARF min_instruction_length /
+/// CIE code_alignment_factor must use this, not EncodedBytes: line-table
+/// arithmetic divides address deltas by MinInstAlignment, so a factor of 12
+/// corrupts any address not ≡0 mod 12. Do not invent Align=4 here.
+inline constexpr unsigned MinBundleAddressAlignBytes = 2;
+
 /// entry_num values selecting E2 / E3 internal geometry (not separate formats).
 inline constexpr unsigned FormatEEntryNumTwo = 0;
 inline constexpr unsigned FormatEEntryNumThree = 1;
+
+/// Generated full-slot idle parcel: legal E2 row with architectural NOP in
+/// every entry window (zero entry payload under the Format E inverse). Header
+/// bits come from the registry indicator / entry_num — never an all-zero word.
+/// Shared by compiler MC padding and LLD nopInstrs.
+ArrayRef<uint8_t> canonicalFullSlotIdleParcel();
 
 } // namespace format
 } // namespace haydn

@@ -33,8 +33,8 @@ define i32 @r14_spill_across_call(i32 %x) nounwind {
 ; pattern that originally surfaced the bug.
 ; CHECK-LABEL: r14_recursive_survives_call:
 ; CHECK: st32
-; CHECK: jal_w{{(\.s[012])?}}
-; CHECK: jal_w{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}
 ; CHECK: ld32
 define i32 @r14_recursive_survives_call(i32 %n) nounwind {
 entry:

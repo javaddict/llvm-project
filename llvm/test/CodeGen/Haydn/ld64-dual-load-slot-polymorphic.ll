@@ -4,22 +4,23 @@
 ; Format E product cutover: FileCheck rebaseline (function-local CHECK-LABEL).
 ; Pack shape follows live product emit; EncodedBytes via registry/productParcelBytes.
 ; Role: semantic — Dual independent i64 loads must use 64-bit load forms (ld64 / d_ldw_*).
+; R13 WITH-load FieldSlot retirement: triple_load spill/add64 no longer
+; coissues; dual ld32+ld64 and ld32+ld32 packs are unchanged.
 
 define void @dual_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-LABEL: dual_load_i64_slot_poly:
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r3, r1, 4 }
-; CHECK-NEXT:    { nop; addi32_w r4, r1, 8 }
+; CHECK-NEXT:    { nop; addi32 r3, r1, 4 }
+; CHECK-NEXT:    { nop; addi32 r4, r1, 8 }
 ; CHECK-NEXT:    { ld32 r3, r3, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r5, r4, 4 }
+; CHECK-NEXT:    { nop; addi32 r5, r4, 4 }
 ; CHECK-NEXT:    { ld32 r4, r4, 0; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r5, r5, 0 }
@@ -27,17 +28,16 @@ define void @dual_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; st32 r5, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r6, r2, 4 }
+; CHECK-NEXT:    { nop; addi32 r6, r2, 4 }
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r2, 0 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r6, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %a = load i64, ptr %p
   %p2 = getelementptr inbounds i64, ptr %p, i64 1
@@ -53,15 +53,13 @@ define void @triple_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    { addi32 r4, r1, 8; ld32 r6, r1, 0 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r6, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; addi32 r3, r1, 4 }
+; CHECK-NEXT:    { st32 r6, sp, 2; ld32 r3, r3, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r3, r1, 4 }
-; CHECK-NEXT:    { addi32 r1, r1, 16; ld32 r3, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r1, r1, 16 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r5, r4, 4 }
+; CHECK-NEXT:    { nop; addi32 r5, r4, 4 }
 ; CHECK-NEXT:    { ld32 r4, r4, 0; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r3, r5, 0 }
@@ -69,25 +67,25 @@ define void @triple_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r5, r1, 4 }
+; CHECK-NEXT:    { nop; addi32 r5, r1, 4 }
 ; CHECK-NEXT:    { ld32 r1, r1, 0; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r3, r5, 0 }
-; CHECK-NEXT:    { st32 r1, sp, 2; add64 d0, d0, d1 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32_w r4, r2, 4 }
+; CHECK-NEXT:    { nop; addi32 r4, r2, 4 }
 ; CHECK-NEXT:    { nop; ld64 d2, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add64 d0, d0, d2 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r2, 0 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r4, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %a = load i64, ptr %p
   %p2 = getelementptr inbounds i64, ptr %p, i64 1

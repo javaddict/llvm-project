@@ -38,7 +38,7 @@
 
 # CHECK-LABEL: <.text>:
 
-# CHECK: {{.*}}0: 87 43 13 41 00 00 00 00 00 00 00 00 { nop; s_lw_with_imm r1, r1, 4 }
+# CHECK: {{.*}}0: 87 43 13 41 00 00 00 00 00 00 00 00 { nop; ld32 r1, r1, 4 }
 # CHECK-NOT: c.ld
 # CHECK: c: 07 0b 04 21 00 00 00 00 00 00 00 00 { nop; add64 d0, d1, d2 }
 # CHECK-NOT: c.add

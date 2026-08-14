@@ -6,7 +6,7 @@
 # REQUIRES: haydn-registered-target
 
 # Role: object — reg-offset LS must NOT encode as Format E idle/NOP and must
-# disassemble as real LS forms (product aliases s_lw/s_sw/d_ldw/d_sdw).
+# disassemble as real LS forms (ld32_reg / st32_reg / ld64_reg / st64_reg).
 
 # ENC-NOT: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 # ENC: ld32_reg
@@ -22,11 +22,11 @@
 
 # DIS-LABEL: <.text>:
 # DIS-NOT: {{{[[:space:]]*}}nop; nop; nop}
-# DIS: s_lw_with_reg
-# DIS: s_sw_with_reg
-# DIS: d_ldw_with_reg
-# DIS: d_sdw_with_reg
-# DIS: s_lw_with_reg
+# DIS: ld32_reg
+# DIS: st32_reg
+# DIS: ld64_reg
+# DIS: st64_reg
+# DIS: ld32_reg
 # DIS-NOT: <unknown>
 
 .text

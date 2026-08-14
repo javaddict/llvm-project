@@ -156,6 +156,9 @@ static_assert(ProductEncodedBytesValue == 12u,
               "product EncodedBytes must be Format E 12 (non-E96 sizes retired)");
 static_assert(ProductEncodedBitsValue == 96u,
               "product EncodedBits must be Format E 96 (non-E96 sizes retired)");
+static_assert(ProductEncodedBytesValue % format::MinBundleAddressAlignBytes == 0,
+              "product EncodedBytes must be a multiple of golden 2-byte min "
+              "bundle-address alignment");
 
 /// VLIWFormat::Size interpreted as EncodedBytes (transitional composite only).
 inline constexpr EncodedBytes vliwFormatSizeAsBytes(unsigned TableSize) {
@@ -201,19 +204,39 @@ inline bool isProductBundleRow(BundleFormatRowID Row) {
 //===----------------------------------------------------------------------===//
 
 /// Representative product VLIWFormat row from PacketFormats (Format E).
-/// Prefers three-entry geometry when present; else any empty-covering row.
-/// EncodedBytes authority is always the registry, not VLIWFormat::Size.
+/// Empty-cover first-match (table order is E2 then E3). EncodedBytes authority
+/// is always the registry, not VLIWFormat::Size. Callers that need a selected
+/// product row after a transitional occupancy miss must use
+/// productVLIWFormatForRow — never treat this empty-cover pointer as a
+/// PacketFormats miss fallback for arbitrary OccupiedSlots.
 inline const VLIWFormat *productVLIWFormat(const PacketFormats &Packets) {
-  // Prefer first-covering of empty: table order is E2 then E3 (both cover 0).
-  // Callers that need exact entry occupancy use Packets.getFormat(Occupied).
+  return Packets.getFormat(/*Occupied=*/0);
+}
+
+/// Exact product composite for \p Row via full entry-slot cover.
+/// Generated FormatSlotData: E2 kinds bits 0|1 = 0x3; E3 kinds bits 2|3|4 =
+/// 0x1c. Full cover selects the matching BUNDLE_E96_* row uniquely — not the
+/// empty-cover representative.
+inline const VLIWFormat *productVLIWFormatForRow(const PacketFormats &Packets,
+                                                BundleFormatRowID Row) {
+  constexpr SlotBits E2Full = SlotBits(0x3);
+  constexpr SlotBits E3Full = SlotBits(0x1c);
+  if (Row == BundleFormatRowID::E96ThreeEntry) {
+    if (const VLIWFormat *F = Packets.getFormat(E3Full))
+      return F;
+  }
+  if (const VLIWFormat *F = Packets.getFormat(E2Full))
+    return F;
   return Packets.getFormat(/*Occupied=*/0);
 }
 
 /// True when \p Occupied is admissible under product Format E packing.
-/// Exact PacketFormats entry-slot cover wins. Transitional residual issue
-/// occupancy is also accepted while PlacementAlternative still stamps
-/// Haydn::SLOT* FieldSlots and post-setDesc members use residual S0/S1/S2
-/// MCSlotKind SlotSet bits (which sit above E2/E3 entry kinds in the table).
+/// Exact PacketFormats entry-slot cover wins. Two transitional residual
+/// occupancy namespaces are also accepted (they are not PacketFormats
+/// entry-bit sets and are not a representative-row / format-bypass bridge):
+///   * Haydn::SLOT0|1|2 FieldSlots from PlacementAlternative (bits 1/2/4);
+///   * residual S0/S1/S2 MCSlotKind SlotSet bits (1<<kind after E2/E3 kinds).
+/// Any other occupancy fails closed — no unconditional true bridge.
 inline bool productCovers(const PacketFormats &Packets, SlotBits Occupied) {
   if (Packets.getFormat(Occupied))
     return true;
@@ -221,16 +244,18 @@ inline bool productCovers(const PacketFormats &Packets, SlotBits Occupied) {
     return false;
   if (Occupied == 0)
     return true;
-  // Haydn::SLOT0|1|2 FieldSlots from enumeratePlacementAlternatives.
+  // PlacementAlternative FieldSlots (issue bits 1/2/4).
   const SlotBits LegacyIssue =
       static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2);
   if ((Occupied & ~LegacyIssue) == 0)
     return true;
-  // Residual S0/S1/S2 MCSlotKind SlotSet bits (not the low E2/E3 entry bits).
-  // Absolute bit positions depend on slot-kind table order; accept any
-  // occupancy that is a subset of the residual S* trio when those kinds exist.
-  // Exact entry-unit injectivity is enforced at Format E commit/verify.
-  return true;
+  // Residual S0/S1/S2 MCSlotKind SlotSet bits. Kind order is fixed by
+  // CodeGenFormat slot emission: E2_0,E2_1,E3_0,E3_1,E3_2,S0,S1,S2 → kinds
+  // 0..7, so residual SlotSet bits are 1<<5|1<<6|1<<7.
+  constexpr SlotBits ResidualIssueSlots =
+      static_cast<SlotBits>((SlotBits(1) << 5) | (SlotBits(1) << 6) |
+                            (SlotBits(1) << 7));
+  return (Occupied & ~ResidualIssueSlots) == 0;
 }
 
 /// Product EncodedBytes when any Format E PacketFormats row is present.
@@ -283,9 +308,13 @@ inline constexpr uint64_t ProductFormatMask =
 // Row / completion selection for a committed cycle
 //===----------------------------------------------------------------------===//
 
-/// Select product row from real member count.
-///   * 3 real members → E96ThreeEntry (full E3)
-///   * 0..2 real members → E96TwoEntry (E2 geometry; underfill/idle use stubs)
+/// Capacity-only row default when both E2 and E3 remain feasible and no
+/// opcode/unit cover is known:
+///   * 3 real members → E96ThreeEntry (E2 cannot hold three)
+///   * 0..2 real members → E96TwoEntry (geometry default only)
+/// Never use this alone for E3-only singletons (LOG2/EXP2/…): prefer
+/// selectProductRow(FeasibleMask, Count) so a mask that has already dropped
+/// E2 stamps E96ThreeEntry even at member count 1.
 inline constexpr BundleFormatRowID
 selectProductRowForMemberCount(unsigned MemberCount) {
   if (MemberCount >= 3)
@@ -293,24 +322,58 @@ selectProductRowForMemberCount(unsigned MemberCount) {
   return BundleFormatRowID::E96TwoEntry;
 }
 
+/// Select product row from the surviving Format E frontier and capacity.
+/// Sole-row masks win over member count (E3-only singleton stays E3; E2-only
+/// stays E2). When both rows remain feasible, capacity decides as in
+/// selectProductRowForMemberCount. Empty/non-product masks fall back to that
+/// capacity default so transitional call sites keep a defined row.
+inline constexpr BundleFormatRowID
+selectProductRow(uint64_t FeasibleMask, unsigned MemberCount) {
+  const uint64_t Prod = FeasibleMask & ProductFormatMask;
+  const bool HasE2 =
+      (Prod & formatRowBit(BundleFormatRowID::E96TwoEntry)) != 0;
+  const bool HasE3 =
+      (Prod & formatRowBit(BundleFormatRowID::E96ThreeEntry)) != 0;
+  if (HasE3 && !HasE2)
+    return BundleFormatRowID::E96ThreeEntry;
+  if (HasE2 && !HasE3)
+    return BundleFormatRowID::E96TwoEntry;
+  if (MemberCount >= 3 && HasE3)
+    return BundleFormatRowID::E96ThreeEntry;
+  if (HasE2)
+    return BundleFormatRowID::E96TwoEntry;
+  if (HasE3)
+    return BundleFormatRowID::E96ThreeEntry;
+  return selectProductRowForMemberCount(MemberCount);
+}
+
 /// Select completion for \p Row given real member count.
-/// Full fill → AllEntriesReal (product-legal). Idle/singleton/underfill →
-/// golden stubs (fail-closed for product emit until idle/pad law closes).
+///
+/// Product law: every non-empty cycle is full-slot format-feasible fill.
+/// Unused entry windows encode as architectural zero-entry NOP — ordinary
+/// Format E completion, not a golden underfill/singleton invent. Empty
+/// membership remains idle stub until an approved idle parcel is consumed
+/// at encode. Documented StubE2/E3* IDs stay available for explicit
+/// fail-closed fixtures only.
 inline constexpr CompletionStateID
 selectCompletionFor(BundleFormatRowID Row, unsigned MemberCount) {
-  const unsigned Entries =
-      (Row == BundleFormatRowID::E96ThreeEntry) ? 3u : 2u;
+  (void)Row;
   if (MemberCount == 0)
     return CompletionStateID::StubIdle;
-  if (MemberCount >= Entries)
+  return CompletionStateID::AllEntriesReal;
+}
+
+/// Completion from real (non-pad) membership plus pad-NOP presence.
+///
+/// Pad NOP is CompletionState, not a membership entry. E2 idle is
+/// {NOP, NOP} — full-slot architectural NOP fill, AllEntriesReal. Empty
+/// membership with no pad stays StubIdle and must not reach product MC.
+inline constexpr CompletionStateID
+selectCompletionForMembersAndPads(BundleFormatRowID Row, unsigned RealMembers,
+                                  bool HasPadNop) {
+  if (RealMembers == 0 && HasPadNop)
     return CompletionStateID::AllEntriesReal;
-  if (Row == BundleFormatRowID::E96ThreeEntry) {
-    if (MemberCount == 1)
-      return CompletionStateID::StubE3Singleton;
-    return CompletionStateID::StubE3Underfill2Of3;
-  }
-  // E2 with one real member.
-  return CompletionStateID::StubE2Singleton;
+  return selectCompletionFor(Row, RealMembers);
 }
 
 //===----------------------------------------------------------------------===//
@@ -498,11 +561,14 @@ inline void stampBundleCommit(MachineInstr &BundleRoot,
   stampBundleCommit(BundleRoot, Plan.Row, Plan.Completion);
 }
 
-/// Tests-only convenience: product plan with registry EncodedBytes.
+/// Product plan with registry EncodedBytes. FeasibleMask is the surviving
+/// Format E frontier (default both rows); sole-row masks override count so an
+/// E3-only cycle never stamps E2 from cardinality alone.
 inline BundlePlan makeProductPlan(SlotBits Occupied,
-                                  ArrayRef<unsigned> Members = {}) {
+                                  ArrayRef<unsigned> Members = {},
+                                  uint64_t FeasibleMask = ProductFormatMask) {
   BundlePlan P;
-  P.Row = selectProductRowForMemberCount(Members.size());
+  P.Row = selectProductRow(FeasibleMask, Members.size());
   P.Completion = selectCompletionFor(P.Row, Members.size());
   P.OccupiedSlots = Occupied;
   P.MemberOpcodes.assign(Members.begin(), Members.end());
@@ -519,10 +585,12 @@ inline BundlePlan makeStallPlan() {
 }
 
 /// Build a product BundlePlan from a covering VLIWFormat row + registry bytes.
-/// EncodedBytes always from productParcelBytes(); row/completion from members.
+/// EncodedBytes always from productParcelBytes(); row/completion from the
+/// surviving Format E frontier and member count.
 inline std::optional<BundlePlan>
 makePlanFromVLIWFormat(const VLIWFormat &F, SlotBits Occupied,
-                       ArrayRef<unsigned> Members = {}) {
+                       ArrayRef<unsigned> Members = {},
+                       uint64_t FeasibleMask = ProductFormatMask) {
   if (Occupied != 0 && !F.covers(Occupied))
     return std::nullopt;
   // Product plans only from Format E parcel geometry (registry EncodedBytes).
@@ -530,7 +598,7 @@ makePlanFromVLIWFormat(const VLIWFormat &F, SlotBits Occupied,
   if (vliwFormatSizeAsBytes(F.getSize()) != productParcelBytes())
     return std::nullopt;
   BundlePlan P;
-  P.Row = selectProductRowForMemberCount(Members.size());
+  P.Row = selectProductRow(FeasibleMask, Members.size());
   P.Completion = selectCompletionFor(P.Row, Members.size());
   P.OccupiedSlots = Occupied;
   P.MemberOpcodes.assign(Members.begin(), Members.end());
@@ -539,21 +607,23 @@ makePlanFromVLIWFormat(const VLIWFormat &F, SlotBits Occupied,
   return P;
 }
 
-/// Query PacketFormats / transitional coverage for \p Occupied; product size
-/// from registry. Does not require a single Full row covering SLOT_ALL.
+/// Query PacketFormats / transitional coverage for Occupied; product size
+/// from registry. FeasibleMask is the surviving Format E frontier used for
+/// row selection (defaults to both product rows).
 inline std::optional<BundlePlan>
 planFromPacketFormats(const PacketFormats &Packets, SlotBits Occupied,
-                      ArrayRef<unsigned> Members = {}) {
+                      ArrayRef<unsigned> Members = {},
+                      uint64_t FeasibleMask = ProductFormatMask) {
   if (!productCovers(Packets, Occupied))
     return std::nullopt;
   // Prefer exact entry-slot cover when the row is product EncodedBytes-sized.
   // Residual / synthetic short/long Size rows are not product plans — fall
-  // back to registry-sized makeProductPlan (row select by member count).
+  // back to registry-sized makeProductPlan with the same frontier.
   if (const VLIWFormat *F = Packets.getFormat(Occupied)) {
-    if (auto P = makePlanFromVLIWFormat(*F, Occupied, Members))
+    if (auto P = makePlanFromVLIWFormat(*F, Occupied, Members, FeasibleMask))
       return P;
   }
-  return makeProductPlan(Occupied, Members);
+  return makeProductPlan(Occupied, Members, FeasibleMask);
 }
 
 } // namespace bundle

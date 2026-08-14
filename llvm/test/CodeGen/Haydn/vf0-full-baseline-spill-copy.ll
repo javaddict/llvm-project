@@ -58,11 +58,11 @@ entry:
 ; CHECK: subi32
 ; CHECK: st32
 ; Call site survives (forces spill/copy pressure).
-; CHECK: jal_w
+; CHECK: jal
 ; CHECK: ext
 ; Reloads + epilogue restore.
 ; CHECK: ld32
-; CHECK: jalr_w
+; CHECK: jalr
 ; Full-only: no compact multi-width residue.
 ; CHECK-NOT: bundle64
 ; CHECK-NOT: bundle96

@@ -101,11 +101,11 @@ for.body:
 ; CHECK-DAG: sub64
 ; CHECK-DAG: ld32
 ; CHECK-DAG: st32
-; CHECK-DAG: jalr_w{{(\.s[012])?}}
+; CHECK-DAG: jalr{{(\.s[012])?}}
 
 define dso_local void @bqriir32x32_df1_cascade(ptr noundef %sections, ptr noundef %r, ptr noundef readonly %x, i32 noundef %N, i32 noundef %M) local_unnamed_addr #0 {
 ; CHECK-LABEL: bqriir32x32_df1_cascade:
-; CHECK: jal_w{{.*}}bqriir32x32_df1_process
+; CHECK: jal{{.*}}bqriir32x32_df1_process
 entry:
   %cmp4 = icmp sgt i32 %M, 0
   br i1 %cmp4, label %for.body.preheader, label %for.cond.cleanup

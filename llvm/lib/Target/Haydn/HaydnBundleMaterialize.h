@@ -109,148 +109,96 @@ struct ExactProductCycle {
 };
 
 /// Peel residual / Format E member opcode names to the golden logical catalog
-/// string used by Format E unit tables (mirrors MC formatELogicalName core +
-/// public mnemonic map for LD32/ST32/…).
+/// string used by Format E unit tables. One map shared with MC encode.
 inline std::string peelFormatELogicalOpcodeName(StringRef Name) {
-  StringRef Base = Name;
-  auto peel = [&](StringRef Suf) {
-    if (Base.ends_with(Suf))
-      Base = Base.drop_back(Suf.size());
-  };
-  for (StringRef Marker : {"_E2_", "_E3_"}) {
-    size_t Idx = Base.find(Marker);
-    if (Idx != StringRef::npos) {
-      Base = Base.take_front(Idx);
-      break;
-    }
-  }
-  for (int Pass = 0; Pass < 3; ++Pass) {
-    StringRef Before = Base;
-    for (StringRef Suf :
-         {"_S0", "_S1", "_S2", "_LD_S0", "_LD_S1", "_LD_S2", "_M0S0LS",
-          "_M0S1LS", "_M0S2LS", "_M1S0LS", "_M1S1LS", "_M1S2LS"})
-      peel(Suf);
-    if (Base == Before)
-      break;
-  }
-  if (Base.ends_with("_F2_W"))
-    Base = Base.drop_back(2);
-  else if (Base.ends_with("_W"))
-    Base = Base.drop_back(2);
+  return format_e::peelLogicalOpcodeName(Name);
+}
 
-  // Public mnemonic → Format E golden catalog (same map as MC encode).
-  if (Base.equals_insensitive("LD32") || Base.equals_insensitive("LW") ||
-      Base.equals_insensitive("LD32_REG"))
-    return Base.equals_insensitive("LD32_REG") ? "S_LW_WITH_REG"
-                                               : "S_LW_WITH_IMM";
-  if (Base.equals_insensitive("ST32") || Base.equals_insensitive("SW") ||
-      Base.equals_insensitive("ST32_REG"))
-    return Base.equals_insensitive("ST32_REG") ? "S_SW_WITH_REG"
-                                               : "S_SW_WITH_IMM";
-  if (Base.equals_insensitive("LD64") || Base.equals_insensitive("LD64_REG"))
-    return Base.equals_insensitive("LD64_REG") ? "D_LDW_WITH_REG"
-                                               : "D_LDW_WITH_IMM";
-  if (Base.equals_insensitive("ST64") || Base.equals_insensitive("ST64_REG"))
-    return Base.equals_insensitive("ST64_REG") ? "D_SDW_WITH_REG"
-                                               : "D_SDW_WITH_IMM";
-  if (Base.equals_insensitive("LD32_POST") ||
-      Base.equals_insensitive("LD32_POST_INC"))
-    return "S_LW_POST_IMM";
-  if (Base.equals_insensitive("ST32_POST") ||
-      Base.equals_insensitive("ST32_POST_INC"))
-    return "S_SW_POST_IMM";
-  if (Base.equals_insensitive("LD64_POST"))
-    return "D_LDW_POST_IMM";
-  if (Base.equals_insensitive("ST64_POST"))
-    return "D_SDW_POST_IMM";
-  return Base.str();
+/// TII overload kept for existing commitExact call sites; unit cover is the
+/// opcode-keyed solver helper (Format E units ≠ encoded entry identity).
+inline bool opcodesHaveFormatEUnitCoverForMode(ArrayRef<unsigned> Opcodes,
+                                               const TargetInstrInfo &TII,
+                                               uint8_t Mode) {
+  (void)TII;
+  return opcodesHaveFormatEUnitCoverForMode(Opcodes, Mode);
 }
 
 /// True when \p Opcodes can be assigned injective Format E units under E2 or
-/// E3 (MC serialize authority). Residual S0/S1/S2 FieldSlots alone over-count
-/// multi-issue for single-unit logicals (e.g. dual D_SW_L_WITH_IMM both need
-/// LOADSTORE0) — refuse those packs before setDesc / BUNDLE freeze.
+/// E3. Residual FieldSlots alone over-count single-unit stores (dual
+/// D_SW_L_WITH_IMM / ST8 both need LOADSTORE0) — refuse before BUNDLE freeze.
 inline bool opcodesHaveFormatEUnitCover(ArrayRef<unsigned> Opcodes,
                                         const TargetInstrInfo &TII) {
-  if (Opcodes.size() < 2)
-    return true;
-  using namespace haydn::format_e;
+  (void)TII;
+  return opcodesHaveFormatEUnitCover(Opcodes);
+}
 
-  SmallVector<std::string, 3> Logs;
-  Logs.reserve(Opcodes.size());
-  for (unsigned Opc : Opcodes)
-    Logs.push_back(peelFormatELogicalOpcodeName(TII.getName(Opc)));
+/// True when \p Kind is an operand of BUNDLE_E96_THREE_ENTRY
+/// (`e3_0_slot` / `e3_1_slot` / `e3_2_slot`). AIE getSlotKind is
+/// format-desc only — no `_S*` name peel.
+inline bool formatECompositeSlotIsE3(MCSlotKind Kind) {
+  return Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0) ||
+         Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1) ||
+         Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2);
+}
 
-  auto unitsFor = [&](uint8_t Mode, StringRef Logical) -> uint32_t {
-    uint32_t Mask = 0;
-    for (unsigned I = 0; I < FormatEMemberCount; ++I) {
-      const FormatEMemberRec &M = FormatEMembers[I];
-      if (M.Mode != Mode || M.IsNop != 0 || M.Unit >= 32)
-        continue;
-      if (!StringRef(M.Logical).equals_insensitive(Logical))
-        continue;
-      Mask |= (1u << M.Unit);
-    }
-    return Mask;
-  };
+/// True when \p Kind is an operand of BUNDLE_E96_TWO_ENTRY
+/// (`e2_0_slot` / `e2_1_slot`).
+inline bool formatECompositeSlotIsE2(MCSlotKind Kind) {
+  return Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_0) ||
+         Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_1);
+}
 
-  // N <= 3: brute-force injective assignment of one free unit per member.
-  auto assignable = [&](ArrayRef<uint32_t> UnitMasks) -> bool {
-    const unsigned N = UnitMasks.size();
-    if (N == 0)
-      return true;
-    if (N == 1)
-      return UnitMasks[0] != 0;
-    if (N == 2) {
-      for (unsigned U0 = 0; U0 < 32; ++U0) {
-        if (!(UnitMasks[0] & (1u << U0)))
-          continue;
-        for (unsigned U1 = 0; U1 < 32; ++U1) {
-          if (U0 == U1)
-            continue;
-          if (UnitMasks[1] & (1u << U1))
-            return true;
-        }
-      }
-      return false;
-    }
-    // N == 3
-    for (unsigned U0 = 0; U0 < 32; ++U0) {
-      if (!(UnitMasks[0] & (1u << U0)))
-        continue;
-      for (unsigned U1 = 0; U1 < 32; ++U1) {
-        if (U1 == U0 || !(UnitMasks[1] & (1u << U1)))
-          continue;
-        for (unsigned U2 = 0; U2 < 32; ++U2) {
-          if (U2 == U0 || U2 == U1)
-            continue;
-          if (UnitMasks[2] & (1u << U2))
-            return true;
-        }
-      }
-    }
-    return false;
-  };
-
-  for (uint8_t Mode : {static_cast<uint8_t>(0), static_cast<uint8_t>(1)}) {
-    SmallVector<uint32_t, 3> Masks;
-    Masks.reserve(Logs.size());
-    bool Ok = true;
-    bool AnyConstrained = false;
-    for (const std::string &L : Logs) {
-      uint32_t M = unitsFor(Mode, L);
-      // Unknown catalog logical: do not invent a unit ban; leave unconstrained
-      // (full mask). Constrained dual-single-unit packs still fail below.
-      if (M == 0)
-        M = ~0u;
-      else
-        AnyConstrained = true;
-      Masks.push_back(M);
-    }
-    if (Ok && (!AnyConstrained || assignable(Masks)))
-      return true;
+/// Product row from committed member InstSlots (bundle format TD), then
+/// logical unit cover. An `e3_*` member cannot be an operand of
+/// BUNDLE_E96_TWO_ENTRY; an `e2_*` member cannot be an operand of
+/// BUNDLE_E96_THREE_ENTRY. AIE: PacketFormats + getSlotKind, no suffix.
+/// Dual single-unit logicals must not freeze E2 and rely on MC DFS.
+inline BundleFormatRowID
+selectProductRowForOpcodes(ArrayRef<unsigned> Opcodes) {
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  bool AnyE3 = false;
+  bool AnyE2 = false;
+  for (unsigned Opc : Opcodes) {
+    const MCSlotKind Kind = Fmts.getSlotKind(Opc);
+    if (formatECompositeSlotIsE3(Kind))
+      AnyE3 = true;
+    else if (formatECompositeSlotIsE2(Kind))
+      AnyE2 = true;
   }
-  return false;
+  if (AnyE3)
+    return BundleFormatRowID::E96ThreeEntry;
+  if (AnyE2)
+    return BundleFormatRowID::E96TwoEntry;
+  if (Opcodes.size() >= 3)
+    return BundleFormatRowID::E96ThreeEntry;
+  if (Opcodes.size() <= 1)
+    return BundleFormatRowID::E96TwoEntry;
+  if (opcodesHaveFormatEUnitCoverForMode(Opcodes, /*Mode=*/0))
+    return BundleFormatRowID::E96TwoEntry;
+  if (opcodesHaveFormatEUnitCoverForMode(Opcodes, /*Mode=*/1))
+    return BundleFormatRowID::E96ThreeEntry;
+  return selectProductRowForMemberCount(Opcodes.size());
+}
+
+inline BundleFormatRowID
+selectProductRowForOpcodes(ArrayRef<unsigned> Opcodes,
+                           const TargetInstrInfo &TII) {
+  (void)TII;
+  return selectProductRowForOpcodes(Opcodes);
+}
+
+/// Product plan with row chosen from Format E unit cover when possible.
+inline BundlePlan makeProductPlanForOpcodes(SlotBits Occupied,
+                                            ArrayRef<unsigned> Members,
+                                            const TargetInstrInfo &TII) {
+  BundlePlan P;
+  P.Row = selectProductRowForOpcodes(Members, TII);
+  P.Completion = selectCompletionFor(P.Row, Members.size());
+  P.OccupiedSlots = Occupied;
+  P.MemberOpcodes.assign(Members.begin(), Members.end());
+  P.Bytes = productParcelBytes();
+  P.Cycles = OneCycle;
+  return P;
 }
 
 /// Exact no-split product solve for a same-cycle opcode sequence.
@@ -269,7 +217,7 @@ inline bool opcodesHaveFormatEUnitCover(ArrayRef<unsigned> Opcodes,
 /// member opcodes; exactTryAdd only accepts alts-bearing logicals, so use
 /// exactPackOneOpcodeCycle for the encode-oracle path on fixed members.
 inline std::optional<ExactProductCycle>
-exactSolveProductOpcodes(ArrayRef<unsigned> Opcodes, HaydnMCFormats &Fmts) {
+exactSolveProductOpcodes(ArrayRef<unsigned> Opcodes, const HaydnMCFormats &Fmts) {
   if (Opcodes.empty() || Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::nullopt;
 
@@ -303,7 +251,7 @@ exactSolveProductOpcodes(ArrayRef<unsigned> Opcodes, HaydnMCFormats &Fmts) {
 /// Never splits — full list packs or nullopt.
 inline std::optional<OpcodeCycle>
 exactPackOneOpcodeCycle(ArrayRef<unsigned> Opcodes,
-                        HaydnBaseMCFormats &Fmts) {
+                        const HaydnBaseMCFormats &Fmts) {
   if (Opcodes.empty() || Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::nullopt;
 
@@ -345,12 +293,13 @@ exactPackOneOpcodeCycle(ArrayRef<unsigned> Opcodes,
 /// Opcode-only: cannot see register RAW. Prefer \p instrsFormOneLegalCycle
 /// for production multi-MI commit (format + no-forwarding RAW).
 inline bool opcodesFormOneLegalCycle(ArrayRef<unsigned> Opcodes,
-                                     HaydnBaseMCFormats &Fmts) {
+                                     const HaydnBaseMCFormats &Fmts) {
   if (Opcodes.empty() || Opcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return false;
 
   // Product formats/alts are generated global — use exact solve first.
-  HaydnMCFormats ProductFmts;
+  const HaydnMCFormats &ProductFmts =
+      static_cast<const HaydnMCFormats &>(Fmts);
   if (exactSolveProductOpcodes(Opcodes, ProductFmts).has_value())
     return true;
   // Already-member / fixed-slot path (post leaveRegion setDesc).
@@ -628,7 +577,7 @@ inline bool orderMembersUseBeforeDefForAnti(
 ///
 /// Does **not** validate field-order emission — use \p canCoissueProductCycle.
 inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
-                                    HaydnBaseMCFormats &Fmts) {
+                                    const HaydnBaseMCFormats &Fmts) {
   if (Instrs.empty() || Instrs.size() > Haydn::ISSUE_SLOT_COUNT)
     return false;
   SmallVector<unsigned, 3> Opcodes;
@@ -691,7 +640,7 @@ inline bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
     }
   }
 
-  HaydnMCFormats Fmts;
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   if (!instrsFormOneLegalCycle(Instrs, Fmts))
     return false;
 
@@ -813,7 +762,7 @@ struct ReadySubsetAuction {
 ///   * Pure: no MI / AltDesc / FormatID mutation.
 inline std::optional<ReadySubsetAuction>
 auctionReadySubsetCycle(ArrayRef<unsigned> BaseOpcodes,
-                        ArrayRef<unsigned> ReadyOpcodes, HaydnMCFormats &Fmts,
+                        ArrayRef<unsigned> ReadyOpcodes, const HaydnMCFormats &Fmts,
                         std::optional<unsigned> MustIncludeReadyIdx =
                             std::nullopt) {
   const unsigned BaseN = BaseOpcodes.size();
@@ -939,7 +888,7 @@ auctionReadySubsetCycle(ArrayRef<unsigned> BaseOpcodes,
 /// ReadyOpcodes must place the focus opcode at index 0; other ready ops follow.
 inline unsigned auctionFocusFillScore(ArrayRef<unsigned> BaseOpcodes,
                                       ArrayRef<unsigned> ReadyOpcodes,
-                                      HaydnMCFormats &Fmts) {
+                                      const HaydnMCFormats &Fmts) {
   if (ReadyOpcodes.empty())
     return BaseOpcodes.size();
   auto A = auctionReadySubsetCycle(BaseOpcodes, ReadyOpcodes, Fmts,
@@ -1024,7 +973,7 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
     if (!opcodesHaveFormatEUnitCover(Ops, TII))
       return false;
 
-    HaydnMCFormats SolveFmts;
+    const HaydnMCFormats &SolveFmts = haydnDefaultMCFormats();
     if (auto Exact = exactSolveProductOpcodes(Ops, SolveFmts)) {
       for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
         const unsigned Member = Exact->MemberOpcodes[I];
@@ -1054,7 +1003,7 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
     }
   }
 
-  HaydnMCFormats Fmts;
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   Haydn::MachineBundle Bundle(&Fmts);
   for (MachineInstr *MI : Instrs) {
     if (!Bundle.canAdd(MI))
@@ -1097,12 +1046,17 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
   if (!Root.isBundle())
     return false;
 
-  // Durable Format E row + completion from real post-setDesc member count.
+  // Durable Format E row + completion from real post-setDesc members.
+  // Row is selected from generated Format E unit cover so dual single-unit
+  // logicals (two ADD32, ADD+XOR) freeze E3 when E2 cannot inject units —
+  // never rely on MC residual DFS/row upgrade after commit. Full-slot
+  // completion (AllEntriesReal) for non-empty cycles.
   SmallVector<unsigned, 3> MemberOps;
   MemberOps.reserve(Instrs.size());
   for (MachineInstr *MI : Instrs)
     MemberOps.push_back(MI->getOpcode());
-  BundlePlan Plan = makeProductPlan(Bundle.getOccupiedSlots(), MemberOps);
+  BundlePlan Plan =
+      makeProductPlanForOpcodes(Bundle.getOccupiedSlots(), MemberOps, TII);
   stampBundleCommit(Root, Plan);
   return true;
 }
@@ -1159,7 +1113,7 @@ inline bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
   // Bake format-member opcodes before dissolve/re-finalize (same as commit).
   // setDesc does not rebuild child operands/ties/implicits — consolidated root
   // ops are rebuilt below by commitExactMultiMIProductCycle.
-  HaydnMCFormats Fmts;
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   if (auto Exact = exactSolveProductOpcodes(Ops, Fmts)) {
     for (unsigned I = 0, E = Kids.size(); I != E; ++I) {
       const unsigned Member = Exact->MemberOpcodes[I];
@@ -1219,7 +1173,7 @@ inline bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
 ///     stall-escape cycle (standalone parcel; Bundle empty-escape).
 inline SmallVector<OpcodeCycle, 4>
 greedySplitLegalOpcodeCycles(ArrayRef<unsigned> Opcodes,
-                             HaydnBaseMCFormats &Fmts) {
+                             const HaydnBaseMCFormats &Fmts) {
   SmallVector<OpcodeCycle, 4> Out;
   if (Opcodes.empty())
     return Out;
@@ -1308,11 +1262,16 @@ struct LateProductCycle {
 /// insert cannot commit. When alts exist: MemberOpcode = tryAddProduct
 /// empty-cycle choice. When no alts: MemberOpcode = LogicalOpcode.
 inline std::optional<LateProductCycle>
-commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
+commitLateProductCycle(unsigned LogicalOpc, const HaydnMCFormats &Fmts) {
   LateProductCycle Out;
   Out.LogicalOpcode = LogicalOpc;
   Out.MemberOpcode = LogicalOpc;
   Out.NeedsSetDesc = false;
+  auto finish = [&]() -> LateProductCycle {
+    Out.Plan.Row = selectProductRowForOpcodes({Out.MemberOpcode});
+    Out.Plan.Completion = selectCompletionFor(Out.Plan.Row, /*MemberCount=*/1);
+    return Out;
+  };
 
   // Prefer exact singleton solve (shared surface).
   if (auto Exact = exactSolveProductOpcodes(ArrayRef<unsigned>{LogicalOpc},
@@ -1320,7 +1279,7 @@ commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
     Out.MemberOpcode = Exact->MemberOpcodes.front();
     Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
     Out.Plan = Exact->Plan;
-    return Out;
+    return finish();
   }
 
   CycleState S = makeProductCycleState(Fmts.getPacketFormats());
@@ -1330,26 +1289,25 @@ commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
     Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
     if (auto P = commitProduct(S, Fmts.getPacketFormats())) {
       Out.Plan = *P;
-      return Out;
+      return finish();
     }
     // tryAdd accepted but FeasibleFormatMask blocked commit — still only
     // accept a plan derived from the generated Full row.
     if (auto Derived = planFromPacketFormats(
             Fmts.getPacketFormats(), S.OccupiedSlots, {LogicalOpc})) {
       Out.Plan = *Derived;
-      return Out;
+      return finish();
     }
     return std::nullopt;
   }
 
-  // No PlacementAlternatives (B, RET, LoopDec, LoopJNZ, already _S* member).
-  // Explicit Format E singleton — still a legal late cycle plan (stub
-  // completion until idle/singleton law closes).
+  // No PlacementAlternatives (B, RET, LoopDec, LoopJNZ, already-member).
+  // Explicit Format E singleton — still a legal late cycle plan.
   // Encode-oracle: lone opcode forms one cycle via exact pack / canAdd.
   SmallVector<unsigned, 1> One = {LogicalOpc};
   if (auto Packed = exactPackOneOpcodeCycle(One, Fmts)) {
     Out.Plan = Packed->Plan;
-    return Out;
+    return finish();
   }
   // Standalone escape still counts as one product parcel for size model
   // (getInstSizeInBytes returns productParcelBytes for real bare MIs).
@@ -1357,7 +1315,7 @@ commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
   if (auto Escape =
           planFromPacketFormats(Fmts.getPacketFormats(), /*Occupied=*/0, One)) {
     Out.Plan = *Escape;
-    return Out;
+    return finish();
   }
   return std::nullopt;
 }
@@ -1365,7 +1323,7 @@ commitLateProductCycle(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
 /// Pure setDesc target for a late bare MI (nullopt = leave opcode unchanged).
 /// Convenience for unit tests / callers that only need the member opcode.
 inline std::optional<unsigned>
-lateSingletonSetDescOpcode(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
+lateSingletonSetDescOpcode(unsigned LogicalOpc, const HaydnMCFormats &Fmts) {
   auto C = commitLateProductCycle(LogicalOpc, Fmts);
   if (!C || !C->NeedsSetDesc)
     return std::nullopt;
@@ -1376,7 +1334,7 @@ lateSingletonSetDescOpcode(unsigned LogicalOpc, HaydnMCFormats &Fmts) {
 /// Shared by Fixup pads/demotion and BranchRelaxation insertBranch hooks so
 /// every late creator builds the same product member form.
 inline unsigned lateProductMemberOpcode(unsigned LogicalOpc) {
-  HaydnMCFormats Fmts;
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   if (auto C = commitLateProductCycle(LogicalOpc, Fmts))
     return C->MemberOpcode;
   return LogicalOpc;
@@ -1397,9 +1355,12 @@ inline void finalizeExactLateSingleton(MachineInstr &MI) {
   finalizeBundle(MBB, MII, std::next(MII));
   MachineInstr &Root = *getBundleStart(MI.getIterator());
   assert(Root.isBundle() && "exact late singleton must produce a BUNDLE root");
-  // Singleton → E2 + stub completion (fail-closed for product emit until
-  // idle/singleton law closes). setDesc may have already run via late path.
-  BundlePlan Plan = makeProductPlan(/*Occupied=*/0, {MI.getOpcode()});
+  // Row from the child's InstSlot (BUNDLE_E96_* operand class), not
+  // `_S*` / `_E3_` name peel. Completion is full-slot architectural NOP.
+  const TargetInstrInfo &TII =
+      *MBB.getParent()->getSubtarget().getInstrInfo();
+  BundlePlan Plan =
+      makeProductPlanForOpcodes(/*Occupied=*/0, {MI.getOpcode()}, TII);
   stampBundleCommit(Root, Plan);
 }
 

@@ -3,10 +3,10 @@
 // CHECK: 	{ 	ld16	r5, r6, 2 }             // encoding: [0x87,0x95,0x00,0x00,0x00,0xa0,0x07,0x00,0x00,0x00,0x00,0x00]
 // CHECK: 	{ 	ld8	r7, r8, 0 }             // encoding: [0x07,0x1e,0x00,0x00,0x00,0xb0,0x07,0x00,0x00,0x00,0x00,0x00]
 // CHECK: 	{ 	ld8	r9, r10, 1 }            // encoding: [0x87,0x66,0x00,0x00,0x00,0xb0,0x07,0x00,0x00,0x00,0x00,0x00]
-// OBJ: {{.*}}0: 87 43 34 04 00 00 00 00 00 00 00 00 { nop; s_lhws_with_imm r3, r4, 0 }
-// OBJ: {{.*}}c: 87 43 54 26 00 00 00 00 00 00 00 00 { nop; s_lhws_with_imm r5, r6, 2 }
-// OBJ: {{.*}}18: 87 43 76 08 00 00 00 00 00 00 00 00 { nop; s_lbs_with_imm r7, r8, 0 }
-// OBJ: {{.*}}24: 87 43 96 1a 00 00 00 00 00 00 00 00 { nop; s_lbs_with_imm r9, r10, 1 }
+// OBJ: {{.*}}0: 87 43 34 04 00 00 00 00 00 00 00 00 { nop; ld16 r3, r4, 0 }
+// OBJ: {{.*}}c: 87 43 54 26 00 00 00 00 00 00 00 00 { nop; ld16 r5, r6, 2 }
+// OBJ: {{.*}}18: 87 43 76 08 00 00 00 00 00 00 00 00 { nop; ld8 r7, r8, 0 }
+// OBJ: {{.*}}24: 87 43 96 1a 00 00 00 00 00 00 00 00 { nop; ld8 r9, r10, 1 }
 # REQUIRES: haydn-registered-target
 # RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding %s | FileCheck --check-prefix=ASM %s
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o

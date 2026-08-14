@@ -308,14 +308,12 @@ TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst A, X, N;
-  A.setOpcode(Haydn::ADD32_S2);
-  X.setOpcode(Haydn::XOR32_S1);
-  N.setOpcode(Haydn::NOT32_S0);
-  if (Fmts.getSlotKind(A.getOpcode()) == MCSlotKind()) {
-    A.setOpcode(Haydn::ADD32);
-    X.setOpcode(Haydn::XOR32);
-    N.setOpcode(Haydn::NOT32);
-  }
+  A.setOpcode(Haydn::ADD32_E3_E0_ALU0_RR);
+  X.setOpcode(Haydn::ADD32_E3_E1_ALU1_RR);
+  N.setOpcode(Haydn::ADD32_E3_E2_ALU2_RR);
+  ASSERT_NE(Fmts.getSlotKind(A.getOpcode()), MCSlotKind());
+  ASSERT_NE(Fmts.getSlotKind(X.getOpcode()), MCSlotKind());
+  ASSERT_NE(Fmts.getSlotKind(N.getOpcode()), MCSlotKind());
   ASSERT_TRUE(B.canAdd(A.getOpcode()));
   B.add(&A);
   ASSERT_TRUE(B.canAdd(X.getOpcode()));
@@ -332,31 +330,30 @@ TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96"));
 
   // Committed members keep fixed getSlotKind — encode must not re-auction.
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_S0)->getOpcode()),
+  ASSERT_NE(B.at(MCSlotKind::Haydn_SLOT_E3_0), nullptr);
+  ASSERT_NE(B.at(MCSlotKind::Haydn_SLOT_E3_1), nullptr);
+  ASSERT_NE(B.at(MCSlotKind::Haydn_SLOT_E3_2), nullptr);
+  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_E3_0)->getOpcode()),
             MCSlotKind());
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_S1)->getOpcode()),
+  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_E3_1)->getOpcode()),
             MCSlotKind());
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_S2)->getOpcode()),
+  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_E3_2)->getOpcode()),
             MCSlotKind());
 }
 
 TEST(HaydnAIEParityBundleTest, SerializeSlotMapNoReAuctionOnMembers) {
   // Source order that would starve under wrong re-auction still packs by
-  // Desc getSlotKind (members already placed). Second S0-only fails canAdd
-  // — no constrained-first re-auction escape.
+  // Desc getSlotKind (members already placed). Second E0-only store fails
+  // canAdd — no constrained-first re-auction escape.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst St0, St1;
-  St0.setOpcode(Haydn::ST32_S0);
-  St1.setOpcode(Haydn::ST32_S0);
-  if (Fmts.getSlotKind(St0.getOpcode()) == MCSlotKind()) {
-    St0.setOpcode(Haydn::ST32);
-    St1.setOpcode(Haydn::ST32);
-  }
+  St0.setOpcode(Haydn::S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6);
+  St1.setOpcode(Haydn::S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6);
   ASSERT_TRUE(B.canAdd(St0.getOpcode()));
   B.add(&St0);
   EXPECT_FALSE(B.canAdd(St1.getOpcode()))
-      << "second fixed S0 member must fail (no encode re-auction)";
+      << "second fixed E0 store member must fail (no encode re-auction)";
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;

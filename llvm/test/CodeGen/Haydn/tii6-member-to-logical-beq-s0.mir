@@ -1,0 +1,71 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-folder \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — T-TII6 generated member→logical inverse on analyzeBranch.
+#
+# REGRESSION TEST: generated BEQ member must invert to logical BEQ.
+# The old getHaydnFlexBaseOpcode string table omitted non-_W bases, so
+# analyzeBranch treated a BEQ member as a non-branch and reported the
+# trailing B as an unconditional (wrong CFG via BranchFolder/MBP).
+# Generated inverse must map BEQ_E2_E0_ALU0_RI12 → BEQ so the two-way
+# cond is preserved.
+#
+# Test design: two-way generated BEQ member + B. BranchFolder must still
+# see a conditional plus an unconditional, not a lone B. It may
+# canonicalize BEQ→BNE (swap successors); that is still two-way.
+
+--- |
+  define void @beq_s0_twoway(i32 %a, i32 %b) {
+  entry:
+    %c = icmp eq i32 %a, %b
+    br i1 %c, label %taken, label %untaken
+  taken:
+    ret void
+  untaken:
+    ret void
+  }
+...
+---
+name:            beq_s0_twoway
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: beq_s0_twoway
+    ; CHECK: bb.0.entry
+    ; CHECK: {{BEQ|BNE}}
+    BEQ_E2_E0_ALU0_RI12 $r1, $r2, %bb.1, implicit-def dead $sfr
+    B %bb.2
+
+  bb.1.taken:
+    liveins: $r1, $r15
+    ; Distinct from bb.2 so BranchFolder does not hoist a shared RET.
+    ; CHECK: bb.1.taken
+    ; CHECK: ADDI32
+    $r1 = ADDI32 $r1, 1, implicit-def dead $sfr
+    RET implicit $r15
+
+  bb.2.untaken:
+    liveins: $r1, $r15
+    ; CHECK: bb.2.untaken
+    ; CHECK: ADDI32
+    $r1 = ADDI32 $r1, 2, implicit-def dead $sfr
+    RET implicit $r15
+
+...

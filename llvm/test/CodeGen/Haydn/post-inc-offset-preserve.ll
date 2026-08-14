@@ -9,6 +9,8 @@
 
 ; REBASELINED : / pipeline reorder (ExpandPseudos/BitSimplify pre-scheduler + materialize at leaveRegion) — bundles regrouped, ops unchanged.
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
+; REBASELINED 2026-08-14: MAC MemberId cutover — FMULA co-issues with ALU
+; (slt32 / x2slli32); idle `{ nop; nop }` after MAC parcels dropped.
 ; Format-E-only rebaseline (/R2-R5): CHECK-LABEL + key invariants.
 ; Format E rebaseline: labels + present opcodes.
 
@@ -24,42 +26,44 @@ define void @test_ld64_fold_in_loop(ptr %in, ptr %out, i32 %n, i64 %coef) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r4 }
 ; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r7, r1, 0; x2slli32 d4, d0, 16; x2srai32 d2, d0, 16 }
-; CHECK-NEXT:    { nop; addi32_w r5, r1, 4 }
-; CHECK-NEXT:    { st32 r7, sp, 2; ld32 r5, r5, 0; x2slli32 d2, d2, 16 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; ld32 r7, r1, 0 }
+; CHECK-NEXT:    { nop; x2srai32 d2, d0, 16 }
+; CHECK-NEXT:    { nop; x2slli32 d4, d0, 16 }
+; CHECK-NEXT:    { nop; addi32 r5, r1, 4 }
+; CHECK-NEXT:    { nop; ld32 r5, r5, 0 }
+; CHECK-NEXT:    { nop; st32 r7, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { st32 r5, sp, 3; x2srai32 d2, d2, 16; x2srai32 d4, d4, 16 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; x2slli32 d2, d2, 16 }
+; CHECK-NEXT:    { nop; st32 r5, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; x2srai32 d4, d4, 16 }
+; CHECK-NEXT:    { nop; x2srai32 d2, d2, 16 }
 ; CHECK-NEXT:    { x2slli32 d2, d2, 16; or64 d5, d1, d1 }
-; CHECK-NEXT:    { ld64 d3, sp, 1; x2srai32 d2, d2, 16 } // 8-byte Folded Reload
+; CHECK-NEXT:    { nop; ld64 d3, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
+; CHECK-NEXT:    { nop; x2srai32 d2, d2, 16 }
 ; CHECK-NEXT:    { addi32 r1, r1, 8; addi32 r4, r4, 1 }
 ; CHECK-NEXT:    { slt32 r5, r4, r3; fmula16.ls00 d5, d3, d4 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; fmula16.ls11 d5, d3, d4 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; fmula16.hs00 d5, d3, d2 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; fmula16.hs11 d5, d3, d2 }
-; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; addi32 r6, r2, 4 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d5, r2, 0 }
-; CHECK-NEXT:    { nop; addi32_w r6, r2, 4 }
-; CHECK-NEXT:    { nop; addi32_w r2, r2, 8 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 8 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d5, r6, 0 }
-; CHECK-NEXT:    { nop; bnez_w r5, .LBB0_1 }
+; CHECK-NEXT:    { nop; bnez r5, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 
@@ -89,34 +93,35 @@ define void @test_st64_fold_in_loop(ptr %out, i32 %n, i64 %a, i64 %coef) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d2, r3 }
 ; CHECK-NEXT:    { nop; slli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; srli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:  .LBB1_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { x2slli32 d4, d1, 16; x2srai32 d3, d1, 16 }
 ; CHECK-NEXT:    { x2srai32 d4, d4, 16; x2slli32 d3, d3, 16 }
 ; CHECK-NEXT:    { or64 d5, d2, d2; x2srai32 d3, d3, 16 }
-; CHECK-NEXT:    { fmula16.ls00 d5, d0, d4; x2slli32 d3, d3, 16 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { fmula16.ls11 d5, d0, d4; x2srai32 d3, d3, 16 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { addi32 r3, r3, 1; fmula16.hs00 d5, d0, d3 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { slt32 r5, r3, r2; fmula16.hs11 d5, d0, d3 }
+; CHECK-NEXT:    { nop; x2slli32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; fmula16.ls00 d5, d0, d4 }
+; CHECK-NEXT:    { nop; x2srai32 d3, d3, 16 }
+; CHECK-NEXT:    { nop; fmula16.ls11 d5, d0, d4 }
+; CHECK-NEXT:    { nop; fmula16.hs00 d5, d0, d3 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, 1 }
+; CHECK-NEXT:    { nop; addi32 r4, r1, 4 }
+; CHECK-NEXT:    { nop; fmula16.hs11 d5, d0, d3 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d5, r1, 0 }
-; CHECK-NEXT:    { nop; addi32_w r4, r1, 4 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, 8 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d5, r4, 0 }
-; CHECK-NEXT:    { nop; bnez_w r5, .LBB1_1 }
+; CHECK-NEXT:    { nop; slt32 r4, r3, r2 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 8 }
+; CHECK-NEXT:    { nop; bnez r4, .LBB1_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 

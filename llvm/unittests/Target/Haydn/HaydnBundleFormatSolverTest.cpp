@@ -44,6 +44,12 @@ using namespace llvm::haydn::bundle;
 
 namespace {
 
+// Three occupied issue bits cannot keep E96TwoEntry (2 entries). Wave 2
+// coveringFormatMaskFromPackets strips E2 → E3-only. ProductFormatMask (E2|E3)
+// is the empty/≤2-member frontier, not a retired size-1 Full mask=3.
+constexpr uint64_t E3OnlyFormatMask =
+    formatRowBit(BundleFormatRowID::E96ThreeEntry);
+
 //===----------------------------------------------------------------------===//
 // Empty commit → stall
 //===----------------------------------------------------------------------===//
@@ -94,10 +100,10 @@ TEST(HaydnBundleFormatSolver, ProductAuthorityIsGeneratedPacketFormats) {
   EXPECT_EQ(Plan->memberCount(), 2u);
   EXPECT_EQ(Plan->Row, BundleFormatRowID::E96TwoEntry);
 
-  // Covering mask keeps E2|E3 frontier under transitional SLOT occupancy.
+  // SLOT_ALL is three issue bits → E3-only (E2 cannot hold three entries).
   EXPECT_EQ(coveringFormatMaskFromPackets(Packets, Haydn::SLOT_ALL,
                                           ProductFormatMask),
-            ProductFormatMask);
+            E3OnlyFormatMask);
   EXPECT_EQ(coveringFormatMaskFromPackets(Packets, Haydn::SLOT0,
                                           /*AllowedMask=*/0),
             0u);
@@ -114,10 +120,10 @@ TEST(HaydnBundleFormatSolver, OneFullRowReachesHRSMSRAHintCommitSize) {
   EncodedBytes Size = productParcelBytes();
   EXPECT_EQ(vliwFormatSizeAsBytes(Prod->getSize()), Size);
 
-  // HR / SMS row frontier (pre-setDesc).
+  // HR / SMS row frontier (pre-setDesc). Empty keeps E2|E3; SLOT_ALL is E3.
   EXPECT_EQ(productFeasibleFormatMask(Packets, 0), ProductFormatMask);
   EXPECT_EQ(productFeasibleFormatMask(Packets, Haydn::SLOT_ALL),
-            ProductFormatMask);
+            E3OnlyFormatMask);
 
   // RA-hint thin eligibility (product PacketFormats present).
   EXPECT_TRUE(productRAHintEligible(Packets));
@@ -151,14 +157,14 @@ TEST(HaydnBundleFormatSolver, ST32_ADD64_Pack) {
   EXPECT_EQ(S.memberCount(), 1u);
   EXPECT_EQ(S.OccupiedSlots & Haydn::SLOT0, SlotBits(Haydn::SLOT0));
   EXPECT_EQ(S.Members[0].LogicalOpcode, Haydn::ST32);
-  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ST32_S0);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(S.Members[0].MemberOpcode, 0));
   EXPECT_EQ(S.Members[0].FieldSlots, SlotBits(Haydn::SLOT0));
 
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
   EXPECT_EQ(S.memberCount(), 2u);
   EXPECT_NE(S.OccupiedSlots & (Haydn::SLOT1 | Haydn::SLOT2), 0u);
   // Prefer S2 first (Bundle.pickSlot order).
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD64_S2);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(S.Members[1].MemberOpcode, 2));
   EXPECT_EQ(S.Members[1].FieldSlots, SlotBits(Haydn::SLOT2));
 
   auto Plan = commitProduct(S);
@@ -185,10 +191,10 @@ TEST(HaydnBundleFormatSolver, ThreeADD32_RejectFourth) {
   EXPECT_EQ(S.memberCount(), 3u);
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_ALL));
 
-  // Slot order preference S2 → S1 → S0.
-  EXPECT_EQ(S.Members[0].MemberOpcode, Haydn::ADD32_S2);
-  EXPECT_EQ(S.Members[1].MemberOpcode, Haydn::ADD32_S1);
-  EXPECT_EQ(S.Members[2].MemberOpcode, Haydn::ADD32_S0);
+  // Slot order preference S2 → S1 → S0; setDesc targets are Format E members.
+  EXPECT_TRUE(formatEMemberOccupiesEntry(S.Members[0].MemberOpcode, 2));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(S.Members[1].MemberOpcode, 1));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(S.Members[2].MemberOpcode, 0));
 
   EXPECT_FALSE(tryAddProduct(S, Fmts, Haydn::ADD32))
       << "fourth ADD32 must conflict once S0|S1|S2 are full";
@@ -209,11 +215,11 @@ TEST(HaydnBundleFormatSolver, EnumerateStampsFieldSlots) {
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD32, Alts));
   ASSERT_EQ(Alts.size(), 3u);
-  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::ADD32_S0);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Alts[0].MemberOpcode, 0));
   EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(Alts[1].MemberOpcode, Haydn::ADD32_S1);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Alts[1].MemberOpcode, 1));
   EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[2].MemberOpcode, Haydn::ADD32_S2);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Alts[2].MemberOpcode, 2));
   EXPECT_EQ(Alts[2].FieldSlots, SlotBits(Haydn::SLOT2));
   for (const PlacementAlternative &A : Alts) {
     EXPECT_EQ(A.CompatibleFormatMask, ProductFormatMask);
@@ -381,8 +387,8 @@ TEST(HaydnBundleFormatSolver, B24_TryAddS2FirstThenS1S0) {
 // Haydn keeps a FormatID *mask* frontier until post-RA freeze (plan §7.1).
 
 TEST(HaydnBundleFormatSolver, ProductFeasibleFormatMaskEmptyOccupied) {
-  // Empty and every Full-covering occupancy → ProductFormatMask (size-1).
-  // Frontier from generated PacketFormats coverage.
+  // Empty and ≤2-bit occupancy keep ProductFormatMask (E2|E3). Three-bit
+  // SLOT_ALL drops E2 (coveringFormatMaskFromPackets OccCount>2).
   HaydnMCFormats Fmts;
   const PacketFormats &Packets = Fmts.getPacketFormats();
   EXPECT_EQ(productFeasibleFormatMask(Packets, /*Occupied=*/0),
@@ -392,7 +398,7 @@ TEST(HaydnBundleFormatSolver, ProductFeasibleFormatMaskEmptyOccupied) {
   EXPECT_EQ(productFeasibleFormatMask(Packets, Haydn::SLOT1 | Haydn::SLOT2),
             ProductFormatMask);
   EXPECT_EQ(productFeasibleFormatMask(Packets, Haydn::SLOT_ALL),
-            ProductFormatMask);
+            E3OnlyFormatMask);
   // Convenience overload agrees.
   EXPECT_EQ(productFeasibleFormatMask(/*Occupied=*/0), ProductFormatMask);
 
@@ -402,7 +408,7 @@ TEST(HaydnBundleFormatSolver, ProductFeasibleFormatMaskEmptyOccupied) {
       ProductFormatMask);
   EXPECT_EQ(makeProductCycleStateFromOccupied(Packets, Haydn::SLOT_ALL)
                 .FeasibleFormatMask,
-            ProductFormatMask);
+            E3OnlyFormatMask);
 }
 
 TEST(HaydnBundleFormatSolver, B41_TryAddKeepsProductFrontier) {
@@ -491,13 +497,25 @@ TEST(HaydnBundleFormatSolver, VF21_FirstFitDeadEndRematchADD32_2xADD64) {
   // format-member opcodes are the setDesc targets (logical→member bridge).
   EXPECT_EQ(Pref.Members[0].LogicalOpcode, Haydn::ADD32);
   EXPECT_EQ(Pref.Members[0].FieldSlots, SlotBits(Haydn::SLOT0));
-  EXPECT_EQ(Pref.Members[0].MemberOpcode, Haydn::ADD32_S0);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Pref.Members[0].MemberOpcode, 0));
   EXPECT_EQ(Pref.Members[1].LogicalOpcode, Haydn::ADD64);
   EXPECT_EQ(Pref.Members[1].FieldSlots, SlotBits(Haydn::SLOT2));
-  EXPECT_EQ(Pref.Members[1].MemberOpcode, Haydn::ADD64_S2);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Pref.Members[1].MemberOpcode, 2));
   EXPECT_EQ(Pref.Members[2].LogicalOpcode, Haydn::ADD64);
   EXPECT_EQ(Pref.Members[2].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Pref.Members[2].MemberOpcode, Haydn::ADD64_S1);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Pref.Members[2].MemberOpcode, 1));
+}
+
+TEST(HaydnBundleFormatSolver, DualLoadStore0StoreRefusesExactTryAdd) {
+  // Overlay on AIEBundle.h:62-105: FieldSlots S2 vs S0 are free, but both
+  // stores need LOADSTORE0. exactTryAddProduct must refuse so HR canAdd does.
+  HaydnMCFormats Fmts;
+  CycleCandidateSet C = makeProductCandidateSet();
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::D_SW_L_WITH_IMM));
+  ASSERT_TRUE(exactTryAddProduct(C, Fmts, Haydn::OR64));
+  EXPECT_FALSE(exactTryAddProduct(C, Fmts, Haydn::ST8));
+  unsigned Seq[] = {Haydn::D_SW_L_WITH_IMM, Haydn::OR64, Haydn::ST8};
+  EXPECT_FALSE(exactCanPackProductSequence(Fmts, Seq));
 }
 
 // Assembler Bundle.canAdd/add and exactSolveProductOpcodes must agree on the
@@ -512,9 +530,9 @@ TEST(HaydnBundleFormatSolver, RematchMemberOpcodeBridgeAsmAndExactSolve) {
     ASSERT_TRUE(exactTryAddProduct(Exact, Fmts, Opc));
   const CycleState &Pref = selectPreferredCandidate(Exact);
   ASSERT_EQ(Pref.memberCount(), 3u);
-  EXPECT_EQ(Pref.Members[0].MemberOpcode, Haydn::ADD32_S0);
-  EXPECT_EQ(Pref.Members[1].MemberOpcode, Haydn::ADD64_S2);
-  EXPECT_EQ(Pref.Members[2].MemberOpcode, Haydn::ADD64_S1);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Pref.Members[0].MemberOpcode, 0));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Pref.Members[1].MemberOpcode, 2));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Pref.Members[2].MemberOpcode, 1));
 
   // exactSolveProductOpcodes is the shared setDesc MemberOpcode vector.
   auto Solved = exactSolveProductOpcodes(Seq, Fmts);
@@ -523,9 +541,9 @@ TEST(HaydnBundleFormatSolver, RematchMemberOpcodeBridgeAsmAndExactSolve) {
   EXPECT_EQ(Solved->MemberOpcodes[0], Pref.Members[0].MemberOpcode);
   EXPECT_EQ(Solved->MemberOpcodes[1], Pref.Members[1].MemberOpcode);
   EXPECT_EQ(Solved->MemberOpcodes[2], Pref.Members[2].MemberOpcode);
-  EXPECT_EQ(Solved->MemberOpcodes[0], Haydn::ADD32_S0);
-  EXPECT_EQ(Solved->MemberOpcodes[1], Haydn::ADD64_S2);
-  EXPECT_EQ(Solved->MemberOpcodes[2], Haydn::ADD64_S1);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Solved->MemberOpcodes[0], 0));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Solved->MemberOpcodes[1], 2));
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Solved->MemberOpcodes[2], 1));
 
   // Standalone assembler path: Bundle canAdd/add of the same logical sequence
   // ends with SlotMap FieldSlots matching preferred Members (rematch sync).
@@ -551,7 +569,7 @@ TEST(HaydnBundleFormatSolver, RematchMemberOpcodeBridgeAsmAndExactSolve) {
   const CycleState &PF = selectPreferredCandidate(PackFriendly);
   EXPECT_EQ(PF.OccupiedSlots, Pref.OccupiedSlots);
   EXPECT_EQ(PF.memberCount(), 3u);
-  // Selected members cover ADD32_S0 + ADD64_S1 + ADD64_S2 regardless of
+  // Selected members cover ADD32_S0 + ADD64 + ADD64 regardless of
   // source order (parity with MC rematch/pack-friendly objdump lines).
   SmallVector<unsigned, 3> PrefMem, PFMem;
   for (const CycleMember &M : Pref.Members)

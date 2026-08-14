@@ -53,3 +53,7 @@ ELF_RELOC(R_HAYDN_HWLoopOff2,     17)
 ELF_RELOC(R_HAYDN_WIDE_BranchSImm12,    18)
 ELF_RELOC(R_HAYDN_WIDE_CallSImm20,      19)
 ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI, 20)
+// Format E LOADSTORE0/LOAD1 RI6: signed imm6 @ parcel bits[33:28] (FieldLsb=28).
+// Distinct from R_HAYDN_LO20 (ALU RI20 / retired WIDE LSOff20 geometry @
+// bits[31:50]). Must not alias R_HAYDN_SImm16 (16-bit field at bit 0).
+ELF_RELOC(R_HAYDN_LS_IMM,               21)

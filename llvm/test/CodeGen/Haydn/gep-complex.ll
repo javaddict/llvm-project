@@ -27,8 +27,9 @@ define i32 @gep_array(ptr %arr, i32 %idx) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %ptr = getelementptr i32, ptr %arr, i32 %idx
   %val = load i32, ptr %ptr
   ret i32 %val
@@ -45,8 +46,9 @@ define i32 @gep_struct_field(ptr %p) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %ptr = getelementptr %struct.Point, ptr %p, i32 0, i32 0
   %val = load i32, ptr %ptr
   ret i32 %val
@@ -62,8 +64,9 @@ define i32 @gep_struct_field1(ptr %p) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %ptr = getelementptr %struct.Point, ptr %p, i32 0, i32 1
   %val = load i32, ptr %ptr
   ret i32 %val
@@ -78,15 +81,15 @@ define i32 @gep_array_of_struct(ptr %arr, i32 %idx) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 12 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 12 }
 ; CHECK-NEXT:    { nop; mull r3, r2, r3 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r2, r1, r3 }
 ; CHECK-NEXT:    { nop; s_lw_pre_imm r1, r2, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %ptr = getelementptr %struct.Triple, ptr %arr, i32 %idx, i32 1
   %val = load i32, ptr %ptr
   ret i32 %val
@@ -103,8 +106,9 @@ define i32 @gep_2d_array(ptr %arr, i32 %row, i32 %col) {
 ; CHECK-NEXT:    { slli32 r1, r3, 2; add32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; s_lw_pre_reg r1, r2, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %row_ptr = getelementptr [4 x i32], ptr %arr, i32 %row
   %elem_ptr = getelementptr [4 x i32], ptr %row_ptr, i32 0, i32 %col
   %val = load i32, ptr %elem_ptr
@@ -125,8 +129,9 @@ define i32 @gep_nested_struct(ptr %p) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %inner_ptr = getelementptr %struct.Outer, ptr %p, i32 0, i32 1
   %field_ptr = getelementptr %struct.Inner, ptr %inner_ptr, i32 0, i32 1
   %val = load i32, ptr %field_ptr
@@ -144,8 +149,9 @@ define i32 @gep_const_offset(ptr %arr) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %ptr = getelementptr i32, ptr %arr, i32 5
   %val = load i32, ptr %ptr
   ret i32 %val
@@ -158,20 +164,20 @@ define i32 @gep_in_loop(ptr %arr, i32 %n) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; move32 r4, r3 }
 ; CHECK-NEXT:  .LBB7_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
 ; CHECK-NEXT:    { add32 r3, r3, r5; slt32 r6, r4, r2 }
-; CHECK-NEXT:    { nop; bnez_w r6, .LBB7_1 }
+; CHECK-NEXT:    { nop; bnez r6, .LBB7_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -205,8 +211,9 @@ define i32 @gep_64bit_index(ptr %arr, i64 %idx) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %ptr = getelementptr i32, ptr %arr, i64 %idx
   %val = load i32, ptr %ptr
   ret i32 %val
@@ -222,8 +229,9 @@ define void @gep_store(ptr %arr, i32 %idx, i32 %val) {
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
 ; CHECK-NEXT:    { nop; s_sw_pre_reg r3, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %ptr = getelementptr i32, ptr %arr, i32 %idx
   store i32 %val, ptr %ptr
   ret void

@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: license information.
 //
 // fresh per-slot port of ALL ALU32 ops from the spec
-// (VLIW_Engine_ISA_Reference.md "Slot 0 -- S-ALU", 66 codepoints).
+// (golden Format E ALU0/ALU1/ALU2 unit members).
 // Authored per-slot (one def per op per legal slot) to future-proof against
-// per-slot format divergence. NOT derived from legacy HaydnInstrInfo*.td or
-// haydn_instruction_db.json — fresh port from the spec table.
+// per-slot format divergence. NOT derived from legacy HaydnInstrInfo*.td.
+// Product encode is Format E (golden/format_e_bit_layout_v2).
 //
-// Encoding model (encoding_manual_flex.md §1.2):
+// Encoding model (Format E FU/opcode widths):
 // ALU32 FU code = 0b000, opcode width = 7 bits.
 // s0[47:45]=FU(000) s0[44:38]=opcode(7b) operands + reserved fill [37:0]
 // s1[39:37]=FU(000) s1[36:30]=opcode(7b) operands + reserved fill [29:0]
@@ -389,9 +389,9 @@ class HaydnFU_ALU32_S0_CSR<bits<7> opc, dag outs, dag ins, string asmstr,
 // TODO(spec): SET_HWLOOP / SET_HWLOOP_F2 / SET_HWLOOP_REG operand encoding is
 // under-specified in the ISA reference (HWLRIII / HWLRIIR / HWLRRRR shape
 // names only). Best-effort layout below reserves operand bits per the WIDE
-// SET_HWLOOP model (encoding_manual.md §5.11-5.13: loop_id uimm1 + count imm +
-// target imm). Authoring s0-only so the codepoints exist; P2 will refine the
-// field split once the spec field layout is confirmed.
+// SET_HWLOOP model (loop_id uimm1 + count imm + target imm; golden HWLR
+// displacement <<2). Authoring s0-only so the codepoints exist; refine the
+// field split once Format E golden confirms the bit-exact placement.
 
 // ALU32 SET_HWLOOP in S0: loop_id(uimm1), count(simm20), target(simm10).
 // TODO(spec): exact field split of count vs target TBD.
@@ -485,524 +485,25 @@ class HaydnFU_ALU32_S0_HWLOOP_F2_W<bits<7> opc, dag outs, dag ins,
 }
 
 //===----------------------------------------------------------------------===//
-// ALU32 RR ops — s0, s1, s2 (3 defs each). Spec codepoints 5-47 (RR family).
-//===----------------------------------------------------------------------===//
-
-// #5 ADD32
-def ADD32_S0 : HaydnFU_ALU32_S0_RR<0b0000101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "add32\t$rt, $rs1, $rs2", []>;
-def ADD32_S1 : HaydnFU_ALU32_S1_RR<0b0000101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "add32\t$rt, $rs1, $rs2", []>;
-def ADD32_S2 : HaydnFU_ALU32_S2_RR<0b0000101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "add32\t$rt, $rs1, $rs2", []>;
-
-// #6 ADD32S
-def ADD32S_S0 : HaydnFU_ALU32_S0_RR<0b0000110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "add32s\t$rt, $rs1, $rs2", []>;
-def ADD32S_S1 : HaydnFU_ALU32_S1_RR<0b0000110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "add32s\t$rt, $rs1, $rs2", []>;
-def ADD32S_S2 : HaydnFU_ALU32_S2_RR<0b0000110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "add32s\t$rt, $rs1, $rs2", []>;
-
-// #7 SUB32
-def SUB32_S0 : HaydnFU_ALU32_S0_RR<0b0000111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sub32\t$rt, $rs1, $rs2", []>;
-def SUB32_S1 : HaydnFU_ALU32_S1_RR<0b0000111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sub32\t$rt, $rs1, $rs2", []>;
-def SUB32_S2 : HaydnFU_ALU32_S2_RR<0b0000111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sub32\t$rt, $rs1, $rs2", []>;
-
-// #8 SUB32S
-def SUB32S_S0 : HaydnFU_ALU32_S0_RR<0b0001000,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sub32s\t$rt, $rs1, $rs2", []>;
-def SUB32S_S1 : HaydnFU_ALU32_S1_RR<0b0001000,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sub32s\t$rt, $rs1, $rs2", []>;
-def SUB32S_S2 : HaydnFU_ALU32_S2_RR<0b0001000,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sub32s\t$rt, $rs1, $rs2", []>;
-
-// #13 AND32
-def AND32_S0 : HaydnFU_ALU32_S0_RR<0b0001101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "and32\t$rt, $rs1, $rs2", []>;
-def AND32_S1 : HaydnFU_ALU32_S1_RR<0b0001101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "and32\t$rt, $rs1, $rs2", []>;
-def AND32_S2 : HaydnFU_ALU32_S2_RR<0b0001101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "and32\t$rt, $rs1, $rs2", []>;
-
-// #14 OR32
-def OR32_S0 : HaydnFU_ALU32_S0_RR<0b0001110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "or32\t$rt, $rs1, $rs2", []>;
-def OR32_S1 : HaydnFU_ALU32_S1_RR<0b0001110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "or32\t$rt, $rs1, $rs2", []>;
-def OR32_S2 : HaydnFU_ALU32_S2_RR<0b0001110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "or32\t$rt, $rs1, $rs2", []>;
-
-// #15 XOR32
-def XOR32_S0 : HaydnFU_ALU32_S0_RR<0b0001111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "xor32\t$rt, $rs1, $rs2", []>;
-def XOR32_S1 : HaydnFU_ALU32_S1_RR<0b0001111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "xor32\t$rt, $rs1, $rs2", []>;
-def XOR32_S2 : HaydnFU_ALU32_S2_RR<0b0001111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "xor32\t$rt, $rs1, $rs2", []>;
-
-// #28 SRL32
-def SRL32_S0 : HaydnFU_ALU32_S0_RR<0b0011100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "srl32\t$rt, $rs1, $rs2", []>;
-def SRL32_S1 : HaydnFU_ALU32_S1_RR<0b0011100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "srl32\t$rt, $rs1, $rs2", []>;
-def SRL32_S2 : HaydnFU_ALU32_S2_RR<0b0011100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "srl32\t$rt, $rs1, $rs2", []>;
-
-// #29 SRA32
-def SRA32_S0 : HaydnFU_ALU32_S0_RR<0b0011101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sra32\t$rt, $rs1, $rs2", []>;
-def SRA32_S1 : HaydnFU_ALU32_S1_RR<0b0011101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sra32\t$rt, $rs1, $rs2", []>;
-def SRA32_S2 : HaydnFU_ALU32_S2_RR<0b0011101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sra32\t$rt, $rs1, $rs2", []>;
-
-// #30 SRA32R
-def SRA32R_S0 : HaydnFU_ALU32_S0_RR<0b0011110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sra32r\t$rt, $rs1, $rs2", []>;
-def SRA32R_S1 : HaydnFU_ALU32_S1_RR<0b0011110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sra32r\t$rt, $rs1, $rs2", []>;
-def SRA32R_S2 : HaydnFU_ALU32_S2_RR<0b0011110,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sra32r\t$rt, $rs1, $rs2", []>;
-
-// #31 SLL32
-def SLL32_S0 : HaydnFU_ALU32_S0_RR<0b0011111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sll32\t$rt, $rs1, $rs2", []>;
-def SLL32_S1 : HaydnFU_ALU32_S1_RR<0b0011111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sll32\t$rt, $rs1, $rs2", []>;
-def SLL32_S2 : HaydnFU_ALU32_S2_RR<0b0011111,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sll32\t$rt, $rs1, $rs2", []>;
-
-// #34 MAX32
-def MAX32_S0 : HaydnFU_ALU32_S0_RR<0b0100010,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "max32\t$rt, $rs1, $rs2", []>;
-def MAX32_S1 : HaydnFU_ALU32_S1_RR<0b0100010,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "max32\t$rt, $rs1, $rs2", []>;
-def MAX32_S2 : HaydnFU_ALU32_S2_RR<0b0100010,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "max32\t$rt, $rs1, $rs2", []>;
-
-// #35 MAXU32
-def MAXU32_S0 : HaydnFU_ALU32_S0_RR<0b0100011,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "maxu32\t$rt, $rs1, $rs2", []>;
-def MAXU32_S1 : HaydnFU_ALU32_S1_RR<0b0100011,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "maxu32\t$rt, $rs1, $rs2", []>;
-def MAXU32_S2 : HaydnFU_ALU32_S2_RR<0b0100011,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "maxu32\t$rt, $rs1, $rs2", []>;
-
-// #36 MIN32
-def MIN32_S0 : HaydnFU_ALU32_S0_RR<0b0100100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "min32\t$rt, $rs1, $rs2", []>;
-def MIN32_S1 : HaydnFU_ALU32_S1_RR<0b0100100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "min32\t$rt, $rs1, $rs2", []>;
-def MIN32_S2 : HaydnFU_ALU32_S2_RR<0b0100100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "min32\t$rt, $rs1, $rs2", []>;
-
-// #37 MINU32
-def MINU32_S0 : HaydnFU_ALU32_S0_RR<0b0100101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "minu32\t$rt, $rs1, $rs2", []>;
-def MINU32_S1 : HaydnFU_ALU32_S1_RR<0b0100101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "minu32\t$rt, $rs1, $rs2", []>;
-def MINU32_S2 : HaydnFU_ALU32_S2_RR<0b0100101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "minu32\t$rt, $rs1, $rs2", []>;
-
-// #40 BREV32
-def BREV32_S0 : HaydnFU_ALU32_S0_RR<0b0101000,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "brev32\t$rt, $rs1, $rs2", []>;
-def BREV32_S1 : HaydnFU_ALU32_S1_RR<0b0101000,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "brev32\t$rt, $rs1, $rs2", []>;
-def BREV32_S2 : HaydnFU_ALU32_S2_RR<0b0101000,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "brev32\t$rt, $rs1, $rs2", []>;
-
-// #42 SLT32
-def SLT32_S0 : HaydnFU_ALU32_S0_RR<0b0101010,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "slt32\t$rt, $rs1, $rs2", []>;
-def SLT32_S1 : HaydnFU_ALU32_S1_RR<0b0101010,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "slt32\t$rt, $rs1, $rs2", []>;
-def SLT32_S2 : HaydnFU_ALU32_S2_RR<0b0101010,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "slt32\t$rt, $rs1, $rs2", []>;
-
-// #43 SLTU32
-def SLTU32_S0 : HaydnFU_ALU32_S0_RR<0b0101011,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sltu32\t$rt, $rs1, $rs2", []>;
-def SLTU32_S1 : HaydnFU_ALU32_S1_RR<0b0101011,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sltu32\t$rt, $rs1, $rs2", []>;
-def SLTU32_S2 : HaydnFU_ALU32_S2_RR<0b0101011,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sltu32\t$rt, $rs1, $rs2", []>;
-
-// #44 SLE32
-def SLE32_S0 : HaydnFU_ALU32_S0_RR<0b0101100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sle32\t$rt, $rs1, $rs2", []>;
-def SLE32_S1 : HaydnFU_ALU32_S1_RR<0b0101100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sle32\t$rt, $rs1, $rs2", []>;
-def SLE32_S2 : HaydnFU_ALU32_S2_RR<0b0101100,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "sle32\t$rt, $rs1, $rs2", []>;
-
-// #45 SEQ32
-def SEQ32_S0 : HaydnFU_ALU32_S0_RR<0b0101101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "seq32\t$rt, $rs1, $rs2", []>;
-def SEQ32_S1 : HaydnFU_ALU32_S1_RR<0b0101101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "seq32\t$rt, $rs1, $rs2", []>;
-def SEQ32_S2 : HaydnFU_ALU32_S2_RR<0b0101101,
-    (outs GPR32:$rt), (ins GPR32:$rs1, GPR32:$rs2),
-    "seq32\t$rt, $rs1, $rs2", []>;
-
-// #46 MOVT32
-def MOVT32_S0 : HaydnFU_ALU32_S0_RR<0b0101110,
-    (outs GPR32:$rt), (ins GPR32:$rt_src, GPR32:$rs1, GPR32:$rs2),
-    "movt32\t$rt, $rs1, $rs2", []> {
-  let Constraints = "$rt = $rt_src";
-}
-def MOVT32_S1 : HaydnFU_ALU32_S1_RR<0b0101110,
-    (outs GPR32:$rt), (ins GPR32:$rt_src, GPR32:$rs1, GPR32:$rs2),
-    "movt32\t$rt, $rs1, $rs2", []> {
-  let Constraints = "$rt = $rt_src";
-}
-def MOVT32_S2 : HaydnFU_ALU32_S2_RR<0b0101110,
-    (outs GPR32:$rt), (ins GPR32:$rt_src, GPR32:$rs1, GPR32:$rs2),
-    "movt32\t$rt, $rs1, $rs2", []> {
-  let Constraints = "$rt = $rt_src";
-}
-
-// #47 MOVF32
-def MOVF32_S0 : HaydnFU_ALU32_S0_RR<0b0101111,
-    (outs GPR32:$rt), (ins GPR32:$rt_src, GPR32:$rs1, GPR32:$rs2),
-    "movf32\t$rt, $rs1, $rs2", []> {
-  let Constraints = "$rt = $rt_src";
-}
-def MOVF32_S1 : HaydnFU_ALU32_S1_RR<0b0101111,
-    (outs GPR32:$rt), (ins GPR32:$rt_src, GPR32:$rs1, GPR32:$rs2),
-    "movf32\t$rt, $rs1, $rs2", []> {
-  let Constraints = "$rt = $rt_src";
-}
-def MOVF32_S2 : HaydnFU_ALU32_S2_RR<0b0101111,
-    (outs GPR32:$rt), (ins GPR32:$rt_src, GPR32:$rs1, GPR32:$rs2),
-    "movf32\t$rt, $rs1, $rs2", []> {
-  let Constraints = "$rt = $rt_src";
-}
-
-//===----------------------------------------------------------------------===//
-// ALU32 R ops — s0, s1, s2 (3 defs each). 2 GPR32.
-//===----------------------------------------------------------------------===//
-
-// #1 NSA32
-def NSA32_S0 : HaydnFU_ALU32_S0_R<0b0000001,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "nsa32\t$rt, $rs", []>;
-def NSA32_S1 : HaydnFU_ALU32_S1_R<0b0000001,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "nsa32\t$rt, $rs", []>;
-def NSA32_S2 : HaydnFU_ALU32_S2_R<0b0000001,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "nsa32\t$rt, $rs", []>;
-
-// #2 NSAU32
-def NSAU32_S0 : HaydnFU_ALU32_S0_R<0b0000010,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "nsau32\t$rt, $rs", []>;
-def NSAU32_S1 : HaydnFU_ALU32_S1_R<0b0000010,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "nsau32\t$rt, $rs", []>;
-def NSAU32_S2 : HaydnFU_ALU32_S2_R<0b0000010,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "nsau32\t$rt, $rs", []>;
-
-// #16 NOT32
-def NOT32_S0 : HaydnFU_ALU32_S0_R<0b0010000,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "not32\t$rt, $rs", []>;
-def NOT32_S1 : HaydnFU_ALU32_S1_R<0b0010000,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "not32\t$rt, $rs", []>;
-def NOT32_S2 : HaydnFU_ALU32_S2_R<0b0010000,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "not32\t$rt, $rs", []>;
-
-// #20 MOVE32
-def MOVE32_S0 : HaydnFU_ALU32_S0_R<0b0010100,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "move32\t$rt, $rs", []>;
-def MOVE32_S1 : HaydnFU_ALU32_S1_R<0b0010100,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "move32\t$rt, $rs", []>;
-def MOVE32_S2 : HaydnFU_ALU32_S2_R<0b0010100,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "move32\t$rt, $rs", []>;
-
-// #32 ABS32S
-def ABS32S_S0 : HaydnFU_ALU32_S0_R<0b0100000,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "abs32s\t$rt, $rs", []>;
-def ABS32S_S1 : HaydnFU_ALU32_S1_R<0b0100000,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "abs32s\t$rt, $rs", []>;
-def ABS32S_S2 : HaydnFU_ALU32_S2_R<0b0100000,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "abs32s\t$rt, $rs", []>;
-
-// #33 ABS32
-def ABS32_S0 : HaydnFU_ALU32_S0_R<0b0100001,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "abs32\t$rt, $rs", []>;
-def ABS32_S1 : HaydnFU_ALU32_S1_R<0b0100001,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "abs32\t$rt, $rs", []>;
-def ABS32_S2 : HaydnFU_ALU32_S2_R<0b0100001,
-    (outs GPR32:$rt), (ins GPR32:$rs, GPR32:$rs2),
-    "abs32\t$rt, $rs", []>;
-
-// #38 NEG32
-def NEG32_S0 : HaydnFU_ALU32_S0_R<0b0100110,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "neg32\t$rt, $rs", []>;
-def NEG32_S1 : HaydnFU_ALU32_S1_R<0b0100110,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "neg32\t$rt, $rs", []>;
-def NEG32_S2 : HaydnFU_ALU32_S2_R<0b0100110,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "neg32\t$rt, $rs", []>;
-
-// #39 NEG32S
-def NEG32S_S0 : HaydnFU_ALU32_S0_R<0b0100111,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "neg32s\t$rt, $rs", []>;
-def NEG32S_S1 : HaydnFU_ALU32_S1_R<0b0100111,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "neg32s\t$rt, $rs", []>;
-def NEG32S_S2 : HaydnFU_ALU32_S2_R<0b0100111,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "neg32s\t$rt, $rs", []>;
-
-// #41 POPCOUNT32
-def POPCOUNT32_S0 : HaydnFU_ALU32_S0_R<0b0101001,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "popcount32\t$rt, $rs", []>;
-def POPCOUNT32_S1 : HaydnFU_ALU32_S1_R<0b0101001,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "popcount32\t$rt, $rs", []>;
-def POPCOUNT32_S2 : HaydnFU_ALU32_S2_R<0b0101001,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "popcount32\t$rt, $rs", []>;
-
-//===----------------------------------------------------------------------===//
-// ALU32 RI20 ops — s0, s1, s2 (3 defs each). rt,rs,simm20.
-//===----------------------------------------------------------------------===//
-
-// #9 ADDI32
-def ADDI32_S0 : HaydnFU_ALU32_S0_RI20<0b0001001,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "addi32\t$rt, $rs, $imm20", []>;
-def ADDI32_S1 : HaydnFU_ALU32_S1_RI20<0b0001001,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "addi32\t$rt, $rs, $imm20", []>;
-def ADDI32_S2 : HaydnFU_ALU32_S2_RI20<0b0001001,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "addi32\t$rt, $rs, $imm20", []>;
-
-// #10 ADDI32S
-def ADDI32S_S0 : HaydnFU_ALU32_S0_RI20<0b0001010,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "addi32s\t$rt, $rs, $imm20", []>;
-def ADDI32S_S1 : HaydnFU_ALU32_S1_RI20<0b0001010,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "addi32s\t$rt, $rs, $imm20", []>;
-def ADDI32S_S2 : HaydnFU_ALU32_S2_RI20<0b0001010,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "addi32s\t$rt, $rs, $imm20", []>;
-
-// #11 SUBI32
-def SUBI32_S0 : HaydnFU_ALU32_S0_RI20<0b0001011,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "subi32\t$rt, $rs, $imm20", []>;
-def SUBI32_S1 : HaydnFU_ALU32_S1_RI20<0b0001011,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "subi32\t$rt, $rs, $imm20", []>;
-def SUBI32_S2 : HaydnFU_ALU32_S2_RI20<0b0001011,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "subi32\t$rt, $rs, $imm20", []>;
-
-// #12 SUBI32S
-def SUBI32S_S0 : HaydnFU_ALU32_S0_RI20<0b0001100,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "subi32s\t$rt, $rs, $imm20", []>;
-def SUBI32S_S1 : HaydnFU_ALU32_S1_RI20<0b0001100,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "subi32s\t$rt, $rs, $imm20", []>;
-def SUBI32S_S2 : HaydnFU_ALU32_S2_RI20<0b0001100,
-    (outs GPR32:$rt), (ins GPR32:$rs, simm20:$imm20),
-    "subi32s\t$rt, $rs, $imm20", []>;
-
-// #17–#19 ANDI/ORI/XORI — ZEXT imm20 (ISA), not SEXT. Peers match logical bases.
-// #17 ANDI32
-def ANDI32_S0 : HaydnFU_ALU32_S0_RI20<0b0010001,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "andi32\t$rt, $rs, $imm20", []>;
-def ANDI32_S1 : HaydnFU_ALU32_S1_RI20<0b0010001,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "andi32\t$rt, $rs, $imm20", []>;
-def ANDI32_S2 : HaydnFU_ALU32_S2_RI20<0b0010001,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "andi32\t$rt, $rs, $imm20", []>;
-
-// #18 ORI32
-def ORI32_S0 : HaydnFU_ALU32_S0_RI20<0b0010010,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "ori32\t$rt, $rs, $imm20", []>;
-def ORI32_S1 : HaydnFU_ALU32_S1_RI20<0b0010010,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "ori32\t$rt, $rs, $imm20", []>;
-def ORI32_S2 : HaydnFU_ALU32_S2_RI20<0b0010010,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "ori32\t$rt, $rs, $imm20", []>;
-
-// #19 XORI32
-def XORI32_S0 : HaydnFU_ALU32_S0_RI20<0b0010011,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "xori32\t$rt, $rs, $imm20", []>;
-def XORI32_S1 : HaydnFU_ALU32_S1_RI20<0b0010011,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "xori32\t$rt, $rs, $imm20", []>;
-def XORI32_S2 : HaydnFU_ALU32_S2_RI20<0b0010011,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm20:$imm20),
-    "xori32\t$rt, $rs, $imm20", []>;
-
-//===----------------------------------------------------------------------===//
 // ALU32 RI5 ops — s0, s1, s2 (3 defs each). rt,rs,uimm5.
 //===----------------------------------------------------------------------===//
 
-// #24 SRLI32
-def SRLI32_S0 : HaydnFU_ALU32_S0_RI5<0b0011000,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srli32\t$rt, $rs, $imm5", []>;
-def SRLI32_S1 : HaydnFU_ALU32_S1_RI5<0b0011000,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srli32\t$rt, $rs, $imm5", []>;
-def SRLI32_S2 : HaydnFU_ALU32_S2_RI5<0b0011000,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srli32\t$rt, $rs, $imm5", []>;
 
-// #25 SRAI32
-def SRAI32_S0 : HaydnFU_ALU32_S0_RI5<0b0011001,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srai32\t$rt, $rs, $imm5", []>;
-def SRAI32_S1 : HaydnFU_ALU32_S1_RI5<0b0011001,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srai32\t$rt, $rs, $imm5", []>;
-def SRAI32_S2 : HaydnFU_ALU32_S2_RI5<0b0011001,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srai32\t$rt, $rs, $imm5", []>;
 
-// #26 SRAI32R
-def SRAI32R_S0 : HaydnFU_ALU32_S0_RI5<0b0011010,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srai32r\t$rt, $rs, $imm5", []>;
-def SRAI32R_S1 : HaydnFU_ALU32_S1_RI5<0b0011010,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srai32r\t$rt, $rs, $imm5", []>;
-def SRAI32R_S2 : HaydnFU_ALU32_S2_RI5<0b0011010,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "srai32r\t$rt, $rs, $imm5", []>;
 
-// #27 SLLI32
-def SLLI32_S0 : HaydnFU_ALU32_S0_RI5<0b0011011,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "slli32\t$rt, $rs, $imm5", []>;
-def SLLI32_S1 : HaydnFU_ALU32_S1_RI5<0b0011011,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "slli32\t$rt, $rs, $imm5", []>;
-def SLLI32_S2 : HaydnFU_ALU32_S2_RI5<0b0011011,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "slli32\t$rt, $rs, $imm5", []>;
 
 //===----------------------------------------------------------------------===//
 // ALU32 I12 (LUI) — s0 ONLY (LUI is a wide-immediate form; per spec #23 it is
 // the I12 class. s0 hosts long-immediate; s1/s2 do not — s0-only here.)
 //===----------------------------------------------------------------------===//
 
-// #23 LUI
-// The legacy LUI (FmtI) carries a vestigial $rs operand (always R0/zero, a
-// leftover from the I-type template). The slot dag must declare it so the
-// runtime MI's operand count matches. `rs` binds to the unencoded rs field
-// (always 0); the encoding is unchanged. See BUG 1.
-def LUI_S0 : HaydnFU_ALU32_S0_I12<0b0010111,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm12:$imm12),
-    "lui\t$rt, $imm12", []>;
+// #23 LUI — FieldSlot retired. Logical LUI still carries the vestigial
+// $rs operand (always R0/zero) so runtime MI operand count matches.
 
 //===----------------------------------------------------------------------===//
 // ALU32 I8 (ZERO_GPR) — s0, s1, s2 (3 defs). rt only.
 //===----------------------------------------------------------------------===//
 
-// #64 ZERO_GPR
-def ZERO_GPR_S0 : HaydnFU_ALU32_S0_I8<0b1000000,
-    (outs GPR32:$rt), (ins),
-    "zero_gpr\t$rt", []>;
-def ZERO_GPR_S1 : HaydnFU_ALU32_S1_I8<0b1000000,
-    (outs GPR32:$rt), (ins),
-    "zero_gpr\t$rt", []>;
-def ZERO_GPR_S2 : HaydnFU_ALU32_S2_I8<0b1000000,
-    (outs GPR32:$rt), (ins),
-    "zero_gpr\t$rt", []>;
 
 //===----------------------------------------------------------------------===//
 // ALU32 MOVE32_DR_L / MOVE32_DR_H (#21/22) — s0, s1, s2 (3 defs each).
@@ -1013,136 +514,18 @@ def ZERO_GPR_S2 : HaydnFU_ALU32_S2_I8<0b1000000,
 // One def per slot per variant.
 //===----------------------------------------------------------------------===//
 
-// #21 MOVE32_DR_L
-def MOVE32_DR_L_S0 : HaydnFU_ALU32_S0_R_DR<0b0010101,
-    (outs GPR32:$rt), (ins DR64:$rsd),
-    "move32_dr_l\t$rt, $rsd", []>;
-def MOVE32_DR_L_S1 : HaydnFU_ALU32_S1_R_DR<0b0010101,
-    (outs GPR32:$rt), (ins DR64:$rsd),
-    "move32_dr_l\t$rt, $rsd", []>;
-def MOVE32_DR_L_S2 : HaydnFU_ALU32_S2_R_DR<0b0010101,
-    (outs GPR32:$rt), (ins DR64:$rsd),
-    "move32_dr_l\t$rt, $rsd", []>;
 
-// #22 MOVE32_DR_H
-def MOVE32_DR_H_S0 : HaydnFU_ALU32_S0_R_DR<0b0010110,
-    (outs GPR32:$rt), (ins DR64:$rsd),
-    "move32_dr_h\t$rt, $rsd", []>;
-def MOVE32_DR_H_S1 : HaydnFU_ALU32_S1_R_DR<0b0010110,
-    (outs GPR32:$rt), (ins DR64:$rsd),
-    "move32_dr_h\t$rt, $rsd", []>;
-def MOVE32_DR_H_S2 : HaydnFU_ALU32_S2_R_DR<0b0010110,
-    (outs GPR32:$rt), (ins DR64:$rsd),
-    "move32_dr_h\t$rt, $rsd", []>;
 
 //===----------------------------------------------------------------------===//
-// S0-ONLY CFG / system family (branches / JAL / JALR / HWLOOP / WFI / CSR).
-// Per spec §1.3 these issue in s0 ONLY — NOT authored for s1/s2.
+// S0-ONLY CFG / system family. Compact non-W FieldSlots (BEQ/JAL/CSR/LUI/
+// SET_HWLOOP) are retired — occupancy uses Format E e0 members. WFI has no
+// Format E member, so WFI_S0 stays. *_W_S0 FieldSlots stay (StripWide=false).
 //===----------------------------------------------------------------------===//
 
-// #48 BEQ (RI12: rs1,rs2,imm12)
-def BEQ_S0 : HaydnFU_ALU32_S0_RI12<0b0110000,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
-    "beq\t$rs, $rt, $imm12", []>;
-
-// #49 BEQZ (I12: rs,imm12)
-def BEQZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0110001,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
-    "beqz\t$rs, $imm12", []>;
-
-// #50 BNE (RI12: rs1,rs2,imm12)
-def BNE_S0 : HaydnFU_ALU32_S0_RI12<0b0110010,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
-    "bne\t$rs, $rt, $imm12", []>;
-
-// #51 BNEZ (I12: rs,imm12)
-def BNEZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0110011,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
-    "bnez\t$rs, $imm12", []>;
-
-// #52 BGE (RI12)
-def BGE_S0 : HaydnFU_ALU32_S0_RI12<0b0110100,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
-    "bge\t$rs, $rt, $imm12", []>;
-
-// #53 BGEZ (I12)
-def BGEZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0110101,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
-    "bgez\t$rs, $imm12", []>;
-
-// #54 BGEU (RI12)
-def BGEU_S0 : HaydnFU_ALU32_S0_RI12<0b0110110,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
-    "bgeu\t$rs, $rt, $imm12", []>;
-
-// #55 BLT (RI12)
-def BLT_S0 : HaydnFU_ALU32_S0_RI12<0b0110111,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
-    "blt\t$rs, $rt, $imm12", []>;
-
-// #56 BLTZ (I12)
-def BLTZ_S0 : HaydnFU_ALU32_S0_I12_ONE<0b0111000,
-    (outs), (ins GPR32:$rs, simm12:$imm12),
-    "bltz\t$rs, $imm12", []>;
-
-// #57 BLTU (RI12)
-def BLTU_S0 : HaydnFU_ALU32_S0_RI12<0b0111001,
-    (outs), (ins GPR32:$rs, GPR32:$rt, simm12:$imm12),
-    "bltu\t$rs, $rt, $imm12", []>;
-
-// #58 JAL (I20: rt,imm20). : the imm20 field stores the signed 20-bit
-// PC-relative byte offset directly (no ÷2 scaling on this slot format, unlike
-// legacy JAL). calltarget_s0 sign-extends the field on decode so negative
-// call offsets render correctly (-5084, not 1043492). The encoder side is
-// unchanged (default getMachineOpValue raw encode = byte-identical).
-def JAL_S0 : HaydnFU_ALU32_S0_I20<0b0111010,
-    (outs GPR32:$rt), (ins calltarget_s0:$imm20),
-    "jal\t$rt, $imm20", []>;
-
-// #59 JALR (RI12: rt,rs,imm12). residual: the imm12 field stores the
-// signed 12-bit rs-relative BYTE offset directly (no ÷2 scaling on this slot
-// format, matching the WIDE JALR_W `calltarget_wide_ri12` Shift=0). The prior
-// `simm12` operand has no DecoderMethod, so the tablegen default stored the
-// raw 12-bit field UNSIGNED (-100 -> 3996). calltarget_s0_ri12 sign-extends
-// the field on decode so negative offsets render correctly. The encoder side
-// is unchanged (default getMachineOpValue raw encode = byte-identical).
-def JALR_S0 : HaydnFU_ALU32_S0_RI12<0b0111011,
-    (outs GPR32:$rt), (ins GPR32:$rs, calltarget_s0_ri12:$imm12),
-    "jalr\t$rt, $rs, $imm12", []>;
-
-// #60 SET_HWLOOP (HWLRIII: loop_id, count, target — TODO(spec) field split)
-def SET_HWLOOP_S0 : HaydnFU_ALU32_S0_HWLOOP<0b0111100,
-    (outs), (ins uimm1:$loop_id, simm20:$count, simm10:$target),
-    "set_hwloop\t$loop_id, $count, $target", []>;
-
-// #61 SET_HWLOOP_F2 (HWLRIIR: loop_id, count, rs — TODO(spec) field split)
-def SET_HWLOOP_F2_S0 : HaydnFU_ALU32_S0_HWLOOP_F2<0b0111101,
-    (outs), (ins uimm1:$loop_id, simm20:$count, GPR32:$rs),
-    "set_hwloop_f2\t$loop_id, $count, $rs", []>;
-
-// #62 SET_HWLOOP_REG (HWLRRRR: 4 GPR32 — TODO(spec) reg roles)
-def SET_HWLOOP_REG_S0 : HaydnFU_ALU32_S0_HWLOOP_REG<0b0111110,
-    (outs), (ins GPR32:$r0, GPR32:$r1, GPR32:$r2, GPR32:$r3),
-    "set_hwloop_reg\t$r0, $r1, $r2, $r3", []>;
-
-// #63 WFI (HINT: no operands)
+// #63 WFI (HINT: no operands). No Format E member — occupancy Fallback.
 def WFI_S0 : HaydnFU_ALU32_S0_HINT<0b0111111,
     (outs), (ins),
     "wfi", []>;
-
-// #65 CSRR (I8: rt,uimm8)
-def CSRR_S0 : HaydnFU_ALU32_S0_CSR<0b1000001,
-    (outs GPR32:$r), (ins uimm8:$csr, GPR32:$rs),
-    "csrr\t$r, $csr", []>;
-
-// #66 CSRW (I8: uimm8, rs). Two-operand shape (no dead def) — the decoder
-// requires every operand to have an Inst field. Legacy CSRW keeps the 3-op
-// FmtCSR shape for MC parity; encodeSlotSubInst drops the leading dead def
-// when leaveRegion setDesc commits CSRW → CSRW_S0 (see HaydnMCCodeEmitter.cpp).
-let hasSideEffects = 1, Defs = [SFR] in
-def CSRW_S0 : HaydnFU_ALU32_S0_CSR<0b1000010,
-    (outs), (ins uimm8:$csr, GPR32:$r),
-    "csrw\t$csr, $r", []>;
 
 // CSRW_W — s0 CSR write (AsmPrinter SETCBR / HWLR path).
 let hasSideEffects = 1, Defs = [SFR] in
@@ -1195,9 +578,9 @@ def ORI32_W_S0 : HaydnFU_ALU32_S0_RI20<0b1110001,
 //
 // The selector emits the legacy `*_W` branch forms (JAL_W, JALR_W, BEQ_W
 // BEQZ_W, BNEZ_W). confirmed a pure alias to the non-W `_S0`
-// siblings is WRONG: the non-W siblings use Shift=0 operands (raw byte offset
-// while the `_W` forms use Shift=1 (offset ÷2, §5.14 D1). A shared
-// codepoint would force the decoder to apply ONE shift -> wrong round-trip.
+// siblings is WRONG historically: `_W` used Shift=1. GE96-03: both are
+// byte PC+imm (Shift=0). Distinct codepoints remain for operand-class
+// pairing; scale no longer differs.
 //
 // FIX (option 2): DISTINCT codepoints (67-71, free s0-ALU32-FU range
 // above the golden set ending at 66) carrying the ÷2-scaled branch-target
@@ -1316,12 +699,12 @@ def BLTZ_W_S0 : HaydnFU_ALU32_S0_I12_ONE<0b1010101,
 // remain the decoder entries); the emitter table includes them so
 // getBinaryCodeForInstr resolves them.
 //
-// AlternateInsts name-peer alts: `NOP` -> `NOP_S0`,
-// `C_ADD32` -> `C_ADD32_S0`, etc.; leaveRegion setDesc commits them
-// (Desc-as-is encode).
+// AlternateInsts name-peer alt: `NOP` -> `NOP_S0` (CompletionState pad).
+// Compact/G FieldSlots C_ADD32_S0 / C_ADDI32_S0 / SUB32_G_S0 are deleted:
+// no LogicalMaterialize row, no C++ enum use, no Format E member.
 //===----------------------------------------------------------------------===//
 
-// NOP (legacy HaydnInst16, 16-bit all-zero). A standalone NOP as a
+// NOP logical mnemonic. A standalone NOP as a
 // slot-0: FU=0, opcode=0, all-zero payload (matches the all-zero composite).
 // isReMaterializable mirrors the legacy NOP def.
 def NOP_S0 : HaydnFU_ALU32_S0_HINT<0b0000000,
@@ -1330,31 +713,6 @@ def NOP_S0 : HaydnFU_ALU32_S0_HINT<0b0000000,
   let isReMaterializable = 1;
   let isCodeGenOnly = 1;
 }
-
-// C_ADD32 (legacy FmtC_ALU32R<0x00>, destructive rt = rt + rs, GPR32Lo).
-// Legacy MI operands: [rt(out), rs(in)] — 2 operands. S0 ALU32 R
-// (rt, rs) — 2 operands matching the logical shape for setDesc.
-let isCodeGenOnly = 1 in
-def C_ADD32_S0 : HaydnFU_ALU32_S0_R<0b1001000,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "c_add32\t$rt, $rs", []>;
-
-// C_ADDI32 (legacy FmtC_ALU32SI<0x0>, destructive rt = rt + imm5, GPR32Lo).
-// Legacy MI operands: [rt(out), rt_in(in,tied), imm(in)]. S0
-// ALU32 RI5 (rt, rs, imm5): setDesc maps $rs <- legacy rt_in (=rt), so rs
-// carries the destructive source correctly.
-let isCodeGenOnly = 1 in
-def C_ADDI32_S0 : HaydnFU_ALU32_S0_RI5<0b1001001,
-    (outs GPR32:$rt), (ins GPR32:$rs, uimm5:$imm5),
-    "c_addi32\t$rt, $rs, $imm5", []>;
-
-// SUB32_G (legacy FmtG_S0_ALU32<0x01>, destructive rd = rd - rs1, GPR32Lo).
-// Legacy MI operands: [rd(out), rs1(in)]. S0: use the R class
-// (2 ops: rt, rs) so setDesc preserves operand count (RR would be 3 ops).
-let isCodeGenOnly = 1 in
-def SUB32_G_S0 : HaydnFU_ALU32_S0_R<0b1001010,
-    (outs GPR32:$rt), (ins GPR32:$rs),
-    "sub32_g\t$rt, $rs", []>;
 
 // SET_HWLOOP_W — residual s0 form (legacy wide 0x88 geometry mapped into
 // ALU32 S0). Live path: real SET_HWLOOP_W before pack → leaveRegion setDesc

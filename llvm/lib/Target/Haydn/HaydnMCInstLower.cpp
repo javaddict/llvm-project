@@ -13,10 +13,14 @@
 
 #include "HaydnMCInstLower.h"
 #include "HaydnAsmPrinter.h"
+#include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -26,9 +30,18 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-mcinstlower"
 
-static bool isHwloopWideSetup(unsigned Opc) {
-  return Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
-         Opc == Haydn::SET_HWLOOP_W_S0 || Opc == Haydn::SET_HWLOOP_F2_W_S0;
+static bool isHwloopWideSetup(const MachineInstr &MI) {
+  const unsigned Opc = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
+  if (Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W)
+    return true;
+  const MachineFunction *MF = MI.getMF();
+  if (!MF)
+    return false;
+  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
+  const std::string Log =
+      haydn::format_e::peelLogicalOpcodeName(TII->getName(Opc));
+  return StringRef(Log).equals_insensitive("SET_HWLOOP") ||
+         StringRef(Log).equals_insensitive("SET_HWLOOP_F2");
 }
 
 void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
@@ -43,7 +56,7 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // temp labels (HWLR_BEGIN = first real of body, HWLR_END = last real of
   // latch). Owned by Lower so BUNDLE/standalone stay pure Desc-as-is (no
   // printer dual-path expand).
-  const bool Hwloop = isHwloopWideSetup(MI->getOpcode());
+  const bool Hwloop = isHwloopWideSetup(*MI);
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);

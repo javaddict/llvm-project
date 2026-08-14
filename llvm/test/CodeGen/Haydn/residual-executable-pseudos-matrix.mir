@@ -1,0 +1,210 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-verify-bundles %t/load_addr.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=LOAD_ADDR
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-verify-bundles %t/setcbr.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SETCBR
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/post_inc.mir -o - 2>&1 | FileCheck %s --check-prefix=POSTINC
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_setcbr.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_SETCBR
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_load_addr.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_ADDR
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_vaarg.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_VAARG
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_vastart.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_VASTART
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_vacopy.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_VACOPY
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_pseudocall.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_CALL
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_ld64_post.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_LD64
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_libcall.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_LIBCALL
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/printer_mov_gpr.mir -o - 2>&1 | FileCheck %s --check-prefix=PRINT_MOV
+
+# Role: verifier — residual executable-pseudo fatal matrix.
+
+#--- load_addr.mir
+--- |
+  define void @residual_load_addr() { ret void }
+...
+---
+name:            residual_load_addr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; LOAD_ADDR: residual cycle-forming pseudo
+    $r1 = LOAD_ADDR 0
+    RET implicit $r15
+
+#--- setcbr.mir
+--- |
+  define void @residual_setcbr() { ret void }
+...
+---
+name:            residual_setcbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SETCBR: residual cycle-forming pseudo
+    SETCBR_BEGIN 0, $r1
+    RET implicit $r15
+
+#--- post_inc.mir
+--- |
+  define void @residual_post_inc() { ret void }
+...
+---
+name:            residual_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; POSTINC: residual executable pseudo
+    $r1 = LD32_POST_INC $r2, 4, 0
+    RET implicit $r15
+
+#--- printer_setcbr.mir
+--- |
+  define void @printer_residual_setcbr() { ret void }
+...
+---
+name:            printer_residual_setcbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; PRINT_SETCBR: residual {{cycle-forming|executable}} pseudo
+    SETCBR_END 0, $r1
+    RET implicit $r15
+
+#--- printer_load_addr.mir
+--- |
+  define void @printer_residual_load_addr() { ret void }
+...
+---
+name:            printer_residual_load_addr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; PRINT_ADDR: residual {{cycle-forming|executable}} pseudo
+    $r1 = LOAD_ADDR 0
+    RET implicit $r15
+
+#--- printer_vaarg.mir
+--- |
+  define void @printer_residual_vaarg() { ret void }
+...
+---
+name:            printer_residual_vaarg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; PRINT_VAARG: residual executable pseudo
+    $r1 = VAARG_I32 $r2
+    RET implicit $r15
+
+#--- printer_vastart.mir
+--- |
+  define void @printer_residual_vastart() { ret void }
+...
+---
+name:            printer_residual_vastart
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; PRINT_VASTART: VASTART/VACOPY must be expanded
+    VASTART $r1
+    RET implicit $r15
+
+#--- printer_vacopy.mir
+--- |
+  define void @printer_residual_vacopy() { ret void }
+...
+---
+name:            printer_residual_vacopy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; PRINT_VACOPY: VASTART/VACOPY must be expanded
+    VACOPY $r1, $r2
+    RET implicit $r15
+
+#--- printer_pseudocall.mir
+--- |
+  declare void @callee()
+  define void @printer_residual_pseudocall() { ret void }
+...
+---
+name:            printer_residual_pseudocall
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; PRINT_CALL: residual executable pseudo
+    $r15 = PseudoCALL @callee, csr_haydn
+    RET implicit $r15
+
+#--- printer_ld64_post.mir
+--- |
+  define void @printer_residual_ld64_post() { ret void }
+...
+---
+name:            printer_residual_ld64_post
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; PRINT_LD64: residual executable pseudo
+    $d0 = LD64_POST_INC $r2, 8, 0
+    RET implicit $r15
+
+#--- printer_libcall.mir
+--- |
+  define void @printer_residual_libcall() { ret void }
+...
+---
+name:            printer_residual_libcall
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r3, $r4, $r15
+    ; PRINT_LIBCALL: residual cross-bank or LIBCALL
+    $r1 = LIBCALL_SDIV $r3, $r4, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit-def $r15
+    RET implicit $r15
+
+#--- printer_mov_gpr.mir
+--- |
+  define void @printer_residual_mov_gpr() { ret void }
+...
+---
+name:            printer_residual_mov_gpr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; PRINT_MOV: residual cross-bank or LIBCALL
+    $d0 = MOV_GPR_TO_DR64 $r1, $r2
+    RET implicit $r15

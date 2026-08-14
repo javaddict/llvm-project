@@ -21,7 +21,7 @@
 
 define i32 @test_basic_return(i32 %a) nounwind {
 ; CHECK-LABEL: test_basic_return:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret i32 %a
 }
 
@@ -35,7 +35,7 @@ define i32 @test_beqz_path(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: test_beqz_path:
 ; On the is_zero path, %a is 0. The redundant copy elim may eliminate
 ; copies that set the return value to 0 when the condition already implies it.
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %cmp = icmp eq i32 %a, 0
   br i1 %cmp, label %is_zero, label %not_zero
@@ -54,7 +54,7 @@ not_zero:
 
 define i32 @test_beq_path(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: test_beq_path:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %equal, label %notequal
@@ -70,7 +70,7 @@ notequal:
 
 define i32 @test_nested_conditions(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: test_nested_conditions:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %cmp1 = icmp eq i32 %a, 0
   br i1 %cmp1, label %a_zero, label %a_nonzero
@@ -104,7 +104,7 @@ a_ne_c:
 
 define i32 @test_phi_same_value(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: test_phi_same_value:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %left, label %right
@@ -126,7 +126,7 @@ join:
 
 define i32 @test_preserve_live_copies(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: test_preserve_live_copies:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %ret_a, label %ret_b
@@ -145,7 +145,7 @@ ret_b:
 define i32 @test_csr_preserve(i32 %a) nounwind {
 ; CHECK-LABEL: test_csr_preserve:
 ; CHECK: mull
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = mul i32 %a, %a
   ret i32 %r
 }
@@ -157,7 +157,7 @@ define i32 @test_csr_preserve(i32 %a) nounwind {
 
 define i32 @test_seq32_bnez(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: test_seq32_bnez:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %eq_path, label %ne_path

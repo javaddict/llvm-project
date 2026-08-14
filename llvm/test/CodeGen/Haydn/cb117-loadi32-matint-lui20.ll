@@ -8,7 +8,7 @@
 ; (Val>>16) + LUI + ADDI split.
 ;
 ; Critical poison: 0xFFFF under the old expander became
-; lui rN, 1; addi32_w rN, rN, 65535 → 0x0010FFFF on real LUI
+; lui rN, 1; addi32 rN, rN, 65535 → 0x0010FFFF on real LUI
 ; which then poisoned AND masks and (when remat/spilled) load bases →
 ; BundleSim MEMORY_FAULT ALIGNMENT on ld32 from 0x10ffff.
 

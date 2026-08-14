@@ -25,17 +25,17 @@ define i32 @phi_loop_counter(i32 %n) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, -1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, -1 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { addi32 r2, r2, 1; addi32 r3, r2, 2 }
 ; CHECK-NEXT:    { nop; slt32 r3, r3, r1 }
-; CHECK-NEXT:    { nop; bnez_w r3, .LBB0_1 }
+; CHECK-NEXT:    { nop; bnez r3, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -53,22 +53,21 @@ define i64 @phi_i64_loop(i32 %n, i64 %init) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; sext32t64 d2, r2 }
 ; CHECK-NEXT:    { nop; slli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; srli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:  .LBB1_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { addi32 r2, r2, 1; or64 d1, d0, d0 }
 ; CHECK-NEXT:    { add64 d0, d1, d2; slt32 r3, r2, r1 }
-; CHECK-NEXT:    { nop; bnez_w r3, .LBB1_1 }
+; CHECK-NEXT:    { nop; bnez r3, .LBB1_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; or64 d0, d1, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -89,17 +88,17 @@ define i32 @phi_double(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32 r2, r1 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, -2 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, -2 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:  .LBB2_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { addi32 r1, r1, 3; addi32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; slt32 r4, r3, r2 }
-; CHECK-NEXT:    { nop; bnez_w r4, .LBB2_1 }
+; CHECK-NEXT:    { nop; bnez r4, .LBB2_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -119,7 +118,7 @@ exit:
 ; bnez_w in its rebaseline, but phi_const_init's back-edge was never
 ; SFR-stripped — the fused form survived, so bnez_w was unsatisfiable. Reverted.
 ; 2026-07 update: the loop is now converted to a hardware loop
-; (set_hwloop_f2_w) by the HWLoops pass — the scalar blt_w back-edge is gone.
+; (set_hwloop_f2) by the HWLoops pass — the scalar blt_w back-edge is gone.
 define i32 @phi_const_init(i32 %n) nounwind {
 ; Cmp+branch fusion no longer fires; loop back-edge is slt32+bnez_w
 ; (was a fused blt_w before the Flex cutover).
@@ -127,20 +126,19 @@ define i32 @phi_const_init(i32 %n) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { nop; move32 r3, r4 }
 ; CHECK-NEXT:  .LBB3_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; move32 r2, r4 }
 ; CHECK-NEXT:    { addi32 r3, r3, 1; add32 r4, r3, r2 }
 ; CHECK-NEXT:    { addi32 r4, r4, 1; slt32 r5, r3, r1 }
-; CHECK-NEXT:    { nop; bnez_w r5, .LBB3_1 }
+; CHECK-NEXT:    { nop; bnez r5, .LBB3_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -160,8 +158,7 @@ define i32 @phi_nested_loops(i32 %n, i32 %m) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { move32 r3, r4; move32 r5, r4 }
 ; CHECK-NEXT:  .LBB4_1: // %outer
 ; CHECK-NEXT:    // =>This Loop Header: Depth=1
@@ -172,17 +169,17 @@ define i32 @phi_nested_loops(i32 %n, i32 %m) nounwind {
 ; CHECK-NEXT:    // => This Inner Loop Header: Depth=2
 ; CHECK-NEXT:    { nop; addi32 r6, r6, 1 }
 ; CHECK-NEXT:    { nop; slt32 r7, r6, r2 }
-; CHECK-NEXT:    { nop; bnez_w r7, .LBB4_2 }
+; CHECK-NEXT:    { nop; bnez r7, .LBB4_2 }
 ; CHECK-NEXT:  // %bb.3: // %outer_latch
 ; CHECK-NEXT:    // in Loop: Header=BB4_1 Depth=1
 ; CHECK-NEXT:    { addi32 r5, r5, 1; add32 r3, r3, r6 }
 ; CHECK-NEXT:    { nop; slt32 r7, r5, r1 }
-; CHECK-NEXT:    { nop; bnez_w r7, .LBB4_1 }
+; CHECK-NEXT:    { nop; bnez r7, .LBB4_1 }
 ; CHECK-NEXT:  // %bb.4: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %outer
 outer:
@@ -211,22 +208,21 @@ define i64 @phi_mixed_types(i32 %n) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r2 }
 ; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:  .LBB5_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { addi32 r2, r2, 1; sext32t64 d2, r2 }
 ; CHECK-NEXT:    { slt32 r3, r2, r1; or64 d0, d1, d1 }
 ; CHECK-NEXT:    { nop; add64 d1, d0, d2 }
-; CHECK-NEXT:    { nop; bnez_w r3, .LBB5_1 }
+; CHECK-NEXT:    { nop; bnez r3, .LBB5_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:
@@ -247,8 +243,7 @@ define i32 @phi_cond_update(i32 %n, i32 %x) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { nop; move32 r5, r4 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -256,12 +251,12 @@ define i32 @phi_cond_update(i32 %n, i32 %x) nounwind {
 ; CHECK-NEXT:    { addi32 r7, r3, 1; addi32 r5, r5, 1 }
 ; CHECK-NEXT:    { nop; slt32 r12, r5, r1 }
 ; CHECK-NEXT:    { nop; movt32 r4, r7, r6 }
-; CHECK-NEXT:    { nop; bnez_w r12, .LBB6_1 }
+; CHECK-NEXT:    { nop; bnez r12, .LBB6_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:

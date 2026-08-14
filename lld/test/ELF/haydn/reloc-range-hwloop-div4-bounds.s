@@ -5,13 +5,11 @@
 # Format E SET_HWLOOP with cross-section body/end labels.
 # EncodedBytes=12: no .balign 16 after SET (writeNopData rejects 4 B pads).
 #
-# Live emission uses R_HAYDN_32 for symbolic Off1/Off2 (HWLoopOff1/Off2
-# FieldLsb residual GE96). Pin assemble + reloc presence + successful
-# in-range link. OOR fail-closed on HWLoopOff is residual until product
-# restores typed HWLoopOff relocs.
+# Live emission uses typed R_HAYDN_HWLoopOff1/Off2 for symbolic Off1/Off2.
+# Pin assemble + reloc presence + successful in-range link.
 
-# RELOCS-DAG: R_HAYDN_32 loop_body
-# RELOCS-DAG: R_HAYDN_32 loop_end
+# RELOCS-DAG: R_HAYDN_HWLoopOff1 loop_body
+# RELOCS-DAG: R_HAYDN_HWLoopOff2 loop_end
 
 # Positive in-range link (body@0x100F0, end@0x100FC = body + one Format E
 # 12-byte parcel via .ld script placement of .text.body).

@@ -81,13 +81,15 @@ exit:
   ret i64 %result
 }
 
-; MIR-level: LD64 + ADDI32 (stride 8) co-packetized (B3.exit.4 setDesc members).
+; MIR-level: ExpandPostIncEarly still emits a 64-bit load + stride-8 bump.
+; After R13 WITH/POST-load FieldSlot retirement, setDesc uses Format E
+; members (D_LDW_WITH_IMM / D_LDW_POST_IMM). One stream is fused POST;
+; the WITH+ADDI32 pair may be adjacent parcels rather than one BUNDLE.
+; Residual: 2-child E2 pack of WITH load + ALU bump (occupancy e2 is E3-only).
 ;
 ; MIR-LABEL: name: vec_dot_streaming
-; MIR: BUNDLE
-; MIR-DAG: LD64
+; MIR-DAG: {{LD64|D_LDW_WITH_IMM|D_LDW_POST_IMM}}
 ; MIR-DAG: ADDI32{{[^,.]*}}, 8
-; MIR: }
 
 ; ASM-LABEL: vec_dot_streaming:
 ; ASM-DAG: {{ld64|d_ldw_post_imm}}

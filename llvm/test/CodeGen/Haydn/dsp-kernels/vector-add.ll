@@ -35,7 +35,7 @@ define void @vector_add(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK:         slt32
 ; CHECK:         set_hwloop_f2
 ; CHECK:         add32
-; CHECK:         jalr_w{{(\.s[012])?}}
+; CHECK:         jalr{{(\.s[012])?}}
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %loop, label %exit

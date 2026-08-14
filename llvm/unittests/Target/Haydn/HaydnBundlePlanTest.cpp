@@ -266,11 +266,19 @@ TEST(HaydnBundlePlanTest, SelectCompletionForRow) {
   EXPECT_EQ(selectCompletionFor(BundleFormatRowID::E96TwoEntry, 0),
             CompletionStateID::StubIdle);
   EXPECT_EQ(selectCompletionFor(BundleFormatRowID::E96TwoEntry, 1),
-            CompletionStateID::StubE2Singleton);
+            CompletionStateID::AllEntriesReal);
   EXPECT_EQ(selectCompletionFor(BundleFormatRowID::E96TwoEntry, 2),
             CompletionStateID::AllEntriesReal);
   EXPECT_EQ(selectCompletionFor(BundleFormatRowID::E96ThreeEntry, 3),
             CompletionStateID::AllEntriesReal);
+  EXPECT_EQ(selectCompletionForMembersAndPads(BundleFormatRowID::E96TwoEntry,
+                                              /*RealMembers=*/0,
+                                              /*HasPadNop=*/true),
+            CompletionStateID::AllEntriesReal);
+  EXPECT_EQ(selectCompletionForMembersAndPads(BundleFormatRowID::E96TwoEntry,
+                                              /*RealMembers=*/0,
+                                              /*HasPadNop=*/false),
+            CompletionStateID::StubIdle);
   EXPECT_TRUE(isProductLegalCompletion(CompletionStateID::AllEntriesReal));
   EXPECT_TRUE(isStubCompletion(CompletionStateID::StubIdle));
 }

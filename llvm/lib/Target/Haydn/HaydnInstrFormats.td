@@ -11,11 +11,11 @@
 // LIVE encode path : Format E only — 12-byte parcel
 // {s2[39:0], s1[39:0], s0[47:0]} via HaydnFormats*.td + HaydnCompositeFormats.td.
 // These legacy format classes still back codegen *names* (selector MIR) and
-// residual `_W` / G / C defs until Phase-5 M0 island delete. EncodedWidth in
-// TSFlags is NOT consulted by getInstSizeInBytes — sizes from committed
+// residual `_W` / G / C defs until Phase-5 M0 island delete. Width bits in
+// TSFlags are NOT consulted by getInstSizeInBytes — sizes from committed
 // FormatID → EncodedBytes / ProductFormatDesc.Bytes (AIE Format->getSize).
 //
-// TSFlags layout (historical; sizing ignores EncodedWidth subsequent):
+// TSFlags layout (historical; sizing ignores retired width tags):
 // Bits [2:0] = VLIW slot mask (0b001=Slot0, 0b010=Slot1, 0b100=Slot2)
 // Bits [4:3] = Encoded width tag (retired for emit sizing)
 //
@@ -132,9 +132,8 @@ def calltarget_s0_ri12 : Operand<OtherVT> {
 // Template parameters (see getSImmOpValueXStepWide / decodeSImmOperandXStepWide
 // in HaydnMCCodeEmitter.cpp / HaydnDisassembler.cpp):
 // N = encoded field width in bits
-// Shift = right-shift applied to the immediate before masking (÷2 for
-// §5.14 branch offsets, ÷4 for §5.11/5.12 hwloop offsets, 0
-// otherwise). Decoder reverses with `<<Shift`.
+// Shift = right-shift applied to the immediate before masking (0 for
+// GE96-03 branch/call byte PC+imm, ÷4 for SET_HWLOOP offsets).
 // IsSigned = 1 => sign-extend the masked field on decode; 0 => zero-extend.
 // IsPCRel = 1 => the symbolic fixup is PC-relative; 0 => absolute.
 // FixupKind = Haydn::FIXUP_HAYDN_* kind pushed when the operand is symbolic
@@ -153,7 +152,7 @@ def calltarget_s0_ri12 : Operand<OtherVT> {
 // encoder tests for NONE and skips the MCFixup::create call.
 //===----------------------------------------------------------------------===//
 
-// 48-bit MOVEI imm32 field (encoding_manual.md §4). Full 32-bit immediate at
+// 48-bit MOVEI imm32 field. TableGen size-6 shell; product encode is Format E member. Full 32-bit immediate at
 // bits[47:16]; signed (MOVEI_H sign-extends the high half). Symbolic targets
 // emit FIXUP_HAYDN_32 (absolute, 4-byte field) — matches encode48Bit.
 def simm32_movei
@@ -168,8 +167,9 @@ def simm32_movei
   let DecoderMethod = "decodeSImmOperandXStepWide<32,0,/*IsSigned*/1>";
 }
 
-// 48-bit WIDE GPR-Imm signed imm20 (encoding_manual.md §5.4, ADDI32_W
-// SUBI32_W / ADDI32S_W / SUBI32S_W / ANDI32_W / XORI32_W). bits[47:28]; field
+// 48-bit WIDE GPR-Imm signed imm20 (ADDI32_W / SUBI32_W / ADDI32S_W /
+// SUBI32S_W / ANDI32_W / XORI32_W). TableGen size-6 shell; product encode
+// is Format E member. bits[47:28]; field
 // is the masked 20-bit value. Symbolic targets emit FIXUP_HAYDN_LO20
 // (absolute) — matches encode48BitGPR for the signed-ALU opcodes.
 def simm20_wide_abs
@@ -193,39 +193,37 @@ def uimm20_wide_abs
   let DecoderMethod = "decodeSImmOperandXStepWide<20,0,/*IsSigned*/0>";
 }
 
-// 48-bit WIDE Branch I20 (JAL_W, encoding_manual.md §5.5). bits[47:28];
-// offset in 2-byte units (§5.14 D1: field stores offset>>1, decoder
-// sign-extends then shifts left 1). Symbolic target emits the dedicated
-// FIXUP_HAYDN_WIDE_CallSImm20 (PC-rel, TargetOffset=28).
+// 48-bit WIDE Branch I20 (JAL_W). TableGen size-6 shell; product encode is Format E member. bits[47:28];
+// JAL 20-bit PC-relative BYTE offset (GE96-03: field = PC+imm, no ÷2).
 def brtarget_wide_i20 : Operand<OtherVT> {
   let EncoderMethod =
-      "getSImmOpValueXStepWide<20,/*Shift*/1,/*IsSigned*/1,/*IsPCRel*/1,"
+      "getSImmOpValueXStepWide<20,/*Shift*/0,/*IsSigned*/1,/*IsPCRel*/1,"
       "Haydn::FIXUP_HAYDN_WIDE_CallSImm20>";
-  let DecoderMethod = "decodeSImmOperandXStepWide<20,1,/*IsSigned*/1>";
+  let DecoderMethod = "decodeSImmOperandXStepWide<20,0,/*IsSigned*/1>";
 }
 
 // WIDE Branch RI12 (BEQ_W..BLTU_W).
-// HaydnFU_ALU32_S0_RI12: imm12 at s0 bits[19:8], ÷2 (§5.14 D1).
+// HaydnFU_ALU32_S0_RI12: imm12 at s0 bits[19:8], byte PC+imm (GE96-03).
 // Uses FIXUP_HAYDN_WIDE_BranchSImm12_RI (FieldLsb=8) — NOT the I12 kind
 // (FieldLsb=4), which would clobber rt/rs on two-register branches.
 def brtarget_wide_ri12 : Operand<OtherVT> {
   let EncoderMethod =
-      "getSImmOpValueXStepWide<12,/*Shift*/1,/*IsSigned*/1,/*IsPCRel*/1,"
+      "getSImmOpValueXStepWide<12,/*Shift*/0,/*IsSigned*/1,/*IsPCRel*/1,"
       "Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI>";
-  let DecoderMethod = "decodeSImmOperandXStepWide<12,1,/*IsSigned*/1>";
+  let DecoderMethod = "decodeSImmOperandXStepWide<12,0,/*IsSigned*/1>";
 }
 
-// 48-bit WIDE Branch I12 (BEQZ_W..BLTZ_W, encoding_manual.md §5.5).
-// bits[47:36]; offset in 2-byte units. Symbolic target emits
+// 48-bit WIDE Branch I12 (BEQZ_W..BLTZ_W). TableGen size-6 shell; product encode is Format E member.
+// bits[47:36]; byte PC+imm (GE96-03). Symbolic target emits
 // FIXUP_HAYDN_WIDE_BranchSImm12 (PC-rel, TargetOffset=36).
 def brtarget_wide_i12 : Operand<OtherVT> {
   let EncoderMethod =
-      "getSImmOpValueXStepWide<12,/*Shift*/1,/*IsSigned*/1,/*IsPCRel*/1,"
+      "getSImmOpValueXStepWide<12,/*Shift*/0,/*IsSigned*/1,/*IsPCRel*/1,"
       "Haydn::FIXUP_HAYDN_WIDE_BranchSImm12>";
-  let DecoderMethod = "decodeSImmOperandXStepWide<12,1,/*IsSigned*/1>";
+  let DecoderMethod = "decodeSImmOperandXStepWide<12,0,/*IsSigned*/1>";
 }
 
-// 48-bit WIDE JALR_W target (encoding_manual.md §5.5). bits[47:36].
+// 48-bit WIDE JALR_W target. TableGen size-6 shell; product encode is Format E member. bits[47:36].
 // rs-relative offset; the immediate form goes in raw (no ÷2 shift). The
 // symbolic form emits FIXUP_HAYDN_WIDE_BranchSImm12 — this is pre-existing
 // GAP-3 (the only available kind is PC-relative, but JALR semantics are
@@ -239,7 +237,7 @@ def calltarget_wide_ri12 : Operand<OtherVT> {
   let DecoderMethod = "decodeSImmOperandXStepWide<12,0,/*IsSigned*/1>";
 }
 
-// 48-bit WIDE DR-Imm RI20 (ADDI64..SLTUI64, encoding_manual.md §5.6).
+// 48-bit WIDE DR-Imm RI20 (ADDI64..SLTUI64). TableGen size-6 shell; product encode is Format E member.
 // bits[47:28]; signed 20-bit; pure immediate — no symbolic fixup emitted.
 def simm20_dr
     : Operand<i32>, ImmLeaf<i32, [{ return isInt<20>(Imm); }]> {
@@ -322,8 +320,8 @@ def hwloop_off2
   let DecoderMethod = "decodeSImmOperandXStepWide<12,2,/*IsSigned*/0>";
 }
 
-// 48-bit WIDE LS signed byte offset (encoding_manual.md §5.16, Class 101
-// Probe 1 resolution). bits[47:28]; signed 20-bit BYTE offset (NOT scaled
+// 48-bit WIDE LS signed byte offset. TableGen size-6 shell; product encode is Format E member.
+// bits[47:28]; signed 20-bit BYTE offset (NOT scaled
 // Shift=0; the field stores the raw byte value, so the assembler must
 // validate natural-alignment per data type via validateInstruction). Range
 // 524288..+524287 bytes.
@@ -336,7 +334,7 @@ def hwloop_off2
 // HaydnELFObjectWriter (owned by sibling agents) — this operand reuses the
 // existing FIXUP_HAYDN_LO20. A dedicated kind can be added later as a pure
 // rename across the reloc-layout siblings without changing any bytes.
-// See encoding_manual.md §5.16.3 (R_HAYDN_LS_ABS20 maps to the same field).
+// Product encode is Format E member (R_HAYDN_LS_ABS20 maps to the same field).
 def simm20_ls
     : Operand<i32>, ImmLeaf<i32, [{ return isInt<20>(Imm); }]> {
   let ParserMatchClass = SImmAsmOperand<20>;
@@ -379,7 +377,7 @@ class HaydnInst<int sz, dag outs, dag ins, string asmstr, list<dag> pattern>
   let Itinerary = NoItinerary;
 
   // Default decoder namespace — 32-bit instructions.
-  // Subclasses for other widths override this (Haydn16, Haydn48, Haydn64).
+  // Size-6 shells override this (Haydn48). Product encode is Format E member.
   let DecoderNamespace = "Haydn32";
 }
 
@@ -426,23 +424,20 @@ class FmtALU32<bits<8> opcode, dag outs, dag ins, string asmstr,
 // and the decoder table build aborts with "Decoding conflict encountered".
 // (FmtALU32 leaves bits[9:0] unset, so all four would collide.)
 //
-// The Inst bits here are ONLY used by the tablegen decoder table + the legacy
-// getBinaryCodeForInstr fallback; the live Mode-0 s0 encoder
-// (HaydnMCCodeEmitter PS_S0) packs opcode 0x3F + ext via getEncOpcodeMap and
-// does not read these bits. funct is written to bits[8:4] so the static
-// decoder mask matches the spec §6.5 ext field position.
+// The Inst bits here are residual TableGen decoder isolation for the MULL
+// family (opcode 0x3F would collide with FmtLS loads in a 32-bit table).
+// Product encode is Format E generated members; these Inst bits are not the
+// wire. funct is written to bits[8:4] so the static decoder mask can
+// distinguish variants.
 class FmtALU32Ext<bits<8> opcode, bits<5> funct, dag outs, dag ins,
                   string asmstr, list<dag> pattern>
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b111;
   let TSFlags{4-3} = 0b01;
   let Itinerary = Slot012_ALU;
-  // the MULL family (FmtALU32Ext) is emitted ONLY as an 8-byte Mode-0
-  // bundle; its standalone-32.td def would otherwise shadow FmtLS loads that
-  // share opcode 0x3F (e.g. ldu8 bytes decoded as mull). Push these defs out
-  // of the default standalone-32 decode table. Mode-0 decode is hand-rolled
-  // (HaydnDisassembler decodeM0SlotS0) and getBinaryCodeForInstr (encoder
-  // fallback) are unaffected by DecoderNamespace.
+  // Isolate the MULL family (FmtALU32Ext) from the default 32-bit decode
+  // table: opcode 0x3F would otherwise shadow FmtLS loads (e.g. ldu8 decoded
+  // as mull). Product decode is Format E entry tables only.
   let DecoderNamespace = "HaydnM0Only";
 
   bits<4> rd;
@@ -504,7 +499,7 @@ class FmtLS<bits<8> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let mayLoad = 1;   // overridden per instruction
+  let mayLoad = 1;   // load default; stores MUST override mayLoad = 0
   let Itinerary = Slot0_LS;
 
   bits<4> rt;
@@ -523,7 +518,7 @@ class FmtLS<bits<8> opcode, dag outs, dag ins, string asmstr,
 // fused post-increment loads (spec D_LDW_POST_IMM / S_LW_POST_IMM).
 // Single instruction equivalent of HiFi's `ae_l64.ip` / `ae_l32.ip`: load from
 // [rs], then rs += (imm6 << ScaleShift). The base writeback rides the AGU
-// dedicated write wordline (encoding_manual.md:217,478) — consumes one LS slot
+// dedicated write wordline — consumes one LS slot
 // no GPR-compute write port. This matches the existing LD64_S1 / LD32_S1 slot-1
 // LD layout (s1 FU=LD, 4-bit opcode space, 8-bit immediate).
 //
@@ -542,10 +537,7 @@ class FmtLS<bits<8> opcode, dag outs, dag ins, string asmstr,
 //
 // This class is encoding-agnostic on the wire except for the field widths
 // the `Inst{...}` bit assignments match the existing FmtLS layout (rt@21:18
-// rs@17:14) so the standalone-32-bit legacy path round-trips it; the bundle
-// packer (HaydnMCCodeEmitter::packInstructionIntoSlot FU_LD) reuses the same
-// field positions in the s1 22-bit window (rtd@39:36, rs@43:40, imm8@35:28
-// opcode@27:24).
+// rs@17:14). Product encode is Format E LD-unit members.
 class FmtLSPostInc<bits<8> opcode, dag outs, dag ins, string asmstr,
                    list<dag> pattern>
     : HaydnInst<4, outs, ins, asmstr, pattern> {
@@ -572,29 +564,23 @@ class FmtLSPostInc<bits<8> opcode, dag outs, dag ins, string asmstr,
 
 // Load/Store with base-register post/pre-increment by REGISTER stride.
 // Sibling of FmtLSPostInc for the D_LDW_POST_REG / D_L*_POST_REG family
-// (encoding_manual.md:412-494, s1 LD register-offset format). The base
+// (s1 LD register-offset format). The base
 // writeback rides the AGU port exactly as the imm-offset form; the only
 // difference is the stride source (GPR32 rs2 vs simm6 scaled_imm).
 //
 // Two-def form mirroring FmtLSPostInc: $rt (loaded data, DR64) AND $rs_wb
 // (base register, written back via AGU). The tied-def constraint
 // `let Constraints = "$rs = $rs_wb"` (set per-instruction) forces regalloc
-// to coalesce the input base and the writeback. The standalone-32-bit
-// `Inst{...}` bit assignments put rt at [21:18], rs at [17:14], rs2 at
-// [13:10] so the legacy-32-bit path round-trips it; the bundle packer
-// (HaydnMCCodeEmitter packInstructionIntoSlot FU_LD) repacks into the s1
-// 22-bit window using the register-offset layout: rs@[43:40], rsd2@[39:36]
-// 0x1@[35:32] (POST_REG variant), type@[31:28], rt@[27:24] (per
-// encoding_manual.md:425-433).
+// to coalesce the input base and the writeback. Product encode is Format E
+// LD register-offset members.
 //
-// `type` (4 bits) is the encoding_manual.md:462-476 data-shape selector.
+// `type` (4 bits) is the data-shape selector.
 // allocates: 0x0=DW (D_LDW_POST_REG), 0x1=W (D_LW_POST_REG)
 // 0x2=HW (D_LHW_POST_REG). Standalone opcodes per width: 0x4F / 0x4E
 // 0x4D — all free in the LS family (existing range 0x40-0x4C). The
 // standalone 32-bit form has no `type` field — the standalone opcode
-// encodes width directly. The bundle FU_LD packer ORs `type` into bits
-// [31:28] of the s1 window; the disassembler FU_LD signature check reads
-// it to dispatch.
+// encodes width directly. Product Format E members carry `type` in the
+// generated LD entry window.
 class FmtLSPostIncReg<bits<8> opcode, bits<4> type, dag outs, dag ins,
                      string asmstr, list<dag> pattern>
     : HaydnInst<4, outs, ins, asmstr, pattern> {
@@ -626,27 +612,15 @@ class FmtLSPostIncReg<bits<8> opcode, bits<4> type, dag outs, dag ins,
 // [17:14] rs(4,GPR32 base) | [13:8] scaled_imm(6) | [7:0] reserved
 // The imm6 is word-scaled (byte offset = imm6 << 2), sign-extended.
 //
-// Probe 2 — RESOLVED by page-1 expansion (ext[4]=1).
-// encoding_manual.md §6.5 introduces the page-1 extension region for
-// narrow-store variants: type selectors move from ext[3:2] into dedicated
-// page-1 opcodes, freeing ext[4:0]+rs[1] for an imm6 offset (unsigned 0-63)
-// with the base register restricted to r0-r7. This format (page 0, imm6)
-// stays as the legacy/binary-compat form for cases the page-1 gate rejects
-// (base∈r8-r15, negative offsets, reloc exprs, or offsets exceeding the
-// page-1 imm6 range). The page-1 _P1 variants live in HaydnInstrInfo.td
-// (FmtM0_S0_LS_Page1); the encoder routes via
-// HaydnMCCodeEmitter::emitMode0S0LSPage1Bundle when the gate passes, and
-// the decoder (tryDecodeM0S0LSTable) handles them via the HaydnM0S0LS trie
-// (ext[4] discriminator) — no new decoder path needed. The scoped Haydn32
-// decoder probe (HaydnDisassembler.cpp:tryDecodeLegacyLSProbe) narrows to
-// the rare fallback (base∈r8-r15 / negative / large offsets → register
-// offset or WIDE LS); see the disassembler comment block for full context.
+// Product encode is Format E generated members. Historical page-1 / Mode-0
+// encoder and decoder helpers are deleted.
 class FmtLaneStore<bits<8> opcode, dag outs, dag ins, string asmstr,
                    list<dag> pattern>
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b001;   // Slot 0 (Load/Store unit)
   let TSFlags{4-3} = 0b01;    // 32-bit width
   let mayStore = 1;
+  let mayLoad = 0;   // pure lane store; clear FmtLS mayLoad=1 default
   let Itinerary = Slot0_LS;
 
   bits<4> rtd;       // DR64 data source (the register whose lane is stored)
@@ -837,7 +811,7 @@ class FmtALU64SelImm<bits<8> opcode, bits<6> funct, dag outs, dag ins,
 }
 
 // ALU64 shift-immediate format (Slot 1/2): one DR64 source + a constant shift
-// amount (shamt). encoding_manual.md §6 "Immediate Routing by Slot" — the s1
+// amount (shamt). Format E immediate routing by slot — the s1
 // ALU64 12-bit opcode field's low N bits carry the shamt; the high bits are
 // op-select. In the standalone 32-bit parcel the shamt lives in funct[4:0].
 //
@@ -850,7 +824,7 @@ class FmtALU64SelImm<bits<8> opcode, bits<6> funct, dag outs, dag ins,
 // entry from these Inst bits. Each instruction's opcode byte (Inst[29:22])
 // is distinct (0x69..0x70), so there is no decode-table collision. The bundle
 // path (s1 ALU64 12-bit opcode) folds shamt into the opcode low bits — handled
-// by HaydnDClassOpcodes::getShiftImmWidth + the MCCodeEmitter/Disassembler
+// by the MCCodeEmitter/Disassembler
 // shift-imm special cases.
 class FmtALU64ShiftImm<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
@@ -993,19 +967,13 @@ class FmtBRCond<bits<6> opcode, dag outs, dag ins, string asmstr,
   let Inst{15 - 0} = offset;
 }
 
-// Jump format (direct) — J-type linear 20-bit immediate.
+// Jump format (direct) — logical JAL shell (FmtJ). Product encode is
+// Format E members; GE96-03 is byte `PC + imm` (ValueShift=0). Do not
+// treat this class's leftover Haydn32 bit diagram as golden scale.
 //
-// JAL uses a custom encoder (getCallTargetOpValue) and a custom decoder
-// (handled in the disassembler's getInstruction pre-check). Layout:
-//
-// Inst[31:30] = 01 (width tag)
-// Inst[29:24] = opcode (0x37 for JAL, fixed)
-// Inst[23:20] = rd (link register)
-// Inst[19:0] = offset>>1 (20-bit linear, LSB=0 for 2-byte alignment)
-//
-// The offset is a signed 21-bit byte value (range: -2^20..2^20-1).
-// Since targets are 2-byte aligned, the LSB is always 0, so we store
-// offset>>1 in the 20-bit target field.
+// JAL uses getCallTargetOpValue. The retired linear layout (not Format E)
+// was Inst[31:30]=01, Inst[29:24]=opcode 0x37, Inst[23:20]=rd, Inst[19:0]
+// target. That field is a signed byte displacement, not offset>>1.
 class FmtJ<bits<6> opcode, dag outs, dag ins, string asmstr,
             list<dag> pattern>
     : HaydnInst<4, outs, ins, asmstr, pattern> {
@@ -1067,6 +1035,5 @@ class FmtCSR<bits<6> opcode, dag outs, dag ins, string asmstr,
 //===----------------------------------------------------------------------===//
 // FmtG_S0_ALU32 (32-bit G-format s0 sub-slot) RETIRED.
 // All *_G instruction shells deleted from HaydnInstrInfo.td.
-// The encode path uses SUB32_G_S0 (name only; not G-parcel encoding).
 //===----------------------------------------------------------------------===//
 

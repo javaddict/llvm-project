@@ -6,20 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Thin view over HaydnMCFormats::getAlternateInstsOpcode for generated
-// format members (transitional PacketFormats alts; product identity is
-// Format E BundleFormatRowID after post-RA commit).
-//
 // PlacementAlternative is the AIE-shaped placement authority surface.
-// Legality is alts-derived only (sparse size-3 AlternateInsts;
-// FieldSlots = 1<<index for non-zero members). Bundle/HR placement does not
-// reverse-map through FlexMap; encode uses post-RA setDesc member Desc-as-is.
+// enumeratePlacementAlternatives stamps generated Format E members as
+// MemberOpcode (mode → row mask). FieldSlots stay residual AlternateInsts
+// occupancy (index == SLOT bit) so Bundle.canAdd does not change.
+// Residual FieldSlot opcodes remain only when no Format E span exists
+// (CSRW_W, NOP). Product identity after post-RA commit is Format E
+// BundleFormatRowID.
 //
 // CompatibleFormatMask is the Format E row frontier this residual member may
 // occupy. Most residual alts stamp ProductFormatMask (E2|E3). Logicals that
 // golden Format E exposes only as E2 (ADDI32, ...) stamp E96TwoEntry only and
-// drop residual S2 (no E2 e2). Post-RA commit freezes one BundleFormatRowID
-// + CompletionStateID on the BUNDLE root.
+// drop residual S2 (no E2 e2). Logicals that golden exposes only as E3
+// (LOG2, EXP2, ...) stamp E96ThreeEntry only. Post-RA commit freezes one
+// BundleFormatRowID + CompletionStateID on the BUNDLE root.
 //
 // leaveRegion materializeMultiOpcodeInstrs does MI.setDesc(selected
 // MemberOpcode) from HaydnAlternateDescriptors
@@ -44,9 +44,10 @@ namespace llvm {
 
 /// One placement choice for a logical opcode under a packet format field.
 /// MemberOpcode + CompatibleFormatMask (plan §6.1). FieldSlots = 1<<sparse-alt-index
-/// (vector index == field; not a reverse FlexMap lookup).
+/// (vector index == field; generated AlternateInsts order).
 struct PlacementAlternative {
-  /// Post-setDesc / format-member opcode (e.g. ADD32_S1).
+  /// Post-setDesc Format E member opcode (e.g. ADD32_E2_E0_ALU0_RR).
+  /// Residual FieldSlots (CSRW_W_S0, NOP_S0) appear only when no span exists.
   unsigned MemberOpcode = 0;
 
 /// Bitmask of BundleFormatRowIDs this member may occupy.
@@ -84,9 +85,9 @@ struct PlacementAlternative {
 
 /// \returns the generated alternate member-opcode vector for \p LogicalOpc,
 /// or nullptr if the opcode has no multi-slot / format-member alternatives.
-/// Identical to HaydnBaseMCFormats::getAlternateInstsOpcode — the
-/// placement authority entry point (AIE AIEMCFormats.h:376-379 peer).
-/// Flex-derived rows are sparse size-3 (index == field; 0 = hole).
+/// Identical to HaydnBaseMCFormats::getAlternateInstsOpcode — occupancy
+/// plus Format E members (AIE AIEMCFormats.h:376-379 peer). Rows are
+/// sparse size-3 (index == residual occupancy class; 0 = hole).
 inline const std::vector<unsigned> *
 getPlacementMemberOpcodes(const HaydnBaseMCFormats &Fmts,
                           unsigned LogicalOpc) {
@@ -101,7 +102,8 @@ inline SlotBits fieldSlotsForAltIndex(unsigned AltIndex) {
 
 /// CompatibleFormatMask for a residual sparse-alt at \p AltIndex.
 /// E2-only Format E logicals (golden Mode=E2 only) drop residual S2 and keep
-/// E96TwoEntry only; other residual alts keep ProductFormatMask (E2|E3).
+/// E96TwoEntry only; E3-only logicals stamp E96ThreeEntry only; other residual
+/// alts keep ProductFormatMask (E2|E3).
 uint64_t residualAltCompatibleFormatMask(unsigned LogicalOpc,
                                          unsigned AltIndex);
 
@@ -109,38 +111,17 @@ uint64_t residualAltCompatibleFormatMask(unsigned LogicalOpc,
 /// E2-only product logical. Such ops must never co-issue in a 3-wide E3 cycle.
 bool isFormatEE2OnlyOpcodeName(llvm::StringRef OpcodeName);
 
-/// Fill \p Out with PlacementAlternative rows for \p LogicalOpc (non-zero
-/// sparse members only). Each row stamps CompatibleFormatMask from Format E
-/// golden availability (see residualAltCompatibleFormatMask) and FieldSlots =
-/// 1<<index. Returns false if there are no non-zero alternatives.
-inline bool
-enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
-                               unsigned LogicalOpc,
-                               SmallVectorImpl<PlacementAlternative> &Out) {
-  Out.clear();
-  const std::vector<unsigned> *Alts =
-      Fmts.getAlternateInstsOpcode(LogicalOpc);
-  if (!Alts || Alts->empty())
-    return false;
-  Out.reserve(Alts->size());
-  bool Any = false;
-  for (unsigned Index = 0, E = static_cast<unsigned>(Alts->size()); Index < E;
-       ++Index) {
-    const unsigned MemberOpc = (*Alts)[Index];
-    if (MemberOpc == 0)
-      continue; // sparse hole — not a placement choice
-    // Format E E2-only logicals: residual S2 is unavailable (no E2 e2) and the
-    // alt mask is E96TwoEntry only. Other residual alts keep ProductFormatMask.
-    // commitExact / canCoissue also refuse 3-wide packs that include E2-only.
-    const uint64_t Mask = residualAltCompatibleFormatMask(LogicalOpc, Index);
-    if (Mask == 0)
-      continue;
-    // Sparse size-3: index == field.
-    Out.emplace_back(MemberOpc, Mask, fieldSlotsForAltIndex(Index));
-    Any = true;
-  }
-  return Any;
-}
+/// True if \p OpcodeName is a Format E E3-only product logical (no E2 row).
+bool isFormatEE3OnlyOpcodeName(llvm::StringRef OpcodeName);
+
+/// Fill \p Out with PlacementAlternative rows for \p LogicalOpc.
+/// Prefers generated Format E members for MemberOpcode (mode → row mask).
+/// FieldSlots stay residual AlternateInsts occupancy. Residual FieldSlot
+/// opcodes remain only when no Format E span exists (CSRW_W, NOP).
+/// Returns false if there are no alternatives.
+bool enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
+                                    unsigned LogicalOpc,
+                                    SmallVectorImpl<PlacementAlternative> &Out);
 
 /// Keep only alternatives compatible with \p Row (solver filter).
 inline void
@@ -153,15 +134,10 @@ filterAlternativesForFormat(SmallVectorImpl<PlacementAlternative> &Alts,
              Alts.end());
 }
 
-/// \returns true if \p LogicalOpc has at least one non-zero format-member alt.
-inline bool hasPlacementAlternatives(const HaydnBaseMCFormats &Fmts,
-                                     unsigned LogicalOpc) {
-  const std::vector<unsigned> *Alts =
-      Fmts.getAlternateInstsOpcode(LogicalOpc);
-  if (!Alts)
-    return false;
-  return llvm::any_of(*Alts, [](unsigned M) { return M != 0; });
-}
+/// \returns true if \p LogicalOpc has a Format E member span or a residual
+/// FieldSlot AlternateInsts row.
+bool hasPlacementAlternatives(const HaydnBaseMCFormats &Fmts,
+                              unsigned LogicalOpc);
 
 } // end namespace llvm
 

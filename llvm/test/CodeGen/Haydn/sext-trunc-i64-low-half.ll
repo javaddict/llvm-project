@@ -32,19 +32,19 @@ define dso_local i64 @sext_trunc_low_half() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; lui r1, v20 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, v20 }
+; CHECK-NEXT:    { nop; lui r1, %hi12(v20) }
+; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(v20) }
 ; CHECK-NEXT:    { nop; ld64 d0, r1, 0 }
-; CHECK-NEXT:    { nop; lui r1, v4 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, v4 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 32 }
+; CHECK-NEXT:    { nop; lui r1, %hi12(v4) }
+; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(v4) }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 32 }
 ; CHECK-NEXT:    { ld64 d1, r1, 0; sll64 d0, d0, r2 }
 ; CHECK-NEXT:    { nop; sra64 d0, d0, r2 }
 ; CHECK-NEXT:    { nop; or64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %a = load i64, ptr @v20, align 8
   %trunc = trunc i64 %a to i32

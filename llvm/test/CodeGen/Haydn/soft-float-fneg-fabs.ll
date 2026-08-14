@@ -18,13 +18,13 @@ define float @negf(float noundef %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r2, 2048 }
-; CHECK-NEXT:    { nop; addi32_w r2, r2, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = fneg float %a
   ret float %r
 }
@@ -36,13 +36,13 @@ define float @fabsf_test(float noundef %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r2, 2048 }
-; CHECK-NEXT:    { nop; addi32_w r2, r2, -1 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, -1 }
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call float @llvm.fabs.f32(float %a)
   ret float %r
 }
@@ -56,13 +56,12 @@ define double @negd(double noundef %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 2048 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
@@ -71,8 +70,9 @@ define double @negd(double noundef %a) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; xor64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = fneg double %a
   ret double %r
 }
@@ -84,13 +84,12 @@ define double @fabsd_test(double noundef %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, -1 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, -1 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 2048 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, -1 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
@@ -99,8 +98,9 @@ define double @fabsd_test(double noundef %a) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; and64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call double @llvm.fabs.f64(double %a)
   ret double %r
 }
@@ -118,11 +118,12 @@ define float @neg_then_add(float noundef %a, float noundef %b) {
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    { move32 r1, r2; move32 r3, r1 }
 ; CHECK-NEXT:    { nop; move32 r2, r3 }
-; CHECK-NEXT:    { nop; jal_w lr, __subsf3 }
+; CHECK-NEXT:    { nop; jal lr, __subsf3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %na = fneg float %a
   %r = fadd float %na, %b
   ret float %r

@@ -15,8 +15,8 @@
 
 define { i32, i32 } @return_small_struct() {
 ; CHECK-LABEL: return_small_struct:
-; CHECK:       addi32_w{{(\.s[012])?}} r1, r0, 42
-; CHECK:       addi32_w{{(\.s[012])?}} r2, r0, 99
+; CHECK:       addi32{{(\.s[012])?}} r1, r0, 42
+; CHECK:       addi32{{(\.s[012])?}} r2, r0, 99
   %r = insertvalue { i32, i32 } undef, i32 42, 0
   %r2 = insertvalue { i32, i32 } %r, i32 99, 1
   ret { i32, i32 } %r2
@@ -25,7 +25,7 @@ define { i32, i32 } @return_small_struct() {
 ;Call site consumes both return regs
 define i32 @call_small_struct() {
 ; CHECK-LABEL: call_small_struct:
-; CHECK:       jal_w{{(\.s[012])?}} lr, return_small_struct
+; CHECK:       jal{{(\.s[012])?}} lr, return_small_struct
 ; CHECK:       add32{{(\.s[012])?}} r1, r1, r2
   %s = call { i32, i32 } @return_small_struct()
   %v1 = extractvalue { i32, i32 } %s, 0
@@ -49,7 +49,7 @@ define { i32, i32, i32, i32 } @return_medium_struct() {
 ;i64 + i32: D0 + R1
 define { i64, i32 } @return_mixed_struct() {
 ; CHECK-LABEL: return_mixed_struct:
-; CHECK:       addi32_w{{(\.s[012])?}} r1, r0, 42
+; CHECK:       addi32{{(\.s[012])?}} r1, r0, 42
   %r = insertvalue { i64, i32 } undef, i64 123456789, 0
   %r2 = insertvalue { i64, i32 } %r, i32 42, 1
   ret { i64, i32 } %r2
@@ -77,7 +77,7 @@ define void @return_large_struct(ptr %sret_output) {
 ;Call with explicit sret buffer
 define i32 @call_large_struct() {
 ; CHECK-LABEL: call_large_struct:
-; CHECK:       jal_w{{(\.s[012])?}} lr, return_large_struct
+; CHECK:       jal{{(\.s[012])?}} lr, return_large_struct
 ; CHECK:       ld32{{(\.s[012])?}} r1,
   %s = alloca { i32, i32, i32, i32, i32, i32 }
   call void @return_large_struct(ptr %s)

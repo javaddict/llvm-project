@@ -26,8 +26,11 @@
 //     fields (<<2 law; FieldLsb via HaydnRelocLayout / resolveFieldLsb).
 //   Out-of-range branch/call sites get long-branch thunks (needsThunk).
 //   R_HAYDN_HI20/LO16 — LUI+ADDI32 pair for 32-bit absolute addressing.
+//   R_HAYDN_LO20 — ALU RI20 / retired WIDE LSOff20 20-bit absolute field.
+//   R_HAYDN_LS_IMM — Format E LS RI6 signed imm6 (not SImm16, not LO20).
 //   R_HAYDN_GOT_HI20 — GOT entry address high part.
-//   R_HAYDN_TPREL_HI20/LO16 — TLS TP-relative offsets.
+//   R_HAYDN_TPREL_HI20/LO16 — fail-closed: golden has no TLS model, so these
+//     kinds are a link error (never silent R_ABS).
 //
 //===----------------------------------------------------------------------===//
 
@@ -79,23 +82,20 @@ public:
     // offsets fail HaydnRelocLayout::computeRelocValue (inBranchRange).
     needsThunks = true;
 
-    // Trap filler is a fixed 4-byte TargetInfo field. Prefer whole-parcel
-    // zeros for executable padding via nopInstrs (below).
-    trapInstr = {0x00, 0x00, 0x00, 0x00};
-
-    // Executable padding: whole product parcels only.
-    //
-    // Canonical idle wire bytes are blocked until golden closes completion /
-    // top-pad policy; the vectors ledger forbids driving LLD idle pad from
-    // stubs. Until then, LLD only accepts fill sizes that are multiples of
-    // the production EncodedBytes and writes zero bytes as a fail-closed
-    // geometry placeholder — not a product-legal Format E idle claim
-    // (indicator 000 is not Format E). Partial 2/4-byte linker NOPs are
-    // retired so text packing stays congruent with BundleSim ASSERT %
-    // product-record-size.
-    const unsigned Parcel = productParcelEncodedBytes().Value;
-    std::vector<uint8_t> WholeParcel(Parcel, 0);
-    nopInstrs = std::vector<std::vector<uint8_t>>{std::move(WholeParcel)};
+    // Executable padding: whole product parcels only. Consume the same
+    // generated full-slot NOP idle as MC writeNopData (never all-zero).
+    ArrayRef<uint8_t> Idle = llvm::haydn::format::canonicalFullSlotIdleParcel();
+    assert(Idle.size() == productParcelEncodedBytes().Value &&
+           "LLD idle parcel must match production EncodedBytes");
+    assert(Idle.size() >= 4 &&
+           "idle parcel must cover the 4-byte TargetInfo trapInstr field");
+    // trapInstr is a fixed 4-byte generic LLD field (Writer::fillTrap /
+    // OutputSection::getFiller). All-zero is not a Format E bundle (indicator
+    // must be 111). Seed it from the generated idle parcel; do not invent a
+    // second pad encoding. Whole-parcel gaps use nopInstrs below.
+    trapInstr = {Idle[0], Idle[1], Idle[2], Idle[3]};
+    nopInstrs = std::vector<std::vector<uint8_t>>{
+        std::vector<uint8_t>(Idle.begin(), Idle.end())};
   }
 
   RelExpr getRelExpr(RelType type, const Symbol &s,
@@ -121,9 +121,16 @@ public:
     case R_HAYDN_LO16:
     case R_HAYDN_HI12:
     case R_HAYDN_LO20:
+    case R_HAYDN_LS_IMM:
+      return R_ABS;
     case R_HAYDN_TPREL_HI20:
     case R_HAYDN_TPREL_LO16:
-      return R_ABS;
+      // Golden has no TLS model. Mapping these to R_ABS silently linked
+      // thread_local as absolute addresses. Fail closed.
+      Err(ctx) << getErrorLoc(ctx, loc)
+               << "Haydn TLS TPREL relocations are unsupported "
+                  "(no golden TLS model); refusing silent R_ABS";
+      return R_NONE;
     case R_HAYDN_GOT_HI20:
       return R_GOT;
     default:
@@ -139,7 +146,7 @@ public:
   }
 
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override {
-    if (type > R_HAYDN_WIDE_BranchSImm12_RI) {
+    if (type > R_HAYDN_LS_IMM) {
       InternalErr(ctx, buf) << "cannot read addend for relocation " << type;
       return 0;
     }
@@ -200,7 +207,13 @@ public:
   void relocate(uint8_t *loc, const Relocation &rel,
                 uint64_t val) const override {
     RelType type = rel.type;
-    if (type > R_HAYDN_WIDE_BranchSImm12_RI) {
+    if (type == R_HAYDN_TPREL_HI20 || type == R_HAYDN_TPREL_LO16) {
+      Err(ctx) << getErrorLoc(ctx, loc)
+               << "Haydn TLS TPREL relocations are unsupported "
+                  "(no golden TLS model); refusing silent R_ABS";
+      return;
+    }
+    if (type > R_HAYDN_LS_IMM) {
       Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << type;
       return;
     }
@@ -213,28 +226,24 @@ public:
       return;
     }
     const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
-    // WIDE_CallSImm20: E2 e0 imm @ [31:50]; E3 e0/e1 via resolveFieldLsb.
+    // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI}: E2 e0 table FieldLsb;
+    // E3 e0/e1/e2 via resolveFieldLsb.
     const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, loc);
     HaydnReloc::patchField(loc, Comp.FieldVal, FI.NBytes, FI.FieldSize,
                            FieldLsb);
   }
 
   uint32_t calcEFlags() const override {
-    // Product output always carries production ELFFlagsValue (nonzero).
-    // Inputs with e_flags==0 are transitional yaml/pre-flag objects and are
-    // upgraded only when no conflicting nonzero flag is present.
+    // Product output carries production ELFFlagsValue (nonzero EF_HAYDN_E96).
+    // Every participating object must already stamp that flag — zero and
+    // unknown nonzero profiles reject fail-closed (no silent upgrade).
+    // Matches BundleSim elf_validator product profile seat.
     const uint32_t Expected =
         llvm::haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
     assert(Expected != 0 && "E96 product profile must allocate nonzero e_flags");
-    bool SeenZero = false;
-    bool SeenExpected = false;
     for (InputFile *f : ctx.objectFiles) {
       uint32_t eflags =
           cast<ObjFile<ELF32LE>>(f)->getObj().getHeader().e_flags;
-      if (eflags == 0) {
-        SeenZero = true;
-        continue;
-      }
       if (eflags != Expected) {
         ErrAlways(ctx) << f << ": incompatible e_flags 0x"
                        << Twine::utohexstr(eflags)
@@ -242,11 +251,7 @@ public:
                        << Twine::utohexstr(Expected);
         continue;
       }
-      SeenExpected = true;
     }
-    // Zero e_flags inputs are transitional (pre-flag crt/sysroot/yaml).
-    (void)SeenZero;
-    (void)SeenExpected;
     return Expected;
   }
 

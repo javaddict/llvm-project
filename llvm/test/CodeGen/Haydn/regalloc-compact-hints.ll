@@ -89,7 +89,7 @@ define i32 @compact_local_temps() nounwind {
 ; CHECK-NOT:   st32{{.*}}r11
 ; ON-NOT:      st32{{.*}}r12
 ; OFF-NOT:     st32{{.*}}r12
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jalr{{(\.s[012])?}}
 entry:
   %a = add i32 1, 2
   %b = add i32 %a, 3
@@ -109,7 +109,7 @@ define i64 @compact_local_temps_dr64() nounwind {
 ; CHECK-NOT:   st64{{.*}}d9
 ; CHECK-NOT:   st64{{.*}}d10
 ; CHECK-NOT:   st64{{.*}}d11
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jalr{{(\.s[012])?}}
 entry:
   %a = add i64 1, 2
   %b = add i64 %a, 3
@@ -127,7 +127,7 @@ define i32 @compact_conflicting_arg_use(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK:       add32{{.*}}r1{{.*}}r2
 ; CHECK:       add32{{.*}}r1{{.*}}r3
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jalr{{(\.s[012])?}}
 entry:
   %sum = add i32 %a, %b
   %result = add i32 %sum, %c
@@ -147,8 +147,8 @@ define i32 @compact_pressure_full_fallback() nounwind {
 ; Prologue must save at least one CSR (R8–R11 or FP) — wide path in use.
 ; CHECK-DAG:   st32{{.*}}r8
 ; CHECK-DAG:   st32{{.*}}r9
-; CHECK:       jal_w
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jal
+; CHECK:       jalr{{(\.s[012])?}}
 entry:
   %v1 = call i32 @get_value()
   %v2 = call i32 @get_value()
@@ -180,11 +180,11 @@ define i32 @compact_on_off_csr_differential(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK:       // %bb.0:
 ; Values live across call → at least one callee-saved GPR save/restore.
 ; CHECK:       st32{{.*}}r{{[89]|1[01]|14}}
-; CHECK:       jal_w
+; CHECK:       jal
 ; CHECK:       ld32{{.*}}r{{[89]|1[01]|14}}
 ; R12 is caller-saved / not free AT — never a CSR save slot.
 ; CHECK-NOT:   st32{{.*}}r12
-; CHECK:       jalr_w{{(\.s[012])?}}
+; CHECK:       jalr{{(\.s[012])?}}
 entry:
   %t0 = add i32 %a, %b
   %t1 = add i32 %t0, %c

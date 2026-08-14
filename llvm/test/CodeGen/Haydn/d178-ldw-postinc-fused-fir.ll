@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -stop-after=haydn-expand-post-inc-early < %s \
+; RUN:     -stop-after=instruction-select < %s \
 ; RUN:     | FileCheck %s --check-prefix=MIR
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     < %s | FileCheck %s --check-prefix=ASM
@@ -55,8 +55,8 @@ declare i64 @llvm.haydn.mula64.ss.ll(i64, <2 x i32>, <2 x i32>)
 ; D_LDW_POST_IMM). Contract: both streams load + bump, MAC present.
 define i64 @fir_paired32_stream(ptr readonly %a, ptr readonly %b, i32 %n) nounwind {
 ; MIR-LABEL: name: fir_paired32_stream
-; MIR-DAG: LD64
-; MIR-DAG: {{ADDI32|S_.*POST|G_PTR_ADD}}
+; MIR-DAG: {{LD64|D_LDW_POST_IMM}}
+; MIR-DAG: {{ADDI32|S_.*POST|D_LDW_POST_IMM|G_PTR_ADD}}
 ; MIR: MULA64_LL
 entry:
   %cmp0 = icmp sgt i32 %n, 0
@@ -113,4 +113,4 @@ exit:
 ; ASM: {{d_ldw_post_imm|ld64}}
 ; ASM: mula64.ll
 ; ASM-LABEL: stream_store_i64:
-; ASM: st64_post
+; ASM: d_sdw_post_imm

@@ -16,7 +16,7 @@
 ; `bne_w`. If this regresses, binsearch-style code returns the wrong index.
 ;
 ; Flex cutover — `seq32 r8, fp, r2; bnez_w r8,.LBB0_4` is back. Likely
-; getFoldedBranchOpcode logic gap exposed by the new SEQ32_S0 routing.
+; getFoldedBranchOpcode logic gap exposed by the new SEQ32 routing.
 ; This is a REAL correctness bug (binsearch returns wrong index), not byte
 
 define i32 @cb2_binsearch(ptr readonly %a, i32 %key) {
@@ -36,7 +36,7 @@ while.body:
   ; (Track A): seq32 + bnez_w (branch if SEQ==1). With fold on: beq_w.
   ; Never invert equality to take the false edge first.
   ; CHECK-DAG: seq32
-  ; CHECK-DAG: {{beq_w|bnez_w}}{{(\.s[012])?}}
+  ; CHECK-DAG: {{beq|bnez}}{{(\.s[012])?}}
   br i1 %cmp.eq, label %cleanup, label %if.else
 
 if.else:

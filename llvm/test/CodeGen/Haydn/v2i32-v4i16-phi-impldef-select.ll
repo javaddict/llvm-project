@@ -36,7 +36,7 @@ exit:
 ; v2i32 zero-init (legalizes via G_IMPLICIT_DEF for the zeroinitializer).
 define <2 x i32> @test_v2i32_impldef(<2 x i32> %a) {
 ; CHECK-LABEL: test_v2i32_impldef:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %r = add <2 x i32> %a, zeroinitializer
   ret <2 x i32> %r
 }
@@ -60,7 +60,7 @@ exit:
 ; v4i16 SELECT (the conditional-lane pattern from vec_bexp16).
 define <4 x i16> @test_v4i16_select(<4 x i16> %a, <4 x i16> %b, i1 %c) {
 ; CHECK-LABEL: test_v4i16_select:
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %r = select i1 %c, <4 x i16> %a, <4 x i16> %b
   ret <4 x i16> %r
 }

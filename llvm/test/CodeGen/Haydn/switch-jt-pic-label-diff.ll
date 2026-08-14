@@ -35,6 +35,6 @@ default: ret i32 0
 ; CHECK: {{s_lw_pre_reg|ld32}}
 ; After LabelDifference32 load, ADD base before jalr:
 ; CHECK: add32
-; CHECK: jalr_w
+; CHECK: jalr
 ; CHECK: .LJTI0_0:
 ; CHECK: .long{{.*}}.LJTI0_0

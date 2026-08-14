@@ -1,0 +1,36 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=legalizer %s -o - | FileCheck %s
+
+# Role: MIR — G_DYN_STACKALLOC rounds size to StackAlign(8) and masks SP.
+#
+# REGRESSION TEST: T-ABI2 dyn-alloca. Selector used to SUB32 SP by the raw
+# size and drop the align operand, so alloca(n) with n%8≠0 left SP≡4 mod 8
+# (HaydnCallingConv MEMORY_FAULT). Legalizer now owns the RISCV-shaped
+# lower: round size to 8, subtract from SP, AND with -8.
+#
+# Test design: unrounded s32 size with align 1 must become G_ADD/G_AND of
+# the size plus G_SUB/G_AND of SP, with no residual G_DYN_STACKALLOC. If
+# the bug returns, this keeps G_DYN_STACKALLOC or omits the -8 mask.
+# Align>8 reject is llvm/test/CodeGen/Haydn/stack-overalign-reject.ll.
+
+---
+name:            dyn_stackalloc_round_to_8
+legalized:       false
+# CHECK-LABEL: name: dyn_stackalloc_round_to_8
+# CHECK: G_CONSTANT i32 7
+# CHECK: G_ADD
+# CHECK: G_AND
+# CHECK: COPY $r13
+# CHECK: G_PTRTOINT
+# CHECK: G_SUB
+# CHECK: G_AND
+# CHECK: G_INTTOPTR
+# CHECK: $r13 = COPY
+# CHECK-NOT: G_DYN_STACKALLOC
+body:             |
+  bb.0:
+    liveins: $r1, $r13
+    %0:_(s32) = COPY $r1
+    %1:_(p0) = G_DYN_STACKALLOC %0(s32), 1
+    $r1 = COPY %1(p0)
+    RET implicit $r1, implicit $r15
+...

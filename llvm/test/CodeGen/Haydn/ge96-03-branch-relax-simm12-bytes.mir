@@ -1,0 +1,65 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-relaxation \
+# RUN:   -haydn-branch-relax-safety-buffer=0 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: BranchRelaxation must use the same WIDE_BranchSImm12
+# window as applyFixup (GE96-03 signed 12-bit byte PC+imm, ±2048).
+#
+# Bug: isBranchOffsetInRange used isInt<13> (±4096), the leftover ÷2-era
+# window. Sites in (2048, 4096] were left as short BEQZ_W; integrated-as
+# then fataled "relocation offset out of range" (cf_branches, ~42
+# BundleSim compiles).
+#
+# Test design: BEQZ_W over a 2500-byte pad. In isInt<13>, out of isInt<12>.
+# If the ÷2 window returns, branch-relaxation keeps BEQZ_W and this CHECK
+# for JALR fails.
+
+--- |
+  define void @dead_zone_2500(i32 %c) {
+  entry:
+    br i1 undef, label %exit, label %pad
+  pad:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            dead_zone_2500
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: dead_zone_2500
+    ; CHECK: bb.0.entry
+    ; CHECK: JALR
+    BEQZ_W $r0, %bb.2, implicit-def dead $sfr
+
+  bb.1.pad:
+    successors: %bb.2
+    liveins: $r15
+    INLINEASM &".space 2500", 1 /* sideeffect attdialect */
+
+  bb.2.exit:
+    liveins: $r15
+    ; CHECK: bb.2.exit
+    ; CHECK: RET
+    RET implicit $r15
+
+...

@@ -17,6 +17,9 @@
 // Covers SMS hard-root exact-commits from post-RA leaveMBB as well as free
 // scheduled multi-MI packs and late singleton wraps. Does not invent stages.
 //
+// Never calls skipFunction: committed-cycle verify is product emission
+// ownership, not a quality pass. Fail-closes residual cycle-forming pseudos,
+// optnone bare encode escape, and mixed committed-BUNDLE + bare encode MIR.
 // Does not mutate MIR. report_fatal_error on violation (no silent skip).
 // No MCFlags writers. setDesc is owned by Finalize / materialize / hard-root
 // commit-inside-group.

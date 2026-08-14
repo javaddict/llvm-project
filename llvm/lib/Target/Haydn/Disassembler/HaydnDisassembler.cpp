@@ -17,6 +17,8 @@
 //   2. Soft-NOP individual entries only for reserved E2 map=11 / zero or
 //      non-matching residual underfill — never invents logicals; never fails
 //      the whole parcel for residual pad (objdump `<unknown>` rejects sim).
+//      Non-zero unmatched payload is still a soft-NOP mnemonic, annotated
+//      `<unresolved:0x…>` on the comment stream (T-MC9 auditor honesty).
 //   3. Short residual (< product EncodedBytes) → Fail with Size = remaining
 //      (no 2-byte NOP product path; all-zero is not Format E).
 //
@@ -37,19 +39,22 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCDecoder.h"
 #include "llvm/MC/MCDecoderOps.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/raw_ostream.h"
 #include <memory>
+#include <optional>
 
 using namespace llvm;
 using namespace llvm::MCD;
@@ -86,9 +91,8 @@ static DecodeStatus DecodeGPR32RegisterClass(MCInst &Inst, uint32_t RegNo,
   return decodeGPR32(Inst, RegNo);
 }
 
-// GPR32Lo (r0-r7, 3-bit encoding) — the low 8 GPRs, used by 16-bit compressed
-// (§2.2) and 32-bit G-format (§3) instructions. Reject RegNo >= 8. Retained
-// because the generated decoder tables still reference it by name.
+// GPR32Lo (r0-r7, 3-bit encoding) — the low 8 GPRs. Reject RegNo >= 8.
+// Retained because the generated decoder tables still reference it by name.
 static DecodeStatus DecodeGPR32LoRegisterClass(MCInst &Inst, uint32_t RegNo,
                                                uint64_t Address,
                                                const MCDisassembler *Decoder) {
@@ -104,7 +108,8 @@ static DecodeStatus DecodeDR64RegisterClass(MCInst &Inst, uint32_t RegNo,
 }
 
 //===----------------------------------------------------------------------===//
-// (Stage 1): AIE-style scaled-immediate decoder for 48-bit WIDE formats.
+// AIE-style scaled-immediate decoder for logical *_W / *_dr / hwloop_off*
+// operand classes (Format E encode).
 //
 // Bound to the `*_wide` / `*_dr` / `hwloop_off*` operand classes via tablegen
 // `DecoderMethod`. Reverses the encoder's `getSImmOpValueXStepWide`: reads the
@@ -216,30 +221,6 @@ template <> constexpr uint32_t InsnBitWidth<uint64_t> = 48;
 
 // Nested entry decode for BUNDLE_E96_* InstSlot operands (same anon NS).
 namespace {
-/// E96 cond-branch members decode the trailing target immediate as the raw
-/// halfword field (simm12, Shift=0), but the encoder stores offset>>1
-/// (WIDE_BranchSImm12 ValueShift=1) and the dump/BundleSim contract is byte
-/// displacements (validate_target uses the printed imm as bytes). Shift the
-/// cond-branch target <<1 so disassembly prints bytes — matching JAL (which
-/// encodes bytes directly, WIDE_CallSImm20 ValueShift=0) and the contract.
-/// No-op for JAL/JALR/ALU/load/etc. members (only BEQ*/BNE*/BLT*/BGE* match).
-static void recoverFormatECondBranchBytes(MCInst &Nested,
-                                          const MCDisassembler &Decoder) {
-  if (Nested.getNumOperands() == 0)
-    return;
-  // The product Decoder is always a HaydnDisassembler; its MCII names members.
-  StringRef N = static_cast<const HaydnDisassembler &>(Decoder)
-                    .getMCII()
-                    .getName(Nested.getOpcode());
-  if (!N.starts_with("BEQ") && !N.starts_with("BNE") && !N.starts_with("BLT") &&
-      !N.starts_with("BGE"))
-    return;
-  // Cond-branch target displacement is the trailing operand.
-  MCOperand &Target = Nested.getOperand(Nested.getNumOperands() - 1);
-  if (Target.isImm())
-    Target.setImm(Target.getImm() << 1);
-}
-
 static DecodeStatus decodeFormatEEntrySlot(MCInst &MI, uint64_t EntryBits,
                                            uint64_t Address,
                                            const MCDisassembler *Decoder,
@@ -260,10 +241,6 @@ static DecodeStatus decodeFormatEEntrySlot(MCInst &MI, uint64_t EntryBits,
     Nested->clear();
     Nested->setOpcode(Haydn::NOP);
     S = MCDisassembler::Success;
-  } else {
-    // Recover byte displacements for cond-branch targets (dump/BundleSim
-    // contract is bytes; members decode the raw halfword field).
-    recoverFormatECondBranchBytes(*Nested, *Decoder);
   }
   MI.addOperand(MCOperand::createInst(Nested));
   return S;
@@ -357,40 +334,14 @@ static unsigned lookupLogicalOpcode(const MCInstrInfo &MII, StringRef Logical) {
   return 0;
 }
 
-/// PC-relative control immediates encode halfword units (field = bytes >> 1);
-/// decoder must recover **byte** displacements for BundleSim dump parse
-/// (branch_scale=2: validate_target uses dump imm as bytes). Mirrors
-/// decodeSImmOperandXStepWide<N,1,1> used by brtarget_wide_* operands.
-/// JALR is rs-relative with Shift=0 (catalog branch_scale=1).
+/// GE96-03: cond-branch/JAL fields are byte PC+imm (no dump <<1).
+/// SET_HWLOOP Off1/Off2 remain word scale (<<2) for dump bytes.
 static unsigned formatEControlImmByteShift(StringRef Logical) {
-  StringRef Name = Logical;
-  // Strip slot / width / mode suffixes the inverse table may carry.
-  while (Name.ends_with_insensitive("_S0") ||
-         Name.ends_with_insensitive("_S1") ||
-         Name.ends_with_insensitive("_S2") ||
-         Name.ends_with_insensitive("_W") ||
-         Name.ends_with_insensitive("_WL") ||
-         Name.ends_with_insensitive("_M0") ||
-         Name.ends_with_insensitive("_M1")) {
-    size_t Under = Name.rfind('_');
-    if (Under == StringRef::npos)
-      break;
-    Name = Name.take_front(Under);
-  }
+  const std::string Peeled = haydn::format_e::peelLogicalOpcodeName(Logical);
+  const StringRef Name = Peeled;
 
-  // PC-rel cond-branches encode halfword units (field = bytes >> 1) via
-  // WIDE_BranchSImm12 ValueShift=1; recover bytes (<<1). JAL is excluded: it
-  // encodes bytes directly (WIDE_CallSImm20 ValueShift=0) and already prints
-  // bytes, so shifting it would double the displacement.
-  if (Name.equals_insensitive("BEQ") || Name.equals_insensitive("BEQZ") ||
-      Name.equals_insensitive("BNE") || Name.equals_insensitive("BNEZ") ||
-      Name.equals_insensitive("BLT") || Name.equals_insensitive("BLTU") ||
-      Name.equals_insensitive("BLTZ") || Name.equals_insensitive("BGE") ||
-      Name.equals_insensitive("BGEU") || Name.equals_insensitive("BGEZ"))
-    return 1u;
-
-  // SET_HWLOOP begin/end offsets: word scale (<<2). BundleSim dump contract
-  // is byte distances (frontend.md); normalize then divides by hwloop_scale.
+  // GE96-03: cond-branches and JAL print the field as bytes (ValueShift=0).
+  // SET_HWLOOP begin/end offsets stay word scale (<<2).
   if (Name.equals_insensitive("SET_HWLOOP") ||
       Name.equals_insensitive("SET_HWLOOP_F2"))
     return 2u;
@@ -406,6 +357,9 @@ struct FormatEResolvedEntry {
   int MemberId = -1; // >=0 only on inverse hit
   // Authoritative type layout from FormatEMembers[MemberId].LayoutId.
   const haydn::format_e::FormatETypeLayoutRec *Layout = nullptr;
+  /// Non-zero unmatched entry payload. Soft-NOP still succeeds (BundleSim
+  /// rejects `<unknown>`), but objdump annotates the junk for auditors.
+  std::optional<uint64_t> UnresolvedPayload;
 };
 
 /// Resolve one entry via generated type layouts + FormatEInverse.
@@ -498,17 +452,20 @@ static bool resolveFormatEEntry(const APInt &Word, uint8_t Mode,
   // Non-zero payload with no inverse hit: soft-NOP underfill rather than
   // failing the whole parcel. BundleSim rejects any `<unknown>` line from
   // llvm-objdump; residual pads / map=11-adjacent junk must still advance.
-  // Real ops that inverse-match still resolve above.
+  // Real ops that inverse-match still resolve above. Record the payload so
+  // the comment stream can annotate `<unresolved:0x…>` (T-MC9).
   (void)UnitMap;
   Out.Logical = "NOP";
   Out.IsNop = true;
+  Out.UnresolvedPayload = EntryBits;
   return true;
 }
 
 /// Product Format E decode. Full-parcel paths always set Size = EncodedBytes.
 static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
                                      ArrayRef<uint8_t> Bytes, uint64_t Address,
-                                     const HaydnDisassembler &DisAsm) {
+                                     const HaydnDisassembler &DisAsm,
+                                     raw_ostream &CStream) {
   using namespace haydn::format;
   using namespace haydn::format_e;
 
@@ -570,6 +527,10 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
     const StringRef Logical = Resolved.Logical;
     const bool IsNop = Resolved.IsNop;
     const FormatETypeLayoutRec *Lay = Resolved.Layout;
+    if (Resolved.UnresolvedPayload) {
+      CStream << "<unresolved:0x"
+              << Twine::utohexstr(*Resolved.UnresolvedPayload) << ">\n";
+    }
 
     MCInst *Child = DisAsm.getContext().createMCInst();
     if (IsNop || Logical.equals_insensitive("NOP") || !Lay) {
@@ -615,18 +576,12 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
                                DisAsm.getSubtargetInfo());
       }
       if (DS != MCDisassembler::Fail) {
-        // Format E member DecoderMethods emit raw field units. Recover dump
-        // bytes for BundleSim / validate_target:
-        //   cond-branch: halfword field (ValueShift=1) → <<1 on last imm
+        // Format E member DecoderMethods emit raw field units. Dump bytes:
+        //   cond-branch / JAL: field is already PC+imm bytes (GE96-03)
         //   SET_HWLOOP / SET_HWLOOP_F2: Off1/Off2 word fields (ValueShift=2)
         //     → <<2 on operands 1 and 2 (sel, off1, off2, cnt|rs)
-        // JAL already encodes/prints bytes (ValueShift=0).
         const unsigned ByteShift = formatEControlImmByteShift(Logical);
-        if (ByteShift == 1 && Decoded.getNumOperands() > 0) {
-          MCOperand &T = Decoded.getOperand(Decoded.getNumOperands() - 1);
-          if (T.isImm())
-            T.setImm(T.getImm() << 1);
-        } else if (ByteShift == 2) {
+        if (ByteShift == 2) {
           for (unsigned OI : {1u, 2u}) {
             if (OI >= Decoded.getNumOperands())
               break;
@@ -677,7 +632,6 @@ MCDisassembler::DecodeStatus HaydnDisassembler::getInstruction(
     raw_ostream &CStream) const {
   // Product Format E decoder. Size is the registry EncodedBytes for a full
   // parcel so llvm-objdump hex tokens match BundleSim's product parser.
-  (void)CStream;
   using namespace haydn::format;
   const unsigned ParcelBytes =
       maxEncodedBytesInProfile(ObjectEncodingProfileID::E96).Value;
@@ -686,7 +640,7 @@ MCDisassembler::DecodeStatus HaydnDisassembler::getInstruction(
     Size = Bytes.size();
     return MCDisassembler::Fail;
   }
-  return tryDecodeFormatE(Instr, Size, Bytes, Address, *this);
+  return tryDecodeFormatE(Instr, Size, Bytes, Address, *this, CStream);
 }
 
 } // end anonymous namespace

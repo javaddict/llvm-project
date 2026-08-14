@@ -41,20 +41,27 @@
 #include <stack>
 #include <string>
 #include <utility>
+#include <optional>
 #include <vector>
 
 using namespace llvm;
 
 // Forward declarations: helpers defined after run() and called from it.
-// Sparse `_S{0,1,2}` slot-member discovery feeds
-// GET_ALTERNATE_INST_OPCODE_FUNC (AIE MultiSlot_Pseudo / materializableInto
-// peer for targets that still use suffix-discovered Full members).
+// GET_ALTERNATE_INST_OPCODE_FUNC order:
+//   1) MultiSlot_Pseudo.materializableInto (AIE-shaped)
+//   2) LogicalMaterialize.materializableInto (bulk declarative typed relation)
+// Residual `_S{0,1,2}` name discovery is not a product alternate source: any
+// setDesc-safe sparse member row without an explicit list fails TableGen.
 struct SlotMemberVariantRow {
   unsigned Members[3] = {0, 0, 0};
 };
 static std::map<unsigned, SlotMemberVariantRow>
 collectSparseAltSlotMemberRows(
     ArrayRef<const CodeGenInstruction *> NumberedInstructions);
+static std::map<unsigned, SlotMemberVariantRow>
+collectLogicalMaterializeRows(
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions,
+    const RecordKeeper &Records);
 static void emitAlternateInstsOpcodeFunc(
     raw_ostream &o, const CodeGenTarget &Target,
     ArrayRef<const CodeGenInstruction *> NumberedInstructions,
@@ -311,11 +318,8 @@ static StringRef stripTargetNamespace(StringRef Qualified) {
 /// VF1.3 setDesc gate:
 /// - MultiSlot_Pseudo materializableInto: full shape/flag/sched/uops contract
 ///   (PrintFatalError). Explicit author list must be setDesc-safe.
-/// - Sparse `_S*` name discovery: drop members that fail *structural* shape
-///   (operands/ties/NumDefs/regclass) so name collisions never reach HR
-///   setDesc; flag/implicits/sched residual on product TD is not a silent
-///   invent — MultiSlot tests own the full contract, and product alts that
-///   pass structural shape keep packing (AIE-unconditional setDesc).
+/// - LogicalMaterialize members: structural setDesc filter at emit time;
+///   uncovered setDesc-safe `_S*` rows fail closed (no suffix-discovery backfill).
 static void validateSetDescAlternateCompatibility(
     ArrayRef<const CodeGenInstruction *> NumberedInstructions,
     const std::vector<TGInstrLayout> &PseudoInstFormats,
@@ -615,11 +619,9 @@ namespace {
 constexpr const char *SlotMemberSuffix[3] = {"_S0", "_S1", "_S2"};
 } // end anonymous namespace
 
-/// Collect logical-opcode -> per-slot member opcode rows by stripping
-/// `_S{0,1,2}` suffixes from Inst names. Sole feed for Haydn sparse
-/// AlternateInsts under GET_ALTERNATE_INST_OPCODE_FUNC (PlacementAlternative
-/// slot-member discovery). Not encode authority — post-RA setDesc(member)
-/// + Desc-as-is MC own materialize/encode.
+/// Audit helper: map logical opcodes → `_S{0,1,2}` members by suffix.
+/// Not a product alternate source — emitAlternateInstsOpcodeFunc fails closed
+/// if any setDesc-safe row remains uncovered by MultiSlot/LogicalMaterialize.
 static std::map<unsigned, SlotMemberVariantRow>
 collectSparseAltSlotMemberRows(
     ArrayRef<const CodeGenInstruction *> NumberedInstructions) {
@@ -644,23 +646,97 @@ collectSparseAltSlotMemberRows(
   return RowsByName;
 }
 
-/// Emit GET_ALTERNATE_INST_OPCODE_FUNC (AIE MultiSlot_Pseudo path + Haydn
-/// sparse `_S*` slot-member synthesis). AIE peer: CodeGenFormat emit
-/// ~142-164 and addAlternateInstInMultiSlotPseudo (AIE dense
-/// materializableInto order). Haydn: sparse-alt rows are always size 3
-/// with 0 for missing slots so vector index == field/slot (FieldSlots =
-/// 1<<index; getLegalSlots ORs non-zero alt indices — sole materialize
-/// member discovery).
+/// Place a member opcode into a size-3 row by residual `_S{N}` suffix or by
+/// InstSlot SlotName S0/S1/S2. Returns false if no field can be resolved.
+static bool placeMemberInSparseRow(const CodeGenInstruction &Member,
+                                   unsigned MemberOpc,
+                                   SlotMemberVariantRow &Row) {
+  StringRef Name = Member.TheDef->getName();
+  for (unsigned Slot = 0; Slot < 3; ++Slot) {
+    if (Name.ends_with(SlotMemberSuffix[Slot])) {
+      Row.Members[Slot] = MemberOpc;
+      return true;
+    }
+  }
+  // Typed Slot field (s0_slot / s1_slot / s2_slot → SlotName S0/S1/S2).
+  if (Member.TheDef->getValue("Slot")) {
+    const Record *SlotRec = Member.TheDef->getValueAsDef("Slot");
+    if (SlotRec && SlotRec->getValue("SlotName")) {
+      StringRef SlotName = SlotRec->getValueAsString("SlotName");
+      for (unsigned Slot = 0; Slot < 3; ++Slot) {
+        // SlotMemberSuffix is "_S0"; InstSlot SlotName is "S0".
+        if (SlotName == StringRef(SlotMemberSuffix[Slot]).drop_front(1)) {
+          Row.Members[Slot] = MemberOpc;
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/// Bulk declarative LogicalMaterialize rows (typed alternate relation).
+/// Same sparse size-3 shape as MultiSlot materializableInto emission.
+static std::map<unsigned, SlotMemberVariantRow>
+collectLogicalMaterializeRows(
+    ArrayRef<const CodeGenInstruction *> NumberedInstructions,
+    const RecordKeeper &Records) {
+  StringMap<unsigned> NameToEnum;
+  for (unsigned Opc = 0, E = NumberedInstructions.size(); Opc < E; ++Opc)
+    NameToEnum[NumberedInstructions[Opc]->TheDef->getName()] = Opc;
+
+  std::map<unsigned, SlotMemberVariantRow> Rows;
+  if (!Records.getClass("LogicalMaterialize"))
+    return Rows;
+
+  for (const Record *D :
+       Records.getAllDerivedDefinitions("LogicalMaterialize")) {
+    if (!D->getValue("BaseLogical") || !D->getValue("materializableInto"))
+      continue;
+    const Record *Base = D->getValueAsDef("BaseLogical");
+    auto BaseIt = NameToEnum.find(Base->getName());
+    if (BaseIt == NameToEnum.end()) {
+      PrintFatalError(D->getLoc(),
+                      "LogicalMaterialize BaseLogical '" + Base->getName() +
+                          "' not found among instructions");
+    }
+    SlotMemberVariantRow &Row = Rows[BaseIt->second];
+    for (const Record *MemRec :
+         D->getValueAsListOfDefs("materializableInto")) {
+      auto MemIt = NameToEnum.find(MemRec->getName());
+      if (MemIt == NameToEnum.end()) {
+        PrintFatalError(D->getLoc(),
+                        "LogicalMaterialize member '" + MemRec->getName() +
+                            "' for '" + Base->getName() +
+                            "' not found among instructions");
+      }
+      const CodeGenInstruction &MemberCGI =
+          *NumberedInstructions[MemIt->second];
+      if (!placeMemberInSparseRow(MemberCGI, MemIt->second, Row)) {
+        PrintFatalError(MemRec->getLoc(),
+                        "LogicalMaterialize member '" + MemRec->getName() +
+                            "' has no S0/S1/S2 suffix or InstSlot field");
+      }
+    }
+  }
+  return Rows;
+}
+
+/// Emit GET_ALTERNATE_INST_OPCODE_FUNC (AIE MultiSlot_Pseudo + Haydn
+/// LogicalMaterialize bulk typed relation). No residual `_S*` name-discovery
+/// backfill: uncovered setDesc-safe sparse rows fail closed at TableGen.
+/// AIE peer: CodeGenFormat emit ~142-164 and addAlternateInstInMultiSlotPseudo
+/// (AIE dense materializableInto order). Haydn sparse-alt rows are always
+/// size 3 with 0 for missing slots so vector index == field/slot.
 ///
 /// Precondition: validateSetDescAlternateCompatibility has already proven
-/// every emitted logical→member pair is MI.setDesc-safe (operands/ties/
-/// implicits/flags/sched/uops).
+/// MultiSlot pairs are setDesc-safe; LogicalMaterialize rows pass structural
+/// setDesc filtering below.
 static void emitAlternateInstsOpcodeFunc(
     raw_ostream &o, const CodeGenTarget &Target,
     ArrayRef<const CodeGenInstruction *> NumberedInstructions,
     const std::vector<TGInstrLayout> &PseudoInstFormats,
     const RecordKeeper &Records) {
-  (void)Records; // timing map already applied by validateSetDesc…
   const std::string TargetName = Target.getName().str();
 
   // Names already covered by true MultiSlot_Pseudo (materializableInto).
@@ -668,28 +744,19 @@ static void emitAlternateInstsOpcodeFunc(
   for (const TGInstrLayout &P : PseudoInstFormats)
     PseudoNames.insert(P.getInstrName());
 
-  // Sparse `_S*` slot-member logicals: size-3 members (index == slot),
-  // skipping any base that is already a MultiSlot_Pseudo (explicit
-  // materializableInto wins). Structurally setDesc-unsafe members are
-  // zeroed (VF1.3 filter) so HR never selects a blind setDesc that would
-  // corrupt the MI operand vector.
-  const auto SparseAltRows = filterSparseAltsSetDescStructural(
-      NumberedInstructions,
-      collectSparseAltSlotMemberRows(NumberedInstructions));
   struct SparseAltEntry {
     std::string LogicalName;
     // Always length 3: Target::Name or "0" at missing slots (sparse alts).
     std::string Members[3];
   };
-  std::vector<SparseAltEntry> SparseAlts;
-  SparseAlts.reserve(SparseAltRows.size());
-  for (const auto &KV : SparseAltRows) {
-    const unsigned LogicalOpc = KV.first;
-    const SlotMemberVariantRow &Row = KV.second;
+
+  auto rowToEntry =
+      [&](unsigned LogicalOpc,
+          const SlotMemberVariantRow &Row) -> std::optional<SparseAltEntry> {
     StringRef LogicalName =
         NumberedInstructions[LogicalOpc]->TheDef->getName();
     if (PseudoNames.count(LogicalName.str()))
-      continue;
+      return std::nullopt;
     SparseAltEntry Entry;
     Entry.LogicalName = LogicalName.str();
     bool Any = false;
@@ -703,8 +770,50 @@ static void emitAlternateInstsOpcodeFunc(
           NumberedInstructions[Row.Members[Slot]]->TheDef->getName();
       Entry.Members[Slot] = TargetName + "::" + MemName.str();
     }
-    if (Any)
-      SparseAlts.push_back(std::move(Entry));
+    if (!Any)
+      return std::nullopt;
+    return Entry;
+  };
+
+  // Bulk declarative LogicalMaterialize (typed alternate relation).
+  auto MaterializeRows = filterSparseAltsSetDescStructural(
+      NumberedInstructions,
+      collectLogicalMaterializeRows(NumberedInstructions, Records));
+  std::set<unsigned> CoveredLogicals;
+  std::vector<SparseAltEntry> SparseAlts;
+  SparseAlts.reserve(MaterializeRows.size());
+  for (const auto &KV : MaterializeRows) {
+    if (auto E = rowToEntry(KV.first, KV.second)) {
+      CoveredLogicals.insert(KV.first);
+      SparseAlts.push_back(std::move(*E));
+    }
+  }
+
+  // Fail closed: no suffix-discovered alternate emission. Any setDesc-safe
+  // `_S*` row whose logical is not MultiSlot_Pseudo / LogicalMaterialize is a
+  // TableGen error (forces explicit materializableInto).
+  auto SparseAuditRows = filterSparseAltsSetDescStructural(
+      NumberedInstructions,
+      collectSparseAltSlotMemberRows(NumberedInstructions));
+  for (const auto &KV : SparseAuditRows) {
+    if (CoveredLogicals.count(KV.first))
+      continue;
+    StringRef LogicalName =
+        NumberedInstructions[KV.first]->TheDef->getName();
+    if (PseudoNames.count(LogicalName.str()))
+      continue;
+    bool Any = false;
+    for (unsigned Slot = 0; Slot < 3; ++Slot)
+      if (KV.second.Members[Slot] != 0)
+        Any = true;
+    if (!Any)
+      continue;
+    PrintFatalError(
+        NumberedInstructions[KV.first]->TheDef->getLoc(),
+        "logical '" + LogicalName.str() +
+            "' has setDesc-safe `_S*` slot members but no MultiSlot_Pseudo "
+            "or LogicalMaterialize materializableInto list; suffix name "
+            "discovery is not a product alternate source");
   }
 
   const unsigned NumPseudo = PseudoInstFormats.size();
@@ -715,12 +824,12 @@ static void emitAlternateInstsOpcodeFunc(
     << "#undef GET_ALTERNATE_INST_OPCODE_FUNC\n";
 
   if (NumTotal != 0) {
-    o << "// Alternate member opcodes per multi-slot logical / sparse base.\n"
-      << "// MultiSlot_Pseudo materializableInto first (AIE dense path), then\n"
-      << "// Full-format `_S*` members as sparse size-3 (index==field; Haydn).\n"
-      << "// Zero means no member for that slot/field.\n"
-      << "// VF1.3: every non-zero member is setDesc-compatible with its\n"
-      << "// logical (operands/ties/implicits/flags/sched/uops proven above).\n"
+    o << "// Alternate member opcodes per multi-slot logical.\n"
+      << "// Order: MultiSlot_Pseudo materializableInto (AIE), then\n"
+      << "// LogicalMaterialize bulk typed relation. No residual `_S*`\n"
+      << "// name-discovery backfill. All sparse rows are size-3\n"
+      << "// (index==field, 0=hole). MultiSlot members are fully setDesc-safe;\n"
+      << "// LogicalMaterialize members pass structural shape filtering.\n"
       << "static std::vector<unsigned int> const AlternateInsts[] = {\n";
     for (unsigned I = 0; I < NumPseudo; ++I) {
       PseudoInstFormats[I].emitAlternateInstsOpcodeSet(o);
@@ -730,7 +839,7 @@ static void emitAlternateInstsOpcodeFunc(
     for (unsigned I = 0; I < NumSparseAlt; ++I) {
       const SparseAltEntry &E = SparseAlts[I];
       o << "    // " << TargetName << "::" << E.LogicalName
-        << " (Full members, sparse S0/S1/S2)\n";
+        << " (LogicalMaterialize, sparse size-3)\n";
       o << "    { " << E.Members[0] << ", " << E.Members[1] << ", "
         << E.Members[2] << " }";
       if (NumPseudo + I + 1 != NumTotal)
@@ -755,6 +864,7 @@ static void emitAlternateInstsOpcodeFunc(
   o << "  }\n}\n";
   o << "#endif // GET_ALTERNATE_INST_OPCODE_FUNC\n\n";
 }
+
 
 void CodeGenFormat::computeSlotSets(TGTargetSlots &Slots,
                                     std::vector<TGInstrLayout> &InstFormats) {
@@ -1174,14 +1284,32 @@ void TGInstrLayout::emitFlatTree(ConstTable &FieldsHierarchy,
 void TGInstrLayout::emitAlternateInstsOpcodeSet(raw_ostream &o) const {
   assert(AlternateInsts.size() &&
          "AlternateInsts cannot be empty for multi slot pseudo instr");
-  o << "    // " << Target << "::" << InstrName << "\n";
-  o << "    { ";
-  for (const auto &AltInstr : AlternateInsts) {
-    o << AltInstr;
-    if (AltInstr != AlternateInsts.back())
-      o << ", ";
+  // Emit sparse size-3 (index == field/slot; 0 = hole) so PlacementAlternative
+  // FieldSlots = 1<<index matches the member's issue field. Declarative
+  // materializableInto lists may omit holes (e.g. S1+S2 only); place each
+  // member by residual _S{N} suffix when present, else densify list order
+  // into the first N slots (AIE consecutive MultiSlot shape).
+  std::string Members[3] = {"0", "0", "0"};
+  bool AnySuffix = false;
+  for (const std::string &AltInstr : AlternateInsts) {
+    StringRef Leaf = stripTargetNamespace(AltInstr);
+    for (unsigned Slot = 0; Slot < 3; ++Slot) {
+      if (!Leaf.ends_with(SlotMemberSuffix[Slot]))
+        continue;
+      Members[Slot] = AltInstr;
+      AnySuffix = true;
+      break;
+    }
   }
-  o << " }";
+  if (!AnySuffix) {
+    for (unsigned I = 0, E = static_cast<unsigned>(AlternateInsts.size());
+         I < E && I < 3; ++I)
+      Members[I] = AlternateInsts[I];
+  }
+  o << "    // " << Target << "::" << InstrName
+    << " (MultiSlot_Pseudo materializableInto, sparse size-3)\n";
+  o << "    { " << Members[0] << ", " << Members[1] << ", " << Members[2]
+    << " }";
 }
 
 void TGInstrLayout::emitAlternateInstsOpcode(raw_ostream &o,

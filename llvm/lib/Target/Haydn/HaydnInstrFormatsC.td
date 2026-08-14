@@ -1,4 +1,4 @@
-//===-- HaydnInstrFormatsC.td - Compressed Formats ---------*- tablegen -*-===//
+//===-- HaydnInstrFormatsC.td - Size-6 TableGen shells ----*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,64 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Compressed 16-bit and extended 48-bit instruction formats.
-// Per §2.7 and §2.9 of the plan.
+// TableGen size-6 (HaydnInst48 / Fmt48_*) shells for live logical opcodes
+// such as ADDI32_W, BEQZ_W, and JAL_W. Product encode is Format E member.
 //
-//===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// Compressed 16-bit and extended 48-bit instruction formats.
-// Per §2.7 and §2.9 of the plan.
-//===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// Compressed 16-bit instruction formats — encoding_manual.md §2 (Slice 4
-// spec migration).
-//
-// §2.1 Bundle Bit Map:
-// bits[15:4] = opcode / operands (12b)
-// bits[3:0] = pattern (4b). bits[3:1] select one of 8 patterns; bit[0]=0
-// is the primary 16-bit-width discriminator (§1 decode tree).
-//
-// §2.2 Pattern Table:
-// 0000 NOP all-zero 16-bit window (canonical bundle NOP, §2.4/§10.5).
-// 0010 HINT hint(8) | 0000(4 reserved).
-// 0100 ALU32 R opc(6) | rs(3) | rt(3). 64 ops, GPR32Lo (r0-r7).
-// 0110 MOVI opc(2) | rd(3) | imm7(7). MOVI rd, imm7 (-64..+63).
-// 1000 BRANCH opc(2) | imm10(10). PC-rel branch (-512 words).
-// 1010 ALU32 RI opc(4) | rs(3) | rt(3) | imm2(2). Tiny imm 0-3.
-// 1100 ALU32 SI opc(4) | rd(3) | imm5(5). Destructive rd=rd OP imm.
-// 1110 Reserved (future extension).
-//
-// §2.3 Key Design Changes vs the legacy layout (bits[15:14]=00 + 6b opcode):
-// ZERO/CLR eliminated; ZERO_GPR = MOVI rd, 0.
-// ALU32 R opcode expanded 4b -> 6b (16 -> 64 ops).
-// HINT expanded 4b -> 8b.
-// MOVI immediate expanded imm5 -> imm7 (-16 -> +-64).
-// BRANCH offset expanded imm8 -> imm10 (-128 -> +-512 words).
-//
-// The legacy FmtC_ALU/FmtC_LS/FmtC_ALUImm4/FmtC_II classes (6b opcode at
-// [13:8] with rd at [7:4]) are RETIRED by this migration. Concrete C_*
-// instruction defs in HaydnInstrInfoC.td are re-encoded onto the §2.2
-// pattern classes below.
-//===----------------------------------------------------------------------===//
-
-class HaydnInst16<dag outs, dag ins, string asmstr, list<dag> pattern>
-    : HaydnInst<2, outs, ins, asmstr, pattern> {
-  let TSFlags{4-3} = 0b00;
-  let DecoderNamespace = "Haydn16";
-}
-
-//===----------------------------------------------------------------------===//
-// FmtC_* 16-bit compressed format classes RETIRED.
-// HaydnInst16 kept — NOP still uses the 16-bit all-zero encoding.
-// C_* instruction shells deleted from HaydnInstrInfoC.td.
-//===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// 48-bit extended format
-// 32-bit R/I-type base + 16-bit extension payload
-// Consumes one owner issue slot (the extension is NOT an issue slot)
 //===----------------------------------------------------------------------===//
 
 class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
@@ -73,25 +18,19 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 // NOTE: The legacy `FmtExtI` class (base 32-bit parcel + 16-bit extension
-// parcel, width tag 0b10) was removed — it contradicted encoding_manual.md
-// §4/§5, which define the two 48-bit formats (MOVEI, Wide-imm ALU) as flat
-// 6-byte parcels, not a base+extension split. No `def` inherited FmtExtI
-// (grep across lib/Target/Haydn/ returned only the class definition).
-// The spec-aligned 48-bit formats are Fmt48_MOVEI (§4) and Fmt48_WideImmALU
-// (§5) below. See -fmt-exti-disposition-and-widemm-isPseudo.md.
+// parcel, width tag 0b10) was removed. TableGen size-6 shell; product encode
+// is Format E member. No `def` inherited FmtExtI.
 
 //===----------------------------------------------------------------------===//
-// 48-bit S-format (MOVEI) — encoding_manual.md §4. RETIRED by.
+// 48-bit S-format (MOVEI) RETIRED.
 //
 // The Fmt48_MOVEI class and its 2 defs (MOVEI_H/MOVEI_L) had zero live C++
-// consumers subsequent and are removed. The §4 bit-layout documentation is
-// retained above for historical reference.
+// consumers subsequent and are removed.
 //===----------------------------------------------------------------------===//
 
 
 //===----------------------------------------------------------------------===//
-// 48-bit Wide-imm ALU — encoding_manual.md §5 (Slice 1 spec migration
-// RESOLVES.
+// 48-bit Wide-imm ALU. TableGen size-6 shell; product encode is Format E member.
 //
 // AUDIT : all 9 Fmt48_Wide* classes below are KEPT — each is
 // the base class of >=1 live def in HaydnInstrInfo.td. No class is orphaned.
@@ -162,7 +101,7 @@ class Haydn48WideBase<dag outs, dag ins, string asmstr, list<dag> pattern>
 // bits[19:16] = rs bits[15:12] = rt bits[11:4] = opcode bits[3:0] = 1101
 //===----------------------------------------------------------------------===//
 
-// 48-bit WIDE GPR-Imm format. encoding_manual.md §5.4, Class 000.
+// 48-bit WIDE GPR-Imm format. TableGen size-6 shell; product encode is Format E member.
 // `rt = rs OP (imm20)` (sign-extended for ADDI32_W/SUBI32_W/...; zero
 // extended for ANDI32_W/ORI32_W/XORI32_W/LUI_W). The constraint
 // `$rt = $rs` makes the read-modify-write explicit; the encoder writes the
@@ -194,7 +133,7 @@ class Fmt48_WideGPRImm<bits<8> opcode, dag outs, dag ins, string asmstr,
 // RI12 (JALR): bits[47:36]=offset12 [35:32]=rd [15:12]=rs opcode=0x30
 //===----------------------------------------------------------------------===//
 
-// 48-bit WIDE Branch I20 format (JAL). encoding_manual.md §5.5.
+// 48-bit WIDE Branch I20 format (JAL). TableGen size-6 shell; product encode is Format E member.
 // `rt = PC+6; PC += sext(offset20) << 1`. The 20-bit offset is in 2-byte
 // units (§5.14, D1). The MC encoder emits a FIXUP_HAYDN_CallSImm20 fixup
 // for symbolic targets; the encoded immediate is `(target - PC) >> 1`.
@@ -216,7 +155,8 @@ class Fmt48_WideBR_I20<bits<8> opcode, dag outs, dag ins, string asmstr,
 }
 
 // 48-bit WIDE Branch RI12 format (BEQ/BNE/BGE/BGEU/BLT/BLTU/JALR).
-// encoding_manual.md §5.5. Two-register form: `if (rs COND rt) PC += sext(off12)<<1`
+// TableGen size-6 shell; product encode is Format E member.
+// Two-register form: `if (rs COND rt) PC += sext(off12)<<1`
 // (or for JALR `rt=PC+6; PC=rs+sext(off12)`). bits[35:32]=rt, bits[15:12]=rs.
 class Fmt48_WideBR_RI12<bits<8> opcode, dag outs, dag ins, string asmstr,
                         list<dag> pattern>
@@ -238,7 +178,7 @@ class Fmt48_WideBR_RI12<bits<8> opcode, dag outs, dag ins, string asmstr,
 }
 
 // 48-bit WIDE Branch I12 format (BEQZ/BNEZ/BGEZ/BLTZ).
-// encoding_manual.md §5.5. Single-register form:
+// TableGen size-6 shell; product encode is Format E member. Single-register form:
 // `if (rs COND 0) PC += sext(off12)<<1`. bits[15:12]=rs; bits[35:32]=spare.
 class Fmt48_WideBR_I12<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
@@ -267,10 +207,10 @@ class Fmt48_WideBR_I12<bits<8> opcode, dag outs, dag ins, string asmstr,
 // Fmt48_WideDR_RI20 RETIRED — its 7 defs (ADDI64/SUBI64
 // ANDI64/ORI64/XORI64/SLTI64/SLTUI64) had zero live C++ consumers subsequent.
 // The RI6 shift format (Fmt48_WideDR_RI6) below is KEPT — SLLI64/SRLI64
-// SRAI64 are consumed by HaydnDClassOpcodes.cpp.
+// SRAI64 remain live logical opcodes.
 //===----------------------------------------------------------------------===//
 
-// 48-bit WIDE DR-Imm RI6 format (shifts). encoding_manual.md §5.6.
+// 48-bit WIDE DR-Imm RI6 format (shifts). TableGen size-6 shell; product encode is Format E member.
 // `rtd = rsd <shift> imm6` (rsd tied to rtd).
 class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
@@ -300,7 +240,7 @@ class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
 // Class 100 — Control (§5.8-5.13). CSR + ZERO_GPR + SET_HWLOOP forms.
 //===----------------------------------------------------------------------===//
 
-// 48-bit WIDE CSR format (CSRR/CSRW). encoding_manual.md §5.9, §5.10.
+// 48-bit WIDE CSR format (CSRR/CSRW). TableGen size-6 shell; product encode is Format E member.
 // CSRR: `rt = CSR[uimm8]`. CSRW: `CSR[uimm8] = rs`. bits[47:40]=uimm8
 // bits[39:16]=spare(0), bits[15:12]=rt/rs, opcode=0x80/0x81.
 class Fmt48_WideCSR<bits<8> opcode, dag outs, dag ins, string asmstr,

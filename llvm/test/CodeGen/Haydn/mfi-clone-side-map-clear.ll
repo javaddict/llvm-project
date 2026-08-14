@@ -5,9 +5,9 @@
 ; Role: phase-firewall pin (CG-25 / PIPE-20): clone clears AltDescs and remaps SMS MBBs.
 
 ; CHECK-LABEL: clone_src_a:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 ; CHECK-LABEL: clone_src_b:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 
 define i32 @clone_src_a(i32 %x, i32 %y) {
 entry:

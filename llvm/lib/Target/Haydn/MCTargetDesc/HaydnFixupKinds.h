@@ -120,18 +120,11 @@ enum Fixups {
   FIXUP_HAYDN_S0LSOff2_0,
   FIXUP_HAYDN_S0LSOff3_0,
 
-  // s0 LS D_LD/S_LD/D_ST/S_ST imm6 field at LoWord bits[13:8]
-  // (per HaydnFU_LS_S0_*_RI6 in HaydnFormatsLS.td:
-  // `s0 = {FU, opcode, reserved[24], imm6, rtd/rt, rs}`). Signed 6-bit byte
-  // offset (the `simm6` operand stores the raw value — no scaling). The
-  // encoder (HaydnMCCodeEmitter::getExprFixupKind) currently routes
-  // LD32/ST32/LD64/ST64 to FIXUP_HAYDN_LO20, which writes 20 bits at
-  // bits[37:18] — that is the WRONG field for LS (the 6-bit imm6 lives at
-  // bits[13:8], a different position from the ADDI32_W imm20). The result is
-  // a silent miscompilation of LS relocatable addresses. MC-only
-  // no ELF reloc; the encoder wiring maps LD32_S0 / ST32_S0 / LD64_S0 /
-  // ST64_S0 to this kind instead of LO20. Defined + mapped here so the
-  // encoder change is a one-line edit.
+  // Format E LOADSTORE0/LOAD1 RI6 signed imm6 @ parcel bits[33:28]
+  // (HaydnRelocLayout LS_IMM). Distinct from FIXUP_HAYDN_LO20 (ALU RI20 /
+  // retired WIDE LSOff20 @ bits[31:50]). Encoder getExprFixupKind routes
+  // generated LS RI6 members (and peeled LD32/ST32/LD64/ST64 → S_LW_WITH_IMM
+  // etc.) here. Maps 1:1 to ELF R_HAYDN_LS_IMM — never R_HAYDN_SImm16.
   FIXUP_HAYDN_LS_IMM,
 
   // Marker - must be last

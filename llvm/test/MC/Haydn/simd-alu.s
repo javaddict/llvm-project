@@ -56,10 +56,10 @@
 // CHECK: { x4frsst16 d0, d1, d2 } // encoding: [0x07,0x8b,0x0d,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { x4frst16 d3, d4, d5 } // encoding: [0x07,0xab,0x3d,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { x4sat32t16 d0, d1, d2 } // encoding: [0x07,0xcb,0x0d,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4cjmul16s_h d0, d1, d2 } // encoding: [0x47,0xa1,0x06,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4cjmul16s_l d3, d4, d5 } // encoding: [0x47,0xa9,0x36,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4cmul16s_h d6, d7, d8 } // encoding: [0x47,0x81,0x66,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-// CHECK: { x4cmul16s_l d9, d10, d11 } // encoding: [0x47,0x89,0x96,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4cjmul16s.h d0, d1, d2 } // encoding: [0x47,0xa1,0x06,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4cjmul16s.l d3, d4, d5 } // encoding: [0x47,0xa9,0x36,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4cmul16s.h d6, d7, d8 } // encoding: [0x47,0x81,0x66,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+// CHECK: { x4cmul16s.l d9, d10, d11 } // encoding: [0x47,0x89,0x96,0xba,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { x2fmula32rs d0, d1, d2 } // encoding: [0x47,0x01,0x0d,0x21,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { x2fmula32rss d3, d4, d5 } // encoding: [0x47,0x09,0x3d,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 // CHECK: { x2fmuls32rs d6, d7, d8 } // encoding: [0x47,0x19,0x6d,0x87,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
@@ -124,10 +124,10 @@
 // ROUNDTRIP: {{.*}}270: 07 8b 0d 21 00 00 00 00 00 00 00 00 { 	nop; 	x4frsst16	d0, d1, d2 }
 // ROUNDTRIP: {{.*}}27c: 07 ab 3d 54 00 00 00 00 00 00 00 00 { 	nop; 	x4frst16	d3, d4, d5 }
 // ROUNDTRIP: {{.*}}288: 07 cb 0d 21 00 00 00 00 00 00 00 00 { 	nop; 	x4sat32t16	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}294: 47 a1 06 21 00 00 00 00 00 00 00 00 { 	nop; 	x4cjmul16s_h	d0, d1, d2 }
-// ROUNDTRIP: {{.*}}2a0: 47 a9 36 54 00 00 00 00 00 00 00 00 { 	nop; 	x4cjmul16s_l	d3, d4, d5 }
-// ROUNDTRIP: {{.*}}2ac: 47 81 66 87 00 00 00 00 00 00 00 00 { 	nop; 	x4cmul16s_h	d6, d7, d8 }
-// ROUNDTRIP: {{.*}}2b8: 47 89 96 ba 00 00 00 00 00 00 00 00 { 	nop; 	x4cmul16s_l	d9, d10, d11 }
+// ROUNDTRIP: {{.*}}294: 47 a1 06 21 00 00 00 00 00 00 00 00 { 	nop; 	x4cjmul16s.h	d0, d1, d2 }
+// ROUNDTRIP: {{.*}}2a0: 47 a9 36 54 00 00 00 00 00 00 00 00 { 	nop; 	x4cjmul16s.l	d3, d4, d5 }
+// ROUNDTRIP: {{.*}}2ac: 47 81 66 87 00 00 00 00 00 00 00 00 { 	nop; 	x4cmul16s.h	d6, d7, d8 }
+// ROUNDTRIP: {{.*}}2b8: 47 89 96 ba 00 00 00 00 00 00 00 00 { 	nop; 	x4cmul16s.l	d9, d10, d11 }
 // ROUNDTRIP: {{.*}}2c4: 47 01 0d 21 00 00 00 00 00 00 00 00 { 	nop; 	x2fmula32rs	d0, d1, d2 }
 // ROUNDTRIP: {{.*}}2d0: 47 09 3d 54 00 00 00 00 00 00 00 00 { 	nop; 	x2fmula32rss	d3, d4, d5 }
 // ROUNDTRIP: {{.*}}2dc: 47 19 6d 87 00 00 00 00 00 00 00 00 { 	nop; 	x2fmuls32rs	d6, d7, d8 }
@@ -313,13 +313,13 @@ x4sat32t16 d0, d1, d2
 # SIMD X4 Complex Multiply (non-ternary forms)
 #===----------------------------------------------------------------------===
 
-x4cjmul16s_h d0, d1, d2
+x4cjmul16s.h d0, d1, d2
 
-x4cjmul16s_l d3, d4, d5
+x4cjmul16s.l d3, d4, d5
 
-x4cmul16s_h d6, d7, d8
+x4cmul16s.h d6, d7, d8
 
-x4cmul16s_l d9, d10, d11
+x4cmul16s.l d9, d10, d11
 
 #===----------------------------------------------------------------------===
 # X2 Fractional Multiply Accumulate/Subtract (FmtALU64 — 3-operand)

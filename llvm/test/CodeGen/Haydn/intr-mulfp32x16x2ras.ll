@@ -7,6 +7,8 @@
 ;
 ; REBASELINED : / cutover — slot auction now packs x2s* shifts and fmula16 ops into multi-op bundles (with `nop` padding when S0 is idle); per-function op set unchanged.
 ; REBASELINED : scheduling changed (//) — bundles regrouped, ops unchanged.
+; REBASELINED 2026-08-14: MAC FieldSlot→MemberId at Finalize gives members
+; real itineraries, so consecutive FMULA co-issue (idle `{ nop; nop }` gone).
 
 ;
 ; REGRESSION TEST: mulfp32x16x2ras (32x16 fractional MAC) must use native
@@ -35,15 +37,14 @@ define i64 @test_mulfp32x16x2ras_low(i64 %acc, i64 %a32, i64 %b16) {
 ; CHECK-NEXT:    { x2slli32 d2, d2, 16; x2srai32 d3, d2, 16 }
 ; CHECK-NEXT:    { x2srai32 d2, d2, 16; x2slli32 d3, d3, 16 }
 ; CHECK-NEXT:    { fmula16.ls00 d0, d1, d2; x2srai32 d3, d3, 16 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { fmula16.ls11 d0, d1, d2; x2slli32 d3, d3, 16 }
 ; CHECK-NEXT:    { nop; x2srai32 d3, d3, 16 }
 ; CHECK-NEXT:    { nop; fmula16.hs00 d0, d1, d3 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; fmula16.hs11 d0, d1, d3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulfp32x16x2ras.low(i64 %acc, i64 %a32, i64 %b16)
   ret i64 %r
 }
@@ -58,15 +59,13 @@ define i64 @test_mulfp32x16x2ras_high(i64 %acc, i64 %a32, i64 %b16) {
 ; CHECK-NEXT:    { x2srai32 d2, d2, 16; x2slli32 d3, d2, 16 }
 ; CHECK-NEXT:    { x2slli32 d2, d2, 16; x2srai32 d3, d3, 16 }
 ; CHECK-NEXT:    { x2srai32 d2, d2, 16; fmula16.ls00 d0, d1, d3 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; fmula16.ls11 d0, d1, d3 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; fmula16.hs00 d0, d1, d2 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; fmula16.hs11 d0, d1, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.mulfp32x16x2ras.high(i64 %acc, i64 %a32, i64 %b16)
   ret i64 %r
 }

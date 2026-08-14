@@ -40,8 +40,8 @@ define i32 @test_direct_return(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; %x arrives in R1. No computation, so it should be returned directly
 ; without a COPY or MOVE32.
@@ -58,8 +58,8 @@ define i32 @test_simple_op_return(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; %x in R1. Result of add should go directly to R1 (return register).
   %result = add i32 %x, 1
@@ -74,8 +74,8 @@ define i64 @test_dr64_direct_return(i64 %x) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; %x arrives in D0. Should return in D0 without a copy.
   ret i64 %x
@@ -94,8 +94,8 @@ define i32 @test_phi_coalescing(i32 %x, i1 %cond) nounwind {
 ; CHECK-NEXT:    { nop; movt32 r1, r3, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; The phi result should coalesce with the input values to minimize copies.
   br i1 %cond, label %then, label %else
@@ -126,8 +126,8 @@ define i32 @test_two_arg_accumulate(i32 %a, i32 %b) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; %a in R1, %b in R2. add32 r1, r1, r2 puts result in R1 (return reg).
   %result = add i32 %a, %b
@@ -143,8 +143,8 @@ define i64 @test_dr64_two_arg_accumulate(i64 %a, i64 %b) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; %a in D0, %b in D1. add64 d0, d0, d1 puts result in D0 (return reg).
   %result = add i64 %a, %b
@@ -160,11 +160,11 @@ define i32 @test_copy_chain_collapse() nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; jal_w lr, simple_callee }
+; CHECK-NEXT:    { nop; jal lr, simple_callee }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
   %v1 = call i32 @simple_callee()
   ret i32 %v1

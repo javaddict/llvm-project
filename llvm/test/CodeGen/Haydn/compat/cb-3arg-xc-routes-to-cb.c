@@ -54,8 +54,8 @@ volatile uintptr_t  g_ptr_sink;
 // CBR0 boundary setup must survive (hasSideEffects prevents DCE).
 // CSR addresses: CBR_BEGIN[0]=0x2C=44, CBR_END[0]=0x2D=45.
 // ASM-LABEL: setup_cbr0:
-// ASM: csrw_w{{(\.s[012])?}} 44, {{r[0-9]+}}
-// ASM: csrw_w{{(\.s[012])?}} 45, {{r[0-9]+}}
+// ASM: csrw{{(_w)?}}{{(\.s[012])?}} 44, {{r[0-9]+}}
+// ASM: csrw{{(_w)?}}{{(\.s[012])?}} 45, {{r[0-9]+}}
 void setup_cbr0(void *base, uintptr_t end) {
   WUR_AE_CBEGIN0((uintptr_t)base);
   WUR_AE_CEND0(end);

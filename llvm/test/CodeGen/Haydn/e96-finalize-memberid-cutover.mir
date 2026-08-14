@@ -1,0 +1,584 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+
+# Role: MIR — Finalize cutoverBundleFieldSlots rewrites residual FieldSlot
+# children to generated MemberId. Entry is membership position, not the
+# suffix digit: logical ADD32 as the sole child of an E2 BUNDLE cutovers
+# to ADD32_E2_E0_ALU0_RR, never e2. Dual residual: child0 → e0, child1 → e1.
+# 3-child packs that cannot bind in membership order (store only at E3 e0
+# LOADSTORE0; dual loads LS0+LOAD1) rebind via assignFormatEMemberEntries.
+# WIDE integer ADDI32_W_S0 peels to ADDI32 and cutovers. Compact reloc
+# logical BEQZ and reloc-bearing JAL_W_S0/JALR_W_S0 cutover (members use WIDE
+# PCRel operand classes; JALR link is an SSA out). Reloc ADDI32_W uses
+# simm20_wide_abs; reloc SET_HWLOOP_F2_W uses uimm6/uimm12 + HWLoopOff
+# fixups. POST/PRE FieldSlots cutover: members carry tied dest2 writeback.
+# Unsuffixed catalog logicals CSRW_W / ST32_POST cutover when Desc matches.
+# Extra trailing uses (MOVE32/ABS32 vestigial rs2) and tied MAC acc ins
+# (`$rta = $rtd`) drop onto the member Desc. Vestigial first ins (LUI $rs)
+# drops when generated dest is an SSA out. Catalog role `reg` is an SSA
+# def for LUI/ZERO_GPR/ZERO_DR/CSRR/MOVESFR2GPR (same seam as JALR).
+# Pad NOP_S0 beside real work is CompletionState, not membership:
+# skip without consuming an entry and erase after rewrite.
+
+--- |
+  @g = external global i32
+  define void @cutover_s2_at_e0() { ret void }
+  define void @cutover_dual_residual() { ret void }
+  define void @cutover_addi32_w_integer() { ret void }
+  define void @cutover_ld32_s0() { ret void }
+  define void @cutover_st32_s0() { ret void }
+  define void @cutover_s_lw_post_imm() { ret void }
+  define void @cutover_s_sw_post_imm() { ret void }
+  define void @cutover_beqz_reloc() {
+    br label %1
+  1:
+    ret void
+  }
+  define void @cutover_jal_w_reloc() {
+    br label %1
+  1:
+    ret void
+  }
+  define void @cutover_jalr_w_reloc() { ret void }
+  define void @cutover_addi32_w_reloc() { ret void }
+  define void @cutover_set_hwloop_f2_w_reloc() {
+    br label %1
+  1:
+    ret void
+  }
+  define void @cutover_nop_sibling_jalr() { ret void }
+  define void @cutover_nop_sibling_beqz() {
+    br label %1
+  1:
+    ret void
+  }
+  define void @cutover_csrw_w_s0() { ret void }
+  define void @cutover_csrw_w() { ret void }
+  define void @cutover_st32_post() { ret void }
+  define void @cutover_store_last_srli_sext_st64() { ret void }
+  define void @cutover_alu_then_dual_load() { ret void }
+  define void @cutover_and_move_st32() { ret void }
+  define void @cutover_srli64_uimm6_32() { ret void }
+  define void @cutover_move32_s2() { ret void }
+  define void @cutover_mula64_hh_s1() { ret void }
+  define void @cutover_movt32_s0() { ret void }
+  define void @cutover_x2movt32_s1() { ret void }
+  define void @cutover_x2mula32_s1() { ret void }
+  define void @cutover_lui_s0() { ret void }
+  define void @cutover_zero_gpr_s0() { ret void }
+  define void @cutover_csrr_s0() { ret void }
+...
+---
+name:            cutover_s2_at_e0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; CHECK-LABEL: name: cutover_s2_at_e0
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: ADD32_E2_E0_ALU0_RR
+    ; CHECK-NOT: ADD32_S2
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_dual_residual
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    ; CHECK-LABEL: name: cutover_dual_residual
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: ADD32_E2_E0_ALU0_RR
+    ; CHECK: ADDI32_E2_E1_ALU1_RI20
+    ; CHECK-NOT: ADD32_S0
+    ; CHECK-NOT: ADDI32_S1
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = ADDI32 $r2, 1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_addi32_w_integer
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: cutover_addi32_w_integer
+    ; CHECK: ADDI32_E2_E0_ALU0_RI20
+    ; CHECK-NOT: ADDI32_W_S0
+    BUNDLE 0, 0, implicit-def $r1, implicit-def dead $sfr, implicit $r0 {
+      $r1 = ADDI32_W_S0 $r0, 8, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_ld32_s0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; CHECK-LABEL: name: cutover_ld32_s0
+    ; CHECK: S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6
+    ; CHECK-NOT: LD32_S0
+    BUNDLE 0, 0, implicit-def $r1, implicit $r2 {
+      $r1 = LD32 $r2, 1
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_st32_s0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: cutover_st32_s0
+    ; CHECK: S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6
+    ; CHECK-NOT: ST32_S0
+    BUNDLE 0, 0, implicit $r1, implicit $r2 {
+      ST32 $r1, $r2, 1
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_s_lw_post_imm
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; CHECK-LABEL: name: cutover_s_lw_post_imm
+    ; CHECK: S_LW_POST_IMM_E2_E0_LOADSTORE0_RI6
+    ; CHECK-NOT: S_LW_POST_IMM_S0
+    BUNDLE 0, 0, implicit-def $r1, implicit-def $r2, implicit $r2 {
+      $r1, $r2 = S_LW_POST_IMM $r2, 1
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_s_sw_post_imm
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: cutover_s_sw_post_imm
+    ; CHECK: S_SW_POST_IMM_E2_E0_LOADSTORE0_RI6
+    ; CHECK-NOT: S_SW_POST_IMM_S0
+    BUNDLE 0, 0, implicit-def $r2, implicit $r1, implicit $r2 {
+      $r2 = S_SW_POST_IMM $r1, $r2, 1
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_beqz_reloc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    successors: %bb.1
+    ; CHECK-LABEL: name: cutover_beqz_reloc
+    ; CHECK: BEQZ_E2_E0_ALU0_I12
+    ; CHECK-NOT: BEQZ_S0
+    BUNDLE 0, 0, implicit $r0 {
+      BEQZ $r0, %bb.1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            cutover_jal_w_reloc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1
+    ; CHECK-LABEL: name: cutover_jal_w_reloc
+    ; CHECK: JAL_E2_E0_ALU0_I20
+    ; CHECK-NOT: JAL_W_S0
+    BUNDLE 0, 0, implicit-def $r15 {
+      $r15 = JAL_W_S0 %bb.1
+    }
+    RET implicit $r15
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            cutover_jalr_w_reloc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: cutover_jalr_w_reloc
+    ; CHECK: JALR_E2_E0_ALU0_RI12
+    ; CHECK-NOT: JALR_W_S0
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_W_S0 $r15, 0
+    }
+
+...
+---
+name:            cutover_addi32_w_reloc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: cutover_addi32_w_reloc
+    ; CHECK: ADDI32_E2_E0_ALU0_RI20
+    ; CHECK-NOT: ADDI32_W_S0
+    BUNDLE 0, 0, implicit-def $r1, implicit-def dead $sfr, implicit $r0 {
+      $r1 = ADDI32_W_S0 $r0, @g, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_set_hwloop_f2_w_reloc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1
+    ; CHECK-LABEL: name: cutover_set_hwloop_f2_w_reloc
+    ; CHECK: SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR
+    ; CHECK-NOT: SET_HWLOOP_F2_W_S0
+    BUNDLE 0, 0, implicit $r1 {
+      SET_HWLOOP_F2_W_S0 1, %bb.1, %bb.1, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            cutover_nop_sibling_jalr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: cutover_nop_sibling_jalr
+    ; CHECK: JALR_E2_E0_ALU0_RI12
+    ; CHECK-NOT: JALR_W_S0
+    ; CHECK-NOT: NOP_S0
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      NOP_S0
+      $r0 = JALR_W_S0 $r15, 0
+    }
+
+...
+---
+name:            cutover_nop_sibling_beqz
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    successors: %bb.1
+    ; CHECK-LABEL: name: cutover_nop_sibling_beqz
+    ; CHECK: BEQZ_E2_E0_ALU0_I12
+    ; CHECK-NOT: BEQZ_W_S0
+    ; CHECK-NOT: NOP_S0
+    BUNDLE 0, 0, implicit $r0 {
+      NOP_S0
+      BEQZ_W_S0 $r0, %bb.1
+    }
+    RET implicit $r15
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            cutover_csrw_w_s0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: cutover_csrw_w_s0
+    ; CHECK: CSRW_E2_E0_ALU0_I8
+    ; CHECK-NOT: CSRW_W_S0
+    BUNDLE 0, 0, implicit $r1, implicit-def $sfr {
+      CSRW_W_S0 44, $r1, implicit-def $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_csrw_w
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: cutover_csrw_w
+    ; CHECK: CSRW_E2_E0_ALU0_I8
+    ; CHECK-NOT: CSRW_W
+    BUNDLE 0, 0, implicit $r1, implicit-def $sfr {
+      CSRW_W 44, $r1, implicit-def $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_st32_post
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: cutover_st32_post
+    ; CHECK: S_SW_POST_IMM_E2_E0_LOADSTORE0_RI6
+    ; CHECK-NOT: ST32_POST
+    BUNDLE 0, 0, implicit-def $r2, implicit $r1, implicit $r2 {
+      $r2 = ST32_POST $r1, $r2, 1
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_store_last_srli_sext_st64
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $r3, $r4, $r15
+    ; CHECK-LABEL: name: cutover_store_last_srli_sext_st64
+    ; CHECK: BUNDLE 1, 0
+    ; CHECK-DAG: D_SDW_WITH_IMM_E3_E0_LOADSTORE0_RI6
+    ; CHECK-DAG: SRLI64_E3_
+    ; CHECK-DAG: SEXT32T64_E3_
+    ; CHECK-NOT: SRLI64_S1
+    ; CHECK-NOT: ST64_S0
+    BUNDLE 1, 0, implicit-def $d1, implicit-def $d2, implicit-def dead $sfr, implicit $d1, implicit $r3, implicit $d0, implicit $r4 {
+      $d1 = SRLI64 $d1, 1, implicit-def dead $sfr
+      $d2 = SEXT_GPR32_TO_DR64 $r3, implicit-def dead $sfr
+      ST64 $d0, $r4, 16, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_alu_then_dual_load
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3, $r4, $r6, $r15
+    ; CHECK-LABEL: name: cutover_alu_then_dual_load
+    ; CHECK: BUNDLE 1, 0
+    ; CHECK-DAG: D_LDW_WITH_IMM_E3_E0_LOADSTORE0_RI6
+    ; CHECK-DAG: S_LW_WITH_IMM_E3_
+    ; CHECK-DAG: SLT32_E3_
+    ; CHECK-NOT: LD64_S0
+    ; CHECK-NOT: LD32_S1
+    BUNDLE 1, 0, implicit-def $r1, implicit-def $d0, implicit-def $r5, implicit-def dead $sfr, implicit $r2, implicit $r3, implicit $r4, implicit $r6 {
+      $r1 = SLT32 $r2, $r3, implicit-def dead $sfr
+      $d0 = LD64 $r4, 0, implicit-def dead $sfr
+      $r5 = LD32 $r6, 4, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_and_move_st32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3, $d0, $r6, $r5, $r15
+    ; CHECK-LABEL: name: cutover_and_move_st32
+    ; CHECK: BUNDLE 1, 0
+    ; CHECK-DAG: S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6
+    ; CHECK-DAG: AND32_E3_
+    ; CHECK-DAG: MOVE32_DR_L_E3_
+    ; CHECK-NOT: ST32_S0
+    BUNDLE 1, 0, implicit-def $r1, implicit-def $r4, implicit-def dead $sfr, implicit $r2, implicit $r3, implicit $d0, implicit $r6, implicit $r5 {
+      $r1 = AND32 $r2, $r3, implicit-def dead $sfr
+      $r4 = MOVE32_DR_L $d0, implicit-def dead $sfr
+      ST32 $r6, $r5, 0, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_srli64_uimm6_32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d5, $r7, $d0, $r13, $r15
+    ; CHECK-LABEL: name: cutover_srli64_uimm6_32
+    ; CHECK: BUNDLE 1, 0
+    ; CHECK-DAG: SRLI64_E3_
+    ; CHECK-DAG: SEXT32T64_E3_
+    ; CHECK-DAG: D_SDW_WITH_IMM_E3_E0_LOADSTORE0_RI6
+    ; CHECK-NOT: SRLI64_S2
+    ; CHECK-NOT: SEXT_GPR32_TO_DR64_S1
+    BUNDLE 1, 0, implicit-def $d5, implicit-def $d6, implicit-def dead $sfr, implicit $d5, implicit $r7, implicit $d0, implicit $r13 {
+      $d5 = SRLI64 $d5, 32, implicit-def dead $sfr
+      $d6 = SEXT_GPR32_TO_DR64 $r7
+      ST64 $d0, $r13, 2, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_move32_s2
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; CHECK-LABEL: name: cutover_move32_s2
+    ; CHECK: MOVE32_E2_E0_ALU0_R
+    ; CHECK-NOT: MOVE32_S2
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = MOVE32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_mula64_hh_s1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $r15
+    ; CHECK-LABEL: name: cutover_mula64_hh_s1
+    ; CHECK: MULA64_HH_E2_E0_MAC0_RR
+    ; CHECK-NOT: MULA64_HH_S1
+    BUNDLE 0, 0, implicit-def $d0, implicit $d0, implicit $d1, implicit $d2 {
+      $d0 = MULA64_HH $d0, $d1, $d2
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_movt32_s0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r5, $r1, $r15
+    ; CHECK-LABEL: name: cutover_movt32_s0
+    ; CHECK: MOVT32_E2_E0_ALU0_RR
+    ; CHECK-NOT: MOVT32_S0
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r2, implicit $r5, implicit $r1 {
+      $r2 = MOVT32 $r2, $r5, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_x2movt32_s1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $r15
+    ; CHECK-LABEL: name: cutover_x2movt32_s1
+    ; CHECK: X2MOVT32_E2_E0_ALU0_R
+    ; CHECK-NOT: X2MOVT32_S1
+    BUNDLE 0, 0, implicit-def $d0, implicit $d0, implicit $d1 {
+      $d0 = X2MOVT32 $d0, $d1, implicit $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_x2mula32_s1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3, $r15
+    ; CHECK-LABEL: name: cutover_x2mula32_s1
+    ; CHECK: X2MULA32_E2_E0_MAC0_RRR
+    ; CHECK-NOT: X2MULA32_S1
+    BUNDLE 0, 0, implicit-def $d0, implicit-def $d1, implicit $d0, implicit $d1, implicit $d2, implicit $d3 {
+      $d0, $d1 = X2MULA32 $d0, $d1, $d2, $d3
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_lui_s0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: cutover_lui_s0
+    ; CHECK: LUI_E2_E0_ALU0_I12
+    ; CHECK-NOT: LUI_S0
+    BUNDLE 0, 0, implicit-def $r1, implicit $r0 {
+      $r1 = LUI $r0, 1
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_zero_gpr_s0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: cutover_zero_gpr_s0
+    ; CHECK: ZERO_GPR_E2_E0_ALU0_I8
+    ; CHECK-NOT: ZERO_GPR_S0
+    BUNDLE 0, 0, implicit-def $r1 {
+      $r1 = ZERO_GPR
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_csrr_s0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: cutover_csrr_s0
+    ; CHECK: CSRR_E2_E0_ALU0_I8
+    ; CHECK-NOT: CSRR_S0
+    BUNDLE 0, 0, implicit-def $r1, implicit $r0, implicit $sfr {
+      $r1 = CSRR 1, $r0, implicit $sfr
+    }
+    RET implicit $r15
+

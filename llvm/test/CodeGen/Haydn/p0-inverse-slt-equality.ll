@@ -10,7 +10,7 @@ define i32 @both_slt_at_eq(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: both_slt_at_eq:
 ; CHECK-DAG: slt32
 ; CHECK-DAG: slt32
-; CHECK: jalr_w
+; CHECK: jalr
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
   %v1 = zext i1 %cmp1 to i32

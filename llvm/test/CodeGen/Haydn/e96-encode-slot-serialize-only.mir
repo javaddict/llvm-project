@@ -1,0 +1,46 @@
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %s -o %t.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: encodeSlotSubInst is serialize-only.
+#
+# Bug: after placement converted residual/standalone sources to generated
+# MemberId, encodeSlotSubInst still peeled catalog names and
+# fillFormatEMemberInst-rebuilt operands (bag-sort, unit claim-by-name).
+# That was a second MC placement authority (T-MC4 encoder peel).
+#
+# Fix: encodeSlotSubInst encodes generated members / NOP as-is. It does
+# not peel _S* or _E3_ for row/entry. A non-member child that leaks into
+# entry encode fatals "refuse name recovery / operand rebuild".
+#
+# Test design: skip-Finalize dual generated members serialize as-is;
+# encodeSlotSubInst does not peel. 3-child store-last that cannot bind
+# in membership order is the peer NEG in
+# e3-three-child-entry-rebind-serialize.mir
+# (placement-failed, never "failed to fill Format E member operands").
+#
+# If encode-slot peel returns, this dual pack may still pass, but the
+# 3-child NEG would encode or print the old fill diagnostic.
+
+--- |
+  define void @dual_fieldslot_positional() { ret void }
+...
+---
+name:            dual_fieldslot_positional
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+# CHECK-LABEL: <dual_fieldslot_positional>:
+# CHECK-DAG: add32
+# CHECK-DAG: addi32
+# CHECK: jalr
+# CHECK-NOT: <unknown>

@@ -55,7 +55,7 @@ define i64 @mul_s64_full(i64 %a, i64 %b) {
 ; CHECK-LABEL: mul_s64_full:
 ; CHECK-COUNT-3: mul64.ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %r = mul i64 %a, %b
   ret i64 %r
 }
@@ -71,7 +71,7 @@ define i64 @mul_u64_full(i64 %a, i64 %b) {
 ; CHECK-LABEL: mul_u64_full:
 ; CHECK-COUNT-3: mul64.ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %r = mul i64 %a, %b
   ret i64 %r
 }
@@ -82,7 +82,7 @@ define i64 @mul_s64_const(i64 %a) {
 ; CHECK-LABEL: mul_s64_const:
 ; CHECK-COUNT-3: mul64.ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %r = mul i64 %a, 4294967297 ; 0x100000001
   ret i64 %r
 }
@@ -93,7 +93,7 @@ define i32 @mul_s64_trunc(i64 %a, i64 %b) {
 ; CHECK-LABEL: mul_s64_trunc:
 ; CHECK-COUNT-3: mul64.ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %m = mul i64 %a, %b
   %r = trunc i64 %m to i32
   ret i32 %r
@@ -105,7 +105,7 @@ define i64 @mul_mixed_full_ext(i64 %a, i32 %b) {
 ; CHECK-LABEL: mul_mixed_full_ext:
 ; CHECK-COUNT-3: mul64.ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %bb = sext i32 %b to i64
   %r = mul i64 %a, %bb
   ret i64 %r
@@ -118,7 +118,7 @@ define i64 @mul_sext_i32_widen(i32 %a, i32 %b) {
 ; CHECK-COUNT-1: mul64.ll
 ; CHECK-NOT: mul64.ulul
 ; CHECK-NOT: __muldi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
   %r = mul i64 %aa, %bb
@@ -138,7 +138,7 @@ define i64 @mul_zext_i32_widen(i32 %a, i32 %b) {
 ; CHECK-COUNT-1: mul64.ulul
 ; CHECK-NOT: mul64.ll.
 ; CHECK-NOT: __muldi3
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64
   %r = mul i64 %aa, %bb

@@ -14,17 +14,17 @@
 ; load-bearing custom sequence). Locks dual-sched + AIE2 pack order:
 ;
 ; EnsureTerminators in addPostRegAlloc (BEFORE PEI) so invented
-; RET receives epilogue emission. ExpandPostIncEarly + peeps + MBP +
+; RET receives epilogue emission. MBP +
 ; HardwareLoops + ExpandPseudos live in addPreSched2 (AFTER PEI).
 ;
-; Opt0 - EnsureTerminators (pre-PEI) -> PEI -> ExpandPostIncEarly ->
+; Opt0 - EnsureTerminators (pre-PEI) -> PEI ->
 ; ExpandPseudos -> PostMachineScheduler -> Finalize/Verify ->
 ; BranchRelaxation -> late Finalize/Verify (B4.3)
-; (no MBP / HardwareLoops / FixupHwLoops / profitability peeps)
+; (no MBP / HardwareLoops / FixupHwLoops / DeadMI / MCP)
 ;
-; Opt1+ - EnsureTerminators (pre-PEI) -> PEI -> ExpandPostIncEarly ->
-; CFG/Cond/Copy peeps -> MBP BEFORE HardwareLoops -> ExpandPseudos
-; > BitSimplify/PEI peep -> PostMachineScheduler -> Finalize/Verify
+; Opt1+ - EnsureTerminators (pre-PEI) -> PEI -> late-opt MCP(UseCopyInstr)
+; -> DeadMI -> MBP BEFORE HardwareLoops ->
+; ExpandPseudos -> PostMachineScheduler -> Finalize/Verify
 ; PreEmit - BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->
 ; late Finalize/Verify (B4.3 empty-cycle setDesc + wrap; AIE PreEmit empty)
 ;
@@ -64,20 +64,29 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Haydn Post-Selection Optimizer
 
 ; Opt0 custom post-RA / pre-emit (legal encode only):
-; EnsureTerminators is pre-PEI (addPostRegAlloc); Expand* are post-PEI
+; EnsureTerminators is pre-PEI (addPostRegAlloc); ExpandPseudos is post-PEI
 ; (addPreSched2). Do not require NEXT across PEI/debug/analysis.
 ; O0:      Haydn Ensure Dead-End Terminators
-; O0:      Haydn early post-increment pseudo expansion
-; O0-NEXT:      Haydn pseudo instruction expansion pass
+; O0:      Haydn pseudo instruction expansion pass
+; O0-NOT:      Haydn early post-increment pseudo expansion
 ; O0-NOT:      Haydn Condition Optimizer
 ; O0-NOT:      Haydn Copy Elimination
+; O0-NOT:      Machine Copy Propagation Pass
+; O0-NOT:      Remove dead machine instructions
 ; O0-NOT:      Branch Probability Basic Block Placement
 ; O0-NOT:      Haydn Hardware Loop Detection
 ; O0-NOT:      Haydn Bit Simplification
 ; O0-NOT:      Haydn PEI Peephole Optimizer
+; O0-NOT:      Haydn Bundle Finalization
 ; O0:      PostRA Machine Instruction Scheduler
+; Early Finalize/Verify after postmisched: target-local no-reorder commit
+; ownership (never skipFunction). postmisched may quality-skip optnone only.
+; No Finalize/Verify before PostRA (no pre-RA bundle identity).
+; O0-NEXT:      Haydn Bundle Finalization
+; O0-NEXT:      Haydn Bundle Invariant Verifier
 ; O0-NOT:      Branch Probability Basic Block Placement
-; O0:      Branch relaxation pass
+; O0:      Haydn Exposed-Pipeline Latency Stalls
+; O0-NEXT:      Branch relaxation pass
 ; O0-NOT:      Haydn Hardware Loop Fixup
 ; B4.3 late layout firewall after PreEmit growth (AIE PreEmit empty):
 ; O0-NEXT:      Haydn Bundle Finalization
@@ -112,22 +121,30 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123:      Machine Instruction Scheduler
 
 ; Shared Opt1+/Opt2+/Opt3 custom sequence:
-; EnsureTerminators pre-PEI; ExpandPostIncEarly+peeps+MBP+hwloop post-PEI.
-; Analysis (MDT/MLI) may appear between CopyElim and MBP / after MBP.
+; EnsureTerminators pre-PEI; late-opt MCP; DeadMI +
+; MBP + hwloop post-PEI. Invented Cond/CopyElim/BitSimplify/PEIPeephole stay deleted.
 ; O123:      Haydn Ensure Dead-End Terminators
-; O123:      Haydn early post-increment pseudo expansion
-; O123-NEXT:      Haydn Condition Optimizer
-; O123-NEXT:      Haydn Copy Elimination
+; O123:      Machine Copy Propagation Pass
+; O123:      Remove dead machine instructions
+; O123-NOT:      Haydn early post-increment pseudo expansion
+; O123-NOT:      Haydn Condition Optimizer
+; O123-NOT:      Haydn Copy Elimination
 ; O123:      Branch Probability Basic Block Placement
 ; O123-NOT:      Haydn Hardware Loop Detection
 ; O123:      Haydn pseudo instruction expansion pass
-; O123-NEXT:      Haydn Bit Simplification
-; O123-NEXT:      Haydn PEI Peephole Optimizer
+; O123-NOT:      Haydn Bit Simplification
+; O123-NOT:      Haydn PEI Peephole Optimizer
+; O123-NOT:      Haydn Bundle Finalization
 ; O123:      PostRA Machine Instruction Scheduler
+; Early Finalize/Verify after postmisched (no-skip commit ownership).
+; No Finalize/Verify before PostRA (no pre-RA bundle identity).
+; O123-NEXT:      Haydn Bundle Finalization
+; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Sole MBP (addBlockPlacement empty - no second placement after pack):
 ; O123-NOT:      Branch Probability Basic Block Placement
-; PreEmit - BR / FixupHwLoops / BR / late Finalize+Verify
-; O123:      Branch relaxation pass
+; PreEmit - LatencyStalls / BR / FixupHwLoops / BR / late Finalize+Verify
+; O123:      Haydn Exposed-Pipeline Latency Stalls
+; O123-NEXT:      Branch relaxation pass
 ; O123-NOT:      Haydn Hardware Loop Fixup
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier

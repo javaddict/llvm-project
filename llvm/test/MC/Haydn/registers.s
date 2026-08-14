@@ -16,8 +16,8 @@
 # CHECK: {{.*}}48: 07 8b 66 87 00 00 00 00 00 00 00 00{{.*}}and64
 # CHECK: {{.*}}54: 07 ab 96 ba 00 00 00 00 00 00 00 00{{.*}}or64
 # CHECK: {{.*}}60: 07 cb c6 ed 00 00 00 00 00 00 00 00{{.*}}xor64
-# CHECK: {{.*}}6c: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}s_lw_with_imm
-# CHECK: {{.*}}78: 87 43 02 02 00 00 00 00 00 00 00 00{{.*}}d_ldw_with_imm
+# CHECK: {{.*}}6c: 87 43 03 01 00 00 00 00 00 00 00 00{{.*}}ld32
+# CHECK: {{.*}}78: 87 43 02 02 00 00 00 00 00 00 00 00{{.*}}ld64
 # CHECK-NOT: <unknown>
 
 # Immediate-form slli64 is an AsmParser gap exercised elsewhere.

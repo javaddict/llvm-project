@@ -3025,7 +3025,7 @@ pad:
   br label %far
 
 far:
-; CHECK: jalr_w{{(\.s[012])?}} r0, lr, 0
+; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret void
 }
 

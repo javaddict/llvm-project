@@ -24,7 +24,15 @@
 //   PseudoLongB*              -> expandLongBranch (recurse encodeInstruction)
 //   standalone real opcode    -> wrap as Format E E2 singleton (+ NOP underfill)
 // Placement failure fails closed — no sequential E2 singleton split (layout-size
-// fiction vs BranchRelaxation / FixupHwLoops).
+// fiction vs BranchRelaxation / FixupHwLoops). Residual FieldSlot composites
+// serialize as-is / Mode / one dual swap only; they never free-DFS. Bounded
+// one-parcel DFS is standalone hand-asm only (golden logical names). Compiler
+// 3-child rebind (store at E3 e0 LOADSTORE0; dual loads LS0+LOAD1) lives in
+// Finalize assignFormatEMemberEntries. FieldSlot suffixes never pin entries.
+// encodeSlotSubInst is serialize-only: every non-NOP child must already be a
+// generated private member. Name peel and operand rebuild stay in placement
+// (standalone DFS + residual FieldSlot fillFormatEMemberInst), never in
+// entry encode.
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,6 +46,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -51,7 +60,6 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstring>
-#include <functional>
 #include <optional>
 #include <string>
 
@@ -94,19 +102,40 @@ static void addHaydnFixup(SmallVectorImpl<MCFixup> &Fixups, uint32_t Offset,
                                    isHaydnPCRelFixupKind(Kind)));
 }
 
+/// Map `%hi12/%lo20/%pc_lo20` MCSpecifierExpr to the existing Haydn fixup
+/// kind. Bare symbols return nullopt so the opcode switch remains the default.
+static std::optional<unsigned> fixupKindFromSpecifier(const MCExpr *Expr) {
+  const auto *SE = dyn_cast_or_null<MCSpecifierExpr>(Expr);
+  if (!SE)
+    return std::nullopt;
+  switch (SE->getSpecifier()) {
+  case ELF::R_HAYDN_HI12:
+    return Haydn::FIXUP_HAYDN_HI12;
+  case ELF::R_HAYDN_LO20:
+    return Haydn::FIXUP_HAYDN_LO20;
+  case ELF::R_HAYDN_PC_LO20:
+    return Haydn::FIXUP_HAYDN_PC_LO20;
+  default:
+    return std::nullopt;
+  }
+}
+
 // Forward decls for Format E placement (defined with encodeSlotSubInst).
 static std::string formatELogicalName(StringRef Name);
 static const FormatEMemberRec *
 findFormatEMember(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
                   uint32_t UsedUnitMask = 0);
+static const FormatEMemberRec *findFormatEMemberByOpcode(unsigned Opc);
 static bool isFormatENopOpcode(unsigned Opc, const MCInstrInfo &MII);
+static bool isResidualSlotMemberOpcode(unsigned Opc, const MCInstrInfo &MII);
 /// Rebuild \p In as one Format E parcel with golden entry assignment.
 /// Prefer sequential as-is serialize for committed BUNDLE_E96_* rows; residual
 /// bare logicals place within one row only (no E2↔E3 upgrade on committed
 /// composites). Returns false if no injective one-parcel assignment exists
 /// (caller must fail closed — never multi-parcel).
 static bool buildFormatEPlacedComposite(const MCInst &In,
-                                        const MCInstrInfo &MII, MCInst &Out,
+                                        const MCInstrInfo &MII,
+                                        const MCRegisterInfo &MRI, MCInst &Out,
                                         SmallVectorImpl<MCInst> &Storage);
 
 //===----------------------------------------------------------------------===//
@@ -140,9 +169,8 @@ public:
                             SmallVectorImpl<MCFixup> &Fixups,
                             const MCSubtargetInfo &STI) const;
 
-  // (Stage 1): AIE-style scaled-immediate encoder for the 48-bit WIDE
-  // formats. Bound to the `*_wide` / `*_dr` / `hwloop_off*` operand classes
-  // via tablegen `EncoderMethod`.
+  // AIE-style scaled-immediate encoder for logical *_W / *_dr / hwloop_off*
+  // operand classes (Format E encode). Bound via tablegen EncoderMethod.
   template <unsigned N, unsigned Shift, bool IsSigned, bool IsPCRel,
             Haydn::Fixups FixupKind>
   void getSImmOpValueXStepWide(const MCInst &MI, unsigned OpNo, APInt &Op,
@@ -181,8 +209,35 @@ private:
 
 } // end anonymous namespace
 
-// Determine the appropriate fixup kind for an expression operand based on
-// the parent instruction opcode. Geometry per HaydnRelocLayout.
+/// True when \p Mem / peeled \p Logical is a Format E LOADSTORE0/LOAD1 RI6
+/// member (signed imm6 @ bits[33:28] → FIXUP_HAYDN_LS_IMM). ALU RI6 (SRAI64
+/// etc.) and ALU RI20 / retired WIDE LSOff20 (LO20) stay out.
+static bool isFormatELSRI6(const FormatEMemberRec *Mem, StringRef Logical) {
+  auto isLSUnit = [](uint8_t Unit) {
+    return Unit == static_cast<uint8_t>(FormatEUnit::LOADSTORE0) ||
+           Unit == static_cast<uint8_t>(FormatEUnit::LOAD1);
+  };
+  if (Mem && Mem->TypeName && StringRef(Mem->TypeName) == "RI6" &&
+      isLSUnit(Mem->Unit))
+    return true;
+  if (Logical.empty())
+    return false;
+  for (unsigned I = 0; I < FormatEMemberCount; ++I) {
+    const FormatEMemberRec &M = FormatEMembers[I];
+    if (M.IsNop || !M.Logical || !M.TypeName)
+      continue;
+    if (!Logical.equals_insensitive(M.Logical))
+      continue;
+    if (StringRef(M.TypeName) == "RI6" && isLSUnit(M.Unit))
+      return true;
+  }
+  return false;
+}
+
+// Determine the appropriate fixup kind for an expression operand.
+// MCSpecifierExpr (%hi12/%lo20/%pc_lo20) selects the kind; the opcode
+// switch is the bare-symbol default (RISCVMCCodeEmitter.cpp getImmOpValue).
+// Geometry per HaydnRelocLayout.
 // Slot-variant / Format E member opcodes (post-setDesc or encode Wire fill)
 // route symbolic operands through getMachineOpValue — peel to logical name
 // so LUI_E2_E0_ALU0_I12 gets HI12 (not default FIXUP_HAYDN_32 that clobbers
@@ -190,9 +245,19 @@ private:
 // OpNo is required for multi-field SET_HWLOOP Off1/Off2 (two distinct kinds
 // on one instruction); pass ~0u when the operand index is unknown.
 static unsigned getExprFixupKind(const MCInst &MI, const MCInstrInfo &MII,
-                                 unsigned OpNo = ~0u) {
-  const std::string LogicalStorage =
-      formatELogicalName(MII.getName(MI.getOpcode()));
+                                 unsigned OpNo = ~0u,
+                                 const MCExpr *Expr = nullptr) {
+  if (std::optional<unsigned> SpecKind = fixupKindFromSpecifier(Expr))
+    return *SpecKind;
+
+  // Typed committed private members: take Logical from generated MemberId
+  // record (no opcode-name peel / marker recovery).
+  const FormatEMemberRec *Typed = findFormatEMemberByOpcode(MI.getOpcode());
+  std::string LogicalStorage;
+  if (Typed && Typed->Logical && Typed->Logical[0] != '\0')
+    LogicalStorage = Typed->Logical;
+  if (LogicalStorage.empty())
+    LogicalStorage = formatELogicalName(MII.getName(MI.getOpcode()));
   const StringRef Logical = LogicalStorage;
 
   // Format E SET_HWLOOP / SET_HWLOOP_F2 members use plain uimm6/uimm12 for
@@ -257,142 +322,15 @@ static unsigned getExprFixupKind(const MCInst &MI, const MCInstrInfo &MII,
       Logical.equals_insensitive("BLTU_W"))
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
 
-  switch (MI.getOpcode()) {
-  default:
-    break;
-  case Haydn::LUI:
-  case Haydn::LUI_S0:
-    // LUI_S0 carries a 12-bit high field (HaydnFU_ALU32_S0_I12).
-    // HI12 pairs with LO20 on ADDI32 (not the retired 32-bit-parcel HI20/LO16).
-    return Haydn::FIXUP_HAYDN_HI12;
-  // ADDI32 RI20: imm20 at s0 bits[37:18] → LO20 (not legacy LO16).
-  // ADDI32_W / ADDI32_W_S0 handled below with ORI32_W (block).
-  case Haydn::ADDI32:
-  case Haydn::ADDI32_S0:
-  case Haydn::ADDI32_S1:
-  case Haydn::ADDI32_S2:
-    return Haydn::FIXUP_HAYDN_LO20;
-  // ADDI32S/SUBI* still use signed imm fields; ANDI/ORI/XORI are RI20 ZEXT
-  // (ISA: uimm20) — same LO20 window as ADDI32 peers (not LO16).
-  case Haydn::ADDI32S:
-  case Haydn::SUBI32:
-  case Haydn::SUBI32S:
-  case Haydn::ADDI32S_S0:
-  case Haydn::ADDI32S_S1:
-  case Haydn::ADDI32S_S2:
-  case Haydn::SUBI32_S0:
-  case Haydn::SUBI32_S1:
-  case Haydn::SUBI32_S2:
-  case Haydn::SUBI32S_S0:
-  case Haydn::SUBI32S_S1:
-  case Haydn::SUBI32S_S2:
-    return Haydn::FIXUP_HAYDN_LO16;
-  case Haydn::ANDI32:
-  case Haydn::ORI32:
-  case Haydn::XORI32:
-  case Haydn::ANDI32_S0:
-  case Haydn::ANDI32_S1:
-  case Haydn::ANDI32_S2:
-  case Haydn::ORI32_S0:
-  case Haydn::ORI32_S1:
-  case Haydn::ORI32_S2:
-  case Haydn::XORI32_S0:
-  case Haydn::XORI32_S1:
-  case Haydn::XORI32_S2:
-    return Haydn::FIXUP_HAYDN_LO20;
-  // JAL/JALR `_S0` route symbolic call targets through
-  // `getMachineOpValue` (not `getCallTargetOpValue`), so this switch decides
-  // their kind. Match `getCallFixupKind`'s legacy mapping.
-  case Haydn::JAL_S0:
-    return Haydn::FIXUP_HAYDN_CallSImm20;
-  case Haydn::JALR_S0:
-    return Haydn::FIXUP_HAYDN_BranchSImm16;
-  // Format E branch `_S0` forms use the same s0 windows as the `_W_S0`
-  // peers (cutover). FIXUP_HAYDN_BranchSImm16 still has legacy-parcel
-  // geometry (FieldLsb=0, FieldSize=16) and does not patch s0
-  // imm12 — linked BEQ/BNE kept offset 0. Map to the WIDE fixup kinds that
-  // already carry correct FieldLsb (RI12 → bits[19:8]/8; I12 → bits[15:4]/4).
-  // Bare logical opcodes (asm) + private _S0 encode peers.
-  case Haydn::BEQ:
-  case Haydn::BNE:
-  case Haydn::BGE:
-  case Haydn::BGEU:
-  case Haydn::BLT:
-  case Haydn::BLTU:
-  case Haydn::BEQ_S0:
-  case Haydn::BNE_S0:
-  case Haydn::BGE_S0:
-  case Haydn::BGEU_S0:
-  case Haydn::BLT_S0:
-  case Haydn::BLTU_S0:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
-  case Haydn::BEQZ:
-  case Haydn::BNEZ:
-  case Haydn::BLTZ:
-  case Haydn::BGEZ:
-  case Haydn::BEQZ_S0:
-  case Haydn::BNEZ_S0:
-  case Haydn::BLTZ_S0:
-  case Haydn::BGEZ_S0:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
-  // legacy BEQZ_W/BNEZ_W/BGEZ_W/BLTZ_W — CodeGen emits these opcodes
-  // (HaydnConditionOptimizer, HaydnAsmPrinter B/RET expansion, ISel
-  // G_BRINDIRECT). Format E encode maps them via golden members; symbolic
-  // targets use FIXUP_HAYDN_WIDE_BranchSImm12 (E96 FieldLsb for I12).
-  case Haydn::BEQZ_W:
-  case Haydn::BNEZ_W:
-  case Haydn::BGEZ_W:
-  case Haydn::BLTZ_W:
-  case Haydn::BEQZ_W_S0:
-  case Haydn::BNEZ_W_S0:
-  case Haydn::BGEZ_W_S0:
-  case Haydn::BLTZ_W_S0:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
-  // Two-register WIDE cond (RI12): imm12 at s0 bits[19:8] → FieldLsb=8.
-  case Haydn::BEQ_W:
-  case Haydn::BNE_W:
-  case Haydn::BGE_W:
-  case Haydn::BGEU_W:
-  case Haydn::BLT_W:
-  case Haydn::BLTU_W:
-  case Haydn::BEQ_W_S0:
-  case Haydn::BNE_W_S0:
-  case Haydn::BGE_W_S0:
-  case Haydn::BGEU_W_S0:
-  case Haydn::BLT_W_S0:
-  case Haydn::BLTU_W_S0:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
-  // ADDI32_W/ORI32_W `_S0` carry the wide-reloc operand
-  // (simm20_wide_abs / uimm20_wide_abs) — the symbolic operand MUST map to
-  // FIXUP_HAYDN_LO20 (the 20-bit absolute LO20 reloc, paired with LUI's HI12).
-  // Without this, the default FIXUP_HAYDN_32 clobbers the opcode bytes.
-  // The legacy ADDI32_W/ORI32_W are also handled here (the AsmParser matches
-  // the bare mnemonic to the logical opcode; residual encode materializes the
-  // _S0 member via alts — but getExprFixupKind sees the original opcode).
-  case Haydn::ADDI32_W:
-  case Haydn::ORI32_W:
-  case Haydn::ADDI32_W_S0:
-  case Haydn::ORI32_W_S0:
-    return Haydn::FIXUP_HAYDN_LO20;
-  // (DEFERRED): LD32/ST32/LD64/ST64 still map to FIXUP_HAYDN_LO20.
-  // The RISK-5 encoder-side change (all LS -> FIXUP_HAYDN_LS_IMM) was OVER-BROAD
-  // it broke the WIDE LSOff20 path (LD32 with a 20-bit offset is correctly
-  // LO20, as fixup-selection-regression.s verifies) AND HaydnELFObjectWriter
-  // aborts (LS_IMM has no ELF reloc; marked it MC-only). 's real scope
-  // is only the NARROW imm6 LS ops (RI6 form, 6-bit) conflated with LO20; the
-  // WIDE LSOff20 (20-bit) is correctly LO20. Reverted until the narrow-vs-wide
-  // distinction + R_HAYDN_LS_IMM ELF reloc land. LS_IMM kind/geometry
-  // stay defined for that follow-up.
-  case Haydn::LD32:
-  case Haydn::ST32:
-  case Haydn::LD64:
-  case Haydn::ST64:
-  case Haydn::LD32_S0:
-  case Haydn::ST32_S0:
-  case Haydn::LD64_S0:
-  case Haydn::ST64_S0:
-    return Haydn::FIXUP_HAYDN_LO20;
-  }
+  // Narrow LS RI6 (S_LW_WITH_IMM / LD32 peel / generated members): LS_IMM.
+  // Wide LSOff20 / ALU RI20 already returned LO20 above (ADDI32/ORI32).
+  // RISCV split: InstFormatI → lo12_i vs InstFormatS → lo12_s vs CI reject
+  // (RISCVMCCodeEmitter.cpp:640-643, RISCVELFObjectWriter.cpp:134-140).
+  if (isFormatELSRI6(Typed, Logical))
+    return Haydn::FIXUP_HAYDN_LS_IMM;
+
+  // Kind is the peeled / MemberId logical above. Residual `_S*` FieldSlots
+  // and generated members must not grow a second opcode switch.
   return Haydn::FIXUP_HAYDN_32;
 }
 
@@ -456,7 +394,8 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
       haydnEmitFormatEParcelLE(Word96, CB);
     };
 
-    if (buildFormatEPlacedComposite(MI, MII, Placed, PlaceStorage)) {
+    if (buildFormatEPlacedComposite(MI, MII, *Ctx.getRegisterInfo(), Placed,
+                                    PlaceStorage)) {
       emitOneComposite(Placed);
       return;
     }
@@ -488,7 +427,25 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
           /*GenCrashDiag=*/false);
     }
     // Fail closed: refuse multi-parcel sequential E2 singleton emit. Post-RA
-    // owns the exact one-parcel commit; MC only serializes.
+    // owns the exact one-parcel commit; MC only serializes. Typed private
+    // Format E members never enter standalone DFS / name-recovery re-place.
+    // Residual FieldSlot composites never free-DFS; reaching here means
+    // one-parcel as-is / Mode / swap placement failed entirely.
+    bool HasPrivate = false;
+    for (const MCInst *C : Reals) {
+      if (findFormatEMemberByOpcode(C->getOpcode())) {
+        HasPrivate = true;
+        break;
+      }
+    }
+    if (HasPrivate) {
+      report_fatal_error(
+          Twine("Haydn MC: committed Format E private member cannot enter "
+                "standalone DFS re-place; children=[") +
+              ChildDiag +
+              "] — refuse name recovery / row retry (serialize-only)",
+          /*GenCrashDiag=*/false);
+    }
     report_fatal_error(
         Twine("Haydn MC: Format E one-parcel placement failed for composite "
               "with ") +
@@ -601,16 +558,27 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
 }
 
 //===----------------------------------------------------------------------===//
-// encodeSlotSubInst — residual composite slot slice (generated emitter)
+// encodeSlotSubInst — serialize one placed Format E entry (generated emitter)
 //===----------------------------------------------------------------------===//
 //
 // AIEBaseMCCodeEmitter.cpp:134-162 encodes SubInst Desc as-is;
 // SubInstFormat/slot geometry come from SubInst.getOpcode().
 //
-// CodeGen path: post-RA setDesc already committed format members
-// (AIEMachineScheduler.cpp:1126-1132 materializeMultiOpcodeInstrs) → encode
-// Desc as-is (AIE getSlotKind post-commit, AIEBaseMCFormats.cpp:66-75).
-//
+// Placement (buildFormatEPlacedComposite) emits generated private members
+// or NOP. This function serializes that Desc. FieldSlot / bare logical
+// children are a placement bug — fail closed, no name peel or rebuild.
+// MemberId → Haydn::<E96 member opcode> (generated with live TD members).
+// File scope so typed serialize/lookup and fillFormatEMemberInst share one map.
+#define GET_FORMAT_E_MEMBER_OPCODES
+#include "HaydnGenFormatEMemberOpcodes.inc"
+
+// File-scope forward decl so as-is residual cutover can call the wire
+// rebuild defined later in this TU (outside the placement helpers ns).
+// encodeSlotSubInst never calls this — placement only.
+static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
+                                  const MCInst &Logical, const MCInstrInfo &MII,
+                                  const MCRegisterInfo &MRI, MCInst &Out);
+
 // Same TU anonymous namespace as the emitter class (C++ merges them).
 namespace {
 
@@ -619,10 +587,11 @@ namespace {
 // getAlternateInstsOpcode[SlotIdx] — the same PlacementAlternative / setDesc
 // member table. Local copy only; no MCFlags.
 static bool isFormatENopOpcode(unsigned Opc, const MCInstrInfo &MII) {
-  if (Opc == Haydn::NOP || Opc == Haydn::NOP_S0)
+  if (Opc == Haydn::NOP)
     return true;
   std::string Log = formatELogicalName(MII.getName(Opc));
   // Empty catalog name is not a product real (unknown pseudo / meta).
+  // Covers residual NOP_S0 and generated NOP_* members without naming _S*.
   return Log.empty() || StringRef(Log).equals_insensitive("NOP");
 }
 
@@ -649,99 +618,307 @@ static const FormatEMemberRec *findFormatEMember(StringRef Logical, uint8_t Mode
   return Fallback;
 }
 
-/// Serialize-as-is only when every real is already a committed Format E
-/// member for its (mode, entry). That is the post-RA setDesc product shape.
-/// Bare logical / residual `_S*` hand-asm falls through to DFS placement.
+/// Typed reverse map: private Format E member opcode → generated MemberId.
+/// Non-NOP private members are unique in FormatEMemberOpcodes; NOP multi-maps
+/// and is excluded (caller treats product NOP as zero entry).
+static const FormatEMemberRec *findFormatEMemberByOpcode(unsigned Opc) {
+  if (Opc == 0 || Opc == Haydn::NOP)
+    return nullptr;
+  for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+    if (FormatEMemberOpcodes[I] != Opc)
+      continue;
+    if (I >= FormatEMemberCount)
+      return nullptr;
+    const FormatEMemberRec &M = FormatEMembers[I];
+    if (M.IsNop)
+      return nullptr;
+    return &M;
+  }
+  return nullptr;
+}
+
+/// Residual PacketFormats format-member opcodes (slot suffix peers).
+static bool isResidualSlotMemberOpcode(unsigned Opc, const MCInstrInfo &MII) {
+  if (Opc == 0 || isFormatENopOpcode(Opc, MII))
+    return false;
+  if (findFormatEMemberByOpcode(Opc))
+    return false;
+  StringRef Name = MII.getName(Opc);
+  for (StringRef Suf :
+       {"_S0", "_S1", "_S2", "_LD_S0", "_LD_S1", "_LD_S2", "_M0S0LS",
+        "_M0S1LS", "_M0S2LS", "_M1S0LS", "_M1S1LS", "_M1S2LS"}) {
+    if (Name.ends_with(Suf))
+      return true;
+  }
+  return false;
+}
+
+/// Serialize-as-is when every real is fixed at its composite entry under
+/// \p Mode (0=E2, 1=E3):
+///  * typed private Format E member (MemberId + Mode/EntryIdx), or
+///  * residual FieldSlot member placeable at that composite entry by logical
+///    name only, cut over to the generated private MemberId wire when the
+///    residual operand shape matches (positional copy or bag-sort rebuild).
+///    FieldSlot _S0/_S1/_S2 suffixes never supply Format-E entry indices.
+/// Positional full-slot packs with zero-entry NOP pads serialize as-is.
+/// Private members never DFS. Residual soft-falls back when wire rebuild fails.
+/// encodeSlotSubInst never peels or rebuilds.
+/// When \p ForceMode is set, entry count and Out opcode follow ForceMode even
+/// if In carries the other product composite (fixed-entry Mode-retry cutover).
 static bool trySerializeFormatECompositeAsIs(const MCInst &In,
                                              const MCInstrInfo &MII,
+                                             const MCRegisterInfo &MRI,
                                              MCInst &Out,
-                                             SmallVectorImpl<MCInst> &Storage) {
+                                             SmallVectorImpl<MCInst> &Storage,
+                                             std::optional<uint8_t> ForceMode =
+                                                 std::nullopt) {
   const bool IsE3 = In.getOpcode() == Haydn::BUNDLE_E96_THREE_ENTRY;
   const bool IsE2 = In.getOpcode() == Haydn::BUNDLE_E96_TWO_ENTRY;
-  if (!IsE2 && !IsE3)
+  if (!IsE2 && !IsE3 && !ForceMode)
     return false;
-  const uint8_t Mode = IsE3 ? 1 : 0;
-  const unsigned EntryCount = IsE3 ? 3u : 2u;
-  if (In.getNumOperands() < EntryCount)
+  const uint8_t Mode =
+      ForceMode ? *ForceMode : static_cast<uint8_t>(IsE3 ? 1 : 0);
+  const unsigned EntryCount = Mode ? 3u : 2u;
+  // Prefer explicit entry children; residual Mode-retry may pad from fewer
+  // In operands when ForceMode upgrades E2→E3 (extra entries become NOP).
+  if (!ForceMode && In.getNumOperands() < EntryCount)
+    return false;
+  if (ForceMode && In.getNumOperands() == 0)
     return false;
 
-  // FormatEMemberOpcodes is defined later in this TU; reverse-map by scanning
-  // FormatEMembers + opcode table via linear match on SubInst opcode names
-  // that contain _E2_/_E3_ placement markers (committed private members).
-  auto isCommittedMemberAt = [&](unsigned Opc, unsigned Entry) -> bool {
-    StringRef Name = MII.getName(Opc);
-    if (!Name.contains(Mode ? "_E3_" : "_E2_"))
+  auto isPrivateMemberAt = [&](unsigned Opc, unsigned Entry) -> bool {
+    const FormatEMemberRec *Mem = findFormatEMemberByOpcode(Opc);
+    if (!Mem)
       return false;
-    // Entry marker: _E0_ / _E1_ / _E2_ after mode (E3 entry2 is _E2_ after _E3_).
-    std::string EntTag = "_E" + std::to_string(Entry) + "_";
-    // Avoid matching mode tag: require the entry tag after the mode tag.
-    size_t ModePos = Name.find(Mode ? "_E3_" : "_E2_");
-    if (ModePos == StringRef::npos)
-      return false;
-    return Name.find(EntTag, ModePos + 4) != StringRef::npos;
+    return Mem->Mode == Mode && Mem->EntryIdx == static_cast<uint8_t>(Entry);
   };
 
-  SmallVector<const MCInst *, 3> AtEntry(EntryCount, nullptr);
+  SmallVector<const MCInst *, 3> ChildAt(EntryCount, nullptr);
+  SmallVector<const FormatEMemberRec *, 3> MemAt(EntryCount, nullptr);
+  SmallVector<bool, 3> ResidualAt(EntryCount, false);
   unsigned RealCount = 0;
-  for (unsigned E = 0; E < EntryCount; ++E) {
-    const MCOperand &Op = In.getOperand(E);
+  uint32_t UsedUnits = 0;
+  // Collect real children in composite order (skip NOP). ForceMode may
+  // re-bind the same ordered reals onto a different entry count.
+  SmallVector<const MCInst *, 3> OrderedReals;
+  for (unsigned I = 0, N = In.getNumOperands(); I != N; ++I) {
+    const MCOperand &Op = In.getOperand(I);
     if (!Op.isInst() || !Op.getInst())
+      continue;
+    const unsigned ChildOpc = Op.getInst()->getOpcode();
+    if (isFormatENopOpcode(ChildOpc, MII))
+      continue;
+    OrderedReals.push_back(Op.getInst());
+  }
+  if (OrderedReals.empty() || OrderedReals.size() > EntryCount)
+    return false;
+
+  bool AllPrivate = true;
+  for (const MCInst *Child : OrderedReals) {
+    if (!findFormatEMemberByOpcode(Child->getOpcode())) {
+      AllPrivate = false;
+      break;
+    }
+  }
+
+  // Typed MemberId composites serialize by committed EntryIdx, not operand
+  // order. Holes are encode-time CompletionState NOP. Do not relocate a
+  // member to a different entry than its opcode records.
+  if (AllPrivate) {
+    for (const MCInst *Child : OrderedReals) {
+      const FormatEMemberRec *Mem = findFormatEMemberByOpcode(Child->getOpcode());
+      if (!Mem || Mem->Mode != Mode || Mem->EntryIdx >= EntryCount)
+        return false;
+      const unsigned E = Mem->EntryIdx;
+      if (ChildAt[E] || (Mem->Unit < 32 && (UsedUnits & (1u << Mem->Unit))))
+        return false;
+      if (Mem->Unit < 32)
+        UsedUnits |= (1u << Mem->Unit);
+      ChildAt[E] = Child;
+      MemAt[E] = Mem;
+      ResidualAt[E] = false;
+      ++RealCount;
+    }
+    if (RealCount == 0)
       return false;
-    const MCInst *Child = Op.getInst();
-    if (isFormatENopOpcode(Child->getOpcode(), MII)) {
-      AtEntry[E] = nullptr;
+    Storage.clear();
+    Storage.reserve(EntryCount);
+    Out.clear();
+    Out.setOpcode(Mode ? Haydn::BUNDLE_E96_THREE_ENTRY
+                       : Haydn::BUNDLE_E96_TWO_ENTRY);
+    for (unsigned E = 0; E < EntryCount; ++E) {
+      if (!ChildAt[E]) {
+        Storage.emplace_back();
+        Storage.back().setOpcode(Haydn::NOP);
+        Out.addOperand(MCOperand::createInst(&Storage.back()));
+        continue;
+      }
+      Out.addOperand(MCOperand::createInst(ChildAt[E]));
+    }
+    return true;
+  }
+
+  // Residual FieldSlot: bind reals to leading entries in operand order;
+  // trailing entries stay NOP. FieldSlot suffixes never pin Format-E entry.
+  // 3-child residual that fails this as-is bind does not DFS here —
+  // Finalize assignFormatEMemberEntries owns that rebind.
+  for (unsigned E = 0; E < EntryCount; ++E) {
+    if (E >= OrderedReals.size()) {
+      ChildAt[E] = nullptr;
       continue;
     }
-    // Residual bare logical / `_S*` — not a durable member for this entry.
-    if (!isCommittedMemberAt(Child->getOpcode(), E))
-      return false;
-    AtEntry[E] = Child;
-    ++RealCount;
+    const MCInst *Child = OrderedReals[E];
+    const unsigned ChildOpc = Child->getOpcode();
+    if (isPrivateMemberAt(ChildOpc, E)) {
+      const FormatEMemberRec *Mem = findFormatEMemberByOpcode(ChildOpc);
+      if (Mem->Unit < 32 && (UsedUnits & (1u << Mem->Unit)))
+        return false;
+      if (Mem->Unit < 32)
+        UsedUnits |= (1u << Mem->Unit);
+      ChildAt[E] = Child;
+      MemAt[E] = Mem;
+      ResidualAt[E] = false;
+      ++RealCount;
+      continue;
+    }
+    if (isResidualSlotMemberOpcode(ChildOpc, MII)) {
+      std::string Log = formatELogicalName(MII.getName(ChildOpc));
+      const FormatEMemberRec *Mem =
+          findFormatEMember(Log, Mode, static_cast<uint8_t>(E), UsedUnits);
+      if (!Mem)
+        return false;
+      if (Mem->Unit < 32)
+        UsedUnits |= (1u << Mem->Unit);
+      ChildAt[E] = Child;
+      MemAt[E] = Mem;
+      ResidualAt[E] = true;
+      ++RealCount;
+      continue;
+    }
+    return false; // bare logical — one-parcel DFS below
   }
   if (RealCount == 0)
     return false;
 
-  unsigned NopSlots = EntryCount - RealCount;
   Storage.clear();
-  Storage.reserve(NopSlots);
+  Storage.reserve(EntryCount);
   Out.clear();
-  Out.setOpcode(In.getOpcode());
+  Out.setOpcode(Mode ? Haydn::BUNDLE_E96_THREE_ENTRY
+                     : Haydn::BUNDLE_E96_TWO_ENTRY);
   for (unsigned E = 0; E < EntryCount; ++E) {
-    if (AtEntry[E]) {
-      Out.addOperand(MCOperand::createInst(AtEntry[E]));
-    } else {
+    if (!ChildAt[E]) {
       Storage.emplace_back();
       Storage.back().setOpcode(Haydn::NOP);
       Out.addOperand(MCOperand::createInst(&Storage.back()));
+      continue;
     }
+    if (!ResidualAt[E]) {
+      Out.addOperand(MCOperand::createInst(ChildAt[E]));
+      continue;
+    }
+    // Residual FieldSlot → generated private MemberId wire. Compiler
+    // Finalize already drops extra FieldSlot ops (MOVE32 rs2, MAC acc,
+    // LUI vestigial rs) when the member dest is an SSA out. Remaining
+    // bag-sort: skip-Finalize / hand-asm FieldSlot. encodeSlotSubInst
+    // never peels or rebuilds.
+    Storage.emplace_back();
+    if (!fillFormatEMemberInst(*MemAt[E], *ChildAt[E], MII, MRI,
+                               Storage.back()))
+      return false;
+    Out.addOperand(MCOperand::createInst(&Storage.back()));
   }
   return true;
 }
 
-/// Greedy+backtrack assign of real children onto Format E entries with
-/// unit injectivity. Prefer sequential as-is serialize for committed
-/// BUNDLE_E96_* rows; residual bare logicals may place within one row only.
-/// Never multi-parcel and never upgrade E2↔E3 on a committed composite.
+/// Place real children onto Format E entries with unit injectivity.
+/// As-is / Mode / one dual swap first. Residual FieldSlot never free-DFS
+/// (Finalize assignFormatEMemberEntries owns 3-child rebind). Typed private
+/// members bind by committed EntryIdx, never DFS. Bare hand-asm is the
+/// separately typed standalone entry and may one-parcel DFS.
 static bool buildFormatEPlacedComposite(const MCInst &In,
-                                        const MCInstrInfo &MII, MCInst &Out,
+                                        const MCInstrInfo &MII,
+                                        const MCRegisterInfo &MRI, MCInst &Out,
                                         SmallVectorImpl<MCInst> &Storage) {
-  // Product path: post-RA / AsmPrinter already ordered entries. Serialize
-  // that layout without collapsing underfill or swapping rows.
-  if (trySerializeFormatECompositeAsIs(In, MII, Out, Storage))
+  if (trySerializeFormatECompositeAsIs(In, MII, MRI, Out, Storage))
     return true;
 
-  auto looksCommittedMember = [&](unsigned Opc) -> bool {
-    StringRef Name = MII.getName(Opc);
-    return Name.contains("_E2_") || Name.contains("_E3_");
-  };
+  // Typed private Format E members must serialize as-is (EntryIdx bind);
+  // refuse private leakage into name-recovery DFS. Residual FieldSlot
+  // composites try as-is / Mode / swap only. Dual single-unit packs that
+  // need E3 must either commit E3 or succeed Mode retry — never sequential
+  // E2 split.
+  bool SawPrivate = false;
+  bool SawResidual = false;
+  bool SawBare = false;
+  unsigned RealKids = 0;
   for (unsigned I = 0, E = In.getNumOperands(); I != E; ++I) {
     const MCOperand &Op = In.getOperand(I);
     if (!Op.isInst() || !Op.getInst())
       continue;
-    if (isFormatENopOpcode(Op.getInst()->getOpcode(), MII))
+    const unsigned ChildOpc = Op.getInst()->getOpcode();
+    if (isFormatENopOpcode(ChildOpc, MII))
       continue;
-    if (looksCommittedMember(Op.getInst()->getOpcode()))
-      return false;
+    ++RealKids;
+    if (findFormatEMemberByOpcode(ChildOpc) != nullptr) {
+      SawPrivate = true;
+      continue;
+    }
+    if (isResidualSlotMemberOpcode(ChildOpc, MII)) {
+      SawResidual = true;
+      continue;
+    }
+    SawBare = true;
+  }
+  if (SawPrivate)
+    return false; // never DFS a composite that carries typed private members
+
+  // Residual FieldSlots never pin entries. Try as-is / Mode / one swap
+  // first; if that fails (or the pack mixes residual + bare logicals),
+  // fall through to logical-name assign under the composite row. E2 vs
+  // E3 is already a bundle-level fact (child count / InstSlot). Never
+  // sequential E2 split.
+  if (SawResidual && !SawBare) {
+    const bool PrefersE3 = In.getOpcode() == Haydn::BUNDLE_E96_THREE_ENTRY;
+    const bool PrefersE2 = In.getOpcode() == Haydn::BUNDLE_E96_TWO_ENTRY;
+    if (PrefersE2 && RealKids <= 3) {
+      if (trySerializeFormatECompositeAsIs(In, MII, MRI, Out, Storage,
+                                           /*ForceMode=*/1))
+        return true;
+    }
+    if (PrefersE3 && RealKids <= 2) {
+      if (trySerializeFormatECompositeAsIs(In, MII, MRI, Out, Storage,
+                                           /*ForceMode=*/0))
+        return true;
+    }
+    if (RealKids == 2) {
+      SmallVector<const MCInst *, 3> Kids;
+      for (unsigned I = 0, E = In.getNumOperands(); I != E; ++I) {
+        const MCOperand &Op = In.getOperand(I);
+        if (!Op.isInst() || !Op.getInst())
+          continue;
+        if (isFormatENopOpcode(Op.getInst()->getOpcode(), MII))
+          continue;
+        Kids.push_back(Op.getInst());
+      }
+      if (Kids.size() == 2) {
+        MCInst Swapped;
+        Swapped.setOpcode(In.getOpcode());
+        Swapped.addOperand(MCOperand::createInst(Kids[1]));
+        Swapped.addOperand(MCOperand::createInst(Kids[0]));
+        if (trySerializeFormatECompositeAsIs(Swapped, MII, MRI, Out, Storage))
+          return true;
+        if (PrefersE2) {
+          if (trySerializeFormatECompositeAsIs(Swapped, MII, MRI, Out, Storage,
+                                               /*ForceMode=*/1))
+            return true;
+        }
+        if (PrefersE3) {
+          if (trySerializeFormatECompositeAsIs(Swapped, MII, MRI, Out, Storage,
+                                               /*ForceMode=*/0))
+            return true;
+        }
+      }
+    }
   }
 
   SmallVector<const MCInst *, 3> Reals;
@@ -761,115 +938,57 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
   if (Reals.empty() || Reals.size() > 3)
     return false;
 
-  // Assignment state for one mode attempt.
-  struct ModeTry {
-    uint8_t Mode = 0;
-    unsigned EntryCount = 2;
-    SmallVector<int, 3> EntryOfKid; // kid -> entry (-1 free)
-    SmallVector<const FormatEMemberRec *, 3> MemOfKid;
-    uint32_t UsedUnits = 0;
-    uint8_t UsedEntries = 0;
-  };
-
-  auto attemptMode = [&](uint8_t Mode) -> std::optional<ModeTry> {
-    ModeTry T;
-    T.Mode = Mode;
-    T.EntryCount = Mode ? 3u : 2u;
-    if (Reals.size() > T.EntryCount)
-      return std::nullopt;
-    T.EntryOfKid.assign(Reals.size(), -1);
-    T.MemOfKid.assign(Reals.size(), nullptr);
-
-    std::function<bool(unsigned)> dfs = [&](unsigned Kid) -> bool {
-      if (Kid == Reals.size())
-        return true;
-      StringRef Log = LogicalNames[Kid];
-      for (uint8_t Entry = 0; Entry < T.EntryCount; ++Entry) {
-        if (T.UsedEntries & (1u << Entry))
-          continue;
-        // Try every legal unit at this entry (not only lowest UnitMap).
-        SmallVector<const FormatEMemberRec *, 4> Cands;
-        for (unsigned I = 0; I < FormatEMemberCount; ++I) {
-          const FormatEMemberRec &M = FormatEMembers[I];
-          if (M.IsNop || M.Mode != Mode || M.EntryIdx != Entry)
-            continue;
-          if (!Log.equals_insensitive(M.Logical))
-            continue;
-          if (M.Unit < 32 && (T.UsedUnits & (1u << M.Unit)))
-            continue;
-          Cands.push_back(&M);
-        }
-        // Deterministic: lower UnitMap first.
-        llvm::sort(Cands, [](const FormatEMemberRec *A,
-                             const FormatEMemberRec *B) {
-          return A->UnitMap < B->UnitMap;
-        });
-        for (const FormatEMemberRec *Mem : Cands) {
-          T.EntryOfKid[Kid] = static_cast<int>(Entry);
-          T.MemOfKid[Kid] = Mem;
-          T.UsedEntries |= static_cast<uint8_t>(1u << Entry);
-          T.UsedUnits |= (1u << Mem->Unit);
-          if (dfs(Kid + 1))
-            return true;
-          T.UsedUnits &= ~(1u << Mem->Unit);
-          T.UsedEntries &= static_cast<uint8_t>(~(1u << Entry));
-          T.EntryOfKid[Kid] = -1;
-          T.MemOfKid[Kid] = nullptr;
-        }
-      }
-      return false;
-    };
-
-    if (!dfs(0))
-      return std::nullopt;
-    return T;
-  };
-
-  // Residual bare/_S* only reaches here (committed members already returned).
-  // Prefer the composite's row; residual hand-asm may try the other one-parcel
-  // row after preferred fails — still never multi-parcel. Committed private
-  // members never enter this DFS path.
+  // Standalone hand-asm only. Prefer the composite's row; may try the other
+  // one-parcel row after preferred fails — still never multi-parcel.
   const bool PrefersE3 = In.getOpcode() == Haydn::BUNDLE_E96_THREE_ENTRY;
   const bool PrefersE2 = In.getOpcode() == Haydn::BUNDLE_E96_TWO_ENTRY;
-  std::optional<ModeTry> Best;
+  std::optional<SmallVector<FormatEEntryAssign, 3>> Best;
+  uint8_t BestMode = 0;
+  auto tryMode = [&](uint8_t Mode) -> bool {
+    if (LogicalNames.size() > (Mode ? 3u : 2u))
+      return false;
+    Best = assignFormatEMemberEntries(LogicalNames, Mode);
+    if (!Best)
+      return false;
+    BestMode = Mode;
+    return true;
+  };
   if (PrefersE3) {
-    Best = attemptMode(/*Mode=*/1);
-    if (!Best && Reals.size() <= 2)
-      Best = attemptMode(/*Mode=*/0);
+    if (!tryMode(/*Mode=*/1) && Reals.size() <= 2)
+      tryMode(/*Mode=*/0);
   } else if (PrefersE2) {
-    Best = attemptMode(/*Mode=*/0);
-    if (!Best && Reals.size() <= 3)
-      Best = attemptMode(/*Mode=*/1);
+    if (!tryMode(/*Mode=*/0) && Reals.size() <= 3)
+      tryMode(/*Mode=*/1);
   } else {
     if (Reals.size() <= 2)
-      Best = attemptMode(/*Mode=*/0);
+      tryMode(/*Mode=*/0);
     if (!Best && Reals.size() <= 3)
-      Best = attemptMode(/*Mode=*/1);
+      tryMode(/*Mode=*/1);
   }
   if (!Best)
     return false;
 
-  const unsigned EntryCount = Best->EntryCount;
+  const unsigned EntryCount = BestMode ? 3u : 2u;
   Out.clear();
-  Out.setOpcode(Best->Mode ? Haydn::BUNDLE_E96_THREE_ENTRY
-                           : Haydn::BUNDLE_E96_TWO_ENTRY);
+  Out.setOpcode(BestMode ? Haydn::BUNDLE_E96_THREE_ENTRY
+                         : Haydn::BUNDLE_E96_TWO_ENTRY);
 
-  // Map entry -> kid index.
   SmallVector<int, 3> KidAtEntry(EntryCount, -1);
   for (unsigned K = 0, KE = Reals.size(); K != KE; ++K)
-    KidAtEntry[Best->EntryOfKid[K]] = static_cast<int>(K);
+    KidAtEntry[(*Best)[K].EntryIdx] = static_cast<int>(K);
 
-  // Pre-size NOP storage so emplace cannot reallocate and invalidate
-  // MCOperand::createInst pointers into Storage.
-  unsigned NopSlots = 0;
-  for (unsigned E = 0; E < EntryCount; ++E)
-    if (KidAtEntry[E] < 0)
-      ++NopSlots;
   Storage.clear();
-  Storage.reserve(NopSlots);
+  Storage.reserve(EntryCount);
   for (unsigned E = 0; E < EntryCount; ++E) {
     if (KidAtEntry[E] >= 0) {
-      Out.addOperand(MCOperand::createInst(Reals[KidAtEntry[E]]));
+      const int Kid = KidAtEntry[E];
+      if (!(*Best)[Kid].Mem)
+        return false;
+      Storage.emplace_back();
+      if (!fillFormatEMemberInst(*(*Best)[Kid].Mem, *Reals[Kid], MII, MRI,
+                                 Storage.back()))
+        return false;
+      Out.addOperand(MCOperand::createInst(&Storage.back()));
     } else {
       Storage.emplace_back();
       Storage.back().setOpcode(Haydn::NOP);
@@ -880,121 +999,10 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
 }
 
 // Strip residual slot member / wide / LS suffixes to recover the logical
-// catalog name used by Format E records.
+// catalog name used by Format E records. Shared peel lives in
+// HaydnFormatERecords.h (Bundle canAdd / solver unit cover use the same map).
 static std::string formatELogicalName(StringRef Name) {
-  StringRef Base = Name;
-  // Peel known residual suffixes (order matters for compound tails).
-  auto peel = [&](StringRef Suf) {
-    if (Base.ends_with(Suf))
-      Base = Base.drop_back(Suf.size());
-  };
-  // Format E live member tails: LOGICAL_E2_E0_UNIT_TYPE / _E3_E1_…
-  for (StringRef Marker : {"_E2_", "_E3_"}) {
-    size_t Idx = Base.find(Marker);
-    if (Idx != StringRef::npos) {
-      Base = Base.take_front(Idx);
-      break;
-    }
-  }
-  // Residual slot / member tails.
-  for (int Pass = 0; Pass < 3; ++Pass) {
-    StringRef Before = Base;
-    for (StringRef Suf :
-         {"_S0", "_S1", "_S2", "_LD_S0", "_LD_S1", "_LD_S2", "_M0S0LS",
-          "_M0S1LS", "_M0S2LS", "_M1S0LS", "_M1S1LS", "_M1S2LS"})
-      peel(Suf);
-    if (Base == Before)
-      break;
-  }
-  // Format E golden catalogs AR pre-load as PLDWWUA_POST (no bare PLDWWUA
-  // member). Selector emits logical PLDWWUA — map for placement/encode.
-  if (Base.equals_insensitive("PLDWWUA"))
-    Base = "PLDWWUA_POST";
-  // Wide demoted forms: BEQ_W → BEQ, ADDI32_W → ADDI32, SET_HWLOOP_F2_W →
-  // SET_HWLOOP_F2 (keep the _F2 catalog logical — HWLRIIR). Dropping "_F2_W"
-  // as a unit used to collapse F2 into SET_HWLOOP (HWLRIII), so the register
-  // count was packed as a 16-bit imm and the parcel decoded as NOP — memcpy
-  // HWLoops ran the body once and returned garbage.
-  if (Base.ends_with("_F2_W"))
-    Base = Base.drop_back(2); // …_F2_W → …_F2
-  else if (Base.ends_with("_W"))
-    Base = Base.drop_back(2);
-  // Do NOT peel a bare "_F2": SET_HWLOOP_F2 is a distinct golden logical.
-
-  // Public mnemonic → Format E golden catalog logical (freestanding path).
-  // Residual legacy public names are not golden catalog strings; without
-  // this map encode fails golden placement (was residual truncate → <unknown>).
-  if (Base.equals_insensitive("LD32") || Base.equals_insensitive("LW") ||
-      Base.equals_insensitive("LD32_REG"))
-    return Base.equals_insensitive("LD32_REG") ? "S_LW_WITH_REG"
-                                               : "S_LW_WITH_IMM";
-  if (Base.equals_insensitive("ST32") || Base.equals_insensitive("SW") ||
-      Base.equals_insensitive("ST32_REG"))
-    return Base.equals_insensitive("ST32_REG") ? "S_SW_WITH_REG"
-                                               : "S_SW_WITH_IMM";
-  if (Base.equals_insensitive("LD64") || Base.equals_insensitive("LD64_REG"))
-    return Base.equals_insensitive("LD64_REG") ? "D_LDW_WITH_REG"
-                                               : "D_LDW_WITH_IMM";
-  // ST64 must be D_SDW (full DR[63:0] → mem64, scale=3). D_SW_L only stores
-  // DR[31:0] as mem32 — mapping ST64 there dropped the high half and applied
-  // word scale (<<2) instead of dword (<<3), breaking 64-bit stores / udivdi3
-  // spill traffic / CoreMark-adjacent long long paths.
-  if (Base.equals_insensitive("ST64") || Base.equals_insensitive("ST64_REG"))
-    return Base.equals_insensitive("ST64_REG") ? "D_SDW_WITH_REG"
-                                               : "D_SDW_WITH_IMM";
-  if (Base.equals_insensitive("LD8") || Base.equals_insensitive("LB") ||
-      Base.equals_insensitive("LD8_REG"))
-    return Base.ends_with_insensitive("REG") ? "S_LBS_WITH_REG"
-                                             : "S_LBS_WITH_IMM";
-  if (Base.equals_insensitive("LDU8") || Base.equals_insensitive("LBU") ||
-      Base.equals_insensitive("LDU8_REG"))
-    return Base.ends_with_insensitive("REG") ? "S_LBU_WITH_REG"
-                                             : "S_LBU_WITH_IMM";
-  if (Base.equals_insensitive("ST8") || Base.equals_insensitive("SB") ||
-      Base.equals_insensitive("ST8_REG"))
-    return Base.ends_with_insensitive("REG") ? "S_SB_WITH_REG"
-                                             : "S_SB_WITH_IMM";
-  if (Base.equals_insensitive("LD16") || Base.equals_insensitive("LH") ||
-      Base.equals_insensitive("LHWS") || Base.equals_insensitive("LD16_REG"))
-    return Base.ends_with_insensitive("REG") ? "S_LHWS_WITH_REG"
-                                             : "S_LHWS_WITH_IMM";
-  if (Base.equals_insensitive("LDU16") || Base.equals_insensitive("LHU") ||
-      Base.equals_insensitive("LHWU") || Base.equals_insensitive("LDU16_REG"))
-    return Base.ends_with_insensitive("REG") ? "S_LHWU_WITH_REG"
-                                             : "S_LHWU_WITH_IMM";
-  if (Base.equals_insensitive("ST16") || Base.equals_insensitive("SH") ||
-      Base.equals_insensitive("SHW") || Base.equals_insensitive("ST16_REG"))
-    return Base.ends_with_insensitive("REG") ? "S_SHW_WITH_REG"
-                                             : "S_SHW_WITH_IMM";
-  // POST/PRE public forms (imm).
-  if (Base.equals_insensitive("LD32_POST") ||
-      Base.equals_insensitive("LD32_POST_INC"))
-    return "S_LW_POST_IMM";
-  if (Base.equals_insensitive("ST32_POST") ||
-      Base.equals_insensitive("ST32_POST_INC"))
-    return "S_SW_POST_IMM";
-  if (Base.equals_insensitive("LD32_PRE") ||
-      Base.equals_insensitive("LD32_PRE_INC"))
-    return "S_LW_PRE_IMM";
-  if (Base.equals_insensitive("ST32_PRE") ||
-      Base.equals_insensitive("ST32_PRE_INC"))
-    return "S_SW_PRE_IMM";
-  if (Base.equals_insensitive("LD64_POST"))
-    return "D_LDW_POST_IMM";
-  if (Base.equals_insensitive("ST64_POST"))
-    return "D_SDW_POST_IMM";
-  // Legacy codegen public names → golden catalog.
-  if (Base.equals_insensitive("SEXT_GPR32_TO_DR64") ||
-      Base.equals_insensitive("SEXT32T64"))
-    return "SEXT32T64";
-  if (Base.equals_insensitive("MOV_GPR_TO_DR64") ||
-      Base.equals_insensitive("MOVE_GPR_TO_DR64") ||
-      Base.equals_insensitive("ZEXT_GPR32_TO_DR64"))
-    return "SEXT32T64";
-  if (Base.equals_insensitive("RET"))
-    return "JALR";
-
-  return Base.str();
+  return haydn::format_e::peelLogicalOpcodeName(Name);
 }
 
 // Entry field packing is TableGen Inst{} on live Format E members
@@ -1003,13 +1011,9 @@ static std::string formatELogicalName(StringRef Name) {
 
 } // end anonymous namespace (Format E placement helpers)
 
-// MemberId → Haydn::<E96 member opcode> (generated with live TD members).
-#define GET_FORMAT_E_MEMBER_OPCODES
-#include "HaydnGenFormatEMemberOpcodes.inc"
-
 /// Map logical / residual `_S*` MC operands onto a live Format E member Inst
-/// (wire field order + reg classes from tblgen Desc). Used only to feed
-/// getBinaryCodeForInstr — bit placement is TableGen Inst{}.
+/// (wire field order + reg classes from tblgen Desc). Placement only —
+/// encodeSlotSubInst never calls this.
 static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
                                   const MCInst &Logical, const MCInstrInfo &MII,
                                   const MCRegisterInfo &MRI, MCInst &Out) {
@@ -1018,6 +1022,78 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
   const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
   if (MemberOpc == 0)
     return false;
+
+  // Typed as-is path: SubInst is already the private Format E member opcode
+  // with wire-shaped operands — copy Desc operands without bag-sort rebuild.
+  if (Logical.getOpcode() == MemberOpc) {
+    const MCInstrDesc &Desc = MII.get(MemberOpc);
+    if (Logical.getNumOperands() < Desc.getNumOperands())
+      return false;
+    Out.clear();
+    Out.setOpcode(MemberOpc);
+    for (unsigned OI = 0, OE = Desc.getNumOperands(); OI != OE; ++OI)
+      Out.addOperand(Logical.getOperand(OI));
+    return true;
+  }
+
+  // Residual positional promote: when residual/slot-member operands already
+  // match the private member Desc in count, order, and operand kind, copy
+  // without bag-sort. Shape-mismatched residual (writeback extras, dual-dest
+  // collapse, UA stream reorder) falls through to bag-sort recovery.
+  {
+    const MCInstrDesc &Desc = MII.get(MemberOpc);
+    const unsigned Need = Desc.getNumOperands();
+    if (Logical.getNumOperands() == Need && Need > 0) {
+      bool PosOk = true;
+      for (unsigned OI = 0; OI != Need; ++OI) {
+        const MCOperand &MO = Logical.getOperand(OI);
+        const MCOperandInfo &Info = Desc.operands()[OI];
+        const bool WantReg = Info.OperandType == MCOI::OPERAND_REGISTER ||
+                             Info.RegClass >= 0;
+        if (WantReg) {
+          if (!MO.isReg()) {
+            PosOk = false;
+            break;
+          }
+          if (Info.RegClass >= 0 && MO.getReg() != Haydn::NoRegister &&
+              !MRI.getRegClass(Info.RegClass).contains(MO.getReg())) {
+            PosOk = false;
+            break;
+          }
+        } else if (!MO.isImm() && !MO.isExpr()) {
+          PosOk = false;
+          break;
+        }
+      }
+      if (PosOk) {
+        Out.clear();
+        Out.setOpcode(MemberOpc);
+        for (unsigned OI = 0; OI != Need; ++OI)
+          Out.addOperand(Logical.getOperand(OI));
+        return true;
+      }
+    }
+  }
+
+  // SET_HWLOOP: preserve operand order (sel, off1, off2, cnt|rs). This is
+  // identity fill, not bag-sort — residual reloc SET_HWLOOP*_W already
+  // cutovers; peel-identity SET_HWLOOP stays verifier-banned.
+  {
+    StringRef Log = Mem.Logical ? Mem.Logical : "";
+    if (Log.equals_insensitive("SET_HWLOOP") ||
+        Log.equals_insensitive("SET_HWLOOP_F2") ||
+        Log.equals_insensitive("SET_HWLOOP_W") ||
+        Log.equals_insensitive("SET_HWLOOP_F2_W")) {
+      const MCInstrDesc &Desc = MII.get(MemberOpc);
+      if (Logical.getNumOperands() < Desc.getNumOperands())
+        return false;
+      Out.clear();
+      Out.setOpcode(MemberOpc);
+      for (unsigned OI = 0, OE = Desc.getNumOperands(); OI != OE; ++OI)
+        Out.addOperand(Logical.getOperand(OI));
+      return true;
+    }
+  }
 
   SmallVector<MCRegister, 4> DRs, GPRs, ARs;
   SmallVector<int64_t, 4> Imms;
@@ -1052,24 +1128,6 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
       Imms.clear();
       Imms.push_back(Last);
     }
-  }
-  // SET_HWLOOP / SET_HWLOOP_F2: logical order is sel, off1, off2, cnt|rs.
-  // Bag-sort (all imms then all exprs) puts cnt imm into the Off1 slot when
-  // Off1/Off2 are symbolic (Imms=[sel,cnt], Exprs=[start,end]) — Off fields
-  // swap/clobber and typed HWLoopOff range-checks fail. Preserve order.
-  if (Log.equals_insensitive("SET_HWLOOP") ||
-      Log.equals_insensitive("SET_HWLOOP_F2") ||
-      Log.equals_insensitive("SET_HWLOOP_W") ||
-      Log.equals_insensitive("SET_HWLOOP_F2_W")) {
-    const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
-    const MCInstrDesc &Desc = MII.get(MemberOpc);
-    if (Logical.getNumOperands() < Desc.getNumOperands())
-      return false;
-    Out.clear();
-    Out.setOpcode(MemberOpc);
-    for (unsigned OI = 0, OE = Desc.getNumOperands(); OI != OE; ++OI)
-      Out.addOperand(Logical.getOperand(OI));
-    return true;
   }
   // PLDWWUA logical: (rs, ar_sel). Format E member: (ar_sel, rs/dest2).
   if (Log.equals_insensitive("PLDWWUA") ||
@@ -1284,104 +1342,88 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
         /*GenCrashDiag=*/false);
   }
 
-  // Product Format E: select golden member, fill wire-shaped MCInst, then
-  // **tblgen** getBinaryCodeForInstr (Inst{} from HaydnFormatsE96Members.td.inc).
-  // C++ does not pack entry fields. Residual truncate is forbidden.
+  // Product Format E: TableGen Inst{} on live members encodes the entry
+  // window. C++ does not pack entry fields. Residual truncate is forbidden.
   (void)Kind;
   (void)EntryLSB;
   if (isFormatENopOpcode(SubInst.getOpcode(), MII)) {
     Op = APInt(EntryWidth, 0); // zero entry → NOP under Format E inverse
     return;
   }
-  std::string Logical = formatELogicalName(MII.getName(SubInst.getOpcode()));
   const uint8_t Mode = IsFormatE3 ? 1 : 0;
-  // Claim units already chosen for lower entry indices (matches
-  // buildFormatEPlacedComposite unit injectivity).
-  uint32_t UsedUnits = 0;
-  for (unsigned S = 0; S < SlotIdx && S < Composite.getNumOperands(); ++S) {
-    const MCOperand &Prev = Composite.getOperand(S);
-    if (!Prev.isInst() || !Prev.getInst())
-      continue;
-    if (isFormatENopOpcode(Prev.getInst()->getOpcode(), MII))
-      continue;
-    // Prefer exact committed member opcode when present (serialize-as-is).
-    const FormatEMemberRec *PM = nullptr;
-    for (unsigned I = 0; I < FormatEMemberCount && !PM; ++I) {
-      const FormatEMemberRec &M = FormatEMembers[I];
-      if (M.IsNop || M.Mode != Mode || M.EntryIdx != S)
-        continue;
-      if (M.MemberId < FormatEMemberOpcodeCount &&
-          FormatEMemberOpcodes[M.MemberId] == Prev.getInst()->getOpcode())
-        PM = &M;
-    }
-    if (!PM) {
-      std::string PrevLog =
-          formatELogicalName(MII.getName(Prev.getInst()->getOpcode()));
-      PM = findFormatEMember(PrevLog, Mode, static_cast<uint8_t>(S), UsedUnits);
-    }
-    if (PM)
-      UsedUnits |= (1u << PM->Unit);
-  }
-  // Serialize-as-is: when SubInst is already the committed Format E member for
-  // this (mode, entry), use that MemberId — do not re-pick lowest UnitMap.
-  const FormatEMemberRec *Mem = nullptr;
-  for (unsigned I = 0; I < FormatEMemberCount; ++I) {
-    const FormatEMemberRec &M = FormatEMembers[I];
-    if (M.IsNop || M.Mode != Mode || M.EntryIdx != SlotIdx)
-      continue;
-    if (M.MemberId < FormatEMemberOpcodeCount &&
-        FormatEMemberOpcodes[M.MemberId] == SubInst.getOpcode()) {
-      if (M.Unit < 32 && (UsedUnits & (1u << M.Unit)))
-        continue;
-      Mem = &M;
-      break;
-    }
-  }
-  const StringRef SubName = MII.getName(SubInst.getOpcode());
-  const bool IsCommittedMemberName =
-      SubName.contains("_E2_") || SubName.contains("_E3_");
-  if (!Mem && !IsCommittedMemberName)
-    Mem = findFormatEMember(Logical, Mode, static_cast<uint8_t>(SlotIdx),
-                            UsedUnits);
-  if (!Mem || Mem->MemberId >= FormatEMemberOpcodeCount) {
-    if (IsCommittedMemberName) {
-      report_fatal_error(
-          Twine("Haydn MC: committed Format E member '") +
-              MII.getName(SubInst.getOpcode()) +
-              "' does not match mode=" +
-              Twine(static_cast<unsigned>(Mode)) + " entry=" +
-              Twine(SlotIdx) + " — refuse logical re-place (serialize-only)",
-          /*GenCrashDiag=*/false);
-    }
-    std::string Msg =
-        "Haydn MC: Format E entry encode miss for '" + Logical + "' mode=" +
-        std::to_string(static_cast<unsigned>(Mode)) +
-        " entry=" + std::to_string(SlotIdx) +
-        " — no golden member / opcode table";
-    report_fatal_error(Twine(Msg), /*GenCrashDiag=*/false);
-  }
 
-  const unsigned MemberOpc = FormatEMemberOpcodes[Mem->MemberId];
+  // Claim units already chosen for lower entry indices. Previous entries
+  // are generated members or NOP after placement; no name recovery.
+  auto claimPrevUnits = [&]() -> uint32_t {
+    uint32_t UsedUnits = 0;
+    for (unsigned S = 0; S < SlotIdx && S < Composite.getNumOperands(); ++S) {
+      const MCOperand &Prev = Composite.getOperand(S);
+      if (!Prev.isInst() || !Prev.getInst())
+        continue;
+      if (isFormatENopOpcode(Prev.getInst()->getOpcode(), MII))
+        continue;
+      const FormatEMemberRec *PM =
+          findFormatEMemberByOpcode(Prev.getInst()->getOpcode());
+      if (PM && (PM->Mode != Mode || PM->EntryIdx != static_cast<uint8_t>(S)))
+        PM = nullptr;
+      if (PM && PM->Unit < 32)
+        UsedUnits |= (1u << PM->Unit);
+    }
+    return UsedUnits;
+  };
+
+  // Serialize-only: SubInst must already be the generated private member
+  // for this (Mode, Entry). Placement owns FieldSlot→MemberId and standalone
+  // DFS fill. Name peel / fillFormatEMemberInst are not reachable here.
+  const FormatEMemberRec *Typed =
+      findFormatEMemberByOpcode(SubInst.getOpcode());
+  if (!Typed) {
+    report_fatal_error(
+        Twine("Haydn MC: Format E entry encode saw non-member opcode '") +
+            MII.getName(SubInst.getOpcode()) +
+            "' — placement must emit generated members; refuse name "
+            "recovery / operand rebuild",
+        /*GenCrashDiag=*/false);
+  }
+  if (Typed->Mode != Mode || Typed->EntryIdx != static_cast<uint8_t>(SlotIdx)) {
+    report_fatal_error(
+        Twine("Haydn MC: committed Format E member '") +
+            MII.getName(SubInst.getOpcode()) +
+            "' does not match mode=" +
+            Twine(static_cast<unsigned>(Mode)) + " entry=" +
+            Twine(SlotIdx) + " — refuse logical re-place (serialize-only)",
+        /*GenCrashDiag=*/false);
+  }
+  const uint32_t UsedUnits = claimPrevUnits();
+  if (Typed->Unit < 32 && (UsedUnits & (1u << Typed->Unit))) {
+    report_fatal_error(
+        Twine("Haydn MC: committed Format E member '") +
+            MII.getName(SubInst.getOpcode()) +
+            "' collides unit with earlier entry — refuse re-place",
+        /*GenCrashDiag=*/false);
+  }
+  if (Typed->MemberId >= FormatEMemberOpcodeCount) {
+    report_fatal_error(
+        Twine("Haydn MC: committed Format E MemberId out of range for '") +
+            MII.getName(SubInst.getOpcode()) + "'",
+        /*GenCrashDiag=*/false);
+  }
+  const unsigned MemberOpc = FormatEMemberOpcodes[Typed->MemberId];
   if (MemberOpc == Haydn::NOP || isFormatENopOpcode(MemberOpc, MII)) {
     Op = APInt(EntryWidth, 0);
     return;
   }
-
-  // Build wire-shaped member MCInst from logical/residual operands, then
-  // encode solely via TableGen Inst{} (getBinaryCodeForInstr).
-  MCInst Wire;
-  if (!fillFormatEMemberInst(*Mem, SubInst, MII, *Ctx.getRegisterInfo(), Wire)) {
+  if (SubInst.getOpcode() != MemberOpc) {
     report_fatal_error(
-        Twine("Haydn MC: failed to fill Format E member operands for '") +
-            Logical + "' → " + MII.getName(MemberOpc),
+        Twine("Haydn MC: committed member opcode mismatch MemberId table "
+              "for '") +
+            MII.getName(SubInst.getOpcode()) + "'",
         /*GenCrashDiag=*/false);
   }
   SmallVector<MCFixup, 4> LocalFixups;
-  // HaydnGenMCCodeEmitter uses fixed 96-bit Inst/Scratch (Format E parcel).
-  // Passing a wider Scratch hits APInt::zext(96) assert (width >= BitWidth).
   APInt Scratch(96, 0);
   APInt InstBits(96, 0);
-  getBinaryCodeForInstr(Wire, LocalFixups, InstBits, Scratch, STI);
+  getBinaryCodeForInstr(SubInst, LocalFixups, InstBits, Scratch, STI);
   Op = InstBits.zextOrTrunc(EntryWidth);
   for (const MCFixup &F : LocalFixups)
     addHaydnFixup(Fixups, F.getOffset(), F.getValue(), F.getKind());
@@ -1392,55 +1434,25 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
 //===----------------------------------------------------------------------===//
 
 unsigned HaydnMCCodeEmitter::getBranchFixupKind(const MCInst &MI) const {
-  // Match getExprFixupKind for the same opcode classes so both
-  // getBranchTargetOpValue and getMachineOpValue attach Format E field
-  // geometry (WIDE_BranchSImm12 / RI12, not legacy BranchSImm16).
-  switch (MI.getOpcode()) {
-  case Haydn::BEQ:
-  case Haydn::BNE:
-  case Haydn::BGE:
-  case Haydn::BGEU:
-  case Haydn::BLT:
-  case Haydn::BLTU:
-  case Haydn::BEQ_S0:
-  case Haydn::BNE_S0:
-  case Haydn::BGE_S0:
-  case Haydn::BGEU_S0:
-  case Haydn::BLT_S0:
-  case Haydn::BLTU_S0:
-  case Haydn::BEQ_W:
-  case Haydn::BNE_W:
-  case Haydn::BGE_W:
-  case Haydn::BGEU_W:
-  case Haydn::BLT_W:
-  case Haydn::BLTU_W:
-  case Haydn::BEQ_W_S0:
-  case Haydn::BNE_W_S0:
-  case Haydn::BGE_W_S0:
-  case Haydn::BGEU_W_S0:
-  case Haydn::BLT_W_S0:
-  case Haydn::BLTU_W_S0:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
-  case Haydn::BEQZ:
-  case Haydn::BNEZ:
-  case Haydn::BLTZ:
-  case Haydn::BGEZ:
-  case Haydn::BEQZ_S0:
-  case Haydn::BNEZ_S0:
-  case Haydn::BLTZ_S0:
-  case Haydn::BGEZ_S0:
-  case Haydn::BEQZ_W:
-  case Haydn::BNEZ_W:
-  case Haydn::BGEZ_W:
-  case Haydn::BLTZ_W:
-  case Haydn::BEQZ_W_S0:
-  case Haydn::BNEZ_W_S0:
-  case Haydn::BGEZ_W_S0:
-  case Haydn::BLTZ_W_S0:
+  // Same logical-name map as getExprFixupKind. Do not switch on residual
+  // `_S*` FieldSlots — MemberId / peel covers generated members and keeps.
+  const FormatEMemberRec *Typed = findFormatEMemberByOpcode(MI.getOpcode());
+  std::string LogicalStorage;
+  if (Typed && Typed->Logical && Typed->Logical[0] != '\0')
+    LogicalStorage = Typed->Logical;
+  if (LogicalStorage.empty())
+    LogicalStorage = formatELogicalName(MII.getName(MI.getOpcode()));
+  const StringRef Logical = LogicalStorage;
+  if (Logical.equals_insensitive("BEQZ") ||
+      Logical.equals_insensitive("BNEZ") ||
+      Logical.equals_insensitive("BLTZ") ||
+      Logical.equals_insensitive("BGEZ") ||
+      Logical.equals_insensitive("BEQZ_W") ||
+      Logical.equals_insensitive("BNEZ_W") ||
+      Logical.equals_insensitive("BGEZ_W") ||
+      Logical.equals_insensitive("BLTZ_W"))
     return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12;
-  default:
-    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
-  }
+  return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI;
 }
 
 unsigned HaydnMCCodeEmitter::getCallFixupKind(const MCInst &MI) const {
@@ -1484,7 +1496,7 @@ HaydnMCCodeEmitter::getMachineOpValue(const MCInst &MI, const MCOperand &MO,
       }
     }
     addHaydnFixup(Fixups, /*Offset=*/0, MO.getExpr(),
-                  getExprFixupKind(MI, MII, OpNo));
+                  getExprFixupKind(MI, MII, OpNo, MO.getExpr()));
     Op = 0;
     return;
   }
@@ -1504,10 +1516,10 @@ HaydnMCCodeEmitter::getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
   const MCOperand &MO = MI.getOperand(OpNo);
   unsigned Opcode = MI.getOpcode();
 
-  // D1/§5.14: ALL branches use 2-byte units (<<1). Unified at ÷2.
+  // GE96-03: branches store byte PC+imm (no ÷2). Bundle min-align is 2.
   (void)Opcode;
   unsigned Alignment = 2;
-  unsigned Shift = 1;
+  unsigned Shift = 0;
 
   if (MO.isImm()) {
     int64_t Imm = MO.getImm();
@@ -1519,7 +1531,11 @@ HaydnMCCodeEmitter::getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
   }
 
   if (MO.isExpr()) {
-    addHaydnFixup(Fixups, /*Offset=*/0, MO.getExpr(), getBranchFixupKind(MI));
+    unsigned Kind = getBranchFixupKind(MI);
+    if (std::optional<unsigned> SpecKind =
+            fixupKindFromSpecifier(MO.getExpr()))
+      Kind = *SpecKind;
+    addHaydnFixup(Fixups, /*Offset=*/0, MO.getExpr(), Kind);
     Op = 0;
     return;
   }
@@ -1539,8 +1555,8 @@ HaydnMCCodeEmitter::getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
   if (MO.isImm()) {
     int64_t Imm = MO.getImm();
     if (IsJAL) {
-      // Linear 20-bit encoding: Inst[19:0] = (offset >> 1) & 0xFFFFF.
-      Op = static_cast<uint64_t>((Imm >> 1) & 0xFFFFF);
+      // GE96-03: JAL field stores byte PC+imm (no ÷2).
+      Op = static_cast<uint64_t>(Imm & 0xFFFFF);
       return;
     }
     Op = static_cast<uint64_t>(Imm);
@@ -1548,7 +1564,11 @@ HaydnMCCodeEmitter::getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
   }
 
   if (MO.isExpr()) {
-    addHaydnFixup(Fixups, /*Offset=*/0, MO.getExpr(), getCallFixupKind(MI));
+    unsigned Kind = getCallFixupKind(MI);
+    if (std::optional<unsigned> SpecKind =
+            fixupKindFromSpecifier(MO.getExpr()))
+      Kind = *SpecKind;
+    addHaydnFixup(Fixups, /*Offset=*/0, MO.getExpr(), Kind);
     Op = 0;
     return;
   }
@@ -1562,7 +1582,8 @@ HaydnMCCodeEmitter::getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
 }
 
 //===----------------------------------------------------------------------===//
-// (Stage 1): AIE-style scaled-immediate encoder for 48-bit WIDE formats.
+// AIE-style scaled-immediate encoder for logical *_W / *_dr / hwloop_off*
+// operand classes (Format E encode).
 //
 // Bound to the `*_wide` / `*_dr` / `hwloop_off*` operand classes via tablegen
 // `EncoderMethod`. Reproduces the bit layout per operand:
@@ -1602,7 +1623,10 @@ void HaydnMCCodeEmitter::getSImmOpValueXStepWide(
   }
 
   if (MO.isExpr()) {
-    if (FixupKind != Haydn::FIXUP_HAYDN_NONE) {
+    if (std::optional<unsigned> SpecKind =
+            fixupKindFromSpecifier(MO.getExpr())) {
+      addHaydnFixup(Fixups, /*Offset=*/0, MO.getExpr(), *SpecKind);
+    } else if (FixupKind != Haydn::FIXUP_HAYDN_NONE) {
       Fixups.push_back(MCFixup::create(
           /*Offset=*/0, MO.getExpr(), static_cast<MCFixupKind>(FixupKind),
           IsPCRel));
@@ -1636,9 +1660,8 @@ MCCodeEmitter *llvm::createHaydnMCCodeEmitter(const MCInstrInfo &MCII,
 // one production EncodedBytes (registry parcel size).
 //
 // Control immediates in MCInst are **byte** PC deltas (same as fixup Values
-// and getBranchTargetOpValue). Format E encode applies ValueShift=1 so the
-// wire field stores halfwords; dump recovers bytes via <<1. A 2-parcel skip
-// is therefore createImm(2 * Parcel) bytes → field Parcel after ÷2.
+// and getBranchTargetOpValue). GE96-03: field stores bytes (ValueShift=0).
+// A 2-parcel skip is createImm(2 * Parcel) bytes.
 //===----------------------------------------------------------------------===//
 
 // Map a long branch pseudo to the inverted conditional branch opcode.
@@ -1668,7 +1691,7 @@ void HaydnMCCodeEmitter::expandLongBranch(
   unsigned InvOpc = getInvertedBranchOpcode(LongOpc);
   const unsigned Parcel = haydnProductionParcelBytes().Value;
   // Byte skip over this inverted-branch parcel + the following JAL parcel.
-  // Format E encode applies halfword ValueShift (Imm >> 1).
+  // GE96-03: field stores bytes (ValueShift=0).
   const int64_t SkipBytes = static_cast<int64_t>(2u * Parcel);
 
   // Record the fixup count before the inverted branch so we can drop any

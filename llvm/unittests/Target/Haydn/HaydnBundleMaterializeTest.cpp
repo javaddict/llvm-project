@@ -33,6 +33,7 @@
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "gtest/gtest.h"
 
 #define GET_INSTRINFO_ENUM
@@ -234,8 +235,10 @@ TEST(HaydnBundleMaterializeTest, FourAluSplitToTwoCycles) {
 
 TEST(HaydnBundleMaterializeTest, SixAluSplitToTwoFullCycles) {
   HaydnMCFormats Fmts;
+  // Six E2+E3 ALU logicals pack 3+3. ADDI32 is Format E E2-only and cannot
+  // join a 3-wide E3 cycle (HaydnAlternateDescriptors.cpp E2-only list).
   unsigned Ops[] = {Haydn::ADD32, Haydn::XOR32, Haydn::NOT32,
-                    Haydn::SUB32, Haydn::NEG32, Haydn::ADDI32};
+                    Haydn::SUB32, Haydn::NEG32, Haydn::OR32};
   expectValidSplit(Ops, Fmts, 2, 2);
   auto Cycles = greedySplitLegalOpcodeCycles(Ops, Fmts);
   ASSERT_EQ(Cycles.size(), 2u);
@@ -436,6 +439,17 @@ TEST(HaydnBundleMaterializeTest, ExactSolveDualStoreFailsClosed) {
   EXPECT_EQ(Split.size(), 2u);
 }
 
+TEST(HaydnBundleMaterializeTest, ExactSolveLaneStoreAndST8FailsClosed) {
+  // D_SW_L_WITH_IMM + OR64 + ST8 is the libc bf16mull illegal residual.
+  // FieldSlots would accept S2+S1+S0; unit injectivity must refuse.
+  HaydnMCFormats Fmts;
+  unsigned Ops[] = {Haydn::D_SW_L_WITH_IMM, Haydn::OR64, Haydn::ST8};
+  EXPECT_FALSE(opcodesHaveFormatEUnitCover(Ops));
+  EXPECT_FALSE(exactSolveProductOpcodes(Ops, Fmts).has_value());
+  EXPECT_FALSE(exactPackOneOpcodeCycle(Ops, Fmts).has_value());
+  EXPECT_FALSE(opcodesFormOneLegalCycle(Ops, Fmts));
+}
+
 TEST(HaydnBundleMaterializeTest, ExactSolveOverwidthFailsClosed) {
   HaydnMCFormats Fmts;
   unsigned Ops[] = {Haydn::ADD32, Haydn::ADD32, Haydn::ADD32, Haydn::ADD32};
@@ -611,12 +625,24 @@ TEST(HaydnBundleMaterializeTest, AuctionThreeReadyRematchAdd32_2xAdd64) {
   auto Solved = exactSolveProductOpcodes(A->CycleOpcodes, Fmts);
   ASSERT_TRUE(Solved.has_value());
   ASSERT_EQ(Solved->MemberOpcodes.size(), 3u);
-  // Auction may reorder ready indices; the selected member multiset is fixed.
-  SmallVector<unsigned, 3> Mem = Solved->MemberOpcodes;
-  llvm::sort(Mem);
-  EXPECT_EQ(Mem[0], Haydn::ADD32_S0);
-  EXPECT_EQ(Mem[1], Haydn::ADD64_S1);
-  EXPECT_EQ(Mem[2], Haydn::ADD64_S2);
+  // Auction may reorder ready indices; occupancy is residual S0/S1/S2,
+  // setDesc targets are Format E members at those entries.
+  unsigned SawAdd32E0 = 0, SawAdd64E1 = 0, SawAdd64E2 = 0;
+  for (unsigned Opc : Solved->MemberOpcodes) {
+    const StringRef Name = haydnOpcodeName(Opc);
+    EXPECT_TRUE(Name.contains("_E2_") || Name.contains("_E3_")) << Name;
+    if (Name.starts_with("ADD32_") && Name.contains("_E0_"))
+      ++SawAdd32E0;
+    else if (Name.starts_with("ADD64_") && Name.contains("_E1_"))
+      ++SawAdd64E1;
+    else if (Name.starts_with("ADD64_") && Name.contains("_E2_"))
+      ++SawAdd64E2;
+    else
+      ADD_FAILURE() << "unexpected member " << Name;
+  }
+  EXPECT_EQ(SawAdd32E0, 1u);
+  EXPECT_EQ(SawAdd64E1, 1u);
+  EXPECT_EQ(SawAdd64E2, 1u);
 }
 
 TEST(HaydnBundleMaterializeTest, AuctionFocusPrefersDenserPartner) {

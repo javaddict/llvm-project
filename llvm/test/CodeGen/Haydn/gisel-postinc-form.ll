@@ -116,8 +116,8 @@ exit:
 ; ISEL-LABEL: name: postinc_store_i32
 ; ISEL: {{ST32_POST|S_SW_POST_IMM}}
 ; ASM-LABEL: postinc_store_i32:
-; ST32_POST member after leaveRegion setDesc — underscore print (peers d230/ii-scheduler-reorder).
-; ASM: st32_post
+; ST32_POST member after leaveRegion setDesc — catalog print s_sw_post_imm.
+; ASM: s_sw_post_imm
 define void @postinc_store_i32(ptr %p, i32 %n, i32 %v) {
 entry:
   %cmp = icmp sgt i32 %n, 0

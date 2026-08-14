@@ -50,8 +50,8 @@ define void @test_independent_alu_cross_slot(i32 %a, i32 %b, i64 %c, i64 %d,
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st64 d0, r4, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
                                              i32* %out32, i64* %out64) {
 ; The two independent ALU ops must be in a single bundle (slot 1 + slot 2).
 ; The xor32 of R0 (soft-zero prologue) shares slot 0 of that bundle.
@@ -86,8 +86,8 @@ define void @test_3slot_bundle(i32* %ptr, i32 %a, i32 %b, i64 %c, i64 %d,
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st64 d0, r5, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
                                i32* %out32, i64* %out64) {
 ; LD32 takes slot 0; the independent ADD32+ADD64 pair bundles together in
 ; slot 1+2 of the next bundle (first bundle is consumed by xor32+ld32+nop).
@@ -121,8 +121,8 @@ define i32 @test_raw_hazard(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 5 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
   %a = add i32 %x, 10
   %b = sub i32 %a, 5
@@ -150,8 +150,8 @@ define i32 @test_memory_dependency(i32* %ptr, i32 %val) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
   store i32 %val, i32* %ptr, align 4
   %loaded = load i32, i32* %ptr, align 4
@@ -180,8 +180,8 @@ define i32 @test_independent_loads(i32* %p1, i32* %p2) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
   %v1 = load i32, i32* %p1, align 4
   %v2 = load i32, i32* %p2, align 4

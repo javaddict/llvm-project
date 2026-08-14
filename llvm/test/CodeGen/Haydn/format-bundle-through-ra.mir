@@ -2,42 +2,58 @@
 # jointly legal (dual LD32 → LD32_S0/S1 Format E). True-RAW shells
 # sequentialize; product path does not revive pre-RA SMS freeze.
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=SCHED
+# RUN:   -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefixes=SCHED,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=register-coalescer \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COALESCER
+# RUN:   -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefixes=COALESCER,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-before=greedy -verify-machineinstrs %s -o - \
-# RUN:   | FileCheck %s --check-prefix=PREGREEDY
+# RUN:   | FileCheck %s --check-prefixes=PREGREEDY,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=greedy -verify-machineinstrs %s -o - \
-# RUN:   | FileCheck %s --check-prefix=GREEDY
+# RUN:   | FileCheck %s --check-prefixes=GREEDY,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=virtregrewriter -verify-machineinstrs %s -o - \
-# RUN:   | FileCheck %s --check-prefix=VRW
+# RUN:   | FileCheck %s --check-prefixes=VRW,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=virtregrewriter -stress-regalloc=4 -verify-machineinstrs \
-# RUN:   %s -o - | FileCheck %s --check-prefix=SPILL
+# RUN:   %s -o - | FileCheck %s --check-prefixes=SPILL,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=greedy -haydn-ra-compact-hints=true -verify-machineinstrs \
-# RUN:   %s -o - | FileCheck %s --check-prefix=GREEDY
+# RUN:   %s -o - | FileCheck %s --check-prefixes=GREEDY,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=virtregrewriter -haydn-ra-compact-hints=true \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=VRW
+# RUN:   -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefixes=VRW,FIREWALL
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=virtregrewriter -stress-regalloc=4 \
 # RUN:   -haydn-ra-compact-hints=true -verify-machineinstrs %s -o - \
-# RUN:   | FileCheck %s --check-prefix=SPILL
+# RUN:   | FileCheck %s --check-prefixes=SPILL,FIREWALL
 # Large-frame CSR PEI around architectural dual-load hard roots (zero member
 # loss; CSR save/restore and spills only outside the root).
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=prologepilog -verify-machineinstrs %s -o - \
-# RUN:   | FileCheck %s --check-prefix=PEI
+# RUN:   | FileCheck %s --check-prefixes=PEI,FIREWALL
 # Optional postmisched exact-commit of dual-load hard roots after PEI.
 # RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
 # RUN:   -stop-after=postmisched -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=POST
 
 # Role: MIR — hard BUNDLE membership fence through sched→RA (+ PEI large-frame).
+#
+# Phase-firewall pin: no durable row/entry/member/completion/issue-cycle
+# identity crosses RA. Logical hard BUNDLE roots may keep membership; they
+# must not grow private slot forms, Format-E composite names, or stamped
+# row/completion immediates until postmisched (POST). Multi-bundle synthetic
+# proofs stay inert.
+# FIREWALL-NOT: BUNDLE_E96
+# FIREWALL-NOT: BundleFormatRowID
+# FIREWALL-NOT: CompletionStateID
+# FIREWALL-NOT: {{ADD32|ADD64|ADDI32|LD32|ST32}}_S{{[0-2]}}
+# FIREWALL-NOT: {{ADD32|ADD64|ADDI32|LD32|ST32}}_E2_
+# FIREWALL-NOT: {{ADD32|ADD64|ADDI32|LD32|ST32}}_E3_
+# FIREWALL-NOT: BUNDLE{{ *[0-9]+, *[0-9]+}}
 
 # Hard-bundle resource fence: every standard TargetOpcode::BUNDLE root is an
 # atomic isSchedulingBoundary. Architectural multi-MI logical-opcode BUNDLEs
@@ -157,6 +173,7 @@ body:             |
   ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; GREEDY-NEXT: }
+  ; GREEDY-NOT: ADD32_S
 
   ; Physreg rewrite of members; hard root still wraps both ADD32.
   ; VRW-LABEL: name: hard_bundle_membership

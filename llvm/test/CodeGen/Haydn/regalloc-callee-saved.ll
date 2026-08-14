@@ -53,17 +53,17 @@ define i32 @test_minimal_callee_save(i32 %x) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32_w r2, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
 ; CHECK-NEXT:    { nop; move32 r8, r1 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { add32 r1, r8, r1; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 
 entry:
 ; Value is moved to a callee-saved register (FP or R8-R12) before call
@@ -83,7 +83,7 @@ define i32 @test_all_gpr_callee_saved(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
-; CHECK-NEXT:    { nop; addi32_w r6, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r6, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 lr, r6, 0 }
 ; CHECK-NEXT:    { nop; st32 fp, r6, 1 }
 ; CHECK-NEXT:    { nop; st32 r11, r6, 2 }
@@ -92,23 +92,23 @@ define i32 @test_all_gpr_callee_saved(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK-NEXT:    { nop; st32 r8, r6, 5 }
 ; CHECK-NEXT:    { move32 r10, r3; move32 r9, r2 }
 ; CHECK-NEXT:    { move32 r8, r5; move32 r11, r4 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r10, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r11 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r11, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; add32 r2, fp, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r10 }
@@ -121,8 +121,8 @@ define i32 @test_all_gpr_callee_saved(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK-NEXT:    { nop; ld32 r10, sp, 5 }
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 6 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 32 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; Stack is allocated for callee-saves
 ; Multiple GPR callee-save stores (at least 3 of R8-R12)
@@ -147,10 +147,10 @@ define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind 
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 72 }
-; CHECK-NEXT:    { nop; addi32_w r0, r0, 68 }
+; CHECK-NEXT:    { nop; addi32 r0, r0, 68 }
 ; CHECK-NEXT:    { nop; st32_reg lr, sp, r0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w r1, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d14, r1, 0 }
 ; CHECK-NEXT:    { nop; st64 d13, r1, 1 }
 ; CHECK-NEXT:    { nop; st64 d12, r1, 2 }
@@ -160,35 +160,35 @@ define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind 
 ; CHECK-NEXT:    { nop; st64 d8, r1, 6 }
 ; CHECK-NEXT:    { or64 d10, d2, d2; or64 d9, d1, d1 }
 ; CHECK-NEXT:    { nop; or64 d11, d3, d3 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d9, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d10, d10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d11, d11 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d11, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d12, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d13, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d10, d10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d14, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d11, d11 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; add64 d1, d8, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add64 d1, d1, d10 }
@@ -206,8 +206,8 @@ define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind 
 ; CHECK-NEXT:    { nop; ld64 d9, sp, 6 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 7 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 17 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 72 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 72 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; DR64 callee-saves use ST64 (8-byte stores)
 ; Epilogue: DR64 callee-save restores using LD64
@@ -238,38 +238,38 @@ define i64 @test_mixed_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 48 }
-; CHECK-NEXT:    { nop; addi32_w r5, sp, 28 }
+; CHECK-NEXT:    { nop; addi32 r5, sp, 28 }
 ; CHECK-NEXT:    { nop; st32 lr, r5, 0 }
 ; CHECK-NEXT:    { nop; st32 r11, r5, 1 }
 ; CHECK-NEXT:    { nop; st32 r10, r5, 2 }
 ; CHECK-NEXT:    { nop; st32 r9, r5, 3 }
 ; CHECK-NEXT:    { nop; st32 r8, r5, 4 }
-; CHECK-NEXT:    { nop; addi32_w r5, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r5, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d9, r5, 0 }
 ; CHECK-NEXT:    { nop; st64 d8, r5, 1 }
 ; CHECK-NEXT:    { move32 r10, r3; or64 d8, d0, d0; move32 r9, r2 }
 ; CHECK-NEXT:    { or64 d9, d1, d1; move32 r11, r4 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r10, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r11 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i32 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; move32 r11, r1 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal_w lr, use_i64 }
+; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; add32 r1, r8, r9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
@@ -287,8 +287,8 @@ define i64 @test_mixed_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    { nop; ld32 r10, sp, 9 }
 ; CHECK-NEXT:    { nop; ld32 r9, sp, 10 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 11 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 48 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 48 }
+; CHECK:    { nop; jalr r0, lr, 0 }
                                      i64 %e, i64 %f) nounwind {
 entry:
 ; Prologue saves both GPR (st32) and DR64 (st64) callee-saves
@@ -318,8 +318,8 @@ define i32 @test_leaf_no_saves(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 42 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK:    { nop; jalr r0, lr, 0 }
 entry:
 ; No callee-save stores
   %result = add i32 %x, 42

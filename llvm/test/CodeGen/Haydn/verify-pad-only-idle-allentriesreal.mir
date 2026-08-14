@@ -1,0 +1,56 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: pad-only idle parcel stamps AllEntriesReal.
+#
+# Bug: collectBundleMemberOpcodes skips isPadNopOpcode children (F11).
+# A stall/idle BUNDLE then had real-member count 0, so verify expected
+# StubIdle (1) against Finalize's AllEntriesReal (0) and aborted every
+# BundleSim C compile that inserted a latency-stall NOP cycle.
+#
+# Product law: E2 idle is {NOP, NOP} — full-slot architectural NOP fill,
+# AllEntriesReal. Pad NOP is CompletionState, not a real member. Empty
+# BUNDLE (no reals and no pads) stays illegal.
+#
+# Test design: two E2 BUNDLE 0, 0 roots — one child NOP (stall wrap;
+# printer pads the second entry) and explicit {NOP, NOP}. If the
+# pad-only hole returns, haydn-verify-bundles fatals.
+
+--- |
+  define void @pad_only_idle() { ret void }
+  define void @e2_idle_nop_nop() { ret void }
+...
+---
+name:            pad_only_idle
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: pad_only_idle
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: NOP_S0
+    BUNDLE 0, 0 {
+      NOP_S0
+    }
+    RET implicit $r15
+...
+---
+name:            e2_idle_nop_nop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: e2_idle_nop_nop
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: NOP_S0
+    ; CHECK: NOP_S0
+    BUNDLE 0, 0 {
+      NOP_S0
+      NOP_S0
+    }
+    RET implicit $r15
+...
+

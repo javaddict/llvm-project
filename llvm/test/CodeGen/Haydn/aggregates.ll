@@ -14,12 +14,12 @@ define [2 x i32] @return_array() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 42 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 99 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 99 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %result = insertvalue [2 x i32] undef, i32 42, 0
   %result2 = insertvalue [2 x i32] %result, i32 99, 1
   ret [2 x i32] %result2
@@ -34,8 +34,9 @@ define i32 @sum_array_arg([2 x i32] %arr) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %e0 = extractvalue [2 x i32] %arr, 0
   %e1 = extractvalue [2 x i32] %arr, 1
   %sum = add i32 %e0, %e1
@@ -49,18 +50,18 @@ define { i32, i32, i32 } @return_3field() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; st32 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 2 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { nop; st32 r2, r1, 1 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 3 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 3 }
 ; CHECK-NEXT:    { nop; st32 r2, r1, 2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = insertvalue { i32, i32, i32 } undef, i32 1, 0
   %r2 = insertvalue { i32, i32, i32 } %r, i32 2, 1
   %r3 = insertvalue { i32, i32, i32 } %r2, i32 3, 2
@@ -76,8 +77,9 @@ define i32 @get_third_field({ i32, i32, i32 } %s) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %f = extractvalue { i32, i32, i32 } %s, 2
   ret i32 %f
 }
@@ -91,8 +93,9 @@ define i32 @nested_struct({ i32, { i32, i32 } } %s) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %inner = extractvalue { i32, { i32, i32 } } %s, 1
   %field = extractvalue { i32, i32 } %inner, 0
   ret i32 %field
@@ -105,15 +108,15 @@ define i64 @return_struct_i64() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 118 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, -275179 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, -275179 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = insertvalue { i64, i32 } undef, i64 123456789, 0
   %r2 = insertvalue { i64, i32 } %r, i32 42, 1
   %v = extractvalue { i64, i32 } %r2, 0
@@ -129,8 +132,9 @@ define i32 @large_struct_byval(ptr byval([6 x i32]) %s) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %e0 = getelementptr [6 x i32], ptr %s, i32 0, i32 0
   %v0 = load i32, ptr %e0
   ret i32 %v0
@@ -145,14 +149,14 @@ define i32 @array_literal() {
 ; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 10 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 20 }
-; CHECK-NEXT:    { nop; jal_w lr, sum_array_arg }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 20 }
+; CHECK-NEXT:    { nop; jal lr, sum_array_arg }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %arr = insertvalue [2 x i32] undef, i32 10, 0
   %arr2 = insertvalue [2 x i32] %arr, i32 20, 1
   %sum = call i32 @sum_array_arg([2 x i32] %arr2)
@@ -166,16 +170,15 @@ define { i8, i16, i32, i64 } @mixed_struct() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r2, r1, 8 }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 7 }
-; CHECK-NEXT:    { nop; st8 r4, r1, 0 }
-; CHECK-NEXT:    { nop; addi32_w r3, r2, 4 }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 42 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 7 }
+; CHECK-NEXT:    { st8 r4, r1, 0; addi32 r2, r1, 8 }
+; CHECK-NEXT:    { nop; addi32 r3, r2, 4 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 42 }
 ; CHECK-NEXT:    { nop; st16 r4, r1, 1 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 99 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 99 }
 ; CHECK-NEXT:    { nop; st32 r4, r1, 1 }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 1000 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 1000 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
@@ -183,8 +186,9 @@ define { i8, i16, i32, i64 } @mixed_struct() {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r3, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = insertvalue { i8, i16, i32, i64 } undef, i8 7, 0
   %r2 = insertvalue { i8, i16, i32, i64 } %r, i16 42, 1
   %r3 = insertvalue { i8, i16, i32, i64 } %r2, i32 99, 2
@@ -200,8 +204,9 @@ define {} @empty_struct() {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   ret {} undef
 }
 
@@ -212,25 +217,25 @@ define [2 x i64] @array_i64() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 111 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 111 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r4 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
-; CHECK-NEXT:    { nop; addi32_w r2, r1, 4 }
+; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 222 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 222 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
-; CHECK-NEXT:    { nop; addi32_w r3, r1, 8 }
+; CHECK-NEXT:    { nop; addi32 r3, r1, 8 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r3, 0 }
-; CHECK-NEXT:    { nop; addi32_w r1, r3, 4 }
+; CHECK-NEXT:    { nop; addi32 r1, r3, 4 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = insertvalue [2 x i64] undef, i64 111, 0
   %r2 = insertvalue [2 x i64] %r, i64 222, 1
   ret [2 x i64] %r2
@@ -251,8 +256,9 @@ define void @aggregate_copy(ptr %dst, ptr %src) {
 ; CHECK-NEXT:    { nop; st32 r5, r1, 2 }
 ; CHECK-NEXT:    { nop; st32 r2, r1, 3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %v = load [4 x i32], ptr %src
   store [4 x i32] %v, ptr %dst
   ret void
@@ -267,13 +273,13 @@ define i32 @read_global_struct() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; lui r1, global_struct }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, global_struct }
+; CHECK-NEXT:    { nop; lui r1, %hi12(global_struct) }
+; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(global_struct) }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %v = load { i32, i32 }, ptr @global_struct
   %f = extractvalue { i32, i32 } %v, 0
   ret i32 %f
@@ -286,12 +292,12 @@ define i32 @out_of_bounds(ptr %arr) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 39996 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 39996 }
 ; CHECK-NEXT:    { nop; ld32_reg r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; No bounds checking in LLVM IR
   %ptr = getelementptr i32, ptr %arr, i32 9999
   %v = load i32, ptr %ptr

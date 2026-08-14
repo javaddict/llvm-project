@@ -52,12 +52,12 @@ define float @ret_float_2p5() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 1026 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   ret float 2.500000e+00
 }
 
@@ -68,12 +68,12 @@ define float @ret_float_1p0() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 1016 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   ret float 1.000000e+00
 }
 
@@ -84,10 +84,11 @@ define float @ret_float_0p0() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   ret float 0.000000e+00
 }
 
@@ -98,12 +99,12 @@ define float @ret_float_neg2p0() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 3072 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   ret float -2.000000e+00
 }
 
@@ -116,22 +117,22 @@ define double @ret_double_3p14() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 1311 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, -293601 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, -293601 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 1025 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, -450888 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, -450888 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   ret double 3.140000e+00
 }
 
@@ -143,21 +144,21 @@ define double @ret_double_1p0() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r1, 1023 }
-; CHECK-NEXT:    { nop; addi32_w r1, r1, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   ret double 1.000000e+00
 }
 
@@ -172,14 +173,14 @@ define float @const_plus_arg(float %a) {
 ; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; lui r2, 1026 }
-; CHECK-NEXT:    { nop; addi32_w r2, r2, 0 }
-; CHECK-NEXT:    { nop; jal_w lr, __addsf3 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 0 }
+; CHECK-NEXT:    { nop; jal lr, __addsf3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 16 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = fadd float %a, 2.500000e+00
   ret float %r
 }

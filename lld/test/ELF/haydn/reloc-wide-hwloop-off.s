@@ -8,13 +8,13 @@
 # lld must accept (no "unrecognized relocation" Fatal).
 #
 # Format E EncodedBytes=12. Do not .balign 16 after SET (4-byte pad fails
-# writeNopData). Product currently emits R_HAYDN_32 for symbolic Off1/Off2
-# operands (HWLoopOff1/Off2 FieldLsb residual GE96) — pin live emission.
+# writeNopData). Product emits typed R_HAYDN_HWLoopOff1/Off2 for symbolic
+# Off1/Off2 — pin live emission; LLD must accept without Fatal.
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-DAG:      0x0 R_HAYDN_32 loop_body 0x0
-# RELOCS-DAG:      0x0 R_HAYDN_32 loop_end 0x0
+# RELOCS-DAG:      0x0 R_HAYDN_HWLoopOff1 loop_body 0x0
+# RELOCS-DAG:      0x0 R_HAYDN_HWLoopOff2 loop_end 0x0
 # RELOCS:        }
 # RELOCS-NEXT: ]
 

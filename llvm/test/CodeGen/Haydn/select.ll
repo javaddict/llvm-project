@@ -40,8 +40,9 @@ define i32 @select_i32(i1 %cond, i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; movt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = select i1 %cond, i32 %a, i32 %b
   ret i32 %r
 }
@@ -55,8 +56,9 @@ define i32 @select_cmp(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; min32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %cmp = icmp slt i32 %a, %b
   %r = select i1 %cmp, i32 %a, i32 %b
   ret i32 %r
@@ -71,8 +73,9 @@ define i32 @select_unsigned(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; minu32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %cmp = icmp ult i32 %a, %b
   %r = select i1 %cmp, i32 %a, i32 %b
   ret i32 %r
@@ -87,13 +90,14 @@ define i32 @select_eq(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; addi32_w r4, r0, 0 }
 ; CHECK-NEXT:    { nop; movt32 r4, r3, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r4 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %cmp = icmp eq i32 %a, %b
   %r = select i1 %cmp, i32 %c, i32 0
   ret i32 %r
@@ -109,8 +113,9 @@ define i32 @nested_select(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-NEXT:    { min32 r2, r3, r4; min32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %cmp1 = icmp slt i32 %a, %b
   %sel1 = select i1 %cmp1, i32 %a, i32 %b
   %cmp2 = icmp slt i32 %c, %d
@@ -127,14 +132,14 @@ define i32 @select_chain(i32 %val) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 100 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 100 }
 ; CHECK-NEXT:    { nop; max32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; min32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %cmp1 = icmp slt i32 %val, 0
   %sel1 = select i1 %cmp1, i32 0, i32 %val
   %cmp2 = icmp sgt i32 %sel1, 100
@@ -166,8 +171,9 @@ define i64 @select_i64(i1 %cond, i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 24 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = select i1 %cond, i64 %a, i64 %b
   ret i64 %r
 }
@@ -182,8 +188,9 @@ define i64 @select_i64_cmp(i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; min64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %cmp = icmp slt i64 %a, %b
   %r = select i1 %cmp, i64 %a, i64 %b
   ret i64 %r
@@ -197,16 +204,16 @@ define i32 @multiple_selects(i32 %a, i32 %b, i32 %c, i32 %x, i32 %y) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r6, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r6, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r1, r1, r6 }
 ; CHECK-NEXT:    { nop; movt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; seq32 r1, r3, r6 }
 ; CHECK-NEXT:    { nop; movt32 r5, r4, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r5 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %cmp1 = icmp eq i32 %a, 0
   %s1 = select i1 %cmp1, i32 %b, i32 %c
   %cmp2 = icmp eq i32 %s1, 0
@@ -222,14 +229,15 @@ define i32 @select_const(i1 %cond) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; addi32 r3, r0, 42 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 99 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, 42 }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 99 }
 ; CHECK-NEXT:    { nop; movt32 r2, r3, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = select i1 %cond, i32 42, i32 99
   ret i32 %r
 }
@@ -246,8 +254,9 @@ define ptr @select_ptr(i1 %cond, ptr %a, ptr %b) {
 ; CHECK-NEXT:    { nop; movt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = select i1 %cond, ptr %a, ptr %b
   ret ptr %r
 }
@@ -260,15 +269,15 @@ define i32 @abs(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; addi32_w r2, r0, 0 }
-; CHECK-NEXT:    { nop; addi32_w r3, r0, -1 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, -1 }
 ; CHECK-NEXT:    { slt32 r3, r3, r1; sub32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; movt32 r2, r1, r3 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %neg = sub i32 0, %x
   %cmp = icmp sgt i32 %x, -1
   %r = select i1 %cmp, i32 %x, i32 %neg
@@ -286,12 +295,13 @@ define i32 @saturating_add(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; lui r3, 2048 }
-; CHECK-NEXT:    { nop; addi32_w r3, r3, -1 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, -1 }
 ; CHECK-NEXT:    { nop; sltu32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; movt32 r1, r3, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %sum = add i32 %a, %b
   %overflow = icmp ult i32 %sum, %a
   %max = xor i32 2147483647, -1  ; INT_MAX = 0x7FFFFFFF
@@ -310,8 +320,9 @@ define i32 @conditional_inc(i32 %val, i1 %cond) {
 ; CHECK-NEXT:    { addi32 r3, r1, 1; andi32 r2, r2, 1 }
 ; CHECK-NEXT:    { nop; movt32 r1, r3, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
-; CHECK:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %inc = add i32 %val, 1
   %r = select i1 %cond, i32 %inc, i32 %val
   ret i32 %r

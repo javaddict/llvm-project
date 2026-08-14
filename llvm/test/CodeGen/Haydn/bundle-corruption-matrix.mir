@@ -6,6 +6,24 @@
 # RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   %t/unknown-formatid.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=BAD-ID
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/e2-three-members.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=E2-OVER
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/wrong-completion.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=BAD-COMP
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/over-issue.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=OVER-ISSUE
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/e2-private-e3-member.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=E2-PRIV-E3
+# MC encode refuse uses report_fatal_error(/*GenCrashDiag=*/false) → exit 1,
+# not abort; plain `not` (no --crash) still surfaces the diagnostic for FileCheck.
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir \
+# RUN:   -start-after=livedebugvalues -filetype=obj \
+# RUN:   %t/private-wrong-entry-encode.mir -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=PRIV-REPLACE
 # Residual cycle-forming LOADI32 seat is already load-bearing in
 # vf5-residual-cycle-pseudo-ban.mir (not --crash path under finalize+verify).
 
@@ -16,9 +34,16 @@
 # Seat inventory: Inputs/CORRUPTION-MATRIX.txt
 # Companion MC entry-count reject: MC/Haydn/bundle-canadd-reject.s
 # Residual phase: vf5-residual-cycle-pseudo-ban.mir / residual-crossbank-*.mir
+# Independent inverse positive accepts: e96-bundle-inverse-verify.mir
 
 # NO-IMM: BUNDLE root missing or unknown BundleFormatRowID imm
 # BAD-ID: BUNDLE root missing or unknown BundleFormatRowID imm
+# E2-OVER: BUNDLE membership exceeds stamped row entry count (E2 holds 2
+# BAD-COMP: BUNDLE root CompletionStateID does not match row and member count
+# OVER-ISSUE: memberCount > ISSUE_SLOT_COUNT (3)
+# E2-PRIV-E3: structural inverse: E3 fixed-slot member under E96TwoEntry row
+# PRIV-REPLACE: committed Format E private member cannot enter standalone DFS
+# (duplicate EntryIdx scatter miss — typed members never DFS)
 
 #--- missing-formatid.mir
 --- |
@@ -51,6 +76,106 @@ body:             |
     liveins: $r0, $r15
     BUNDLE 99 {
       $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+...
+#--- e2-three-members.mir
+--- |
+  define void @corrupt_e2_three_members() { ret void }
+...
+---
+name:            corrupt_e2_three_members
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
+    BUNDLE 0, 0, implicit-def $r6, implicit-def $r7, implicit-def $r8, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5 {
+      $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r7 = XOR32 $r2, $r3, implicit-def dead $sfr
+      $r8 = OR32 $r4, $r5, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+...
+#--- wrong-completion.mir
+--- |
+  define void @corrupt_wrong_completion() { ret void }
+...
+---
+name:            corrupt_wrong_completion
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    BUNDLE 0, 2, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+...
+#--- over-issue.mir
+--- |
+  define void @corrupt_over_issue() { ret void }
+...
+---
+name:            corrupt_over_issue
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
+    BUNDLE 1, 0, implicit-def $r8, implicit-def $r9, implicit-def $r10, implicit-def $r11, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
+      $r8 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r9 = XOR32 $r2, $r3, implicit-def dead $sfr
+      $r10 = OR32 $r4, $r5, implicit-def dead $sfr
+      $r11 = AND32 $r6, $r7, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+...
+
+#--- e2-private-e3-member.mir
+--- |
+  define void @corrupt_e2_private_e3_member() { ret void }
+...
+---
+name:            corrupt_e2_private_e3_member
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; Private E3 entry-0 member under stamped E2 row must fail closed.
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = ADD32_E3_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+    }
+    BUNDLE 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
+...
+
+#--- private-wrong-entry-encode.mir
+--- |
+  define void @corrupt_private_dup_entry_encode() { ret void }
+...
+---
+name:            corrupt_private_dup_entry_encode
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit-def $r3, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      $r3 = XOR32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
     }
     BUNDLE 0 {
       $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

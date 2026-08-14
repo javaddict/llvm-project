@@ -12,7 +12,7 @@ define i32 @test_alloca() {
 }
 ; CHECK-LABEL: test_alloca:
 ; CHECK: st32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 
 ; Callee-saved registers
 define i32 @test_callee_save() {
@@ -26,4 +26,4 @@ define i32 @test_callee_save() {
 }
 declare i32 @extern_func(i32)
 ; CHECK-LABEL: test_callee_save:
-; CHECK: jal_w{{(\.s[012])?}}
+; CHECK: jal{{(\.s[012])?}}

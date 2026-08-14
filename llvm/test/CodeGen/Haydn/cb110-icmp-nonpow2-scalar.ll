@@ -20,7 +20,7 @@ define i1 @icmp_ugt_i63(i63 %a, i63 %b) nounwind {
 ; Signed slt on i61 → widen both sides to i64 via SEXT, then 64-bit compare.
 ; CHECK-LABEL: icmp_slt_i61:
 ; CHECK-DAG: slt32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 define i1 @icmp_slt_i61(i61 %a, i61 %b) nounwind {
   %c = icmp slt i61 %a, %b
   ret i1 %c
@@ -29,7 +29,7 @@ define i1 @icmp_slt_i61(i61 %a, i61 %b) nounwind {
 ; Unsigned ult on i61 (yarpgen seed 2168 shape).
 ; CHECK-LABEL: icmp_ult_i61:
 ; CHECK-DAG: sltu32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 define i1 @icmp_ult_i61(i61 %a, i61 %b) nounwind {
   %c = icmp ult i61 %a, %b
   ret i1 %c
@@ -38,7 +38,7 @@ define i1 @icmp_ult_i61(i61 %a, i61 %b) nounwind {
 ; Equality on a mid-range non-pow2 (s48) — also hits the same rule.
 ; CHECK-LABEL: icmp_eq_i48:
 ; CHECK-DAG: seq32
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 define i1 @icmp_eq_i48(i48 %a, i48 %b) nounwind {
   %c = icmp eq i48 %a, %b
   ret i1 %c
