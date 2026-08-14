@@ -3046,3 +3046,47 @@ bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
   }
 }
 
+bool HaydnInstrInfo::areMemAccessesTriviallyDisjoint(
+    const MachineInstr &MIa, const MachineInstr &MIb) const {
+  assert(MIa.mayLoadOrStore() && "MIa must be a load or store.");
+  assert(MIb.mayLoadOrStore() && "MIb must be a load or store.");
+
+  if (MIa.hasUnmodeledSideEffects() || MIb.hasUnmodeledSideEffects() ||
+      MIa.hasOrderedMemoryRef() || MIb.hasOrderedMemoryRef())
+    return false;
+
+  // The interface's own contract: assume any register used to compute an
+  // address holds the same value in both instructions. That is what makes a
+  // bare base comparison sound here, and it is why this is a post-RA question.
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+  SmallVector<const MachineOperand *, 4> BaseOpsA, BaseOpsB;
+  int64_t OffsetA = 0, OffsetB = 0;
+  bool ScalableA = false, ScalableB = false;
+  LocationSize WidthA = LocationSize::precise(0),
+               WidthB = LocationSize::precise(0);
+
+  if (!getMemOperandsWithOffsetWidth(MIa, BaseOpsA, OffsetA, ScalableA, WidthA,
+                                     TRI) ||
+      !getMemOperandsWithOffsetWidth(MIb, BaseOpsB, OffsetB, ScalableB, WidthB,
+                                     TRI))
+    return false;
+
+  // Haydn never reports a scalable offset, but a false here is the safe answer
+  // if that ever changes rather than a comparison of incomparable units.
+  if (ScalableA || ScalableB)
+    return false;
+  if (BaseOpsA.size() != 1 || BaseOpsB.size() != 1)
+    return false;
+  if (!BaseOpsA[0]->isIdenticalTo(*BaseOpsB[0]))
+    return false;
+  if (!WidthA.hasValue() || !WidthB.hasValue())
+    return false;
+
+  // Offsets come back in BYTES (§ 5.18 — the immediate is an element index and
+  // the accessor scales it), so this compares like with like.
+  const int64_t LowOffset = std::min(OffsetA, OffsetB);
+  const int64_t HighOffset = std::max(OffsetA, OffsetB);
+  const LocationSize LowWidth = (LowOffset == OffsetA) ? WidthA : WidthB;
+  return LowOffset + static_cast<int64_t>(LowWidth.getValue()) <= HighOffset;
+}
+
