@@ -248,6 +248,53 @@ exactSolveProductOpcodes(ArrayRef<unsigned> Opcodes, const HaydnMCFormats &Fmts)
   return Out;
 }
 
+/// Exact solve for one CLOSED singleton with the documented row default.
+///
+/// ProductDefaultRowID is E96TwoEntry: "Default product row preference for
+/// singletons / unknown fill (E2 geometry)". The solver's S2→S1→S0
+/// materialize preference is an OPEN-cycle fill heuristic (leave low slots
+/// free for later adds); reusing it for a cycle that is already closed made
+/// every lone ADD32 commit as an e3_* member and stamp BUNDLE row 1,
+/// contradicting the default the code documents (CB-152b,
+/// singleton-bundle-formatid). Same candidate expansion as
+/// exactSolveProductOpcodes; the selection just prefers a state that
+/// commits as the E2 row, falling back to the unrestricted preferred state
+/// for E3-only menus (ALU2-only opcodes and friends).
+inline std::optional<ExactProductCycle>
+exactSolveLateSingleton(unsigned LogicalOpc, const HaydnMCFormats &Fmts) {
+  CycleCandidateSet Cands = makeProductCandidateSet(Fmts.getPacketFormats());
+  if (!exactTryAddProduct(Cands, Fmts, LogicalOpc))
+    return std::nullopt;
+
+  CycleCandidateSet E2Cands;
+  for (const CycleState &S : Cands)
+    if (S.Members.size() == 1 &&
+        formatECompositeSlotIsE2(
+            Fmts.getSlotKind(S.Members[0].MemberOpcode)))
+      E2Cands.push_back(S);
+
+  auto tryCommit = [&](const CycleCandidateSet &Set)
+      -> std::optional<ExactProductCycle> {
+    if (Set.empty())
+      return std::nullopt;
+    const CycleState &S = selectPreferredCandidate(Set);
+    if (S.Members.size() != 1)
+      return std::nullopt;
+    auto Plan = commitProduct(S, Fmts.getPacketFormats());
+    if (!Plan || !Plan->isProductLegal())
+      return std::nullopt;
+    ExactProductCycle Out;
+    Out.LogicalOpcodes.assign(1, LogicalOpc);
+    Out.MemberOpcodes.push_back(S.Members[0].MemberOpcode);
+    Out.Plan = *Plan;
+    Out.State = S;
+    return Out;
+  };
+  if (auto E2 = tryCommit(E2Cands))
+    return E2;
+  return tryCommit(Cands);
+}
+
 /// Encode-oracle: true one-cycle pack of \p Opcodes via Bundle canAdd/add.
 /// Accepts post-setDesc fixed-slot members and alts-bearing logicals.
 /// Never splits — full list packs or nullopt.
@@ -1388,9 +1435,9 @@ commitLateProductCycle(unsigned LogicalOpc, const HaydnMCFormats &Fmts) {
     return Out;
   };
 
-  // Prefer exact singleton solve (shared surface).
-  if (auto Exact = exactSolveProductOpcodes(ArrayRef<unsigned>{LogicalOpc},
-                                            Fmts)) {
+  // Prefer exact singleton solve, with the documented CLOSED-singleton row
+  // default (E2) — see exactSolveLateSingleton.
+  if (auto Exact = exactSolveLateSingleton(LogicalOpc, Fmts)) {
     Out.MemberOpcode = Exact->MemberOpcodes.front();
     Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
     Out.Plan = Exact->Plan;

@@ -92,12 +92,15 @@ exit:
   ret i64 %r
 }
 
-; MIR-level: packing contract — LD64 + ADDI32 (stride 8) co-packetized.
-; HWLoop not required: SMS may pipeline this shape instead of ZOL form.
+; MIR-level: packing contract, current form. The stride-8 update now fuses
+; INTO the load as a post-increment member (D_LDW_POST_IMM, element index 1
+; = 8 bytes on s64) — stronger than the original "LD64 + ADDI32 co-packed"
+; contract this test opened with. The second pointer's stride-8 addi still
+; co-packs (dual-ADDI32 E2 bundle with the loop counter).
 ;
 ; MIR-LABEL: name: vec_dot_streaming_postinc
+; MIR-DAG: D_LDW_POST_IMM{{.*}}, 1 ::
 ; MIR: BUNDLE
-; MIR-DAG: LD64
 ; MIR-DAG: ADDI32{{[^,.]*}}, 8
 ; MIR: }
 

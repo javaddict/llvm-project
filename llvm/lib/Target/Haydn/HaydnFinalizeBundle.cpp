@@ -67,6 +67,7 @@
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -81,6 +82,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <mutex>
 
 using namespace llvm;
 
@@ -304,6 +306,53 @@ namespace {
 /// (HaydnBundleMaterialize.h commitLateProductCycle).
 bool materializeLateBareIfNeeded(MachineInstr &MI, const TargetInstrInfo &TII,
                                  HaydnMCFormats &Fmts) {
+  // CB-152b: a standalone MI reaching finalize IS a closed singleton cycle,
+  // and the documented default row for singletons is E2
+  // (ProductDefaultRowID). Post-RA's hazard recognizer commits members with
+  // the OPEN-cycle S2-first fill preference — correct while the cycle might
+  // still co-issue, but a lone e3_* member here would drag the BUNDLE row to
+  // E96ThreeEntry against the default. Re-settle to the logical's preferred
+  // E2-committable sibling when one exists (same exactSolveLateSingleton
+  // authority as the bare path below; no second theory of legality). The
+  // sibling shares the logical's operand signature, so the rewrite is a
+  // plain setDesc-compatible member swap.
+  {
+    const StringRef CurName = TII.getName(MI.getOpcode());
+    if (isGeneratedFormatEMemberName(CurName) &&
+        !haydn::bundle::formatECompositeSlotIsE2(
+            Fmts.getSlotKind(MI.getOpcode()))) {
+      const std::string Logical =
+          haydn::format_e::peelLogicalOpcodeName(CurName);
+      // Logical NAME → logical OPCODE, built once from the alts-bearing
+      // opcodes (the same ledger the solver consumes; golden logical names
+      // are the TD def names verbatim).
+      static llvm::StringMap<unsigned> LogicalByName;
+      static std::once_flag Once;
+      std::call_once(Once, [&TII, &Fmts] {
+        for (unsigned Opc = 0, E = TII.getNumOpcodes(); Opc != E; ++Opc)
+          if (Fmts.getAlternateInstsOpcode(Opc))
+            LogicalByName[TII.getName(Opc)] = Opc;
+      });
+      auto It = LogicalByName.find(Logical);
+      if (!Logical.empty() && It != LogicalByName.end()) {
+        if (auto Resettled =
+                haydn::bundle::exactSolveLateSingleton(It->second, Fmts)) {
+          const unsigned NewMember = Resettled->MemberOpcodes.front();
+          if (NewMember != MI.getOpcode() &&
+              haydn::bundle::formatECompositeSlotIsE2(
+                  Fmts.getSlotKind(NewMember)) &&
+              memberDescCompatible(MI, NewMember, TII)) {
+            rewriteFieldSlotToMember(MI, NewMember, TII);
+            LLVM_DEBUG(dbgs()
+                       << "HaydnFinalizeBundle: singleton row resettle → "
+                       << TII.getName(MI.getOpcode())
+                       << " (closed cycle prefers ProductDefaultRowID E2)\n");
+            return true;
+          }
+        }
+      }
+    }
+  }
   auto Cycle = haydn::bundle::commitLateProductCycle(MI.getOpcode(), Fmts);
   if (!Cycle || !Cycle->NeedsSetDesc)
     return false;
