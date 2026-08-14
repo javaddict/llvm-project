@@ -4267,5 +4267,14 @@ toolchain's AGU surface.
   his line tags them with fail-closed tiers. Both are fail-closed; the
   surface difference is a product decision to settle with the ISA/API
   owner, not a merge decision.
+* (Settled post-merge, same day: CB-149 — the user decided, and AR2/AR3
+  are restored with the full 2-bit ar_sel domain, 636042bb7cd5; gates
+  resealed at torture 1417/0, CoreMark PASS, ctest 222/223. And
+  fork/mhyang moved during the merge: 1c740f0d5708 → 11b1d70b4111,
+  five commits, 654 files — FieldSlot retirement, a generated shared
+  resource model with hosted multi-stage SMS, hwloop Role-A, runtime
+  fail-closed ABI/residual pseudos, AE oracles. A second reconciliation
+  round onto that tip is merge-sized work awaiting a direction
+  decision; his new tip still has only AR0/AR1, so CB-149 rides along.)
 * His plan documents live at /ssd2/mhyang/haydn-plans (his machine) and
   are cited by header comments as "plan §…"; they are not in this repo.
