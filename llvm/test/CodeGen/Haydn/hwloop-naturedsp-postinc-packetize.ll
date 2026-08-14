@@ -72,8 +72,8 @@ define i64 @vec_dot_streaming_postinc(ptr readonly %x, ptr readonly %y, i32 %N) 
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; addi32 r5, r0, 0 }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 0 }
-; ASM-NEXT:    { addi32 r5, r0, 0; addi32 r4, r0, 0 }
+; ASM-NEXT:    { addi32 r4, r0, 0; s_sw_with_imm r5, sp, 0 }
+; ASM-NEXT:    { addi32 r5, r0, 0; nop }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 1 }
 ; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; slt32 r5, r4, r3; nop }
 ; ASM-NEXT:    { addi32 sp, sp, 8; xori32 r5, r5, 1 }
@@ -101,11 +101,11 @@ define i64 @vec_dot_streaming_postinc(ptr readonly %x, ptr readonly %y, i32 %N) 
 ; MIR-NEXT:     $r13 = SUBI32_P21_ALU1 $r13, 8
 ; MIR-NEXT:     $r5 = ADDI32_P20_ALU0 $r0, 0
 ; MIR-NEXT:   }
-; MIR-NEXT:   S_SW_WITH_IMM_P30_LOADSTORE0 killed $r5, $r13, 0
-; MIR-NEXT:   BUNDLE 0, implicit-def $r5, implicit-def $r4, implicit $r0 {
-; MIR-NEXT:     $r5 = ADDI32_P21_ALU1 $r0, 0
-; MIR-NEXT:     $r4 = ADDI32_P20_ALU0 $r0, 0
+; MIR-NEXT:   BUNDLE 0, implicit-def $r4, implicit $r0, implicit killed $r5, implicit $r13 {
+; MIR-NEXT:     $r4 = ADDI32_P21_ALU1 $r0, 0
+; MIR-NEXT:     S_SW_WITH_IMM_P20_LOADSTORE0 killed $r5, $r13, 0
 ; MIR-NEXT:   }
+; MIR-NEXT:   $r5 = ADDI32_P21_ALU1 $r0, 0
 ; MIR-NEXT:   S_SW_WITH_IMM_P30_LOADSTORE0 killed $r5, $r13, 1
 ; MIR-NEXT:   BUNDLE 1, implicit-def $d0, implicit-def $r5, implicit $r13, implicit $r4, implicit $r3 {
 ; MIR-NEXT:     $d0 = D_LDW_WITH_IMM_P32_LOAD1 $r13, 0

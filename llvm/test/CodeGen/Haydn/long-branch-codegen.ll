@@ -47,63 +47,50 @@ define void @test_long_beq(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { beqz r0, .LBB0_3; nop; nop }
 ; CHECK-NEXT:  .LBB0_2: // %pad
 ; CHECK-NEXT:    { addi32 r1, r0, 0; addi32 r2, r0, 2 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
-; CHECK-NEXT:    { addi32 r1, r0, 1; addi32 r4, r0, 3 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 1 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 2 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 3 }
-; CHECK-NEXT:    { addi32 r1, r0, 4; addi32 r2, r0, 5 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 4 }
-; CHECK-NEXT:    { addi32 r4, r0, 6; s_sw_with_imm r2, r3, 5 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 6 }
-; CHECK-NEXT:    { addi32 r2, r0, 7; addi32 r1, r0, 8 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 7 }
-; CHECK-NEXT:    { addi32 r4, r0, 9; s_sw_with_imm r1, r3, 8 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 9 }
-; CHECK-NEXT:    { addi32 r2, r0, 10; addi32 r4, r0, 11 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 10 }
-; CHECK-NEXT:    { addi32 r1, r0, 12; s_sw_with_imm r4, r3, 11 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 12 }
-; CHECK-NEXT:    { addi32 r1, r0, 13; addi32 r2, r0, 14 }
+; CHECK-NEXT:    { addi32 r4, r0, 3; s_sw_with_imm r1, r3, 0 }
+; CHECK-NEXT:    { addi32 r1, r0, 1; addi32 r5, r0, 33 }
+; CHECK-NEXT:    { addi32 r6, r0, 132; s_sw_with_imm r1, r3, 1 }
+; CHECK-NEXT:    { addi32 r1, r0, 4; s_sw_with_imm r2, r3, 2 }
+; CHECK-NEXT:    { addi32 r2, r0, 5; s_sw_with_imm r4, r3, 3 }
+; CHECK-NEXT:    { addi32 r4, r0, 6; s_sw_with_imm r1, r3, 4 }
+; CHECK-NEXT:    { addi32 r1, r0, 8; s_sw_with_imm r2, r3, 5 }
+; CHECK-NEXT:    { addi32 r2, r0, 7; s_sw_with_imm r4, r3, 6 }
+; CHECK-NEXT:    { addi32 r4, r0, 9; s_sw_with_imm r2, r3, 7 }
+; CHECK-NEXT:    { addi32 r2, r0, 10; s_sw_with_imm r1, r3, 8 }
+; CHECK-NEXT:    { addi32 r1, r0, 12; s_sw_with_imm r4, r3, 9 }
+; CHECK-NEXT:    { addi32 r4, r0, 11; s_sw_with_imm r2, r3, 10 }
+; CHECK-NEXT:    { addi32 r2, r0, 14; s_sw_with_imm r4, r3, 11 }
+; CHECK-NEXT:    { addi32 r4, r0, 15; s_sw_with_imm r1, r3, 12 }
+; CHECK-NEXT:    { addi32 r1, r0, 13; addi32 r7, r0, 144 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 13 }
-; CHECK-NEXT:    { addi32 r4, r0, 15; s_sw_with_imm r2, r3, 14 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 15 }
-; CHECK-NEXT:    { addi32 r1, r0, 16; addi32 r2, r0, 17 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 16 }
-; CHECK-NEXT:    { addi32 r4, r0, 18; s_sw_with_imm r2, r3, 17 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 18 }
-; CHECK-NEXT:    { addi32 r2, r0, 19; addi32 r1, r0, 20 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 19 }
-; CHECK-NEXT:    { addi32 r4, r0, 21; s_sw_with_imm r1, r3, 20 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 21 }
-; CHECK-NEXT:    { addi32 r2, r0, 22; addi32 r4, r0, 23 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 22 }
-; CHECK-NEXT:    { addi32 r1, r0, 24; s_sw_with_imm r4, r3, 23 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 24 }
-; CHECK-NEXT:    { addi32 r1, r0, 25; addi32 r2, r0, 26 }
+; CHECK-NEXT:    { addi32 r1, r0, 16; s_sw_with_imm r2, r3, 14 }
+; CHECK-NEXT:    { addi32 r2, r0, 17; s_sw_with_imm r4, r3, 15 }
+; CHECK-NEXT:    { addi32 r4, r0, 18; s_sw_with_imm r1, r3, 16 }
+; CHECK-NEXT:    { addi32 r1, r0, 20; s_sw_with_imm r2, r3, 17 }
+; CHECK-NEXT:    { addi32 r2, r0, 19; s_sw_with_imm r4, r3, 18 }
+; CHECK-NEXT:    { addi32 r4, r0, 21; s_sw_with_imm r2, r3, 19 }
+; CHECK-NEXT:    { addi32 r2, r0, 22; s_sw_with_imm r1, r3, 20 }
+; CHECK-NEXT:    { addi32 r1, r0, 24; s_sw_with_imm r4, r3, 21 }
+; CHECK-NEXT:    { addi32 r4, r0, 23; s_sw_with_imm r2, r3, 22 }
+; CHECK-NEXT:    { addi32 r2, r0, 26; s_sw_with_imm r4, r3, 23 }
+; CHECK-NEXT:    { addi32 r4, r0, 27; s_sw_with_imm r1, r3, 24 }
+; CHECK-NEXT:    { addi32 r1, r0, 25; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 25 }
-; CHECK-NEXT:    { addi32 r4, r0, 27; s_sw_with_imm r2, r3, 26 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 27 }
-; CHECK-NEXT:    { addi32 r1, r0, 28; addi32 r2, r0, 29 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 28 }
-; CHECK-NEXT:    { addi32 r4, r0, 30; s_sw_with_imm r2, r3, 29 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 30 }
-; CHECK-NEXT:    { addi32 r2, r0, 31; addi32 r1, r0, 32 }
+; CHECK-NEXT:    { addi32 r1, r0, 28; s_sw_with_imm r2, r3, 26 }
+; CHECK-NEXT:    { addi32 r2, r0, 29; s_sw_with_imm r4, r3, 27 }
+; CHECK-NEXT:    { addi32 r4, r0, 30; s_sw_with_imm r1, r3, 28 }
+; CHECK-NEXT:    { addi32 r1, r0, 32; s_sw_with_imm r2, r3, 29 }
+; CHECK-NEXT:    { addi32 r2, r0, 31; s_sw_with_imm r4, r3, 30 }
 ; CHECK-NEXT:    { addi32 r4, r0, 128; s_sw_with_imm r2, r3, 31 }
-; CHECK-NEXT:    { addi32 r5, r0, 33; addi32 r6, r0, 132 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r4 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r5, r3, r6 }
-; CHECK-NEXT:    { addi32 r2, r0, 34; addi32 r4, r0, 136 }
+; CHECK-NEXT:    { addi32 r2, r0, 34; s_sw_with_reg r1, r3, r4 }
+; CHECK-NEXT:    { addi32 r4, r0, 136; s_sw_with_reg r5, r3, r6 }
 ; CHECK-NEXT:    { addi32 r5, r0, 35; addi32 r6, r0, 140 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r2, r3, r4 }
-; CHECK-NEXT:    { addi32 r1, r0, 36; addi32 r7, r0, 144 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r5, r3, r6 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r7 }
-; CHECK-NEXT:    { addi32 r1, r0, 37; addi32 r2, r0, 148 }
-; CHECK-NEXT:    { addi32 r4, r0, 38; addi32 r5, r0, 152 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r2 }
-; CHECK-NEXT:    { addi32 r6, r0, 39; addi32 r7, r0, 156 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r4, r3, r5 }
+; CHECK-NEXT:    { addi32 r1, r0, 36; s_sw_with_reg r2, r3, r4 }
+; CHECK-NEXT:    { addi32 r2, r0, 148; s_sw_with_reg r5, r3, r6 }
+; CHECK-NEXT:    { addi32 r4, r0, 38; s_sw_with_reg r1, r3, r7 }
+; CHECK-NEXT:    { addi32 r1, r0, 37; addi32 r5, r0, 152 }
+; CHECK-NEXT:    { addi32 r6, r0, 39; s_sw_with_reg r1, r3, r2 }
+; CHECK-NEXT:    { addi32 r7, r0, 156; s_sw_with_reg r4, r3, r5 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_reg r6, r3, r7 }
 ; CHECK-NEXT:  .LBB0_3: // %exit
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -258,13 +245,12 @@ define void @test_long_bne_backward(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { addi32 r1, r0, 31; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 31 }
 ; CHECK-NEXT:    { addi32 r1, r0, 32; nop }
+; CHECK-NEXT:    { addi32 r2, r0, 132; s_sw_with_reg r1, r3, r2 }
+; CHECK-NEXT:    { addi32 r1, r0, 33; nop }
+; CHECK-NEXT:    { addi32 r2, r0, 136; s_sw_with_reg r1, r3, r2 }
+; CHECK-NEXT:    { addi32 r1, r0, 34; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r2 }
-; CHECK-NEXT:    { addi32 r1, r0, 33; addi32 r2, r0, 132 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r2 }
-; CHECK-NEXT:    { addi32 r1, r0, 34; addi32 r2, r0, 136 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r2 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r11, r3, fp }
-; CHECK-NEXT:    { addi32 r1, r0, 36; nop }
+; CHECK-NEXT:    { addi32 r1, r0, 36; s_sw_with_reg r11, r3, fp }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r8 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_reg r9, r3, r10 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_reg r12, r3, r7 }
@@ -340,69 +326,56 @@ define void @test_long_uncond(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { lui r3, arr; seq32 r1, r1, r2; nop }
-; CHECK-NEXT:    { addi32 r3, r3, arr; addi32 r4, r0, 99 }
+; CHECK-NEXT:    { addi32 r4, r0, 99; lui r3, arr }
+; CHECK-NEXT:    { addi32 r3, r3, arr; seq32 r1, r1, r2 }
 ; CHECK-NEXT:    { xori32 r1, r1, 1; nop }
 ; CHECK-NEXT:    { bnez r1, .LBB2_2; nop; nop }
 ; CHECK-NEXT:  // %bb.1: // %pad
 ; CHECK-NEXT:    { addi32 r1, r0, 0; addi32 r2, r0, 2 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
-; CHECK-NEXT:    { addi32 r1, r0, 1; addi32 r5, r0, 3 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 1 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 2 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 3 }
-; CHECK-NEXT:    { addi32 r1, r0, 4; addi32 r2, r0, 5 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 4 }
-; CHECK-NEXT:    { addi32 r5, r0, 6; s_sw_with_imm r2, r3, 5 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 6 }
-; CHECK-NEXT:    { addi32 r2, r0, 7; addi32 r1, r0, 8 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 7 }
-; CHECK-NEXT:    { addi32 r5, r0, 9; s_sw_with_imm r1, r3, 8 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 9 }
-; CHECK-NEXT:    { addi32 r2, r0, 10; addi32 r5, r0, 11 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 10 }
-; CHECK-NEXT:    { addi32 r1, r0, 12; s_sw_with_imm r5, r3, 11 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 12 }
-; CHECK-NEXT:    { addi32 r1, r0, 13; addi32 r2, r0, 14 }
+; CHECK-NEXT:    { addi32 r5, r0, 3; s_sw_with_imm r1, r3, 0 }
+; CHECK-NEXT:    { addi32 r1, r0, 1; addi32 r6, r0, 33 }
+; CHECK-NEXT:    { addi32 r7, r0, 132; s_sw_with_imm r1, r3, 1 }
+; CHECK-NEXT:    { addi32 r1, r0, 4; s_sw_with_imm r2, r3, 2 }
+; CHECK-NEXT:    { addi32 r2, r0, 5; s_sw_with_imm r5, r3, 3 }
+; CHECK-NEXT:    { addi32 r5, r0, 6; s_sw_with_imm r1, r3, 4 }
+; CHECK-NEXT:    { addi32 r1, r0, 8; s_sw_with_imm r2, r3, 5 }
+; CHECK-NEXT:    { addi32 r2, r0, 7; s_sw_with_imm r5, r3, 6 }
+; CHECK-NEXT:    { addi32 r5, r0, 9; s_sw_with_imm r2, r3, 7 }
+; CHECK-NEXT:    { addi32 r2, r0, 10; s_sw_with_imm r1, r3, 8 }
+; CHECK-NEXT:    { addi32 r1, r0, 12; s_sw_with_imm r5, r3, 9 }
+; CHECK-NEXT:    { addi32 r5, r0, 11; s_sw_with_imm r2, r3, 10 }
+; CHECK-NEXT:    { addi32 r2, r0, 14; s_sw_with_imm r5, r3, 11 }
+; CHECK-NEXT:    { addi32 r5, r0, 15; s_sw_with_imm r1, r3, 12 }
+; CHECK-NEXT:    { addi32 r1, r0, 13; addi32 r12, r0, 144 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 13 }
-; CHECK-NEXT:    { addi32 r5, r0, 15; s_sw_with_imm r2, r3, 14 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 15 }
-; CHECK-NEXT:    { addi32 r1, r0, 16; addi32 r2, r0, 17 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 16 }
-; CHECK-NEXT:    { addi32 r5, r0, 18; s_sw_with_imm r2, r3, 17 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 18 }
-; CHECK-NEXT:    { addi32 r2, r0, 19; addi32 r1, r0, 20 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 19 }
-; CHECK-NEXT:    { addi32 r5, r0, 21; s_sw_with_imm r1, r3, 20 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 21 }
-; CHECK-NEXT:    { addi32 r2, r0, 22; addi32 r5, r0, 23 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r3, 22 }
-; CHECK-NEXT:    { addi32 r1, r0, 24; s_sw_with_imm r5, r3, 23 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 24 }
-; CHECK-NEXT:    { addi32 r1, r0, 25; addi32 r2, r0, 26 }
+; CHECK-NEXT:    { addi32 r1, r0, 16; s_sw_with_imm r2, r3, 14 }
+; CHECK-NEXT:    { addi32 r2, r0, 17; s_sw_with_imm r5, r3, 15 }
+; CHECK-NEXT:    { addi32 r5, r0, 18; s_sw_with_imm r1, r3, 16 }
+; CHECK-NEXT:    { addi32 r1, r0, 20; s_sw_with_imm r2, r3, 17 }
+; CHECK-NEXT:    { addi32 r2, r0, 19; s_sw_with_imm r5, r3, 18 }
+; CHECK-NEXT:    { addi32 r5, r0, 21; s_sw_with_imm r2, r3, 19 }
+; CHECK-NEXT:    { addi32 r2, r0, 22; s_sw_with_imm r1, r3, 20 }
+; CHECK-NEXT:    { addi32 r1, r0, 24; s_sw_with_imm r5, r3, 21 }
+; CHECK-NEXT:    { addi32 r5, r0, 23; s_sw_with_imm r2, r3, 22 }
+; CHECK-NEXT:    { addi32 r2, r0, 26; s_sw_with_imm r5, r3, 23 }
+; CHECK-NEXT:    { addi32 r5, r0, 27; s_sw_with_imm r1, r3, 24 }
+; CHECK-NEXT:    { addi32 r1, r0, 25; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 25 }
-; CHECK-NEXT:    { addi32 r5, r0, 27; s_sw_with_imm r2, r3, 26 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 27 }
-; CHECK-NEXT:    { addi32 r1, r0, 28; addi32 r2, r0, 29 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 28 }
-; CHECK-NEXT:    { addi32 r5, r0, 30; s_sw_with_imm r2, r3, 29 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r3, 30 }
-; CHECK-NEXT:    { addi32 r2, r0, 31; addi32 r1, r0, 32 }
+; CHECK-NEXT:    { addi32 r1, r0, 28; s_sw_with_imm r2, r3, 26 }
+; CHECK-NEXT:    { addi32 r2, r0, 29; s_sw_with_imm r5, r3, 27 }
+; CHECK-NEXT:    { addi32 r5, r0, 30; s_sw_with_imm r1, r3, 28 }
+; CHECK-NEXT:    { addi32 r1, r0, 32; s_sw_with_imm r2, r3, 29 }
+; CHECK-NEXT:    { addi32 r2, r0, 31; s_sw_with_imm r5, r3, 30 }
 ; CHECK-NEXT:    { addi32 r5, r0, 128; s_sw_with_imm r2, r3, 31 }
-; CHECK-NEXT:    { addi32 r6, r0, 33; addi32 r7, r0, 132 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r5 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r6, r3, r7 }
-; CHECK-NEXT:    { addi32 r2, r0, 34; addi32 r5, r0, 136 }
+; CHECK-NEXT:    { addi32 r2, r0, 34; s_sw_with_reg r1, r3, r5 }
+; CHECK-NEXT:    { addi32 r5, r0, 136; s_sw_with_reg r6, r3, r7 }
 ; CHECK-NEXT:    { addi32 r6, r0, 35; addi32 r7, r0, 140 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r2, r3, r5 }
-; CHECK-NEXT:    { addi32 r1, r0, 36; addi32 r12, r0, 144 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r6, r3, r7 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r12 }
-; CHECK-NEXT:    { addi32 r1, r0, 37; addi32 r2, r0, 148 }
-; CHECK-NEXT:    { addi32 r5, r0, 38; addi32 r6, r0, 152 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r1, r3, r2 }
-; CHECK-NEXT:    { addi32 r7, r0, 39; addi32 r12, r0, 156 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_reg r5, r3, r6 }
+; CHECK-NEXT:    { addi32 r1, r0, 36; s_sw_with_reg r2, r3, r5 }
+; CHECK-NEXT:    { addi32 r2, r0, 148; s_sw_with_reg r6, r3, r7 }
+; CHECK-NEXT:    { addi32 r5, r0, 38; s_sw_with_reg r1, r3, r12 }
+; CHECK-NEXT:    { addi32 r1, r0, 37; addi32 r6, r0, 152 }
+; CHECK-NEXT:    { addi32 r7, r0, 39; s_sw_with_reg r1, r3, r2 }
+; CHECK-NEXT:    { addi32 r12, r0, 156; s_sw_with_reg r5, r3, r6 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_reg r7, r3, r12 }
 ; CHECK-NEXT:  .LBB2_2: // %far
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r4, r3, 0 }

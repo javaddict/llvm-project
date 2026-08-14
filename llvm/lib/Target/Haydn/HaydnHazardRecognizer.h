@@ -355,6 +355,20 @@ private:
   haydn::bundle::CycleState CurrentCycleState =
       haydn::bundle::makeProductCycleState();
 
+  // The instructions behind CurrentCycleState.Members, in the same order and
+  // appended in lockstep. tryAdd may RE-SOLVE the cycle to fit a newcomer
+  // (CB-147), which moves an already-accepted member to a different member
+  // opcode; the alternate descriptor published for it then names the slot it
+  // left, so commitPlacementForEmit re-stamps every mover and needs this to
+  // find them. Cleared with CurrentCycleState on Advance/Recede/Reset.
+  //
+  // These pointers live no longer than the ones HaydnAlternateDescriptors
+  // already keys on, and nothing replaces a MachineInstr between here and
+  // leaveRegion's materializeMultiOpcodeInstrs — which is the only reason it
+  // is safe to hold them at all. Facts, not pointers, is still the rule for
+  // everything that outlives a cycle (see CurrentCycleMemOps).
+  SmallVector<MachineInstr *, 3> CurrentCycleMIs;
+
   // HaydnMCFormats for PlacementAlternative / tryAdd (B2.5 alts-only).
   // Stateless table lookup.
   // WithMII: this is the placement authority — enumeratePlacementAlternatives

@@ -31,12 +31,11 @@ define i32 @vla_test(i32 %n) {
 ; CHECK-NEXT:    { addi32 fp, sp, 16; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
 ; CHECK-NEXT:    .cfi_offset fp, -4
-; CHECK-NEXT:    { slli32 r2, r1, 2; nop; nop }
-; CHECK-NEXT:    { addi32 r2, r2, 7; addi32 r3, r0, -8 }
-; CHECK-NEXT:    { and32 r2, r2, r3; nop; nop }
-; CHECK-NEXT:    { sub32 r2, sp, r2; nop; nop }
-; CHECK-NEXT:    { addi32 r4, r0, 1; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { max32 r4, r1, r4; move32 sp, r2; nop }
+; CHECK-NEXT:    { addi32 r3, r0, -8; slli32 r2, r1, 2 }
+; CHECK-NEXT:    { addi32 r2, r2, 7; addi32 r4, r0, 1 }
+; CHECK-NEXT:    { addi32 r3, r0, 0; and32 r2, r2, r3 }
+; CHECK-NEXT:    { sub32 r2, sp, r2; max32 r4, r1, r4; nop }
+; CHECK-NEXT:    { move32 sp, r2; nop; nop }
 ; CHECK-NEXT:    { nop; set_hwloop_f2 1, .LLhwloop_start0, .LLhwloop_end0, r4; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
@@ -46,11 +45,11 @@ define i32 @vla_test(i32 %n) {
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { mull r5, r3, r3; nop; nop }
+; CHECK-NEXT:    { mull r5, r3, r3; addi32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; nop; s_sw_post_imm r5, r4, 1 }
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { addi32 r3, r3, 1; nop }
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %for.end
 ; CHECK-NEXT:    { addi32 r1, r1, -1; nop }
 ; CHECK-NEXT:    { slli32 r1, r1, 2; nop; nop }
@@ -92,8 +91,8 @@ define ptr @dynamic_alloca(i32 %size) {
 ; CHECK-NEXT:    { addi32 fp, sp, 16; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_register fp
 ; CHECK-NEXT:    .cfi_offset fp, -4
-; CHECK-NEXT:    { slli32 r1, r1, 2; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r1, 7; addi32 r2, r0, -8 }
+; CHECK-NEXT:    { addi32 r2, r0, -8; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { addi32 r1, r1, 7; nop }
 ; CHECK-NEXT:    { and32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { sub32 r1, sp, r1; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }

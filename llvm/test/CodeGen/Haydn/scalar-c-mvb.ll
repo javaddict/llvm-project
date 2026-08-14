@@ -350,12 +350,10 @@ define i64 @load64(i64* %p) {
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { addi32 r2, r1, 4; s_lw_with_imm r1, r1, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r2, r2, 0; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { s_lw_with_imm r2, r2, 0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
@@ -370,7 +368,8 @@ define void @store64(i64* %p, i64 %v) {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { addi32 r2, r1, 4; d_sw_l_with_imm d0, r1, 0 }
+; CHECK-NEXT:    { addi32 r2, r1, 4; nop }
+; CHECK-NEXT:    { nop; nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }

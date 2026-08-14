@@ -196,14 +196,12 @@ define void @mixed_overflow(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 
 ; CHECK-NEXT:    .cfi_offset r9, 32
 ; CHECK-NEXT:    .cfi_offset lr, 28
 ; CHECK-NEXT:    { addi32 r12, sp, 40; addi32 r8, sp, 48 }
-; CHECK-NEXT:    { s_lw_with_imm r12, r12, 0; nop; d_ldw_with_imm d4, r8, 0 }
-; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { move32 r9, sp; nop; nop }
+; CHECK-NEXT:    { s_lw_with_imm r12, r12, 0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { d_ldw_with_imm d4, r8, 0; move32 r9, sp; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_post_imm r12, r9, 2 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d4, r9, 0 }
 ; CHECK-NEXT:    { nop; jal lr, use_13_args; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
+; CHECK-NEXT:    { addi32 sp, sp, 16; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm lr, sp, 7; nop; nop }
 ; CHECK-NEXT:    { s_lw_with_imm r9, sp, 8; nop; nop }

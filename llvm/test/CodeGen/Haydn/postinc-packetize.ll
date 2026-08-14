@@ -61,25 +61,43 @@ define i64 @vec_dot_streaming(ptr readonly %a, ptr readonly %b, i32 %n) nounwind
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; nop }
 ; ASM-NEXT:    { subi32 sp, sp, 8; addi32 r5, r0, 0 }
-; ASM-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 0 }
-; ASM-NEXT:    { addi32 r5, r0, 0; addi32 r4, r0, 0 }
+; ASM-NEXT:    { addi32 r4, r0, 0; s_sw_with_imm r5, sp, 0 }
+; ASM-NEXT:    { addi32 r5, r0, 0; nop }
 ; ASM-NEXT:    { nop; nop; s_sw_with_imm r5, sp, 1 }
 ; ASM-NEXT:    { d_ldw_with_imm d0, sp, 0; slt32 r5, r4, r3; nop }
 ; ASM-NEXT:    { addi32 sp, sp, 8; xori32 r5, r5, 1 }
-; ASM-NEXT:    { bnez r5, .LBB0_2; nop; nop }
-; ASM-NEXT:  .LBB0_1: // %loop
-; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
+; ASM-NEXT:    { bnez r5, .LBB0_4; nop; nop }
+; ASM-NEXT:  // %bb.1: // %loop
 ; ASM-NEXT:    { d_ldw_with_imm d1, r1, 0; nop; d_ldw_post_imm d2, r2, 1 }
 ; ASM-NEXT:    { addi32 r1, r1, 8; addi32 r4, r4, 1 }
-; ASM-NEXT:    { mula64_ll d0, d1, d2; slt32 r5, r4, r3; nop }
-; ASM-NEXT:    { bnez r5, .LBB0_1; nop; nop }
-; ASM-NEXT:  .LBB0_2: // %exit
+; ASM-NEXT:    { addi32 r5, r0, 2; nop }
+; ASM-NEXT:    { slt32 r5, r3, r5; nop; nop }
+; ASM-NEXT:    { bnez r5, .LBB0_3; nop; nop }
+; ASM-NEXT:  .LBB0_2: // %loop
+; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
+; ASM-NEXT:  // #<swps> loop bb.2 @vec_dot_streaming
+; ASM-NEXT:  // #<swps> II=3 cycles per pipeline stage (SMS schedule)
+; ASM-NEXT:  // #<swps> stages=2
+; ASM-NEXT:  // #<swps> ops=10 (non-meta at SMS)
+; ASM-NEXT:  // #<swps> ResMII=3
+; ASM-NEXT:  // #<swps> RecMII=1
+; ASM-NEXT:  // #<swps> MII=max(res,rec)=3
+; ASM-NEXT:  // #<swps> AchievedII=4 (kernel parcels)
+; ASM-NEXT:  // #<swps> verdict=schedule-limited
+; ASM-NEXT:    { mula64_ll d0, d1, d2; d_ldw_with_imm d1, r1, 0; d_ldw_post_imm d2, r2, 1 }
+; ASM-NEXT:    { addi32 r4, r4, 1; addi32 r1, r1, 8 }
+; ASM-NEXT:    { slt32 r5, r4, r3; nop; nop }
+; ASM-NEXT:    { bnez r5, .LBB0_2; nop; nop }
+; ASM-NEXT:  .LBB0_3:
+; ASM-NEXT:    { mula64_ll d0, d1, d2; nop; nop }
+; ASM-NEXT:    { nop; nop; nop }
+; ASM-NEXT:  .LBB0_4: // %exit
 ; ASM-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; ASM-NEXT:    { addi32 sp, sp, 8; nop }
 ; ASM-NEXT:    { nop; jalr r0, lr, 0; nop }
 ; MIR-LABEL: name: vec_dot_streaming
 ; MIR: bb.0.entry:
-; MIR-NEXT:   successors: %bb.1(0x50000000), %bb.2(0x30000000)
+; MIR-NEXT:   successors: %bb.1(0x50000000), %bb.4(0x30000000)
 ; MIR-NEXT:   liveins: $r1, $r2, $r3, $r0
 ; MIR-NEXT: {{  $}}
 ; MIR-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
@@ -89,11 +107,11 @@ define i64 @vec_dot_streaming(ptr readonly %a, ptr readonly %b, i32 %n) nounwind
 ; MIR-NEXT:     $r13 = SUBI32_P21_ALU1 $r13, 8
 ; MIR-NEXT:     $r5 = ADDI32_P20_ALU0 $r0, 0
 ; MIR-NEXT:   }
-; MIR-NEXT:   S_SW_WITH_IMM_P30_LOADSTORE0 killed $r5, $r13, 0
-; MIR-NEXT:   BUNDLE 0, implicit-def $r5, implicit-def $r4, implicit $r0 {
-; MIR-NEXT:     $r5 = ADDI32_P21_ALU1 $r0, 0
-; MIR-NEXT:     $r4 = ADDI32_P20_ALU0 $r0, 0
+; MIR-NEXT:   BUNDLE 0, implicit-def $r4, implicit $r0, implicit killed $r5, implicit $r13 {
+; MIR-NEXT:     $r4 = ADDI32_P21_ALU1 $r0, 0
+; MIR-NEXT:     S_SW_WITH_IMM_P20_LOADSTORE0 killed $r5, $r13, 0
 ; MIR-NEXT:   }
+; MIR-NEXT:   $r5 = ADDI32_P21_ALU1 $r0, 0
 ; MIR-NEXT:   S_SW_WITH_IMM_P30_LOADSTORE0 killed $r5, $r13, 1
 ; MIR-NEXT:   BUNDLE 1, implicit-def $d0, implicit-def $r5, implicit $r13, implicit $r4, implicit $r3 {
 ; MIR-NEXT:     $d0 = D_LDW_WITH_IMM_P32_LOAD1 $r13, 0
@@ -103,10 +121,10 @@ define i64 @vec_dot_streaming(ptr readonly %a, ptr readonly %b, i32 %n) nounwind
 ; MIR-NEXT:     $r13 = ADDI32_P21_ALU1 $r13, 8
 ; MIR-NEXT:     $r5 = XORI32_P20_ALU0 killed $r5, 1
 ; MIR-NEXT:   }
-; MIR-NEXT:   BNEZ killed $r5, %bb.2
+; MIR-NEXT:   BNEZ killed $r5, %bb.4
 ; MIR-NEXT: {{  $}}
 ; MIR-NEXT: bb.1.loop:
-; MIR-NEXT:   successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+; MIR-NEXT:   successors: %bb.2(0x40000000), %bb.3(0x40000000)
 ; MIR-NEXT:   liveins: $d0, $r1, $r2, $r3, $r4
 ; MIR-NEXT: {{  $}}
 ; MIR-NEXT:   BUNDLE 1, implicit-def $d1, implicit-def $d2, implicit-def $r2, implicit $r1, implicit killed $r2 :: (load (s64) from %ir.pa), (load (s64) from %ir.pb) {
@@ -117,13 +135,33 @@ define i64 @vec_dot_streaming(ptr readonly %a, ptr readonly %b, i32 %n) nounwind
 ; MIR-NEXT:     $r1 = ADDI32_P21_ALU1 killed $r1, 8
 ; MIR-NEXT:     $r4 = ADDI32_P20_ALU0 killed $r4, 1
 ; MIR-NEXT:   }
-; MIR-NEXT:   BUNDLE 1, implicit-def $d0, implicit-def $r5, implicit killed $d0, implicit killed $d1, implicit killed $d2, implicit $r4, implicit $r3 {
-; MIR-NEXT:     $d0 = MULA64_LL_P32_MAC1 killed $d0, killed $d1, killed $d2
-; MIR-NEXT:     $r5 = SLT32_P31_ALU0 $r4, $r3
-; MIR-NEXT:   }
-; MIR-NEXT:   BNEZ killed $r5, %bb.1
+; MIR-NEXT:   $r5 = ADDI32_P21_ALU1 $r0, 2
+; MIR-NEXT:   $r5 = SLT32_P32_ALU0 $r3, killed $r5
+; MIR-NEXT:   BNEZ killed $r5, %bb.3
 ; MIR-NEXT: {{  $}}
-; MIR-NEXT: bb.2.exit:
+; MIR-NEXT: bb.2.loop:
+; MIR-NEXT:   successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+; MIR-NEXT:   liveins: $d0, $d1, $d2, $r1, $r2, $r3, $r4
+; MIR-NEXT: {{  $}}
+; MIR-NEXT:   BUNDLE 1, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $r2, implicit killed $d0, implicit killed $d1, implicit killed $d2, implicit $r1, implicit killed $r2 :: (load (s64) from %ir.pa + 8), (load (s64) from %ir.pb + 8) {
+; MIR-NEXT:     $d0 = MULA64_LL_P32_MAC1 killed $d0, killed $d1, killed $d2
+; MIR-NEXT:     $d1 = D_LDW_WITH_IMM_P31_LOAD1 $r1, 0 :: (load (s64) from %ir.pa + 8)
+; MIR-NEXT:     $d2, $r2 = D_LDW_POST_IMM_P30_LOADSTORE0 killed $r2, 1 :: (load (s64) from %ir.pb + 8)
+; MIR-NEXT:   }
+; MIR-NEXT:   BUNDLE 0, implicit-def $r4, implicit-def $r1, implicit killed $r4, implicit killed $r1 {
+; MIR-NEXT:     $r4 = ADDI32_P21_ALU1 killed $r4, 1
+; MIR-NEXT:     $r1 = ADDI32_P20_ALU0 killed $r1, 8
+; MIR-NEXT:   }
+; MIR-NEXT:   $r5 = SLT32_P32_ALU0 $r4, $r3
+; MIR-NEXT:   BNEZ killed $r5, %bb.2
+; MIR-NEXT: {{  $}}
+; MIR-NEXT: bb.3:
+; MIR-NEXT:   successors: %bb.4(0x80000000)
+; MIR-NEXT:   liveins: $d0, $d1, $d2
+; MIR-NEXT: {{  $}}
+; MIR-NEXT:   $d0 = MULA64_LL killed $d0, killed $d1, killed $d2
+; MIR-NEXT: {{  $}}
+; MIR-NEXT: bb.4.exit:
 ; MIR-NEXT:   liveins: $d0
 ; MIR-NEXT: {{  $}}
 ; MIR-NEXT:   $r0 = frame-destroy XOR32 $r0, $r0

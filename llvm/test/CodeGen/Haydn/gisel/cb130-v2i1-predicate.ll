@@ -31,8 +31,14 @@ entry:
 
 ; Two lanes: two scalar unsigned compares, and two conditional moves for the
 ; select. A vector-of-i1 would show neither.
+; Two separate positive assertions, deliberately NOT a same-line one: the
+; point is that the lane compares exist as scalars, not that the packer
+; happened to put them in one bundle. Which bundle each lands in is a
+; scheduling detail, and pinning it made this test fail on a pure density
+; improvement (CB-147). Naming the same-line directive in this comment
+; would re-arm it -- FileCheck reads directives out of comments.
 ; CHECK: sltu32
-; CHECK-SAME: sltu32
+; CHECK: sltu32
 ; CHECK: movt32
 ; CHECK: movt32
 ; CHECK: jalr

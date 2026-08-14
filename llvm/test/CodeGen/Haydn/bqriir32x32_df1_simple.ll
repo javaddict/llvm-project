@@ -41,10 +41,9 @@ define dso_local void @bqriir32x32_df1_process(ptr noundef %st, ptr noundef writ
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d9, r5, 6 }
 ; CHECK-NEXT:    { nop; nop; d_sdw_with_imm d8, r5, 7 }
 ; CHECK-NEXT:    { addi32 fp, sp, 120; nop }
-; CHECK-NEXT:    { move32 r9, r1; nop; nop }
+; CHECK-NEXT:    { addi32 r12, r0, 0; move32 r9, r1 }
 ; CHECK-NEXT:    { s_lw_with_imm r5, r9, 5; nop; s_lw_with_imm r6, r9, 6 }
 ; CHECK-NEXT:    { s_lw_with_imm r8, r9, 7; nop; s_lw_with_imm r7, r9, 8 }
-; CHECK-NEXT:    { addi32 r12, r0, 0; nop }
 ; CHECK-NEXT:    { slt32 r12, r12, r4; nop; nop }
 ; CHECK-NEXT:    { xori32 r12, r12, 1; nop }
 ; CHECK-NEXT:    { bnez r12, .LBB0_3; nop; nop }
@@ -88,7 +87,7 @@ define dso_local void @bqriir32x32_df1_process(ptr noundef %st, ptr noundef writ
 ; CHECK-NEXT:    { srli64 d13, d13, 32; slli64 d14, d14, 32; sext32t64 d0, r7 }
 ; CHECK-NEXT:    { mul64_ulul d13, d13, d5; srli64 d14, d14, 32; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { add64 d10, d10, d13; sext32t64 d13, r6; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { sll64 d10, d10, r4; nop; nop }
+; CHECK-NEXT:    { addi32 r3, r3, 4; sll64 d10, d10, r4 }
 ; CHECK-NEXT:    { add64 d10, d15, d10; sext32t64 d15, r1; move32_dr_h r1, d13 }
 ; CHECK-NEXT:    { slli64 d15, d15, 32; nop; nop }
 ; CHECK-NEXT:    { srli64 d15, d15, 32; nop; nop }
@@ -128,11 +127,11 @@ define dso_local void @bqriir32x32_df1_process(ptr noundef %st, ptr noundef writ
 ; CHECK-NEXT:    { add64 d0, d0, d10; nop; nop }
 ; CHECK-NEXT:    { srl64 d0, d0, r12; nop; nop }
 ; CHECK-NEXT:    { move32_dr_l r8, d0; nop; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_post_imm r8, r2, 1 }
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { addi32 r3, r3, 4; nop }
+; CHECK-NEXT:    { nop; nop; s_sw_post_imm r8, r2, 1 }
 ; CHECK-NEXT:  .LBB0_3: // %for.cond.cleanup
+; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r5, r9, 5 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r6, r9, 6 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, r9, 7 }
@@ -243,8 +242,8 @@ define dso_local void @bqriir32x32_df1_cascade(ptr noundef %sections, ptr nounde
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r9, r6, 4 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r8, r6, 5 }
 ; CHECK-NEXT:    { addi32 fp, sp, 32; nop }
-; CHECK-NEXT:    { move32 r8, r2; move32 r9, r4; nop }
-; CHECK-NEXT:    { addi32 r2, r0, 0; move32 r10, r5 }
+; CHECK-NEXT:    { addi32 r2, r0, 0; move32 r8, r2 }
+; CHECK-NEXT:    { move32 r9, r4; move32 r10, r5; nop }
 ; CHECK-NEXT:    { slt32 r2, r2, r10; nop; nop }
 ; CHECK-NEXT:    { xori32 r2, r2, 1; nop }
 ; CHECK-NEXT:    { bnez r2, .LBB1_4; nop; nop }
@@ -263,9 +262,8 @@ define dso_local void @bqriir32x32_df1_cascade(ptr noundef %sections, ptr nounde
 ; CHECK-NEXT:    { move32 r1, r10; move32 r2, r8; nop }
 ; CHECK-NEXT:    { move32 r3, r8; move32 r4, r9; nop }
 ; CHECK-NEXT:    { nop; jal lr, bqriir32x32_df1_process; nop }
-; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
-; CHECK-NEXT:    { addi32 r11, r11, -1; addi32 r10, r10, 36 }
-; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
+; CHECK-NEXT:    { addi32 r11, r11, -1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { addi32 r10, r10, 36; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { seq32 r1, r11, r1; nop; nop }
 ; CHECK-NEXT:    { beqz r1, .LBB1_3; nop; nop }
 ; CHECK-NEXT:  .LBB1_4: // %for.cond.cleanup

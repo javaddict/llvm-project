@@ -271,11 +271,11 @@ body:             |
     ; CHECK-LABEL: name: test3_dual_mac_s1_s2
     ; CHECK: liveins: $r0, $r1, $d0, $d2, $d3, $d4, $d5, $d6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE 1, implicit-def $r2, implicit-def dead $sfr, implicit-def $d0, implicit $r0, implicit killed $r1, implicit killed $d0, implicit killed $d2, implicit killed $d3 {
-    ; CHECK-NEXT:   $r2 = ADD32_P32_ALU0 $r0, killed $r1, implicit-def dead $sfr
-    ; CHECK-NEXT:   $d0 = F2MULAA32R_HHLL_P31_MAC0 killed $d0, killed $d2, killed $d3, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 1, implicit-def $d0, implicit-def dead $sfr, implicit-def $r2, implicit-def $d4, implicit killed $d0, implicit killed $d2, implicit killed $d3, implicit $r0, implicit killed $r1, implicit killed $d4, implicit killed $d5, implicit killed $d6 {
+    ; CHECK-NEXT:   $d0 = F2MULAA32R_HHLL_P32_MAC1 killed $d0, killed $d2, killed $d3, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r2 = ADD32_P31_ALU0 $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT:   $d4 = F2MULAA32R_HHLL_P30_MAC0 killed $d4, killed $d5, killed $d6, implicit-def dead $sfr
     ; CHECK-NEXT: }
-    ; CHECK-NEXT: $d4 = F2MULAA32R_HHLL_P32_MAC1 killed $d4, killed $d5, killed $d6, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr

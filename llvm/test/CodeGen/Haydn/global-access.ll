@@ -81,14 +81,13 @@ define i64 @load_global_i64() nounwind {
 ; CHECK-NEXT:  // %bb.0:
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
-; CHECK-NEXT:    { lui r1, g_long; nop; nop }
-; CHECK-NEXT:    { addi32 r1, r1, g_long; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; lui r1, g_long }
+; CHECK-NEXT:    { addi32 r1, r1, g_long; nop }
 ; CHECK-NEXT:    { addi32 r2, r1, 4; s_lw_with_imm r1, r1, 0 }
 ; CHECK-NEXT:    { s_lw_with_imm r2, r2, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }

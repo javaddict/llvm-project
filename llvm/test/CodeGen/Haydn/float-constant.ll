@@ -120,14 +120,13 @@ define double @ret_double_3p14() {
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { lui r1, 1311; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r1, r1, -293601 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; lui r1, 1311 }
+; CHECK-NEXT:    { addi32 r1, r1, -293601; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { lui r1, 1025; nop; nop }
 ; CHECK-NEXT:    { addi32 r1, r1, -450888; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }
@@ -148,8 +147,7 @@ define double @ret_double_1p0() {
 ; CHECK-NEXT:    { lui r1, 1023; nop; nop }
 ; CHECK-NEXT:    { addi32 r1, r1, 0; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }

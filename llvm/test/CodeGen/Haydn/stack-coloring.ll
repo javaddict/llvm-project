@@ -60,14 +60,12 @@ define void @three_allocas() nounwind {
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm lr, sp, 5 }
 ; CHECK-NEXT:    { addi32 r1, r0, 10; addi32 r4, sp, 16 }
 ; CHECK-NEXT:    { addi32 r2, r0, 20; addi32 r5, sp, 12 }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r4, 0 }
-; CHECK-NEXT:    { addi32 r3, r0, 30; addi32 r6, sp, 8 }
-; CHECK-NEXT:    { s_lw_with_imm r1, r4, 0; nop; nop }
-; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, r5, 0 }
+; CHECK-NEXT:    { addi32 r3, r0, 30; s_sw_with_imm r1, r4, 0 }
+; CHECK-NEXT:    { addi32 r6, sp, 8; s_sw_with_imm r2, r5, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r1, r4, 0; nop; s_lw_with_imm r2, r5, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r3, r6, 0 }
-; CHECK-NEXT:    { s_lw_with_imm r2, r5, 0; nop; s_lw_with_imm r3, r6, 0 }
+; CHECK-NEXT:    { s_lw_with_imm r3, r6, 0; add32 r1, r1, r2; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { add32 r1, r1, r2; nop; nop }
 ; CHECK-NEXT:    { add32 r1, r1, r3; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, use_i32; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -111,10 +109,10 @@ define i32 @alloca_loop(i32 %n) nounwind {
 ; CHECK-NEXT:  .LLhwloop_start0:
 ; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; nop }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { add32 r1, r2, r1; nop; nop }
+; CHECK-NEXT:    { addi32 r2, r2, 1; add32 r1, r2, r1 }
 ; CHECK-NEXT:    .p2align 2
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { addi32 r2, r2, 1; s_sw_with_imm r1, r3, 0 }
+; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, r3, 0 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { s_lw_with_imm r1, r3, 0; nop; nop }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
@@ -243,13 +241,12 @@ define i64 @alloca_i64() nounwind {
 ; CHECK-NEXT:  // %bb.0: // %entry
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { subi32 sp, sp, 16; nop }
-; CHECK-NEXT:    { lui r1, 12; nop; nop }
-; CHECK-NEXT:    { subi32 sp, sp, 8; addi32 r1, r1, -237234 }
+; CHECK-NEXT:    { subi32 sp, sp, 8; lui r1, 12 }
+; CHECK-NEXT:    { addi32 r1, r1, -237234; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { addi32 r1, r0, 0; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { addi32 r1, sp, 8; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { addi32 r2, r1, 4; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; nop; d_sw_h_with_imm d0, r2, 0 }
@@ -257,8 +254,7 @@ define i64 @alloca_i64() nounwind {
 ; CHECK-NEXT:    { nop; nop; nop }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r1, sp, 0 }
 ; CHECK-NEXT:    { nop; nop; s_sw_with_imm r2, sp, 1 }
-; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; nop; nop }
-; CHECK-NEXT:    { addi32 sp, sp, 8; nop }
+; CHECK-NEXT:    { d_ldw_with_imm d0, sp, 0; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; nop; nop }
 ; CHECK-NEXT:    { addi32 sp, sp, 16; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0; nop }

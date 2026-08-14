@@ -34,15 +34,13 @@ define i64 @test_dr64_copy_regression(i64 %a0, i64 %a1, i64 %a2, i64 %a3,
 ; CHECK-NEXT:    .cfi_offset d8, 16
 ; CHECK-NEXT:    .cfi_offset d9, 8
 ; CHECK-NEXT:    { addi32 r1, sp, 32; or64 d8, d1, d1 }
-; CHECK-NEXT:    { d_ldw_with_imm d1, r1, 0; or64 d9, d0, d0; add64 d2, d2, d3 }
-; CHECK-NEXT:    { addi32 r1, sp, 40; addi32 r2, sp, 56 }
-; CHECK-NEXT:    { d_ldw_with_imm d4, r1, 0; add64 d0, d9, d8; d_ldw_with_imm d6, r2, 0 }
+; CHECK-NEXT:    { d_ldw_with_imm d1, r1, 0; addi32 r1, sp, 40 }
+; CHECK-NEXT:    { d_ldw_with_imm d4, r1, 0; addi32 r1, sp, 48 }
+; CHECK-NEXT:    { d_ldw_with_imm d5, r1, 0; addi32 r2, sp, 56 }
+; CHECK-NEXT:    { or64 d9, d0, d0; d_ldw_with_imm d6, r2, 0; add64 d2, d2, d3 }
 ; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { addi32 r1, sp, 48; add64 d1, d1, d4 }
-; CHECK-NEXT:    { d_ldw_with_imm d5, r1, 0; add64 d0, d0, d2; nop }
-; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { add64 d3, d5, d6; nop; nop }
-; CHECK-NEXT:    { add64 d1, d1, d3; nop; nop }
+; CHECK-NEXT:    { add64 d0, d9, d8; add64 d1, d1, d4; add64 d3, d5, d6 }
+; CHECK-NEXT:    { add64 d0, d0, d2; add64 d1, d1, d3; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d1; nop; nop }
 ; CHECK-NEXT:    { nop; jal lr, bar; nop }
 ; CHECK-NEXT:    { add64 d0, d0, d9; xor32 r0, r0, r0; nop }

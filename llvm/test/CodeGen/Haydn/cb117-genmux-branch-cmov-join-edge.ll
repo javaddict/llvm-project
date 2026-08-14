@@ -22,9 +22,8 @@ define void @land_add_store() nounwind {
 ; CHECK-NEXT:    { lui r1, a; lui r2, flag; nop }
 ; CHECK-NEXT:    { addi32 r1, r1, a; addi32 r2, r2, flag }
 ; CHECK-NEXT:    { s_lhwu_with_imm r4, r1, 0; lui r1, out; nop }
-; CHECK-NEXT:    { nop; nop; nop }
-; CHECK-NEXT:    { s_lw_with_imm r5, r2, 0; not32 r2, r4; nop }
-; CHECK-NEXT:    { addi32 r3, r0, 0; addi32 r1, r1, out }
+; CHECK-NEXT:    { s_lw_with_imm r5, r2, 0; addi32 r3, r0, 0 }
+; CHECK-NEXT:    { addi32 r1, r1, out; not32 r2, r4 }
 ; CHECK-NEXT:    { seq32 r4, r5, r3; nop; nop }
 ; CHECK-NEXT:    { bnez r4, .LBB0_4; nop; nop }
 ; CHECK-NEXT:  // %bb.1: // %cond.true
