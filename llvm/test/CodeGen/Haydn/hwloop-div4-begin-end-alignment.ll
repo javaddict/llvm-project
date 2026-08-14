@@ -104,7 +104,8 @@ define i32 @bigimm(ptr %a, i32 %n) {
 ; ASM-NEXT:  .LBB1_1: // %for.body
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
-; ASM-NEXT:    { addi32 r5, r5, 1; move32 r7, r4 }
+; ASM-NEXT:    { nop; move32 r7, r4 }
+; ASM-NEXT:    { nop; addi32 r5, r5, 1 }
 ; ASM-NEXT:    { slt32 r6, r5, r2; mull r7, r6, r7 }
 ; ASM-NEXT:    { nop; nop }
 ; ASM-NEXT:    { nop; add32 r3, r3, r7 }

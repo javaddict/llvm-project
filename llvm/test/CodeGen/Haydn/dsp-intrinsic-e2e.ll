@@ -142,9 +142,12 @@ define i64 @conditional_mac(i64 %a, i64 %b, i64 %c, i32 %flag) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { mul64.ll d0, d0, d1; mul64.ll d3, d0, d2 }
+; CHECK-NEXT:    { nop; mul64.ll d3, d0, d2 }
+; CHECK-NEXT:    { nop; mul64.ll d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
-; CHECK-NEXT:    { seq32 r1, r1, r2; add64 d0, d0, d2; add64 d3, d3, d1 }
+; CHECK-NEXT:    { nop; add64 d3, d3, d1 }
+; CHECK-NEXT:    { nop; add64 d0, d0, d2 }
+; CHECK-NEXT:    { nop; seq32 r1, r1, r2 }
 ; CHECK-NEXT:    { move32_dr_h r4, d3; move32_dr_l r3, d3 }
 ; CHECK-NEXT:    { move32_dr_h r5, d0; move32_dr_l r2, d0 }
 ; CHECK-NEXT:    { nop; movt32 r2, r3, r1 }
@@ -205,8 +208,9 @@ define i64 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; CHECK-NEXT:    { nop; st32 r6, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 8 }
-; CHECK-NEXT:    { ld64 d2, sp, 1; slt32 r5, r4, r3 } // 8-byte Folded Reload
+; CHECK-NEXT:    { nop; ld64 d2, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
+; CHECK-NEXT:    { nop; slt32 r5, r4, r3 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; mul64.ll d1, d1, d2 }
 ; CHECK-NEXT:    { nop; nop }

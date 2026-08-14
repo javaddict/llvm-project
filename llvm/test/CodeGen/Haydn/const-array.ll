@@ -18,7 +18,8 @@ define i32 @local_const_array(i32 %index) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 10 }
-; CHECK-NEXT:    { st32 r3, r2, 0; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; st32 r3, r2, 0 }
+; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 20 }
 ; CHECK-NEXT:    { nop; st32 r3, r2, 1 }
@@ -157,7 +158,8 @@ define void @init_array(ptr %arr, i32 %size, i32 %value) {
 ; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:  .LBB4_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { addi32 r4, r4, 1; s_sw_post_imm r3, r1, 1 }
+; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
+; CHECK-NEXT:    { nop; s_sw_post_imm r3, r1, 1 }
 ; CHECK-NEXT:    { nop; slt32 r5, r4, r2 }
 ; CHECK-NEXT:    { nop; bnez r5, .LBB4_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit

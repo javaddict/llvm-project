@@ -47,8 +47,11 @@ DEFAULT_CONSTRAINTS = DEFAULT_GOLDEN_DIR / "VLIW_Engine_Compiler_Constraints.md"
 PINNED_XLSX_SHA256 = (
     "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af"
 )
+# Repaired golden (see generate_format_e_records.py) — sched outputs derive
+# from Behavior/latency, so the mapping repair changes nothing here, but the
+# two importers must agree on which golden is current.
 PINNED_JSON_SHA256 = (
-    "b0b477e585f9d464b8750472017d73c3f919e5358e0bda387dc6eeecb79509a4"
+    "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9"
 )
 PINNED_CANONICAL_SHA256 = (
     "6d403139d2530efbcee741456be330ce63843482d7fd372a18eab94cdfb728f9"
@@ -93,6 +96,13 @@ def resolve_golden_dir() -> Path:
         nested = p / "golden"
         if (nested / "format_e_bit_layout_v2.json").is_file():
             return nested
+    if DEFAULT_GOLDEN_DIR.is_dir():
+        return DEFAULT_GOLDEN_DIR
+    # Discovery, not trust: content is pinned by hash, so falling back to the
+    # user database copy cannot change what generation accepts.
+    home_db = Path.home() / "haydn"
+    if (home_db / "format_e_bit_layout_v2.json").is_file():
+        return home_db
     return DEFAULT_GOLDEN_DIR
 
 

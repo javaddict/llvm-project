@@ -75,7 +75,8 @@ define i32 @vla_basic(i32 %n) {
 ; CHECK-NEXT:    { nop; sub32 r1, sp, r1 }
 ; CHECK-NEXT:    { nop; and32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 42 }
-; CHECK-NEXT:    { st32 r3, r2, 0; move32 sp, r2 }
+; CHECK-NEXT:    { nop; st32 r3, r2, 0 }
+; CHECK-NEXT:    { nop; move32 sp, r2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -233,7 +234,8 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    { nop; addi32 r5, r4, 1 }
 ; CHECK-NEXT:    { nop; mull r4, r4, r4 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { s_sw_post_imm r4, r3, 1; slt32 r6, r5, r1 }
+; CHECK-NEXT:    { nop; s_sw_post_imm r4, r3, 1 }
+; CHECK-NEXT:    { nop; slt32 r6, r5, r1 }
 ; CHECK-NEXT:    { nop; move32 r4, r5 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB6_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit

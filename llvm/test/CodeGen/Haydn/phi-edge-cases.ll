@@ -60,7 +60,8 @@ define i64 @phi_i64_loop(i32 %n, i64 %init) nounwind {
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:  .LBB1_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { addi32 r2, r2, 1; or64 d1, d0, d0 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
+; CHECK-NEXT:    { nop; or64 d1, d0, d0 }
 ; CHECK-NEXT:    { add64 d0, d1, d2; slt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB1_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
@@ -131,8 +132,10 @@ define i32 @phi_const_init(i32 %n) nounwind {
 ; CHECK-NEXT:  .LBB3_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; move32 r2, r4 }
-; CHECK-NEXT:    { addi32 r3, r3, 1; add32 r4, r3, r2 }
-; CHECK-NEXT:    { addi32 r4, r4, 1; slt32 r5, r3, r1 }
+; CHECK-NEXT:    { nop; add32 r4, r3, r2 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, 1 }
+; CHECK-NEXT:    { nop; slt32 r5, r3, r1 }
+; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
 ; CHECK-NEXT:    { nop; bnez r5, .LBB3_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
@@ -172,7 +175,8 @@ define i32 @phi_nested_loops(i32 %n, i32 %m) nounwind {
 ; CHECK-NEXT:    { nop; bnez r7, .LBB4_2 }
 ; CHECK-NEXT:  // %bb.3: // %outer_latch
 ; CHECK-NEXT:    // in Loop: Header=BB4_1 Depth=1
-; CHECK-NEXT:    { addi32 r5, r5, 1; add32 r3, r3, r6 }
+; CHECK-NEXT:    { nop; addi32 r5, r5, 1 }
+; CHECK-NEXT:    { nop; add32 r3, r3, r6 }
 ; CHECK-NEXT:    { nop; slt32 r7, r5, r1 }
 ; CHECK-NEXT:    { nop; bnez r7, .LBB4_1 }
 ; CHECK-NEXT:  // %bb.4: // %exit
@@ -215,7 +219,8 @@ define i64 @phi_mixed_types(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:  .LBB5_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { addi32 r2, r2, 1; sext32t64 d2, r2 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r2 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
 ; CHECK-NEXT:    { slt32 r3, r2, r1; or64 d0, d1, d1 }
 ; CHECK-NEXT:    { nop; add64 d1, d0, d2 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB5_1 }
