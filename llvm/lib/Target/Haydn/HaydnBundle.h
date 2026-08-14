@@ -392,6 +392,58 @@ private:
     return haydnSlotMaskToKind(Pref.Members.back().FieldSlots);
   }
 
+  // Apply a fixed slot claim AS A MEMBER onto every surviving candidate.
+  // SlotMap rows and candidate member history must grow in lockstep —
+  // syncSlotMapFromPreferred asserts Members >= SlotMap — so fixed-slot and
+  // no-alt commits must never rebuild-from-occupied (the live-path rule) and
+  // must never claim occupancy memberlessly. Falls back to a rebuilt
+  // singleton that still carries one synthetic member when no candidate
+  // survives the claim (caller reserved without a probe).
+  // \p MemberFieldSlots is the SLOT0/1/2-space identity recorded on the
+  // synthetic member (syncSlotMapFromPreferred converts SlotMap-covered
+  // members back to kinds, so it must be a single issue bit).
+  // \p OccupancyBits is what the claim occupies — the residual kind's own
+  // SlotSet bits, exactly what the old rebuild-from-occupied fed the
+  // candidate occupancy — so packing/conflict semantics stay tip-identical
+  // (a second same-fixed-slot member still collides; popcount-based entry
+  // capacity still counts one bit per member).
+  void applyFixedClaimAsMember(unsigned Opcode, SlotBits MemberFieldSlots,
+                               SlotBits OccupancyBits) {
+    haydn::bundle::CycleCandidateSet Next;
+    for (const haydn::bundle::CycleState &C : PackingCandidates) {
+      if (C.OccupiedSlots & OccupancyBits)
+        continue;
+      haydn::bundle::CycleState N = C;
+      haydn::bundle::CycleMember M;
+      M.LogicalOpcode = Opcode;
+      M.MemberOpcode = Opcode;
+      M.FieldSlots = MemberFieldSlots;
+      N.Members.push_back(M);
+      N.OccupiedSlots |= OccupancyBits;
+      N.FeasibleFormatMask = haydn::bundle::coveringFormatMaskFromPackets(
+          FormatInterface->getPacketFormats(), N.OccupiedSlots,
+          N.FeasibleFormatMask);
+      if (N.FeasibleFormatMask == 0)
+        continue;
+      haydn::bundle::insertNondominatedCandidate(Next, std::move(N));
+    }
+    OccupiedSlots |= OccupancyBits;
+    if (!Next.empty()) {
+      PackingCandidates = std::move(Next);
+      return;
+    }
+    haydn::bundle::CycleState S =
+        haydn::bundle::makeProductCycleStateFromOccupied(
+            FormatInterface->getPacketFormats(), OccupiedSlots);
+    haydn::bundle::CycleMember M;
+    M.LogicalOpcode = Opcode;
+    M.MemberOpcode = Opcode;
+    M.FieldSlots = MemberFieldSlots;
+    S.Members.push_back(M);
+    PackingCandidates.clear();
+    PackingCandidates.push_back(std::move(S));
+  }
+
   // Commit \p Instr into SlotMap and expand PackingCandidates when alts-bearing.
   // \p Slot is the provisional preferred field (hint or pickSlot); after exact
   // expand, SlotMap is re-synced from selectPreferredCandidate so rematching
@@ -406,14 +458,16 @@ private:
     const unsigned Opcode = Instr->getOpcode();
     MCSlotKind Fixed = FormatInterface->getSlotKind(Opcode);
     if (Fixed != MCSlotKind()) {
-      // Post-setDesc member: occupancy is the fixed slot; rebuild a singleton
-      // candidate from the new occupancy (member history not required for
-      // further fixed-slot checks).
-      OccupiedSlots |= SI->getSlotSet();
-      PackingCandidates.clear();
-      PackingCandidates.push_back(
-          haydn::bundle::makeProductCycleStateFromOccupied(
-              FormatInterface->getPacketFormats(), OccupiedSlots));
+      // Post-setDesc member: occupancy is the fixed slot, applied as a
+      // member so later alt-having adds can still sync SlotMap against a
+      // full member history (the rebuild-from-occupied that used to live
+      // here wiped it and tripped syncSlotMapFromPreferred). This member is
+      // SlotMap-covered, so its FieldSlots must live in the SLOT0/1/2 bit
+      // space, not the residual kind's own 32/64/128 SlotSet space.
+      SlotBits Claim = residualSlotKindToFieldSlots(Fixed);
+      if (!Claim)
+        Claim = SI->getSlotSet();
+      applyFixedClaimAsMember(Opcode, Claim, SI->getSlotSet());
       return;
     }
 
@@ -443,8 +497,12 @@ private:
       return;
     }
 
-    // No-alt: should not reach here when pickSlot returned a slot.
-    OccupiedSlots |= SI->getSlotSet();
+    // No-alt residual: still a SlotMap row, so still a member (FieldSlots
+    // space — see the fixed path above).
+    SlotBits NoAltClaim = residualSlotKindToFieldSlots(Slot);
+    if (!NoAltClaim)
+      NoAltClaim = SI->getSlotSet();
+    applyFixedClaimAsMember(Opcode, NoAltClaim, SI->getSlotSet());
   }
 
   /// Rewrite SlotMap + OccupiedSlots from the preferred surviving matching so
@@ -473,11 +531,10 @@ private:
     if (Fixed != MCSlotKind()) {
       const MCSlotInfo *SI = FormatInterface->getSlotInfo(Fixed);
       assert(SI);
-      OccupiedSlots |= SI->getSlotSet();
-      PackingCandidates.clear();
-      PackingCandidates.push_back(
-          haydn::bundle::makeProductCycleStateFromOccupied(
-              FormatInterface->getPacketFormats(), OccupiedSlots));
+      SlotBits Claim = residualSlotKindToFieldSlots(Fixed);
+      if (!Claim)
+        Claim = SI->getSlotSet();
+      applyFixedClaimAsMember(Opcode, Claim, SI->getSlotSet());
       return;
     }
     HaydnMCFormats SolverFmts;

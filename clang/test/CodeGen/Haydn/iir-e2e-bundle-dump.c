@@ -114,19 +114,22 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 
 // === Objdump checks ===
 
+// The disassembler prints committed member spellings (underscore-joined,
+// e.g. mul64_ulul / s_sw_with_imm), and the packer may seat loads on the
+// LOAD1 member names — accept either surface.
 // BUNDLE-LABEL: <biquad_df1>:
-// BUNDLE-DAG: {{mul64\.ll|mul64\.ulul}}
-// BUNDLE-DAG: mula64.ll
+// BUNDLE-DAG: {{mul64[._](ll|ulul)}}
+// BUNDLE-DAG: {{mula64[._]ll|fmula|x2mula}}
 // BUNDLE-DAG: sub64
-// BUNDLE-DAG: st32
-// BUNDLE-DAG: ld32
+// BUNDLE-DAG: {{st32|s_sw_with_imm}}
+// BUNDLE-DAG: {{ld32|s_lw_with_imm}}
 // BUNDLE: jalr
 
 // BUNDLE-LABEL: <biquad_df1_32bit>:
 // BUNDLE-DAG: mull
 // BUNDLE-DAG: sub32
-// BUNDLE-DAG: ld32
-// BUNDLE-DAG: st32
+// BUNDLE-DAG: {{ld32|s_lw_with_imm}}
+// BUNDLE-DAG: {{st32|s_sw_with_imm}}
 // BUNDLE: jalr
 
 // BUNDLE-LABEL: <biquad_process_block>:

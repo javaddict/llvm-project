@@ -386,6 +386,14 @@ static MachineInstr *getLastRealInstr(MachineBasicBlock *MBB) {
     // BUNDLE header is the VLIW unit for inclusive END. Representation
     // expands emit real bytes — count them. Residual executable pseudos fatal.
     if (!MI.isBundle() && MI.isPseudo()) {
+      // A pseudo whose logical resolves to golden Format E placements is
+      // serializable as-is (the encoder wraps it as a product singleton and
+      // the placement DFS seats it) — it IS a real instruction for layout.
+      // ARCTAN and friends are E3-only with no ExpandPseudos row, so at -O0,
+      // where no cycle commit runs, this is their only path to emission.
+      if (!haydn::bundle::isResidualCycleFormingPseudo(MI.getOpcode()) &&
+          haydnFormatEHasGoldenPlacement(MI.getOpcode()))
+        return &MI;
       if (haydn::bundle::isResidualCycleFormingPseudo(MI.getOpcode()) ||
           haydn::bundle::isResidualExecutablePseudo(MI)) {
         fatalResidualCyclePseudo(
@@ -855,7 +863,16 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         MI, "must be exact-committed real MIs before AsmPrinter "
             "(shared residual law; missing specific printer case)");
 
-  if (haydn::bundle::isResidualExecutablePseudo(*MI)) {
+  // Golden-placement pseudos are serializable Desc-only: the encoder wraps
+  // them as a product singleton and the placement DFS seats them (E3-only
+  // logicals like ARCTAN have no ExpandPseudos row, and at -O0 no cycle
+  // commit ever materializes them). The serializer stays fail-closed if
+  // placement is impossible, so this is a routing exemption, not a softening
+  // of the one-to-one ban.
+  const bool GoldenPlaceablePseudo =
+      MI->isPseudo() && haydnFormatEHasGoldenPlacement(MI->getOpcode());
+  if (!GoldenPlaceablePseudo &&
+      haydn::bundle::isResidualExecutablePseudo(*MI)) {
     std::string Msg;
     raw_string_ostream OS(Msg);
     OS << "HaydnAsmPrinter: residual executable pseudo — expand before "
@@ -864,7 +881,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     MI->print(OS);
     report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
   }
-  if (MI->isPseudo()) {
+  if (MI->isPseudo() && !GoldenPlaceablePseudo) {
     std::string Msg;
     raw_string_ostream OS(Msg);
     OS << "HaydnAsmPrinter: unhandled pseudo at emit (no silent drop). MI:\n";

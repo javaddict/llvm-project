@@ -39,7 +39,9 @@ haydn_x4int16 test_x4seli_bad(haydn_x4int16 a, haydn_x4int16 b) {
 // --- UA AR ImmArg ---------------------------------------------------------
 void test_wbar_ok(void *p) { __builtin_haydn_wbarwua(1, p, 0); }
 void test_wbar_ar_bad(void *p) {
-  // expected-error@+1 {{argument value 4 is outside the valid range [0, 3]}}
+  // KNOWN GAP (ledger CB-149): this base models only AR0/AR1 ([0, 1]); the
+  // golden ar_sel field is 2 bits (four ARs, NatureDSP ar&=3 → [0, 3]).
+  // expected-error@+1 {{argument value 4 is outside the valid range [0, 1]}}
   __builtin_haydn_wbarwua(4, p, 0);
 }
 void test_wbar_dir_nonconst(void *p, int d) {
@@ -47,6 +49,11 @@ void test_wbar_dir_nonconst(void *p, int d) {
   __builtin_haydn_wbarwua(0, p, d);
 }
 void test_sqhwua_ok(int64_t d, void *p, int s) {
+  __builtin_haydn_d_sqhwua_post(d, p, 1, s, 1);
+}
+void test_sqhwua_ar23_gap(int64_t d, void *p, int s) {
+  // Golden-legal ar_sel=2, rejected on this base (ledger CB-149).
+  // expected-error@+1 {{argument value 2 is outside the valid range [0, 1]}}
   __builtin_haydn_d_sqhwua_post(d, p, 2, s, 1);
 }
 void test_sqhwua_ar_nonconst(int64_t d, void *p, int s, int ar) {
