@@ -24,7 +24,7 @@ Companion documents:
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **The only branch. The format E switch landed on it in `37932ae027aa` (2026-08-14), a merge of `haydn-formate-switch-mc`.** Fully green: llvm lit 604/620 zero failures, `HaydnTests` 256/256, clang 1428/1475 zero failures, `--check` + round-trip 3686/3686, BundleSim ctest 226/226, gcc-c-torture 1417 PASS / 0 FAIL at -O3, CoreMark e2e PASS. |
 | `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | ctest **226/226**. The § 5.5 executor port is done; the old "41/221, the rest failing in the un-ported executor" is retired. |
 | `llvm-project` | ~~`haydn-formate-switch-mc`~~ | `6107f7edec50` | **merged and then DELETED** (local and `fork`, 2026-08-14). Nothing was lost and nothing needed a backup tag: that commit is the merge's **second parent**, so every commit on it stays permanently reachable from `haydn`. `git rev-list --count fork/haydn-formate-switch-mc ^fork/haydn` was **0** before the delete. To read it again: `git log 6107f7edec50`. |
-| `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; subsumed by `-mc`, and so by `haydn` |
+| `llvm-project` | ~~`haydn-formate-switch-wip`~~ | `6f0d97cf0e10` | **DELETED 2026-08-14**, but it was NOT simply "subsumed" — see below. 20 of its 21 commits past `backup/wip-preformate-20260807` came in with the merge; its **tip did not**, and is preserved as the tag `backup/wip-parked-20260814`. |
 
 **`haydn` is the trunk, and since `37932ae027aa` that is finally true of the
 code as well as the prose.** Work from it.
@@ -48,11 +48,29 @@ in exactly those two markdown files. **Both documents now live on `haydn`.**
 There is no longer a branch to cross-check before editing either one.
 
 
-All three branches are on the `github` remote. The pre-rebase states of the two
-WIP branches are preserved as the tags `backup/wip-preformate-20260807` and
-`backup/mc-preformate-20260807`, also pushed — the rebases were force-pushed
-over the branch names, so those tags are the only copies of what was there
-before.
+The pre-rebase states of the two WIP branches are preserved as the tags
+`backup/wip-preformate-20260807` and `backup/mc-preformate-20260807`, also
+pushed — the rebases were force-pushed over the branch names, so those tags are
+the only copies of what was there before.
+
+**Those tags do NOT cover the branch tips, and this section used to read as if
+they did.** A tag records where a branch was *before* its rebase; the branch
+then moved on. Checked when the branches were deleted:
+
+* `-mc`'s tip needed no tag — it is the **second parent** of the merge, so
+  every commit on it stays reachable from `haydn`. `git rev-list --count
+  fork/haydn-formate-switch-mc ^fork/haydn` was **0**.
+* `-wip`'s tip **was not covered by anything**. `6f0d97cf0e10` is in neither
+  `haydn` nor `backup/wip-preformate-20260807`, and it was reachable from
+  exactly one ref — the branch about to be deleted. It is now the tag
+  `backup/wip-parked-20260814`. Its own message says *"Parked, not for merge"*:
+  it absorbs the re-delivered database's AR shapes with 23 C++ errors still
+  open, and that AR work was finished differently on the trunk (§ 8 Q1).
+
+**The rule this leaves:** before deleting a branch, prove the loss is zero
+against every ref that could hold it — `git rev-list --count <branch> ^haydn
+^<tags>` — rather than trusting a sentence in this file that says it is
+subsumed. One of the two was, and one was not.
 
 ### The two WIP branches were COMPLEMENTARY — and are now joined
 
