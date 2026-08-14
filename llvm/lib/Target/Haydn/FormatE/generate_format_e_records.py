@@ -54,6 +54,9 @@ PINNED_XLSX_SHA256 = (
 PINNED_JSON_SHA256 = (
     "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9"
 )
+PINNED_INDEX_SHA256 = (
+    "e77908e9f09a6d649491389f8dabe06a896db22b230bedfe915d553e8801103b"
+)
 PINNED_CANONICAL_SHA256 = (
     "6d403139d2530efbcee741456be330ce63843482d7fd372a18eab94cdfb728f9"
 )
@@ -1280,6 +1283,91 @@ def _is_store_logical(key: str) -> bool:
     return key.startswith(("D_S", "S_S", "WBAR"))
 
 
+def load_td_tied_logicals(td_dir: Path) -> set:
+    """Logicals whose LLVM def models a tie (per-def `let Constraints`).
+
+    The member Desc must mirror the LOGICAL's operand shape — setDesc keeps
+    the MI operands — so a golden accumulator tie is only emittable when the
+    logical actually carries the tied input. Some conditional-move logicals
+    (MOVT64/MOVF64/MOVT32/MOVF32, MOVEI_*) read their destination per golden
+    Behavior but are modeled UNTIED two-operand defs in TD; those diverge
+    (see the CB ledger) and their members must stay at logical arity.
+    Comments are skipped; a Constraints match is attributed to the nearest
+    preceding `def NAME`."""
+    tied = set()
+    for fn in ("HaydnInstrInfo.td", "HaydnInstrInfoAuto.td"):
+        path = td_dir / fn
+        if not path.is_file():
+            raise SystemExit(f"error: TD file for tie scan missing: {path}")
+        text = path.read_text(encoding="utf-8")
+        # Two spellings carry a tie: a body/backward `let Constraints = ...`
+        # inside (or after) the def, and the PREFIX group form
+        # `let Constraints = "..." in { ... def A; def B; ... }` where the
+        # constraint precedes every def it governs (X2MULA32's dual-dest
+        # family). Brace depth is tracked so a group closes exactly where
+        # its `{` closes; def BODIES contribute braces too.
+        depth = 0
+        region_stack: List[int] = []
+        current = None
+        for raw in text.splitlines():
+            ln = raw.split("//", 1)[0]
+            stripped = ln.strip()
+            m = re.match(r"def\s+([A-Za-z0-9_]+)", stripped)
+            if m:
+                current = m.group(1)
+                if region_stack:
+                    tied.add(_logical_key(current))
+            if "Constraints" in ln and "=" in ln:
+                if re.search(r"\bin\s*\{", ln):
+                    region_stack.append(depth)
+                elif current:
+                    tied.add(_logical_key(current))
+            for ch in ln:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    while region_stack and region_stack[-1] >= depth:
+                        region_stack.pop()
+    return tied
+
+
+def load_accumulator_ties(index_path: Path) -> Dict[str, Tuple[str, ...]]:
+    """Golden accumulator law: an instruction whose *_Write_Port alias also
+    appears in the same bank's *_Read_Port reads its own destination — the
+    Behavior column spells it out (`rtd = rtd + ...`). LLVM models that as a
+    tied accumulator INPUT operand on the logical (Constraints "$rd=$rd_in"),
+    and a member Desc that lacks it desynchronizes from the MI it setDescs
+    onto (machine verifier: "Explicit def tied to explicit use without tie
+    constraint" + "Extra explicit operand", CB-152c). Returns
+    logical-key -> tied aliases in Write_Port order. Purely derived — no
+    hand list; X2MULA32 yields ('rtd1', 'rtd2'), F2MULAA32R_HHLL ('rtd',).
+    LS POST/PRE/BREV base writeback is the OTHER tie family and stays with
+    ls_has_tied_base_writeback (synthetic tied OUT, not a tied IN)."""
+    idx = json.loads(index_path.read_text(encoding="utf-8"))
+    ties: Dict[str, Tuple[str, ...]] = {}
+    for type_recs in idx.values():
+        for rec in type_recs:
+            name = rec.get("Instruction")
+            if not name:
+                continue
+            tied: List[str] = []
+            for bank in ("GPR", "DR", "AR", "SFR"):
+                writes = rec.get(f"{bank}_Write_Port") or []
+                reads = set(rec.get(f"{bank}_Read_Port") or [])
+                tied.extend(a for a in writes if a in reads)
+            if not tied:
+                continue
+            key = _logical_key(name)
+            if key in ties and ties[key] != tuple(tied):
+                raise SystemExit(
+                    f"error: conflicting accumulator ties for {key}: "
+                    f"{ties[key]} vs {tuple(tied)}"
+                )
+            ties[key] = tuple(tied)
+    return ties
+
+
 def ls_has_tied_base_writeback(logical: str) -> bool:
     """POST/PRE/BREV update the encoded dest2 base (FieldSlot `$rs = $rs_wb`)."""
     key = _logical_key(logical)
@@ -1318,7 +1406,15 @@ def member_gpr_is_ssa_def(logical: str, role: str, is_ls: bool) -> bool:
     return key in INDIRECT_CALL_LOGICALS or key in DEST_REG_LOGICALS
 
 
-def classify_member_flags(rec: MemberRecord) -> MemberEmitFlags:
+MAC_ACCFIRST_ITINERARY = {
+    "MAC0": "Slot1_MAC_AccFirst",
+    "MAC1": "Slot2_MAC_AccFirst",
+}
+
+
+def classify_member_flags(
+    rec: MemberRecord, accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None
+) -> MemberEmitFlags:
     """Map unit/type/logical onto a published itinerary and closed flags.
 
     Itinerary comes from the already-published R5 class for `rec.unit`
@@ -1334,6 +1430,19 @@ def classify_member_flags(rec: MemberRecord) -> MemberEmitFlags:
                 f"error: {rec.member_symbol}: {key} unit {rec.unit} has no "
                 "published SinCosLat itinerary"
             )
+    elif (
+        accum_ties is not None
+        and len(accum_ties.get(key, ())) == 1
+        and rec.unit in MAC_ACCFIRST_ITINERARY
+    ):
+        # Single-tie MAC member of a FmtALU64Acc logical: keep the
+        # accumulator-read-late OperandCycles the logical's
+        # Slot12_MAC_AccFirst carries, restricted to the committed unit —
+        # the tied acc operand this member now declares would otherwise be
+        # read at the wb-shape early cycle and stall golden RecMII=1
+        # acc->acc chains. Dual-tie (FmtMAC2Dest) logicals publish the wb
+        # shape themselves and stay on the unit default.
+        itinerary = MAC_ACCFIRST_ITINERARY[rec.unit]
     else:
         itinerary = UNIT_ITINERARY.get(rec.unit)
         if itinerary is None:
@@ -1585,7 +1694,9 @@ def check_emitted_member_itineraries(text: str) -> None:
         raise SystemExit(f"error: pinned members not emitted: {missing_pins}")
 
 
-def emit_members_td_inc(cat: Catalog) -> str:
+def emit_members_td_inc(
+    cat: Catalog, accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None
+) -> str:
     """LIVE TableGen format-member Inst defs — included by HaydnFormatsE96.td.
 
     Each member is wrapped in a per-def `let Itinerary=..., mayLoad=..., ...`
@@ -1635,6 +1746,8 @@ def emit_members_td_inc(cat: Catalog) -> str:
         return False
 
     canonicalized: List[str] = []
+
+    accum_tied_members: List[str] = []
     lines: List[str] = []
     lines.append("//===-- HaydnFormatsE96Members.td.inc - LIVE E96 members -*-===//")
     lines.append("// Auto-generated by FormatE/generate_format_e_records.py")
@@ -1736,6 +1849,50 @@ def emit_members_td_inc(cat: Catalog) -> str:
                 out_frags.append(frag)
             else:
                 in_frags.append(frag)
+        constraint_parts: List[str] = []
+        # Accumulator law (CB-152c): the logical carries tied accumulator
+        # INPUT operands (Constraints "$rd = $rd_in"); the member Desc must
+        # mirror them or setDesc leaves the MI with more explicit operands
+        # than the Desc declares and unmarked ties. Synthetic acc ins are
+        # PREPENDED in dest order (the logical lists rd_in/ra before rs*),
+        # carry no encoded bits (tied: the dest field is the wire), and stay
+        # out of the AsmString exactly like the logical's rd_in.
+        accum = (accum_ties or {}).get(_logical_key(rec.logical))
+        # LS units are excluded from the accumulator path wholesale: their
+        # golden ties are base/AR writebacks, not accumulators — POST/PRE/
+        # BREV already mirror via the synthetic dest2_wb OUT above, and the
+        # CB / *WUA_POST (AR-ua) tie families are the CB-151 encode-residual
+        # domain whose member shapes need the owner's redesign, not a
+        # bolted-on tie (their tied aliases are member INS or unencoded
+        # ar[ar_sel], so this path could not express them anyway).
+        if accum and not is_ls:
+            acc_ins: List[str] = []
+            for alias in accum:
+                matches = []
+                for frag in out_frags:
+                    fname = frag[frag.find("$") + 1 :]
+                    frole = fname.split("_")[0].lower()
+                    if active.get(frole, "") == alias:
+                        matches.append(frag)
+                if len(matches) != 1:
+                    raise SystemExit(
+                        f"error: {rec.member_symbol} accumulator alias "
+                        f"{alias!r} matched {len(matches)} dest operands"
+                    )
+                dfrag = matches[0]
+                dname = dfrag[dfrag.find("$") + 1 :]
+                dcls = dfrag.split(":")[0]
+                aname = f"{dname}_acc"
+                if any(
+                    f.endswith("$" + aname) for f in out_frags + in_frags
+                ):
+                    raise SystemExit(
+                        f"error: {rec.member_symbol} {aname} name collides"
+                    )
+                acc_ins.append(f"{dcls}:${aname}")
+                constraint_parts.append(f"${dname} = ${aname}")
+            in_frags = acc_ins + in_frags
+            accum_tied_members.append(rec.member_symbol)
         constraints: Optional[str] = None
         if is_ls and ls_has_tied_base_writeback(rec.logical):
             dest2_ins = []
@@ -1760,13 +1917,15 @@ def emit_members_td_inc(cat: Catalog) -> str:
                     f"error: {rec.member_symbol} dest2_wb name collides"
                 )
             out_frags.append(f"{dest2_cls}:${wb_name}")
-            constraints = f"${dest2_name} = ${wb_name}"
+            constraint_parts.append(f"${dest2_name} = ${wb_name}")
+        if constraint_parts:
+            constraints = ", ".join(constraint_parts)
         outs = ", ".join(out_frags)
         ins = ", ".join(in_frags)
         outs_dag = f"(outs {outs})" if outs else "(outs)"
         ins_dag = f"(ins {ins})" if ins else "(ins)"
 
-        flags = classify_member_flags(rec)
+        flags = classify_member_flags(rec, accum_ties)
         let = flags.let_line()
         if constraints:
             if not let.endswith(" in {"):
@@ -1796,6 +1955,50 @@ def emit_members_td_inc(cat: Catalog) -> str:
             f"{canonicalized} != ['X4SEL16_E3_E1_ALU1_RRR'] — re-audit "
             "the encode bag binding before repinning"
         )
+    # Accumulator-tie pins: measured, not assumed. The tie set derives from
+    # golden Write∩Read ports; a DB regen that changes the member count must
+    # be re-audited (operand order vs the logical Constraints) before the
+    # count moves. Representative shapes are pinned as text below.
+    if accum_ties is not None:
+        if "F2MULAA32R_HHLL_E3_E2_MAC1_RR" not in accum_tied_members:
+            raise SystemExit(
+                "error: F2MULAA32R_HHLL_E3_E2_MAC1_RR did not receive its "
+                "accumulator tie"
+            )
+        text_so_far = "\n".join(lines)
+        pin_f2 = (
+            "def F2MULAA32R_HHLL_E3_E2_MAC1_RR : HaydnEntryE3E2<"
+            "(outs DR64:$dest_0), "
+            "(ins DR64:$dest_0_acc, DR64:$src1_1, DR64:$src2_2), "
+            '"f2mulaa32r.hhll\\t$dest_0, $src1_1, $src2_2"'
+        )
+        if pin_f2 not in text_so_far:
+            raise SystemExit(
+                "error: F2MULAA32R member must carry the tied accumulator "
+                "input first in (ins), unprinted (mirrors logical rd_in)"
+            )
+        if 'Constraints = "$dest_0 = $dest_0_acc"' not in text_so_far:
+            raise SystemExit(
+                "error: F2MULAA32R member missing accumulator Constraints"
+            )
+        pin_x2 = (
+            "def X2MULA32_E2_E0_MAC0_RRR : HaydnEntryE2E0<"
+            "(outs DR64:$dest1_0, DR64:$dest2_3), "
+            "(ins DR64:$dest1_0_acc, DR64:$dest2_3_acc, "
+            "DR64:$src1_1, DR64:$src2_2)"
+        )
+        if pin_x2 not in text_so_far:
+            raise SystemExit(
+                "error: X2MULA32 member must carry BOTH tied accumulator "
+                "inputs in dest order before the sources"
+            )
+        if (
+            'Constraints = "$dest1_0 = $dest1_0_acc, $dest2_3 = $dest2_3_acc"'
+            not in text_so_far
+        ):
+            raise SystemExit(
+                "error: X2MULA32 member missing dual accumulator Constraints"
+            )
     lines.append(
         "// Members emitted in canonical alias order (same-class permutation "
         f"vs majority signature): {len(canonicalized)}"
@@ -2782,7 +2985,36 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     records = emit_records_inc(cat, json_sha, xlsx_sha)
     ledger = emit_setdesc_ledger_inc(cat)
-    members_td = emit_members_td_inc(cat)
+    index_path = golden / "instruction_type_index.json"
+    if not index_path.is_file():
+        print(f"error: golden index not found: {index_path}", file=sys.stderr)
+        return 2
+    index_sha = sha256_file(index_path)
+    if index_sha != PINNED_INDEX_SHA256:
+        print(
+            f"error: index sha256 {index_sha} != pinned {PINNED_INDEX_SHA256}",
+            file=sys.stderr,
+        )
+        return 2
+    accum_ties = load_accumulator_ties(index_path)
+    td_tied = load_td_tied_logicals(Path(__file__).resolve().parent.parent)
+    divergent = sorted(k for k in accum_ties if k not in td_tied)
+    accum_ties = {k: v for k, v in accum_ties.items() if k in td_tied}
+    # Golden says these read their destination; the LLVM logical models no
+    # tie, so members stay at logical arity and the gap is a ledger item
+    # (conditional moves / partial-word inserts with unmodeled dest reads).
+    # Measured, pinned: a regen that changes this set must be re-audited.
+    divergent_non_ls = [
+        k for k in divergent
+        if not k.startswith(("D_", "S_", "PLD", "WBAR"))
+    ]
+    if len(divergent_non_ls) != 87:
+        raise SystemExit(
+            "error: golden-tied-but-TD-untied set changed "
+            f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "
+            "member arity vs the logicals (CB ledger: unmodeled dest reads)"
+        )
+    members_td = emit_members_td_inc(cat, accum_ties)
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir)
