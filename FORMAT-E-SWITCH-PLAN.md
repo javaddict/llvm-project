@@ -22,7 +22,7 @@ Companion documents:
 | Repo | Branch | Head | Builds? |
 |---|---|---|---|
 | `llvm-project` | `haydn` | *the tip — do not trust a hash here* | **yes, fully green** |
-| `llvm-project` | `haydn-formate-switch-mc` | `605b078bfd75` | **Re-measured 2026-08-14 on this head: llvm lit 603/619 with ZERO failures (8 XFAIL, 8 unsupported), `HaydnTests` 256/256, BundleSim ctest 226/226, gcc-c-torture 1417/0 at -O3, clang 1428/1475 zero failures, `--check` and round-trip 3686/3686 both green.** The older counts this row used to carry (lit 573/591, `HaydnTests` 253/253) were real but stale — re-run rather than believed. Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
+| `llvm-project` | `haydn-formate-switch-mc` | `6107f7edec50` | **Re-measured 2026-08-14 on this head: llvm lit 604/620 with ZERO failures (8 XFAIL, 8 unsupported), `HaydnTests` 256/256, BundleSim ctest 226/226, gcc-c-torture 1417/0 at -O3, CoreMark e2e PASS, clang 1428/1475 zero failures, `--check` and round-trip 3686/3686 both green.** The older counts this row used to carry (lit 573/591, `HaydnTests` 253/253) were real but stale — re-run rather than believed. Both § 5.2 generator gaps closed; § 5.11 down to three logicals, all blocked on § 5.2 rather than on themselves. **`HaydnTests` and `lld` are both green** — § 5.2's geometry port and § 5.7's coverage gap are done. § 8 Q1 is done and the AR family is consistent from `BuiltinsHaydn.td` through to the assembler. § 5.4's lit backlog is EMPTY — **zero failures**, and the two "deliberate f2mulzaa32rs reds" turned out to be misspelt intrinsic names, not a compiler gap. § 5.12 and § 5.14 are both CLOSED. |
 | `simulator` | `master` | `417b0c2` **pushed** (`origin` IS javaddict/bundlesim here — unlike `llvm-project`, where `origin` is upstream and only `fork` may be pushed) | § 5.11's re-pin, § 5.15's BSP fixes, and the doc sweep that retired "Bundle128" from `CLAUDE.md` and `docs/`. Links and executes; **41/221**, the rest failing in the un-ported executor (§ 5.5). `BUNDLESIM_BUNDLE_BYTES` deliberately still 16 — it retires with the catalog regeneration, not before |
 | `llvm-project` | `haydn-formate-switch-wip` | `6f0d97cf0e10` | rebased; now subsumed by `-mc` |
 | `simulator` | `master` | `bdf14d7` | yes, green except CB-130 |
@@ -3196,6 +3196,55 @@ not, and one of them is a trap worth its own entry (§ 6.17):
 * **`bqriir32x32_df1-e2e.ll`**'s hwloop distance moved 708 → 696, exactly one
   parcel. That test already anticipated this and states the invariant it wants —
   real distances, neither zero — which still holds.
+
+---
+
+### 5.24 CB-148 — the pipeliner asserted because a hook was never implemented
+
+Found by running `scripts/run_full_gate.sh` (ctest + CoreMark + Dhrystone) for
+the first time. **clang aborted compiling CoreMark**, and nothing in the
+recorded baseline covered it: lit, ctest and gcc-c-torture all pass with the bug
+present.
+
+```
+MachinePipeliner.cpp:1117, hasLoopCarriedMemDep:
+  Assertion `TII->areMemAccessesTriviallyDisjoint(SrcMI, DstMI) &&
+             "What happened to the chain edge?"' failed.
+```
+
+**It was not a scale bug**, which is where § 5.18 would have sent you.
+`TargetInstrInfo::areMemAccessesTriviallyDisjoint` is a virtual whose **default
+returns false for every pair**, and Haydn never overrode it while enabling
+`MachinePipeliner` at O2+. The pipeliner's cheap path reasons "same base, lower
+offset first, therefore disjoint" and then asserts the target agrees — so an
+unimplemented hook is not a loss of precision here, it is an abort. Every target
+that enables the swing pipeliner implements it (AArch64, Hexagon, RISCV, AMDGPU,
+Lanai).
+
+Implemented in the standard shape: same single base operand, non-scalable
+offsets, and `LowOffset + LowWidth <= HighOffset`. Haydn's
+`getMemOperandsWithOffsetWidth` already returns **byte** offsets (§ 5.18 fixed
+that), so the comparison is like with like.
+
+**It is a real precision win, not just an assert silencer.**
+`MachineInstr::mayAlias` is built on this hook, so every consumer of it — memory
+clustering, scheduling, dead-store elimination — was being told "may alias" for
+every pair. Measured over 250 torture files: bundles 14355 → 14341 and the real
+op count 16269 → **16268**, one instruction fewer, which is the more precise
+alias answer letting a store go.
+
+#### The first regression test for it was vacuous
+
+A hand-written `i32` loop over one base at two constant offsets — the shape the
+assertion describes — **compiled fine without the fix**. Checking that a new
+test fails without its fix is the rule, and it caught this one.
+
+What actually reaches the path is narrower: `matrix_add_const` is a **halfword**
+read-modify-write in a nested loop, and the vectorizer turns the inner loop into
+`<4 x i16>`, which legalizes into several halfword accesses off one base at
+different constant offsets. Both the element type and the vectorization are
+load-bearing. The test is that IR, reduced, and it aborts the compiler without
+the override.
 
 ---
 
