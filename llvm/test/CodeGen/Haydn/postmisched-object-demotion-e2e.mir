@@ -100,7 +100,7 @@ body:             |
 # MIR: BUNDLE 0
 # MIR: SUBI32
 # MIR: BUNDLE 0
-# MIR: BNEZ_W
+# MIR: BNEZ_E2
 # MIR: bb.3.exit
 # MIR: RET
 

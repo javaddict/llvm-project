@@ -31,9 +31,10 @@
 // No slot side-map (AIE has none). Post-commit placement is opcode identity
 // via getSlotKind (AIEBaseMCFormats.cpp:66-75) + Bundle SlotMap
 // (AIEBundle.h:92-104). Product: Format E composites only (FE8). Selected
-// MemberOpcode must be a real placement member (residual `_S*` peer today) —
-// never re-stamp a bare logical. Multi-MI commit re-solves setDesc as a
-// fail-closed second line so residual logical packs cannot reach encode.
+// MemberOpcode must be a real placement member (declarative MultiSlot /
+// LogicalMaterialize alternate) — never re-stamp a bare logical. Multi-MI
+// commit re-solves setDesc as a fail-closed second line so residual logical
+// packs cannot reach encode.
 //
 //===----------------------------------------------------------------------===//
 
@@ -108,6 +109,13 @@ public:
   // AIE peer AIEAlternateDescriptors.h:74 — leaveRegion end-state after
   // materializeMultiOpcodeInstrs setDesc (AIEMachineScheduler.cpp:1081-1082).
   void clear() { AlternateDescs.clear(); }
+
+  /// True when no transient alternate survives (leaveRegion / leaveMBB pin).
+  bool empty() const { return AlternateDescs.empty(); }
+
+  unsigned size() const {
+    return static_cast<unsigned>(AlternateDescs.size());
+  }
 };
 
 } // end namespace llvm

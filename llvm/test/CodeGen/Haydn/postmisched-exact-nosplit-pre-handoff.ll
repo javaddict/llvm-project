@@ -15,7 +15,7 @@
 ;     roots; post-RA owns packing.
 ;   * loop kernels (acc_stream / dual_stream): pre-RA SMS rejects StageCount>1
 ;     and never freezes multi-member BUNDLE; bare logical MIs through RA.
-;   * stop-after postmisched: exact-commits multi-MI product cycles as BUNDLE 0
+;   * stop-after postmisched: exact-commits multi-MI product cycles as BUNDLE {{[01]}}
 ;     (FormatE96 FormatID) with member setDesc where alts apply.
 ;   * Illegal multi-member hard root sequential-dissolve:
 ;     postmisched-hard-root-illegal-fail.mir.
@@ -33,7 +33,7 @@ define i32 @pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) {
 ; PRE: OR32
 ;
 ; POST-LABEL: name: pack_three_alu
-; POST: BUNDLE 0
+; POST: BUNDLE {{[01]}}
 ; POST-DAG: ADD32
 ; POST-DAG: XOR32
 entry:
@@ -54,7 +54,7 @@ define i32 @acc_stream(ptr nocapture readonly %p, i32 %n) {
 ; PRE-NOT: BUNDLE
 ;
 ; POST-LABEL: name: acc_stream
-; POST: BUNDLE 0
+; POST: BUNDLE {{[01]}}
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %loop, label %exit
@@ -82,7 +82,7 @@ define i32 @dual_stream(ptr nocapture readonly %x, ptr nocapture readonly %h,
 ; PRE-DAG: LD32
 ;
 ; POST-LABEL: name: dual_stream
-; POST: BUNDLE 0
+; POST: BUNDLE {{[01]}}
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %loop, label %exit

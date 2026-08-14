@@ -283,10 +283,17 @@ public:
   //
   // StageCount = PrologueCount + 1 (SMSchedule::getMaxStageCount() + 1).
   // Product defaults match cl::opt -haydn-sms-max-stagecount (3) and
-  // -haydn-pipeliner-track-regpressure (true).
+  // -haydn-pipeliner-track-regpressure (true). Product Option A containment
+  // further rejects every StageCount > 1 (soft and ZOL); only proven soft
+  // StageCount == 1 schedules may mutate MIR. PreferPostPipeliner and
+  // force-pressure-reject remain flag-only and are outside this pure surface.
 
   /// Product max total stages (prologue stages + 1). AIE LoopMaxStageCount peer.
   static constexpr unsigned productSMSMaxStageCount = 3;
+
+  /// Product pre-RA SMS containment: soft StageCount == 1 only. Multi-stage is
+  /// post-RA greenfield work; pre-RA rejects StageCount > 1 before mutation.
+  static constexpr unsigned productSMSContainmentMaxStageCount = 1;
 
   /// Product default for the spill-pressure gate (AIE track-regpressure peer).
   static constexpr bool productSMSTrackRegPressureDefault = true;
@@ -296,6 +303,13 @@ public:
       unsigned StageCount,
       unsigned MaxStageCount = productSMSMaxStageCount) {
     return StageCount > MaxStageCount;
+  }
+
+  /// True when StageCount exceeds product Option A StageCount1 containment.
+  static bool smsProductStageCountExceedsContainment(
+      unsigned StageCount,
+      unsigned ContainmentMax = productSMSContainmentMaxStageCount) {
+    return StageCount > ContainmentMax;
   }
 
   /// ZOL: single-stage schedules have no pipeline overlap → reject (AIE peer).
@@ -331,6 +345,9 @@ public:
   /// \p PressureExcess is the pure result of smsSpillPressureExceedsLimits (or
   /// canAllocateSMS inverted). When TrackRegPressure is false, pressure is
   /// ignored — matching -haydn-pipeliner-track-regpressure=false.
+  /// Historical AIE-shaped surface: max-stage + ZOL + pressure only. Product
+  /// Option A StageCount1 containment is layered by
+  /// smsProductShouldUseScheduleFailsClosed (used by live shouldUseSchedule).
   static bool smsShouldUseScheduleFailsClosed(
       bool IsZOL, unsigned PrologueCount, int64_t MinTripCount,
       bool PressureExcess,
@@ -357,6 +374,35 @@ public:
     return !smsShouldUseScheduleFailsClosed(IsZOL, PrologueCount, MinTripCount,
                                             PressureExcess, MaxStageCount,
                                             TrackRegPressure);
+  }
+
+  /// Product shouldUseSchedule fail-close including StageCount1 containment.
+  /// Live PipelinerLoopInfo::shouldUseSchedule must agree with this polarity
+  /// for every non-flag special case (force-pressure / prefer-post-pipeliner).
+  static bool smsProductShouldUseScheduleFailsClosed(
+      bool IsZOL, unsigned PrologueCount, int64_t MinTripCount,
+      bool PressureExcess,
+      unsigned MaxStageCount = productSMSMaxStageCount,
+      bool TrackRegPressure = productSMSTrackRegPressureDefault,
+      unsigned ContainmentMax = productSMSContainmentMaxStageCount) {
+    const unsigned StageCount = PrologueCount + 1u;
+    if (smsProductStageCountExceedsContainment(StageCount, ContainmentMax))
+      return true;
+    return smsShouldUseScheduleFailsClosed(IsZOL, PrologueCount, MinTripCount,
+                                           PressureExcess, MaxStageCount,
+                                           TrackRegPressure);
+  }
+
+  /// Inverse of smsProductShouldUseScheduleFailsClosed.
+  static bool smsProductShouldUseScheduleAccepts(
+      bool IsZOL, unsigned PrologueCount, int64_t MinTripCount,
+      bool PressureExcess,
+      unsigned MaxStageCount = productSMSMaxStageCount,
+      bool TrackRegPressure = productSMSTrackRegPressureDefault,
+      unsigned ContainmentMax = productSMSContainmentMaxStageCount) {
+    return !smsProductShouldUseScheduleFailsClosed(
+        IsZOL, PrologueCount, MinTripCount, PressureExcess, MaxStageCount,
+        TrackRegPressure, ContainmentMax);
   }
 
   //===--------------------------------------------------------------------===//
@@ -719,6 +765,12 @@ private:
   static constexpr unsigned UnknownSUNum = ~0u;
 
   MachineBasicBlock *CurMBB = nullptr;
+  /// Top-level BUNDLE roots present at enterRegion (phase-firewall).
+  unsigned PreRAEnterBundleRoots = 0;
+  /// Bundled private members (isBundledWithPred) present at enterRegion.
+  unsigned PreRAEnterBundledMembers = 0;
+  /// Placement-form opcodes (private members / residual S-slot peers) at enter.
+  unsigned PreRAEnterPrivatePlacementOps = 0;
   std::vector<unsigned> PSetThresholds;
   // SUDelayerMap[SU] = NodeNum of SU we are waiting for (AIE).
   std::vector<unsigned> SUDelayerMap;

@@ -1,0 +1,87 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — T-SM3 / SM-H2: alone-law survives already-member (_S* / Format E)
+# identity on post-RA recommit. Not slot-suffix identity (ADD32_S2 still packs).
+#
+# REGRESSION TEST: ARCTAN / SIN_COS input (post-setDesc identity) must
+# still issue alone. Bug: haydnOpcodeIssuesAloneInCycle keyed only on logical
+# ARCTAN/SIN_COS, so recommit after setDesc silently packed an independent ALU
+# into the same cycle. Fix: HaydnHazardRecognizer::opcodeIssuesAloneInCycle
+# uses AlternateInsts membership (AIEHazardRecognizer.cpp:188-202 canAdd) plus
+# generated Format E member Logical. If this regresses, ARCTAN and ADDI32
+# land in one BUNDLE.
+
+--- |
+  define void @test_arctan_s2_member_stays_alone() { ret void }
+  define void @test_sin_cos_s1_member_stays_alone() { ret void }
+...
+---
+name:            test_arctan_s2_member_stays_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $r0
+
+    ; CHECK-LABEL: name: test_arctan_s2_member_stays_alone
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: ARCTAN
+    ; CHECK-NOT: BUNDLE
+    $r1 = ARCTAN $d0, 2
+    $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
+
+    $r0 = COPY $r1
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            test_sin_cos_s1_member_stays_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r3
+
+    ; CHECK-LABEL: name: test_sin_cos_s1_member_stays_alone
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: SIN_COS
+    ; CHECK-NOT: BUNDLE
+    $d1 = SIN_COS $r0, 2
+    $r5 = ADDI32 $r3, 10, implicit-def dead $sfr
+
+    $r0 = COPY $r5
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

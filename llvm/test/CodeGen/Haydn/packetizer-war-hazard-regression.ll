@@ -15,7 +15,7 @@
 ; Bug (/ e2e_sort_selection_min O2 miscomp): the post-RA VLIW packetizer's
 ; hasDependence checked RAW and WAW but NOT WAR. This let it pack a writer next
 ; to a reader of the same register in the same bundle:
-; BUNDLE { $r1 = SLL32_S0 $r8, $r1 // slot 0: READS r8
+; BUNDLE { $r1 = SLL32 $r8, $r1 // slot 0: READS r8
 ; $r8 = LD32_S1 $r13, 12 } // slot 1: WRITES r8
 ; The SLL needs the OLD r8 (the select result / running min index m), but the
 ; load's write of r8 races the shift's read within the bundle. On the target

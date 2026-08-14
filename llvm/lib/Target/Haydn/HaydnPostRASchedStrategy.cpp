@@ -29,13 +29,14 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMemberSetDesc.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnPlacementAlternative.h"
+#include "HaydnPortModel.h"
 #include "HaydnPostRAScratch.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -50,8 +51,9 @@
 #include <algorithm>
 #include <optional>
 
-#define GET_REGINFO_ENUM
-#include "HaydnGenRegisterInfo.inc"
+// Register enums (Haydn::SFR, ...) arrive via HaydnPortModel ->
+// MCTargetDesc/HaydnMCTargetDesc.h (GET_REGINFO_ENUM once). Do not re-include
+// HaydnGenRegisterInfo.inc here — double enum definition is illegal.
 
 using namespace llvm;
 
@@ -61,12 +63,12 @@ STATISTIC(NumIdleCyclesMaterialized,
           "Number of post-RA idle (stall) cycles materialized as NOP");
 STATISTIC(NumMultiMIBundlesFinalized,
           "Number of multi-MI cycles finalized as BUNDLE");
-// qualification: must remain 0. Counts fail-closed cases where a
-// scheduled multi-MI cycle could not exact-commit as one product cycle
-// (solver/scheduler bug). Production does NOT greedily split those cycles.
+// RESIDUAL(21): can be nonzero today. Field-order RAW fail-closed
+// sequential fallback (postra-field-order-raw-narrow-store.mir) is
+// correct product behavior — keep as STATISTIC; do not abort llc.
 STATISTIC(NumScheduledCyclesSplit,
           "Number of scheduled multi-MI cycles that failed exact no-split "
-          "commit (must be 0 in product qualification)");
+          "commit (nonzero is sequential fallback, not a product abort)");
 STATISTIC(NumTrueRAWCycleRejects,
           "Number of scheduled multi-MI cycles rejected for same-cycle true "
           "RAW (no-forwarding)");
@@ -81,15 +83,31 @@ STATISTIC(NumUnstampedMultiMemberCommitted,
           "Number of multi-member hard BUNDLE roots transactionally "
           "exact-committed at post-RA leaveMBB");
 STATISTIC(NumUnstampedMultiMemberSequentialized,
-          "Number of multi-member hard BUNDLE roots dissolved to sequential "
-          "parcels when exact-commit could not form one product cycle "
-          "(field-order RAW after RA physreg assign, etc.)");
+          "Number of multi-member shells recovered by schedule-order "
+          "sequentialize after the product coissue probe rejected packing "
+          "(recovery only; not an independent legality authority)");
+STATISTIC(NumProductCoissueProbeRejects,
+          "Number of residual multi-member shells rejected by the product "
+          "coissue probe (shared legality authority; sequentialize follows)");
 STATISTIC(NumBundledFreePackRefusals,
           "Number of free scheduled multi-MI packs refused because they "
           "touched a hard-root member (commit-inside-group only)");
 STATISTIC(NumMultiMemberSeamReplayStalls,
           "Number of idle NOP cycles inserted by post-RA cross-boundary "
           "latency/Required/Reserved replay");
+STATISTIC(NumPostRAScheduledCyclesAudited,
+          "Number of architectural cycles reconstructed by post-RA leaveMBB "
+          "(emitted-cycle audit; one cycle per scheduled pack/idle/single)");
+STATISTIC(NumPostRAAltDescsCleared,
+          "Number of post-RA regions that cleared transient alternate "
+          "descriptors after setDesc materialize (product expects every "
+          "scheduled region)");
+STATISTIC(NumPostRAAltDescLeakFatals,
+          "Number of post-RA leaveRegion/leaveMBB residual alternate "
+          "descriptor leaks (must be 0)");
+STATISTIC(NumPostRAResourceAdmissionPinsHeld,
+          "Number of post-RA enterMBB checks that held fail-closed per-op "
+          "resource admission (product closed until golden import)");
 
 static cl::opt<bool> EnableHaydnPostRAReadySubsetAuction(
     "haydn-postra-ready-subset-auction", cl::init(true), cl::Hidden,
@@ -261,6 +279,25 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
   //
   // Multi-member BUNDLE roots at entry are metrics-only (product expects 0).
   if (MBB) {
+    // Fail-closed per-op resource admission pin (release-visible). Shares the
+    // single PortModel availability-aware record with pre-RA / HR /
+    // ResourceCycle: aggregate ceilings only; no admitted per-op table and no
+    // competitive per-op claims until golden publishes the complete generated
+    // import. LeaveMBB sequential fallout for illegal multi-member shells is
+    // recovery only after the product coissue probe rejects packing — not an
+    // independent legality authority.
+    static bool ResourceAdmissionPinned = false;
+    if (!ResourceAdmissionPinned) {
+      ResourceAdmissionPinned = true;
+      if (!haydnAvailabilityAwareConsumePinsHold())
+        report_fatal_error(
+            "Haydn post-RA product resource admission pins failed",
+            /*GenCrashDiag=*/false);
+    }
+    ++NumPostRAResourceAdmissionPinsHeld;
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: resource-admission "
+                         "per_op_records=0 competitive_claims=0 "
+                         "aggregate_surface_bound=1\n");
     unsigned HardRoots = countMultiMemberHardRoots(*MBB);
     if (HardRoots) {
       NumPreExistingHardRootsAtPostRA += HardRoots;
@@ -307,6 +344,10 @@ void HaydnPostRASchedStrategy::leaveMBB() {
         PreExistingMultiMembers.insert(Kids.begin(), Kids.end());
     }
     if (!MBBBundles.empty()) {
+      NumPostRAScheduledCyclesAudited += MBBBundles.size();
+      LLVM_DEBUG(dbgs() << "HaydnPostRASched: emitted-cycle audit bb."
+                        << CurrentMBB->getNumber()
+                        << " cycles=" << MBBBundles.size() << "\n");
       materializeBundles(*CurrentMBB, MBBBundles);
       MBBBundles.clear();
     }
@@ -317,6 +358,16 @@ void HaydnPostRASchedStrategy::leaveMBB() {
     // itself (no cross-MBB callback repair).
     if (!PreExistingMultiMembers.empty())
       replayMultiMemberSeamHazards(*CurrentMBB, PreExistingMultiMembers);
+    HaydnAlternateDescriptors &AltDescs =
+        CurrentMBB->getParent()
+            ->getInfo<HaydnMachineFunctionInfo>()
+            ->getAltDescs();
+    if (!AltDescs.empty()) {
+      ++NumPostRAAltDescLeakFatals;
+      report_fatal_error(
+          "Haydn post-RA leaveMBB found residual alternate descriptors",
+          /*GenCrashDiag=*/false);
+    }
   }
   // Pack ownership = leaveRegion/leaveMBB only.
   PostGenericScheduler::leaveMBB();
@@ -422,16 +473,23 @@ static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
       BundleUnsafe = true;
       continue;
     }
+    // Do not splice meta/COPY across a member def/use boundary. A COPY
+    // that only *reads* a member-def'd reg used to pass the def-only
+    // check and was hoisted above its producer (stale value).
     bool HasRegConflict = false;
     for (const MachineOperand &MO : MI.operands()) {
-      if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+      if (!MO.isReg() || !MO.getReg())
         continue;
-      Register DefReg = MO.getReg();
+      Register Reg = MO.getReg();
       for (const MachineInstr *RealMI : Instrs) {
         if (RealMI == &MI)
           continue;
-        if (RealMI->readsRegister(DefReg, TRI) ||
-            RealMI->definesRegister(DefReg, TRI)) {
+        if (MO.isDef() && (RealMI->readsRegister(Reg, TRI) ||
+                           RealMI->definesRegister(Reg, TRI))) {
+          HasRegConflict = true;
+          break;
+        }
+        if (MO.isUse() && RealMI->definesRegister(Reg, TRI)) {
           HasRegConflict = true;
           break;
         }
@@ -641,8 +699,19 @@ void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
     // INLINEASM is never a format-member logical — leave it alone.
     if (MI.isInlineAsm())
       return;
-    if (std::optional<unsigned> AltOpcode = AltDescs.getSelectedOpcode(&MI))
-      MI.setDesc(HII->get(*AltOpcode));
+    if (std::optional<unsigned> AltOpcode = AltDescs.getSelectedOpcode(&MI)) {
+      // AIE setDesc is unconditional (members share logical operand
+      // shape). Haydn Format E members drop tied acc / vestigial uses;
+      // rewrite from the keep-map. Slot comes from the format desc, not
+      // an `_S*` postfix.
+      const MCSlotKind Kind = haydnDefaultMCFormats().getSlotKind(*AltOpcode);
+      if ((haydn::bundle::formatECompositeSlotIsE2(Kind) ||
+           haydn::bundle::formatECompositeSlotIsE3(Kind)) &&
+          memberDescCompatible(MI, *AltOpcode, *HII))
+        rewriteFieldSlotToMember(MI, *AltOpcode, *HII);
+      else
+        MI.setDesc(HII->get(*AltOpcode));
+    }
   };
 
   // AIE asserts top==bottom for PostRA; Haydn PostGenericScheduler is
@@ -655,6 +724,13 @@ void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
   // AIE leaveRegion: materialize then SelectedAltDescs.clear()
   // (AIEMachineScheduler.cpp:1081-1082). Full clear — no slot side-map survives.
   AltDescs.clear();
+  if (!AltDescs.empty()) {
+    ++NumPostRAAltDescLeakFatals;
+    report_fatal_error(
+        "Haydn post-RA leaveRegion left residual alternate descriptors",
+        /*GenCrashDiag=*/false);
+  }
+  ++NumPostRAAltDescsCleared;
 }
 
 // Resolve the SUnit for a cycle-list MI (AIE getBundledSUnit peer,
@@ -846,9 +922,11 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
     if (Kids.size() < 2)
       continue;
 
-    // Product coissue probe (schedule + field + SET trip/Off). Illegal →
-    // sequentialize whether or not the shell already carries a Format E stamp.
+    // Product coissue probe is the legality authority (schedule + field +
+    // SET trip/Off). Illegal → sequentialize recovery preserves schedule
+    // order; sequentialize itself does not invent packing legality.
     if (!haydn::bundle::canCoissueProductCycle(Kids)) {
+      ++NumProductCoissueProbeRejects;
       sequentializeMultiMemberRoot(*Root, Kids);
       ++NumUnstampedMultiMemberSequentialized;
       continue;
@@ -907,25 +985,10 @@ static bool cycleConflictsScoreboard(
     if (HR.checkConflict(SB, *MI, /*Cycle=*/0))
       return true;
   }
-  SmallSet<Register, 8> SeenDefs;
   const TargetRegisterInfo *TRI = nullptr;
-  for (MachineInstr *MI : Members) {
-    if (!TRI)
-      TRI = MI->getMF()->getSubtarget().getRegisterInfo();
-    for (const MachineOperand &MO : MI->all_defs()) {
-      if (!MO.isReg() || !MO.getReg() || MO.isDead())
-        continue;
-      Register R = MO.getReg();
-      if (R == Haydn::SFR)
-        continue;
-      for (Register Prev : SeenDefs) {
-        if (TRI->regsOverlap(Prev, R))
-          return true;
-      }
-      SeenDefs.insert(R);
-    }
-  }
-  return false;
+  if (!Members.empty() && Members.front()->getMF())
+    TRI = Members.front()->getMF()->getSubtarget().getRegisterInfo();
+  return haydn::bundle::cycleMembersHaveWAW(Members, TRI);
 }
 
 static unsigned requiredLatencyGap(const TargetInstrInfo &TII,

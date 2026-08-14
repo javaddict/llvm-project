@@ -27,7 +27,7 @@
 ; SWP-NOT: Unable to analyzeLoop, can NOT pipeline Loop
 
 ; ASM-LABEL: dot_dual_load_mac:
-; ASM: jalr_w
+; ASM: jalr
 
 define i64 @dot_dual_load_mac(ptr nocapture readonly %a, ptr nocapture readonly %b, i32 %n) {
 entry:

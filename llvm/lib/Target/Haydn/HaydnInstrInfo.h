@@ -52,94 +52,6 @@ struct HaydnCountableLoop {
   Register TripCountReg;
 };
 
-// Target-specific loop info for the MachinePipeliner (Swing Modulo Scheduling).
-// Mirrors the ARM structure (see ARMBaseInstrInfo.cpp): identify the loop's
-// conditional terminator (EndLoop) and the comparison instruction that sets
-// its condition register (CmpMI), plus a runtime trip-count register
-// (TripCountReg). Trip-count handling is delegated to the target-independent
-// ModuloScheduleExpander via createTripCountGreaterCondition
-// adjustTripCount, both of which ALWAYS emit a runtime comparison and return
-// nullopt -- there is no static-trip-count shortcut. The hand-rolled
-// `(limit - init) / step` derivation was a silent wrong-code bug (Blocker-1
-// lesson): it returned a compile-time bool that drove
-// `PeelingModuloScheduleExpander::fixupBranches` into the static-false
-// (`KernelDisposed`) branch, collapsing countable loops to ~1 iteration with
-// `-verify-machineinstrs` still green. See and lesson.
-// Trip-count source : for a DECREMENTING IV (the shape LSR
-// produces for real DSP loops -- `iv -= step` until `iv == 0`), TripCountReg
-// is the IV's preheader *init* value (the IV counts N, N-1,..., 0, so its
-// initial value IS the trip count). For an INCREMENTING IV (`iv < limit`)
-// TripCountReg is the compare's non-IV operand (the upper bound). Taking the
-// compare's non-IV operand unconditionally was the matrix_test crash root
-// cause: for decrementing loops that operand is a function-wide materialized
-// zero (`ADDI32 $r0, 0`), and adjustTripCount's replaceRegWith on it
-// corrupted every compare/PHI-init in the function. See AIE's DownCountLoop
-// (sms-packetizer-deep-dive.md §2c) for the same init-based derivation.
-class HaydnPipelinerLoopInfo : public TargetInstrInfo::PipelinerLoopInfo {
-  MachineFunction *MF;
-  const HaydnInstrInfo *HII;
-  MachineInstr *EndLoop;
-  MachineInstr *CmpMI;
-  // Optional XORI invert on the latch condition path (see HaydnCountableLoop).
-  MachineInstr *InvertMI = nullptr;
-  Register TripCountReg;
-  // Cached loop basic block — set in the constructor because setPreheader
-  // may erase EndLoop (when the expander clones the kernel)
-  // making EndLoop->getParent unsafe in later adjustTripCount calls.
-  MachineBasicBlock *LoopBB;
-  DebugLoc DL;
-  // ZOL (Zero-Overhead Loop) mode. When true, the loop is already in
-  // hardware-loop form (LoopStart in preheader + PseudoLoopEnd in latch).
-  // SMS pipelines it directly, editing LoopStart's adj operand for trip-count
-  // adjustment. Mirrors AIE's ZeroOverheadLoop
-  // (AIEBasePipelinerLoopInfo.cpp:644-835).
-  bool IsZOL = false;
-  MachineInstr *LoopStart = nullptr;
-  // AIE MinTripCount peer (AIEBasePipelinerLoopInfo). 0 = unknown/unbounded.
-  // ZOL SMS is only safe when MinTripCount is known and large enough to cover
-  // prologue stages without a dynamic guard (ZOL cannot reverse its exit).
-  int64_t MinTripCount = 0;
-
-public:
-  HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
-                         MachineInstr *EndLoop, MachineInstr *CmpMI,
-                         Register TripCountReg,
-                         MachineInstr *InvertMI = nullptr)
-      : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(CmpMI), InvertMI(InvertMI),
-        TripCountReg(TripCountReg), LoopBB(EndLoop->getParent()),
-        DL(EndLoop->getDebugLoc()) {}
-
-  // ZOL constructor — for loops already in hardware-loop form.
-  HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
-                         MachineInstr *EndLoop, MachineInstr *LoopStart,
-                         int64_t MinTripCount)
-      : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(nullptr), InvertMI(nullptr),
-        TripCountReg(), LoopBB(EndLoop->getParent()),
-        DL(EndLoop->getDebugLoc()), IsZOL(true), LoopStart(LoopStart),
-        MinTripCount(MinTripCount) {}
-
-  bool shouldIgnoreForPipelining(const MachineInstr *MI) const override;
-
-  // Pre-RA SMS containment: reject every StageCount > 1 (no issue-cycle
-  // identity crosses RA; ZOL and soft counted alike — closes inverted ZOL
-  // multi-stage gate). Also reject ZOL StageCount <= 1 (no overlap), PPS-3
-  // stage-count / reg-pressure gates, and AIE ZeroOverheadLoop
-  // MaxStageCount >= MinTripCount. Accepted StageCount==1 schedules stay
-  // bare logical MIs (proven counted residual only). Metrics live on the
-  // MachinePipeliner success remark — no generic post-expand virtual.
-  // Costs hwloop geometry on final parcels (kernel II + MinBodyBundles pad);
-  // SetupIssueDistance is preheader→BEGIN, never an II>=Setup floor.
-  bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
-
-  std::optional<bool>
-  createTripCountGreaterCondition(int TC, MachineBasicBlock &MBB,
-                                  SmallVectorImpl<MachineOperand> &Cond) override;
-
-  void adjustTripCount(int TripCountAdjust) override;
-
-  void setPreheader(MachineBasicBlock *NewPreheader) override;
-};
-
 class HaydnInstrInfo : public HaydnGenInstrInfo {
   const HaydnRegisterInfo RegInfo;
   const HaydnSubtarget &STI;
@@ -266,13 +178,12 @@ public:
                             int64_t BrOffset = 0,
                             RegScavenger *RS = nullptr) const override;
 
-  // Encoded size in bytes: BUNDLE → encodedBytesFor(committed FormatID stamp
-  // of product Format E row); bare real → productParcelBytes() matching
-  // generated VLIWFormat::Size for BUNDLE_E96_* (12 B); INLINEASM /
-  // INLINEASM_BR → conservative getInlineAsmLength (product MaxInstLength
-  // per statement). Shared with Fixup + HardwareLoops + BranchRelaxation.
-  // Opaque inline asm is not a compiler
-  // issue cycle (Finalize leaves it standalone; no bundle crosses it).
+  // Encoded size in bytes: BUNDLE → encodedBytesFor(committed Format E row)
+  // plus named late-layout growth (JT R0 re-zero, hwloop setup pads,
+  // same-slot serial); bare real → productParcelBytes(); INLINEASM →
+  // conservative getInlineAsmLength. Shared with Fixup + HardwareLoops +
+  // BranchRelaxation. Hexagon peer: getSize + computeOffset extender/align
+  // (HexagonInstrInfo.cpp:4601; HexagonBranchRelaxation.cpp:95-114).
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
 
   // Insert a standalone NOP at \p MI. Required for AIE-style cycle-level NOP
@@ -318,16 +229,16 @@ public:
                                       unsigned DstSchedClass) const;
 
   // Memory access cycle relative to issue (AIE getFirst/LastMemoryCycle peer).
-  // Table-driven (MemInstrItinData peer): first=0, last=1 for memory itineraries
-  // Slot0_LS / Slot1_LD / Slot01_LD only (OperandCycles [2], LoadLatency=2 /
-  // ISA §55). nullopt = non-memory / unknown class (ALU/MAC/PSEUDO never report
-  // a memory cycle). Product getMemoryLatency reads these by default.
+  // Bodies are generated (HaydnGenMemoryCycles.inc) from the published
+  // Slot0_LS / Slot1_LD / Slot01_LD latency-2 scaffold — AIE MemInstrItinData
+  // + AIEMemoryCyclesEmitter.cpp:123-157. nullopt = non-memory / unknown
+  // class. Product getMemoryLatency reads these by default.
   std::optional<int> getFirstMemoryCycle(unsigned SchedClass) const;
   std::optional<int> getLastMemoryCycle(unsigned SchedClass) const;
-  int getMinFirstMemoryCycle() const { return 0; }
-  int getMaxFirstMemoryCycle() const { return 0; }
-  int getMinLastMemoryCycle() const { return 1; } // memory classes only
-  int getMaxLastMemoryCycle() const { return 1; } // LoadLatency - 1
+  int getMinFirstMemoryCycle() const;
+  int getMaxFirstMemoryCycle() const;
+  int getMinLastMemoryCycle() const;
+  int getMaxLastMemoryCycle() const;
 
   // Max result latency for MI from itinerary OperandCycles (for RegionEndEdges
   // ExitSU artificial edges). Floor 1; loads use at least LoadLatency.
@@ -373,10 +284,17 @@ public:
 
   bool getIncrementValue(const MachineInstr &MI, int &Value) const override;
 
+  /// Byte-offset / access-width oracle for LS ops. Offsets are always bytes.
+  /// Register-base scaled immediates are element indices (ISel and post-PEI);
+  /// FrameIndex extras stay bytes until PEI rewrites them.
   bool getMemOperandsWithOffsetWidth(
       const MachineInstr &MI, SmallVectorImpl<const MachineOperand *> &BaseOps,
       int64_t &Offset, bool &OffsetIsScalable, LocationSize &Width,
       const TargetRegisterInfo *TRI) const override;
+
+  /// Same-base accesses whose byte ranges [off, off+width) do not overlap.
+  bool areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
+                                       const MachineInstr &MIb) const override;
 };
 
 } // namespace llvm

@@ -33,7 +33,7 @@
 ; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
 ; ASM-DAG: {{(sub32|subi32)}}
 ; ASM-DAG: seq32
-; ASM: jalr_w
+; ASM: jalr
 
 define i32 @usad_row(ptr nocapture readonly %w, ptr nocapture readonly %x) {
 entry:

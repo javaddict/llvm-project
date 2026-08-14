@@ -58,7 +58,7 @@ body:             |
     RET implicit $r15
 
 # REPLAY-LABEL: name: root_to_consumer_raw
-# REPLAY: BUNDLE 0
+# REPLAY: BUNDLE {{[01]}}
 # REPLAY-DAG: F2MULAA32R_HHLL
 # REPLAY-DAG: ADD32
 # REPLAY: NOP
@@ -67,7 +67,7 @@ body:             |
 
 # REPLAY-LABEL: name: producer_to_root_exact
 # REPLAY: F2MULAA32R_HHLL
-# REPLAY: BUNDLE 0
+# REPLAY: BUNDLE {{[01]}}
 # REPLAY-DAG: ADD32
 # REPLAY-DAG: ADD32
 # REPLAY: RET

@@ -81,7 +81,7 @@ define i32 @critical_path_priority(i32 %a, i32 %b) {
 ; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: addi32{{(_w)?}} {{.*}}, 36
 ; CHECK-DAG: {{add32|addi32}}
-; CHECK: jalr_w{{(\.s[012])?}}
+; CHECK: jalr{{(\.s[012])?}}
 ; CHECK: .Lfunc_end0:
 ; PREGREEDY-LABEL: name: critical_path_priority
 ; PREGREEDY-NOT: BUNDLE

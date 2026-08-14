@@ -17,7 +17,7 @@
 
 ; ASM-LABEL: matrix_sum_like:
 ; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
-; ASM: jalr_w
+; ASM: jalr
 
 define i32 @matrix_sum_like(ptr nocapture readonly %C, i32 %N, i32 %clip) {
 entry:

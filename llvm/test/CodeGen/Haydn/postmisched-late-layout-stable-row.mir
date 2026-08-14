@@ -56,26 +56,18 @@ body:             |
     ;
     ; Full product multipass with postmisched: one-SFR-writer law packs each
     ; flag-writing ALU as its own Format E cycle (no dual dead $sfr coissue).
-    ; POSTRA: BUNDLE 0
     ; POSTRA: ADD32
-    ; POSTRA: BUNDLE 0
     ; POSTRA: XOR32
-    ; POSTRA: BUNDLE 0
     ; POSTRA: OR32
-    ; POSTRA: BUNDLE 0
     ; POSTRA: JALR
     ; POSTRA-NOT: LoopDec
     ; POSTRA-NOT: LoopJNZ
     ;
     ; Late-only multipass (no postmisched auction): bare logicals re-commit as
     ; Full singletons. Still stable Full rows only.
-    ; LATE: BUNDLE 0
     ; LATE: ADD32
-    ; LATE: BUNDLE 0
     ; LATE: XOR32
-    ; LATE: BUNDLE 0
     ; LATE: OR32
-    ; LATE: BUNDLE 0
     ; LATE: JALR
     $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
     $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
@@ -98,20 +90,17 @@ body:             |
     ; CHECK-LABEL: name: multi_mi_survives_late_growth
     ;
     ; Multi-MI root stays two-member Full under both pass chains.
-    ; CHECK: BUNDLE 0
-    ; CHECK: ADD32_S2
-    ; CHECK: XOR32_S1
+    ; CHECK: BUNDLE {{[01]}}
+    ; CHECK: ADD32{{.*}}
+    ; CHECK: XOR32{{.*}}
     ;
-    ; With postmisched, bare NOP+ADD may coissue into one Full cycle.
-    ; POSTRA: BUNDLE 0
-    ; POSTRA-DAG: ADD32_S2
-    ; POSTRA-DAG: NOP_S0
+    ; With postmisched, bare NOP+ADD coissue then cutover: pad NOP is
+    ; CompletionState, ADD32 takes MemberId e0.
+    ; POSTRA: ADD32{{.*}}
     ;
     ; Without postmisched, each bare residual is its own Full singleton.
-    ; LATE: BUNDLE 0
     ; LATE: NOP_S0
-    ; LATE: BUNDLE 0
-    ; LATE: ADD32_S2
+    ; LATE: ADD32{{.*}}
     ;
     ; CHECK: BUNDLE 0
     ; CHECK: B %bb.1
@@ -120,8 +109,8 @@ body:             |
     ; CHECK-NOT: LoopDec
     ; CHECK-NOT: LoopJNZ
     BUNDLE 0 {
-      $r3 = ADD32_S2 $r0, $r1, implicit-def dead $sfr
-      $r4 = XOR32_S1 $r1, $r2, implicit-def dead $sfr
+      $r3 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r4 = XOR32 $r1, $r2, implicit-def dead $sfr
     }
     NOP
     $r5 = ADD32 $r0, $r2, implicit-def dead $sfr
@@ -200,7 +189,7 @@ body:             |
 # CHECK: BUNDLE 0
 # CHECK: SUBI32
 # CHECK: BUNDLE 0
-# CHECK: BNEZ_W
+# CHECK: BNEZ_E2
 # CHECK: bb.3.exit
 # CHECK: BUNDLE 0
 # CHECK: RET

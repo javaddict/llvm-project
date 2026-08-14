@@ -14,9 +14,10 @@
 // are counting budgets enforced by HaydnPortModel + HaydnFuncUnitWrapper.
 //
 // Per-instruction port vectors / full Data_Latency tables are not product-
-// qualified until the restored golden instruction-type index lands. Existing
+// qualified until golden admits them into generated records. Existing
 // itinerary class names remain as scaffolding attachment points; InstrStage
-// resources below are the seven units only.
+// resources below are the seven units only. InstrItinData rows are generated
+// by FormatE/generate_sched_records.py (HaydnGenSchedRecords.inc).
 //
 //===----------------------------------------------------------------------===//
 
@@ -45,69 +46,37 @@ def MAC1       : FuncUnit;
 //
 // Class identifiers retain historical Slot* names because instruction .td
 // files attach by those names. Stages reserve execution units, not slots.
+// InstrItinData for these names is generated (HaydnGenSchedRecords.inc).
+// The two unreferenced 5-cycle accumulator-latency classes are deleted.
 //===----------------------------------------------------------------------===//
 
 def PSEUDO       : InstrItinClass;
 def Slot0_ALU    : InstrItinClass;  // control / scalar ALU scaffold → ALU0
 def Slot0_LS     : InstrItinClass;  // load/store → LOADSTORE0
 def Slot12_ALU   : InstrItinClass;  // wide ALU → ALU1|ALU2
-def Slot12_ALU_AccLat : InstrItinClass;
+// SIN_COS / ARCTAN: Constraints Data_Latency = uimm4+2. uimm4 is 4-bit, so
+// the conservative bound is 15+2 = 17. Exact operand-dependent windows wait
+// for a generated per-op import. InstrStage stays 1 cycle:
+// ProductMaxInstrStageCycles=1; the uimm4+2 unit-occupancy lock is class-3
+// residual (ProductDraftArctanMultiCycleLockEnabled=false), not this class.
+def Slot12_ALU_SinCosLat : InstrItinClass; // logical SIN_COS/ARCTAN → ALU1|ALU2
 def Slot012_ALU  : InstrItinClass;  // any ALU → ALU0|ALU1|ALU2
 def Slot1_LD     : InstrItinClass;  // load unit → LOAD1
 def Slot01_LD    : InstrItinClass;  // dual-load menu → LOADSTORE0|LOAD1
 def Slot1_ALU    : InstrItinClass;  // → ALU1
+def Slot1_ALU_SinCosLat : InstrItinClass; // SIN_COS_S1 / ARCTAN_S1 → ALU1
 def Slot2_ALU    : InstrItinClass;  // → ALU2
 // Slot 2 memory forms: Data_Latency 2. Must NOT borrow Slot2_ALU (latency 1).
 // Haydn has no interlock — wrong latency here is a silent silicon hazard.
 def Slot2_LS     : InstrItinClass;  // → ALU2 (S2 pack seat), mem Data_Latency 2
 def Slot2_MAC    : InstrItinClass;  // → MAC1
-def Slot2_ALU_AccLat : InstrItinClass;
+def Slot2_ALU_SinCosLat : InstrItinClass; // SIN_COS_S2 / ARCTAN_S2 → ALU2
 def Slot12_MAC   : InstrItinClass;  // → MAC0|MAC1
-def Slot12_MAC_AccFirst : InstrItinClass;
 def Slot1_MAC    : InstrItinClass;  // → MAC0
 
-//===----------------------------------------------------------------------===//
-// Processor Itineraries (DFA automaton over the seven units)
-//
-// Single-stage occupancy for one issue cycle. OperandCycles retain existing
-// latency scaffolding (loads 2; common ALU 1; MAC acc-feedback shape). Full
-// per-op qualification waits on restored golden latency tables.
-//===----------------------------------------------------------------------===//
-
-def HaydnItineraries : ProcessorItineraries<
-  [LOADSTORE0, LOAD1, ALU0, ALU1, ALU2, MAC0, MAC1],
-  [],
-  [
-    InstrItinData<PSEUDO, []>,
-
-    // Scalar/control ALU scaffold on ALU0 (independent of LOADSTORE0).
-    InstrItinData<Slot0_ALU, [InstrStage<1, [ALU0]>], [1]>,
-    // Load/Store unit; load-use latency 2 (common Data_Latency scaffold).
-    InstrItinData<Slot0_LS,  [InstrStage<1, [LOADSTORE0]>], [2]>,
-
-    InstrItinData<Slot12_ALU, [InstrStage<1, [ALU1, ALU2]>], [1]>,
-    InstrItinData<Slot12_ALU_AccLat, [InstrStage<1, [ALU1, ALU2]>],
-                  [5, 1, 1, 5]>,
-
-    // Any of the three ALU units.
-    InstrItinData<Slot012_ALU, [InstrStage<1, [ALU0, ALU1, ALU2]>], [1]>,
-
-    InstrItinData<Slot1_LD, [InstrStage<1, [LOAD1]>], [2]>,
-    InstrItinData<Slot01_LD, [InstrStage<1, [LOADSTORE0, LOAD1]>], [2]>,
-
-    InstrItinData<Slot1_ALU, [InstrStage<1, [ALU1]>], [1]>,
-
-    // MAC units: internal acc feedback vs regfile writeback in OperandCycles.
-    InstrItinData<Slot12_MAC, [InstrStage<1, [MAC0, MAC1]>], [2, 1, 1, 2]>,
-    InstrItinData<Slot12_MAC_AccFirst, [InstrStage<1, [MAC0, MAC1]>],
-                  [2, 2, 1, 1]>,
-    InstrItinData<Slot1_MAC, [InstrStage<1, [MAC0]>], [2, 1, 1, 2]>,
-
-    InstrItinData<Slot2_ALU, [InstrStage<1, [ALU2]>], [1]>,
-    InstrItinData<Slot2_LS,  [InstrStage<1, [ALU2]>], [2]>,
-    InstrItinData<Slot2_ALU_AccLat, [InstrStage<1, [ALU2]>], [5, 1, 1, 5]>,
-    InstrItinData<Slot2_MAC, [InstrStage<1, [MAC1]>], [2, 1, 1, 2]>
-  ]>;
+// Generated ProcessorItineraries (AIE peer: AIE2PGenSchedule.td
+// ProcessorItineraries + AIETarget.td MemInstrItinData).
+include "HaydnGenSchedRecords.inc"
 
 //===----------------------------------------------------------------------===//
 // Scheduling Machine Model
@@ -126,7 +95,11 @@ def HaydnSchedModel : SchedMachineModel {
   // (CritLimit=1) rejects every diamond (condition adds 2). Keep 8 as product
   // if-conversion budget until a dedicated branch-penalty field is plumbed.
   let MispredictPenalty = 8;
-  // Incomplete until golden per-op port/latency tables are restored.
+  // Incomplete until golden admits complete per-op port/latency/pipeline
+  // tables into generated records (PortModel admission helper stays false).
+  // Aggregate unit itineraries + pooled PortModel ceilings remain product-safe
+  // and are carried by the shared availability-aware record (IssueWidth /
+  // NumExecUnits / LoadLatency scaffold + bank port budgets).
   let CompleteModel = 0;
   // Open the post-RA MachineScheduler gate (Haydn owns the strategy).
   let PostRAScheduler = 1;

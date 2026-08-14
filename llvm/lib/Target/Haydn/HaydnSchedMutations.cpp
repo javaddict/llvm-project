@@ -379,8 +379,8 @@ class MemoryEdges : public ScheduleDAGMutation {
 
 // AIE (AIEBaseSubtarget PostRA mutator): setup instrs raise ExitSU latency so
 // the region end is far enough after writing LS/LE/LC. Haydn freeze:
-//   SetupIssueDistance = 4  (= AIE LoopSetupDistance peer for SET→BEGIN)
-//   InterveningCycles  = 3  (= Following floor; SetupIssueDistance - 1)
+//   SetupIssueDistance = 3  (= AIE LoopSetupDistance peer for SET→BEGIN)
+//   InterveningCycles  = 2  (= Following floor; SetupIssueDistance - 1)
 //
 // ExitSU forward latency must be SetupIssueDistance, not InterveningCycles:
 // SET at TopReadyCycle C and latency D yields ExitSU.TopReadyCycle = C+D

@@ -61,7 +61,7 @@
 
 define void @two_decrementing_loops(i32 noundef %N, ptr nocapture %A, ptr nocapture %B) {
 ; ASM-LABEL: two_decrementing_loops:
-; ASM:        jalr_w
+; ASM:        jalr
 entry:
   %cmpA = icmp eq i32 %N, 0
   br i1 %cmpA, label %loopB, label %loopA

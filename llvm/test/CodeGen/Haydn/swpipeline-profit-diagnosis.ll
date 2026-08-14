@@ -76,21 +76,21 @@ define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr noc
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32_w r5, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 r5, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { ld32 r7, r3, 0; ld32 r6, r2, 0 }
 ; CHECK-NEXT:    { addi32 r3, r3, 4; addi32 r5, r5, 1 }
 ; CHECK-NEXT:    { addi32 r2, r2, 4; add32 r6, r6, r7 }
-; CHECK-NEXT:    { nop; st32_post r6, r1, 1 }
+; CHECK-NEXT:    { nop; s_sw_post_imm r6, r1, 1 }
 ; CHECK-NEXT:    { nop; slt32 r6, r5, r4 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; bnez_w r6, .LBB0_1 }
+; CHECK-NEXT:    { nop; bnez r6, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32_w sp, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
-; CHECK-NEXT:    { nop; jalr_w r0, lr, 0 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   br label %loop
 loop:

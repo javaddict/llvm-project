@@ -21,7 +21,7 @@
 
 ; ASM-LABEL: count_down_sum:
 ; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
-; ASM: jalr_w
+; ASM: jalr
 
 define i32 @count_down_sum(i32 %n) {
 entry:

@@ -14,6 +14,7 @@
 //
 // Post-RA: HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HazardRecognizer
 // (sole owner of final VLIW pack in leaveRegion/leaveMBB).
+// Multi-stage SMS (HaydnPostRAMultiStage) optional after ordinary convergence; default OFF.
 //
 // Do NOT revive VLIWMachineScheduler / ConvergingVLIWScheduler (UAF).
 // Do NOT use bare GenericScheduler via nullptr factory fallback.
@@ -37,6 +38,11 @@ public:
   HaydnScheduleDAGMI(MachineSchedContext *C,
                      std::unique_ptr<MachineSchedStrategy> S, bool IsPreRA)
       : ScheduleDAGMI(C, std::move(S), IsPreRA) {}
+
+  /// AIE `AIEPostRASchedStrategy::buildGraph` passes `Context->AA` into
+  /// `buildEdges` (`AIEMachineScheduler.cpp:1792`). This is that same
+  /// `ScheduleDAGMI::AA` without calling protected `getAAForDep`.
+  AAResults *getAliasAnalysis() const { return AA; }
 
   void exitRegion() override;
   void schedule() override;

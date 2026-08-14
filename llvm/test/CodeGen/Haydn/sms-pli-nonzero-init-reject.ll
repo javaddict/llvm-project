@@ -17,7 +17,7 @@
 
 ; ASM-LABEL: scan_from_k:
 ; ASM-NOT: #<swps>
-; ASM: jalr_w
+; ASM: jalr
 
 define i32 @scan_from_k(ptr nocapture readonly %p, i32 %k, i32 %n) {
 entry:

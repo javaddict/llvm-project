@@ -21,7 +21,7 @@ body:             |
     liveins: $d0
 
     $r1 = MOVE32_DR_L $d0, implicit-def dead $sfr
-    $d1 = SEXT32T64_S1 $r1, implicit-def dead $sfr
+    $d1 = SEXT_GPR32_TO_DR64 $r1, implicit-def dead $sfr
     $d0 = COPY $d1
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...

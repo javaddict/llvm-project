@@ -8,7 +8,7 @@
 # def of R0 must NOT co-issue.
 #
 # Without hasSameBundleWAW tracking R0, PostRA packed:
-#   { xor32 r0,r0,r0; addi32_w r0, r1, 0; ... } → ISS WRITE_CONFLICT.
+#   { xor32 r0,r0,r0; addi32 r0, r1, 0; ... } → ISS WRITE_CONFLICT.
 #
 # CONTROL: independent soft-zero + write to a different reg may still pack.
 
@@ -41,12 +41,12 @@ body:             |
     liveins: $r1
 
     ; Soft-zero then redefine R0 — must stay separate (no BUNDLE wrapping both).
-    ; After B3.1 materialize, opcodes may be format-member (XOR32_S2 etc.).
+    ; After B3.1 materialize, opcodes may be format-member (XOR32 etc.).
     ; CHECK-LABEL: name: test_r0_dual_def_no_bundle
     ; CHECK: liveins: $r1
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r0 = XOR32_S2 $r0, $r0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = ADDI32_S1 killed $r1, 0, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = XOR32{{.*}} $r0, $r0, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = ADDI32{{.*}} killed $r1, 0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r0 = XOR32 $r0, $r0, implicit-def dead $sfr
     $r0 = ADDI32 $r1, 0, implicit-def dead $sfr
@@ -82,8 +82,8 @@ body:             |
     ; CHECK-LABEL: name: test_r0_softzero_with_other_def_can_bundle
     ; CHECK: liveins: $r1, $r2
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r0 = XOR32_S2 $r0, $r0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r3 = ADD32_S2 killed $r1, killed $r2, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = XOR32{{.*}} $r0, $r0, implicit-def dead $sfr
+    ; CHECK-NEXT: $r3 = ADD32{{.*}} killed $r1, killed $r2, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r0 = XOR32 $r0, $r0, implicit-def dead $sfr
     $r3 = ADD32 $r1, $r2, implicit-def dead $sfr

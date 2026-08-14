@@ -60,7 +60,7 @@
 ; No bundle may contain both seq32 (flag producer) and and32 (its consumer).
 ; ASM-NOT: {{[{].*seq32.*and32}}
 ; ASM-NOT: {{[{].*and32.*seq32}}
-; ASM: jalr_w
+; ASM: jalr
 
 define i32 @no_forwarding_raw(ptr nocapture readonly %p, i32 %n) {
 entry:
