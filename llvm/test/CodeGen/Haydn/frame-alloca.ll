@@ -230,8 +230,7 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    { move32 r3, r2; move32 sp, r2 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; addi32 r5, r4, 1 }
-; CHECK-NEXT:    { nop; mull r4, r4, r4 }
+; CHECK-NEXT:    { mull r4, r4, r4; addi32 r5, r4, 1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { s_sw_post_imm r4, r3, 1; slt32 r6, r5, r1 }
 ; CHECK-NEXT:    { nop; move32 r4, r5 }
