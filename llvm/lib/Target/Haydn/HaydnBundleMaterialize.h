@@ -245,6 +245,54 @@ exactSolveProductOpcodes(ArrayRef<unsigned> Opcodes, const HaydnMCFormats &Fmts)
     Out.MemberOpcodes.push_back(M.MemberOpcode);
   Out.Plan = *Plan;
   Out.State = S;
+
+  // Output coherence (CB-153b): CycleState records each member's alt AS
+  // ACCEPTED, but later adds can narrow the row frontier — the settled
+  // Plan.Row then contradicts earlier members' recorded identities (an
+  // e3_* member inside an E2 plan), and every consumer that bakes these
+  // opcodes (setDesc, Bundle canAdd, MC serialize) chokes on the mixed
+  // set. The recorded Plan.Row can itself sit on the stale side (two
+  // plain ALU ops record an E2 plan although the E2 e1 menu cannot host
+  // a second general op — only E3 can). Re-bind the members onto a
+  // single row via the golden-records entry assignment: the plan's row
+  // first, then the other row, correcting the plan when the other row is
+  // the one that binds. Refuse to return an incoherent solution.
+  {
+    const uint8_t Mode =
+        Out.Plan.Row == BundleFormatRowID::E96ThreeEntry ? 1 : 0;
+    bool Coherent = true;
+    for (unsigned M : Out.MemberOpcodes) {
+      const MCSlotKind Kind = Fmts.getSlotKind(M);
+      const bool IsE2 = formatECompositeSlotIsE2(Kind);
+      const bool IsE3 = formatECompositeSlotIsE3(Kind);
+      if ((Mode == 0 && IsE3) || (Mode == 1 && IsE2)) {
+        Coherent = false;
+        break;
+      }
+    }
+    if (!Coherent) {
+      bool Fixed = false;
+      for (uint8_t TryMode : {Mode, static_cast<uint8_t>(1 - Mode)}) {
+        if (Opcodes.size() > (TryMode ? 3u : 2u))
+          continue;
+        SmallVector<unsigned, 3> Rebound =
+            assignMemberOpcodesForSettledRow(Opcodes, TryMode);
+        if (Rebound.size() != Opcodes.size())
+          continue;
+        Out.MemberOpcodes.assign(Rebound.begin(), Rebound.end());
+        if (TryMode != Mode) {
+          Out.Plan.Row = TryMode ? BundleFormatRowID::E96ThreeEntry
+                                 : BundleFormatRowID::E96TwoEntry;
+          Out.Plan.Completion =
+              selectCompletionFor(Out.Plan.Row, Opcodes.size());
+        }
+        Fixed = true;
+        break;
+      }
+      if (!Fixed)
+        return std::nullopt;
+    }
+  }
   return Out;
 }
 
@@ -655,6 +703,18 @@ inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
   return opcodesFormOneLegalCycle(Opcodes, Fmts);
 }
 
+/// Register-file port budgets for one candidate cycle (golden 4R2W GPR,
+/// 7R3W DR, 2R2W AR, 2R1W SFR — the same counters the hazard recognizer
+/// charges per issue cycle). The HR enforces these while SCHEDULING; the
+/// hard-root recommit and leaveMBB commit surfaces bypass the HR, and the
+/// gap was masked by the solver's formerly incoherent member output (mixed
+/// rows made the pack fail before ports could matter). With coherent
+/// members (CB-153b) the gate must be explicit or a three-GPR-write cycle
+/// commits a hardware-illegal bundle. Out-of-line: the counters live in
+/// HaydnPortModel.h, which must not be pulled into this header's includers.
+bool cycleMembersRespectPortBudgets(ArrayRef<MachineInstr *> Instrs);
+
+
 /// Full **emission** coissue probe for one product cycle (layer 3 + schedule
 /// pack). Caller must already have same available/ready cycle (layer 1) and
 /// no blocking Data deps (layer 2).
@@ -679,6 +739,10 @@ inline bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
   // SET_HWLOOP must not share a cycle with a producer of its trip/Off regs
   // (snapshot no-forwarding: WAR samples stale trip; RAW needs forwarding).
   if (cycleMembersHaveHwloopTripConflict(Instrs, TII, TRI))
+    return false;
+
+  // Register-file port budgets (HR-equivalent; see the helper).
+  if (!cycleMembersRespectPortBudgets(Instrs))
     return false;
 
   // Format E E2-only logicals cannot form a 3-wide E3 parcel.
@@ -1119,6 +1183,9 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
   // SET_HWLOOP trip/Off sample cannot coissue with a producer of those regs
   // (WAR would sample stale trip under snapshot no-forwarding).
   if (cycleMembersHaveHwloopTripConflict(Instrs, TII, TRI))
+    return false;
+  // Register-file port budgets (HR-equivalent; see the helper).
+  if (!cycleMembersRespectPortBudgets(Instrs))
     return false;
 
   // Bake format-member descriptors before SlotMap / encode. leaveRegion

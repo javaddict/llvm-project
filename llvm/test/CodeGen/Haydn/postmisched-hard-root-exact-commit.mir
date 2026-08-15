@@ -42,9 +42,11 @@ body:             |
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r15
     ; COMMIT-NEXT: {{  $}}
     ; COMMIT-NEXT: $r6 = ADDI32 $r0, 1, implicit-def dead $sfr
-    ; COMMIT-NEXT: BUNDLE 1, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-    ; COMMIT-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; (Coherent exact solve (CB-153b) re-binds members onto one settled row;
+    ; the entry assignment may permute schedule order in the emitted bundle.)
+    ; COMMIT-NEXT: BUNDLE 1, 0, implicit-def $r5, implicit-def dead $sfr, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
     ; COMMIT-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
+    ; COMMIT-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
     ; COMMIT-NEXT: }
     ; COMMIT-NEXT: $r7 = XOR32 killed $r4, killed $r5, implicit-def dead $sfr
     ; COMMIT-NEXT: RET implicit $r15
@@ -53,9 +55,11 @@ body:             |
     ; OPS: liveins: $r0, $r1, $r2, $r3, $r15
     ; OPS-NEXT: {{  $}}
     ; OPS-NEXT: $r6 = ADDI32 $r0, 1, implicit-def dead $sfr
-    ; OPS-NEXT: BUNDLE 1, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-    ; OPS-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; (Coherent exact solve (CB-153b) re-binds members onto one settled row;
+    ; the entry assignment may permute schedule order in the emitted bundle.)
+    ; OPS-NEXT: BUNDLE 1, 0, implicit-def $r5, implicit-def dead $sfr, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
     ; OPS-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
+    ; OPS-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
     ; OPS-NEXT: }
     ; OPS-NEXT: $r7 = XOR32 killed $r4, killed $r5, implicit-def dead $sfr
     ; OPS-NEXT: RET implicit $r15

@@ -13,12 +13,15 @@
 
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnPlacementAlternative.h"
+#include "HaydnPortModel.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/ADT/bit.h"
 #include <algorithm>
 #include <cassert>
+#include <mutex>
 #include <string>
 
 using namespace llvm;
@@ -293,6 +296,8 @@ bool productResMIIFailsQualification(ArrayRef<unsigned> Opcodes) {
     return false;
   return productResMIIOverestimate(Opcodes) > 0;
 }
+
+
 } // namespace bundle
 } // namespace haydn
 } // namespace llvm
@@ -386,3 +391,114 @@ bool hasPlacementAlternatives(const HaydnBaseMCFormats &Fmts,
 }
 
 } // namespace llvm
+
+SmallVector<unsigned, 3>
+llvm::haydn::bundle::assignMemberOpcodesForSettledRow(
+    ArrayRef<unsigned> LogicalOpcodes, uint8_t Mode) {
+  // Bridge to the golden records DFS. Two traps this route avoids:
+  // (1) LLVM logical NAMES (LD32/ST64) are not the golden record names
+  //     (S_LW_WITH_IMM/D_SDW_WITH_IMM) — the golden name comes from any of
+  //     the logical's member records, reached through the sparse alts
+  //     vector and an opcode->record inverse;
+  // (2) the sparse alts vector itself holds at most one row REPRESENTATIVE
+  //     per residual slot, so it cannot serve as the candidate space for a
+  //     row-constrained assignment — assignFormatEMemberEntries walks the
+  //     full member records with entry+unit injectivity instead.
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+
+  static SmallVector<int, 0> RecIdxByOpcode;
+  static std::once_flag Once;
+  std::call_once(Once, [] {
+    const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+    RecIdxByOpcode.assign(MII.getNumOpcodes(), -1);
+    for (unsigned Mid = 0; Mid < haydn::format_e::FormatEMemberCount &&
+                           Mid < FormatEMemberOpcodeCount;
+         ++Mid) {
+      const unsigned Opc = FormatEMemberOpcodes[Mid];
+      if (Opc != 0 && Opc < RecIdxByOpcode.size())
+        RecIdxByOpcode[Opc] = static_cast<int>(Mid);
+    }
+  });
+
+  SmallVector<unsigned, 3> Empty;
+  const unsigned N = LogicalOpcodes.size();
+  if (N == 0 || N > (Mode ? 3u : 2u))
+    return Empty;
+
+  SmallVector<std::string, 3> Logs;
+  Logs.reserve(N);
+  for (unsigned LogOpc : LogicalOpcodes) {
+    const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(LogOpc);
+    const char *Golden = nullptr;
+    if (Alts) {
+      for (unsigned MemberOpc : *Alts) {
+        if (MemberOpc == 0 || MemberOpc >= RecIdxByOpcode.size() ||
+            RecIdxByOpcode[MemberOpc] < 0)
+          continue;
+        const haydn::format_e::FormatEMemberRec &Rec =
+            haydn::format_e::FormatEMembers[RecIdxByOpcode[MemberOpc]];
+        if (!Rec.IsNop && Rec.Logical && Rec.Logical[0] != '\0') {
+          Golden = Rec.Logical;
+          break;
+        }
+      }
+    }
+    if (!Golden)
+      return Empty;
+    Logs.push_back(Golden);
+  }
+
+  auto Assign = haydn::format_e::assignFormatEMemberEntries(Logs, Mode);
+  if (!Assign)
+    return Empty;
+  SmallVector<unsigned, 3> Out;
+  Out.reserve(N);
+  for (const haydn::format_e::FormatEEntryAssign &E : *Assign) {
+    if (!E.Mem || E.Mem->MemberId >= FormatEMemberOpcodeCount)
+      return Empty;
+    const unsigned MemberOpc = FormatEMemberOpcodes[E.Mem->MemberId];
+    if (MemberOpc == 0)
+      return Empty;
+    Out.push_back(MemberOpc);
+  }
+  return Out;
+}
+
+bool llvm::haydn::bundle::cycleMembersRespectPortBudgets(
+    ArrayRef<MachineInstr *> Instrs) {
+  unsigned GR = 0, GW = 0, DRr = 0, DRw = 0, ARr = 0, ARw = 0, SR = 0,
+           SW = 0;
+  for (const MachineInstr *MI : Instrs) {
+    auto [R, W] = countGPRPorts(*MI);
+    GR += R;
+    GW += W;
+    auto [DR2, DW2] = countDRPorts(*MI);
+    DRr += DR2;
+    DRw += DW2;
+    auto [AR2, AW2] = countARPorts(*MI);
+    ARr += AR2;
+    ARw += AW2;
+    // SFR: count LIVE writes only. countSFRPorts charges every def "dead
+    // or live" (PackLegality rule 3), but the golden entry menus seat two
+    // or three ALU ops — each an implicit dead $sfr writer — in one
+    // bundle, and the product emits and executes such bundles (dual-ADDI32
+    // pairs all over the corpus). Dead flag defs are not exclusive-port
+    // traffic; a live SFR write (CSRW, a consumed compare) still is. The
+    // HR-side counter still applies rule 3 to dead defs — that asymmetry
+    // is part of the CB-153b co-issue story and stays flagged for the
+    // owner.
+    auto [SR2, SW2] = countSFRPorts(*MI);
+    SR += SR2;
+    unsigned LiveSFRWrites = 0;
+    for (const MachineOperand &MO : MI->operands()) {
+      if (MO.isReg() && MO.isDef() && !MO.isDead() &&
+          isHaydnSFRPortReg(MO.getReg()))
+        ++LiveSFRWrites;
+    }
+    SW += std::min(SW2, LiveSFRWrites);
+  }
+  return GR <= HAYDN_GPR_READ_PORTS && GW <= HAYDN_GPR_WRITE_PORTS &&
+         DRr <= HAYDN_DR_READ_PORTS && DRw <= HAYDN_DR_WRITE_PORTS &&
+         ARr <= HAYDN_AR_READ_PORTS && ARw <= HAYDN_AR_WRITE_PORTS &&
+         SR <= HAYDN_SFR_READ_PORTS && SW <= HAYDN_SFR_WRITE_PORTS;
+}

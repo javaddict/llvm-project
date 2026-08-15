@@ -535,15 +535,35 @@ TEST(HaydnBundleFormatSolver, RematchMemberOpcodeBridgeAsmAndExactSolve) {
   EXPECT_TRUE(formatEMemberOccupiesEntry(Pref.Members[2].MemberOpcode, 1));
 
   // exactSolveProductOpcodes is the shared setDesc MemberOpcode vector.
+  // OUTPUT COHERENCE (CB-153b): the state's per-member records keep the alt
+  // chosen AT ACCEPT TIME, which can disagree with the finally settled row;
+  // the solve's OUTPUT re-binds onto the settled row, so pointer-identity
+  // with Pref.Members is no longer the contract. What IS the contract:
+  // logical preserved per position, one row for every member, entries
+  // injective and unit-injective under that row.
   auto Solved = exactSolveProductOpcodes(Seq, Fmts);
   ASSERT_TRUE(Solved.has_value());
   ASSERT_EQ(Solved->MemberOpcodes.size(), 3u);
-  EXPECT_EQ(Solved->MemberOpcodes[0], Pref.Members[0].MemberOpcode);
-  EXPECT_EQ(Solved->MemberOpcodes[1], Pref.Members[1].MemberOpcode);
-  EXPECT_EQ(Solved->MemberOpcodes[2], Pref.Members[2].MemberOpcode);
-  EXPECT_TRUE(formatEMemberOccupiesEntry(Solved->MemberOpcodes[0], 0));
-  EXPECT_TRUE(formatEMemberOccupiesEntry(Solved->MemberOpcodes[1], 2));
-  EXPECT_TRUE(formatEMemberOccupiesEntry(Solved->MemberOpcodes[2], 1));
+  {
+    const bool RowE3 =
+        Solved->Plan.Row == haydn::bundle::BundleFormatRowID::E96ThreeEntry;
+    ASSERT_TRUE(RowE3) << "three members can only settle as E3";
+    unsigned SeenEntries = 0;
+    for (unsigned I = 0; I < 3; ++I) {
+      const unsigned M = Solved->MemberOpcodes[I];
+      const StringRef Name = haydnOpcodeName(M);
+      EXPECT_TRUE(Name.contains("_E3_"))
+          << "member " << Name << " must sit on the settled E3 row";
+      const std::string Log =
+          haydn::format_e::peelLogicalOpcodeName(Name);
+      EXPECT_EQ(Log, std::string(haydnOpcodeName(Seq[I])))
+          << "logical must be preserved per position";
+      for (unsigned E2I = 0; E2I < 3; ++E2I)
+        if (formatEMemberOccupiesEntry(M, E2I))
+          SeenEntries |= 1u << E2I;
+    }
+    EXPECT_EQ(SeenEntries, 0b111u) << "entries must be injective over e0-e2";
+  }
 
   // Standalone assembler path: Bundle canAdd/add of the same logical sequence
   // ends with SlotMap FieldSlots matching preferred Members (rematch sync).
