@@ -37,16 +37,16 @@ body:             |
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
     ; COMMIT-NEXT: {{  $}}
     ; Group A: dual-ALU hard root exact-commits as Format E row 0.
-    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r8, implicit-def dead $sfr, implicit-def $r9, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-    ; COMMIT-NEXT:   $r8 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r9, implicit-def dead $sfr, implicit-def $r8, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
     ; COMMIT-NEXT:   $r9 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
+    ; COMMIT-NEXT:   $r8 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
     ; COMMIT-NEXT: }
     ; Mid-stage free op stays outside both groups (no cross-stage splice).
     ; COMMIT-NEXT: $r10 = ADDI32 killed $r8, 1, implicit-def dead $sfr
     ; Group B: second hard root exact-commits independently.
-    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r11, implicit-def dead $sfr, implicit-def $r12, implicit killed $r4, implicit killed $r5, implicit killed $r6, implicit killed $r7 {
-    ; COMMIT-NEXT:   $r11 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r4, killed $r5, implicit-def dead $sfr
+    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r12, implicit-def dead $sfr, implicit-def $r11, implicit killed $r6, implicit killed $r7, implicit killed $r4, implicit killed $r5 {
     ; COMMIT-NEXT:   $r12 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r6, killed $r7, implicit-def dead $sfr
+    ; COMMIT-NEXT:   $r11 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r4, killed $r5, implicit-def dead $sfr
     ; COMMIT-NEXT: }
     ; COMMIT-NEXT: $r13 = XOR32 killed $r11, killed $r12, implicit-def dead $sfr
     ; COMMIT-NEXT: RET implicit $r15

@@ -3540,11 +3540,14 @@ TEST_F(HaydnBundleBoundaryTest, HardRootExactCommitRebuildsRootOperands) {
 }
 
 
-// Coissue law: same available cycle may still host Anti (WAR). Emission/
-// field order must preserve use-before-redef. LD + index-ADD is schedule WAR;
-// residual S2→S0 field order flips to true RAW → canCoissueProductCycle false.
-// SMS handoff must not freeze; exact-commit refuses before dissolve.
-TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiNotPreservable_LDregAdd) {
+// Coissue law: same available cycle may still host Anti (WAR); emission/
+// field order must preserve use-before-redef. LD + index-ADD is schedule
+// WAR. The load also has an e1/LOAD1 member, and with the reader at the
+// HIGHER entry the field order stays reader-before-writer — the coherent
+// exact solve (CB-153b) settles on that placement, so the pair legally
+// coissues. (The former pin expected rejection: the solver used to hand
+// back row-mixed members that no downstream pack accepted.)
+TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiPreservedBySolve) {
   using namespace llvm::haydn::bundle;
   const HaydnInstrInfo &II = TII();
   DebugLoc DL;
@@ -3564,17 +3567,58 @@ TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiNotPreservable_LDregAdd)
 
   MachineInstr *Kids[] = {Ld, Add};
   HaydnMCFormats Fmts;
-  // Layer: schedule-order still looks legal (WAR snapshot, no Data RAW).
   EXPECT_TRUE(opcodesFormOneLegalCycle(
       ArrayRef<unsigned>{Haydn::LD32_REG_M0S0LS, Haydn::ADD32}, Fmts));
   EXPECT_FALSE(cycleMembersHaveTrueRAW(Kids, TRI()));
   EXPECT_TRUE(instrsFormOneLegalCycle(Kids, Fmts));
-  // Layer 3 emission: preferred field order cannot preserve Anti.
+  EXPECT_TRUE(canCoissueProductCycle(Kids))
+      << "the e1 load member preserves the Anti";
+  ASSERT_TRUE(commitExactMultiMIProductCycle(Kids));
+  unsigned LdEntry = ~0u, AddEntry = ~0u;
+  for (unsigned E = 0; E < 3; ++E) {
+    if (formatEMemberOccupiesEntry(Ld->getOpcode(), E))
+      LdEntry = E;
+    if (formatEMemberOccupiesEntry(Add->getOpcode(), E))
+      AddEntry = E;
+  }
+  ASSERT_NE(LdEntry, ~0u);
+  ASSERT_NE(AddEntry, ~0u);
+  EXPECT_GT(LdEntry, AddEntry)
+      << "reader must emit before writer (higher entry prints first)";
+}
+
+// The genuinely unpreservable shape: a STORE reading the register is
+// LOADSTORE0/e0-only in both rows, so the writer always lands at a higher
+// entry and emits first under every placement — coissue must refuse, and
+// the hard-root recommit path must refuse with it.
+TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiNotPreservable_StAdd) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *St =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R10)
+          .addImm(0)
+          .getInstr();
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R2)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R11)
+          .getInstr();
+
+  MachineInstr *Kids[] = {St, Add};
+  HaydnMCFormats Fmts;
+  EXPECT_FALSE(cycleMembersHaveTrueRAW(Kids, TRI()));
+  EXPECT_TRUE(instrsFormOneLegalCycle(Kids, Fmts));
   EXPECT_FALSE(canCoissueProductCycle(Kids))
-      << "Anti/WAR not preservable under Format field order";
+      << "no placement can put the e0-only store above the writer";
   EXPECT_FALSE(instrsCanExactCommitProductCycle(Kids));
 
-  finalizeBundle(*MBB, Ld->getIterator(), std::next(Add->getIterator()));
+  finalizeBundle(*MBB, St->getIterator(), std::next(Add->getIterator()));
   MachineInstr &Root = MBB->front();
   ASSERT_TRUE(Root.isBundle());
   EXPECT_FALSE(commitExactHardRootProductCycle(Root, II));
