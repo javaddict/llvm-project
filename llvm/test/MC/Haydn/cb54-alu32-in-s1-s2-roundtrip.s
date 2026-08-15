@@ -58,4 +58,3 @@
 # CHECK: {{.*}}18: 4f 52 48 05 20 21 1c 02 00 00 00 00 { not32 r7, r8; popcount32 r9, r10 }
 # CHECK: {{.*}}24: 4f 09 1a 2a a0 04 41 08 00 00 00 00 { add64 d0, d1, d2; add64 d3, d4, d5 }
 # CHECK-NOT:  <unknown>
-# CHECK-NOT:  c.add

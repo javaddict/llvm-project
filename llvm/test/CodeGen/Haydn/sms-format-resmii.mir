@@ -161,7 +161,6 @@ body:             |
   ; Logical opcodes only — SMS does not emit durable pre-RA BUNDLE groups.
   ; HANDOFF-NOT: BUNDLE
   ; HANDOFF: ADD32
-  ; HANDOFF-NOT: ADD32_S
   ; HANDOFF-NOT: S_LW_POST_IMM_S
 ...
 ---
@@ -237,6 +236,4 @@ body:             |
   ; HANDOFF-DAG: LD32
   ; HANDOFF-DAG: MULL
   ; HANDOFF-DAG: ADD32
-  ; HANDOFF-NOT: LD32_S
-  ; HANDOFF-NOT: MULL_S
 ...

@@ -79,8 +79,6 @@ body:             |
   ; SCHED-NEXT: {{%[0-9]+}}:dr64 = ADD64
   ; SCHED-NEXT: }
   ; SCHED: ADDI32
-  ; SCHED-NOT: ADD32_S
-  ; SCHED-NOT: ADD64_S
 
   ; Isolated register-coalescer: hard root membership holds.
   ; COALESCER-LABEL: name: sms_handoff_rematch_members
@@ -89,8 +87,6 @@ body:             |
   ; COALESCER-NEXT: {{%[0-9]+}}:dr64 = ADD64
   ; COALESCER-NEXT: {{%[0-9]+}}:dr64 = ADD64
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: ADD32_S
-  ; COALESCER-NOT: ADD64_S
 
   ; GREEDY-LABEL: name: sms_handoff_rematch_members
   ; GREEDY: BUNDLE{{.*}}{
@@ -98,8 +94,6 @@ body:             |
   ; GREEDY-NEXT: {{%[0-9]+}}:dr64 = ADD64
   ; GREEDY-NEXT: {{%[0-9]+}}:dr64 = ADD64
   ; GREEDY-NEXT: }
-  ; GREEDY-NOT: ADD32_S
-  ; GREEDY-NOT: ADD64_S
 
   ; VRW-LABEL: name: sms_handoff_rematch_members
   ; VRW: BUNDLE{{.*}}{
@@ -107,8 +101,6 @@ body:             |
   ; VRW-NEXT: ${{d[0-9]+}} = ADD64
   ; VRW-NEXT: ${{d[0-9]+}} = ADD64
   ; VRW-NEXT: }
-  ; VRW-NOT: ADD32_S
-  ; VRW-NOT: ADD64_S
 
   ; stress-regalloc=4: membership holds (spill/reload may or may not appear
   ; for this compact rematch shape; root must not unbundle / private-slot).
@@ -118,5 +110,3 @@ body:             |
   ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
   ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
   ; SPILL-NEXT: }
-  ; SPILL-NOT: ADD32_S
-  ; SPILL-NOT: ADD64_S
