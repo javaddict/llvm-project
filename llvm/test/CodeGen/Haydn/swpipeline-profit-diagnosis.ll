@@ -79,10 +79,9 @@ define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr noc
 ; CHECK-NEXT:    { nop; addi32 r5, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r7, r3, 0; ld32 r6, r2, 0 }
+; CHECK-NEXT:    { ld32 r6, r2, 0; ld32 r7, r3, 0 }
 ; CHECK-NEXT:    { addi32 r3, r3, 4; addi32 r5, r5, 1 }
-; CHECK-NEXT:    { nop; add32 r6, r6, r7 }
-; CHECK-NEXT:    { nop; addi32 r2, r2, 4 }
+; CHECK-NEXT:    { add32 r6, r6, r7; addi32 r2, r2, 4 }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r6, r1, 1 }
 ; CHECK-NEXT:    { nop; slt32 r6, r5, r4 }
 ; CHECK-NEXT:    { nop; nop }

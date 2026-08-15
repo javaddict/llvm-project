@@ -73,7 +73,7 @@ define i64 @load_global_i64() nounwind {
 ; CHECK-NEXT:    { nop; lui r1, %hi12(g_long) }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_long) }
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -138,7 +138,7 @@ define i32 @two_globals() nounwind {
 ; CHECK-NEXT:    { nop; lui r2, %hi12(g_int2) }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_int) }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, %lo20(g_int2) }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

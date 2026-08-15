@@ -51,6 +51,7 @@
 #include "llvm/ADT/bit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
@@ -63,6 +64,7 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -714,6 +716,107 @@ inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
 /// HaydnPortModel.h, which must not be pulled into this header's includers.
 bool cycleMembersRespectPortBudgets(ArrayRef<MachineInstr *> Instrs);
 
+/// Single-shot re-solve for a same-cycle set whose CURRENT opcodes cannot
+/// form one product cycle because per-MI baking left row-MIXED members
+/// (CB-153b): the HR accepts each pick into its own hazard-cycle with an
+/// open-cycle placement preference, the zone ready-cycle grouping later
+/// pairs picks from different HR cycles, and materializeMultiOpcodeInstrs
+/// bakes those per-accept identities — an e3_* MOVE32 lands next to an
+/// e2_* load and no as-is pack can accept the set even though the
+/// logicals co-issue. Peel every committed member back to its logical
+/// (typed and residual `_S<k>` spellings; `_W` reloc identities excluded)
+/// and ask the now-coherent exact solve ONCE; on success TEMPORARILY bake
+/// its members and validate the same emission laws the as-is path runs
+/// (MachineBundle form + field-order RAW/WAW). No retry ladder, no
+/// mirrored or cross-row attempts: one deterministic assignment, or
+/// nullopt. Descs are restored before returning; the caller re-bakes the
+/// returned members if it commits.
+inline std::optional<SmallVector<unsigned, 3>>
+resolveMixedMemberCycleOnce(ArrayRef<MachineInstr *> Instrs,
+                            const TargetInstrInfo &TII,
+                            const TargetRegisterInfo *TRI,
+                            const HaydnMCFormats &Fmts) {
+  if (Instrs.size() < 2 || Instrs.size() > Haydn::ISSUE_SLOT_COUNT)
+    return std::nullopt;
+
+  SmallVector<unsigned, 3> SavedOps;
+  SmallVector<unsigned, 3> Peeled;
+  SavedOps.reserve(Instrs.size());
+  Peeled.reserve(Instrs.size());
+  bool AnyPeeled = false;
+  for (MachineInstr *MI : Instrs) {
+    const unsigned Opc = MI->getOpcode();
+    SavedOps.push_back(Opc);
+    const StringRef Name = TII.getName(Opc);
+    unsigned Log = Opc;
+    const std::string Logical =
+        haydn::format_e::peelLogicalOpcodeName(Name, /*StripWide=*/false);
+    if (!Logical.empty() && Logical != Name.str()) {
+      static llvm::StringMap<unsigned> LogicalByName;
+      static std::once_flag Once;
+      std::call_once(Once, [&TII, &Fmts] {
+        for (unsigned O = 0, E = TII.getNumOpcodes(); O != E; ++O)
+          if (Fmts.getAlternateInstsOpcode(O))
+            LogicalByName[TII.getName(O)] = O;
+      });
+      auto It = LogicalByName.find(Logical);
+      if (It != LogicalByName.end()) {
+        Log = It->second;
+        AnyPeeled = true;
+      }
+    }
+    Peeled.push_back(Log);
+  }
+  if (!AnyPeeled)
+    return std::nullopt; // nothing was a committed member; not our case
+
+  if (!opcodesHaveFormatEUnitCover(Peeled, TII))
+    return std::nullopt;
+
+  auto Exact = exactSolveProductOpcodes(Peeled, Fmts);
+  if (!Exact || Exact->MemberOpcodes.size() != Instrs.size())
+    return std::nullopt;
+
+  auto restoreDescs = [&]() {
+    for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
+      if (Instrs[I]->getOpcode() != SavedOps[I])
+        Instrs[I]->setDesc(TII.get(SavedOps[I]));
+    }
+  };
+  for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
+    if (Exact->MemberOpcodes[I] != Instrs[I]->getOpcode())
+      Instrs[I]->setDesc(TII.get(Exact->MemberOpcodes[I]));
+  }
+
+  Haydn::MachineBundle Bundle(&Fmts);
+  for (MachineInstr *MI : Instrs) {
+    if (!Bundle.canAdd(MI)) {
+      restoreDescs();
+      return std::nullopt;
+    }
+    Bundle.add(MI);
+  }
+  if (Bundle.size() <= 1 || Bundle.isStandalone()) {
+    restoreDescs();
+    return std::nullopt;
+  }
+  const VLIWFormat *Fmt = Bundle.getFormatOrNull();
+  if (!Fmt) {
+    restoreDescs();
+    return std::nullopt;
+  }
+  SmallVector<MachineInstr *, 3> FieldOrdered =
+      getFieldOrderedMembers(Bundle, *Fmt);
+  const bool FieldRAW = cycleMembersHaveTrueRAW(FieldOrdered, TRI);
+  const bool FieldWAW = cycleMembersHaveWAW(FieldOrdered, TRI) ||
+                        cycleMembersHaveWAW(Instrs, TRI);
+  restoreDescs();
+  if (FieldRAW || FieldWAW)
+    return std::nullopt;
+  return SmallVector<unsigned, 3>(Exact->MemberOpcodes.begin(),
+                                  Exact->MemberOpcodes.end());
+}
+
 
 /// Full **emission** coissue probe for one product cycle (layer 3 + schedule
 /// pack). Caller must already have same available/ready cycle (layer 1) and
@@ -754,8 +857,14 @@ inline bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
   }
 
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
-  if (!instrsFormOneLegalCycle(Instrs, Fmts))
-    return false;
+  if (!instrsFormOneLegalCycle(Instrs, Fmts)) {
+    // instrsFormOneLegalCycle bundles the schedule-order RAW law with the
+    // opcode-set law; only the LATTER may be retried (row-mixed baked
+    // members, CB-153b). A true RAW set stays refused.
+    if (cycleMembersHaveTrueRAW(Instrs, TRI))
+      return false;
+    return resolveMixedMemberCycleOnce(Instrs, TII, TRI, Fmts).has_value();
+  }
 
   SmallVector<unsigned, 3> SavedOps;
   SavedOps.reserve(Instrs.size());
@@ -1208,6 +1317,14 @@ inline bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
         const unsigned Member = Exact->MemberOpcodes[I];
         if (Member != Instrs[I]->getOpcode())
           Instrs[I]->setDesc(TII.get(Member));
+      }
+    } else if (auto Resolved =
+                   resolveMixedMemberCycleOnce(Instrs, TII, TRI, SolveFmts)) {
+      // Row-mixed baked members (CB-153b): the single-shot re-solve found
+      // one coherent assignment and validated the emission laws; bake it.
+      for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
+        if ((*Resolved)[I] != Instrs[I]->getOpcode())
+          Instrs[I]->setDesc(TII.get((*Resolved)[I]));
       }
     } else {
       // Already-member / no-alt path: encode oracle only. Refuse any residual

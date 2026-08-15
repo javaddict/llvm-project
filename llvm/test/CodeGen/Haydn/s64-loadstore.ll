@@ -17,7 +17,7 @@ define i64 @load64(ptr %p) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -63,7 +63,7 @@ define i64 @load64_array(ptr %p, i32 %idx) {
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 3 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -111,7 +111,7 @@ define i64 @load64_volatile(ptr %p) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill

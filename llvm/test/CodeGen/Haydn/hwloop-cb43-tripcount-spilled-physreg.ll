@@ -20,7 +20,7 @@ define dso_local i32 @main() local_unnamed_addr #0 {
 ; CHECK-NEXT:    { nop; addi32 r1, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 16 }
-; CHECK-NEXT:    { move32 r5, r3; move32 r4, r1 }
+; CHECK-NEXT:    { move32 r4, r1; move32 r5, r3 }
 ; CHECK-NEXT:  .LBB0_1: // %for.body
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_sw_post_imm r5, r4, 16 }
@@ -34,7 +34,7 @@ define dso_local i32 @main() local_unnamed_addr #0 {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 16 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, -1 }
-; CHECK-NEXT:    { seq32 r7, r2, r3; srai32 r6, r5, 31 }
+; CHECK-NEXT:    { srai32 r6, r5, 31; seq32 r7, r2, r3 }
 ; CHECK-NEXT:    { nop; add32 r5, r5, r6 }
 ; CHECK-NEXT:    { nop; xor32 r5, r5, r6 }
 ; CHECK-NEXT:    { nop; xori32 r6, r7, 1 }

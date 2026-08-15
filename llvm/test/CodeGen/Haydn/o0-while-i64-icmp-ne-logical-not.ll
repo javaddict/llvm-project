@@ -26,11 +26,11 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_1 }
 ; CHECK-NEXT:  .LBB0_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d1, sp, 1; ld64 d0, sp, 2 } // 16-byte Folded Reload
+; CHECK-NEXT:    { ld64 d0, sp, 2; ld64 d1, sp, 1 } // 16-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { move32_dr_h r1, d1; move32_dr_l r2, d1 }
-; CHECK-NEXT:    { move32_dr_h r4, d0; move32_dr_l r3, d0 }
+; CHECK-NEXT:    { move32_dr_l r2, d1; move32_dr_h r1, d1 }
+; CHECK-NEXT:    { move32_dr_l r3, d0; move32_dr_h r4, d0 }
 ; CHECK-NEXT:    { seq32 r1, r1, r4; slt32 r5, r1, r4 }
 ; CHECK-NEXT:    { nop; seq32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
@@ -81,11 +81,11 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB1_1 }
 ; CHECK-NEXT:  .LBB1_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d1, sp, 1; ld64 d0, sp, 2 } // 16-byte Folded Reload
+; CHECK-NEXT:    { ld64 d0, sp, 2; ld64 d1, sp, 1 } // 16-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { move32_dr_h r3, d1; move32_dr_l r2, d1 }
-; CHECK-NEXT:    { move32_dr_h r5, d0; move32_dr_l r4, d0 }
+; CHECK-NEXT:    { move32_dr_l r2, d1; move32_dr_h r3, d1 }
+; CHECK-NEXT:    { move32_dr_l r4, d0; move32_dr_h r5, d0 }
 ; CHECK-NEXT:    { seq32 r3, r3, r5; slt32 r1, r3, r5 }
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r4 }
 ; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
@@ -137,12 +137,12 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB2_1 }
 ; CHECK-NEXT:  .LBB2_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d1, sp, 1; ld64 d0, sp, 2 } // 16-byte Folded Reload
+; CHECK-NEXT:    { ld64 d0, sp, 2; ld64 d1, sp, 1 } // 16-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { move32_dr_h r1, d0; move32_dr_h r5, d1 }
-; CHECK-NEXT:    { move32_dr_l r2, d0; move32_dr_l r4, d1 }
-; CHECK-NEXT:    { sltu32 r2, r2, r4; slt32 r3, r5, r1 }
+; CHECK-NEXT:    { move32_dr_h r5, d1; move32_dr_h r1, d0 }
+; CHECK-NEXT:    { move32_dr_l r4, d1; move32_dr_l r2, d0 }
+; CHECK-NEXT:    { slt32 r3, r5, r1; sltu32 r2, r2, r4 }
 ; CHECK-NEXT:    { slt32 r1, r1, r5; seq32 r3, r5, r1 }
 ; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
