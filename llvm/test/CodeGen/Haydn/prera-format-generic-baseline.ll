@@ -149,8 +149,8 @@ define i32 @base_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) 
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r2, implicit killed $r1, implicit killed $r2, implicit killed $r3, implicit killed $r4 {
-; POST-NEXT:     $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
-; POST-NEXT:     $r2 = XOR32_E3_E1_ALU1_RR killed $r3, killed $r4
+; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r2
+; POST-NEXT:     $r2 = XOR32_E3_E0_ALU2_RR killed $r3, killed $r4
 ; POST-NEXT:   }
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r3, implicit killed $r1, implicit killed $r2, implicit killed $r5, implicit killed $r6 {
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r2
@@ -277,8 +277,8 @@ define i32 @base_critical_and_side(i32 %a, i32 %b, i32 %c) {
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r4, implicit-def $r2, implicit killed $r2, implicit killed $r3 {
-; POST-NEXT:     $r4 = XOR32_E3_E2_ALU2_RR $r2, $r3
-; POST-NEXT:     $r2 = OR32_E3_E1_ALU1_RR killed $r2, killed $r3
+; POST-NEXT:     $r4 = XOR32_E3_E1_ALU1_RR $r2, $r3
+; POST-NEXT:     $r2 = OR32_E3_E0_ALU2_RR killed $r2, killed $r3
 ; POST-NEXT:   }
 ; POST-NEXT:   $r2 = ADD32_E3_E2_ALU2_RR killed $r4, killed $r2
 ; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2

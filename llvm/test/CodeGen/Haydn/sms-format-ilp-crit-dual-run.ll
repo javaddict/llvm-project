@@ -448,8 +448,8 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; POST-NEXT:   $r4 = XOR32_E3_E2_ALU2_RR killed $r4, $r3
 ; POST-NEXT:   $r3 = ADDI32_E2_E1_ALU1_RI20 killed $r3, 1
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r5, implicit-def $r6, implicit killed $r6, implicit killed $r5, implicit $r3, implicit $r2 {
-; POST-NEXT:     $r5 = ADD32_E3_E2_ALU2_RR killed $r6, killed $r5
-; POST-NEXT:     $r6 = SLT32_E3_E1_ALU1_RR $r3, $r2
+; POST-NEXT:     $r5 = ADD32_E3_E1_ALU1_RR killed $r6, killed $r5
+; POST-NEXT:     $r6 = SLT32_E3_E0_ALU2_RR $r3, $r2
 ; POST-NEXT:   }
 ; POST-NEXT:   $r5 = ADDI32_E2_E1_ALU1_RI20 killed $r5, 6
 ; POST-NEXT:   BNEZ_W killed $r6, %bb.1

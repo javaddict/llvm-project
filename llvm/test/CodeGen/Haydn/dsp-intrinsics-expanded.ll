@@ -1527,8 +1527,7 @@ define i64 @test_mul64_chain(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; mul64.ll d2, d0, d1 }
-; CHECK-NEXT:    { nop; mul64.lh d0, d0, d1 }
+; CHECK-NEXT:    { mul64.lh d0, d0, d1; mul64.ll d2, d0, d1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add64 d0, d2, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
