@@ -358,6 +358,20 @@ inline CycleCandidateSet makeProductCandidateSet() {
   return makeProductCandidateSet(haydnDefaultMCFormats().getPacketFormats());
 }
 
+/// Member opcodes (parallel to \p LogicalOpcodes) bound onto ONE settled row
+/// (\p Mode: 0 = E2, 1 = E3) with entry/unit injectivity — the shared
+/// assignFormatEMemberEntries DFS on the golden member records. Empty on
+/// failure. Out-of-line: needs the per-TU member-opcode table and the shared
+/// MCInstrInfo for logical names.
+SmallVector<unsigned, 3>
+assignMemberOpcodesForSettledRow(ArrayRef<unsigned> LogicalOpcodes,
+                                 uint8_t Mode);
+
+/// Golden register-file port budgets over one candidate cycle (4R2W GPR,
+/// 7R3W DR, 2R2W AR, 2R1W SFR; HaydnPortModel counters). Out-of-line so the
+/// header consumers do not inherit the port model's enum includes.
+bool cycleMembersRespectPortBudgets(ArrayRef<class MachineInstr *> Instrs);
+
 /// Preferred representative among \p Cands (non-empty). Deterministic
 /// S2→S1→S0 materialize / SlotMap / AltDesc selection.
 inline const CycleState &

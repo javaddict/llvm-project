@@ -41,9 +41,9 @@ body:             |
     ; CHECK-LABEL: name: stale_hard_root_ops
     ; CHECK: liveins: $r0, $r1, $r2, $r3, $r15
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-    ; CHECK-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r5, implicit-def dead $sfr, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
     ; CHECK-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
+    ; CHECK-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
     ; CHECK-NEXT: }
     ; CHECK-NEXT: $r6 = XOR32 killed $r4, killed $r5, implicit-def dead $sfr
     ; CHECK-NEXT: RET implicit $r15
@@ -132,9 +132,9 @@ body:             |
   ; POST-NEXT:   liveins: $r0, $r1, $r2, $r3, $r15
   ; POST-NEXT: {{  $}}
   ; POST-NEXT:   SET_HWLOOP_W 0, %bb.1, %bb.1, 3, implicit-def dead $sfr
-  ; POST-NEXT:   BUNDLE {{[01]}}, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-  ; POST-NEXT:     $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
-  ; POST-NEXT:     $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
+  ; POST-NEXT:   BUNDLE {{[01]}}, 0, implicit-def $r5, implicit-def dead $sfr, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
+  ; POST-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
+  ; POST-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
   ; POST-NEXT:   }
   ; POST-NEXT:   RET implicit $r15
   ; POST-NEXT: {{  $}}
@@ -153,9 +153,9 @@ body:             |
   ; FIX-NEXT:   BUNDLE {{[01]}}, 0 {
   ; FIX-NEXT:     NOP_S0
   ; FIX-NEXT:   }
-  ; FIX-NEXT:   BUNDLE {{[01]}}, 0, implicit-def $r4, implicit-def dead $sfr, implicit-def $r5, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 {
-  ; FIX-NEXT:     $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
+  ; FIX-NEXT:   BUNDLE {{[01]}}, 0, implicit-def $r5, implicit-def dead $sfr, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
   ; FIX-NEXT:     $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
+  ; FIX-NEXT:     $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
   ; FIX-NEXT:   }
   ; FIX-NEXT:   RET implicit $r15
   ; FIX-NEXT: {{  $}}

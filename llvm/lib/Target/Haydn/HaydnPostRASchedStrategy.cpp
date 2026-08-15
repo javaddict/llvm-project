@@ -720,8 +720,12 @@ static void materializeExactNoSplitCycle(
 
   // Same ReadyCycle but emission/field cannot pack — leave sequential in
   // schedule order (no Anti reorder; true RAW stays def-before-use).
-  LLVM_DEBUG(dbgs() << "HaydnPostRASched: same-ready-cycle multi-MI cannot "
-                       "coissue — sequential in schedule order\n");
+  LLVM_DEBUG({
+    dbgs() << "HaydnPostRASched: same-ready-cycle multi-MI cannot "
+              "coissue — sequential in schedule order:\n";
+    for (const MachineInstr *MI : Instrs)
+      dbgs() << "    " << *MI;
+  });
   ++NumScheduledCyclesSplit;
 }
 
