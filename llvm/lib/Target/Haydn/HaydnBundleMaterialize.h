@@ -783,38 +783,75 @@ resolveMixedMemberCycleOnce(ArrayRef<MachineInstr *> Instrs,
         Instrs[I]->setDesc(TII.get(SavedOps[I]));
     }
   };
-  for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
-    if (Exact->MemberOpcodes[I] != Instrs[I]->getOpcode())
-      Instrs[I]->setDesc(TII.get(Exact->MemberOpcodes[I]));
-  }
 
-  Haydn::MachineBundle Bundle(&Fmts);
-  for (MachineInstr *MI : Instrs) {
-    if (!Bundle.canAdd(MI)) {
-      restoreDescs();
-      return std::nullopt;
+  // Bake one candidate member list temporarily and run the same emission
+  // laws the as-is path runs. FieldLawOnly reports whether the ONLY reason
+  // for failure was the field-order check (a different entry assignment may
+  // still save those); hard failures (canAdd/format) report false there.
+  auto validate = [&](ArrayRef<unsigned> Members,
+                      bool &FieldLawOnly) -> bool {
+    FieldLawOnly = false;
+    for (unsigned I = 0, E = Instrs.size(); I != E; ++I) {
+      if (Members[I] != Instrs[I]->getOpcode())
+        Instrs[I]->setDesc(TII.get(Members[I]));
     }
-    Bundle.add(MI);
-  }
-  if (Bundle.size() <= 1 || Bundle.isStandalone()) {
+    Haydn::MachineBundle Bundle(&Fmts);
+    for (MachineInstr *MI : Instrs) {
+      if (!Bundle.canAdd(MI)) {
+        restoreDescs();
+        return false;
+      }
+      Bundle.add(MI);
+    }
+    if (Bundle.size() <= 1 || Bundle.isStandalone()) {
+      restoreDescs();
+      return false;
+    }
+    const VLIWFormat *Fmt = Bundle.getFormatOrNull();
+    if (!Fmt) {
+      restoreDescs();
+      return false;
+    }
+    SmallVector<MachineInstr *, 3> FieldOrdered =
+        getFieldOrderedMembers(Bundle, *Fmt);
+    const bool FieldRAW = cycleMembersHaveTrueRAW(FieldOrdered, TRI);
+    const bool FieldWAW = cycleMembersHaveWAW(FieldOrdered, TRI);
     restoreDescs();
+    if (FieldRAW || FieldWAW) {
+      FieldLawOnly = true;
+      return false;
+    }
+    return true;
+  };
+
+  // Same-cycle live WAW in schedule order is illegal under EVERY placement.
+  if (cycleMembersHaveWAW(Instrs, TRI))
     return std::nullopt;
+
+  bool FieldLawOnly = false;
+  if (validate(Exact->MemberOpcodes, FieldLawOnly))
+    return SmallVector<unsigned, 3>(Exact->MemberOpcodes.begin(),
+                                    Exact->MemberOpcodes.end());
+
+  // The preferred assignment flipped a legal schedule-order WAR into a
+  // field-order RAW (reader placed at a lower entry than the writer). ONE
+  // deterministic alternative: re-bind the peeled logicals in REVERSED
+  // order on the settled row — the records DFS then hands the mirrored
+  // entry assignment — and run the identical validation. No further
+  // retries, and never the Bundle<MCInst> exactPack path.
+  if (FieldLawOnly) {
+    const uint8_t Mode =
+        Exact->Plan.Row == BundleFormatRowID::E96ThreeEntry ? 1 : 0;
+    SmallVector<unsigned, 3> Rev(Peeled.rbegin(), Peeled.rend());
+    SmallVector<unsigned, 3> Bound = assignMemberOpcodesForSettledRow(Rev, Mode);
+    if (Bound.size() == Instrs.size()) {
+      std::reverse(Bound.begin(), Bound.end());
+      bool Dummy = false;
+      if (validate(Bound, Dummy))
+        return Bound;
+    }
   }
-  const VLIWFormat *Fmt = Bundle.getFormatOrNull();
-  if (!Fmt) {
-    restoreDescs();
-    return std::nullopt;
-  }
-  SmallVector<MachineInstr *, 3> FieldOrdered =
-      getFieldOrderedMembers(Bundle, *Fmt);
-  const bool FieldRAW = cycleMembersHaveTrueRAW(FieldOrdered, TRI);
-  const bool FieldWAW = cycleMembersHaveWAW(FieldOrdered, TRI) ||
-                        cycleMembersHaveWAW(Instrs, TRI);
-  restoreDescs();
-  if (FieldRAW || FieldWAW)
-    return std::nullopt;
-  return SmallVector<unsigned, 3>(Exact->MemberOpcodes.begin(),
-                                  Exact->MemberOpcodes.end());
+  return std::nullopt;
 }
 
 
