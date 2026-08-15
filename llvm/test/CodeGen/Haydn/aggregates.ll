@@ -248,7 +248,7 @@ define void @aggregate_copy(ptr %dst, ptr %src) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r4, r2, 1; ld32 r3, r2, 0 }
+; CHECK-NEXT:    { ld32 r3, r2, 0; ld32 r4, r2, 1 }
 ; CHECK-NEXT:    { ld32 r2, r2, 3; ld32 r5, r2, 2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r3, r1, 0 }

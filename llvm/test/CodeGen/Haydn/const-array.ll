@@ -18,8 +18,7 @@ define i32 @local_const_array(i32 %index) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 10 }
-; CHECK-NEXT:    { nop; st32 r3, r2, 0 }
-; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { st32 r3, r2, 0; slli32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 20 }
 ; CHECK-NEXT:    { nop; st32 r3, r2, 1 }
@@ -117,7 +116,7 @@ define i32 @sum_array(ptr %arr, i32 %count) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { add32 r3, r3, r5; slt32 r6, r4, r2 }
+; CHECK-NEXT:    { slt32 r6, r4, r2; add32 r3, r3, r5 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB3_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
@@ -196,7 +195,7 @@ define i64 @read_i64_array(i32 %index) {
 ; CHECK-NEXT:    { nop; slli32 r1, r1, 3 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -321,7 +320,7 @@ define i1 @array_contains(ptr %arr, i32 %size, i32 %target) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r5, r5, 1 }
-; CHECK-NEXT:    { slt32 r7, r5, r2; seq32 r6, r6, r3 }
+; CHECK-NEXT:    { seq32 r6, r6, r3; slt32 r7, r5, r2 }
 ; CHECK-NEXT:    { nop; or32 r4, r4, r6 }
 ; CHECK-NEXT:    { nop; bnez r7, .LBB10_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit

@@ -97,7 +97,7 @@ define <2 x i32> @test_x2frsst32_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i32>
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2frsst32 d1, d0, d1; x2slt32 d0, d2 }
+; CHECK-NEXT:    { x2slt32 d0, d2; x2frsst32 d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -115,7 +115,7 @@ define <4 x i16> @test_x4frsst16_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16>
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x4frsst16 d1, d0, d1; x4seq16 d0, d2 }
+; CHECK-NEXT:    { x4seq16 d0, d2; x4frsst16 d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x4movt16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

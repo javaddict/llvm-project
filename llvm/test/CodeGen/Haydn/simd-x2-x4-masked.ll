@@ -442,7 +442,7 @@ define <2 x i32> @test_x2addsub32s_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i3
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2addsub32s d1, d0, d1; x2slt32 d0, d2 }
+; CHECK-NEXT:    { x2slt32 d0, d2; x2addsub32s d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -518,7 +518,7 @@ define <2 x i32> @test_x2clamp32_masked_sle(<2 x i32> %a, <2 x i32> %b, <2 x i32
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2clamp32 d1, d0, d1; x2sle32 d0, d2 }
+; CHECK-NEXT:    { x2sle32 d0, d2; x2clamp32 d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

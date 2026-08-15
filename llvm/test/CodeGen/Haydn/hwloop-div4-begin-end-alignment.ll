@@ -64,7 +64,7 @@ define i32 @sum_arr(ptr %a, i32 %n) {
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; ASM-NEXT:    { nop; addi32 r4, r4, 1 }
-; ASM-NEXT:    { add32 r3, r3, r5; slt32 r6, r4, r2 }
+; ASM-NEXT:    { slt32 r6, r4, r2; add32 r3, r3, r5 }
 ; ASM-NEXT:    { nop; bnez r6, .LBB0_1 }
 ; ASM-NEXT:  // %bb.2: // %for.end
 ; ASM-NEXT:    { nop; move32 r1, r3 }
@@ -104,8 +104,7 @@ define i32 @bigimm(ptr %a, i32 %n) {
 ; ASM-NEXT:  .LBB1_1: // %for.body
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
-; ASM-NEXT:    { nop; move32 r7, r4 }
-; ASM-NEXT:    { nop; addi32 r5, r5, 1 }
+; ASM-NEXT:    { move32 r7, r4; addi32 r5, r5, 1 }
 ; ASM-NEXT:    { slt32 r6, r5, r2; mull r7, r6, r7 }
 ; ASM-NEXT:    { nop; nop }
 ; ASM-NEXT:    { nop; add32 r3, r3, r7 }
@@ -148,17 +147,17 @@ define i32 @nested_hwloop(ptr noalias %a, i32 %n, i32 %m) {
 ; ASM-NEXT:    .cfi_offset r8, -4
 ; ASM-NEXT:    .cfi_offset r9, -8
 ; ASM-NEXT:    { nop; addi32 r5, r0, 0 }
-; ASM-NEXT:    { move32 r4, r5; move32 r6, r5 }
+; ASM-NEXT:    { move32 r6, r5; move32 r4, r5 }
 ; ASM-NEXT:  .LBB2_1: // %outer.header
 ; ASM-NEXT:    // =>This Loop Header: Depth=1
 ; ASM-NEXT:    // Child Loop BB2_2 Depth 2
-; ASM-NEXT:    { move32 r12, r5; move32 r7, r1 }
+; ASM-NEXT:    { move32 r7, r1; move32 r12, r5 }
 ; ASM-NEXT:  .LBB2_2: // %inner.body
 ; ASM-NEXT:    // Parent Loop BB2_1 Depth=1
 ; ASM-NEXT:    // => This Inner Loop Header: Depth=2
 ; ASM-NEXT:    { nop; s_lw_post_imm r8, r7, 1 }
 ; ASM-NEXT:    { nop; addi32 r12, r12, 1 }
-; ASM-NEXT:    { add32 r4, r4, r8; slt32 r9, r12, r3 }
+; ASM-NEXT:    { slt32 r9, r12, r3; add32 r4, r4, r8 }
 ; ASM-NEXT:    { nop; bnez r9, .LBB2_2 }
 ; ASM-NEXT:  // %bb.3: // %outer.latch
 ; ASM-NEXT:    // in Loop: Header=BB2_1 Depth=1

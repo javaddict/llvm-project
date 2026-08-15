@@ -124,8 +124,7 @@ define i64 @mixed_locals(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; addi32 r3, sp, 20 }
 ; CHECK-NEXT:    { nop; addi32 r1, r3, 4 }
-; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
-; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r3, 0 }
+; CHECK-NEXT:    { d_sw_l_with_imm d0, r3, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; ld32 r3, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -198,8 +197,7 @@ define i32 @full_frame(i32 %a) {
 ; CHECK-NEXT:    { nop; addi32 r6, sp, 28 }
 ; CHECK-NEXT:    { st32 r1, r6, 0; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 8 }
-; CHECK-NEXT:    { nop; move32 r12, sp }
-; CHECK-NEXT:    { nop; ld32 r1, r6, 0 }
+; CHECK-NEXT:    { move32 r12, sp; ld32 r1, r6, 0 }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r2, r12, 2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
