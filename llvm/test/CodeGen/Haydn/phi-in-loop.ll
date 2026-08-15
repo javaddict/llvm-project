@@ -39,8 +39,7 @@ define i32 @shift_loop(ptr %p, i32 %n) {
 ; CHECK-NEXT:    { nop; move32 r4, r3 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { nop; slli32 r3, r3, 1 }
+; CHECK-NEXT:    { slli32 r3, r3, 1; addi32 r4, r4, 1 }
 ; CHECK-NEXT:    { nop; slt32 r5, r4, r2 }
 ; CHECK-NEXT:    { nop; bnez r5, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit

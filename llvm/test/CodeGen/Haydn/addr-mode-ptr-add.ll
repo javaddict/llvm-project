@@ -80,7 +80,7 @@ define i32 @test_sequential_loads(ptr %p) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r3, r1, 1; ld32 r2, r1, 0 }
+; CHECK-NEXT:    { ld32 r2, r1, 0; ld32 r3, r1, 1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }

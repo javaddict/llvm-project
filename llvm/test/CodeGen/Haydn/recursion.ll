@@ -31,8 +31,7 @@ define i32 @factorial(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_3 }
 ; CHECK-NEXT:  .LBB0_2: // %recurse
-; CHECK-NEXT:    { nop; addi32 r2, r1, -1 }
-; CHECK-NEXT:    { nop; move32 r8, r1 }
+; CHECK-NEXT:    { move32 r8, r1; addi32 r2, r1, -1 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; jal lr, factorial }
 ; CHECK-NEXT:    { nop; mull r1, r8, r1 }
@@ -67,8 +66,7 @@ define i32 @sum_to_n(i32 %n, i32 %acc) nounwind {
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; beqz r3, .LBB1_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
-; CHECK-NEXT:    { nop; addi32 r3, r1, -1 }
-; CHECK-NEXT:    { nop; add32 r2, r2, r1 }
+; CHECK-NEXT:    { add32 r2, r2, r1; addi32 r3, r1, -1 }
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
 ; CHECK-NEXT:    { nop; jal lr, sum_to_n }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

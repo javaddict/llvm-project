@@ -34,16 +34,17 @@ define i64 @caller_5th_i64_spills(i64 %x) {
 ; CHECK-NEXT:    { sext32t64 d2, r1; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 4 }
 ; CHECK-NEXT:    { sext32t64 d3, r1; slli64 d2, d2, 32 }
-; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d3, d3, 32 }
-; CHECK-NEXT:    { srli64 d2, d2, 32; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { slli64 d3, d3, 32; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { srli64 d1, d1, 32; srli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; jal lr, sink_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; xor32 r0, r0, r0 }
-; CHECK:    { nop; ld32 lr, sp, 5 }
-; CHECK:    { nop; addi32 sp, sp, 24 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 5 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
  %r = call i64 @sink_i64(i64 1, i64 2, i64 3, i64 4, i64 %x)
  ret i64 %r
 }

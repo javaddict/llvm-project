@@ -360,7 +360,7 @@ define <2 x i32> @test_x2add32s_masked_eq(<2 x i32> %a, <2 x i32> %b, <2 x i32> 
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2add32s d1, d0, d1; x2seq32 d0, d2 }
+; CHECK-NEXT:    { x2seq32 d0, d2; x2add32s d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -378,7 +378,7 @@ define <2 x i32> @test_x2sub32s_masked_lt(<2 x i32> %a, <2 x i32> %b, <2 x i32> 
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x2sub32s d1, d0, d1; x2slt32 d0, d2 }
+; CHECK-NEXT:    { x2slt32 d0, d2; x2sub32s d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -396,7 +396,7 @@ define <4 x i16> @test_x4add16s_masked_eq(<4 x i16> %a, <4 x i16> %b, <4 x i16> 
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x4add16s d1, d0, d1; x4seq16 d0, d2 }
+; CHECK-NEXT:    { x4seq16 d0, d2; x4add16s d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x4movt16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -414,7 +414,7 @@ define <4 x i16> @test_x4sub16s_masked_sle(<4 x i16> %a, <4 x i16> %b, <4 x i16>
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { x4sub16s d1, d0, d1; x4sle16 d0, d2 }
+; CHECK-NEXT:    { x4sle16 d0, d2; x4sub16s d1, d0, d1 }
 ; CHECK-NEXT:    { nop; x4movt16 d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

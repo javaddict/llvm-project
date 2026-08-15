@@ -61,8 +61,8 @@ define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
 ; CHECK-NEXT:    { nop; xori32 r6, r6, 1 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB0_4 }
 ; CHECK-NEXT:  // %bb.1: // %for.body.preheader
-; CHECK-NEXT:    { ld32 r6, r1, 0; ld32 r7, r1, 1 }
-; CHECK-NEXT:    { ld32 r9, r1, 7; ld32 r12, r1, 6 }
+; CHECK-NEXT:    { ld32 r7, r1, 1; ld32 r6, r1, 0 }
+; CHECK-NEXT:    { ld32 r12, r1, 6; ld32 r9, r1, 7 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r6 }
 ; CHECK-NEXT:    { nop; ld32 r6, r1, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, r1, 8 }
@@ -86,15 +86,12 @@ define void @bqriir32x32_df1_single(ptr %st, ptr %r, ptr %x, i32 %N) {
 ; CHECK-NEXT:    { nop; sext32t64 d8, r8 }
 ; CHECK-NEXT:    { nop; move32 r8, r9 }
 ; CHECK-NEXT:    { sext32t64 d7, r8; add64 d6, d6, d7 }
-; CHECK-NEXT:    { nop; mul64.ll d7, d3, d7 }
-; CHECK-NEXT:    { nop; mul64.ll d8, d4, d8 }
+; CHECK-NEXT:    { mul64.ll d7, d3, d7; mul64.ll d8, d4, d8 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { add64 d6, d7, d8; add64 d5, d6, d5 }
-; CHECK-NEXT:    { nop; sub64 d5, d5, d6 }
-; CHECK-NEXT:    { nop; addi32 r5, r5, 1 }
-; CHECK-NEXT:    { slt32 r10, r5, r4; srl64 d5, d5, r7 }
-; CHECK-NEXT:    { nop; move32_dr_l r9, d5 }
-; CHECK-NEXT:    { nop; addi32 r3, r3, 4 }
+; CHECK-NEXT:    { sub64 d5, d5, d6; addi32 r5, r5, 1 }
+; CHECK-NEXT:    { srl64 d5, d5, r7; slt32 r10, r5, r4 }
+; CHECK-NEXT:    { move32_dr_l r9, d5; addi32 r3, r3, 4 }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r9, r2, 1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; bnez r10, .LBB0_2 }
@@ -241,16 +238,16 @@ define void @bqriir32x32_df1_cascade(ptr %sections, i32 %nsec,
 ; CHECK-NEXT:    .cfi_offset r11, -16
 ; CHECK-NEXT:    .cfi_offset fp, -20
 ; CHECK-NEXT:    .cfi_offset lr, -24
-; CHECK-NEXT:    { move32 r8, r1; move32 r9, r2 }
+; CHECK-NEXT:    { move32 r9, r2; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; addi32 fp, r0, 0 }
-; CHECK-NEXT:    { move32 r10, r3; slt32 r1, fp, r9 }
-; CHECK-NEXT:    { move32 r11, r5; move32 r3, r4 }
+; CHECK-NEXT:    { slt32 r1, fp, r9; move32 r10, r3 }
+; CHECK-NEXT:    { move32 r3, r4; move32 r11, r5 }
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; bnez r1, .LBB1_2 }
 ; CHECK-NEXT:  .LBB1_1: // %cascade.loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r1, r8, 1 }
-; CHECK-NEXT:    { move32 r4, r11; move32 r2, r10 }
+; CHECK-NEXT:    { move32 r2, r10; move32 r4, r11 }
 ; CHECK-NEXT:    { nop; jal lr, bqriir32x32_df1_single }
 ; CHECK-NEXT:    { nop; addi32 fp, fp, 1 }
 ; CHECK-NEXT:    { nop; move32 r3, r10 }
@@ -318,7 +315,7 @@ define i32 @main() {
 ; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(section0) }
 ; CHECK-NEXT:    { nop; addi32 r3, r3, %lo20(input_buf) }
 ; CHECK-NEXT:    { nop; lui r10, %hi12(section1) }
-; CHECK-NEXT:    { move32 r4, r9; move32 r2, r8 }
+; CHECK-NEXT:    { move32 r2, r8; move32 r4, r9 }
 ; CHECK-NEXT:    { nop; addi32 r10, r10, %lo20(section1) }
 ; CHECK-NEXT:    { nop; jal lr, bqriir32x32_df1_single }
 ; CHECK-NEXT:    { nop; move32 r1, r10 }

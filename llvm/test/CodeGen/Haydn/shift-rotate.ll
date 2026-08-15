@@ -269,8 +269,7 @@ define i32 @merge_halves(i32 %lo, i32 %hi) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; andi32 r1, r1, 65535 }
-; CHECK-NEXT:    { nop; slli32 r2, r2, 16 }
+; CHECK-NEXT:    { slli32 r2, r2, 16; andi32 r1, r1, 65535 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

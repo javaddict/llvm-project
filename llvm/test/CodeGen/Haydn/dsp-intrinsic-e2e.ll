@@ -145,11 +145,9 @@ define i64 @conditional_mac(i64 %a, i64 %b, i64 %c, i32 %flag) {
 ; CHECK-NEXT:    { nop; mul64.ll d3, d0, d2 }
 ; CHECK-NEXT:    { nop; mul64.ll d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
-; CHECK-NEXT:    { nop; add64 d3, d3, d1 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d2 }
-; CHECK-NEXT:    { nop; seq32 r1, r1, r2 }
-; CHECK-NEXT:    { move32_dr_h r4, d3; move32_dr_l r3, d3 }
-; CHECK-NEXT:    { move32_dr_h r5, d0; move32_dr_l r2, d0 }
+; CHECK-NEXT:    { add64 d3, d3, d1; add64 d0, d0, d2; seq32 r1, r1, r2 }
+; CHECK-NEXT:    { move32_dr_l r3, d3; move32_dr_h r4, d3 }
+; CHECK-NEXT:    { move32_dr_l r2, d0; move32_dr_h r5, d0 }
 ; CHECK-NEXT:    { nop; movt32 r2, r3, r1 }
 ; CHECK-NEXT:    { nop; movt32 r5, r4, r1 }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 2 } // 4-byte Folded Spill
@@ -192,7 +190,7 @@ define i64 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:  .LBB8_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { addi32 r4, r4, 1; ld32 r6, r1, 0 }
+; CHECK-NEXT:    { ld32 r6, r1, 0; addi32 r4, r4, 1 }
 ; CHECK-NEXT:    { nop; addi32 r5, r1, 4 }
 ; CHECK-NEXT:    { st32 r6, sp, 2; ld32 r5, r5, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -200,7 +198,7 @@ define i64 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; CHECK-NEXT:    { st32 r5, sp, 3; addi32 r1, r1, 8 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r7, r2, 4 }
-; CHECK-NEXT:    { ld32 r5, r2, 0; ld64 d1, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    { ld64 d1, sp, 1; ld32 r5, r2, 0 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r6, r7, 0 }
 ; CHECK-NEXT:    { nop; st32 r5, sp, 2 } // 4-byte Folded Spill
@@ -208,9 +206,8 @@ define i64 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; CHECK-NEXT:    { nop; st32 r6, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 8 }
-; CHECK-NEXT:    { nop; ld64 d2, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    { slt32 r5, r4, r3; ld64 d2, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; slt32 r5, r4, r3 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; mul64.ll d1, d1, d2 }
 ; CHECK-NEXT:    { nop; nop }

@@ -77,16 +77,12 @@ define i32 @test_gpr_spill_15_live(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { nop; st32 r10, r12, 3 }
 ; CHECK-NEXT:    { nop; st32 r9, r12, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r12, 5 }
-; CHECK-NEXT:    { nop; move32 r8, r1 }
-; CHECK-NEXT:    { nop; st32 r2, sp, 5 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r2, sp, 5; move32 r8, r1; move32 r11, r5 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; move32 r11, r5 }
 ; CHECK-NEXT:    { st32 r3, sp, 4; addi32 r9, r8, 100 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; move32 r1, r9 }
-; CHECK-NEXT:    { nop; st32 r4, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r4, sp, 3; move32 r1, r9; move32 fp, r6 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; move32 fp, r6 }
 ; CHECK-NEXT:    { st32 r7, sp, 2; addi32 r10, r8, 321 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
@@ -187,8 +183,8 @@ define i32 @test_all_callee_saved_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK-NEXT:    { nop; st32 r10, r6, 3 }
 ; CHECK-NEXT:    { nop; st32 r9, r6, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r6, 5 }
-; CHECK-NEXT:    { move32 r10, r3; move32 r9, r2 }
-; CHECK-NEXT:    { move32 r8, r5; move32 r11, r4 }
+; CHECK-NEXT:    { move32 r9, r2; move32 r10, r3 }
+; CHECK-NEXT:    { move32 r11, r4; move32 r8, r5 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r9 }
@@ -252,8 +248,7 @@ define i32 @test_interleaved_calls_heavy(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; st32 r9, r2, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r2, 5 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r1, sp, 3; xor32 r0, r0, r0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; jal lr, consume_i32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

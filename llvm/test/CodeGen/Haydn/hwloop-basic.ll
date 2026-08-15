@@ -19,13 +19,11 @@ define i32 @hwloop_basic(ptr %p) {
 ; DEFAULT-NEXT:    .cfi_def_cfa_offset 8
 ; DEFAULT-NEXT:    { nop; move32 r2, r1 }
 ; DEFAULT-NEXT:    { nop; addi32 r1, r0, 0 }
-; DEFAULT-NEXT:    { nop; ld32 r2, r2, 0 }
-; DEFAULT-NEXT:    { nop; move32 r4, r1 }
+; DEFAULT-NEXT:    { move32 r4, r1; ld32 r2, r2, 0 }
 ; DEFAULT-NEXT:    { nop; addi32 r3, r0, 10 }
 ; DEFAULT-NEXT:  .LBB0_1: // %loop
 ; DEFAULT-NEXT:    // =>This Inner Loop Header: Depth=1
-; DEFAULT-NEXT:    { nop; addi32 r4, r4, 1 }
-; DEFAULT-NEXT:    { nop; add32 r1, r1, r2 }
+; DEFAULT-NEXT:    { add32 r1, r1, r2; addi32 r4, r4, 1 }
 ; DEFAULT-NEXT:    { nop; sltu32 r5, r4, r3 }
 ; DEFAULT-NEXT:    { nop; bnez r5, .LBB0_1 }
 ; DEFAULT-NEXT:  // %bb.2: // %exit

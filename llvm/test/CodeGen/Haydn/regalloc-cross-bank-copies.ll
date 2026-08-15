@@ -25,7 +25,7 @@ define i64 @test_zext_gpr_to_dr64(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
 ; CHECK-NEXT:    { sext32t64 d1, r1; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { slli64 d1, d1, 32; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -68,7 +68,7 @@ define i64 @test_multiple_cross_bank(i32 %a, i32 %b) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { sext32t64 d1, r2; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { slli64 d1, d1, 32; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
@@ -76,7 +76,7 @@ define i64 @test_multiple_cross_bank(i32 %a, i32 %b) nounwind {
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 100 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
 ; CHECK-NEXT:    { sext32t64 d1, r1; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { slli64 d1, d1, 32; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -102,10 +102,10 @@ define i64 @test_cross_bank_under_pressure(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { add32 r2, r3, r4; add32 r1, r1, r2 }
-; CHECK-NEXT:    { add32 r1, r1, r7; add32 r3, r5, r6 }
+; CHECK-NEXT:    { add32 r3, r5, r6; add32 r1, r1, r7 }
 ; CHECK-NEXT:    { sext32t64 d0, r1; add32 r2, r2, r3 }
 ; CHECK-NEXT:    { sext32t64 d1, r2; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { slli64 d1, d1, 32; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -1 }
 ; CHECK-NEXT:    { sext32t64 d1, r1; add64 d0, d0, d1 }

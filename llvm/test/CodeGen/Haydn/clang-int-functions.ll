@@ -57,7 +57,7 @@ define i32 @test_shifts(i32 %a, i32 %n) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { srl32 r4, r1, r2; sll32 r3, r1, r2 }
+; CHECK-NEXT:    { sll32 r3, r1, r2; srl32 r4, r1, r2 }
 ; CHECK-NEXT:    { add32 r2, r3, r4; sra32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -79,8 +79,8 @@ define i32 @test_imm_shifts(i32 %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { srli32 r3, r1, 8; slli32 r2, r1, 4 }
-; CHECK-NEXT:    { add32 r2, r2, r3; srai32 r1, r1, 16 }
+; CHECK-NEXT:    { slli32 r2, r1, 4; srli32 r3, r1, 8 }
+; CHECK-NEXT:    { srai32 r1, r1, 16; add32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -178,10 +178,9 @@ define i32 @test_complex(i32 %x, i32 %y) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { nop; addi32 r4, r1, 10 }
-; CHECK-NEXT:    { nop; mull r3, r2, r3 }
+; CHECK-NEXT:    { addi32 r4, r1, 10; mull r3, r2, r3 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { and32 r1, r1, r2; sub32 r3, r4, r3 }
+; CHECK-NEXT:    { sub32 r3, r4, r3; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; or32 r1, r3, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -298,9 +297,8 @@ define i32 @test_popcount(i32 %a) {
 ; CHECK-NEXT:    { nop; move32 r2, r3 }
 ; CHECK-NEXT:  .LBB14_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; andi32 r4, r1, 1 }
-; CHECK-NEXT:    { nop; srli32 r1, r1, 1 }
-; CHECK-NEXT:    { add32 r2, r2, r4; seq32 r5, r1, r3 }
+; CHECK-NEXT:    { srli32 r1, r1, 1; andi32 r4, r1, 1 }
+; CHECK-NEXT:    { seq32 r5, r1, r3; add32 r2, r2, r4 }
 ; CHECK-NEXT:    { nop; xori32 r5, r5, 1 }
 ; CHECK-NEXT:    { nop; bnez r5, .LBB14_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit

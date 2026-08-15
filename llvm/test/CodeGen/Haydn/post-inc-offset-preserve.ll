@@ -33,22 +33,16 @@ define void @test_ld64_fold_in_loop(ptr %in, ptr %out, i32 %n, i64 %coef) {
 ; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; ld32 r7, r1, 0 }
-; CHECK-NEXT:    { nop; x2srai32 d2, d0, 16 }
-; CHECK-NEXT:    { nop; x2slli32 d4, d0, 16 }
+; CHECK-NEXT:    { ld32 r7, r1, 0; x2srai32 d2, d0, 16; x2slli32 d4, d0, 16 }
 ; CHECK-NEXT:    { nop; addi32 r5, r1, 4 }
-; CHECK-NEXT:    { nop; ld32 r5, r5, 0 }
-; CHECK-NEXT:    { nop; st32 r7, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r7, sp, 2; ld32 r5, r5, 0; x2slli32 d2, d2, 16 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; x2slli32 d2, d2, 16 }
-; CHECK-NEXT:    { nop; st32 r5, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { st32 r5, sp, 3; x2srai32 d4, d4, 16; x2srai32 d2, d2, 16 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; x2srai32 d4, d4, 16 }
-; CHECK-NEXT:    { nop; x2srai32 d2, d2, 16 }
-; CHECK-NEXT:    { x2slli32 d2, d2, 16; or64 d5, d1, d1 }
-; CHECK-NEXT:    { nop; ld64 d3, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    { or64 d5, d1, d1; x2slli32 d2, d2, 16 }
+; CHECK-NEXT:    { x2srai32 d2, d2, 16; ld64 d3, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; x2srai32 d2, d2, 16 }
 ; CHECK-NEXT:    { addi32 r1, r1, 8; addi32 r4, r4, 1 }
 ; CHECK-NEXT:    { slt32 r5, r4, r3; fmula16.ls00 d5, d3, d4 }
 ; CHECK-NEXT:    { nop; fmula16.ls11 d5, d3, d4 }
@@ -100,15 +94,12 @@ define void @test_st64_fold_in_loop(ptr %out, i32 %n, i64 %a, i64 %coef) {
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:  .LBB1_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { x2slli32 d4, d1, 16; x2srai32 d3, d1, 16 }
-; CHECK-NEXT:    { x2srai32 d4, d4, 16; x2slli32 d3, d3, 16 }
-; CHECK-NEXT:    { or64 d5, d2, d2; x2srai32 d3, d3, 16 }
-; CHECK-NEXT:    { nop; x2slli32 d3, d3, 16 }
-; CHECK-NEXT:    { nop; fmula16.ls00 d5, d0, d4 }
-; CHECK-NEXT:    { nop; x2srai32 d3, d3, 16 }
-; CHECK-NEXT:    { nop; fmula16.ls11 d5, d0, d4 }
-; CHECK-NEXT:    { nop; fmula16.hs00 d5, d0, d3 }
-; CHECK-NEXT:    { nop; addi32 r3, r3, 1 }
+; CHECK-NEXT:    { x2srai32 d3, d1, 16; x2slli32 d4, d1, 16 }
+; CHECK-NEXT:    { x2slli32 d3, d3, 16; x2srai32 d4, d4, 16 }
+; CHECK-NEXT:    { x2srai32 d3, d3, 16; or64 d5, d2, d2 }
+; CHECK-NEXT:    { x2slli32 d3, d3, 16; fmula16.ls00 d5, d0, d4 }
+; CHECK-NEXT:    { x2srai32 d3, d3, 16; fmula16.ls11 d5, d0, d4 }
+; CHECK-NEXT:    { fmula16.hs00 d5, d0, d3; addi32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; addi32 r4, r1, 4 }
 ; CHECK-NEXT:    { nop; fmula16.hs11 d5, d0, d3 }
 ; CHECK-NEXT:    { nop; nop }

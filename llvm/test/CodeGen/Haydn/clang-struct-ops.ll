@@ -108,7 +108,7 @@ define i32 @test_nested_struct(ptr %o) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r3, r1, 1; ld32 r2, r1, 0 }
+; CHECK-NEXT:    { ld32 r2, r1, 0; ld32 r3, r1, 1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
@@ -209,8 +209,7 @@ define i32 @test_packed_fields(i32 %packed) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; andi32 r2, r1, 65535 }
-; CHECK-NEXT:    { nop; srli32 r1, r1, 16 }
+; CHECK-NEXT:    { srli32 r1, r1, 16; andi32 r2, r1, 65535 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -274,7 +273,7 @@ define i32 @test_struct_compare(ptr %a, ptr %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
 ; CHECK-NEXT:    { nop; seq32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }

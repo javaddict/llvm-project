@@ -142,8 +142,7 @@ define i32 @test_stack_outgoing(i32 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; move32 r12, r1 }
+; CHECK-NEXT:    { move32 r12, r1; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 8 }
 ; CHECK-NEXT:    { nop; move32 r8, sp }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r2, r8, 2 }
@@ -182,8 +181,7 @@ define i32 @test_local_and_outgoing(i32 %a) {
 ; CHECK-NEXT:    { nop; addi32 r6, sp, 24 }
 ; CHECK-NEXT:    { st32 r1, r6, 0; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 8 }
-; CHECK-NEXT:    { nop; move32 r12, sp }
-; CHECK-NEXT:    { nop; ld32 r1, r6, 0 }
+; CHECK-NEXT:    { move32 r12, sp; ld32 r1, r6, 0 }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r2, r12, 2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
