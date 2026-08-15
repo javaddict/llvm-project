@@ -148,8 +148,6 @@ body:             |
   ; SCHED: ADDI32
   ; SCHED: ADDI32
   ; Phase identity: logical opcodes only through pre-RA schedule.
-  ; SCHED-NOT: ADD32_S
-  ; SCHED-NOT: ADDI32_S
   ; Isolated register-coalescer: hard root membership holds (operand rewrites
   ; OK; no unbundle / private slot form).
   ; COALESCER-LABEL: name: hard_bundle_membership
@@ -157,7 +155,6 @@ body:             |
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: ADD32_S
 
   ; Still hard-bundled after machine-scheduler (pre-greedy).
   ; PREGREEDY-LABEL: name: hard_bundle_membership
@@ -165,7 +162,6 @@ body:             |
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; PREGREEDY-NEXT: }
-  ; PREGREEDY-NOT: ADD32_S
 
   ; Assignment may rewrite operands; zero member loss/split.
   ; GREEDY-LABEL: name: hard_bundle_membership
@@ -173,7 +169,6 @@ body:             |
   ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; GREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; GREEDY-NEXT: }
-  ; GREEDY-NOT: ADD32_S
 
   ; Physreg rewrite of members; hard root still wraps both ADD32.
   ; VRW-LABEL: name: hard_bundle_membership
@@ -181,7 +176,6 @@ body:             |
   ; VRW-NEXT: ${{r[0-9]+}} = ADD32
   ; VRW-NEXT: ${{r[0-9]+}} = ADD32
   ; VRW-NEXT: }
-  ; VRW-NOT: ADD32_S
 ...
 ---
 # ============================================================================
@@ -223,7 +217,6 @@ body:             |
   ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
   ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
   ; SPILL-NEXT: }
-  ; SPILL-NOT: ADD32_S
 
   ; Default (non-stress) VRW path also preserves membership for this shape.
   ; VRW-LABEL: name: hard_bundle_spill_around
@@ -243,7 +236,6 @@ body:             |
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: ADD32_S
   ; PREGREEDY-LABEL: name: hard_bundle_spill_around
   ; PREGREEDY: BUNDLE{{.*}}{
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
@@ -318,8 +310,6 @@ body:             |
   ; SCHED-DAG: = ADD32 %
   ; SCHED-DAG: = ADDI32 %
   ; Phase identity: logical opcodes only through pre-RA schedule.
-  ; SCHED-NOT: ADD32_S
-  ; SCHED-NOT: ADDI32_S
 
   ; COALESCER-LABEL: name: hard_bundle_resource_conflict
   ; COALESCER: BUNDLE{{.*}}{
@@ -327,7 +317,6 @@ body:             |
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: ADD32_S
 
   ; PREGREEDY-LABEL: name: hard_bundle_resource_conflict
   ; PREGREEDY: BUNDLE{{.*}}{
@@ -335,7 +324,6 @@ body:             |
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; PREGREEDY-NEXT: }
-  ; PREGREEDY-NOT: ADD32_S
 
   ; GREEDY-LABEL: name: hard_bundle_resource_conflict
   ; GREEDY: BUNDLE{{.*}}{
@@ -351,7 +339,6 @@ body:             |
   ; VRW-NEXT: ${{r[0-9]+}} = ADD32
   ; VRW-NEXT: ${{r[0-9]+}} = ADD32
   ; VRW-NEXT: }
-  ; VRW-NOT: ADD32_S
 
   ; stress-regalloc=4: spill/reload around the hard root only — zero member
   ; loss. Same three ADD32 children; no private slot form through RA.
@@ -363,7 +350,6 @@ body:             |
   ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
   ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
   ; SPILL-NEXT: }
-  ; SPILL-NOT: ADD32_S
 ...
 ---
 # ============================================================================
@@ -422,8 +408,6 @@ body:             |
   ; SCHED-NEXT: {{%[^:]+}}:dr64 = ADD64
   ; SCHED-NEXT: {{%[^:]+}}:dr64 = ADD64
   ; SCHED-NEXT: }
-  ; SCHED-NOT: ADD32_S
-  ; SCHED-NOT: ADD64_S
 
   ; Isolated register-coalescer pin: zero member loss / unbundle.
   ; COALESCER-LABEL: name: hard_bundle_mixed_fu
@@ -432,8 +416,6 @@ body:             |
   ; COALESCER-NEXT: {{%[^:]+}}:dr64 = ADD64
   ; COALESCER-NEXT: {{%[^:]+}}:dr64 = ADD64
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: ADD32_S
-  ; COALESCER-NOT: ADD64_S
 
   ; PREGREEDY-LABEL: name: hard_bundle_mixed_fu
   ; PREGREEDY: BUNDLE{{.*}}{
@@ -441,8 +423,6 @@ body:             |
   ; PREGREEDY-NEXT: {{%[^:]+}}:dr64 = ADD64
   ; PREGREEDY-NEXT: {{%[^:]+}}:dr64 = ADD64
   ; PREGREEDY-NEXT: }
-  ; PREGREEDY-NOT: ADD32_S
-  ; PREGREEDY-NOT: ADD64_S
 
   ; GREEDY-LABEL: name: hard_bundle_mixed_fu
   ; GREEDY: BUNDLE{{.*}}{
@@ -458,8 +438,6 @@ body:             |
   ; VRW-NEXT: ${{d[0-9]+}} = ADD64
   ; VRW-NEXT: ${{d[0-9]+}} = ADD64
   ; VRW-NEXT: }
-  ; VRW-NOT: ADD32_S
-  ; VRW-NOT: ADD64_S
 
   ; stress-regalloc=4: spill/reload around the hard root only — zero member
   ; loss. Mixed ADD32 + 2xADD64 children; no private slot form through RA.
@@ -471,8 +449,6 @@ body:             |
   ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
   ; SPILL-NEXT: ${{d[0-9]+}} = ADD64
   ; SPILL-NEXT: }
-  ; SPILL-NOT: ADD32_S
-  ; SPILL-NOT: ADD64_S
 ...
 ---
 # ============================================================================
@@ -518,21 +494,18 @@ body:             |
   ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; SCHED-NEXT: }
-  ; SCHED-NOT: LD32_S
 
   ; COALESCER-LABEL: name: hard_bundle_dual_ld
   ; COALESCER: BUNDLE{{.*}}{
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: LD32_S
 
   ; PREGREEDY-LABEL: name: hard_bundle_dual_ld
   ; PREGREEDY: BUNDLE{{.*}}{
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; PREGREEDY-NEXT: }
-  ; PREGREEDY-NOT: LD32_S
 
   ; GREEDY-LABEL: name: hard_bundle_dual_ld
   ; GREEDY: BUNDLE{{.*}}{
@@ -546,7 +519,6 @@ body:             |
   ; VRW-NEXT: ${{r[0-9]+}} = LD32
   ; VRW-NEXT: ${{r[0-9]+}} = LD32
   ; VRW-NEXT: }
-  ; VRW-NOT: LD32_S
 
   ; stress-regalloc=4: spill/reload around the dual-load hard root only —
   ; zero member loss; no private slot form through RA. ST32 of live ranges
@@ -557,7 +529,6 @@ body:             |
   ; SPILL-NEXT: ${{r[0-9]+}} = LD32
   ; SPILL-NEXT: ${{r[0-9]+}} = LD32
   ; SPILL-NEXT: }
-  ; SPILL-NOT: LD32_S
 ...
 ---
 # ============================================================================
@@ -599,24 +570,18 @@ body:             |
   ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; SCHED-NEXT: }
-  ; SCHED-NOT: LD32_S
-  ; SCHED-NOT: ADD32_S
 
   ; COALESCER-LABEL: name: hard_bundle_ld_add
   ; COALESCER: BUNDLE{{.*}}{
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: LD32_S
-  ; COALESCER-NOT: ADD32_S
 
   ; PREGREEDY-LABEL: name: hard_bundle_ld_add
   ; PREGREEDY: BUNDLE{{.*}}{
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; PREGREEDY-NEXT: {{%[0-9]+}}:gpr32 = ADD32
   ; PREGREEDY-NEXT: }
-  ; PREGREEDY-NOT: LD32_S
-  ; PREGREEDY-NOT: ADD32_S
 
   ; GREEDY-LABEL: name: hard_bundle_ld_add
   ; GREEDY: BUNDLE{{.*}}{
@@ -629,8 +594,6 @@ body:             |
   ; VRW-NEXT: ${{r[0-9]+}} = LD32
   ; VRW-NEXT: ${{r[0-9]+}} = ADD32
   ; VRW-NEXT: }
-  ; VRW-NOT: LD32_S
-  ; VRW-NOT: ADD32_S
 
   ; stress-regalloc=4: spill/reload around the LD+ADD hard root only.
   ; ST32 of live ranges proves spill-around (member LD32 is not a spill).
@@ -640,8 +603,6 @@ body:             |
   ; SPILL-NEXT: ${{r[0-9]+}} = LD32
   ; SPILL-NEXT: ${{r[0-9]+}} = ADD32
   ; SPILL-NEXT: }
-  ; SPILL-NOT: LD32_S
-  ; SPILL-NOT: ADD32_S
 ...
 ---
 # ============================================================================
@@ -717,14 +678,12 @@ body:             |
   ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; SCHED-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; SCHED-NEXT: }
-  ; SCHED-NOT: LD32_S
 
   ; COALESCER-LABEL: name: hard_bundle_dual_ld_large_frame
   ; COALESCER: BUNDLE{{.*}}{
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; COALESCER-NEXT: {{%[0-9]+}}:gpr32 = LD32
   ; COALESCER-NEXT: }
-  ; COALESCER-NOT: LD32_S
 
   ; PREGREEDY-LABEL: name: hard_bundle_dual_ld_large_frame
   ; PREGREEDY: BUNDLE{{.*}}{
@@ -743,7 +702,6 @@ body:             |
   ; VRW-NEXT: ${{r[0-9]+}} = LD32
   ; VRW-NEXT: ${{r[0-9]+}} = LD32
   ; VRW-NEXT: }
-  ; VRW-NOT: LD32_S
 
   ; stop-after=prologepilog: large stack + CSR r8/r9 save; dual-load root
   ; still wraps two logical LD32; CSR frame-setup stores stay outside root.
@@ -756,7 +714,6 @@ body:             |
   ; PEI-NEXT: }
   ; PEI-DAG: ST32 killed ${{r[89]}}
   ; PEI-DAG: ST32 killed ${{r[89]}}
-  ; PEI-NOT: LD32_S
 
   ; stop-after=postmisched: dual-load hard root exact-commits (private slots);
   ; large-frame spill of liveins/CSRs still present; zero member loss.

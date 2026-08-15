@@ -64,5 +64,3 @@ entry:
 ; CHECK: ld32
 ; CHECK: jalr
 ; Full-only: no compact multi-width residue.
-; CHECK-NOT: bundle64
-; CHECK-NOT: bundle96

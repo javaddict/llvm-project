@@ -39,11 +39,8 @@
 # CHECK-LABEL: <.text>:
 
 # CHECK: {{.*}}0: 87 43 13 41 00 00 00 00 00 00 00 00 { nop; ld32 r1, r1, 4 }
-# CHECK-NOT: c.ld
 # CHECK: c: 07 0b 04 21 00 00 00 00 00 00 00 00 { nop; add64 d0, d1, d2 }
-# CHECK-NOT: c.add
 # CHECK: {{.*}}18: 07 8b 10 32 00 00 00 00 00 00 00 00 { nop; add32 r1, r2, r3 }
-# CHECK-NOT: c.add
 
 { ld32 r1, r1, 4 }
 

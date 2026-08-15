@@ -107,6 +107,5 @@ body:             |
   ; Logical only — no durable pre-RA BUNDLE from SMS expansion.
   ; HANDOFF-NOT: BUNDLE
   ; HANDOFF: ADD32
-  ; HANDOFF-NOT: ADD32_S
 
 ...

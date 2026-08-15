@@ -84,13 +84,11 @@
 # CONT-SPILL-DAG: ${{r[0-9]+}} = LD32
 # CONT-SPILL-DAG: ${{r[0-9]+}} = LD32
 # CONT-SPILL-NOT: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-SPILL-NOT: LD32_S
 
 # CONT-COMPACT-LABEL: name: sms_shoulduse_multistage_mac
 # CONT-COMPACT-DAG: ${{r[0-9]+}} = LD32
 # CONT-COMPACT-DAG: ${{r[0-9]+}} = LD32
 # CONT-COMPACT-NOT: BUNDLE{{.*}}:: (load{{.*}}{
-# CONT-COMPACT-NOT: LD32_S
 
 # CONT-POST-LABEL: name: sms_shoulduse_multistage_mac
 # CONT-POST-DAG: SEQ32

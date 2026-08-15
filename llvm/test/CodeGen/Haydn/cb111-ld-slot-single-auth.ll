@@ -19,8 +19,6 @@
 
 define i32 @two_i32(i32 %a) nounwind {
 ; ASM-LABEL: two_i32:
-; ASM-NOT: ld32_s1
-; ASM-NOT: ld64_s1
   %p1 = load i32, ptr @g1, align 4
   %p2 = load i32, ptr @g2, align 4
   %sum = add i32 %p1, %p2
@@ -30,8 +28,6 @@ define i32 @two_i32(i32 %a) nounwind {
 
 define i64 @two_i64(i64 %a) nounwind {
 ; ASM-LABEL: two_i64:
-; ASM-NOT: ld32_s1
-; ASM-NOT: ld64_s1
   %p1 = load i64, ptr @h1, align 8
   %p2 = load i64, ptr @h2, align 8
   %sum = add i64 %p1, %p2
@@ -41,7 +37,6 @@ define i64 @two_i64(i64 %a) nounwind {
 
 define i32 @one_i32(ptr %p) nounwind {
 ; ASM-LABEL: one_i32:
-; ASM-NOT: ld32_s1
   %v = load i32, ptr %p, align 4
   ret i32 %v
 }

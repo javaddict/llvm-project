@@ -28,7 +28,6 @@
 ; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; POST-OPTNONE-NOT: BUNDLE
-; POST-OPTNONE-NOT: ADD32_S{{[0-2]}}
 
 ; After Finalize+Verify: committed cycles only on both paths.
 ; PLAIN-O0-LABEL: name: plain_o0

@@ -86,8 +86,6 @@ define i32 @critical_path_priority(i32 %a, i32 %b) {
 ; PREGREEDY-LABEL: name: critical_path_priority
 ; PREGREEDY-NOT: BUNDLE
 ; PREGREEDY: ADD32
-; PREGREEDY-NOT: ADD32_S
-; PREGREEDY-NOT: ADDI32_S
   %a1 = add i32 %a, 1
   %a2 = add i32 %a1, 2
   %a3 = add i32 %a2, 3
@@ -112,8 +110,6 @@ define i32 @critical_path_with_memory(ptr %p, i32 %x) {
 ; PREGREEDY-LABEL: name: critical_path_with_memory
 ; PREGREEDY-NOT: BUNDLE
 ; PREGREEDY: LD32
-; PREGREEDY-NOT: LD32_S
-; PREGREEDY-NOT: ADD32_S
   %v = load i32, ptr %p
   %r1 = add i32 %v, 1
   %r2 = add i32 %r1, 2

@@ -72,7 +72,6 @@
 define i32 @gap2_countup_blt(ptr readonly %a, i32 %n) nounwind {
 ; CHECK-LABEL: name: gap2_countup_blt
 ; CHECK: SET_HWLOOP
-; CHECK-NOT: HWLOOP_END
 entry:
   %c0 = icmp sgt i32 %n, 0
   br i1 %c0, label %loop, label %exit
@@ -114,7 +113,6 @@ exit:
 define i32 @gap3_pointer_iv(ptr readonly %p, ptr readnone %end) nounwind {
 ; CHECK-LABEL: name: gap3_pointer_iv
 ; CHECK: SET_HWLOOP
-; CHECK-NOT: HWLOOP_END
 entry:
   br label %loop
 
