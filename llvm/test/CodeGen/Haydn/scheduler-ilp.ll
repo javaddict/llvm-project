@@ -86,8 +86,6 @@ define i32 @ilp_independent_ops(i32 %a, i32 %b, i32 %c) {
 ; PREGREEDY-LABEL: name: ilp_independent_ops
 ; PREGREEDY-NOT: BUNDLE
 ; PREGREEDY: ADD32
-; PREGREEDY-NOT: ADD32_S
-; PREGREEDY-NOT: ADDI32_S
   %r1 = add i32 %a, 1
   %r2 = add i32 %b, 2
   %r3 = add i32 %c, 3
@@ -108,8 +106,6 @@ define i32 @ilp_independent_loads(ptr %p1, ptr %p2, ptr %p3) {
 ; PREGREEDY-LABEL: name: ilp_independent_loads
 ; PREGREEDY-NOT: BUNDLE
 ; PREGREEDY: LD32
-; PREGREEDY-NOT: LD32_S
-; PREGREEDY-NOT: ADD32_S
   %v1 = load i32, ptr %p1
   %v2 = load i32, ptr %p2
   %v3 = load i32, ptr %p3

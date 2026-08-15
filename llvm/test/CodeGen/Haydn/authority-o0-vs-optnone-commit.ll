@@ -69,20 +69,17 @@
 ; PACK-LABEL: name:{{ +}}with_optnone
 ; PACK: $r{{[0-9]+}} = ADD32{{ }}
 ; PACK-NOT: BUNDLE
-; PACK-NOT: ADD32_S{{[0-2]}}
 ; PACK: JALR
 ; PACK-LABEL: name:{{ +}}multi_optnone
 ; PACK: $r{{[0-9]+}} = ADD32{{ }}
 ; PACK: $r{{[0-9]+}} = ADD32{{ }}
 ; PACK-NOT: BUNDLE
-; PACK-NOT: ADD32_S{{[0-2]}}
 ; PACK: JALR
 ; Independent multi-op optnone remains sequential bare logicals (quality skip).
 ; PACK-LABEL: name:{{ +}}indep_optnone
 ; PACK: $r{{[0-9]+}} = ADD32{{ }}
 ; PACK: $r{{[0-9]+}} = ADD32{{ }}
 ; PACK-NOT: BUNDLE
-; PACK-NOT: ADD32_S{{[0-2]}}
 ; PACK: JALR
 ; Plain O0 independent multi co-issues under postmisched (product shape).
 ; PACK-LABEL: name:{{ +}}indep_plain
@@ -97,21 +94,18 @@
 ; SKIP-OPTNONE-LABEL: name:{{ +}}with_optnone
 ; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; SKIP-OPTNONE-NOT: BUNDLE
-; SKIP-OPTNONE-NOT: ADD32_S{{[0-2]}}
 ; SKIP-OPTNONE: JALR
 ; Multi-op optnone remains sequential bare logicals (no reorder pack).
 ; SKIP-OPTNONE-LABEL: name:{{ +}}multi_optnone
 ; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; SKIP-OPTNONE-NOT: BUNDLE
-; SKIP-OPTNONE-NOT: ADD32_S{{[0-2]}}
 ; SKIP-OPTNONE: JALR
 ; Independent multi-op optnone still bare after quality skip.
 ; SKIP-OPTNONE-LABEL: name:{{ +}}indep_optnone
 ; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; SKIP-OPTNONE-NOT: BUNDLE
-; SKIP-OPTNONE-NOT: ADD32_S{{[0-2]}}
 ; SKIP-OPTNONE: JALR
 
 ; ---------------------------------------------------------------------------

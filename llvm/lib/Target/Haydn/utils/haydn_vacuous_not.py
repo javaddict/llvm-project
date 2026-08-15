@@ -84,13 +84,21 @@ VOCAB = (
 # negative assertion legitimately names plenty of non-Haydn text (libcall
 # symbols, `<unknown>`, generic MIR opcodes, pass debug output), and flagging
 # those produces noise that buries the real rows.
+# RECALIBRATED for the merged (mhyang second-wave) tree, 2026-08-16. The
+# original hand list encoded OUR round-1 line's retirements, and the merge
+# un-retired most of them: the wave's InstPrinter prints logical mnemonics
+# again (ld32/st32/ld64 are LIVE assembly text), the reloc `_W` identities
+# and the LS `_S<k>` residual opcodes survive in MIR output
+# (SET_HWLOOP_W, S_SW_WITH_IMM_S1), and LD32_REG_M0S0LS exists as an
+# opcode. Everything mnemonic/opcode-shaped is better judged by the
+# LIVENESS check against the generated tables below — it correctly kept
+# S_SW_WITH_IMM_S1 and correctly flags ADD32_S2 (the wave deleted the ALU
+# residual defs). The hand list keeps only text the shape filters hide
+# from the liveness check: dotted compressed-ISA spellings and the
+# Bundle128 era name.
 RETIRED = re.compile(
     r"\b("
-    r"ld8|ldu8|ld16|ldu16|ld32|ld64|st8|st16|st32|st64"     # 5.6 load/store
-    r"|LD8|LDU8|LD16|LDU16|LD32|LD64|ST8|ST16|ST32|ST64"
-    r"|\w+_[wW]\b"                                          # 5.1 _W forms
-    r"|\w+_[sS][012]\b|\w+_[sS][012]_FLEX"                  # Bundle128 members
-    r"|\w+_M0S0\w*|BUNDLE128\w*"
+    r"BUNDLE128\w*"
     r"|c\.[a-z]"                                            # compressed, retired
     r")"
 )

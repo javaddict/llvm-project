@@ -62,7 +62,6 @@
 #
 # II: HaydnGenMemoryCycles.inc
 # II-NOT: case Slot0_LS:
-# II-NOT: HAYDN_LOAD_LATENCY_SCAFFOLD) - 1
 #
 # SCHED: include "HaydnGenSchedRecords.inc"
 # SCHED: let CompleteModel = 0
