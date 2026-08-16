@@ -11,7 +11,13 @@ that you may want to ratify or revert.
 ## Where the branch stands
 
 ```
-gcc-torture -O3    1417 PASS / 0 FAIL / 0 timeout      (full house)
+gcc-torture -O3    1475 PASS / 0 FAIL / 0 timeout      (full house, now incl. ieee/)
+gcc-torture matrix O0 / O1 / O2 / Os all full house    (O0: fp-cmp-7 unsupported —
+                    link_error DCE test; clang folds x > +inf only in instcombine)
+ieee/ sub-suite    58 / 58     (soft-float NaN / ±0 / inf / subnormal, first run)
+yarpgen 101–300    200 / 200 vs i386 freestanding oracle
+Dhrystone e2e      PASS        (first-ever close of this gate; host oracle and
+                    guest agree on the 76-byte final state; 100 runs = 202,344 bundles)
 BundleSim ctest    222 / 223   (only cb100 = CB-151 tracking red, deliberate)
 Haydn lit battery  880 / 1     (only ae-compat-selp24 = CB-150)
 HaydnTests         460 / 460
@@ -20,6 +26,10 @@ CoreMark           521,503 committed bundles  (+0.76% vs round-1's 517,586;
 vacuous-NOT gate   0  (tool recalibrated for this tree; 122 dead guards removed)
 llc strlen-5.c     1.38 s      (wave tip: 30.5 s)
 ```
+
+The broadened matrix rides two simulator-repo harness commits (`f7388be`
+torture-lit dejagnu conventions + ieee/ discovery; `27e6bb7` Dhrystone
+K&R-2.1 acceptance) — nothing on this branch moved for it.
 
 ## What needs you, in priority order
 
