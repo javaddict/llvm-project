@@ -87,6 +87,25 @@ which literally contains a hash.
 tip that was never merged; it is correct for a message to name it, and it lives
 in `backup/wip-parked-20260814`.
 
+**Done again on 2026-08-17, for the two reunification merges, and it cost even
+less.** § 10's and § 11's closing merges were both `-s ours` in effect — each
+merge tree is identical to its first parent, because the ports had already
+landed as ordinary commits ahead of it — so neither carried content that
+dropping it could lose. Only § 11's merge was on the first-parent line (§ 10's
+sat on its second-parent side), so `git rebase --onto` past that one merge
+removed both and replayed just the 11 commits above it. After: `haydn` is **41**
+commits on `origin/haydn-dev`, first-parent count equal to the total, no merge
+in the range, tree identical to the pre-rewrite tip. The **226** commits that
+were reachable only through the second parents keep their SHAs and stay
+reachable from `haydn-on-mhyang`, `haydn` and `haydn-on-mhyang-2` on the fork,
+plus the tag `backup/haydn-pre-linearize-20260817`. Citations: 8 renumbered in
+`HANDOFF-MHYANG.md` and the dropped merge's own hash retired; **0 inside commit
+messages** — nothing quoted a rewritten hash, so the message repair above had no
+sequel this time. The rebase ran with `core.hooksPath` pointed at nothing, so
+Gerrit's `commit-msg` hook could not slip a Change-Id into a replayed message;
+all 11 are byte-identical. Nothing was rebuilt or re-gated — identical tree, so
+§ 11's numbers still describe this history.
+
 
 The pre-rebase states of the two WIP branches are preserved as the tags
 `backup/wip-preformate-20260807` and `backup/mc-preformate-20260807`, also
@@ -4156,9 +4175,10 @@ This document's history through § 9 describes the `haydn` line. On
 `llvm-project-mhyang`, tip `1c740f0d5708`, 15 commits since the common
 base `33e468768f4f` of 2026-07-27 — six of them adapted picks of our own
 fixes). The user's instruction fixed the direction: HIS tree is the
-base; our unique work is ported on top. Branch: `haydn-on-mhyang`; the
-closing merge commit carries `haydn`@6e3b2cc5a46c as second parent so
-every commit this document cites stays reachable.
+base; our unique work is ported on top. Branch: `haydn-on-mhyang`; its
+closing merge commit carried `haydn`@6e3b2cc5a46c as second parent, and
+since the 2026-08-17 linearization (§ 1) it is that branch name, not this
+history, that keeps every commit this document cites reachable.
 
 ### What the two lines were
 
@@ -4242,7 +4262,7 @@ Dhrystone                  not run — its qualification source path
                            recorded baseline either
 ```
 
-The second validation round also fixed on this base: ARCTAN (and every
+The second validation pass also fixed on this base: ARCTAN (and every
 golden-placeable pseudo) now emits at -O0 as a product singleton; the
 Bundle<MCInst> fixed-slot paths keep member history so
 syncSlotMapFromPreferred cannot underflow; aligned(N) on functions is
@@ -4274,27 +4294,29 @@ toolchain's AGU surface.
   five commits, 654 files — FieldSlot retirement, a generated shared
   resource model with hosted multi-stage SMS, hwloop Role-A, runtime
   fail-closed ABI/residual pseudos, AE oracles. A second reconciliation
-  round onto that tip is merge-sized work awaiting a direction
-  decision; his new tip still has only AR0/AR1, so CB-149 rides along.)
+  onto that tip is merge-sized work awaiting a direction decision; his
+  new tip still has only AR0/AR1, so CB-149 rides along.)
 * His plan documents live at /ssd2/mhyang/haydn-plans (his machine) and
   are cited by header comments as "plan §…"; they are not in this repo.
 
-## 11. Round two: onto the second wave (2026-08-15)
+## 11. Onto the second wave (2026-08-15)
 
 mhyang's second wave (`1c740f0d5708` → `11b1d70b4111`, five commits, 654
-files) landed while round one was being validated, and the direction was
-confirmed with him: his line absorbs ours. Branch `haydn-on-mhyang-2`
-re-expresses the merged state on the wave tip; the closing merge carries
-`haydn-on-mhyang` as second parent so both prior lines stay reachable.
+files) landed while `haydn-on-mhyang` was being validated, and the
+direction was confirmed with him: his line absorbs ours. Branch
+`haydn-on-mhyang-2` re-expresses the merged state on the wave tip; its
+closing merge carried `haydn-on-mhyang` as second parent, and since the
+2026-08-17 linearization (§ 1) both prior lines stay reachable through
+that branch name instead of through this history.
 
 ### What the wave absorbed on its own (verified, adopted, not re-applied)
 
-The wave independently converged on most of round one: the unit-cover
-law (`opcodesHaveFormatEUnitCover` — its own comment names the
-two-LOADSTORE0-stores case; the bf16mul crash class is structurally
+The wave independently converged on most of `haydn-on-mhyang`: the
+unit-cover law (`opcodesHaveFormatEUnitCover` — its own comment names
+the two-LOADSTORE0-stores case; the bf16mul crash class is structurally
 gone), byte-scaled memory offsets with FI awareness plus the
 disjointness hook, the DWARF line unit as the golden 2-byte min
-bundle-address alignment (more principled than round one's 1 — adopted),
+bundle-address alignment (more principled than that line's 1 — adopted),
 the splice RAW direction ("a COPY that only reads a member-def'd reg
 used to pass the def-only check"), the Bundle member-history assert, and
 ARCTAN-class -O0 emission. Convergence this systematic is the strongest
@@ -4306,7 +4328,7 @@ The repaired golden (his pin was still the delivery hash; the delta is
 again exactly X4SEL16_E3_E1_ALU1_RRR, and his new typed-MemberId
 serialization still binds bag-by-class — the probe reproduced the
 rsd1/rsd2 swap byte-for-byte until the canonical-order emission was
-re-applied, landing on the same …52 d9… bytes round one derived
+re-applied, landing on the same …52 d9… bytes haydn-on-mhyang derived
 independently). CB-144 and the G_FREEZE hang. aligned(N) end-to-end.
 tryCSEConstantDR64 guards. The fscanf entrypoint. CB-149 (the wave
 still modeled AR0/AR1; restoring AR2/AR3 exposed a hand-written
@@ -4334,9 +4356,9 @@ ProductDefaultRowID contradiction and the tied-MAC member Desc verifier
 trip — owner's calls, deliberately not re-pinned to current behavior),
 CB-150 (one AE compat test), CB-151 unchanged.
 
-### Round-two gates (addendum)
+### Wave-tip gates (addendum)
 
-Execution gates against the round-2 toolchain, after two convention fixes
+Execution gates against the wave-tip toolchain, after two convention fixes
 on the simulator side (dump parser accepts objdump's new `<sym>` branch
 annotations; the legacy ld/st mnemonic aliases stop dividing an
 immediate that is already an element index) and one on the toolchain
@@ -4351,20 +4373,20 @@ with both directions of the history in its header):
   design) and three yarpgen seeds that now exceed their 300 s budget
   (CB-153b; seed8 solo-passes given time).
 * gcc-torture -O3: 1416 pass / 0 fail / 1 timeout (the timeout is the
-  CB-153 compile/runtime class; round 1 scored 1417/0).
-* CoreMark: PASS, 563,224 committed bundles vs round 1's 517,586
+  CB-153 compile/runtime class; haydn-on-mhyang scored 1417/0).
+* CoreMark: PASS, 563,224 committed bundles vs haydn-on-mhyang's 517,586
   (+8.8%, CB-153b).
 * Haydn lit battery: 880 discovered, 9 red — the eight CB-152
   finalize-cohort tests plus CB-150. HaydnTests: recorded as 437/437 at
   the time, which was a MISCOUNT — the grep pattern matched gtest's
   plural "FAILED TESTS" but its singular "1 FAILED TEST" summary, so
   GoldenHashPins (the wave unittest still pinning the DELIVERY golden
-  hash b0b477e5... that round 2 had repointed to the repaired
+  hash b0b477e5... that this line had repointed to the repaired
   8465132c... everywhere else) sat red unnoticed. Pin re-pointed with
   the repair rationale; suite now 459/459 (count from the gtest tail,
   not a grep). Read the tail, don't pattern-match victory.
 
-### Round-two follow-up sweep (2026-08-15, same session)
+### Wave-tip follow-up sweep (2026-08-15, same session)
 
 CB-153a fixed (post-RA auction ranking memoized three ways, decision-
 identical, 30.5s -> 1.38s llc on strlen-5; corpus byte-identical, twin
@@ -4380,7 +4402,7 @@ counts, half the multi-issue bundles; auction not the lever) — handed
 to the owner with per-object numbers and a minimal example.
 
 Battery: 880 discovered / ONE red (CB-150, plans machine). HaydnTests
-459/459. torture -O3 1417/0/0 — full house, back to the round-1 mark.
-ctest 222/223 (cb100 = CB-151 by design; the bsp_smoke 2000-bundle
+459/459. torture -O3 1417/0/0 — full house, back to the haydn-on-mhyang
+mark. ctest 222/223 (cb100 = CB-151 by design; the bsp_smoke 2000-bundle
 leash moved to 2500 after CB-152c's hazard-correct stalls +72 bundles).
 CoreMark PASS, 563,224 bundles (unchanged by this sweep).
