@@ -129,6 +129,10 @@ fieldSlotKeepOperands(const MachineInstr &MI, const MCInstrDesc &NewDesc) {
   const MCInstrDesc &OldDesc = MI.getDesc();
   const unsigned OldN = OldDesc.getNumOperands();
   const unsigned NewN = NewDesc.getNumOperands();
+  // Operand-less on both sides (ZERO_SFR and its members) is trivially
+  // compatible: the empty keep map. Only asymmetric zero is a mismatch.
+  if (OldN == 0 && NewN == 0)
+    return SmallVector<unsigned, 4>{};
   if (OldN == 0 || NewN == 0 || MI.getNumExplicitOperands() < OldN)
     return std::nullopt;
 
@@ -673,6 +677,17 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
     }
     const haydn::format_e::FormatEMemberRec *Mem = resolveFieldSlotMember(
         *Kid, Mode, static_cast<uint8_t>(EntryIdx), UsedUnits, TII);
+    // resolveFieldSlotMember answers (logical, mode, entry, units) only; it
+    // does not prove the MI's operand shape can carry the member desc. Since
+    // members may carry ties the FieldSlot MI lacks (accumulator ties landed
+    // by the member-mirrors-tie work), require the same compatibility the
+    // ledger-rebind path checks before planning the rewrite — otherwise an
+    // incompatible pair reaches rewriteFieldSlotToMember and trips its
+    // memberDescCompatible contract assert.
+    if (Mem && (!memberDescCompatible(*Kid, FormatEMemberOpcodes[Mem->MemberId],
+                                      TII) ||
+                !ri6ImmFitsMember(*Kid, *Mem)))
+      Mem = nullptr;
     if (!Mem) {
       if (MustResolve) {
         LeadingFailed = true;
