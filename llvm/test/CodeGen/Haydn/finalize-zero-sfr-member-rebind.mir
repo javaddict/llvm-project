@@ -1,0 +1,46 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn -run-pass=haydn-finalize-mi-bundles -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — operand-less member (ZERO_SFR) through the ledger rebind.
+
+# CB-155: a bundle whose already-member kids sit at entries that contradict
+# their stamps (ZERO_SFR carries an ..._E1_ stamp but stands at composite
+# position 0) fails the leading sequential assignment, and the ledger rebind
+# replans every kid — including a member→member rewrite for ZERO_SFR. Both
+# descs are operand-less, which fieldSlotKeepOperands used to reject outright
+# (`OldN == 0 || NewN == 0` fail-closed), so rewriteFieldSlotToMember tripped
+# its memberDescCompatible contract assert on the first real corpus that
+# bundles zero_sfr with a store (BundleSim intrin_simd_cmul, -O1/-O2).
+# The empty↔empty keep map is trivially compatible; only asymmetric zero is
+# a mismatch. This test asserts the rebind completes and both members stay
+# committed in one bundle.
+
+--- |
+  define void @zero_sfr_member_rebind() { ret void }
+...
+---
+name:            zero_sfr_member_rebind
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r9', virtual-reg: '' }
+body: |
+  bb.0:
+    liveins: $d0, $r9
+    BUNDLE 1, 0, implicit-def $sfr, implicit killed $d0, implicit killed $r9 {
+      ZERO_SFR_E3_E1_ALU1_I8 implicit-def $sfr
+      D_SDW_WITH_IMM_E3_E0_LOADSTORE0_RI6 killed $d0, killed $r9, 0
+    }
+    RET implicit $r15
+
+# CHECK-LABEL: name: zero_sfr_member_rebind
+# CHECK: BUNDLE
+# CHECK-DAG: ZERO_SFR_E{{[23]}}_E{{[0-9]}}_ALU{{[0-9]}}_I8
+# CHECK-DAG: D_SDW_WITH_IMM_E{{[23]}}_E0_LOADSTORE0_RI6
+...
