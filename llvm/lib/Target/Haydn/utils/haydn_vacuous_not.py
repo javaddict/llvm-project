@@ -85,7 +85,7 @@ VOCAB = (
 # symbols, `<unknown>`, generic MIR opcodes, pass debug output), and flagging
 # those produces noise that buries the real rows.
 # RECALIBRATED for the merged (mhyang second-wave) tree, 2026-08-16. The
-# original hand list encoded OUR round-1 line's retirements, and the merge
+# original hand list encoded OUR haydn-on-mhyang retirements, and the merge
 # un-retired most of them: the wave's InstPrinter prints logical mnemonics
 # again (ld32/st32/ld64 are LIVE assembly text), the reloc `_W` identities
 # and the LS `_S<k>` residual opcodes survive in MIR output
