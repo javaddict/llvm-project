@@ -2610,7 +2610,22 @@ def emit_logical_defs_td_inc(
         outs = "(outs " + ", ".join(out_frags) + ")" if out_frags else "(outs)"
         ins = "(ins " + ", ".join(in_frags) + ")"
         asm = mnem + ("\t" + ", ".join(asm_ops) if asm_ops else "")
-        itin = "Slot0_LS" if is_ls else ("Slot1_MAC" if rec.unit.startswith("MAC") else "Slot012_ALU")
+        # Constraints.md:57 "unit assignment is not bound to a fixed slot" —
+        # itinerary follows the UNION of the logical's member units (golden
+        # placements), mirroring the Available set. MAC symmetric MAC0+MAC1;
+        # dual-load LOADSTORE0+LOAD1 gets the Slot01_LD menu; accumulating
+        # (tied) MACs keep acc-read-late AccFirst timing (CB-152c).
+        uset = {(cat.members[mid].unit) for mid in mids}
+        if "MAC0" in uset or "MAC1" in uset:
+            itin = "Slot12_MAC_AccFirst" if is_acc else "Slot12_MAC"
+        elif uset == {"LOADSTORE0", "LOAD1"}:
+            itin = "Slot01_LD"
+        elif "LOAD1" in uset:
+            itin = "Slot1_LD"
+        elif "LOADSTORE0" in uset:
+            itin = "Slot0_LS"
+        else:
+            itin = "Slot012_ALU"
         props = [f"isCodeGenOnly = 0", "DecoderNamespace = \"HaydnAutoNoDecode\"", "isAsmParserOnly = 0"]
         if may_store:
             props.append("mayStore = 1")

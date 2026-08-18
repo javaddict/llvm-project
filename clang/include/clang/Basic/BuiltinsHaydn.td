@@ -6618,22 +6618,22 @@ def AE_MULA32_LL : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll"> {
 def AE_MULA32U_LL : HaydnAeCompatDef<"EMULATED", "haydn_mula64_uu_ull"> {
   let OracleId = "emu.mula32u_ll";
 }
-def AE_MULA32X16_H0 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hl"> {
+def AE_MULA32X16_H0 : HaydnAeCompatDef<"EMULATED", "haydn_mula32x16_h0"> {
   let OracleId = "emu.mula32x16_h0";
 }
-def AE_MULA32X16_H1 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hl"> {
+def AE_MULA32X16_H1 : HaydnAeCompatDef<"EMULATED", "haydn_mula32x16_h1"> {
   let OracleId = "emu.mula32x16_h1";
 }
-def AE_MULA32X16_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll"> {
+def AE_MULA32X16_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mula32x16_l0"> {
   let OracleId = "emu.mula32x16_l0";
 }
-def AE_MULA32X16_L1 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll"> {
+def AE_MULA32X16_L1 : HaydnAeCompatDef<"EMULATED", "haydn_mula32x16_l1"> {
   let OracleId = "emu.mula32x16_l1";
 }
-def AE_MULA32X16_L2 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll"> {
+def AE_MULA32X16_L2 : HaydnAeCompatDef<"EMULATED", "haydn_mula32x16_l2"> {
   let OracleId = "emu.mula32x16_l2";
 }
-def AE_MULA32X16_L3 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_ll"> {
+def AE_MULA32X16_L3 : HaydnAeCompatDef<"EMULATED", "haydn_mula32x16_l3"> {
   let OracleId = "emu.mula32x16_l3";
 }
 def AE_MULAAD32_HH_LL : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll"> {

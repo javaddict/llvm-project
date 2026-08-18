@@ -1703,6 +1703,13 @@ static inline int AE_CALCRNG3_1arg(ae_int64 a) {
 // is the eventual target intrinsic, but it is not yet user-visible (missing
 // from haydn.h), so we compose via the declared FIR helper for now.
 // See and the TODO block at end of part-9 write-back section.
+//
+// 2026-08-19: native golden v2_1 MUL/MULA32X16_Hn exist but are INTEGER
+// (no <<1); this AE macro family is FRACTIONINAL per the fmul32s FIR
+// lowering. Retargeting to the integer natives changes product semantics
+// (silent-miscompute class) — needs an exactness proof against the HiFi
+// oracle (incl. the fir_hl-vs-fir_hh data-half convention) before it can
+// move to FMUL/FMULA32X16_Hn. Left as emu; see OPEN follow-up.
 #define AE_MUL32X16_H0(acc, a, b) haydn_mulafd32x16x2_fir_hl(__AE_TO_I64(acc), __AE_TO_I64((haydn_dr64_t)((a))), (haydn_dr64_t)((b)))
 
 /// 32x16 MAC, lane H1 — composed via declared FIR helper (haydn_smula16_1n
@@ -3430,21 +3437,22 @@ static inline ae_int64 __AE_INT64X2_RADD_1(ae_int64x2 a) {
   ((long long)(int)(short)(((unsigned long long)(b) >> 32) & 0xFFFF))
 #define __AE_MUL32X16_WIDEN_COEF_L3(b) \
   ((long long)(int)(short)(((unsigned long long)(b) >> 48) & 0xFFFF))
-// H* multiplies a[63:32] by the chosen coef lane (mula64_ss_hl reads
-// rsd1[63:32] * rsd2[31:0]); L* multiplies a[31:0] (mula64_ss_ll reads
-// rsd1[31:0] * rsd2[31:0]).
+// Native since golden v2_1 (2026-08-19): MULA32X16_Hn/Ln read the packed
+// coef lanes directly (H = rsd1[63:32], L = rsd1[31:0]; n = rsd2 coef lane),
+// so the __AE_MUL32X16_WIDEN_COEF extraction + mula64_ss_hl/ll composition
+// is retired — one native instruction replaces extract+pack+MAC.
 #define AE_MULA32X16_H0(acc, a, b) \
-  haydn_mula64_ss_hl((acc), __AE_TO_I64(a), __AE_TO_I64(__AE_MUL32X16_WIDEN_COEF_L0(b)))
+  haydn_mula32x16_h0((acc), __AE_TO_I64(a), __AE_TO_I64(b))
 #define AE_MULA32X16_H1(acc, a, b) \
-  haydn_mula64_ss_hl((acc), __AE_TO_I64(a), __AE_TO_I64(__AE_MUL32X16_WIDEN_COEF_L1(b)))
+  haydn_mula32x16_h1((acc), __AE_TO_I64(a), __AE_TO_I64(b))
 #define AE_MULA32X16_L0(acc, a, b) \
-  haydn_mula64_ss_ll((acc), __AE_TO_I64(a), __AE_TO_I64(__AE_MUL32X16_WIDEN_COEF_L0(b)))
+  haydn_mula32x16_l0((acc), __AE_TO_I64(a), __AE_TO_I64(b))
 #define AE_MULA32X16_L1(acc, a, b) \
-  haydn_mula64_ss_ll((acc), __AE_TO_I64(a), __AE_TO_I64(__AE_MUL32X16_WIDEN_COEF_L1(b)))
+  haydn_mula32x16_l1((acc), __AE_TO_I64(a), __AE_TO_I64(b))
 #define AE_MULA32X16_L2(acc, a, b) \
-  haydn_mula64_ss_ll((acc), __AE_TO_I64(a), __AE_TO_I64(__AE_MUL32X16_WIDEN_COEF_L2(b)))
+  haydn_mula32x16_l2((acc), __AE_TO_I64(a), __AE_TO_I64(b))
 #define AE_MULA32X16_L3(acc, a, b) \
-  haydn_mula64_ss_ll((acc), __AE_TO_I64(a), __AE_TO_I64(__AE_MUL32X16_WIDEN_COEF_L3(b)))
+  haydn_mula32x16_l3((acc), __AE_TO_I64(a), __AE_TO_I64(b))
 
 //---- MULAAD32 (dual 32x32 dual-MAC) -----------------------------------
 #define AE_MULAAD32_HH_LL(acc, a, b) \
