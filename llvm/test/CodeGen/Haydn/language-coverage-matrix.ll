@@ -43,6 +43,9 @@
 ; RUN: not llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:   -filetype=null %t/va_v2i32.ll -o /dev/null 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=VA_VEC
+; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
+; RUN:   -filetype=null %t/half_cc.ll -o /dev/null 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=HALF_CC
 
 ;--- supported.ll
 declare i32 @ext_i32(i32)
@@ -160,6 +163,26 @@ define i32 @sup_atomic_rmw_add(ptr %p, i32 %v) {
   ret i32 %r
 }
 
+declare float @llvm.minimum.f32(float, float)
+declare float @llvm.maximum.f32(float, float)
+
+; llvm.minimum/maximum currently legalize through minnum/maxnum → fminf/fmaxf.
+; That is a residual substitution, not IEEE-754 minimum/maximum (NaN and
+; signed-zero). This seat only proves the advertised IR does not abort.
+define float @sup_fminimum_residual(float %a, float %b) {
+; SUP-LABEL: sup_fminimum_residual:
+; SUP: {{fminf|jal}}
+  %r = call float @llvm.minimum.f32(float %a, float %b)
+  ret float %r
+}
+
+define float @sup_fmaximum_residual(float %a, float %b) {
+; SUP-LABEL: sup_fmaximum_residual:
+; SUP: {{fmaxf|jal}}
+  %r = call float @llvm.maximum.f32(float %a, float %b)
+  ret float %r
+}
+
 
 ;--- musttail.ll
 declare void @callee(i32)
@@ -253,3 +276,9 @@ define void @va_v2i32(i32 %n, ...) {
   ret void
 }
 ; VA_VEC: unable to legalize instruction: {{.*}}G_VAARG
+
+;--- half_cc.ll
+define half @half_cc_reject(half %x) {
+  ret half %x
+}
+; HALF_CC: {{unable to lower arguments|unable to lower function|unable to lower|failed to lower}}

@@ -1,7 +1,10 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:     -enable-post-misched=false -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
+; RUN:     -enable-post-misched=false -verify-machineinstrs < %s | FileCheck %s
 
 ; Role: semantic — ISel exit: pure SSA pred ops expand only to X2/X4SLT + MOVT + MOVESFR2GPR/MOVEGPR2SFR.
+; Post-RA pack of two-epoch reverse is format-pipeline owned; this pin is ISel emit.
 
 ; C1.1 / G-PRED-SSA ISel exit: pure SSA pred ops expand only to
 ;   X2/X4SLT + MOVT + MOVESFR2GPR/MOVEGPR2SFR

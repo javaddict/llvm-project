@@ -50,11 +50,11 @@ body:             |
 
     ; CHECK-LABEL: name: late_bare_recommit
     ; Empty-cycle tryAdd then MemberId: ADD32 → generated ADD32_E*
-    ; member (E2 or E3 singleton). Reloc BEQZ → BEQZ_E2_E0. NOP stays NOP_S0.
+    ; member (E2 or E3 singleton). Reloc BEQZ → BEQZ_E2_E0. Pad NOP stays NOP.
     ; CHECK: BUNDLE
     ; CHECK: ADD32_E{{[23]}}_E{{[0-2]}}_
     ; CHECK: BUNDLE
-    ; CHECK: NOP_S0
+    ; CHECK: NOP
     ; CHECK: BUNDLE
     ; CHECK: BEQZ_E2_E0_ALU0_I12
     ; CHECK: BUNDLE

@@ -21,7 +21,6 @@ define i64 @cb_ld_sel0_imm1(ptr %base) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; d_ldw_cb_imm 0, d0, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; Formats CBRI print: cbr_sel, rtd, rs, imm
@@ -36,7 +35,6 @@ define i64 @cb_ld_sel1_imm2(ptr %base) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; d_ldw_cb_imm 1, d0, r1, 2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r_pair = call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %base, i32 1, i32 2)
@@ -50,7 +48,6 @@ define void @cb_st_sel0_imm1(i64 %data, ptr %base) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; d_sdw_cb_imm 0, d0, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   call ptr @llvm.haydn.sdw.cb.imm(i64 %data, ptr %base, i32 0, i32 1)
@@ -64,10 +61,9 @@ define void @cb_setup_and_st(i64 %data, ptr %base) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 4096 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 4351 }
-; CHECK-NEXT:    { nop; csrw{{(_w)?}} 44, r2 }
-; CHECK-NEXT:    { nop; csrw{{(_w)?}} 45, r3 }
+; CHECK-NEXT:    { nop; csrw 44, r2 }
+; CHECK-NEXT:    { nop; csrw 45, r3 }
 ; CHECK-NEXT:    { nop; d_sdw_cb_imm 0, d0, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; Operand-order guard (sel=0, imm=1). ExpandPseudos SETCBR→CSRW_W carries

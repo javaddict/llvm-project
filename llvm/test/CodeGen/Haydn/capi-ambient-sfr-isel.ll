@@ -1,7 +1,10 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:     -enable-post-misched=false -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
+; RUN:     -enable-post-misched=false -verify-machineinstrs < %s | FileCheck %s
 
 ; Role: semantic — ambient SFR quarantine ISel exit: x2/x4 movt/movf are IntrHasSideEffects → G_INTRINSIC_W_SIDE_EFFECTS.
+; Post-RA pack of two-epoch reverse is format-pipeline owned; this pin is ISel emit.
 
 ; C1.2 ambient SFR quarantine ISel exit:
 ;   x2/x4 movt/movf are IntrHasSideEffects → G_INTRINSIC_W_SIDE_EFFECTS

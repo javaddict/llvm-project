@@ -4,7 +4,8 @@
 # RUN:     -run-pass=haydn-postlegalizer-combiner,regbankselect,instruction-select \
 # RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=ISEL
 
-# Role: MIR — Wave T3.3: G_SEXTLOAD + G_PTR_ADD AGU fuse → G_HAYDN_*INC_LOAD is_sext=1 → S_LBS/S_LHWS (signed byte/half post/pre-inc).
+# Role: MIR — G_SEXTLOAD + G_PTR_ADD AGU fuse → G_HAYDN_*INC_LOAD is_sext=1
+# → S_LBS/S_LHWS. G_ZEXTLOAD stays is_sext=0 → S_LBU/S_LHWU.
 
 # Wave T3.3: G_SEXTLOAD + G_PTR_ADD AGU fuse → G_HAYDN_*INC_LOAD is_sext=1 →
 # S_LBS/S_LHWS (signed byte/half post/pre-inc). G_ZEXTLOAD stays is_sext=0 → S_LBU/S_LHWU.

@@ -1,0 +1,71 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=prologepilog,postrapseudos \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — withDR64PackBase large-offset MatInt must not seed from dirty R0.
+#
+# REGRESSION TEST: PA2-B6 / W49. withDR64PackBase already refuses Base==R0,
+# but the !isInt<20>(Off) MatInt arm seeded Cur=R0 with no local
+# isSoftZeroR0Clean check. F24 historically left R0 dirty; that read is a
+# silent wrong pack-slot address.
+#
+# Fix: if R0 is dirty at the insertion point, emit XOR32 R0,R0,R0 (one local
+# cleanliness restore) then MatInt. Do not revive a function-wide epilogue
+# xor. Base stays a scavenged non-R0 GPR.
+#
+# Test design: VLA forces hasFP. A >simm20 local pushes DR64PackFI's
+# FrameReg-relative offset out of isInt<20> so the MatInt arm runs (not
+# ADDI32_W FrameReg, Off). An explicit ADDI32_W into R0 before LOADI64 is a
+# non-restore def → isSoftZeroR0Clean is false. The general LOADI64
+# (0x2_0000_0001, both halves nonzero) takes the DR64PackFI pack path.
+# If the cleanliness restore is dropped, either the debug assert fires or
+# MatInt reads the dirty seed. Pin: XOR32 R0,R0,R0 immediately after the
+# dirty write and before the MatInt dest (which must not be R0).
+#
+# Do not rebase dr64-pack-slot-large-frame-fallback.ll /
+# dr64-pack-base-spill-simm20-overflow.ll (W11).
+
+--- |
+  target triple = "haydn-unknown-elf"
+
+  define i64 @pack_base_matint_dirty_r0(i32 %a, i32 %n) nounwind {
+  entry:
+    ret i64 0
+  }
+...
+---
+name:            pack_base_matint_dirty_r0
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+stack:
+  - { id: 0, type: variable-sized, alignment: 8 }
+  - { id: 1, size: 600000, alignment: 8 }
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: pack_base_matint_dirty_r0
+    ; Prologue soft-zero (PEI) then the explicit dirty write:
+    ; CHECK: $r0 = frame-setup XOR32 $r0, $r0
+    ; CHECK: $r0 = ADDI32_W $r1, 99
+    ; Local restore immediately before MatInt seed. Dest of LUI is the
+    ; scavenged pack base, never R0 (NeedsZeroBase / Base != R0).
+    ; CHECK-NEXT: $r0 = XOR32 $r0, $r0
+    ; CHECK-NEXT: $[[BASE:r[1-9]|r1[0-2]]] = LUI $r0,
+    ; CHECK-NOT: $r0 = LUI
+    ; CHECK: $[[BASE]] = ADDI32_W $[[BASE]],
+    ; CHECK: $[[BASE]] = ADD32 $r{{[0-9]+}}, $[[BASE]]
+    ; Pack: two ST32 halves + LD64 on that same base. No SP transient.
+    ; CHECK: ST32 $r{{[0-9]+}}, $[[BASE]], 0
+    ; CHECK: ST32 {{(killed )?}}$r{{[0-9]+}}, $[[BASE]], 1
+    ; CHECK: {{.*}} = LD64 $[[BASE]], 0
+    ; CHECK-NOT: $r13 = SUBI32 $r13, 8
+    ; CHECK-NOT: $r13 = ADDI32_W $r13, 8
+    $r0 = ADDI32_W $r1, 99
+    $d0 = LOADI64 8589934593
+    RET implicit $d0, implicit $r15
+...

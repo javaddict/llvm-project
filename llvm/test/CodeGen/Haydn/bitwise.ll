@@ -170,6 +170,9 @@ entry:
   %r = add i32 %not_and, %or
   ret i32 %r
 }
-; CHECK-DAG: {{xor32|xori32}}
+; The ~x value-nots select NOT32 (GISel Pat for xor x,-1; see bool-ops.ll).
+; The old xor32 alternation here was only ever satisfied by the epilogue r0
+; re-zero xor, which F24 removed from leaf no-call functions.
+; CHECK-DAG: not32
 ; CHECK-DAG: {{or32|ori32}}
 ; CHECK-DAG: {{add32|addi32}}

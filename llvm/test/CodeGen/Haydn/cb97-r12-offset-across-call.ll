@@ -34,7 +34,11 @@ define i32 @test_call_has_modsi3(i32 %a, i32 %b) nounwind {
 ; no stale sp+r12 access without remat (failure mode when R12 was
 ; reserved AT and remat was DCE'd across the call).
 ; CHECK-NOT: { {{ld32_reg|st32_reg}}{{[^}]*}}sp, r12
-; CHECK: xor32{{.*}}r0, r0, r0
+; F24: at -O1 the srem-by-7 is fully inlined (mulssh/mull magic number), so
+; this function is leaf — no call, empty CSI — and the epilogue r0 re-zero
+; xor is no longer emitted. The guarded stale sp+r12 failure mode needs a
+; callee-clobber boundary, which a leaf cannot have; the loop test below
+; still calls __modsi3 and keeps its epilogue xor pinned.
 ; Epilogue restores CSRs via ld32/ld32_reg with a rematerialized offset in
 ; some scavenged GPR (not necessarily r12 when AT is optional).
 ; CHECK: {{ld32|st32|addi32}}

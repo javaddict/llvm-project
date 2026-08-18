@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
-; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s
 
 ; Role: semantic — systematic: every succ-empty MBB must terminate (soft RET).
 

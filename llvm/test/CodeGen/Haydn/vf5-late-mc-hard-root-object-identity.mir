@@ -34,6 +34,8 @@
   define void @hard_root_two_member_alu() { ret void }
   define void @hard_root_three_member_mixed_fu() { ret void }
   define void @hard_root_killed_consolidated_operands() { ret void }
+  define void @hard_root_xor32_beqz_e2_rematch() { ret void }
+  define void @pad_only_missing_row() { ret void }
 ...
 ---
 # Two-member Format E hard root (logical ADD32+XOR32). Finalize
@@ -142,3 +144,57 @@ body:             |
 # OBJ-NOT: <unknown>
 # OBJ-NOT: setcbr
 # OBJ-NOT: loopdec
+
+...
+---
+# XOR32 and BEQZ are e0-only under E2. A dual E2 stamp with XOR32/BEQZ
+# at membership entry 1 is an illegal inverse. Finalize rematches onto
+# E3 members and stamps the E3 row.
+name:            hard_root_xor32_beqz_e2_rematch
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    successors: %bb.1
+    BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
+      $r3 = XOR32 $r0, $r1, implicit-def dead $sfr
+      BEQZ $r2, %bb.1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+# MIR-LABEL: name: hard_root_xor32_beqz_e2_rematch
+# MIR: BUNDLE 1, 0
+# MIR: XOR32_E3_
+# MIR: BEQZ_E3_
+# MIR: RET
+
+# OBJ-LABEL: <hard_root_xor32_beqz_e2_rematch>:
+# OBJ: xor32
+# OBJ: beqz
+# OBJ: jalr
+# OBJ-NOT: <unknown>
+
+...
+---
+# Pad-only idle with no row imm must stamp a product row. Printer
+# !Row→E2 is fatal; full-bundle NOP idle is legal constructively.
+name:            pad_only_missing_row
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    BUNDLE {
+      NOP
+    }
+    RET implicit $r15
+
+# MIR-LABEL: name: pad_only_missing_row
+# MIR: BUNDLE 0, 0 {
+# MIR-NEXT: NOP
+# MIR: RET

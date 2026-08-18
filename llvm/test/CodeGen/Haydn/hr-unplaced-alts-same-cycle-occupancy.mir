@@ -1,0 +1,38 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs -debug-only=haydn-hazard-rec %s -o - 2>&1 \
+# RUN:   | FileCheck %s
+# REQUIRES: asserts
+#
+# REGRESSION TEST: W35 / PA-N1 — same-cycle checkConflict must still walk
+# itinerary occupancy (StageCycle>0), not early-return on UnplacedAltsSameCycle.
+#
+# Bug: UnplacedAltsSameCycle `return false` at DeltaCycles==0 skipped ALL
+# itinerary stages, including StageCycle>0 occupancy. Multi-stage uses
+# checkConflict as its only placement gate (fitInInterval /
+# resourcesConverged), so a later-stage FU conflict was invisible.
+# Leftover StageCycle==0 FieldSlot unit bits (MOVE32_DR Slot0_ALU) stay
+# skipped — exactTryAdd owns issue-cycle injectivity. Product SMS default
+# stays OFF. Stage-0 PostPipeliner stays deleted.
+#
+# Test design:
+#   1. Debug pin: postmisched must log the same-cycle occupancy walk
+#      (fails if the early-return returns). That is the W35 hole.
+#   2. Both extracts survive postmisched. Leftover StageCycle==0 unit
+#      bits stay skipped (exactTryAdd / s64-compare-gt pack pin).
+#
+# CHECK: checkConflict: same-cycle itinerary occupancy (skip leftover StageCycle==0 unit bits)
+# CHECK: name: unplaced_move32_dr_still_packs
+# CHECK-DAG: MOVE32_DR_L
+# CHECK-DAG: MOVE32_DR_H
+---
+name:            unplaced_move32_dr_still_packs
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0
+
+    $r1 = MOVE32_DR_L $d0, implicit-def dead $sfr
+    $r2 = MOVE32_DR_H $d0, implicit-def dead $sfr
+    $r0 = COPY $r1
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

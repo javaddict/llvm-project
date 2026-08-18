@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1  -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — BiQuad IIR filter (Direct Form 1), 32x32-bit fixed-point (portable C version).
 

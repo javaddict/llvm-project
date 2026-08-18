@@ -1,0 +1,96 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/ld32_misaligned.mir -o - 2>&1 | FileCheck %s --check-prefix=LD32
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/st32_misaligned.mir -o - 2>&1 | FileCheck %s --check-prefix=ST32
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/ld64_misaligned.mir -o - 2>&1 | FileCheck %s --check-prefix=LD64
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/st64_misaligned.mir -o - 2>&1 | FileCheck %s --check-prefix=ST64
+#
+# Role: verifier — leftover *_POST_INC split expand must fail closed on a
+# misaligned displacement. report_fatal_error(GenCrashDiag=false) → exit 1
+# (plain `not`, not abort / not --crash).
+#
+# REGRESSION TEST: NDEBUG used to silently truncate Offset>>2 / Offset>>3
+# when assert(Offset % 4/8 == 0) was compiled out. A leftover POST_INC with
+# a non-zero unaligned offset takes the LD/ST + ADDI32_W split; that path
+# must fatal with opcode + offset, not emit a wrong scaled immediate.
+#
+# Test design: Offset!=0 skips the fused AGU form. Offset=2 is not
+# word-aligned (LD32/ST32); Offset=4 is not dword-aligned (LD64/ST64).
+# If the fatal regresses to assert, Debug aborts (lit `not` still fails
+# FileCheck). If it regresses to silent shift, llc succeeds and FileCheck
+# misses the diagnostic.
+
+#--- ld32_misaligned.mir
+--- |
+  define i32 @ld32_misaligned(ptr %p) {
+    %v = load i32, ptr %p, align 4
+    ret i32 %v
+  }
+...
+---
+name:            ld32_misaligned
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; LD32: HaydnExpandPseudos: LD32_POST_INC displacement 2 is not word-aligned
+    $r1 = LD32_POST_INC $r2, 4, 2
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- st32_misaligned.mir
+--- |
+  define void @st32_misaligned(ptr %p, i32 %v) {
+    store i32 %v, ptr %p, align 4
+    ret void
+  }
+...
+---
+name:            st32_misaligned
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; ST32: HaydnExpandPseudos: ST32_POST_INC displacement 2 is not word-aligned
+    ST32_POST_INC $r1, $r2, 4, 2
+    RET implicit $r15, implicit $r2
+
+#--- ld64_misaligned.mir
+--- |
+  define i64 @ld64_misaligned(ptr %p) {
+    %v = load i64, ptr %p, align 8
+    ret i64 %v
+  }
+...
+---
+name:            ld64_misaligned
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; LD64: HaydnExpandPseudos: LD64_POST_INC displacement 4 is not dword-aligned
+    $d0 = LD64_POST_INC $r2, 8, 4
+    RET implicit $r15, implicit $d0, implicit $r2
+
+#--- st64_misaligned.mir
+--- |
+  define void @st64_misaligned(ptr %p, i64 %v) {
+    store i64 %v, ptr %p, align 8
+    ret void
+  }
+...
+---
+name:            st64_misaligned
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $r2, $r15
+    ; ST64: HaydnExpandPseudos: ST64_POST_INC displacement 4 is not dword-aligned
+    ST64_POST_INC $d0, $r2, 8, 4
+    RET implicit $r15, implicit $r2

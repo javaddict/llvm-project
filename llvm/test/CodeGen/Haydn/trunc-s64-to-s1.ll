@@ -33,7 +33,6 @@ define i32 @trunc_s64_2_to_i1() nounwind {
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %c = trunc i64 2 to i1            ; 2 & 1 = 0 -> false
@@ -50,7 +49,6 @@ define i32 @trunc_s64_3_to_i1() nounwind {
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, -1 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %c = trunc i64 3 to i1            ; 3 & 1 = 1 -> true
@@ -69,11 +67,10 @@ define i32 @trunc_s64_branch(i64 %v) nounwind {
 ; CHECK-NEXT:    { nop; bnez r1, .LBB2_2 }
 ; CHECK-NEXT:  // %bb.1: // %then
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB2_3 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB2_2: // %else
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
-; CHECK-NEXT:  .LBB2_3: // %then
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:

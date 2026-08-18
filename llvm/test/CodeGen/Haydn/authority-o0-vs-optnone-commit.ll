@@ -23,8 +23,11 @@
 ; Live product (re-verify before citing):
 ;   * PostMachineScheduler still calls skipFunction (quality/reorder only).
 ;   * FinalizeBundle and VerifyBundles deliberately do NOT call skipFunction:
-;     they are the target-local no-reorder commit ownership for optnone and for
-;     any bare MI remaining after allowed late growth.
+;     they are the target-local no-reorder commit ownership for optnone.
+;     HaydnLatencyStalls sits between PostMachineScheduler and that first
+;     Finalize so stall NOPs are committed in the same lane. Product default
+;     also runs late Finalize/Verify after BranchRelaxation so
+;     insertIndirectBranch LUI+ADDI32_W+JALR_W rejoin the same lane.
 ;   * Therefore both plain O0 and optnone leave committed Format-E BUNDLE roots
 ;     with private member placement and durable row/completion imms after
 ;     haydn-verify-bundles. Singleton completion is the documented stub identity
@@ -32,33 +35,35 @@
 ;     fail-closed when golden is silent.
 ;   * Independent multi-op canaries pin the product-shape distinction that
 ;     dependent multi-op chains miss: plain O0 postmisched packs co-issue
-;     (BUNDLE 0, 0 == E2 + AllEntriesReal with two private members); optnone
-;     stays sequential bare logicals until Finalize wraps each as BUNDLE 0, 0 (full-slot NOP pad).
+;     (BUNDLE 1, 0 == E3 + AllEntriesReal with two private members); optnone
+;     stays sequential bare logicals until Finalize wraps each as BUNDLE 0, 0.
 ;   * Verify also refuses mixed committed-BUNDLE + bare encode residual for
 ;     every function (partial-commit escape), while all-bare non-optnone MIR
 ;     unit fixtures remain legal until Finalize runs.
 ;   * HaydnLatencyStalls never calls skipFunction.
 ;   * Never change generic skipFunction semantics for quality passes.
 ;
-; Inventory: Inputs/SOURCE-AUTHORITY-ANCHORS.txt
+; Inventory: Inputs/SOURCE-AUTHORITY-ANCHORS.txt (T8-EVID restamp)
 ;
 ; Function order: optnone bodies first so SKIP-OPTNONE / PACK checks stay
 ; in-function (positive JALR bounds -NOT before plain multi-op setDesc members).
 
 ; ---------------------------------------------------------------------------
-; Phase firewall: no BUNDLE / private member / row / completion / issue-cycle
-; identity before RA or through RA. Finalize/Verify still commit after
-; postmisched (including optnone: they do not skipFunction).
+; Phase firewall: no BUNDLE / private member / setDesc / row / completion /
+; issue-cycle identity before RA or through RA. Finalize/Verify still commit
+; after postmisched (including optnone: they do not skipFunction).
 ; ---------------------------------------------------------------------------
 ; PRERA: ADD32
 ; PRERA-NOT: BUNDLE
 ; PRERA-NOT: {{ADD32|XOR32|JALR_W}}_S{{[0-2]}}
+; PRERA-NOT: {{ADD32|XOR32|JALR_W}}_E{{[23]}}_
 ; PRERA-NOT: BUNDLE_E96
 ; PRERA-NOT: BundleFormatRowID
 ; PRERA-NOT: CompletionStateID
 ; THRU: ADD32
 ; THRU-NOT: BUNDLE
 ; THRU-NOT: {{ADD32|XOR32|JALR_W}}_S{{[0-2]}}
+; THRU-NOT: {{ADD32|XOR32|JALR_W}}_E{{[23]}}_
 ; THRU-NOT: BUNDLE_E96
 ; THRU-NOT: BundleFormatRowID
 ; THRU-NOT: CompletionStateID
@@ -83,7 +88,6 @@
 ; PACK: JALR
 ; Plain O0 independent multi co-issues under postmisched (product shape).
 ; PACK-LABEL: name:{{ +}}indep_plain
-; PACK: BUNDLE 1, 0
 ; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PACK: JALR
@@ -110,8 +114,8 @@
 
 ; ---------------------------------------------------------------------------
 ; Plain O0 after Finalize+Verify: committed cycles only.
-; Dependent chains are singleton Format-E (BUNDLE 0, 2). Independent multi
-; keeps the postmisched full-fill co-issue (BUNDLE 0, 0) and never leaves bare
+; Dependent chains are singleton Format-E wraps. Independent multi keeps
+; the postmisched full-fill co-issue (BUNDLE 1, 0) and never leaves bare
 ; encode MIs. optnone is no-reorder singleton commit only.
 ; ---------------------------------------------------------------------------
 ; PLAIN-LABEL: name:{{ +}}with_optnone
@@ -145,7 +149,7 @@
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PLAIN-NOT: $r{{[0-9]+}} = ADD32{{ }}
 ; PLAIN: JALR_E2
-; Independent plain O0 multi-MI full-fill (AllEntriesReal full-fill co-issue).
+; Independent plain O0 multi-MI full-fill (AllEntriesReal co-issue).
 ; PLAIN-LABEL: name:{{ +}}indep_plain
 ; PLAIN: BUNDLE 1, 0
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_

@@ -40,7 +40,12 @@
 > | **CB-151** | P2 (sharpened 2026-08-15) | AR-ua encode | The D-side unaligned-window post ops (`d_ltwua_post` family: dest, ar_sel, rbase, rdelta, dir) encode through the bag-by-class member binding into shorter AR-shape members, silently dropping/permuting operands — self-consistent through this toolchain's decoder, rejected by BundleSim's golden catalog ("operand kind disagrees", cb100_ar_unaligned red as the tracking signal). This line's own `ar-unaligned-roundtrip.s` is `XFAIL: *` with "encode residual" in its OWNER note. Closing it needs the member-selection/ledger-signature gating this line planned ("MCInstrDesc gating") — note the generator's canonicalizer pins same-class permutations against the MAJORITY member signature, which cannot see a family that is consistently permuted against the LOGICAL's operand order. SHARPENED: the "dropped operands" are phantom limbs. Golden's whole UA family carries NO rs2 and NO dir_sel (`D_LTWUA_POST rtd, ar_sel, rs`; Behavior reads only rs/ar[ar_sel], writes rtd/ar/rs+8) — the five-operand LLVM logical shape is a fabrication against golden, and the wire member (3 fields: ar_sel, dest1, dest2) is the CORRECT shape. The public builtins (int64_t(void const*, int, int, int) in haydn_dsp.h) mirror the fat form, so the real fix reshapes the AE-compat LOWERING to expand the 4-arg public semantic onto golden-shaped ops — owner's API-intent territory (same layer as CB-150), not a generator patch. |
 > | **CB-150** | P3 | AE tier machinery | Tip mid-stream state, pre-existing at 1c740f0d5708: `ae-tier-audit.test` inventory counts drift (macros=600 surface=673 td_tiers=661), `ae-compat-tier-closure.c`, and `ae-compat-selp24-f24-satshift.c` expecting `llvm.smax`-shaped compat IR the current headers no longer produce. Needs the tier inventory regeneration workflow (owner's machine) — not guessed at in the merge. |
 >
-> 
+> **CB-61 FIXED (minted 2026-08-17, W54):** `-O0` clang abort in
+> `LegalizationArtifactCombiner::tryCombineTrunc` via
+> `MachineIRBuilder::validateTruncExt` ("invalid widening trunc"). See
+> dedicated section below. Not OPEN.
+>
+
 ### Closed same day — CB-155 FIXED; CB-156/CB-157 were wrong test goldens (2026-08-17)
 
 **CB-155 FIXED**: `fieldSlotKeepOperands` failed closed on
@@ -67,6 +72,30 @@ corruption" — same call correct once then aborting — were a misread of
 which check aborted: the sdiv printed correct and the WRONG-golden srem on
 the next line did the aborting. Lesson re-learned: HOST-ORACLE THE TEST
 before filing the compiler; CB-158 survived that knife, these two did not.
+
+## CB-61 — FIXED (minted 2026-08-17)
+
+**Was:** clang `-O0 -global-isel-abort=1` abort on nested trunc/ext
+cast chains. `LegalizationArtifactCombiner::tryCombineTrunc` folded
+`trunc(trunc)` unconditionally; an earlier artifact combine could
+narrow the inner source so `TruncSrc` was not strictly wider than
+`DstTy`. `MachineIRBuilder::buildTrunc` then hit
+`validateTruncExt` (`"invalid widening trunc"`) and SIGABRT'd llc.
+
+**Fix (one guard, D1000 HC#0 exception):** skip the fold when
+`MRI.getType(TruncSrc).getSizeInBits() <= DstTy.getSizeInBits()`.
+Scoped to that one site in
+`llvm/include/llvm/CodeGen/GlobalISel/LegalizationArtifactCombiner.h`.
+Not a target hook.
+
+**Pins:**
+- `llvm/test/CodeGen/Haydn/cb61-o0-artifact-trunc-guard.ll`
+- `llvm/test/CodeGen/Haydn/cb61-o0-postlegalizer-apint-width.ll`
+  (follow-on APInt width hygiene after the guard landed)
+- `llvm/test/CodeGen/Haydn/trunc-of-ext-identity-prelegalizer.ll`
+
+**Ledger:** `contracts/pipeline.md` D1000 row. Do not re-open unless
+the width guard is deleted.
 
 ### 2026-08-17 — provenance: mhyang's sim test corpus, first run against this toolchain
 

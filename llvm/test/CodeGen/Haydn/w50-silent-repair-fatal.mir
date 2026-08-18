@@ -1,0 +1,32 @@
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnAsmPrinter.cpp --check-prefix=A
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnMCInstLower.cpp --check-prefix=D
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFinalizeBundle.cpp --check-prefix=F
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -start-after=haydn-verify-bundles \
+# RUN:   %t/missing_row.mir -o - 2>&1 | FileCheck %s --check-prefix=NO-ROW
+# REQUIRES: haydn-registered-target
+#
+# Compiler-origin silent repairs must fatal: missing-row E2 default,
+# child-count row override, and dangling-MBB rewrite onto the parent.
+
+# A: refuse E2
+# A: E3 override
+# D: refuse dangling-block repair
+# F: silent repair
+
+#--- missing_row.mir
+--- |
+  define void @missing_row() { ret void }
+...
+---
+name:            missing_row
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; NO-ROW: missing{{( or unknown)?}} BundleFormatRowID
+    BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15

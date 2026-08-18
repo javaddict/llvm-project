@@ -45,7 +45,7 @@ define i32 @self_comparison_ult(i32 %a) nounwind {
 define i32 @inverse_comparison(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: inverse_comparison:
 ; CHECK: slt32
-; CHECK: { {{.*}}xor32 r0, r0, r0{{.*}} }
+; F24: leaf no-call, empty CSI — no epilogue r0 re-zero xor anymore.
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a
@@ -75,7 +75,7 @@ define i32 @unrelated_comparisons(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 define i32 @inverse_comparison_select(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: inverse_comparison_select:
 ; CHECK: slt32
-; CHECK: { {{.*}}xor32 r0, r0, r0{{.*}} }
+; F24: leaf no-call, empty CSI — no epilogue r0 re-zero xor anymore.
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp1 = icmp slt i32 %a, %b
   %cmp2 = icmp slt i32 %b, %a

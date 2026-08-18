@@ -22,7 +22,11 @@ else:
 define i32 @icmp_ne(i32 %a, i32 %b) {
 ; CHECK-LABEL: icmp_ne:
 ; CHECK: seq32
-; CHECK: xor32
+; The icmp ne branch lowers to seq32 + bnez (branch to else when equal).
+; The old bare-xor32 expectation was matching the epilogue r0 re-zero xor
+; (the prologue xor precedes seq32 and cannot satisfy it), not a value op;
+; F24 removed the epilogue xor in leaf no-call functions, so only seq32 is
+; load-bearing here.
 entry:
   %cmp = icmp ne i32 %a, %b
   br i1 %cmp, label %then, label %else

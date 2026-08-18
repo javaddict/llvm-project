@@ -121,11 +121,12 @@ define i32 @test_all_gpr_caller_saved(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    { nop; st32 r10, r12, 3 }
 ; CHECK-NEXT:    { nop; st32 r9, r12, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r12, 5 }
-; CHECK-NEXT:    { st32 r1, sp, 3; move32 r9, r2; move32 r10, r3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r1, sp, 3; move32 r9, r2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { st32 r7, sp, 2; move32 r11, r4; move32 fp, r5 } // 4-byte Folded Spill
+; CHECK-NEXT:    { move32 r10, r3; move32 r11, r4 }
+; CHECK-NEXT:    { move32 fp, r5; move32 r8, r6 }
+; CHECK-NEXT:    { nop; st32 r7, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; move32 r8, r6 }
 ; CHECK-NEXT:    { nop; jal lr, clobber_gpr }
 ; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload

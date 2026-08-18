@@ -4,10 +4,11 @@
 
 # Test that the PostLegalizerCombiner infrastructure runs without errors.
 #
-# NOTE: MAC fusion (G_MUL + G_ADD -> MAC32) is NOT performed here because
-# this combiner runs before RegBankSelect — registers are still generic but
-# MAC32 requires GPR32. MAC fusion is done in PostSelectOptimize instead.
-# This test verifies the combiner pass runs correctly and preserves generic MIR.
+# NOTE: MAC fusion (G_MUL + G_ADD -> MAC) is NOT performed here: formMACs /
+# PostSelect MAC densify is FATED (hard constraint #6) and is dead; the
+# automatic low-lane widening to G_MULA64{,U} happens in the
+# PreLegalizerCombiner, and PostSelect is cross-bank peephole only. This
+# test verifies the combiner pass runs correctly and preserves generic MIR.
 
 ---
 name:            test_combiner_passthrough

@@ -1,4 +1,5 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — Circular buffer (CB) and bit-reversed (BREV) addressing intrinsics must emit native mnemonics (not pseudos / libcalls).
 

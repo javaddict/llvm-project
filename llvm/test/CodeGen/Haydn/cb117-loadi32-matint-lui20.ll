@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
-; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s --check-prefix=CHECK-O0
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s --check-prefix=CHECK-O0
 
 ; Role: semantic — LOADI32 / constant rematerialisation must use ISA LUI (imm12 → bits[31:20], i.e.
 

@@ -32,9 +32,9 @@ define i64 @test_movda32(i32 %x) {
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.movda32(i32 %x)
   ret i64 %r
 }
@@ -50,9 +50,9 @@ define i64 @test_movda16(i32 %x) {
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.movda16(i32 %x)
   ret i64 %r
 }
@@ -72,9 +72,9 @@ define i64 @test_movda32x2(i32 %lo, i32 %hi) {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i64 @llvm.haydn.movda32x2(i32 %lo, i32 %hi)
   ret i64 %r
 }
@@ -88,9 +88,9 @@ define i32 @test_movad32_low(i64 %dr) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.movad32.low(i64 %dr)
   ret i32 %r
 }
@@ -104,9 +104,9 @@ define i32 @test_movad32_high(i64 %dr) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r1, d0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i32 @llvm.haydn.movad32.high(i64 %dr)
   ret i32 %r
 }
@@ -121,9 +121,9 @@ define i32 @test_roundtrip_low(i32 %x) {
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %dr = call i64 @llvm.haydn.movda32(i32 %x)
   %back = call i32 @llvm.haydn.movad32.low(i64 %dr)
   ret i32 %back

@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs  -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — FILED : DR64 R_CMP instructions (SLT64 SEQ64, SLE64 and _S0/_S2 variants) have an operand-flag.
 

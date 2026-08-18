@@ -109,10 +109,30 @@
 # RUN:   %t/residual_nsa16_l.mir -o - 2>&1 | FileCheck %s --check-prefix=NSA16LBAN
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_nsaz16_l.mir -o - 2>&1 | FileCheck %s --check-prefix=NSAZ16LBAN
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_set_hwloop.mir -o - 2>&1 | FileCheck %s --check-prefix=BSET
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_setcbr.mir -o - 2>&1 | FileCheck %s --check-prefix=BCBR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_load_addr.mir -o - 2>&1 | FileCheck %s --check-prefix=BADDR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_loopctl.mir -o - 2>&1 | FileCheck %s --check-prefix=BLOOP
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_set_hwloop_reg.mir -o - 2>&1 | FileCheck %s --check-prefix=BSETR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_setcbr_end.mir -o - 2>&1 | FileCheck %s --check-prefix=BCBRE
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_loopjnz.mir -o - 2>&1 | FileCheck %s --check-prefix=BJNZ
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_loopstart.mir -o - 2>&1 | FileCheck %s --check-prefix=BSTART
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_loadi32.mir -o - 2>&1 | FileCheck %s --check-prefix=BLOADI
 
 # Role: verifier — ExpandPseudos residual matrix. Relocated surfaces
 # (PseudoCALL / LIBCALL_* / VASTART / VACOPY / VAARG_* / ADJCALLSTACK) fail
-# closed here; product owners are CallLowering / legalizer / PEI.
+# closed here; product owners are CallLowering / legalizer / PEI. Leftover
+# SET_HWLOOP / SETCBR / LOOPCTL / LOAD_ADDR as BUNDLE children are fatal
+# (in-bundle expand is leftover *_POST_INC only).
 
 #--- load_addr_fi.mir
 --- |
@@ -194,7 +214,7 @@ body:             |
     successors: %bb.1, %bb.2
     ; HWLOOP: SET_HWLOOP_W
     ; HWLOOP-NOT: SET_HWLOOP{{$}}
-    SET_HWLOOP 0, %bb.1, %bb.2, 16
+    SET_HWLOOP 0, %bb.1, %bb.2, 16, implicit-def dead $sfr
     RET implicit $r15
   bb.1:
     RET implicit $r15
@@ -215,7 +235,7 @@ body:             |
     successors: %bb.1, %bb.2
     ; HWLOOPR: SET_HWLOOP_F2_W
     ; HWLOOPR-NOT: SET_HWLOOP_REG
-    SET_HWLOOP_REG 0, %bb.1, %bb.2, $r4
+    SET_HWLOOP_REG 0, %bb.1, %bb.2, $r4, implicit-def dead $sfr
     RET implicit $r15
   bb.1:
     RET implicit $r15
@@ -1025,4 +1045,176 @@ body:             |
     liveins: $d0, $r15
     ; NSAZ16LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
     $r1 = NSAZ16_L $d0
+    RET implicit $r15
+
+#--- bundled_set_hwloop.mir
+--- |
+  define void @residual_bundled_set_hwloop() { ret void }
+...
+---
+name:            residual_bundled_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1
+    ; BSET: residual cycle-forming bundled child
+    ; BSET: SET_HWLOOP
+    BUNDLE implicit-def dead $sfr {
+      SET_HWLOOP 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- bundled_setcbr.mir
+--- |
+  define void @residual_bundled_setcbr() { ret void }
+...
+---
+name:            residual_bundled_setcbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BCBR: residual cycle-forming bundled child
+    ; BCBR: SETCBR
+    BUNDLE {
+      SETCBR_BEGIN 0, $r1
+    }
+    RET implicit $r15
+
+#--- bundled_load_addr.mir
+--- |
+  define void @residual_bundled_load_addr() { ret void }
+...
+---
+name:            residual_bundled_load_addr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; BADDR: residual cycle-forming bundled child
+    ; BADDR: LOAD_ADDR
+    BUNDLE implicit-def $r1 {
+      $r1 = LOAD_ADDR 0
+    }
+    RET implicit $r15
+
+#--- bundled_loopctl.mir
+--- |
+  define void @residual_bundled_loopctl() { ret void }
+...
+---
+name:            residual_bundled_loopctl
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BLOOP: residual cycle-forming bundled child
+    ; BLOOP: LoopDec
+    BUNDLE implicit-def $r1 {
+      $r1 = LoopDec $r1
+    }
+    RET implicit $r15
+
+#--- bundled_set_hwloop_reg.mir
+--- |
+  define void @residual_bundled_set_hwloop_reg() { ret void }
+...
+---
+name:            residual_bundled_set_hwloop_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r4, $r15
+    successors: %bb.1
+    ; BSETR: residual cycle-forming bundled child
+    ; BSETR: SET_HWLOOP_REG
+    BUNDLE implicit-def dead $sfr {
+      SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4, implicit-def dead $sfr
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- bundled_setcbr_end.mir
+--- |
+  define void @residual_bundled_setcbr_end() { ret void }
+...
+---
+name:            residual_bundled_setcbr_end
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BCBRE: residual cycle-forming bundled child
+    ; BCBRE: SETCBR
+    BUNDLE {
+      SETCBR_END 1, $r1
+    }
+    RET implicit $r15
+
+#--- bundled_loopjnz.mir
+--- |
+  define void @residual_bundled_loopjnz() { ret void }
+...
+---
+name:            residual_bundled_loopjnz
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.0
+    ; BJNZ: residual cycle-forming bundled child
+    ; BJNZ: LoopJNZ
+    BUNDLE {
+      LoopJNZ $r1, %bb.0
+    }
+    RET implicit $r15
+
+#--- bundled_loopstart.mir
+--- |
+  define void @residual_bundled_loopstart() { ret void }
+...
+---
+name:            residual_bundled_loopstart
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BSTART: residual cycle-forming bundled child
+    ; BSTART: LoopStart
+    BUNDLE {
+      LoopStart $r1, 0
+    }
+    RET implicit $r15
+
+#--- bundled_loadi32.mir
+--- |
+  define void @residual_bundled_loadi32() { ret void }
+...
+---
+name:            residual_bundled_loadi32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1
+    ; BLOADI: residual cycle-forming bundled child
+    ; BLOADI: LOADI32
+    BUNDLE implicit-def $r1 {
+      $r1 = LOADI32 %bb.1
+    }
+    RET implicit $r15
+  bb.1:
     RET implicit $r15

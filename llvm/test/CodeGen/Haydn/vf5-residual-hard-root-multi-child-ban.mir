@@ -201,7 +201,7 @@ body:             |
     ; V-SET_HWLOOP: one-to-one ban
     BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      SET_HWLOOP 0, %bb.1, %bb.1, 8
+      SET_HWLOOP 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
     }
     RET implicit $r15
   bb.1:
@@ -223,7 +223,7 @@ body:             |
     ; V-SET_HWLOOP_REG: one-to-one ban
     BUNDLE 0, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r4 {
       $r5 = ADD32 $r0, $r1, implicit-def dead $sfr
-      SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+      SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4, implicit-def dead $sfr
     }
     RET implicit $r15
   bb.1:
@@ -380,7 +380,7 @@ body:             |
     ; P-SET_HWLOOP: must be exact-committed real MIs before AsmPrinter
     BUNDLE 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      SET_HWLOOP 0, %bb.1, %bb.1, 8
+      SET_HWLOOP 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
     }
     RET implicit $r15
   bb.1:
@@ -402,7 +402,7 @@ body:             |
     ; P-SET_HWLOOP_REG: must be exact-committed real MIs before AsmPrinter
     BUNDLE 0, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r4 {
       $r5 = ADD32 $r0, $r1, implicit-def dead $sfr
-      SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4
+      SET_HWLOOP_REG 0, %bb.1, %bb.1, $r4, implicit-def dead $sfr
     }
     RET implicit $r15
   bb.1:

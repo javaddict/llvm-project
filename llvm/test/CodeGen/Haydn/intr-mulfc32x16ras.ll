@@ -1,5 +1,6 @@
 ; REQUIRES: haydn-registered-target
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:   -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — Un-XFAIL'd : X2FCMULA32RS ISel selection now lands; the test was stale-CHECK only (lesson).
 

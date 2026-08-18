@@ -1,5 +1,5 @@
 ; REQUIRES: haydn-registered-target
-; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs  -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — Un-XFAIL'd : vector-add ISel works; was stale-CHECK only.
 

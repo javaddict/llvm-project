@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -filetype=asm %s -o %t.s
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -filetype=obj %s -o %t_c.o
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -filetype=asm %s -o %t.s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -filetype=obj %s -o %t_c.o
 ; RUN: llvm-objdump -d --triple=haydn-unknown-elf %t_c.o > %t_c.dis
 ; RUN: FileCheck %s --check-prefix=ASM --input-file=%t.s
 

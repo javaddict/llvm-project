@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2  -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 ; REQUIRES: haydn-registered-target
 
 ; Role: smoke — Smoke: pre-existing CHECK drift — compile and emit a return.

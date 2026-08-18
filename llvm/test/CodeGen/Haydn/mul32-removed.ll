@@ -18,7 +18,6 @@ define i32 @scalar_mul(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; mull r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -39,7 +38,6 @@ define i32 @cond_mul(i32 %n, i32 %h, i32 %x) {
 ; CHECK-NEXT:    { nop; seq32 r1, r1, r4 }
 ; CHECK-NEXT:    { nop; movt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

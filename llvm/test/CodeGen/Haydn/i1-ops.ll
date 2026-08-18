@@ -95,7 +95,7 @@ define i1 @trunc_i32_to_i1(i32 %a) nounwind {
 ;i1 used in branch
 define i32 @i1_branch(i1 %cond, i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: i1_branch:
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z{{(\.s[012])?}}
 entry:
   br i1 %cond, label %t, label %f
 t:

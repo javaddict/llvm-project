@@ -26,9 +26,9 @@ define ptr @test_chain(ptr %p) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 20 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p1 = getelementptr i8, ptr %p, i32 16
   %p2 = getelementptr i8, ptr %p1, i32 4
   ret ptr %p2
@@ -42,9 +42,9 @@ define ptr @test_triple_chain(ptr %p) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 28 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p1 = getelementptr i8, ptr %p, i32 8
   %p2 = getelementptr i8, ptr %p1, i32 16
   %p3 = getelementptr i8, ptr %p2, i32 4
@@ -59,9 +59,9 @@ define ptr @test_negative_offset(ptr %p) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 8 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p1 = getelementptr i8, ptr %p, i32 -12
   %p2 = getelementptr i8, ptr %p1, i32 20
   ret ptr %p2
@@ -76,9 +76,9 @@ define ptr @test_nonconstant(ptr %p, i32 %off) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 4 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p1 = getelementptr i8, ptr %p, i32 %off
   %p2 = getelementptr i8, ptr %p1, i32 4
   ret ptr %p2

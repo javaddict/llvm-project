@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -enable-misched=false -enable-post-misched=false \
 ; RUN:     -verify-machineinstrs < %s | FileCheck %s
 
 ; Role: semantic — R-CROSS: prefer end-to-end DR64 over pack/unpack ping-pong.

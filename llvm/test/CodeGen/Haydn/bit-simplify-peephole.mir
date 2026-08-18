@@ -1,4 +1,4 @@
-# RUN: llc -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
+# RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
 # RUN:   %s -o /dev/null 2>&1 | FileCheck %s
 # REQUIRES: asserts
 

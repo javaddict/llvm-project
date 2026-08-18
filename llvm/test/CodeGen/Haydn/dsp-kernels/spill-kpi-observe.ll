@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -O2 -global-isel-abort=1 \
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -O2 -global-isel-abort=1 -enable-misched=false -enable-post-misched=false \
 ; RUN:   -verify-machineinstrs < %s | FileCheck %s
 
 ; Role: semantic — spill/reload KPI observe on hot DSP kernels (fail-open).

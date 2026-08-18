@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -filetype=obj %s -o %t.o && llvm-objdump -d %t.o | FileCheck --check-prefix=BUNDLE %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs -filetype=obj -enable-misched=false -enable-post-misched=false %s -o %t.o && llvm-objdump -d %t.o | FileCheck --check-prefix=BUNDLE %s
 ; REQUIRES: haydn-registered-target
 
 ; Role: object — NatureDSP-style biquad IIR object dump: stack, 64-bit MAC chain, stores, return.

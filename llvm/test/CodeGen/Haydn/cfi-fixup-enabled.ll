@@ -1,6 +1,6 @@
-; RUN: llc -mtriple=haydn-unknown-elf -debug-pass=Structure -o /dev/null %s 2>&1 \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -debug-pass=Structure -o /dev/null %s 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=PASS
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -verify-machineinstrs < %s | FileCheck %s
 ;
 ; Role: semantic — CFIFixup is product-enabled (Options.EnableCFIFixup).
 ; Companion: cfi-callee-saves.ll / cfi-cfa-object-offset.ll (CFA-relative

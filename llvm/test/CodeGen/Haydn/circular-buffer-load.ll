@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o - < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -o -  -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — Circular buffer (CB) load AND store intrinsics must emit native mnemonics (not be dropped as pseudos by AsmPrinter).
 

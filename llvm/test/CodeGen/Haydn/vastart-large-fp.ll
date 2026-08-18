@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -frame-pointer=all < %s | FileCheck %s --check-prefix=FP
-; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s --check-prefix=OMIT
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -frame-pointer=all < %s | FileCheck %s --check-prefix=FP
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s --check-prefix=OMIT
 
 ; Role: semantic — Large locals + va_start + frame pointer must compile (no hard-fatal on far FI).
 

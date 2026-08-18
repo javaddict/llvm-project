@@ -1,8 +1,8 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -stop-after=postmisched < %s 2>/dev/null | FileCheck %s --check-prefix=POST-O0
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -stop-after=haydn-verify-bundles < %s 2>/dev/null | FileCheck %s --check-prefix=PLAIN-O0
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-after=postmisched < %s 2>/dev/null | FileCheck %s --check-prefix=POST-OPTNONE
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-after=haydn-verify-bundles < %s 2>/dev/null | FileCheck %s --check-prefix=OPTNONE
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s --check-prefix=ASM
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -stop-after=postmisched < %s 2>/dev/null | FileCheck %s --check-prefix=POST-O0
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -stop-after=haydn-verify-bundles < %s 2>/dev/null | FileCheck %s --check-prefix=PLAIN-O0
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-after=postmisched < %s 2>/dev/null | FileCheck %s --check-prefix=POST-OPTNONE
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-after=haydn-verify-bundles < %s 2>/dev/null | FileCheck %s --check-prefix=OPTNONE
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s --check-prefix=ASM
 ;
 ; Product policy: plain O0 (no optnone) and optnone are distinct.
 ;   * Generic postmisched may skip optnone (no reorder) via skipFunction.

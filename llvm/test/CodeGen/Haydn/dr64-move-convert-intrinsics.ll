@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs  -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — XFAIL RESOLVED (, binary `e01004df`): the X2CMUL32_F2_S1 X2CMUL32_S1 operand-flag bug filed earlier today was.
 

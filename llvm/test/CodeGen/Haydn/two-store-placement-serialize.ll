@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-unknown-elf -O2 -filetype=obj %s -o /dev/null
+; RUN: llc -global-isel-abort=1 -mtriple=haydn-unknown-unknown-elf -O2 -filetype=obj %s -o /dev/null
 ; REQUIRES: haydn-registered-target
 ; Role: object — golden-placement law reaches the packing solver.
 ;

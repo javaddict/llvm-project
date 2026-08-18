@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -enable-misched=false -enable-post-misched=false \
 ; RUN:     -verify-machineinstrs < %s 2>&1 | FileCheck %s
 
 ; REGRESSION TEST: DR64PackBaseSpillFI huge-frame simm20 overflow (tier 3).

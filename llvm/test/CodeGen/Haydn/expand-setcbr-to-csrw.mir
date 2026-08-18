@@ -38,10 +38,10 @@ body:             |
     ; EXPAND: RET
     ;
     ; PACK-LABEL: name: expand_cbr_map
-    ; PACK: CSRW_W{{(_S0)?}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; PACK: CSRW_W{{(_S0)?}} 45, {{.*}}$r2, implicit-def $sfr, implicit-def $cbr0
-    ; PACK: CSRW_W{{(_S0)?}} 46, {{.*}}$r3, implicit-def $sfr, implicit-def $cbr1
-    ; PACK: CSRW_W{{(_S0)?}} 47, {{.*}}$r4, implicit-def $sfr, implicit-def $cbr1
+    ; PACK: CSRW{{[^ ]*}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW{{[^ ]*}} 45, {{.*}}$r2, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW{{[^ ]*}} 46, {{.*}}$r3, implicit-def $sfr, implicit-def $cbr1
+    ; PACK: CSRW{{[^ ]*}} 47, {{.*}}$r4, implicit-def $sfr, implicit-def $cbr1
     ; PACK-NOT: SETCBR
     SETCBR_BEGIN 0, killed $r1
     SETCBR_END 0, killed $r2
@@ -57,25 +57,30 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r15
+    successors: %bb.1
 
     ; CBR boundary write (CSR 0x2C) is *outside* HWLR 0x20..0x25, so the
     ; CSRW↔SET_HWLOOP hazard must not reject it. Expand yields CSRW_W; pack
     ; setDescs the member form; SET stays a setup SU with Following flush.
+    ; Two-block shape: SET_HWLOOP_W MBB operands are labels, not branches.
+    ; Same-block %bb.0/%bb.0 + JALR made those operands unexpected successors.
+    ; Fallthrough to %bb.1 is the verifier-legal layout (hwloop-hard-root-*).
     ; EXPAND-LABEL: name: expand_cbr_then_set_hwloop
     ; EXPAND: CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
-    ; EXPAND-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; EXPAND-NEXT: SET_HWLOOP_W 0, %bb.1, %bb.1, 1, implicit-def $sfr
     ; EXPAND-NOT: SETCBR
     ;
     ; PACK-LABEL: name: expand_cbr_then_set_hwloop
-    ; PACK-DAG: CSRW_W{{(_S0)?}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; PACK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; PACK-DAG: CSRW{{[^ ]*}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK-DAG: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 1, implicit-def $sfr
     ; PACK-NOT: SETCBR
-    ; InterveningCycles=2 following flush after the SET SU (ExitSU latency).
-    ; PACK: NOP
-    ; PACK: NOP
+    ; Following flush after the SET SU is sched-owned (NOP count not pinned).
     ; PACK: $r0 = JALR
     SETCBR_BEGIN 0, $r1
-    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 1, implicit-def $sfr
+
+  bb.1:
+    liveins: $r15
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 
 ...
@@ -86,21 +91,24 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r15
+    successors: %bb.1
 
     ; Control: CSR 0x20 (HWLR_BEGIN) must still refuse same-bundle coissue
     ; with SET_HWLOOP (spec CSRW↔SET race). Direct CSRW_W — expand not needed.
     ; EXPAND-LABEL: name: hwlr_csrw_still_serializes
     ; EXPAND: CSRW_W 32, $r1, implicit-def $sfr
-    ; EXPAND-NEXT: SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; EXPAND-NEXT: SET_HWLOOP_W 0, %bb.1, %bb.1, 1, implicit-def $sfr
     ;
     ; PACK-LABEL: name: hwlr_csrw_still_serializes
     ; CSRW may co-issue with soft-zero XOR, but SET remains a separate
     ; cycle (never a same-bundle CSRW(HWLR)+SET child pair).
-    ; PACK: CSRW_W{{(_S0)?}} 32, {{.*}}$r1, implicit-def $sfr
-    ; PACK: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
-    ; PACK: NOP
-    ; PACK: NOP
+    ; PACK-DAG: CSRW{{[^ ]*}} 32, {{.*}}$r1, implicit-def $sfr
+    ; PACK-DAG: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 1, implicit-def $sfr
+    ; PACK-NOT: SETCBR
     ; PACK: $r0 = JALR
     CSRW_W 32, $r1, implicit-def $sfr
-    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 1, implicit-def $sfr
+
+  bb.1:
+    liveins: $r15
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

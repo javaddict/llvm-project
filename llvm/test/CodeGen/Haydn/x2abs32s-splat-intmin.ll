@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
 
 ; Role: semantic — G_BUILD_VECTOR / splat of INT_MIN into v2i32 must dual-lane pack both 0x80000000 halves — not SEXT32T64 (which yields 0xFFFFFFFF80000000).
 

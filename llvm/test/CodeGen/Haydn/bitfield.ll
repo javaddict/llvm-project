@@ -23,7 +23,6 @@ define i32 @extract_bits(i32 %value) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 4080 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 4 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -41,7 +40,6 @@ define i32 @extract_low_bits(i32 %value) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -58,7 +56,6 @@ define i32 @extract_high_bits(i32 %value) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 24 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -78,7 +75,6 @@ define i32 @insert_bits(i32 %value, i32 %new_field) {
 ; CHECK-NEXT:    { nop; addi32 r3, r0, -4081 }
 ; CHECK-NEXT:    { and32 r1, r1, r3; andi32 r2, r2, 4080 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -100,7 +96,6 @@ define i32 @insert_low_bits(i32 %value, i32 %new_low) {
 ; CHECK-NEXT:    { nop; addi32 r3, r0, -256 }
 ; CHECK-NEXT:    { and32 r1, r1, r3; andi32 r2, r2, 255 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -122,7 +117,6 @@ define i32 @extract_sign_extended(i32 %value) {
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
 ; CHECK-NEXT:    { nop; slli32 r1, r1, 24 }
 ; CHECK-NEXT:    { nop; srai32 r1, r1, 24 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -145,7 +139,6 @@ define i32 @read_multiple_fields(i32 %value) {
 ; CHECK-NEXT:    { srli32 r1, r1, 16; andi32 r3, r3, 255 }
 ; CHECK-NEXT:    { add32 r2, r2, r3; andi32 r1, r1, 31 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -174,7 +167,6 @@ define i32 @modify_bit_field(i32 %value, i32 %increment) {
 ; CHECK-NEXT:    { and32 r1, r1, r3; andi32 r2, r2, 255 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 4 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -198,7 +190,6 @@ define i32 @extract_bit(i32 %value, i32 %bit_pos) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srl32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -215,7 +206,6 @@ define i1 @is_bit_set(i32 %value, i32 %bit_pos) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srl32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -235,7 +225,6 @@ define i32 @set_bit(i32 %value, i32 %bit_pos) {
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
 ; CHECK-NEXT:    { nop; sll32 r2, r3, r2 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -255,7 +244,6 @@ define i32 @clear_bit(i32 %value, i32 %bit_pos) {
 ; CHECK-NEXT:    { nop; sll32 r2, r3, r2 }
 ; CHECK-NEXT:    { nop; not32 r2, r2 }
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -275,7 +263,6 @@ define i32 @toggle_bit(i32 %value, i32 %bit_pos) {
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
 ; CHECK-NEXT:    { nop; sll32 r2, r3, r2 }
 ; CHECK-NEXT:    { nop; xor32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -296,7 +283,6 @@ define i32 @extract_bits_from_i64(i64 %value) {
 ; CHECK-NEXT:    { nop; srl64 d0, d0, r1 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 65535 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -315,9 +301,8 @@ define i64 @insert_bits_into_i64(i64 %value, i32 %new_field) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 65535 }
-; CHECK-NEXT:    { nop; st32 r2, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r2, sp, 2; sext32t64 d1, r1 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
 ; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, -1 }
 ; CHECK-NEXT:    { st32 r2, sp, 3; srli64 d1, d1, 32 } // 4-byte Folded Spill
@@ -331,7 +316,6 @@ define i64 @insert_bits_into_i64(i64 %value, i32 %new_field) {
 ; CHECK-NEXT:    { nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; and64 d1, d1, d3 }
 ; CHECK-NEXT:    { nop; or64 d0, d0, d1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -353,7 +337,6 @@ define i32 @extract_odd_offset(i32 %value) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 5 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 511 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -376,7 +359,6 @@ define i32 @reverse_bytes(i32 %value) {
 ; CHECK-NEXT:    { slli32 r3, r3, 8; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { or32 r2, r2, r3; andi32 r1, r1, 65280 }
 ; CHECK-NEXT:    { nop; or32 r1, r2, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

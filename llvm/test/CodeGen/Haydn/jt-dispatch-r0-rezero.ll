@@ -28,39 +28,45 @@ define i32 @cb22_jt_r0_rezero(i32 %x) nounwind {
 ; CHECK-NEXT:  .LBB0_2: // %bb0
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_3: // %bb4
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 54 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_4: // %bb2
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 32 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_5: // %bb3
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 43 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_6: // %bb7
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 87 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_7: // %bb1
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 21 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_8: // %bb5
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 65 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_9: // %bb6
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 76 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_11 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB0_10: // %def
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 99 }
-; CHECK-NEXT:  .LBB0_11: // %bb0
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:

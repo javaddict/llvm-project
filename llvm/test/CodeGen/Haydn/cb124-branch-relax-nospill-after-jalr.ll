@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O1 -verify-machineinstrs < %s | FileCheck %s
 
 ; Role: semantic — InsertIndirectBranch must not AllowSpill=true when scavenging a scratch for a far-branch trampoline.
 

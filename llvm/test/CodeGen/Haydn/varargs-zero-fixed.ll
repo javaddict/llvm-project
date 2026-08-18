@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -verify-machineinstrs < %s | FileCheck %s
 ;
 ; Role: semantic — zero-fixed-argument variadics must spill register va_args.
 ; define i32 @f(...) has no fixed args, so FirstUnallocated starts at bank 0

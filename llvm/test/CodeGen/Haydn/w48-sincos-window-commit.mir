@@ -1,0 +1,72 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — SIN_COS/ARCTAN Constraints §Special window is an alone-in-cycle
+# law at commit (shared predicate), not only an HR scoreboard booking. A
+# companion ALU in the same ready cycle must sequentialize. Member / logical
+# identities peel to the same catalog name.
+#
+# If this regresses: commit packs SIN_COS+ADDI32 or ARCTAN+ADDI32 into one
+# BUNDLE, or the shared occupancy helper accepts a companion member.
+
+--- |
+  define void @test_sincos_window_stays_alone() { ret void }
+  define void @test_arctan_window_stays_alone() { ret void }
+...
+---
+name:            test_sincos_window_stays_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+body:             |
+  bb.0:
+    liveins: $r0, $r3
+
+    ; CHECK-LABEL: name: test_sincos_window_stays_alone
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: SIN_COS
+    ; CHECK-NOT: BUNDLE
+    $d1 = SIN_COS $r0, 3
+    $r5 = ADDI32 $r3, 10, implicit-def dead $sfr
+    $r0 = COPY $r5
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            test_arctan_window_stays_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+body:             |
+  bb.0:
+    liveins: $d0, $r0
+
+    ; CHECK-LABEL: name: test_arctan_window_stays_alone
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: ARCTAN
+    ; CHECK-NOT: BUNDLE
+    $r1 = ARCTAN $d0, 4
+    $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
+    $r0 = COPY $r1
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

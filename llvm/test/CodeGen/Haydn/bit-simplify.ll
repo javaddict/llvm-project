@@ -27,7 +27,6 @@ define i32 @xor_xor_const_fold(i32 %a) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 255 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %t1 = xor i32 %a, 15
@@ -43,7 +42,6 @@ define i32 @xor_xor_cancel(i32 %a) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %t1 = xor i32 %a, 42
@@ -59,7 +57,6 @@ define i32 @double_not(i32 %a) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %not1 = xor i32 %a, -1
@@ -79,7 +76,6 @@ define i32 @and_or_disjoint_not_full(i32 %a) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
 ; CHECK-NEXT:    { nop; ori32 r1, r1, 65280 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %masked = and i32 %a, 255
@@ -97,10 +93,12 @@ define i32 @and_or_disjoint_full(i32 %a) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r2, 4080 }
-; CHECK-NEXT:    { nop; addi32 r2, r2, 65280 }
+; CHECK-NEXT:    { nop; lui r2, 16 }
+; CHECK-NEXT:    { nop; lui r3, 4064 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, -65281 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, 130561 }
+; CHECK-NEXT:    { add32 r2, r2, r3; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %masked = and i32 %a, 16711935
@@ -118,7 +116,6 @@ define i32 @shift_mask_redundant_lshr(i32 %a) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %shifted = lshr i32 %a, 8
@@ -136,7 +133,6 @@ define i32 @shift_mask_not_redundant(i32 %a) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %shifted = lshr i32 %a, 8
@@ -153,7 +149,6 @@ define i32 @xor_zero_identity(i32 %x) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = xor i32 %x, 0

@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
 
 ; Role: semantic — LOAD_ADDR (global address) must be rematerializable so RA re-emits it on every use path rather than spilling across a diamond.
 

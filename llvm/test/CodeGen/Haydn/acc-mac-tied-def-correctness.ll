@@ -1,4 +1,5 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — accumulator-form MAC must read the accumulator via a tied two-address def, NOT an OR64-seeded implicit-use operand.
 

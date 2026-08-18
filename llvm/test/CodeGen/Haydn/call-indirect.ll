@@ -135,19 +135,18 @@ define i32 @test_indirect_many_args(ptr %fp, i32 %a) {
 ; CHECK-LABEL: test_indirect_many_args:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
-; CHECK-NEXT:    { nop; addi32 r3, sp, 28 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r3, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 lr, r3, 0 }
-; CHECK-NEXT:    { nop; st32 r9, r3, 1 }
-; CHECK-NEXT:    { nop; st32 r8, r3, 2 }
-; CHECK-NEXT:    .cfi_def_cfa_offset 40
+; CHECK-NEXT:    { nop; st32 r10, r3, 1 }
+; CHECK-NEXT:    { nop; st32 r9, r3, 2 }
+; CHECK-NEXT:    { nop; st32 r8, r3, 3 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
-; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { move32 r12, r1; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 8 }
-; CHECK-NEXT:    { move32 r9, sp; move32 r8, r2 }
-; CHECK-NEXT:    { nop; s_sw_post_imm r1, r9, 2 }
+; CHECK-NEXT:    .cfi_offset r10, -12
+; CHECK-NEXT:    .cfi_offset lr, -16
+; CHECK-NEXT:    { move32 r12, r1; move32 r8, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
@@ -155,15 +154,21 @@ define i32 @test_indirect_many_args(ptr %fp, i32 %a) {
 ; CHECK-NEXT:    { nop; addi32 r5, r0, 5 }
 ; CHECK-NEXT:    { nop; addi32 r6, r0, 6 }
 ; CHECK-NEXT:    { nop; addi32 r7, r0, 7 }
-; CHECK-NEXT:    { nop; st32 r8, r9, 0 }
+; CHECK-NEXT:    { nop; addi32 r9, r0, 8 }
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; move32 r10, sp }
+; CHECK-NEXT:    { nop; s_sw_post_imm r9, r10, 2 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; st32 r8, r10, 0 }
 ; CHECK-NEXT:    { nop; jalr_w lr, r12, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 7 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 8 }
-; CHECK-NEXT:    { nop; ld32 r8, sp, 9 }
-; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
+; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { nop; ld32 r10, sp, 3 }
+; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = call i32 %fp(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 %a)
