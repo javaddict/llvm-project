@@ -7274,3 +7274,735 @@ def AE_MULZAAFD16SS_33_22 : HaydnAeCompatDef<"EXACT", "haydn_fmulaa16_hs_33_22">
   let OracleId = "exact.mulzaafd16ss_33_22";
 }
 
+//===----------------------------------------------------------------------===//
+// 32X16 multiply/MAC family — golden v2_1 (2026-08-18)
+//
+// Names match llvm.haydn.* suffixes exactly (ClangBuiltin<> auto-map).
+// Pure: haydn_<name>(haydn_dr64_t, haydn_dr64_t) -> int64_t.
+// Accumulating (golden DR write alias also read): 3-arg with acc first,
+// matching the tied logical def. NOTE: the 13 AE_MUL32X16_* / AE_MULA32X16_*
+// HaydnAeCompatDef entries are a separate registry namespace (uppercase
+// names, header-macro lowering) — no def-name collision with these native
+// builtins; retargeting AE emu lowering to the new natives is follow-up.
+//===----------------------------------------------------------------------===//
+
+def fmul32x16_h0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_h0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_H0";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_H0; lane selection/rounding/saturation per family)";
+}
+def fmul32x16_h1 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_h1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_H1";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_H1; lane selection/rounding/saturation per family)";
+}
+def fmul32x16_h2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_h2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_H2";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_H2; lane selection/rounding/saturation per family)";
+}
+def fmul32x16_h3 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_h3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_H3";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_H3; lane selection/rounding/saturation per family)";
+}
+def fmul32x16_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_L0";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_L0; lane selection/rounding/saturation per family)";
+}
+def fmul32x16_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_L1";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_L1; lane selection/rounding/saturation per family)";
+}
+def fmul32x16_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_L2";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_L2; lane selection/rounding/saturation per family)";
+}
+def fmul32x16_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmul32x16_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMUL32X16_L3";
+  let Semantics = "32X16 multiply (golden v2_1 FMUL32X16_L3; lane selection/rounding/saturation per family)";
+}
+def fmulzaa32x16_h0_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzaa32x16_h0_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZAA32X16_H0_L1";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZAA32X16_H0_L1; lane selection/rounding/saturation per family)";
+}
+def fmulzaa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzaa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZAA32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZAA32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def fmulzaa32x16_h2_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzaa32x16_h2_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZAA32X16_H2_L3";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZAA32X16_H2_L3; lane selection/rounding/saturation per family)";
+}
+def fmulzaa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzaa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZAA32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZAA32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def fmulzas32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzas32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZAS32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZAS32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def fmulzas32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzas32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZAS32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZAS32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def fmulzsa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzsa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZSA32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZSA32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def fmulzsa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzsa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZSA32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZSA32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def fmulzss32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzss32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZSS32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZSS32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def fmulzss32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "fmulzss32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULZSS32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 FMULZSS32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def mul32x16_h0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_h0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_H0";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_H0; lane selection/rounding/saturation per family)";
+}
+def mul32x16_h1 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_h1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_H1";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_H1; lane selection/rounding/saturation per family)";
+}
+def mul32x16_h2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_h2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_H2";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_H2; lane selection/rounding/saturation per family)";
+}
+def mul32x16_h3 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_h3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_H3";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_H3; lane selection/rounding/saturation per family)";
+}
+def mul32x16_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_L0";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_L0; lane selection/rounding/saturation per family)";
+}
+def mul32x16_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_L1";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_L1; lane selection/rounding/saturation per family)";
+}
+def mul32x16_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_L2";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_L2; lane selection/rounding/saturation per family)";
+}
+def mul32x16_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mul32x16_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MUL32X16_L3";
+  let Semantics = "32X16 multiply (golden v2_1 MUL32X16_L3; lane selection/rounding/saturation per family)";
+}
+def mulzaa32x16_h0_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzaa32x16_h0_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZAA32X16_H0_L1";
+  let Semantics = "32X16 multiply (golden v2_1 MULZAA32X16_H0_L1; lane selection/rounding/saturation per family)";
+}
+def mulzaa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzaa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZAA32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 MULZAA32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def mulzaa32x16_h2_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzaa32x16_h2_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZAA32X16_H2_L3";
+  let Semantics = "32X16 multiply (golden v2_1 MULZAA32X16_H2_L3; lane selection/rounding/saturation per family)";
+}
+def mulzaa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzaa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZAA32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 MULZAA32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def mulzas32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzas32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZAS32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 MULZAS32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def mulzas32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzas32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZAS32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 MULZAS32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def mulzsa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzsa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZSA32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 MULZSA32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def mulzsa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzsa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZSA32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 MULZSA32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def mulzss32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzss32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZSS32X16_H1_L0";
+  let Semantics = "32X16 multiply (golden v2_1 MULZSS32X16_H1_L0; lane selection/rounding/saturation per family)";
+}
+def mulzss32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "mulzss32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULZSS32X16_H3_L2";
+  let Semantics = "32X16 multiply (golden v2_1 MULZSS32X16_H3_L2; lane selection/rounding/saturation per family)";
+}
+def x2cmul32x16_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2cmul32x16_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2CMUL32X16_H";
+  let Semantics = "32X16 multiply (golden v2_1 X2CMUL32X16_H; lane selection/rounding/saturation per family)";
+}
+def x2cmul32x16_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2cmul32x16_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2CMUL32X16_L";
+  let Semantics = "32X16 multiply (golden v2_1 X2CMUL32X16_L; lane selection/rounding/saturation per family)";
+}
+def x2fcmul32x16rs_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fcmul32x16rs_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FCMUL32X16RS_H";
+  let Semantics = "32X16 multiply (golden v2_1 X2FCMUL32X16RS_H; lane selection/rounding/saturation per family)";
+}
+def x2fcmul32x16rs_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fcmul32x16rs_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FCMUL32X16RS_L";
+  let Semantics = "32X16 multiply (golden v2_1 X2FCMUL32X16RS_L; lane selection/rounding/saturation per family)";
+}
+def x2fmul32x16rss_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fmul32x16rss_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMUL32X16RSS_H";
+  let Semantics = "32X16 multiply (golden v2_1 X2FMUL32X16RSS_H; lane selection/rounding/saturation per family)";
+}
+def x2fmul32x16rss_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fmul32x16rss_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMUL32X16RSS_L";
+  let Semantics = "32X16 multiply (golden v2_1 X2FMUL32X16RSS_L; lane selection/rounding/saturation per family)";
+}
+def x2fmul32x16rs_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fmul32x16rs_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMUL32X16RS_H";
+  let Semantics = "32X16 multiply (golden v2_1 X2FMUL32X16RS_H; lane selection/rounding/saturation per family)";
+}
+def x2fmul32x16rs_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fmul32x16rs_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMUL32X16RS_L";
+  let Semantics = "32X16 multiply (golden v2_1 X2FMUL32X16RS_L; lane selection/rounding/saturation per family)";
+}
+def x2fmul32x16ts_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fmul32x16ts_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMUL32X16TS_H";
+  let Semantics = "32X16 multiply (golden v2_1 X2FMUL32X16TS_H; lane selection/rounding/saturation per family)";
+}
+def x2fmul32x16ts_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2fmul32x16ts_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMUL32X16TS_L";
+  let Semantics = "32X16 multiply (golden v2_1 X2FMUL32X16TS_L; lane selection/rounding/saturation per family)";
+}
+def x2mul32x16_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2mul32x16_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2MUL32X16_H";
+  let Semantics = "32X16 multiply (golden v2_1 X2MUL32X16_H; lane selection/rounding/saturation per family)";
+}
+def x2mul32x16_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+  let PublicName = "x2mul32x16_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2MUL32X16_L";
+  let Semantics = "32X16 multiply (golden v2_1 X2MUL32X16_L; lane selection/rounding/saturation per family)";
+}
+def fmula32x16_h0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_h0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_H0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_H0; acc read+written per golden DR ports)";
+}
+def fmula32x16_h1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_h1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_H1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_H1; acc read+written per golden DR ports)";
+}
+def fmula32x16_h2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_h2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_H2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_H2; acc read+written per golden DR ports)";
+}
+def fmula32x16_h3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_h3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_H3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_H3; acc read+written per golden DR ports)";
+}
+def fmula32x16_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_L0; acc read+written per golden DR ports)";
+}
+def fmula32x16_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_L1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_L1; acc read+written per golden DR ports)";
+}
+def fmula32x16_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_L2; acc read+written per golden DR ports)";
+}
+def fmula32x16_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmula32x16_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULA32X16_L3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULA32X16_L3; acc read+written per golden DR ports)";
+}
+def fmulaa32x16_h0_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulaa32x16_h0_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULAA32X16_H0_L1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULAA32X16_H0_L1; acc read+written per golden DR ports)";
+}
+def fmulaa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulaa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULAA32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULAA32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def fmulaa32x16_h2_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulaa32x16_h2_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULAA32X16_H2_L3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULAA32X16_H2_L3; acc read+written per golden DR ports)";
+}
+def fmulaa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulaa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULAA32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULAA32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def fmulas32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulas32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULAS32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULAS32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def fmulas32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulas32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULAS32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULAS32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def fmuls32x16_h0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_h0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_H0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_H0; acc read+written per golden DR ports)";
+}
+def fmuls32x16_h1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_h1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_H1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_H1; acc read+written per golden DR ports)";
+}
+def fmuls32x16_h2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_h2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_H2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_H2; acc read+written per golden DR ports)";
+}
+def fmuls32x16_h3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_h3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_H3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_H3; acc read+written per golden DR ports)";
+}
+def fmuls32x16_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_L0; acc read+written per golden DR ports)";
+}
+def fmuls32x16_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_L1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_L1; acc read+written per golden DR ports)";
+}
+def fmuls32x16_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_L2; acc read+written per golden DR ports)";
+}
+def fmuls32x16_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmuls32x16_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULS32X16_L3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULS32X16_L3; acc read+written per golden DR ports)";
+}
+def fmulsa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulsa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULSA32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULSA32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def fmulsa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulsa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULSA32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULSA32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def fmulss32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulss32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULSS32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULSS32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def fmulss32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "fmulss32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "FMULSS32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 FMULSS32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def mula32x16_h0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_h0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_H0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_H0; acc read+written per golden DR ports)";
+}
+def mula32x16_h1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_h1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_H1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_H1; acc read+written per golden DR ports)";
+}
+def mula32x16_h2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_h2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_H2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_H2; acc read+written per golden DR ports)";
+}
+def mula32x16_h3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_h3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_H3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_H3; acc read+written per golden DR ports)";
+}
+def mula32x16_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_L0; acc read+written per golden DR ports)";
+}
+def mula32x16_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_L1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_L1; acc read+written per golden DR ports)";
+}
+def mula32x16_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_L2; acc read+written per golden DR ports)";
+}
+def mula32x16_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mula32x16_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULA32X16_L3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULA32X16_L3; acc read+written per golden DR ports)";
+}
+def mulaa32x16_h0_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulaa32x16_h0_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULAA32X16_H0_L1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULAA32X16_H0_L1; acc read+written per golden DR ports)";
+}
+def mulaa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulaa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULAA32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULAA32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def mulaa32x16_h2_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulaa32x16_h2_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULAA32X16_H2_L3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULAA32X16_H2_L3; acc read+written per golden DR ports)";
+}
+def mulaa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulaa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULAA32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULAA32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def mulas32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulas32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULAS32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULAS32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def mulas32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulas32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULAS32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULAS32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def muls32x16_h0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_h0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_H0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_H0; acc read+written per golden DR ports)";
+}
+def muls32x16_h1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_h1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_H1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_H1; acc read+written per golden DR ports)";
+}
+def muls32x16_h2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_h2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_H2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_H2; acc read+written per golden DR ports)";
+}
+def muls32x16_h3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_h3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_H3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_H3; acc read+written per golden DR ports)";
+}
+def muls32x16_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_L0; acc read+written per golden DR ports)";
+}
+def muls32x16_l1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_l1";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_L1";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_L1; acc read+written per golden DR ports)";
+}
+def muls32x16_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_L2; acc read+written per golden DR ports)";
+}
+def muls32x16_l3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "muls32x16_l3";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULS32X16_L3";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULS32X16_L3; acc read+written per golden DR ports)";
+}
+def mulsa32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulsa32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULSA32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULSA32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def mulsa32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulsa32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULSA32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULSA32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def mulss32x16_h1_l0 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulss32x16_h1_l0";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULSS32X16_H1_L0";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULSS32X16_H1_L0; acc read+written per golden DR ports)";
+}
+def mulss32x16_h3_l2 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "mulss32x16_h3_l2";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "MULSS32X16_H3_L2";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 MULSS32X16_H3_L2; acc read+written per golden DR ports)";
+}
+def x2cmula32x16_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2cmula32x16_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2CMULA32X16_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2CMULA32X16_H; acc read+written per golden DR ports)";
+}
+def x2cmula32x16_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2cmula32x16_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2CMULA32X16_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2CMULA32X16_L; acc read+written per golden DR ports)";
+}
+def x2fcmula32x16rs_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fcmula32x16rs_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FCMULA32X16RS_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FCMULA32X16RS_H; acc read+written per golden DR ports)";
+}
+def x2fcmula32x16rs_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fcmula32x16rs_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FCMULA32X16RS_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FCMULA32X16RS_L; acc read+written per golden DR ports)";
+}
+def x2fmula32x16rss_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmula32x16rss_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULA32X16RSS_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULA32X16RSS_H; acc read+written per golden DR ports)";
+}
+def x2fmula32x16rss_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmula32x16rss_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULA32X16RSS_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULA32X16RSS_L; acc read+written per golden DR ports)";
+}
+def x2fmula32x16rs_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmula32x16rs_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULA32X16RS_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULA32X16RS_H; acc read+written per golden DR ports)";
+}
+def x2fmula32x16rs_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmula32x16rs_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULA32X16RS_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULA32X16RS_L; acc read+written per golden DR ports)";
+}
+def x2fmula32x16ts_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmula32x16ts_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULA32X16TS_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULA32X16TS_H; acc read+written per golden DR ports)";
+}
+def x2fmula32x16ts_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmula32x16ts_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULA32X16TS_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULA32X16TS_L; acc read+written per golden DR ports)";
+}
+def x2fmuls32x16rss_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmuls32x16rss_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULS32X16RSS_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULS32X16RSS_H; acc read+written per golden DR ports)";
+}
+def x2fmuls32x16rss_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmuls32x16rss_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULS32X16RSS_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULS32X16RSS_L; acc read+written per golden DR ports)";
+}
+def x2fmuls32x16rs_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmuls32x16rs_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULS32X16RS_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULS32X16RS_H; acc read+written per golden DR ports)";
+}
+def x2fmuls32x16rs_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmuls32x16rs_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULS32X16RS_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULS32X16RS_L; acc read+written per golden DR ports)";
+}
+def x2fmuls32x16ts_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmuls32x16ts_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULS32X16TS_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULS32X16TS_H; acc read+written per golden DR ports)";
+}
+def x2fmuls32x16ts_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2fmuls32x16ts_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2FMULS32X16TS_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2FMULS32X16TS_L; acc read+written per golden DR ports)";
+}
+def x2mula32x16_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2mula32x16_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2MULA32X16_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2MULA32X16_H; acc read+written per golden DR ports)";
+}
+def x2mula32x16_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2mula32x16_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2MULA32X16_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2MULA32X16_L; acc read+written per golden DR ports)";
+}
+def x2muls32x16_h : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2muls32x16_h";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2MULS32X16_H";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2MULS32X16_H; acc read+written per golden DR ports)";
+}
+def x2muls32x16_l : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
+  let PublicName = "x2muls32x16_l";
+  let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t, haydn_dr64_t)";
+  let Mnemonic = "X2MULS32X16_L";
+  let Semantics = "32X16 multiply-accumulate (golden v2_1 X2MULS32X16_L; acc read+written per golden DR ports)";
+}

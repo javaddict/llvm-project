@@ -1353,7 +1353,8 @@ def load_td_tied_logicals(td_dir: Path) -> set:
     Comments are skipped; a Constraints match is attributed to the nearest
     preceding `def NAME`."""
     tied = set()
-    for fn in ("HaydnInstrInfo.td", "HaydnInstrInfoManual.td"):
+    for fn in ("HaydnInstrInfo.td", "HaydnInstrInfoManual.td",
+               "HaydnInstrInfoGolden.td.inc"):
         path = td_dir / fn
         if not path.is_file():
             raise SystemExit(f"error: TD file for tie scan missing: {path}")
@@ -2509,7 +2510,9 @@ def load_hand_def_logicals(td_dir: Path) -> set:
     return names
 
 
-def emit_logical_defs_td_inc(cat: Catalog, hand_logicals: set) -> str:
+def emit_logical_defs_td_inc(
+    cat: Catalog, hand_logicals: set, accum_ties: Dict[str, Tuple[str, ...]]
+) -> str:
     """HaydnInst logical defs for golden logicals with no hand def.
 
     2026-08-18 (v2_1): the golden catalog grew past the hand-maintained
@@ -2556,6 +2559,11 @@ def emit_logical_defs_td_inc(cat: Catalog, hand_logicals: set) -> str:
         is_ls = rec.unit.startswith("LOADSTORE")
         may_store = 1 if (is_ls and u.startswith(("D_SW", "S_SW", "D_SD", "S_SD"))) else 0
         mnem = assembler_mnemonic(logical, rec.unit)
+        # Golden accumulator law (load_accumulator_ties, CB-152c): a logical
+        # whose written DR bank alias is also read ties dest to an accumulator
+        # input operand on the logical def.
+        acc_ties = accum_ties.get(_logical_key(logical), ())
+        is_acc = len(acc_ties) == 1 and not is_ls
         out_frags: List[str] = []
         in_frags: List[str] = []
         asm_ops: List[str] = []
@@ -2577,7 +2585,17 @@ def emit_logical_defs_td_inc(cat: Catalog, hand_logicals: set) -> str:
                 asm_ops.append(f"$rs{gpr_n}")
             elif kind == "REG_DR":
                 dr_n += 1
-                in_frags.append(f"DR64:$rd{dr_n}")
+                if not is_ls and r.startswith("dest"):
+                    # MAC/ALU dest is a result: outs. LS dest1 is a READ
+                    # (stored data), stays ins.
+                    out_frags.append(f"DR64:$rd{dr_n}")
+                    if is_acc:
+                        # tied accumulator input: ins gains $rd_in, asm
+                        # keeps the 3-op user spelling (peer X4CMULA16S_H).
+                        in_frags.append(f"DR64:$rd{dr_n}_in")
+                        tie = f"$rd{dr_n} = $rd{dr_n}_in"
+                else:
+                    in_frags.append(f"DR64:$rd{dr_n}")
                 asm_ops.append(f"$rd{dr_n}")
             elif kind == "REG_AR":
                 in_frags.append("AR64:$ar_sel")
@@ -3303,7 +3321,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             file=sys.stderr,
         )
         return 2
-    accum_ties = load_accumulator_ties(index_path)
+    full_accum_ties = load_accumulator_ties(index_path)
+    accum_ties = full_accum_ties
     td_tied = load_td_tied_logicals(Path(__file__).resolve().parent.parent)
     divergent = sorted(k for k in accum_ties if k not in td_tied)
     accum_ties = {k: v for k, v in accum_ties.items() if k in td_tied}
@@ -3311,18 +3330,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # tie, so members stay at logical arity and the gap is a ledger item
     # (conditional moves / partial-word inserts with unmodeled dest reads).
     # Measured, pinned: a regen that changes this set must be re-audited.
-    # 2026-08-18 v2_1 re-audit: 87 -> 159. Growth = (a) the new 32X16
-    # accumulator family (MULA*/FMULA*/MULS* read rtd per Behavior), (b) the
-    # re-delivered index carries complete DR_Read_Port rows for older
-    # logicals (SMULA16_*, FMULS16_HS*, MOVEI_H/L, MOVF64/MOVT64, CLAMP,
-    # MULSA/MULSS32_*), (c) 6 FMUL*32S rows from the forced read-port repair.
-    # Spot-audit 2026-08-18: Behavior text confirms the dest read in all
-    # sampled classes; same ledger class as before, no new mechanism.
+    # 2026-08-18 v2_1 re-audit history: 87 -> 159 when v2_1's fuller index
+    # Read_Port rows added the (then untied) 32X16 accumulator family; back
+    # to 87 the same day when the generated logical defs (HaydnInstrInfo
+    # Golden.td.inc) tied those 72 accumulators per this same golden law
+    # (CB-152c). The remaining 87 = older hand defs deliberately untied
+    # (conditional moves / partial-word inserts with unmodeled dest reads;
+    # SMULA16_*/FMULS16_*/MOVEI_*/MOVT64/MOVF64/CLAMP/MULSA*/MULSS32_*).
     divergent_non_ls = [
         k for k in divergent
         if not k.startswith(("D_", "S_", "PLD", "WBAR"))
     ]
-    if len(divergent_non_ls) != 159:
+    if len(divergent_non_ls) != 87:
         raise SystemExit(
             "error: golden-tied-but-TD-untied set changed "
             f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "
@@ -3331,7 +3350,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     members_td = emit_members_td_inc(cat, accum_ties)
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical)
     hand_logicals = load_hand_def_logicals(out_dir)
-    logical_defs_td = emit_logical_defs_td_inc(cat, hand_logicals)
+    logical_defs_td = emit_logical_defs_td_inc(cat, hand_logicals, full_accum_ties)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir)
 
