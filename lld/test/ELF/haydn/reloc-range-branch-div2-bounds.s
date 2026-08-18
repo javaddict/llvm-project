@@ -2,12 +2,10 @@
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
 # RUN: llvm-readobj -r %t.o | FileCheck --check-prefix=RELOCS %s
 #
-# Pin lld inBranchRange / relocate for the WIDE branch byte window against
-# HaydnRelocLayout::computeRelocValue. GE96-03: branch fields are PC+imm with
-# NO extra scale (ValueShift=0), so the signed-12 window is [-2048, +2046]
-# BYTES — half the retired halfword-scaled (÷2) window these pins used to
-# encode. In-range links patch a direct branch; one past range inserts a
-# long-branch thunk (needsThunk), not a second isInt table.
+# Pin lld inBranchRange / relocate for WIDE branch byte scale (ValueShift=0)
+# against HaydnRelocLayout::computeRelocValue. Signed-12 window is
+# [-2048, +2046]; parcel-grid pins are +2040 / +2052 and -2048 / -2064.
+# In-range links patch a direct branch; one past range inserts a thunk.
 
 # RELOCS: R_HAYDN_WIDE_BranchSImm12{{(_RI)?}} far_target
 
@@ -23,7 +21,7 @@
 # Printer may render beq_w as beq; pin family + in-range displacement.
 # POS-IN: beq{{(_w)?}}{{.*}}2040
 
-# Positive one-past (+2048): thunk required.
+# Positive one-past (+2052): thunk required.
 # RUN: ld.lld %t.o -o %t.posoor -T %S/reloc-range-branch-div2-pos-oor.ld
 # RUN: llvm-nm %t.posoor | FileCheck --check-prefix=POS-OOR-NM %s
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t.posoor | FileCheck --check-prefix=POS-OOR %s
@@ -44,7 +42,7 @@
 # NEG-IN-LABEL: <_start>:
 # NEG-IN: beq{{(_w)?}}{{.*}}-2048
 
-# Negative one-past (-2056): thunk required.
+# Negative one-past (-2064): thunk required.
 # RUN: ld.lld %t.o -o %t.negoor -T %S/reloc-range-branch-div2-neg-oor.ld
 # RUN: llvm-nm %t.negoor | FileCheck --check-prefix=NEG-OOR-NM %s
 

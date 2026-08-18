@@ -58,6 +58,7 @@
 #include "lld/Common/CommonLinkerContext.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <cassert>
@@ -81,7 +82,11 @@ static EncodedBytes productParcelEncodedBytes() {
 static unsigned productParcelSize() {
   unsigned N = productParcelEncodedBytes().Value;
   // FE8: sole product is Format E 12-byte; reject residual 8/16 dual paths.
-  assert(N == 12u && "production EncodedBytes must be Format E 12");
+  // Never return 0: Thunk::alignment used to take this value and
+  // ThunkSection::assignOffsets then aborted (alignToPowerOf2 Align==0).
+  if (N != 12u)
+    report_fatal_error("Haydn LLD: production EncodedBytes must be Format E 12",
+                       /*GenCrashDiag=*/false);
   return N;
 }
 
@@ -138,12 +143,17 @@ static void splitHiLo(uint64_t TargetVA, uint32_t &Hi12, uint32_t &Lo20) {
 }
 
 /// Far call / far branch veneer. Borrows soft-zero R0; never touches R12/LR.
-/// Size: 3 × product EncodedBytes. Alignment 4 (parcel phase / ABI floor).
+/// Size: 3 × product EncodedBytes (parcel-grid veneer). Alignment is 4, the
+/// Hexagon packet/function lattice (HexagonThunk, Thunks.cpp:427). AIE can
+/// use Align(16) because that bundle width is 2^n; EncodedBytes=12 is not,
+/// so it is a size/phase modulus only — feeding it to Thunk::alignment
+/// aborts assignOffsets (alignToPowerOf2). Island spacing is 0 mod
+/// EncodedBytes and compiler text is whole parcels, so Align-4 entries
+/// stay on the section's parcel phase.
 class HaydnLongThunk : public Thunk {
 public:
   HaydnLongThunk(Ctx &ctx, Relocation &rel, Symbol &dest)
       : Thunk(ctx, dest, rel.addend) {
-    // Align-4: architectural PC is 2-byte; product scripts pad to EncodedBytes.
     alignment = 4;
   }
   uint32_t size() override { return longThunkBytes(); }

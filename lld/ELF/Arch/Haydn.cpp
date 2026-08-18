@@ -40,10 +40,14 @@
 #include "Target.h"
 #include "HaydnFormat.h"
 #include "HaydnRelocLayout.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/bit.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/MathExtras.h"
 
+#include <cstring>
+#include <numeric>
 #include <vector>
 
 using namespace llvm;
@@ -82,8 +86,10 @@ public:
     // offsets fail HaydnRelocLayout::computeRelocValue (inBranchRange).
     needsThunks = true;
 
-    // Executable padding: whole product parcels only. Consume the same
-    // generated full-slot NOP idle as MC writeNopData (never all-zero).
+    // Executable padding: whole product parcels only (function/.text pack
+    // is 0 mod EncodedBytes; a 4/8-byte trap fill would put later B/JAL
+    // labels off the parcel grid). Consume the same generated full-slot
+    // NOP idle as MC writeNopData (never all-zero).
     ArrayRef<uint8_t> Idle = llvm::haydn::format::canonicalFullSlotIdleParcel();
     assert(Idle.size() == productParcelEncodedBytes().Value &&
            "LLD idle parcel must match production EncodedBytes");
@@ -93,14 +99,18 @@ public:
     // OutputSection::getFiller); it lands in the sub-parcel residues that
     // whole-parcel nopInstrs cannot cover (function alignment sits on the
     // 4-byte lattice, so residues of 4 or 8 (mod EncodedBytes) are
-    // unavoidable and can never hold a legal bundle). Zero is the one
-    // ISA-inert filler: indicator != 111 means the bytes are not code, and
-    // BundleSim's coverage walk (CB-146) accepts zero gaps by inspecting
-    // the bytes. Seeding this from the idle parcel put a 111-indicator
-    // prefix into dead gaps and made the linear-sweep disassembler decode
-    // a phantom bundle straddling the next function's entry (overlapping
-    // PCs -> CODE_IMAGE_REJECT; gcc-torture align-3). Whole-parcel gaps
-    // still use the generated idle parcel via nopInstrs below.
+    // unavoidable and can never hold a legal bundle). AIE tiles 1..8-byte
+    // NOPs (AIE.cpp:27-35); Hexagon packet align is 4 (power of 2).
+    // EncodedBytes=12 is a size/phase modulus, not sh_addralign, so those
+    // peers cannot supply a 12-byte trap tile. Zero is the one ISA-inert
+    // filler: indicator != 111 means the bytes are not code, and the
+    // consumer coverage walk accepts zero gaps by inspecting the bytes.
+    // Seeding this from the idle parcel put a 111-indicator prefix into
+    // dead gaps and made the linear-sweep disassembler decode a phantom
+    // bundle straddling the next function's entry (overlapping PCs ->
+    // CODE_IMAGE_REJECT "direct control target is not an exact code record";
+    // gcc-torture align-3). Whole-parcel gaps still use the generated
+    // idle parcel via nopInstrs below.
     trapInstr = {0x00, 0x00, 0x00, 0x00};
     nopInstrs = std::vector<std::vector<uint8_t>>{
         std::vector<uint8_t>(Idle.begin(), Idle.end())};
@@ -181,6 +191,8 @@ public:
     }
   }
 
+  void relocateAlloc(InputSection &sec, uint8_t *buf) const override;
+
   bool needsThunk(RelExpr expr, RelType type, const InputFile *file,
                   uint64_t branchAddr, const Symbol &s,
                   int64_t a) const override {
@@ -194,6 +206,43 @@ public:
     default:
       return false;
     }
+  }
+
+  // Gerrit reunification honors aligned(N) when N is a power of two.
+  // EncodedBytes (12) is a size/phase modulus, not sh_addralign: LLD
+  // assignOffsets / OutputSection placement call alignToPowerOf2, which
+  // aborts on 0 and on non-2^n (Hexagon packet align is 4, Thunks.cpp:427;
+  // AIE bundle align is 16). Floor a broken 0 / non-2^n exec align to the
+  // function-alignment lattice (4) so ThunkSection and input placement
+  // cannot inherit Align==0. Parcel-aligned SHF_EXECINSTR inputs set
+  // nopFiller so EncodedBytes script/exec gaps use the idle NOP table
+  // instead of tiling the 4-byte trap. Sub-parcel tails stay trap.
+  //
+  // -ffunction-sections + aligned(N>4) would otherwise start the next
+  // input at alignToPowerOf2(prev_end, N), which is often 4 or 8 mod 12
+  // (12-byte first function then 16-align lands at +16). BundleSim then
+  // rejects JAL/B to that symbol ("direct control target is not an exact
+  // code record"). Grow every exec input to lcm(maxAlign, EncodedBytes)
+  // so the next 2^n start stays on the section's parcel phase. AIE does
+  // not need this: emitCodeAlignment(Align(16)) is already 2^n
+  // (AIETargetELFStreamer.cpp:73-81).
+  void scanSection(InputSectionBase &sec) override {
+    if (sec.flags & SHF_EXECINSTR) {
+      const unsigned Parcel = productParcelEncodedBytes().Value;
+      if (sec.addralign == 0 || !llvm::has_single_bit(sec.addralign))
+        sec.addralign = 4;
+      if (Parcel != 0 && sec.getSize() % Parcel == 0)
+        sec.nopFiller = true;
+    }
+    TargetInfo::scanSection(sec);
+    // Do not inflate InputSection::size to lcm(maxAlign, EncodedBytes).
+    // Growing the file-backed size past content() makes Writer copy the
+    // next bytes of the .o (symtab strings) into .text. BundleSim then
+    // rejects the non-zero pad (align-3.c aligned(256) →
+    // "uncovered bytes that are not alignment fill"). Output-section
+    // p2align gaps use trapInstr (zeros), which accept_alignment_fill
+    // accepts. Function addresses stay on the section's 4-mod-12 grid
+    // because EncodedBytes is a multiple of Align(4).
   }
 
   void relocate(uint8_t *loc, const Relocation &rel,
@@ -230,17 +279,30 @@ public:
     // Every participating object must already stamp that flag — zero and
     // unknown nonzero profiles reject fail-closed (no silent upgrade).
     // Matches BundleSim elf_validator product profile seat.
+    //
+    // EM_HAYDN=259 is the experimental producer number (ELF.h). Some ELF
+    // registries assign 259 to Kalray KVX. Do not invent a replacement
+    // e_machine here. A 259 object without EF_HAYDN_E96 is rejected so a
+    // KVX-like file cannot silently link as Haydn.
     const uint32_t Expected =
         llvm::haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
     assert(Expected != 0 && "E96 product profile must allocate nonzero e_flags");
     for (InputFile *f : ctx.objectFiles) {
-      uint32_t eflags =
-          cast<ObjFile<ELF32LE>>(f)->getObj().getHeader().e_flags;
+      const auto &Hdr = cast<ObjFile<ELF32LE>>(f)->getObj().getHeader();
+      if (Hdr.e_machine != EM_HAYDN) {
+        ErrAlways(ctx) << f << ": unexpected e_machine "
+                       << unsigned(Hdr.e_machine)
+                       << "; Haydn objects must be EM_HAYDN";
+        continue;
+      }
+      uint32_t eflags = Hdr.e_flags;
       if (eflags != Expected) {
         ErrAlways(ctx) << f << ": incompatible e_flags 0x"
                        << Twine::utohexstr(eflags)
                        << "; expected Format E ABI flag 0x"
-                       << Twine::utohexstr(Expected);
+                       << Twine::utohexstr(Expected)
+                       << " (EM_HAYDN=259 experimental; refuse objects that "
+                          "reuse 259 without this flag)";
         continue;
       }
     }
@@ -249,11 +311,35 @@ public:
 
   // Pre-create ThunkSections so far sites inside a large .text can still
   // reach an island. Narrowest thunked reloc is WIDE_BranchSImm12 / _RI.
-  // Three-parcel veneers (3 × EncodedBytes) still fit in the margin.
+  // Spacing is a whole number of EncodedBytes so islands keep the section's
+  // parcel phase. Veneer geometry is Align-4 + 3×EncodedBytes (HaydnLongThunk);
+  // do not use EncodedBytes as Thunk::alignment (not 2^n).
   uint32_t getThunkSectionSpacing() const override {
-    return 0x1000 - 0x400; // 3 KiB islands; ~1 KiB headroom for veneers
+    const unsigned Parcel = productParcelEncodedBytes().Value;
+    const uint32_t Spacing = 0x1000 - 0x400; // 3 KiB; ~1 KiB veneer headroom
+    assert(Parcel != 0 && Spacing % Parcel == 0 &&
+           "thunk island spacing must be a whole number of product parcels");
+    (void)Parcel;
+    return Spacing;
   }
+
 };
+
+void HaydnELF::relocateAlloc(InputSection &sec, uint8_t *buf) const {
+  TargetInfo::relocateAlloc(sec, buf);
+  if (!(sec.flags & SHF_EXECINSTR))
+    return;
+  const size_t Have = sec.content().size();
+  const size_t Want = sec.getSize();
+  if (Want <= Have)
+    return;
+  // Zero the tail. Idle-parcel fill here used to leave 111-indicator
+  // bytes that were not in the objdump record stream, so BundleSim
+  // treated them as uncovered non-fill (align-3.c). Zeros cannot be a
+  // Format-E record (indicator != 111) and are the documented
+  // accept_alignment_fill alphabet.
+  memset(buf + Have, 0, Want - Have);
+}
 
 } // namespace
 

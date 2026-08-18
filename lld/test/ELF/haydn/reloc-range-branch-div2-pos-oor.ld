@@ -1,8 +1,8 @@
-/* GE96-03 positive one-past: +2048 exceeds the signed-12 byte window
- * ([-2048, +2046]) -> long-branch thunk. */
+/* WIDE_BranchSImm12 byte-scale one-past pin: branch@0x10000 → target@0x10804
+ * (byte distance +2052 exceeds signed-12 → long-branch thunk). */
 SECTIONS {
   . = 0x10000;
   .text : { *(.text) }
-  . = 0x10800;
+  . = 0x10804;
   .text.tgt : { *(.text.tgt) }
 }
