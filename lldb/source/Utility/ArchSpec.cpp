@@ -416,6 +416,9 @@ static const ArchDefinitionEntry g_elf_arch_entries[] = {
     {ArchSpec::eCore_riscv64,         llvm::ELF::EM_RISCV,      ArchSpec::eRISCVSubType_riscv64}, // riscv64
     {ArchSpec::eCore_loongarch32,     llvm::ELF::EM_LOONGARCH,  ArchSpec::eLoongArchSubType_loongarch32}, // loongarch32
     {ArchSpec::eCore_loongarch64,     llvm::ELF::EM_LOONGARCH,  ArchSpec::eLoongArchSubType_loongarch64}, // loongarch64
+    // EM_HAYDN=259 is experimental and collides with official Kalray KVX.
+    // Do not invent a replacement e_machine here; product distinguisher is
+    // EF_HAYDN_E96. LLD refuses a 259 object without that flag.
     {ArchSpec::eCore_haydn,           llvm::ELF::EM_HAYDN       }, // Haydn VLIW DSP
 };
 // clang-format on
