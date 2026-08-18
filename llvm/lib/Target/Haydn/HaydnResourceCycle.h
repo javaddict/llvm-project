@@ -21,6 +21,7 @@
 #include "HaydnBundle.h" // MachineBundle::isNoHazardMetaInstruction
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnIntraCycleRAW.h" // shared no-forwarding RAW law (hard #7)
+#include "HaydnIntraCycleWAW.h" // shared no-dual-write WAW law (hard #7)
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h" // PortModel → MCTargetDesc (opcode + regclass enums)
 #include "HaydnResourceRestrictionClasses.h" // II-wrap SMS-HOOK polarity
@@ -49,6 +50,8 @@ struct HaydnCyclePortDemand {
   unsigned DRWrites = 0;
   unsigned ARReads = 0;
   unsigned ARWrites = 0;
+  unsigned SFRReads = 0;
+  unsigned SFRWrites = 0;
 
   HaydnCyclePortDemand &operator+=(const HaydnCyclePortDemand &O) {
     GPRReads += O.GPRReads;
@@ -57,6 +60,8 @@ struct HaydnCyclePortDemand {
     DRWrites += O.DRWrites;
     ARReads += O.ARReads;
     ARWrites += O.ARWrites;
+    SFRReads += O.SFRReads;
+    SFRWrites += O.SFRWrites;
     return *this;
   }
 
@@ -66,7 +71,9 @@ struct HaydnCyclePortDemand {
            DRReads <= HAYDN_DR_READ_PORTS &&
            DRWrites <= HAYDN_DR_WRITE_PORTS &&
            ARReads <= HAYDN_AR_READ_PORTS &&
-           ARWrites <= HAYDN_AR_WRITE_PORTS;
+           ARWrites <= HAYDN_AR_WRITE_PORTS &&
+           SFRReads <= HAYDN_SFR_READ_PORTS &&
+           SFRWrites <= HAYDN_SFR_WRITE_PORTS;
   }
 
   bool canAdd(const HaydnCyclePortDemand &O) const {
@@ -108,10 +115,23 @@ inline void haydnClassifyPortBankClassID(int RegClassID, bool IsDef,
   }
 }
 
+/// Named SFR implicits on the descriptor (SET_HWLOOP / CSR / flag-setters).
+/// Same hasImplicitDefOfPhysReg / hasImplicitUseOfPhysReg walk HR uses via
+/// haydnDescNamesSfrPort. Ordinary ALU leftover $sfr is not on the desc.
+inline void haydnChargeDescNamedSfrPorts(const MCInstrDesc &MID,
+                                         HaydnCyclePortDemand &D) {
+  if (MID.hasImplicitDefOfPhysReg(Haydn::SFR))
+    ++D.SFRWrites;
+  if (MID.hasImplicitUseOfPhysReg(Haydn::SFR))
+    ++D.SFRReads;
+}
+
 /// Descriptor-derived port demand (SMS placement path — no MI operands).
 /// Counts each explicit reg operand independently (no same-reg dedup across
 /// operand slots). Tied use/def appear as separate ops and correctly charge
 /// one read and one write. Unknown / non-reg operands are ignored.
+/// SFR 2R/1W is the named implicit on the desc (classic SMS used to skip
+/// SFR; HR already charged it — one RF-port law).
 inline HaydnCyclePortDemand
 estimateHaydnPortsFromDesc(const MCInstrDesc &MID) {
   HaydnCyclePortDemand D;
@@ -125,21 +145,26 @@ estimateHaydnPortsFromDesc(const MCInstrDesc &MID) {
         I < NumDefs || (MID.hasOptionalDef() && OI.isOptionalDef());
     haydnClassifyPortBankClassID(OI.RegClass, IsDef, D);
   }
+  haydnChargeDescNamedSfrPorts(MID, D);
   return D;
 }
 
 /// Exact MI port demand via shared PortModel (MRI-correct for vregs).
+/// SFR 2R/1W is the same PortModel walk HR uses (pack rule 5).
 inline HaydnCyclePortDemand countHaydnPortsFromMI(const MachineInstr &MI) {
   HaydnCyclePortDemand D;
   auto [GR, GW] = countGPRPorts(MI);
   auto [DR, DW] = countDRPorts(MI);
   auto [AR, AW] = countARPorts(MI);
+  auto [SR, SW] = countSFRPorts(MI);
   D.GPRReads = GR;
   D.GPRWrites = GW;
   D.DRReads = DR;
   D.DRWrites = DW;
   D.ARReads = AR;
   D.ARWrites = AW;
+  D.SFRReads = SR;
+  D.SFRWrites = SW;
   return D;
 }
 
@@ -148,26 +173,21 @@ inline HaydnCyclePortDemand countHaydnPortsFromMI(const MachineInstr &MI) {
 //===----------------------------------------------------------------------===//
 // MOVE32 is tablegen'd as (outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2) so the
 // MCInstrDesc always exposes one def + two use slots. copyPhysReg emits
-// `MOVE32 rd, rs, rs`. PortModel MI accounting (count*Ports / ResMII DFA)
-// dedupes same-reg sources → 1R1W. Descriptor-only placement
-// (estimateHaydnPortsFromDesc / ResourceCycle MID overload) has no operand
-// identity → always 2R1W and conservatively overcounts.
-//
-// This is intentional: placement never under-reserves relative to the MI
-// path. It is not an operand-dependent format predicate and does not
-// fail-close SMS-HOOK. Pre-RA list-sched uses only the MI PortModel path
-// (sibling surface). Constants live here so SMS packing tests do not depend
-// on PreRASchedStrategy ownership.
+// `MOVE32 rd, rs, rs`. PortModel MI accounting charges each explicit
+// field, so that form is 2R1W — the same demand as descriptor-only
+// placement (estimateHaydnPortsFromDesc / ResourceCycle MID overload).
+// One law: every explicit GPR read operand reserves one read port.
+// Names stay so SMS-PORT logging / packing probes keep compiling.
 
-/// MI PortModel demand for MOVE32 rd, rs, rs after same-reg read dedup.
-inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprReads = 1;
+/// MI PortModel demand for MOVE32 rd, rs, rs (per-field, no identity dedup).
+inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprReads = 2;
 inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprWrites = 1;
 /// Descriptor-only shape (1 def + 2 use slots) with no same-reg identity.
 inline constexpr unsigned HaydnMove32ClassDescShapeGprReads = 2;
 inline constexpr unsigned HaydnMove32ClassDescShapeGprWrites = 1;
 
 /// True when descriptor-shape reads strictly overcount the MI repeated-src
-/// form (canonical MOVE32-class differential).
+/// form. Retired: both paths are 2R1W (per-field).
 inline constexpr bool haydnMove32ClassDescOvercountsMiPorts() {
   return HaydnMove32ClassDescShapeGprReads >
              HaydnMove32ClassMiRepeatedSrcGprReads &&
@@ -193,7 +213,7 @@ inline HaydnCyclePortDemand haydnMove32ClassDescShapeDemand() {
 }
 
 /// True when N MI-shape MOVE32 fit the GPR read pool while N descriptor-shape
-/// MOVE32 do not (N=3 → MI 3R OK, desc 6R over under 4R).
+/// MOVE32 do not. Retired: both shapes are 2R1W, so this is never true.
 inline bool haydnMove32ClassDescSaturatesReadPoolEarlier(unsigned N) {
   const unsigned MiR = N * HaydnMove32ClassMiRepeatedSrcGprReads;
   const unsigned DescR = N * HaydnMove32ClassDescShapeGprReads;
@@ -206,47 +226,13 @@ inline bool haydnMove32ClassDescSaturatesReadPoolEarlier(unsigned N) {
 // Peer of HaydnHazardRecognizer::hasSameBundleWAW / appendDefs. ResourceCycle
 // already enforces no-forwarding RAW via CurrentCycleLiveDefs; WAW is the dual
 // for two writers of the same register (or physreg alias) in one modulo phase.
-// Dead defs still WAW-collide (spec forbids dual write regardless of liveness).
-// SFR is included: product law is one SFR writer per cycle (dead flag
-// side-effects count). Used by the MI reserve path and by the pure
-// periodic-certificate same-reg DefRegKey pin.
-
-template <typename DefSet>
-bool haydnHasIntraCycleWAW(const MachineInstr &MI, const DefSet &Defs,
-                           const TargetRegisterInfo *TRI) {
-  for (const MachineOperand &MO : MI.operands()) {
-    if (!MO.isReg() || !MO.isDef())
-      continue;
-    Register Reg = MO.getReg();
-    if (!Reg)
-      continue;
-    if (Reg.isVirtual()) {
-      if (Defs.contains(Reg))
-        return true;
-      continue;
-    }
-    if (!Reg.isPhysical() || !TRI)
-      continue;
-    for (Register D : Defs)
-      if (D.isPhysical() && TRI->regsOverlap(Reg, D))
-        return true;
-  }
-  return false;
-}
-
-template <typename DefSet>
-void haydnAppendCycleDefs(const MachineInstr &MI, DefSet &Defs) {
-  for (const MachineOperand &MO : MI.operands()) {
-    if (!MO.isReg() || !MO.isDef())
-      continue;
-    Register Reg = MO.getReg();
-    if (!Reg)
-      continue;
-    if (!Reg.isPhysical() && !Reg.isVirtual())
-      continue;
-    Defs.insert(Reg);
-  }
-}
+// W39 (2026-08-16): the predicate itself now lives in ONE shared header
+// (HaydnIntraCycleWAW.h — the same no-dual-write law materialize's
+// cycleMembersHaveWAW and the HR enforce); the local line-for-line duplicate
+// was deleted. Dead defs still WAW-collide (spec forbids dual write
+// regardless of liveness). SFR is included: product law is one SFR writer
+// per cycle (dead flag side-effects count). Used by the MI reserve path and
+// by the pure periodic-certificate same-reg DefRegKey pin.
 
 //===----------------------------------------------------------------------===
 // FE5B whole-kernel periodic certificate lifecycle (WP4)
@@ -442,6 +428,12 @@ public:
     return haydnCurrentGoldenAggregateResourceSurface();
   }
 
+  /// Same tag the HR / pack helper publish for the three named
+  /// same-cycle laws (alone + CSRW↔SET + e0-alone).
+  static constexpr const char *namedSameCycleLawsTag() {
+    return HAYDN_NAMED_SAME_CYCLE_LAWS_TAG;
+  }
+
 private:
   HaydnMCFormats Fmts;
   /// Live nondominated packing states — peer of
@@ -451,6 +443,18 @@ private:
   HaydnCyclePortDemand Ports;
   /// True once an ARCTAN/SIN_COS has been reserved in this cycle.
   bool HasAloneOp = false;
+  /// Constraints §Special occupancy (uimm4+2) booked for the reserved
+  /// SIN_COS/ARCTAN. Issue-alone is HasAloneOp; this is the window
+  /// length the HR scoreboard books as Reserved on the selected unit.
+  unsigned SinCosWindowOccupancy = 0;
+  /// Same-cycle laws the post-RA HR names (HaydnHazardRecognizer::
+  /// cycleViolatesNamedSameCycleLaws / HAYDN_NAMED_SAME_CYCLE_LAWS_TAG):
+  /// CSRW 0x20-0x25 ↔ SET_HWLOOP, and LUI/ADDI32_W e0-alone. Incremental
+  /// flags are the DFA form of that occupied-set predicate.
+  bool HasHwloopSetup = false;
+  bool HasHwloopCsrw = false;
+  bool HasAbsMaterialize = false;
+  bool HasNonAbsReal = false;
 
   /// LIVE destination registers written in this modulo issue cycle (peer of
   /// HaydnHazardRecognizer::CurrentCycleLiveDefs). SMS placement now calls the
@@ -464,7 +468,9 @@ private:
   SmallSetVector<Register, 8> CurrentCycleLiveDefs;
   /// ALL destination registers written this modulo phase (peer of
   /// HaydnHazardRecognizer::CurrentCycleDefs). Same-phase WAW fail-closes even
-  /// for dead defs — FE5B simultaneous same-reg / same-bank interference.
+  /// for dead defs — FE5B simultaneous same-reg / same-bank interference —
+  /// via the shared HaydnIntraCycleWAW law (W39: same predicate as the HR
+  /// and the materialize commit path).
   SmallSetVector<Register, 8> CurrentCycleDefs;
   /// Lazily cached register info (the adapter has no MachineFunction at
   /// construction; resolved from the first MI seen — same pattern as HR).
@@ -490,7 +496,7 @@ private:
     if (HasAloneOp)
       return false;
     if (Ports.GPRReads || Ports.GPRWrites || Ports.DRReads || Ports.DRWrites ||
-        Ports.ARReads || Ports.ARWrites)
+        Ports.ARReads || Ports.ARWrites || Ports.SFRReads || Ports.SFRWrites)
       return false;
     for (const haydn::bundle::CycleState &S : Candidates) {
       if (!S.empty() || S.OccupiedSlots != 0)
@@ -519,6 +525,16 @@ private:
       return false;
     if (isHaydnSMSAloneOpcode(Opcode) && !isPackingEmpty())
       return false;
+    const HaydnSoloIssueClass Solo = haydnClassifySoloIssueOpcode(Opcode);
+    // LUI/ADDI32_W e0-alone — a second real steals the materialize entry.
+    if (Solo == HaydnSoloIssueClass::LuiAddiE0 &&
+        (HasNonAbsReal || HasAbsMaterialize))
+      return false;
+    if (Solo != HaydnSoloIssueClass::LuiAddiE0 && HasAbsMaterialize)
+      return false;
+    // SET_HWLOOP refuses a cycle that already wrote HWLR via CSRW.
+    if (Solo == HaydnSoloIssueClass::CsrwSetHwloop && HasHwloopCsrw)
+      return false;
     if (hasPlacementAlternatives(Fmts, Opcode))
       // Probe expands every survivor × every alt — matching frontier, not
       // preferred-only first-fit.
@@ -534,6 +550,13 @@ private:
       return;
     if (isHaydnSMSAloneOpcode(Opcode))
       HasAloneOp = true;
+    const HaydnSoloIssueClass Solo = haydnClassifySoloIssueOpcode(Opcode);
+    if (Solo == HaydnSoloIssueClass::LuiAddiE0)
+      HasAbsMaterialize = true;
+    else
+      HasNonAbsReal = true;
+    if (Solo == HaydnSoloIssueClass::CsrwSetHwloop)
+      HasHwloopSetup = true;
     if (hasPlacementAlternatives(Fmts, Opcode)) {
       bool Ok = haydn::bundle::exactTryAddProduct(Candidates, Fmts, Opcode);
       assert(Ok && "canReserve true but exactTryAddProduct failed");
@@ -572,6 +595,11 @@ public:
         haydn::bundle::makeProductCandidateSet(Fmts.getPacketFormats());
     Ports = HaydnCyclePortDemand{};
     HasAloneOp = false;
+    SinCosWindowOccupancy = 0;
+    HasHwloopSetup = false;
+    HasHwloopCsrw = false;
+    HasAbsMaterialize = false;
+    HasNonAbsReal = false;
     // No-forwarding RAW + same-phase WAW bookkeeping: a fresh cycle/bundle has
     // no defs. TRI is lazily re-resolved from the next MI (see getTRI).
     CurrentCycleLiveDefs.clear();
@@ -606,10 +634,20 @@ public:
       return false;
     if (haydnHasIntraCycleRAW(MI, CurrentCycleLiveDefs, LocalTRI))
       return false;
+    const bool IsHwloopCsrw = haydnHwloopCsrAddr(MI) >= 0;
+    const bool IsHwloopSetup =
+        haydnClassifySoloIssueOpcode(MI.getOpcode()) ==
+        HaydnSoloIssueClass::CsrwSetHwloop;
+    if ((IsHwloopSetup && HasHwloopCsrw) || (IsHwloopCsrw && HasHwloopSetup))
+      return false;
     return canReserveWithPorts(MI.getOpcode(), countHaydnPortsFromMI(MI));
   }
   void reserveResources(MachineInstr &MI) override {
     reserveWithPorts(MI.getOpcode(), countHaydnPortsFromMI(MI));
+    if (unsigned Occ = haydnSinCosWindowOccupancy(MI))
+      SinCosWindowOccupancy = std::max(SinCosWindowOccupancy, Occ);
+    if (haydnHwloopCsrAddr(MI) >= 0)
+      HasHwloopCsrw = true;
     // Record defs AFTER a successful commit so subsequent same-cycle
     // producers/consumers see them (dual of the canReserve WAW/RAW checks).
     haydnAppendCycleDefs(MI, CurrentCycleDefs);
@@ -657,6 +695,9 @@ public:
   const HaydnCyclePortDemand &getPortDemand() const { return Ports; }
 
   bool hasAloneOp() const { return HasAloneOp; }
+
+  /// Booked SIN_COS/ARCTAN occupancy (0 if none reserved this cycle).
+  unsigned sinCosWindowOccupancy() const { return SinCosWindowOccupancy; }
 
   // Opcode-keyed reserve without an MCInstrDesc (unit tests / local probes).
   // Format + alone only — no port pressure (callers without operand shapes).
@@ -741,9 +782,11 @@ public:
                                       unsigned DRReads = 0,
                                       unsigned DRWrites = 0,
                                       unsigned ARReads = 0,
-                                      unsigned ARWrites = 0) {
+                                      unsigned ARWrites = 0,
+                                      unsigned SFRReads = 0,
+                                      unsigned SFRWrites = 0) {
     return haydnPortLowerBoundResMII(GPRReads, GPRWrites, DRReads, DRWrites,
-                                    ARReads, ARWrites);
+                                    ARReads, ARWrites, SFRReads, SFRWrites);
   }
 
   /// Soft-exit II lower bound for a qualification multiset: max of exhaustive

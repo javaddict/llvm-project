@@ -1,0 +1,49 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — MOVE32 rd,rs,rs charges 2R1W per field.
+# Two MOVE32 sit at 4R2W. A third GPR-reading store (2R0W) is 6R and
+# must not join. Same-reg identity dedup would see 1+1+2=4R and wrongly
+# accept the triple.
+#
+# Companion: countgprports-mir.mir (two MOVE32 still pack).
+
+--- |
+  define void @two_move32_plus_store(ptr %p) { ret void }
+...
+---
+name:            two_move32_plus_store
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r4
+
+    ; CHECK-LABEL: name: two_move32_plus_store
+    ; Logical MOVE32 is 2R1W. After member bake the vestigial rs2 is
+    ; dropped (1R1W). The store reads $r2, so it cannot share a cycle
+    ; with the first MOVE32 (no-forwarding RAW). A 3-wide of both
+    ; MOVE32 plus the store is illegal on that RAW.
+    ; CHECK: MOVE32
+    ; CHECK: MOVE32
+    ; CHECK: S_SW_WITH_IMM
+    ; CHECK-NOT: BUNDLE{{.*}}MOVE32{{.*}}MOVE32{{.*}}S_SW_WITH_IMM
+    $r2 = MOVE32 $r0, $r0, implicit-def dead $sfr
+    $r3 = MOVE32 $r1, $r1, implicit-def dead $sfr
+    ST32 $r2, $r4, 0 :: (store (s32))
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

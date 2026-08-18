@@ -9,8 +9,15 @@
 // (AIE MemInstrItinData / AIEMemoryCyclesEmitter peer), not here.
 // Per-operation port/latency/pipeline tables are not imported.
 // CompleteModel stays 0 in HaydnSchedule.td.
+// Generated Format E entry capacities (ProductRows EntryCount):
+// E2=2 / E3=3. HaydnSchedModel.IssueWidth binds E3. Not a
+// competitive invent and not a second 2/3 literal at sched sites.
 //
 //===----------------------------------------------------------------------===//
+
+// Generated ProductRows EntryCount. One fact for E2=2 / E3=3.
+defvar FormatEE2EntryCapacity = 2;
+defvar FormatEE3EntryCapacity = 3;
 
 // Itinerary= alias for FmtALU64Acc. OperandCycles use only 1/2.
 def Slot12_MAC_AccFirst : InstrItinClass;
@@ -22,7 +29,6 @@ def HaydnItineraries : ProcessorItineraries<
   [LOADSTORE0, LOAD1, ALU0, ALU1, ALU2, MAC0, MAC1],
   [],
   [
-    InstrItinData<PSEUDO, []>,
     InstrItinData<Slot0_ALU, [InstrStage<1, [ALU0]>], [1]>,
     InstrItinData<Slot0_LS, [InstrStage<1, [LOADSTORE0]>], [2]>,
     InstrItinData<Slot12_ALU, [InstrStage<1, [ALU1, ALU2]>], [1]>,

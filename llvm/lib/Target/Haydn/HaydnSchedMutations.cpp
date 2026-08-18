@@ -24,12 +24,15 @@
 #include "Haydn.h"
 #include "HaydnHWLoopContracts.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineScheduler.h"
+#include "HaydnPortModel.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -38,7 +41,9 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include <map>
+#include <optional>
 
 using namespace llvm;
 
@@ -67,31 +72,49 @@ static cl::opt<bool> EnableHaydnCallReturnCopyEdges(
 
 // Post-RA MemoryEdges ON: uses only TII->getMemoryLatency; no invented
 // store→load floor. Product getMemoryLatency is architectural (table
-// First/LastMemoryCycle for Slot0_LS/Slot1_LD/Slot01_LD → Latency=2). Soft
+// First/LastMemoryCycle for Slot0_LS/Slot1_LD/Slot01_LD/Slot2_LS →
+// Latency=2). A published memory itinerary with no table row fatals (W21
+// ExactLatencies; never a silent latency-1 on a no-interlock machine). Soft
 // class-agnostic latency-1 is -haydn-accurate-memory-latency=false soak-off
-// only. Densify invents remain FATED. RegionEnd/WAW stay OFF (incomplete
-// MaxLatencyFinder sticky model). Product Latency=2 inserts a full-NOP
-// bubble on pure st32→ld32 chains; unit pins cover all three memory
-// itineraries.
+// only. Densify invents remain FATED. RegionEnd and WAWEdges stay default
+// off. Dead writes of simplifiable reserved status regs (SFR/CBR) drop
+// intra-region Output edges only when -haydn-postra-waw-edges is on (AIE
+// AIE2PSRegisterInfo.cpp:775-778 isSimplifiableReservedReg overlay).
+// Enabling reorders independent ALU/MOVE that FileCheck pins as NodeOrder.
+// Product Latency=2 inserts a full-NOP bubble on pure st32→ld32 chains;
+// unit pins cover all four memory itineraries.
 static cl::opt<bool> EnableHaydnPostRAMemoryEdges(
     "haydn-postra-memory-edges", cl::init(true), cl::Hidden,
     cl::desc("Post-RA: MemoryEdges via getMemoryLatency "
              "(default ON; product architectural latency)"));
 
-// AIE RegionEndEdges rebuilds ExitSU with MaxLatencyFinder. Without that
-// stripping ExitSU preds and replacing with getMaxResultLatency-only edges is
-// incomplete and can drop live-out Data edges (seed1 HOSTCALL residual).
-// Default off until MaxLatencyFinder port exists (AIE peer).
+// AIE RegionEndEdges rebuilds ExitSU with MaxLatencyFinder. The conservative
+// intra-region finder is ported below (itinerary maxLatency, no inter-block
+// successor reduction). Enabling the rebuild without that reduction can
+// still drop live-out Data edges that InterBlockScheduling would keep
+// (AIE AIEMaxLatencyFinder.cpp:101-191). Default off until that
+// successor reduction exists.
 static cl::opt<bool> EnableHaydnPostRARegionEndEdges(
     "haydn-postra-region-end-edges", cl::init(false), cl::Hidden,
-    cl::desc("Post-RA: recompute ExitSU edges (needs MaxLatencyFinder; "
-             "default off)"));
+    cl::desc("Post-RA: recompute ExitSU edges (MaxLatencyFinder ported; "
+             "default off until inter-block reduction)"));
 
-// Generic WAW without AIE isSimplifiableReservedReg is incomplete; default off.
+// AIE InterBlock first brick (AIEMaxLatencyFinder.cpp:159 IncludeStages =
+// !SuccessorsAreScheduled). ScheduledMBBs is already recorded on
+// HaydnScheduleDAGMI. Do not invent PerSuccEdges remaining-latency cuts
+// without that graph (AIE ReduceLatency would under-cover). Default off.
+static cl::opt<bool> EnableHaydnPostRAInterBlock(
+    "haydn-postra-interblock", cl::init(false), cl::Hidden,
+    cl::desc("Post-RA: drop ExitSU stage latency when successorsAreScheduled "
+             "(AIE IncludeStages; default off; no PerSuccEdges invent)"));
+
+// AIE WAWEdges (AIEBaseSubtarget.cpp:876-955) only simplifies reserved
+// status/control writes via isSimplifiableReservedReg. Haydn overlay:
+// SFR and CBR0/CBR1. R0/SP/LR stay real data and are never simplified.
 static cl::opt<bool> EnableHaydnPostRAWAWEdges(
     "haydn-postra-waw-edges", cl::init(false), cl::Hidden,
-    cl::desc("Post-RA: simplify dead physreg Output (WAW) edges "
-             "(default off; needs reserved-reg model)"));
+    cl::desc("Post-RA: simplify dead reserved-status Output (WAW) edges "
+             "(SFR/CBR; AIE isSimplifiableReservedReg overlay; default off)"));
 
 //===----------------------------------------------------------------------===//
 // Latency helpers
@@ -354,18 +377,43 @@ class MemoryEdges : public ScheduleDAGMutation {
         MachineInstr &SrcMI = *PredEdge.getSUnit()->getInstr();
         if (!PredEdge.isNormalMemoryOrBarrier() || !SrcMI.mayLoadOrStore())
           continue;
-        // Ignore pure load-load RAR.
+        // Load-load RAR is architecturally dual-LS (LOADSTORE0 + LOAD1).
+        // AIE ignores the edge (AIEBaseSubtarget.cpp:825-828) and leaves the
+        // LLVM latency as-is; do not invent a zero-latency override. Store→load
+        // and store→store keep the published MemoryCycle latency.
         if (!SrcMI.mayStore() && !MI.mayStore())
           continue;
 
         // Latency only from TII->getMemoryLatency; no store→load floor here.
-        // Product path uses table First/Last (Slot0_LS/Slot1_LD/Slot01_LD →
-        // Last-First+1, floored at 1); nullopt → keep local default 1. Soft
-        // soak-off (-haydn-accurate-memory-latency=false) returns 1 always.
+        // Product path uses table First/Last (Slot0_LS/Slot1_LD/Slot01_LD/
+        // Slot2_LS → Last-First+1, floored at 1). A published Slot*_LS /
+        // Slot*_LD class whose cycles are missing is a generator hole and
+        // must abort, not silently fall back to 1 — Haydn has no interlock,
+        // so a one-cycle-short mem→mem edge is a silicon hazard (W21 /
+        // scheduling F1; AIE ExactLatencies peer at
+        // AIEBaseSubtarget.cpp:830-842). Any other class (e.g. UA_POST
+        // logicals on Slot012_ALU) keeps the local default 1. Soft soak-off
+        // (-haydn-accurate-memory-latency=false) returns 1 always and never
+        // fatals.
+        constexpr bool ExactLatencies = true;
         int Latency = 1;
-        if (auto MemLat = HII->getMemoryLatency(SrcMI.getDesc().getSchedClass(),
-                                                MI.getDesc().getSchedClass())) {
+        unsigned SrcClass = SrcMI.getDesc().getSchedClass();
+        unsigned DstClass = MI.getDesc().getSchedClass();
+        if (auto MemLat = HII->getMemoryLatency(SrcClass, DstClass)) {
           Latency = *MemLat;
+        } else if (ExactLatencies &&
+                   ((HaydnInstrInfo::isPublishedMemoryItinerary(SrcClass) &&
+                     !HII->getLastMemoryCycle(SrcClass)) ||
+                    (HaydnInstrInfo::isPublishedMemoryItinerary(DstClass) &&
+                     !HII->getFirstMemoryCycle(DstClass)))) {
+          // Only a class that OWES a row may trigger this: a published
+          // Slot*_LS / Slot*_LD itinerary with no First/Last row is a
+          // generator hole. A cross-pair whose other side is a non-published
+          // memory class (e.g. AR writeback on Slot012_ALU) keeps the local
+          // default 1 — that class is not table-driven by design.
+          LLVM_DEBUG(dbgs() << "Error: no memory latency info for dependency\n"
+                       << "  from: " << SrcMI << "    to: " << MI);
+          report_fatal_error("Missing memory latency info.");
         }
         updatePredLatency(PredEdge, SU, Latency);
       }
@@ -455,15 +503,111 @@ class ZOLSetupExitLatency : public ScheduleDAGMutation {
 };
 
 //===----------------------------------------------------------------------===//
-// Post-RA: RegionEndEdges (simplified MaxLatencyFinder)
+// Post-RA: MaxLatencyFinder (AIE AIEMaxLatencyFinder.cpp overlay)
 //===----------------------------------------------------------------------===//
 
-// Recompute Artificial edges to ExitSU from each SUnit using itinerary max
-// result latency (AIE RegionEndEdges without inter-block MaxLatencyFinder).
+// Conservative intra-region maxLatency (AIE maxLatency at
+// AIEMaxLatencyFinder.cpp:32-63). Operand cycles + published memory last
+// cycle + optional stage latency. AIE computeEffectiveLatency needs
+// PerSuccEdges (AIEMaxLatencyFinder.cpp:101-151); Haydn keeps stage
+// latency whenever that graph is absent so ExitSU never under-covers.
+class MaxLatencyFinder {
+  const HaydnInstrInfo *const TII;
+  const InstrItineraryData *const Itineraries;
+  const bool IsBottomRegion;
+  const bool HasUnknownSuccessors;
+  const bool SuccessorsAreScheduled;
+  const bool IncludeStages;
+
+  static bool isBottomRegion(ScheduleDAGInstrs *DAG) {
+    // AIE MaxLatencyFinder.cpp:67-76. getBB() is protected on this DAG.
+    MachineInstr *ExitMI = DAG->ExitSU.getInstr();
+    if (!ExitMI)
+      return true;
+    MachineBasicBlock *BB = getDAGMBB(DAG);
+    if (!BB)
+      return false;
+    MachineBasicBlock::instr_iterator It(ExitMI);
+    return std::next(It) == BB->instr_end();
+  }
+
+  static unsigned maxOperandCycles(const InstrItineraryData *Itin,
+                                   unsigned SchedClass) {
+    unsigned Lat = 0;
+    if (!Itin || Itin->isEmpty())
+      return Lat;
+    for (unsigned I = 0;; ++I) {
+      std::optional<unsigned> OpLat = Itin->getOperandCycle(SchedClass, I);
+      if (!OpLat)
+        break;
+      Lat = std::max(Lat, *OpLat);
+    }
+    return Lat;
+  }
+
+public:
+  explicit MaxLatencyFinder(ScheduleDAGInstrs *DAG)
+      : TII(static_cast<const HaydnInstrInfo *>(DAG->TII)),
+        Itineraries(DAG->getSchedModel()->getInstrItineraries()),
+        IsBottomRegion(isBottomRegion(DAG)),
+        HasUnknownSuccessors(getDAGMBB(DAG) && getDAGMBB(DAG)->succ_empty()),
+        SuccessorsAreScheduled([&] {
+          // Only installed on HaydnScheduleDAGMI (createHaydnPostRAScheduler).
+          auto *HDAG = static_cast<HaydnScheduleDAGMI *>(DAG);
+          MachineBasicBlock *BB = getDAGMBB(DAG);
+          return IsBottomRegion && BB && HDAG->successorsAreScheduled(BB);
+        }()),
+        // AIE IncludeStages = !SuccessorsAreScheduled (AIEMaxLatencyFinder.cpp:159).
+        // InterBlock off keeps stage latency even when successorsAreScheduled
+        // so ExitSU never under-covers without PerSuccEdges. InterBlock on
+        // drops stages only; it does not invent remaining-latency cuts.
+        IncludeStages(!EnableHaydnPostRAInterBlock ||
+                      !SuccessorsAreScheduled) {
+    LLVM_DEBUG(dbgs() << "MaxLatencyFinder bottom=" << IsBottomRegion
+                      << " unknown-succ=" << HasUnknownSuccessors
+                      << " succ-sched=" << SuccessorsAreScheduled
+                      << " stages=" << IncludeStages
+                      << (EnableHaydnPostRAInterBlock ? " (interblock)"
+                                                      : " (conservative)")
+                      << "\n");
+  }
+
+  unsigned operator()(const MachineInstr &MI) const {
+    unsigned Latency = 0;
+    if (MI.isBundle()) {
+      const MachineBasicBlock *MBB = MI.getParent();
+      if (MBB) {
+        for (MachineBasicBlock::const_instr_iterator I =
+                 std::next(MI.getIterator());
+             I != MBB->instr_end() && I->isBundledWithPred(); ++I)
+          Latency = std::max(Latency, (*this)(*I));
+      }
+      return Latency;
+    }
+    const unsigned SrcClass = MI.getDesc().getSchedClass();
+    Latency = maxOperandCycles(Itineraries, SrcClass);
+    if (auto Last = TII->getLastMemoryCycle(SrcClass))
+      Latency = std::max(Latency, static_cast<unsigned>(*Last) + 1u);
+    Latency = std::max(Latency, TII->getMaxResultLatency(MI));
+    if (IncludeStages && Itineraries && !Itineraries->isEmpty())
+      Latency = std::max(Latency,
+                         static_cast<unsigned>(
+                             TII->getInstrLatency(Itineraries, MI)));
+    return std::max(Latency, 1u);
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Post-RA: RegionEndEdges (MaxLatencyFinder)
+//===----------------------------------------------------------------------===//
+
+// Recompute Artificial edges to ExitSU from each SUnit using MaxLatencyFinder
+// (AIE RegionEndEdges / AIEBaseSubtarget.cpp:390-418).
 class RegionEndEdges : public ScheduleDAGMutation {
   void apply(ScheduleDAGInstrs *DAG) override {
     const auto *HII = static_cast<const HaydnInstrInfo *>(DAG->TII);
     SUnit &ExitSU = DAG->ExitSU;
+    MaxLatencyFinder MaxLatency(DAG);
 
     // Drop existing ExitSU preds and rebuild (AIE pattern).
     while (!ExitSU.Preds.empty())
@@ -471,7 +615,7 @@ class RegionEndEdges : public ScheduleDAGMutation {
 
     for (SUnit &SU : DAG->SUnits) {
       MachineInstr &MI = *SU.getInstr();
-      unsigned EdgeLatency = HII->getMaxResultLatency(MI);
+      unsigned EdgeLatency = MaxLatency(MI);
       unsigned DelaySlots = HII->getNumDelaySlots(MI);
       if (DelaySlots)
         EdgeLatency = std::max(EdgeLatency, DelaySlots + 1);
@@ -503,8 +647,9 @@ class RegionEndEdges : public ScheduleDAGMutation {
 // Post-RA: WAWEdges (generic physreg Output simplification)
 //===----------------------------------------------------------------------===//
 
-// Drop intra-region Output (WAW) edges on physical registers that are not
-// live after the write (AIE WAWEdges without reserved-sticky special cases).
+// Drop intra-region Output (WAW) edges on simplifiable reserved status
+// registers that are not live after the write (AIE WAWEdges /
+// AIEBaseSubtarget.cpp:876-955). R0/SP/LR keep their Output edges.
 class MachineSchedWAWEdges : public ScheduleDAGMutation {
   void apply(ScheduleDAGInstrs *DAG) override {
     MachineFunction &MF = DAG->MF;
@@ -517,7 +662,8 @@ class MachineSchedWAWEdges : public ScheduleDAGMutation {
       LiveRegs.addLiveOutsNoPristines(*MBB);
     } else {
       for (const MCPhysReg PhysReg : MRI.getReservedRegs().set_bits())
-        LiveRegs.addReg(PhysReg);
+        if (haydnIsSimplifiableReservedReg(PhysReg))
+          LiveRegs.addReg(PhysReg);
     }
 
     std::map<Register, SUnit *> PhysRegWriters;
@@ -525,6 +671,8 @@ class MachineSchedWAWEdges : public ScheduleDAGMutation {
       MachineInstr &MI = *SU.getInstr();
       for (MIBundleOperands MO(MI); MO.isValid(); ++MO) {
         if (!MO->isReg() || !MO->isDef() || !MO->getReg().isPhysical())
+          continue;
+        if (!haydnIsSimplifiableReservedReg(MO->getReg()))
           continue;
         Register PhysReg = MO->getReg();
         if (!LiveRegs.contains(PhysReg)) {
@@ -571,7 +719,7 @@ std::vector<std::unique_ptr<ScheduleDAGMutation>> llvm::getHaydnPostRAMutations(
   // full RegionEndEdges rebuild is OFF.
   std::vector<std::unique_ptr<ScheduleDAGMutation>> Mutations;
   Mutations.emplace_back(std::make_unique<ZOLSetupExitLatency>());
-  if (EnableHaydnPostRARegionEndEdges)
+  if (EnableHaydnPostRARegionEndEdges || EnableHaydnPostRAInterBlock)
     Mutations.emplace_back(std::make_unique<RegionEndEdges>());
   if (EnableHaydnPostRAMemoryEdges)
     Mutations.emplace_back(std::make_unique<MemoryEdges>());

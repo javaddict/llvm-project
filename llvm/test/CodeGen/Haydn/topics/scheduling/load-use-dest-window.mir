@@ -1,0 +1,40 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — char load→use cannot share the next issue cycle (Data_Latency 2,
+# no interlock). The consumer must not sit ahead of or in the same cycle as
+# the defining LDU8.
+
+--- |
+  define i32 @char_load_use(ptr %p, i32 %mask) { ret i32 0 }
+...
+---
+name:            char_load_use
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r3, $r15
+
+    ; CHECK-LABEL: name: char_load_use
+    ; CHECK: $r4 = {{LDU8|S_LBU}}
+    ; CHECK-NEXT: NOP
+    ; CHECK: AND32{{.*}}$r4
+    $r4 = LDU8 $r1, 0, implicit-def dead $sfr :: (load (s8) from %ir.p)
+    $r8 = AND32 $r4, $r3
+    $r0 = COPY $r8
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

@@ -15,26 +15,33 @@
 #include "HaydnHazardRecognizer.h"
 #include "HaydnAlternateDescriptors.h"
 #include "HaydnBundle.h"
+#include "HaydnBundleFormatSolver.h"
+#include "HaydnBundlePortBudget.h"
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnIntraCycleRAW.h"
+#include "HaydnIntraCycleWAW.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
 #include "HaydnResourceRestrictionClasses.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/IR/Value.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
+#include <climits>
 #include <functional>
 
 using namespace llvm;
@@ -61,36 +68,39 @@ llvm::getFieldOrderedMembers(const Haydn::MachineBundle &Bundle,
                              const VLIWFormat &Format) {
   SmallVector<MachineInstr *, 3> Out;
   HaydnMCFormats Fmts;
+  auto already = [&](const MachineInstr *MI) {
+    return llvm::is_contained(Out, MI);
+  };
   auto collect = [&](MCSlotKind Slot, bool AssertSlotInfo) {
     if (AssertSlotInfo) {
       const MCSlotInfo *SlotInfo = Fmts.getSlotInfo(Slot);
       assert(SlotInfo && "getFieldOrderedMembers: format slot has no SlotInfo");
       (void)SlotInfo;
     }
-    if (MachineInstr *MI = Bundle.at(Slot))
+    MachineInstr *MI = Bundle.at(Slot);
+    if (MI && !already(MI))
       Out.push_back(MI);
   };
-  // Run over the slots of the format. (AIE may insert NOPs for empty slots;
-  // product Format E leaves holes un-filled — only present members move.)
+  // PacketFormats list Format E entries high-to-low (E3_2, E3_1, E3_0 /
+  // E2_1, E2_0 — HaydnGenFormats.inc FormatSlotData). That is the same
+  // S2→S1→S0 materialize order selectPreferredCandidate uses
+  // (HaydnBundleFormatSolver.h). AIE walks Format.getSlots() as-is
+  // (AIEHazardRecognizer.cpp:300-314); Haydn overlay keeps that walk and
+  // also collects residual S2/S1/S0 keys so a mixed E*/S* SlotMap still
+  // emits high-to-low. Emitting low-to-high would flip a legal WAR
+  // (reader issued first, writer on a lower entry) into writer-before-
+  // reader and reject the pack as a false no-forwarding RAW.
   for (MCSlotKind Slot : Format.getSlots())
     collect(Slot, /*AssertSlotInfo=*/true);
-  if (Out.empty()) {
-    // Transitional residual: members may still live on residual S0/S1/S2 while
-    // PacketFormats list Format E entry kinds (E2_*/E3_*). Fall back to residual
-    // field order S2→S1→S0, then any remaining SlotMap entries, so hard-root
-    // recommit still rebuilds a BUNDLE shell.
-    static const MCSlotKind ResidualFieldOrder[] = {
-        MCSlotKind(MCSlotKind::Haydn_SLOT_S2),
-        MCSlotKind(MCSlotKind::Haydn_SLOT_S1),
-        MCSlotKind(MCSlotKind::Haydn_SLOT_S0)};
-    for (MCSlotKind Slot : ResidualFieldOrder)
-      collect(Slot, /*AssertSlotInfo=*/false);
-  }
-  if (Out.empty()) {
-    for (const auto &KV : Bundle.getSlotMap())
-      if (KV.second)
-        Out.push_back(KV.second);
-  }
+  static const MCSlotKind ResidualFieldOrder[] = {
+      MCSlotKind(MCSlotKind::Haydn_SLOT_S2),
+      MCSlotKind(MCSlotKind::Haydn_SLOT_S1),
+      MCSlotKind(MCSlotKind::Haydn_SLOT_S0)};
+  for (MCSlotKind Slot : ResidualFieldOrder)
+    collect(Slot, /*AssertSlotInfo=*/false);
+  for (const auto &KV : Bundle.getSlotMap())
+    if (KV.second && !already(KV.second))
+      Out.push_back(KV.second);
   return Out;
 }
 
@@ -177,36 +187,21 @@ bool isNoHazardMeta(const MachineInstr &MI) {
 // immediate; we read getImm directly. The .td marks it uimm8 so a
 // well-formed MI always carries an immediate here; we still guard
 // isImm against malformed/MIR test input.
-int getHwloopCsrAddr(const MachineInstr &MI) {
-  unsigned Opc = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
-  unsigned CsrOpIdx;
-  if (Opc == Haydn::CSRW || Opc == Haydn::CSRW_W)
-    CsrOpIdx = 0;
-  else
-    return -1;
-  if (CsrOpIdx >= MI.getNumOperands())
-    return -1;
-  const MachineOperand &Csr = MI.getOperand(CsrOpIdx);
-  if (!Csr.isImm())
-    return -1;
-  int64_t Addr = Csr.getImm();
-  if (Addr >= 0x20 && Addr <= 0x25)
-    return static_cast<int>(Addr);
-  return -1;
-}
+int getHwloopCsrAddr(const MachineInstr &MI) { return haydnHwloopCsrAddr(MI); }
 
-// Product Format E HI12/LO20 FieldLsb assumes e0 alone. LUI / ADDI32_W must
-// not share a cycle with any other real op or LLD patches the wrong entry
-// (null function pointers, e.g. atexit stdc_at_exit_func).
+// LUI / ADDI32_W stay e0-alone in the HR so a second real cannot steal the
+// materialize entry. HI12 FieldLsb is still not "e0 ⇒ table 32": E3 e0 ALU2
+// LUI is abs[21:32]. resolveFieldLsb owns the window.
 bool isAbsMaterializeOp(unsigned Opcode) {
-  const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(Opcode);
-  return Log == Haydn::LUI || Log == Haydn::ADDI32_W;
+  return haydnIsAbsMaterializeOpcode(Opcode);
 }
 } // namespace
 
 //===----------------------------------------------------------------------===//
 // HaydnFuncUnitWrapper
 //===----------------------------------------------------------------------===//
+
+const HaydnBaseMCFormats *HaydnFuncUnitWrapper::FormatInterface = nullptr;
 
 HaydnFuncUnitWrapper::HaydnFuncUnitWrapper(const InstrStage &IS) {
   // InstrStage Units_ bit N is set iff FU index N is in the choice set.
@@ -244,8 +239,8 @@ bool HaydnFuncUnitWrapper::conflict(const HaydnFuncUnitWrapper &Other) const {
   if (Required.overlap(Other.Reserved) || Reserved.overlap(Other.Required))
     return true;
 
-  // Max three Format E entries per cycle.
-  if (IssueCount + Other.IssueCount > 3)
+  // Max issue == generated E3 entry capacity (Haydn::ISSUE_SLOT_COUNT).
+  if (IssueCount + Other.IssueCount > Haydn::ISSUE_SLOT_COUNT)
     return true;
 
   // GPR 4R2W register-file port budget.
@@ -272,6 +267,31 @@ bool HaydnFuncUnitWrapper::conflict(const HaydnFuncUnitWrapper &Other) const {
   if (SFRWrites + Other.SFRWrites > HAYDN_SFR_WRITE_PORTS)
     return true;
 
+  // AIE FuncUnitWrapper::conflict (AIEHazardRecognizer.cpp:136-138)
+  // same-kind memory-object overlap is not overlaid: golden dual-load
+  // of one object (LOADSTORE0 + LOAD1) is legal. Wait-cycle same-object
+  // reject is an unadmitted ISA row and must not serialize p[0]/p[1].
+  static_assert(!haydnMemoryObjectWaitCyclesAdmitted(),
+                "memory-object wait-cycle reject stays fail-closed");
+
+  // AIE FuncUnitWrapper::conflict (AIEHazardRecognizer.cpp:147-150):
+  // don't check formats unless both have occupied slots. A blocked cycle
+  // (Slots = ~0) then conflicts without needing the LUT contents.
+  if (Slots && Other.Slots) {
+    const SlotBits Combined = Slots | Other.Slots;
+    if (!FormatInterface)
+      return true;
+    // LUT is the AIE isFormatAvailable peer. A miss is a conflict even
+    // when productCovers' FieldSlots transitional accept would say yes.
+    if (!FormatInterface->isFormatAvailable(Combined))
+      return true;
+    // Fail-closed PacketFormats cover: getFormat is getFormatOrNull's
+    // first arm (AIEBundle.h:150-156). productCovers may only reject.
+    const PacketFormats &PF = FormatInterface->getPacketFormats();
+    if (!PF.getFormat(Combined) && !haydn::bundle::productCovers(PF, Combined))
+      return true;
+  }
+
   return false;
 }
 
@@ -296,9 +316,11 @@ void HaydnFuncUnitWrapper::dump() const {
   }
   if (First)
     dbgs() << "-";
-  dbgs() << " issue:" << IssueCount << " gpr:" << GPRReads << "R/" << GPRWrites
-         << "W dr:" << DRReads << "R/" << DRWrites << "W ar:" << ARReads << "R/"
-         << ARWrites << "W sfr:" << SFRReads << "R/" << SFRWrites << "W}";
+  dbgs() << " issue:" << IssueCount << " slots:" << Slots << " gpr:" << GPRReads
+         << "R/" << GPRWrites << "W dr:" << DRReads << "R/" << DRWrites
+         << "W ar:" << ARReads << "R/" << ARWrites << "W sfr:" << SFRReads
+         << "R/" << SFRWrites << "W lobj:" << LoadMemObjectsBits
+         << " sobj:" << StoreMemObjectsBits << "}";
 }
 
 //===----------------------------------------------------------------------===//
@@ -310,6 +332,8 @@ HaydnHazardRecognizer::HaydnHazardRecognizer(const TargetInstrInfo *TII,
                                              bool IsPreRA,
                                              HaydnAlternateDescriptors *AltDescs)
     : TII(TII), ItinData(ItinData), IsPreRA(IsPreRA), AltDescs(AltDescs) {
+  // AIE FuncUnitWrapper::setFormatInterface from the HR ctor.
+  HaydnFuncUnitWrapper::setFormatInterface(&haydnDefaultMCFormats());
   // Compute the scoreboard depth from the itineraries so the window covers
   // the deepest pipeline + max result latency. For Haydn's current
   // single-stage, latency-1 itineraries this is small (1-2), but Stream C
@@ -328,7 +352,10 @@ HaydnHazardRecognizer::scoreMatchingFrontier(ArrayRef<CycleState> Base,
   if (Base.empty())
     return Score;
 
-  HaydnMCFormats LocalFmts;
+  // Process-wide singleton — never a per-call HaydnMCFormats local. Pre-RA
+  // tryCandidate probes this twice per compare; a local formats view was
+  // compile-time overhead on large ready sets (IIR / CoreMark / Dhrystone).
+  const HaydnMCFormats &LocalFmts = haydnDefaultMCFormats();
   auto FillFromPreferred = [&](const CycleCandidateSet &Cands) {
     const CycleState &Pref = selectPreferredCandidate(Cands);
     Score.SuccessorMatchings = static_cast<unsigned>(Cands.size());
@@ -422,6 +449,11 @@ void HaydnHazardRecognizer::computeMaxLatency() {
   }
   PipelineDepth = MaxPipelineDepth;
   MaxLatency = MaxOpLatency;
+  // Scoreboard ring must cover the SIN_COS/ARCTAN occupancy window
+  // (uimm4_max+2). OperandCycles 17 still do not inflate MaxLatency.
+  PipelineDepth = std::max(
+      PipelineDepth,
+      static_cast<int>(haydn::restriction::SinCosScaffoldDataLatency));
 }
 
 void HaydnHazardRecognizer::captureCycleStartScoreboard() {
@@ -440,9 +472,9 @@ void HaydnHazardRecognizer::reenterCurrentCycleScoreboard() {
 
 void HaydnHazardRecognizer::Reset() {
   // Shared PortModel availability-aware record pin (one authority with
-  // pre-RA / ordinary post-RA). Aggregate ceilings only while the complete
-  // per-op table is closed; competitive claims stay fail-closed.
-  static bool ResourceAdmissionPinned = false;
+  // pre-RA / ordinary post-RA / LatencyStalls). Aggregate ceilings only
+  // while the complete per-op table is closed; competitive claims stay
+  // fail-closed. Member, not a function-local static.
   if (!ResourceAdmissionPinned) {
     ResourceAdmissionPinned = true;
     if (!haydnAvailabilityAwareConsumePinsHold())
@@ -460,6 +492,8 @@ void HaydnHazardRecognizer::Reset() {
   CurrentCycleHasHwloopCsrw = false;
   CurrentCycleHasAbsMaterialize = false;
   CurrentCycleHasNonAbsReal = false;
+  DestReadPending.clear();
+  DestWritePending.clear();
   CurrentCycleCandidates = makeProductCandidateSet();
   CurrentCyclePlacedMIs.clear();
   TRI = nullptr;
@@ -476,6 +510,73 @@ HaydnHazardRecognizer::resolveBookingOpcode(const MachineInstr &MI) const {
       return *Sel;
   }
   return MI.getOpcode();
+}
+
+SlotBits
+HaydnHazardRecognizer::occupancySlots(const MachineInstr &MI) const {
+  // AIE getSlotSet(Desc) after MultiSlot materialize
+  // (AIEHazardRecognizer.cpp:549/564). Selected / pinned member only.
+  // Unplaced alts stay untracked (0): preferred-member slot OR of
+  // LD32 (E3 e1) + ST32 (E2 e0) is not a legal mask and would serialize
+  // a rematchable store+load before exactTryAdd can rematch.
+  const unsigned Booked = resolveBookingOpcode(MI);
+  const MCSlotKind Kind = Fmts.getSlotKind(Booked);
+  if (Kind == MCSlotKind())
+    return 0;
+  const MCSlotInfo *SI = Fmts.getSlotInfo(Kind);
+  return SI ? SI->getSlotSet() : 0;
+}
+
+bool MemoryObjectEnumerator::isFull() const {
+  return ObjectCounter == sizeof(MemoryObjectsBits) * CHAR_BIT;
+}
+
+std::optional<unsigned>
+MemoryObjectEnumerator::getObjectNumber(const Value *Object) {
+  auto ItNumber = ObjectNumberingMap.find(Object);
+  if (ItNumber != ObjectNumberingMap.end())
+    return ItNumber->second;
+
+  const Value *ParentObject = getUnderlyingObject(Object);
+  auto ItParent = ObjectNumberingMap.find(ParentObject);
+  if (ItParent != ObjectNumberingMap.end()) {
+    ObjectNumberingMap[Object] = ItParent->second;
+    return ItParent->second;
+  }
+  if (isFull())
+    return std::nullopt;
+
+  const unsigned ObjectNumber = ObjectCounter++;
+  ObjectNumberingMap[ParentObject] = ObjectNumber;
+  ObjectNumberingMap[Object] = ObjectNumber;
+  return ObjectNumber;
+}
+
+MemoryObjectPair
+HaydnHazardRecognizer::getMemoryObjectsBits(const MachineInstr *MI) const {
+  // AIEHazardRecognizer.cpp:829-862. Wait-cycle avoidance, not a golden
+  // bank invent. Pre-RA must not tighten the ready set further. Bits are
+  // dump-only while haydnMemoryObjectWaitCyclesAdmitted is false —
+  // conflict() must not consult them.
+  MemoryObjectPair Result;
+  if (!MI || IsPreRA || (!MI->mayLoad() && !MI->mayStore()))
+    return Result;
+  if (MI->memoperands_empty())
+    return Result;
+
+  MemoryObjectsBits Objects = 0;
+  for (const MachineMemOperand *MMO : MI->memoperands()) {
+    const Value *BaseObject = MMO->getValue();
+    if (!BaseObject)
+      continue;
+    if (auto ObjectNumber = ObjectEnumerator.getObjectNumber(BaseObject))
+      Objects |= (MemoryObjectsBits(1) << *ObjectNumber);
+  }
+  if (MI->mayLoad())
+    Result.Load = Objects;
+  if (MI->mayStore())
+    Result.Store = Objects;
+  return Result;
 }
 
 unsigned
@@ -497,6 +598,7 @@ HaydnFuncUnitWrapper
 HaydnHazardRecognizer::buildCandidate(const MachineInstr &MI) const {
   HaydnFuncUnitWrapper Candidate;
   Candidate.setIssueCountOne();
+  Candidate.setSlots(occupancySlots(MI));
 
   const unsigned BookingOpc = resolveBookingOpcode(MI);
   const unsigned SchedClass =
@@ -520,6 +622,8 @@ HaydnHazardRecognizer::buildCandidate(const MachineInstr &MI) const {
   Candidate.setARPorts(ARReads, ARWrites);
   auto [SFRReads, SFRWrites] = countSFRPorts(MI);
   Candidate.setSFRPorts(SFRReads, SFRWrites);
+  const MemoryObjectPair Mem = getMemoryObjectsBits(&MI);
+  Candidate.setMemoryObjectBits(Mem.Load, Mem.Store);
   return Candidate;
 }
 
@@ -535,10 +639,12 @@ bool HaydnHazardRecognizer::checkConflict(
   if (!SB.isInRange(DeltaCycles))
     return false;
 
-  // Issue-cycle ports + issue count. Unit bits come from itinerary stages
-  // so they are not double-counted here.
+  // Issue-cycle ports + issue count + Format E Slots (AIE EmissionCycle
+  // SlotSet at AIEHazardRecognizer.cpp:583-585). Unit bits come from
+  // itinerary stages so they are not double-counted here.
   HaydnFuncUnitWrapper IssueOnly;
   IssueOnly.setIssueCountOne();
+  IssueOnly.setSlots(occupancySlots(MI));
   auto [Reads, Writes] = countGPRPorts(MI);
   IssueOnly.setGPRPorts(Reads, Writes);
   auto [DRReads, DRWrites] = countDRPorts(MI);
@@ -547,15 +653,45 @@ bool HaydnHazardRecognizer::checkConflict(
   IssueOnly.setARPorts(ARReads, ARWrites);
   auto [SFRReads, SFRWrites] = countSFRPorts(MI);
   IssueOnly.setSFRPorts(SFRReads, SFRWrites);
+  // AIE EmissionCycle books memory-object bits here
+  // (AIEHazardRecognizer.cpp:561-584). Same-kind overlap is not a
+  // same-cycle reject (golden dual-load); bits stay for dump / future
+  // wait-cycle once an ISA row is admitted.
+  const MemoryObjectPair Mem = getMemoryObjectsBits(&MI);
+  IssueOnly.setMemoryObjectBits(Mem.Load, Mem.Store);
   if (SB[DeltaCycles].conflict(IssueOnly))
     return true;
+
+  // Residual logical itineraries (MOVE32_DR Slot0_ALU, TSFlags "slot 0")
+  // are FieldSlot leftovers, not bound Format E units. After a member
+  // books ALU0, the next unplaced MOVE32_DR still looks like Required
+  // ALU0 and checkConflict would serialize a pair the solver can place
+  // on ALU0+ALU1. Same-cycle unit injectivity is exactTryAddProduct.
+  //
+  // PA-N1 / W35: do not early-return here. That skipped every itinerary
+  // stage at DeltaCycles==0, including StageCycle>0 occupancy. Multi-stage
+  // fitInInterval / resourcesConverged uses checkConflict as its only
+  // placement gate. Skip only leftover StageCycle==0 unit bits; still
+  // walk StageCycle>0. Ports/issue already checked above.
+  const bool UnplacedAltsSameCycle =
+      DeltaCycles == 0 && resolveBookingOpcode(MI) == MI.getOpcode() &&
+      hasPlacementAlternatives(Fmts, MI.getOpcode());
 
   const unsigned SchedClass = resolveSchedClass(MI);
   bool SawStage = false;
   if (ItinData && !ItinData->isEmpty() && SchedClass != 0) {
+    LLVM_DEBUG({
+      if (UnplacedAltsSameCycle)
+        dbgs() << "checkConflict: same-cycle itinerary occupancy "
+                  "(skip leftover StageCycle==0 unit bits)\n";
+    });
     if (anyStage(
             ItinData, SchedClass,
             [&](int StageCycle, const HaydnFuncUnitWrapper &ThisCycle) {
+              if (UnplacedAltsSameCycle && StageCycle == 0) {
+                SawStage = true;
+                return false;
+              }
               SawStage = true;
               const int ScoreboardCycle = DeltaCycles + StageCycle;
               if (!SB.isInRange(ScoreboardCycle))
@@ -573,6 +709,10 @@ bool HaydnHazardRecognizer::checkConflict(
   }
   if (!SawStage) {
     // No itinerary stages: ports/issue only from buildCandidate.
+    // Unplaced same-cycle alts must not revive leftover StageCycle==0
+    // unit bits through this fallback.
+    if (UnplacedAltsSameCycle)
+      return false;
     HaydnFuncUnitWrapper Cand = buildCandidate(MI);
     if (SB[DeltaCycles].conflict(Cand))
       return true;
@@ -592,6 +732,7 @@ void HaydnHazardRecognizer::enterResources(
 
   HaydnFuncUnitWrapper IssueOnly;
   IssueOnly.setIssueCountOne();
+  IssueOnly.setSlots(occupancySlots(MI));
   auto [Reads, Writes] = countGPRPorts(MI);
   IssueOnly.setGPRPorts(Reads, Writes);
   auto [DRReads, DRWrites] = countDRPorts(MI);
@@ -600,6 +741,8 @@ void HaydnHazardRecognizer::enterResources(
   IssueOnly.setARPorts(ARReads, ARWrites);
   auto [SFRReads, SFRWrites] = countSFRPorts(MI);
   IssueOnly.setSFRPorts(SFRReads, SFRWrites);
+  const MemoryObjectPair Mem = getMemoryObjectsBits(&MI);
+  IssueOnly.setMemoryObjectBits(Mem.Load, Mem.Store);
   SB[DeltaCycles] |= IssueOnly;
 
   const unsigned SchedClass = resolveSchedClass(MI);
@@ -628,6 +771,32 @@ void HaydnHazardRecognizer::emitInScoreboard(
     ResourceScoreboard<HaydnFuncUnitWrapper> &SB, const MachineInstr &MI,
     int Cycle) const {
   enterResources(SB, MI, Cycle);
+  // SIN_COS/ARCTAN occupancy (Constraints:140): book Reserved on the
+  // selected unit for cycles Cycle+1 .. Cycle+uimm4+1 so a later Required
+  // of the same unit conflicts (NOP-on-unit). Dest-writer stays on the
+  // list-scheduler emit path (DestWritePending); SMS placement sees the
+  // unit lock through this scoreboard.
+  const unsigned Occupancy = sinCosWindowOccupancy(MI);
+  if (Occupancy < 2)
+    return;
+  const unsigned SchedClass = resolveSchedClass(MI);
+  HaydnFuncUnitWrapper::ResourceSet Units;
+  if (ItinData && !ItinData->isEmpty() && SchedClass != 0) {
+    (void)anyStage(ItinData, SchedClass,
+                   [&](int StageCycle, const HaydnFuncUnitWrapper &Stage) {
+                     if (StageCycle == 0)
+                       Units |= Stage.getRequired();
+                     return false;
+                   });
+  }
+  if (Units.empty())
+    return;
+  for (unsigned K = 1; K < Occupancy; ++K) {
+    const int Cyc = Cycle + static_cast<int>(K);
+    if (!SB.isInRange(Cyc))
+      break;
+    SB[Cyc].mergeReserved(Units);
+  }
 }
 
 const TargetRegisterInfo *
@@ -638,12 +807,13 @@ HaydnHazardRecognizer::getTRI(const MachineInstr &MI) {
 }
 
 bool HaydnHazardRecognizer::hasSameBundleWAW(const MachineInstr &MI) const {
-  // same-bundle destination-register WAW. The candidate's defs are
-  // checked here (not in buildCandidate, which carries only port counts) for
-  // overlap against CurrentCycleDefs via regsOverlap — the same alias semantic
-  // as MachineInstr::modifiesRegister (the retired packetizer's
-  // hasWAWHazard). Virtual registers (pre-RA) match by Register identity;
-  // physregs use TRI::regsOverlap for aliases/subregs.
+  // same-bundle destination-register WAW, delegating to the ONE shared
+  // no-dual-write law (HaydnIntraCycleWAW.h — W39 unification). The
+  // candidate's defs are checked here (not in buildCandidate, which carries
+  // only port counts) for overlap against CurrentCycleDefs via regsOverlap —
+  // the same alias semantic as MachineInstr::modifiesRegister (the retired
+  // packetizer's hasWAWHazard). Virtual registers (pre-RA) match by Register
+  // identity; physregs use TRI::regsOverlap for aliases/subregs.
   // FE5B WP4: dual of HaydnResourceCycle same-phase WAW / certificate
   // same-reg DefRegKey fail-close (productSamePhaseWAWFailsClosed).
   //
@@ -657,24 +827,7 @@ bool HaydnHazardRecognizer::hasSameBundleWAW(const MachineInstr &MI) const {
   // emit, when CurrentCycleDefs is empty and no WAW is possible anyway.
   // TRI is required for physreg alias checks. Vreg identity checks work
   // without it (pre-RA). Empty CurrentCycleDefs short-circuits either way.
-  for (const MachineOperand &MO : MI.operands()) {
-    if (!MO.isReg() || !MO.isDef())
-      continue;
-    Register Reg = MO.getReg();
-    if (!Reg)
-      continue;
-    if (Reg.isVirtual()) {
-      if (CurrentCycleDefs.contains(Reg))
-        return true;
-      continue;
-    }
-    if (!Reg.isPhysical() || !TRI)
-      continue;
-    for (Register D : CurrentCycleDefs)
-      if (D.isPhysical() && TRI->regsOverlap(Reg, D))
-        return true;
-  }
-  return false;
+  return haydnHasIntraCycleWAW(MI, CurrentCycleDefs, TRI);
 }
 
 bool HaydnHazardRecognizer::hasSameBundleRAW(const MachineInstr &MI) const {
@@ -719,34 +872,48 @@ void HaydnHazardRecognizer::appendDefs(const MachineInstr &MI) {
   if (!TRI)
     (void)getTRI(MI);
   // WAW set: ALL defs (live or dead), including SFR — the spec forbids two
-  // writes to one register regardless of liveness. HR-specific, not part of
-  // the shared no-forwarding RAW law.
-  for (const MachineOperand &MO : MI.operands()) {
-    if (!MO.isReg() || !MO.isDef())
-      continue;
-    Register Reg = MO.getReg();
-    if (!Reg)
-      continue;
-    if (!Reg.isPhysical() && !Reg.isVirtual())
-      continue;
-    CurrentCycleDefs.insert(Reg);
-  }
+  // writes to one register regardless of liveness. Delegated to the shared
+  // no-dual-write mechanism (HaydnIntraCycleWAW.h — W39; same predicate SMS
+  // HaydnResourceCycle and the materialize commit path use), not part of the
+  // shared no-forwarding RAW law.
+  haydnAppendCycleDefs(MI, CurrentCycleDefs);
   // RAW live-def set: delegated to the shared no-forwarding mechanism
   // (HaydnIntraCycleRAW.h) — same predicate SMS HaydnResourceCycle uses.
   haydnAppendLiveDefs(MI, CurrentCycleLiveDefs);
 }
 
 bool HaydnHazardRecognizer::opcodeIssuesAloneInCycle(unsigned Opcode) {
-  // Logical class-1 (PortModel). Post-setDesc members do not hit this arm.
-  if (haydnOpcodeIssuesAloneInCycle(Opcode))
-    return true;
+  // One classify site (PortModel / logicalOpcodeOrSelf). Members peel to
+  // the logical; do not re-list ARCTAN/SIN_COS here.
+  return haydnOpcodeIssuesAloneInCycle(Opcode);
+}
 
-  // Class-1 alone identity is the golden logical (ARCTAN / SIN_COS), not
-  // AlternateInsts membership. Covers the public logical, residual FieldSlot,
-  // and generated Format E member via one peel (earliest `_E2_`/`_E3_`).
-  const std::string Log = haydn::format_e::peelLogicalOpcodeName(
-      haydn::bundle::haydnOpcodeName(Opcode), /*StripWide=*/false);
-  return Log == "ARCTAN" || Log == "SIN_COS";
+unsigned HaydnHazardRecognizer::sinCosWindowOccupancy(const MachineInstr &MI) {
+  return haydnSinCosWindowOccupancy(MI);
+}
+
+bool HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(
+    const MachineInstr &Cand, ArrayRef<const MachineInstr *> Occupied) {
+  return haydn::pack::cycleViolatesNamedSameCycleLaws(Cand, Occupied);
+}
+
+unsigned HaydnHazardRecognizer::architecturalDefLatency(
+    const InstrItineraryData *Itin, const MachineInstr &MI, unsigned DefOpIdx) {
+  if (unsigned Occ = sinCosWindowOccupancy(MI))
+    return Occ;
+  if (!Itin || Itin->isEmpty())
+    return 1;
+  const unsigned SchedClass = MI.getDesc().getSchedClass();
+  if (std::optional<unsigned> Cycle =
+          Itin->getOperandCycle(SchedClass, DefOpIdx))
+    if (*Cycle != 0)
+      return haydn::restriction::clampPublishedDataLatency(*Cycle);
+  unsigned Max = 1;
+  const int FirstOp = Itin->Itineraries[SchedClass].FirstOperandCycle;
+  const int LastOp = Itin->Itineraries[SchedClass].LastOperandCycle;
+  for (int OpIdx = FirstOp; OpIdx < LastOp; ++OpIdx)
+    Max = std::max(Max, Itin->OperandCycles[OpIdx]);
+  return haydn::restriction::clampPublishedDataLatency(Max);
 }
 
 bool HaydnHazardRecognizer::isLockedSlotDspOp(const MachineInstr &MI) const {
@@ -756,6 +923,181 @@ bool HaydnHazardRecognizer::isLockedSlotDspOp(const MachineInstr &MI) const {
     return true;
   const unsigned Booked = resolveBookingOpcode(MI);
   return Booked != MI.getOpcode() && opcodeIssuesAloneInCycle(Booked);
+}
+
+void HaydnHazardRecognizer::bookSinCosWindow(const MachineInstr &MI) {
+  // Pre-RA is OnlyBottomUp and recedes. Dest/unit windows are post-RA
+  // top-down no-interlock overlays; DAG SDep carries pre-RA latency.
+  if (IsPreRA)
+    return;
+  const unsigned Occupancy = sinCosWindowOccupancy(MI);
+  if (Occupancy < 2)
+    return;
+
+  // Selected-unit occupancy: book Reserved on cycles 1..Occupancy-1 so a
+  // later Required of the same unit conflicts (NOP-on-unit). After
+  // commitPlacementForEmit the booked member is a single ALU1/ALU2 bit.
+  const unsigned SchedClass = resolveSchedClass(MI);
+  HaydnFuncUnitWrapper::ResourceSet Units;
+  if (ItinData && !ItinData->isEmpty() && SchedClass != 0) {
+    (void)anyStage(ItinData, SchedClass,
+                   [&](int StageCycle, const HaydnFuncUnitWrapper &Stage) {
+                     if (StageCycle == 0)
+                       Units |= Stage.getRequired();
+                     return false;
+                   });
+  }
+  if (!Units.empty()) {
+    for (unsigned K = 1; K < Occupancy; ++K) {
+      const int Cyc = static_cast<int>(K);
+      if (!Scoreboard.isInRange(Cyc))
+        break;
+      Scoreboard[Cyc].mergeReserved(Units);
+    }
+  }
+
+  // No dest-writer during the occupancy window (dest commits at cycle
+  // Occupancy). Overlap uses TRI when available.
+  (void)getTRI(MI);
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+      continue;
+    // Status regs are exclusive-writer / port-gated; they are not the
+    // architectural dest the occupancy window names.
+    if (haydnIsSimplifiableReservedReg(MO.getReg()))
+      continue;
+    unsigned &Remain = DestWritePending[MO.getReg()];
+    Remain = std::max(Remain, Occupancy - 1);
+  }
+}
+
+void HaydnHazardRecognizer::bookDestReadWindow(const MachineInstr &MI) {
+  if (IsPreRA)
+    return;
+  (void)getTRI(MI);
+  for (unsigned OpIdx = 0, E = MI.getNumOperands(); OpIdx != E; ++OpIdx) {
+    const MachineOperand &MO = MI.getOperand(OpIdx);
+    if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+      continue;
+    // Dead defs have no consumer. SFR/CBR are status — exclusive writer /
+    // port law, not Data_Latency dests. Booking them serializes every later
+    // implicit-SFR user and invents idle parcels.
+    if (MO.isDead() || haydnIsSimplifiableReservedReg(MO.getReg()))
+      continue;
+    const unsigned Lat = architecturalDefLatency(ItinData, MI, OpIdx);
+    if (Lat <= 1)
+      continue;
+    unsigned &Remain = DestReadPending[MO.getReg()];
+    Remain = std::max(Remain, Lat - 1);
+  }
+}
+
+void HaydnHazardRecognizer::tickDestWindows(int Delta) {
+  // Expire as time moves away from the emit cycle in either direction.
+  // Growing remaining on RecedeCycle (bottom-up) made every overlapping
+  // candidate a permanent Hazard and the scheduler receded forever
+  // (pre-RA OnlyBottomUp / post-RA Bot — IIR/MAC/FIR/CoreMark SIGKILL).
+  const unsigned Step =
+      Delta >= 0 ? static_cast<unsigned>(Delta) : static_cast<unsigned>(-Delta);
+  if (Step == 0)
+    return;
+  auto tick = [Step](DenseMap<Register, unsigned> &Pending) {
+    for (auto It = Pending.begin(), E = Pending.end(); It != E;) {
+      if (It->second <= Step) {
+        auto Erase = It++;
+        Pending.erase(Erase);
+        continue;
+      }
+      It->second -= Step;
+      ++It;
+    }
+  };
+  tick(DestReadPending);
+  tick(DestWritePending);
+}
+
+bool HaydnHazardRecognizer::hasDestWindowHazard(const MachineInstr &MI,
+                                                int DeltaCycles) const {
+  if (IsPreRA)
+    return false;
+  if (DestReadPending.empty() && DestWritePending.empty())
+    return false;
+  const unsigned Need = DeltaCycles >= 0 ? static_cast<unsigned>(DeltaCycles) : 0;
+  auto overlapsPending = [&](const DenseMap<Register, unsigned> &Pending,
+                             Register Reg) {
+    for (const auto &KV : Pending) {
+      if (KV.second <= Need)
+        continue;
+      if (Reg == KV.first)
+        return true;
+      if (TRI && Reg.isPhysical() && KV.first.isPhysical() &&
+          TRI->regsOverlap(Reg, KV.first))
+        return true;
+    }
+    return false;
+  };
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.getReg())
+      continue;
+    if (MO.isUse() && !MO.isUndef() &&
+        overlapsPending(DestReadPending, MO.getReg()))
+      return true;
+    if (MO.isDef() && overlapsPending(DestWritePending, MO.getReg()))
+      return true;
+  }
+  return false;
+}
+
+void HaydnHazardRecognizer::emitForDestWindow(const MachineInstr &MI) {
+  if (IsPreRA || isNoHazardMeta(MI))
+    return;
+  if (isLockedSlotDspOp(MI))
+    bookSinCosWindow(MI);
+  bookDestReadWindow(MI);
+}
+
+void HaydnHazardRecognizer::advanceDestWindows() {
+  tickDestWindows(/*Delta=*/1);
+}
+
+unsigned HaydnHazardRecognizer::destWindowStallNeed(const MachineInstr &MI) const {
+  if (IsPreRA)
+    return 0;
+  if (DestReadPending.empty() && DestWritePending.empty())
+    return 0;
+  unsigned Worst = 0;
+  auto remaining = [&](const DenseMap<Register, unsigned> &Pending,
+                       Register Reg) -> unsigned {
+    unsigned R = 0;
+    for (const auto &KV : Pending) {
+      if (KV.second == 0)
+        continue;
+      if (Reg == KV.first)
+        R = std::max(R, KV.second);
+      else if (TRI && Reg.isPhysical() && KV.first.isPhysical() &&
+               TRI->regsOverlap(Reg, KV.first))
+        R = std::max(R, KV.second);
+    }
+    return R;
+  };
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.getReg())
+      continue;
+    if (MO.isUse() && !MO.isUndef())
+      Worst = std::max(Worst, remaining(DestReadPending, MO.getReg()));
+    if (MO.isDef())
+      Worst = std::max(Worst, remaining(DestWritePending, MO.getReg()));
+  }
+  return Worst;
+}
+
+unsigned HaydnHazardRecognizer::destWindowExitLeak() const {
+  unsigned Leak = 0;
+  for (const auto &KV : DestReadPending)
+    Leak = std::max(Leak, KV.second);
+  for (const auto &KV : DestWritePending)
+    Leak = std::max(Leak, KV.second);
+  return Leak;
 }
 
 void HaydnHazardRecognizer::commitPlacementForEmit(MachineInstr *MI) {
@@ -867,44 +1209,53 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
     return Hazard;
   }
 
-  // CSRW↔SET_HWLOOP same-bundle hazard (spec §5.10: a CSRW targeting
-  // CSR 0x20-0x25 = HWLR_BEGIN/END/COUNT must NOT share a bundle with any
-  // SET_HWLOOP variant — they race the implicit HWLR update). The two sides
-  // are tracked bidirectionally in CurrentCycleHasHwloop{Setup,Csrw} so the
-  // hazard fires regardless of which side was issued first. Only meaningful
-  // at DeltaCycles == 0 (the flags record instrs issued THIS cycle). Setup
-  // identity is TII isHardwareLoopSetupOpcode (sole opcode list); CSR
-  // address is getHwloopCsrAddr in the anonymous namespace above.
-  if (DeltaCycles == 0) {
-    bool IsAbsMat = isAbsMaterializeOp(MI->getOpcode());
-    if ((IsAbsMat &&
-         (CurrentCycleHasNonAbsReal || CurrentCycleHasAbsMaterialize)) ||
-        (!IsAbsMat && CurrentCycleHasAbsMaterialize)) {
+  // Named SF1 same-cycle laws (alone / CSRW↔SET / e0-alone). Occupied
+  // set is CurrentCyclePlacedMIs — same predicate ResourceCycle flags
+  // and fitInInterval conjunct. Flags below stay as emit bookkeeping.
+  if (DeltaCycles == 0 && !CurrentCyclePlacedMIs.empty()) {
+    SmallVector<const MachineInstr *, 4> Occ(CurrentCyclePlacedMIs.begin(),
+                                             CurrentCyclePlacedMIs.end());
+    if (cycleViolatesNamedSameCycleLaws(*MI, Occ)) {
       LLVM_DEBUG({
-        dbgs() << "Abs-materialize solo hazard for ";
+        dbgs() << "Named same-cycle hazard for ";
         MI->print(dbgs());
-        dbgs() << " (LUI/ADDI32_W must be e0-alone for HI12/LO20 FieldLsb)\n";
-      });
-      return Hazard;
-    }
-    bool IsHwloopSetup = static_cast<const HaydnInstrInfo *>(TII)
-                             ->isHardwareLoopSetupOpcode(MI->getOpcode());
-    bool IsHwloopCsrw = getHwloopCsrAddr(*MI) >= 0;
-    if ((IsHwloopSetup && CurrentCycleHasHwloopCsrw) ||
-        (IsHwloopCsrw && CurrentCycleHasHwloopSetup)) {
-      LLVM_DEBUG({
-        dbgs() << "CSRW↔SET_HWLOOP hazard for ";
-        MI->print(dbgs());
-        dbgs() << " (CSR 0x20-0x25 HWLR write vs SET_HWLOOP variant in same "
-                  "cycle; spec §5.10)\n";
+        dbgs() << " (" << namedSameCycleLawsTag() << ")\n";
       });
       return Hazard;
     }
   }
 
-  // ARCTAN/SIN_COS (current design): issue alone this cycle only — no
-  // multi-cycle slot lock / (uimm4+2) scoreboard. Prevents packing an
-  // independent op into the same bundle as a locked DSP op.
+  // Shared RF port-budget predicate (W24 / commit+verify). Incremental
+  // scoreboard ports stay the fast AIE path; this is the same
+  // haydnCycleMembersExceedPortBudget commit consults so HR cannot accept
+  // a pack leaveMBB would sequentialize.
+  if (DeltaCycles == 0 && !CurrentCyclePlacedMIs.empty()) {
+    SmallVector<MachineInstr *, 4> Cycle(CurrentCyclePlacedMIs.begin(),
+                                         CurrentCyclePlacedMIs.end());
+    Cycle.push_back(MI);
+    if (haydnCycleMembersExceedPortBudget(Cycle)) {
+      LLVM_DEBUG({
+        dbgs() << "Shared port-budget hazard for ";
+        MI->print(dbgs());
+        dbgs() << "\n";
+      });
+      return Hazard;
+    }
+  }
+
+  // Dest-read / SIN_COS dest-writer windows (no interlock). DeltaCycles
+  // is the candidate's offset from now: remaining > DeltaCycles is a hit.
+  if (hasDestWindowHazard(*MI, DeltaCycles)) {
+    LLVM_DEBUG({
+      dbgs() << "Dest-window hazard for ";
+      MI->print(dbgs());
+      dbgs() << " at delta " << DeltaCycles << "\n";
+    });
+    return Hazard;
+  }
+
+  // ARCTAN/SIN_COS: issue alone this cycle; multi-cycle unit occupancy is
+  // booked as Reserved on emit (checkConflict Req↔Res).
   if (DeltaCycles == 0) {
     bool IsLocked = isLockedSlotDspOp(*MI);
     if (IsLocked && Scoreboard[DeltaCycles].getIssueCount() > 0) {
@@ -966,9 +1317,12 @@ void HaydnHazardRecognizer::emitInstruction(SUnit *SU, int DeltaCycles) {
     // Rematch may reassign earlier members' slots: restore cycle-start
     // residuals and re-enter every placed MI with selected member FUs.
     reenterCurrentCycleScoreboard();
-    // ARCTAN/SIN_COS: alone this cycle only (no multi-cycle slot lock).
-    if (isLockedSlotDspOp(*MI))
+    // ARCTAN/SIN_COS: alone this cycle; book uimm4+2 unit occupancy + dest lock.
+    if (isLockedSlotDspOp(*MI)) {
       CurrentCycleHasLockedSlotOp = true;
+      bookSinCosWindow(*MI);
+    }
+    bookDestReadWindow(*MI);
     // track CSRW↔SET_HWLOOP same-bundle hazard (spec §5.10).
     if (static_cast<const HaydnInstrInfo *>(TII)->isHardwareLoopSetupOpcode(
             MI->getOpcode()))
@@ -1009,8 +1363,11 @@ void HaydnHazardRecognizer::EmitInstruction(MachineInstr *MI) {
   appendDefs(*MI);
   commitPlacementForEmit(MI);
   reenterCurrentCycleScoreboard();
-  if (isLockedSlotDspOp(*MI))
+  if (isLockedSlotDspOp(*MI)) {
     CurrentCycleHasLockedSlotOp = true;
+    bookSinCosWindow(*MI);
+  }
+  bookDestReadWindow(*MI);
   if (static_cast<const HaydnInstrInfo *>(TII)->isHardwareLoopSetupOpcode(
           MI->getOpcode()))
     CurrentCycleHasHwloopSetup = true;
@@ -1032,6 +1389,7 @@ void HaydnHazardRecognizer::AdvanceCycle() {
   CurrentCycleHasNonAbsReal = false;
   CurrentCycleCandidates = makeProductCandidateSet();
   CurrentCyclePlacedMIs.clear();
+  tickDestWindows(/*Delta=*/1);
   Scoreboard.advance();
   captureCycleStartScoreboard();
 }
@@ -1046,6 +1404,7 @@ void HaydnHazardRecognizer::RecedeCycle() {
   CurrentCycleHasNonAbsReal = false;
   CurrentCycleCandidates = makeProductCandidateSet();
   CurrentCyclePlacedMIs.clear();
+  tickDestWindows(/*Delta=*/-1);
   Scoreboard.recede();
   captureCycleStartScoreboard();
 }

@@ -1,11 +1,11 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -debug-only=machine-scheduler < %s -o /dev/null 2>&1 \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -debug-only=machine-scheduler < %s -o /dev/null 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=PRODUCT
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -haydn-accurate-memory-latency=false \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -haydn-accurate-memory-latency=false \
 ; RUN:     -debug-only=machine-scheduler < %s -o /dev/null 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=SOFT
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s -o - \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s -o - \
 ; RUN:   | FileCheck %s --check-prefix=PACK-PRODUCT
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -haydn-accurate-memory-latency=false < %s -o - \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -haydn-accurate-memory-latency=false < %s -o - \
 ; RUN:   | FileCheck %s --check-prefix=PACK-SOFT
 ; REQUIRES: asserts
 
@@ -32,7 +32,6 @@ define i32 @store_then_load(ptr %p, i32 %v) {
 ; PACK-PRODUCT-NEXT:    { nop; st32 r2, r1, 0 }
 ; PACK-PRODUCT-NEXT:    { nop; nop }
 ; PACK-PRODUCT-NEXT:    { nop; ld32 r1, r1, 0 }
-; PACK-PRODUCT-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PACK-PRODUCT-NEXT:    { nop; addi32 sp, sp, 8 }
 ; PACK-PRODUCT:    { nop; jalr r0, lr, 0 }
 ;
@@ -43,7 +42,6 @@ define i32 @store_then_load(ptr %p, i32 %v) {
 ; PACK-SOFT-NEXT:    .cfi_def_cfa_offset 8
 ; PACK-SOFT-NEXT:    { nop; st32 r2, r1, 0 }
 ; PACK-SOFT-NEXT:    { nop; ld32 r1, r1, 0 }
-; PACK-SOFT-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PACK-SOFT-NEXT:    { nop; addi32 sp, sp, 8 }
 ; PACK-SOFT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -62,7 +60,6 @@ define void @load_then_store(ptr %p, i32 %v) {
 ; PACK-PRODUCT-NEXT:    { nop; nop }
 ; PACK-PRODUCT-NEXT:    { nop; add32 r2, r3, r2 }
 ; PACK-PRODUCT-NEXT:    { nop; st32 r2, r1, 0 }
-; PACK-PRODUCT-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PACK-PRODUCT-NEXT:    { nop; addi32 sp, sp, 8 }
 ; PACK-PRODUCT:    { nop; jalr r0, lr, 0 }
 ;
@@ -75,7 +72,6 @@ define void @load_then_store(ptr %p, i32 %v) {
 ; PACK-SOFT-NEXT:    { nop; nop }
 ; PACK-SOFT-NEXT:    { nop; add32 r2, r3, r2 }
 ; PACK-SOFT-NEXT:    { nop; st32 r2, r1, 0 }
-; PACK-SOFT-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PACK-SOFT-NEXT:    { nop; addi32 sp, sp, 8 }
 ; PACK-SOFT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -96,7 +92,6 @@ define i32 @store_store_load(ptr %p, i32 %a, i32 %b) {
 ; PACK-PRODUCT-NEXT:    { nop; ld32 r2, r1, 0 }
 ; PACK-PRODUCT-NEXT:    { nop; nop }
 ; PACK-PRODUCT-NEXT:    { nop; move32 r1, r2 }
-; PACK-PRODUCT-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PACK-PRODUCT-NEXT:    { nop; addi32 sp, sp, 8 }
 ; PACK-PRODUCT:    { nop; jalr r0, lr, 0 }
 ;
@@ -109,7 +104,6 @@ define i32 @store_store_load(ptr %p, i32 %a, i32 %b) {
 ; PACK-SOFT-NEXT:    { st32 r3, r1, 1; ld32 r2, r1, 0 }
 ; PACK-SOFT-NEXT:    { nop; nop }
 ; PACK-SOFT-NEXT:    { nop; move32 r1, r2 }
-; PACK-SOFT-NEXT:    { nop; xor32 r0, r0, r0 }
 ; PACK-SOFT-NEXT:    { nop; addi32 sp, sp, 8 }
 ; PACK-SOFT:    { nop; jalr r0, lr, 0 }
 entry:

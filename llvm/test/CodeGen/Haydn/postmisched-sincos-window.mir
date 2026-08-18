@@ -1,0 +1,40 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — SIN_COS/ARCTAN §Special window: dest reader cannot land in the
+# uimm4+2 occupancy window. ARCTAN r1, d0, 2 has occupancy 4, so the
+# consumer of r1 must not sit in the next three issue cycles.
+
+--- |
+  define void @arctan_dest_reader_waits() { ret void }
+...
+---
+name:            arctan_dest_reader_waits
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $r2
+
+    ; CHECK-LABEL: name: arctan_dest_reader_waits
+    ; CHECK: $r1 = ARCTAN{{.*}} $d0, 2
+    ; CHECK-NOT: $r7 = ADD32{{.*}}$r1
+    ; CHECK: NOP
+    ; CHECK: $r7 = ADD32{{.*}}$r1
+    $r1 = ARCTAN $d0, 2
+    $r7 = ADD32 $r1, $r2
+    $r0 = COPY $r7
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

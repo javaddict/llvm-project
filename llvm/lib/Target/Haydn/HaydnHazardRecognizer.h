@@ -18,8 +18,9 @@
 // * unit injectivity (no two entries map to the same unit)
 // * the GPR 4R2W, DR 7R3W, AR 2R2W port budgets (live SFR 2R1W vocabulary)
 // * at most one SFR writer per cycle (dead implicit-def $sfr still counts)
-// * latency-bound data dependencies (carried by the scheduler DAG's SDep
-// edges, NOT by this recognizer — see note below).
+// * latency-bound data dependencies (DAG SDep edges plus the dest-read
+//   window below so a no-interlock machine cannot issue a reader inside
+//   a producer's Data_Latency)
 //
 // Encoded entry indices are not processor-resource bits; entry matching is
 // format legality. ALU0 and LOADSTORE0 are independent units and may
@@ -30,11 +31,11 @@
 // MachineScheduler consults it via SchedBoundary::checkHazard
 // (MachineScheduler.cpp:2700), which calls getHazardType on every ready SUnit.
 //
-// Data dependencies (RAW/WAW/WAR with their latencies) are NOT modeled here.
-// They are carried by the scheduler DAG's SDep edges, which set each SUnit's
-// TopReadyCycle/BotReadyCycle. This matches the AIE design (see
-// ~/haydn-plans/AIE/sms-packetizer-deep-dive.md §hazard recognizer): the
-// scoreboard carries only resource/slot/port conflicts; the DAG carries data.
+// Register Data_Latency is primarily a DAG SDep. Haydn has no interlock, so
+// the post-RA scoreboard also serializes dest readers (and SIN_COS/ARCTAN
+// dest writers / unit occupancy) that would land inside a published window.
+// Pre-RA is OnlyBottomUp and must not book those windows — RecedeCycle
+// growing remaining is a compile hang (ready set recedes forever).
 //
 // Why this is safe vs the / UAF
 //=====================================//
@@ -55,9 +56,11 @@
 
 #include "HaydnBundle.h"
 #include "HaydnBundleFormatSolver.h"
+#include "HaydnPortModel.h"
 #include "HaydnResourceScoreboard.h"
 #include "HaydnStaticBitSet.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -65,6 +68,9 @@
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <optional>
+#include <unordered_map>
 
 namespace llvm {
 
@@ -75,6 +81,28 @@ class TargetInstrInfo;
 class HaydnAlternateDescriptors;
 class TargetRegisterInfo;
 class TargetSubtargetInfo;
+class Value;
+
+// AIE AIEHazardRecognizer.h:34-42 MemoryObjectsBits / MemoryObjectPair.
+// Peer struct only. Haydn golden lets two loads of one object share a
+// cycle (LOADSTORE0 + LOAD1, p[0]/p[1]). Wait-cycle same-object reject
+// needs an admitted ISA row and is not booked.
+using MemoryObjectsBits = uint64_t;
+
+struct MemoryObjectPair {
+  MemoryObjectsBits Load = 0;
+  MemoryObjectsBits Store = 0;
+};
+
+struct MemoryObjectEnumerator {
+private:
+  std::unordered_map<const Value *, unsigned> ObjectNumberingMap;
+  unsigned ObjectCounter = 0;
+  bool isFull() const;
+
+public:
+  std::optional<unsigned> getObjectNumber(const Value *Object);
+};
 
 // AIE peer: AIEHazardRecognizer.cpp:278-314 applyFormatOrdering —
 // walk Format.getSlots(), Bundle.at(Slot), removeFromBundle+insert+
@@ -121,13 +149,23 @@ static_assert(HAYDN_NUM_FU_BITS == 7, "seven Format E execution units");
 //   FuncUnitWrapper Reserved). Req↔Res overlap conflicts; Res↔Res is legal.
 // * IssueCount — number of instructions issued this cycle (≤ 3 entries).
 // * GPR/DR/AR/SFR read/write running demand for pooled port budgets.
+// * Slots — AIE FuncUnitWrapper::Slots peer. PacketFormats occupancy
+//   booked from getSlotKind / getSlotInfo()->getSlotSet(). conflict()
+//   ends with isFormatAvailable(Slots|Other) plus a fail-closed
+//   getFormatOrNull / productCovers PacketFormats cover.
 class HaydnFuncUnitWrapper {
 public:
   using ResourceSet = StaticBitSet<HAYDN_NUM_FU_BITS>;
 
 private:
+  /// AIE FuncUnitWrapper::FormatInterface peer
+  /// (AIEHazardRecognizer.h:74). Process-wide default formats.
+  static const HaydnBaseMCFormats *FormatInterface;
+
   ResourceSet Required;
   ResourceSet Reserved;
+  /// AIE FuncUnitWrapper::Slots peer (AIEHazardRecognizer.h:82).
+  SlotBits Slots = 0;
   unsigned IssueCount = 0;
   unsigned GPRReads = 0;
   unsigned GPRWrites = 0;
@@ -137,6 +175,8 @@ private:
   unsigned ARWrites = 0;
   unsigned SFRReads = 0;
   unsigned SFRWrites = 0;
+  MemoryObjectsBits LoadMemObjectsBits = 0;
+  MemoryObjectsBits StoreMemObjectsBits = 0;
 
 public:
   HaydnFuncUnitWrapper() = default;
@@ -154,15 +194,25 @@ public:
                        const ResourceSet &ReservedSet)
       : Required(RequiredSet), Reserved(ReservedSet) {}
 
+  static void setFormatInterface(const HaydnBaseMCFormats *Formats) {
+    FormatInterface = Formats;
+  }
+  static const HaydnBaseMCFormats *getFormatInterface() {
+    return FormatInterface;
+  }
+
   bool isEmpty() const {
-    return Required.empty() && Reserved.empty() && IssueCount == 0 &&
-           GPRReads == 0 && GPRWrites == 0 && DRReads == 0 && DRWrites == 0 &&
-           ARReads == 0 && ARWrites == 0 && SFRReads == 0 && SFRWrites == 0;
+    return Required.empty() && Reserved.empty() && Slots == 0 &&
+           IssueCount == 0 && GPRReads == 0 && GPRWrites == 0 &&
+           DRReads == 0 && DRWrites == 0 && ARReads == 0 && ARWrites == 0 &&
+           SFRReads == 0 && SFRWrites == 0 && LoadMemObjectsBits == 0 &&
+           StoreMemObjectsBits == 0;
   }
 
   void clearResources() {
     Required.clear();
     Reserved.clear();
+    Slots = 0;
     IssueCount = 0;
     GPRReads = 0;
     GPRWrites = 0;
@@ -172,6 +222,8 @@ public:
     ARWrites = 0;
     SFRReads = 0;
     SFRWrites = 0;
+    LoadMemObjectsBits = 0;
+    StoreMemObjectsBits = 0;
   }
 
   // Block all resources (used to mark a cycle as fully occupied so nothing
@@ -179,6 +231,7 @@ public:
   void blockResources() {
     Required = ~ResourceSet();
     Reserved = ~ResourceSet();
+    Slots = ~SlotBits(0);
     IssueCount = ~0u;
     GPRReads = ~0u;
     GPRWrites = ~0u;
@@ -189,6 +242,9 @@ public:
     SFRReads = ~0u;
     SFRWrites = ~0u;
   }
+
+  SlotBits getSlots() const { return Slots; }
+  void setSlots(SlotBits S) { Slots = S; }
 
   unsigned getIssueCount() const { return IssueCount; }
   unsigned getGPRReads() const { return GPRReads; }
@@ -217,6 +273,15 @@ public:
     SFRReads = Reads;
     SFRWrites = Writes;
   }
+  void setMemoryObjectBits(MemoryObjectsBits LoadBits,
+                           MemoryObjectsBits StoreBits) {
+    LoadMemObjectsBits = LoadBits;
+    StoreMemObjectsBits = StoreBits;
+  }
+  MemoryObjectsBits getLoadMemObjectsBits() const { return LoadMemObjectsBits; }
+  MemoryObjectsBits getStoreMemObjectsBits() const {
+    return StoreMemObjectsBits;
+  }
   // Mark this cycle as issuing one more instruction.
   void setIssueCountOne() { IssueCount = 1; }
   // Union another Required / Reserved unit set into this one (used when
@@ -226,11 +291,13 @@ public:
 
   bool operator==(const HaydnFuncUnitWrapper &Other) const {
     return Required == Other.Required && Reserved == Other.Reserved &&
-           IssueCount == Other.IssueCount && GPRReads == Other.GPRReads &&
-           GPRWrites == Other.GPRWrites && DRReads == Other.DRReads &&
-           DRWrites == Other.DRWrites && ARReads == Other.ARReads &&
-           ARWrites == Other.ARWrites && SFRReads == Other.SFRReads &&
-           SFRWrites == Other.SFRWrites;
+           Slots == Other.Slots && IssueCount == Other.IssueCount &&
+           GPRReads == Other.GPRReads && GPRWrites == Other.GPRWrites &&
+           DRReads == Other.DRReads && DRWrites == Other.DRWrites &&
+           ARReads == Other.ARReads && ARWrites == Other.ARWrites &&
+           SFRReads == Other.SFRReads && SFRWrites == Other.SFRWrites &&
+           LoadMemObjectsBits == Other.LoadMemObjectsBits &&
+           StoreMemObjectsBits == Other.StoreMemObjectsBits;
   }
 
   // Union (accumulate another cycle's resources into this one). Used by the
@@ -238,6 +305,7 @@ public:
   HaydnFuncUnitWrapper &operator|=(const HaydnFuncUnitWrapper &Other) {
     Required |= Other.Required;
     Reserved |= Other.Reserved;
+    Slots |= Other.Slots;
     IssueCount += Other.IssueCount;
     GPRReads += Other.GPRReads;
     GPRWrites += Other.GPRWrites;
@@ -247,6 +315,8 @@ public:
     ARWrites += Other.ARWrites;
     SFRReads += Other.SFRReads;
     SFRWrites += Other.SFRWrites;
+    LoadMemObjectsBits |= Other.LoadMemObjectsBits;
+    StoreMemObjectsBits |= Other.StoreMemObjectsBits;
     return *this;
   }
 
@@ -258,6 +328,10 @@ public:
   //   Other.Required; Res/Res is legal
   // * issue cap: combined IssueCount exceeds 3
   // * GPR 4R2W / DR 7R3W / AR 2R2W / SFR 2R1W port budgets
+  // * Format E occupancy: both Slots nonempty and the combined SlotSet is
+  //   not admitted by isFormatAvailable / getFormatOrNull / productCovers
+  //   (AIE FuncUnitWrapper::conflict :147-150).
+  // * Memory-object bits are not a same-cycle reject (golden dual-load).
   bool conflict(const HaydnFuncUnitWrapper &Other) const;
 
   void dump() const;
@@ -331,6 +405,12 @@ public:
   // Accessors used by HaydnPostRASchedStrategy and tests.
   int getMaxLatency() const { return MaxLatency; }
   int getPipelineDepth() const { return PipelineDepth; }
+  /// AIEHazardRecognizer.cpp:718-720. Distance at which two issued
+  /// instructions can still share occupancy. Floor 1 so an empty itinerary
+  /// cannot divide-by-zero the SF10 kernel replay.
+  int getConflictHorizon() const {
+    return std::max(std::max(PipelineDepth, MaxLatency), 1);
+  }
   bool isPreRA() const { return IsPreRA; }
 
   /// Product pin: same-phase / same-bundle destination WAW is fail-closed
@@ -377,12 +457,68 @@ public:
     return CurrentCycleCandidates;
   }
 
+  /// SF1 (Band 2S): format-aware placement oracle for the post-RA
+  /// multi-stage pipeliner. One CycleCandidateSet per modulo cycle —
+  /// ModuloCycleCandidates[II] — probed by canExactTryAddProduct and
+  /// mutated only by exactTryAddProduct on the SMS accept path, the same
+  /// mutate/probe pair this HR uses for the current cycle at
+  /// commitPlacementForEmit / getHazardType(DeltaCycles==0).
+  /// checkConflict also books Slots and asks isFormatAvailable /
+  /// getFormatOrNull / productCovers (AIE FuncUnitWrapper::conflict).
+  /// Re-seeded wholesale per tryII attempt (init is O(1) per cycle).
+  haydn::bundle::ModuloCyclePlacementOracle ModuloOracle;
+
+  /// SF1 probe: can \p MI's opcode join modulo cycle \p Cycle of an
+  /// initialized ModuloOracle? Non-mutating; ports/itinerary/RAW/WAW gates
+  /// remain in their owning predicates. True for untracked (no-alts) ops.
+  bool canPlaceModulo(const MachineInstr &MI, int Cycle) const {
+    return ModuloOracle.canPlace(resolveBookingOpcode(MI), Cycle);
+  }
+
+  /// SF1 accept path: commit \p MI's opcode into modulo cycle \p Cycle.
+  /// Fail-closed — on false the placement must be rejected (retry / raise
+  /// II), never forced or silently re-selected.
+  bool placeModulo(const MachineInstr &MI, int Cycle) {
+    return ModuloOracle.place(resolveBookingOpcode(MI), Cycle);
+  }
+
   /// True when \p Opcode is SIN_COS/ARCTAN or a placement / Format E member of
   /// those logicals. Identity is AIE canAdd AlternateInsts membership
   /// (AIEHazardRecognizer.cpp:188-202) plus generated member Logical — never
-  /// `_S*` suffix parse. Class-1 issue-alone only (Constraints.md Shared Unit
-  /// + §Special; uimm4+2 occupancy is T-SM2, not this predicate).
+  /// `_S*` suffix parse. Class-1 issue-alone is this predicate; the
+  /// uimm4+2 unit occupancy / dest-writer window is booked on emit.
   static bool opcodeIssuesAloneInCycle(unsigned Opcode);
+
+  /// Named SF1 same-cycle laws (alone / CSRW↔SET / e0-alone). Same
+  /// predicate as haydn::pack::cycleViolatesNamedSameCycleLaws.
+  static bool cycleViolatesNamedSameCycleLaws(
+      const MachineInstr &Cand, ArrayRef<const MachineInstr *> Occupied);
+
+  /// Remark / ResourceCycle tag for the three named same-cycle laws.
+  static constexpr const char *namedSameCycleLawsTag() {
+    return HAYDN_NAMED_SAME_CYCLE_LAWS_TAG;
+  }
+
+  /// Golden §Special occupancy for SIN_COS/ARCTAN: uimm4+2 (2..17).
+  /// Returns 0 when \p MI is not a SIN_COS/ARCTAN logical or member.
+  /// Missing or out-of-range imm fail-closes to the published max (15+2).
+  static unsigned sinCosWindowOccupancy(const MachineInstr &MI);
+
+  /// Architectural dest Data_Latency of \p MI's def at \p DefOpIdx.
+  /// SIN_COS/ARCTAN use the exact uimm4+2 window; every other class uses
+  /// the itinerary (clamped so the conservative OperandCycles 17 scaffold
+  /// does not size ordinary dest-read windows).
+  static unsigned architecturalDefLatency(const InstrItineraryData *Itin,
+                                          const MachineInstr &MI,
+                                          unsigned DefOpIdx);
+
+  // Late stall-net reuse of dest-window maps (AIE scoreboard emit/advance
+  // overlay; Haydn has no interlock). Does not rematch or setDesc. Tick
+  // after book so a Data_Latency=2 def still blocks the next issue cycle.
+  void emitForDestWindow(const MachineInstr &MI);
+  void advanceDestWindows();
+  unsigned destWindowStallNeed(const MachineInstr &MI) const;
+  unsigned destWindowExitLeak() const;
 
   // PostPipeliner / external scoreboard helpers. Issue-cycle footprint is
   // ports + issue + stage-0 FUs; multi-cycle stages are booked via
@@ -398,12 +534,34 @@ public:
   bool conflict(const HaydnHazardRecognizer &Other, int DeltaCycles) const {
     return Scoreboard.conflict(Other.Scoreboard, DeltaCycles);
   }
-  // Stage-relative conflict: issue ports at \p Cycle plus each itinerary
-  // stage at Cycle+StageCycle (AIEHazardRecognizer::checkConflict peer).
- // : MultiSlot_Pseudo is not exempt — only isNoHazardMeta / debug
+  // Stage-relative conflict: issue ports + Format E Slots at \p Cycle
+  // plus each itinerary stage at Cycle+StageCycle
+  // (AIEHazardRecognizer::checkConflict peer :554-616). Same-cycle
+  // unplaced alts skip leftover StageCycle==0 FieldSlot unit bits
+  // (exactTryAdd owns issue-cycle injectivity) but still check
+  // StageCycle>0 occupancy. Format coverage rides Slots via
+  // isFormatAvailable / getFormatOrNull / productCovers — not a second
+  // solver. MultiSlot_Pseudo is not exempt — only isNoHazardMeta / debug
   // BUNDLE / LLVM meta skip hazard booking (never blanket isPseudo).
   bool checkConflict(const ResourceScoreboard<HaydnFuncUnitWrapper> &SB,
                      const MachineInstr &MI, int Cycle) const;
+
+  /// PacketFormats occupancy of \p MI for the AIE Slots overlay.
+  /// Selected / pinned member getSlotKind only. Unplaced alts return 0
+  /// so preferred-member slot OR cannot serialize a rematchable pair
+  /// (exactTryAdd owns issue-cycle rematch).
+  SlotBits occupancySlots(const MachineInstr &MI) const;
+
+  /// AIE getMemoryObjectsBits peer (AIEHazardRecognizer.cpp:829-862).
+  /// IR Value* identity from MMOs — not a golden bank invent. Empty
+  /// MMOs are optimistic (no bits). Pre-RA returns empty.
+  MemoryObjectPair getMemoryObjectsBits(const MachineInstr *MI) const;
+
+  /// Swap the AltDesc side-map (SMS search uses the transient pin map).
+  void setAlternateDescriptors(HaydnAlternateDescriptors *A) { AltDescs = A; }
+  HaydnAlternateDescriptors *getAlternateDescriptors() const {
+    return AltDescs;
+  }
   // Stage-relative enter: book issue ports + each stage at relative ring
   // cycle. Stages use selected AltDesc member schedclass when stamped
   // (post-rematch), else the logical opcode schedclass.
@@ -419,6 +577,7 @@ private:
   // slice 2a: function alt-descriptor side-map (non-owning). Null in
   // tests / when no MF context.
   HaydnAlternateDescriptors *AltDescs = nullptr;
+  mutable MemoryObjectEnumerator ObjectEnumerator;
 
   ResourceScoreboard<HaydnFuncUnitWrapper> Scoreboard;
   // Snapshot of Scoreboard at the start of the current issue cycle (after
@@ -451,9 +610,17 @@ private:
   // skip dead: the spec forbids two writes to one register regardless of
   // liveness (write-port/undefined), matching.
   SmallSet<Register, 8> CurrentCycleLiveDefs;
- // ARCTAN/SIN_COS ( current design): force alone in the issue
-  // bundle only. No multi-cycle slot lock / (uimm4+2) scoreboard reservation.
+  // ARCTAN/SIN_COS issue-alone flag for the current cycle. Multi-cycle
+  // unit occupancy (uimm4+2 Reserved) lives on the scoreboard ring.
   bool CurrentCycleHasLockedSlotOp = false;
+  // Dest-read remaining cycles (Data_Latency-1). Serializes readers so the
+  // late stall net inserts nothing at O1+ when the scheduler honors this.
+  DenseMap<Register, unsigned> DestReadPending;
+  // SIN_COS/ARCTAN dest-writer lock remaining cycles (occupancy-1).
+  DenseMap<Register, unsigned> DestWritePending;
+  // Same availability-aware pin pre-RA / post-RA / LatencyStalls consume.
+  // Instance member, not a Reset-local static (one check per recognizer).
+  bool ResourceAdmissionPinned = false;
   // Per-issue-cycle flags, cleared on Reset/AdvanceCycle/RecedeCycle.
   // CSRW↔SET_HWLOOP same-bundle (spec §5.10) and LUI/ADDI32_W e0-alone.
   bool CurrentCycleHasHwloopSetup = false;
@@ -510,7 +677,9 @@ private:
   // written by an instruction issued in the current cycle. FE5B same-phase
   // simultaneous def fail-close dual of HaydnResourceCycle WAW / DefRegKey
   // certificate pin (WP4); product never accepts dual same-reg writers in
-  // one issue bundle/modulo phase.
+  // one issue bundle/modulo phase. W39: delegates to the ONE shared
+  // no-dual-write law (HaydnIntraCycleWAW.h), the same predicate the
+  // ResourceCycle and materialize commit paths use.
   bool hasSameBundleWAW(const MachineInstr &MI) const;
 
   // true iff MI reads a register that an instruction already issued in
@@ -532,6 +701,19 @@ private:
   // logical, residual placement member, or generated Format E member.
   // Survives post-setDesc recommit (SM-H2). Class-1 issue-alone only.
   bool isLockedSlotDspOp(const MachineInstr &MI) const;
+
+  // Book uimm4+2 Reserved occupancy on the selected unit and dest-writer lock.
+  // No-op on the pre-RA bottom-up HR (DAG SDep carries latency).
+  void bookSinCosWindow(const MachineInstr &MI);
+  // Publish dest-read remaining cycles for every def (post-RA only).
+  void bookDestReadWindow(const MachineInstr &MI);
+  // Expire dest-window remaining counts. Both Advance and Recede expire
+  // (never grow) so a bottom-up zone cannot recede forever.
+  void tickDestWindows(int Delta);
+  // True when MI would read a dest still inside Data_Latency, or write a
+  // SIN_COS/ARCTAN dest still inside its occupancy window. Always false
+  // on the pre-RA HR.
+  bool hasDestWindowHazard(const MachineInstr &MI, int DeltaCycles) const;
 
  // –B3.exit.3 / : exact-expand CurrentCycleCandidates via
   // exactTryAddProduct (alts-only). Post-RA re-stamps setAlternateDescriptor

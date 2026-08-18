@@ -1,0 +1,79 @@
+# RUN: FileCheck %s --check-prefix=MEM --input-file=%S/../../../lib/Target/Haydn/HaydnGenMemoryCycles.inc
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -debug-only=machine-scheduler %s -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=PRODUCT
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -haydn-accurate-memory-latency=false -debug-only=machine-scheduler \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=SOFT
+# REQUIRES: asserts
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: Slot2_LS must publish First/LastMemoryCycle.
+#
+# Bug: HaydnGenMemoryCycles.inc listed only Slot0_LS / Slot1_LD / Slot01_LD.
+# Slot2_LS is the itinerary on remaining S2 memory FieldSlots (CB/UA; ALU2,
+# OperandCycles [2]). Generic D_SW_*_S2 forms were retired (no e1/e2 span).
+# Without a MemoryCycle row, getMemoryLatency returned nullopt and
+# MemoryEdges invented Latency=1 on a no-interlock machine — silent silicon
+# hazard. One mechanism: MEMORY_ITIN_NAMES includes Slot2_LS; generator
+# emits first=0 / last=1 like the other LS classes. Product MemoryEdges
+# fatals if a Slot*_LS / Slot*_LD class still has no First/Last (AIE
+# ExactLatencies). Do not invent a latency.
+# Live producer is D_LQHWUA_POST_S2 (mayLoad + Slot2_LS). Store S2
+# FieldSlots have no e2 member (reject-not-migrate).
+# If this regresses: Slot2_LS drops out of the generated table, or S2
+# memory→memory falls back to Latency=1 / fatals on a published class.
+#
+# Role: semantic — Slot2_LS MemoryCycle product pin.
+#
+# MEM: Auto-generated
+# MEM: HaydnInstrInfo::getFirstMemoryCycle
+# MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
+# MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
+# MEM: case Haydn::Sched::Slot01_LD: return 0; // Slot01_LD
+# MEM: case Haydn::Sched::Slot2_LS: return 0; // Slot2_LS
+# MEM: HaydnInstrInfo::getLastMemoryCycle
+# MEM: case Haydn::Sched::Slot0_LS: return 1; // Slot0_LS
+# MEM: case Haydn::Sched::Slot1_LD: return 1; // Slot1_LD
+# MEM: case Haydn::Sched::Slot01_LD: return 1; // Slot01_LD
+# MEM: case Haydn::Sched::Slot2_LS: return 1; // Slot2_LS
+
+--- |
+  define i32 @slot2_ls_store_then_load(ptr %p, i64 %v) {
+  entry:
+    store i32 0, ptr %p, align 4
+    %x = load i32, ptr %p, align 4
+    ret i32 %x
+  }
+...
+---
+name:            slot2_ls_store_then_load
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r15
+
+    ; Live Slot2_LS load (UA S2) then store. hasSideEffects makes the
+    ; Ord edge Barrier; MemoryEdges still applies getMemoryLatency.
+    ; Product=2. Store S2 FieldSlots have no e2 member.
+    ; PRODUCT: D_LQHWUA_POST_S2{{.*}}load
+    ; PRODUCT: Ord{{ +}}Latency=2 {{Memory|Barrier}}
+    ; PRODUCT: ST32{{.*}}store
+    ; SOFT: D_LQHWUA_POST_S2{{.*}}load
+    ; SOFT: Ord{{ +}}Latency=1 {{Memory|Barrier}}
+    ; SOFT: ST32{{.*}}store
+    $d0, $r1 = D_LQHWUA_POST_S2 $r1, $r3, 0, 0 :: (load (s64) from %ir.p)
+    ST32 $r2, $r1, 0, implicit-def dead $sfr :: (store (s32) into %ir.p)
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

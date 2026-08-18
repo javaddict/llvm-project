@@ -1,0 +1,48 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — same-object load-load is not an issue-cycle reject.
+# p[0] and p[1] share an underlying IR object; LOADSTORE0 + LOAD1 must
+# still pack. AIE memory-object wait-cycle reject is not overlaid.
+#
+# If this regresses: HR conflict() treats LoadMemObjectsBits overlap as
+# a same-cycle hazard and the two LD32s serialize.
+
+--- |
+  define i32 @same_base_dual_load(ptr %p) {
+    %v0 = load i32, ptr %p, align 4
+    %p1 = getelementptr i32, ptr %p, i32 1
+    %v1 = load i32, ptr %p1, align 4
+    %s = add i32 %v0, %v1
+    ret i32 %s
+  }
+...
+---
+name:            same_base_dual_load
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+body:             |
+  bb.0:
+    liveins: $r1
+
+    ; CHECK-LABEL: name: same_base_dual_load
+    ; CHECK: BUNDLE{{.*}}{
+    ; CHECK-DAG: {{LD32|S_LW_WITH_IMM}}{{.*}}$r1, 0
+    ; CHECK-DAG: {{LD32|S_LW_WITH_IMM}}{{.*}}$r1, 1
+    ; CHECK: }
+    $r2 = LD32 $r1, 0 :: (load (s32) from %ir.p)
+    $r3 = LD32 $r1, 1 :: (load (s32) from %ir.p1)
+    $r0 = ADD32 $r2, $r3, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

@@ -1,0 +1,42 @@
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %s -o - 2>&1 | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST (canary): W28 / CR-B3 — the verify-side pad-NOP census
+# must stay independent and fail-closed on a WRONG stamp.
+#
+# Bug (class): see w28-pad-nop-census-unified.mir. This arm is the other
+# half of the contract: after unifying Finalize and Verify on the ONE
+# shared census, it must remain impossible to "fix" a divergent counter by
+# teaching the verifier to re-derive a second counting walk that agrees
+# with a wrong stamp. The verifier computes its expectation ONLY from the
+# shared census (collectBundleMemberOpcodes / bundleHasPadNop /
+# selectCompletionForMembersAndPads) and compares it to the stamped imm.
+#
+# Test design: pad-only root (`BUNDLE { NOP }`) deliberately stamped
+# StubIdle (imm 1). The shared census says 0 reals + pad present =>
+# expected AllEntriesReal (0). Verify must fatal with the mismatch text
+# (same abort-family fatal as the corruption-matrix BAD-COMP seat, hence
+# not --crash so the diagnostic still reaches FileCheck).
+#
+# What breaks if this law forks again: either this test goes green (the
+# verifier started agreeing with arbitrary stamps — a silent second law),
+# or the positive arms in w28-pad-nop-census-unified.mir fatal because the
+# stamper's count diverged from this same census.
+
+--- |
+  define void @arm7_mismatch_canary() { ret void }
+...
+---
+name:            arm7_mismatch_canary
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK: HaydnVerifyBundles: BUNDLE root CompletionStateID does not match row and member count in arm7_mismatch_canary
+    BUNDLE 0, 1 {
+      NOP
+    }
+    RET implicit $r15
+...

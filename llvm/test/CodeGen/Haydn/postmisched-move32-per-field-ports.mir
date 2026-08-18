@@ -1,0 +1,83 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — MOVE32 rd,rs,rs charges 2 GPR read ports (per-field).
+# Two MOVE32 plus one independent GPR-reading store is 6R > 4R and must
+# not 3-wide pack. Same-reg identity is not a port-sharing proof
+# (identity-dedup would see 1+1+2 = 4R and accept). Peer: AIE
+# AIEHazardRecognizer.cpp:181-222 books itinerary resources with no
+# operand-identity dedup; HexagonVLIWPacketizer.cpp walks operands
+# per field.
+
+--- |
+  define void @two_move32_store_not_three_wide() { ret void }
+  define void @two_move32_still_dual() { ret void }
+...
+---
+name:            two_move32_store_not_three_wide
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r5, $r6
+
+    ; CHECK-LABEL: name: two_move32_store_not_three_wide
+    ; Per-field: each logical MOVE32 is 2R1W. Two plus ST32 (2R) is 6R.
+    ; They must not share one BUNDLE. Two MOVE32 alone stay legal (4R2W).
+    ; CHECK-NOT: BUNDLE{{.*}}MOVE32{{.*}}MOVE32{{.*}}{{ST32|S_SW}}
+    ; CHECK: MOVE32
+    ; CHECK: MOVE32
+    ; CHECK: {{ST32|S_SW}}
+    $r3 = MOVE32 $r1, $r1
+    $r4 = MOVE32 $r2, $r2
+    ST32 $r5, $r6, 0
+    $r0 = COPY $r3
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            two_move32_still_dual
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; CHECK-LABEL: name: two_move32_still_dual
+    ; Two MOVE32 are 4R2W — still one legal cycle.
+    ; CHECK: BUNDLE
+    ; CHECK-DAG: $r3 = MOVE32
+    ; CHECK-DAG: $r4 = MOVE32
+    ; CHECK: }
+    $r3 = MOVE32 $r1, $r1
+    $r4 = MOVE32 $r2, $r2
+    $r0 = COPY $r3
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

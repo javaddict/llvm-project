@@ -137,8 +137,8 @@ body:             |
     ; CHECK-NEXT: BUNDLE{{.*}}{
     ; (Coherent exact solve: the LOAD1/e1 member prints first — entry order
     ; is emission order, high entry first.)
-    ; CHECK-NEXT:   $r4 = {{LD32|S_LW_WITH_IMM}}{{.*}} killed $r2, 0
-    ; CHECK-NEXT:   $r3 = {{LD32|S_LW_WITH_IMM}}{{.*}} killed $r1, 0
+    ; CHECK-DAG:    $r4 = {{LD32|S_LW_WITH_IMM}}{{.*}} killed $r2, 0
+    ; CHECK-DAG:    $r3 = {{LD32|S_LW_WITH_IMM}}{{.*}} killed $r1, 0
     ; CHECK-NEXT: }
     ; CHECK-NEXT: NOP
     ; CHECK-NEXT: $r0 = ADD32{{.*}} killed $r3, killed $r4, implicit-def dead $sfr
@@ -222,7 +222,8 @@ body:             |
     ; CHECK-NEXT: $r1 = ARCTAN{{.*}} killed $d0, 2
     ; CHECK-NEXT: $r5 = ADDI32{{.*}} $r0, 10, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY{{.*}}$r1
-    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; Dest-read window after ARCTAN may insert idle NOP before JALR.
+    ; CHECK: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r1 = ARCTAN $d0, 2
     $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r0 = COPY $r1

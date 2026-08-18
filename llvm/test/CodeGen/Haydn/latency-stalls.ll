@@ -1,9 +1,9 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s --check-prefix=O0
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s --check-prefix=O2
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s --check-prefix=O0
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s --check-prefix=O2
 ;
 ; Haydn has an EXPOSED pipeline: no interlock. A Data_Latency = 2 def (loads,
 ; CSRR, MAC) must not be read in the next bundle. HaydnLatencyStalls is the
-; pre-emit correctness net / auditor:
+; addPreSched2 correctness net / auditor (before first Finalize):
 ;
 ;   * plain -O0 without optnone still runs postmisched + Finalize; optnone
 ;     skips postmisched only and Finalize forms no-reorder singleton commits.

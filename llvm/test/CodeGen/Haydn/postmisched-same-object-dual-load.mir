@@ -1,0 +1,44 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — same-base dual load (p[0]/p[1]) stays one issue cycle.
+# AIE FuncUnitWrapper::conflict (AIEHazardRecognizer.cpp:136-138) rejects
+# same-kind memory-object overlap as wait-cycle avoidance. Haydn does not
+# overlay that reject: golden dual-load of one object on LOADSTORE0+LOAD1
+# is legal. Wait-cycle bits stay dump-only until an admitted ISA row.
+
+--- |
+  define void @same_object_dual_load(ptr %p) { ret void }
+...
+---
+name:            same_object_dual_load
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1
+
+    ; CHECK-LABEL: name: same_object_dual_load
+    ; Both loads read $r1 (same object, offsets 0 and 4). They must BUNDLE.
+    ; A wait-cycle same-object reject would serialize them.
+    ; CHECK: BUNDLE
+    ; CHECK-DAG: {{LD32|S_LW}}
+    ; CHECK-DAG: {{LD32|S_LW}}
+    ; CHECK: }
+    $r3 = LD32 $r1, 0 :: (load (s32) from %ir.p)
+    $r4 = LD32 $r1, 4 :: (load (s32) from %ir.p + 4)
+    $r0 = ADD32 $r3, $r4, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

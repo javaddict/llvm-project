@@ -9,6 +9,13 @@
 
 # Role: MIR — Residual unstamped multi-member exact-commit at post-RA leaveMBB.
 #
+# W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
+# operands on ALU members were removed. The ALU descs carry no implicit SFR
+# def (real selected code prints none), and under the unified no-dual-write
+# WAW law (HaydnIntraCycleWAW.h) two noise SFR defs in one cycle are an
+# illegal dual write, so the fixtures' intended hard-root commit behavior was
+# masked by the noise. The W39 law itself is pinned by
+# w39-dead-def-dual-write-waw.mir.
 # Multi-member TargetOpcode::BUNDLE shells (synthetic residual / rematch shape)
 # enter postmisched as isSchedulingBoundary fences. leaveMBB exact-commits
 # jointly legal membership: member setDesc where alts apply, canonical field
@@ -41,38 +48,34 @@ body:             |
     ; COMMIT-LABEL: name: hard_root_two_alu
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r15
     ; COMMIT-NEXT: {{  $}}
-    ; COMMIT-NEXT: $r6 = ADDI32 $r0, 1, implicit-def dead $sfr
-    ; (Coherent exact solve (CB-153b) re-binds members onto one settled row;
-    ; the entry assignment may permute schedule order in the emitted bundle.)
-    ; COMMIT-NEXT: BUNDLE 1, 0, implicit-def $r5, implicit-def dead $sfr, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
-    ; COMMIT-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
-    ; COMMIT-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
-    ; COMMIT-NEXT: }
-    ; COMMIT-NEXT: $r7 = XOR32 killed $r4, killed $r5, implicit-def dead $sfr
+    ; COMMIT-NEXT: $r6 = ADDI32 $r0, 1
+    ; COMMIT-NEXT: BUNDLE 1, 0, {{.*}} {
+    ; COMMIT-DAG:    $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1
+    ; COMMIT-DAG:    $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3
+    ; COMMIT:        }
+    ; COMMIT-NEXT: $r7 = XOR32 killed $r4, killed $r5
     ; COMMIT-NEXT: RET implicit $r15
     ;
     ; OPS-LABEL: name: hard_root_two_alu
     ; OPS: liveins: $r0, $r1, $r2, $r3, $r15
     ; OPS-NEXT: {{  $}}
-    ; OPS-NEXT: $r6 = ADDI32 $r0, 1, implicit-def dead $sfr
-    ; (Coherent exact solve (CB-153b) re-binds members onto one settled row;
-    ; the entry assignment may permute schedule order in the emitted bundle.)
-    ; OPS-NEXT: BUNDLE 1, 0, implicit-def $r5, implicit-def dead $sfr, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
-    ; OPS-NEXT:   $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
-    ; OPS-NEXT:   $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
-    ; OPS-NEXT: }
-    ; OPS-NEXT: $r7 = XOR32 killed $r4, killed $r5, implicit-def dead $sfr
+    ; OPS-NEXT: $r6 = ADDI32 $r0, 1
+    ; OPS-NEXT: BUNDLE 1, 0, {{.*}} {
+    ; OPS-DAG:    $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1
+    ; OPS-DAG:    $r5 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3
+    ; OPS:        }
+    ; OPS-NEXT: $r7 = XOR32 killed $r4, killed $r5
     ; OPS-NEXT: RET implicit $r15
-    $r6 = ADDI32 $r0, 1, implicit-def dead $sfr
+    $r6 = ADDI32 $r0, 1
     ; Unstamped multi-member hard root (SMS handoff / rematch shape).
     ; Deliberately omit kill flags on the shell — recommit rebuilds them
     ; from live children (may also add kills via postmisched liveness).
-    BUNDLE implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = ADD32 $r2, $r3
     }
     ; Independent neighbor after the hard root.
-    $r7 = XOR32 $r4, $r5, implicit-def dead $sfr
+    $r7 = XOR32 $r4, $r5
     RET implicit $r15
 
 ...
@@ -88,22 +91,22 @@ body:             |
     ; Three GPR writes exceed the 2W cap, so leaveMBB sequentializes.
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
     ; COMMIT-NEXT: {{  $}}
-    ; COMMIT-NEXT: $r6 = ADD32 $r0, killed $r1, implicit-def dead $sfr
-    ; COMMIT-NEXT: $r7 = ADD32 killed $r2, killed $r3, implicit-def dead $sfr
-    ; COMMIT-NEXT: $r8 = ADD32 killed $r4, killed $r5, implicit-def dead $sfr
+    ; COMMIT-NEXT: $r6 = ADD32 $r0, killed $r1
+    ; COMMIT-NEXT: $r7 = ADD32 killed $r2, killed $r3
+    ; COMMIT-NEXT: $r8 = ADD32 killed $r4, killed $r5
     ; COMMIT-NEXT: RET implicit $r15
     ;
     ; OPS-LABEL: name: hard_root_three_alu
     ; OPS: liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
     ; OPS-NEXT: {{  $}}
-    ; OPS-NEXT: $r6 = ADD32 $r0, killed $r1, implicit-def dead $sfr
-    ; OPS-NEXT: $r7 = ADD32 killed $r2, killed $r3, implicit-def dead $sfr
-    ; OPS-NEXT: $r8 = ADD32 killed $r4, killed $r5, implicit-def dead $sfr
+    ; OPS-NEXT: $r6 = ADD32 $r0, killed $r1
+    ; OPS-NEXT: $r7 = ADD32 killed $r2, killed $r3
+    ; OPS-NEXT: $r8 = ADD32 killed $r4, killed $r5
     ; OPS-NEXT: RET implicit $r15
-    BUNDLE implicit-def $r6, implicit-def $r7, implicit-def $r8, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5 {
-      $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r7 = ADD32 $r2, $r3, implicit-def dead $sfr
-      $r8 = ADD32 $r4, $r5, implicit-def dead $sfr
+    BUNDLE implicit-def $r6, implicit-def $r7, implicit-def $r8, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5 {
+      $r6 = ADD32 $r0, $r1
+      $r7 = ADD32 $r2, $r3
+      $r8 = ADD32 $r4, $r5
     }
     RET implicit $r15
 
@@ -123,23 +126,23 @@ body:             |
     ; COMMIT-LABEL: name: hard_root_internal_read
     ; COMMIT: liveins: $r0, $r1, $r2, $r15
     ; COMMIT-NEXT: {{  $}}
-    ; COMMIT-NEXT: $r4 = ADD32 $r0, killed $r1, implicit-def dead $sfr
-    ; COMMIT-NEXT: $r5 = ADD32 killed $r4, killed $r2, implicit-def dead $sfr
-    ; COMMIT-NEXT: $r6 = XOR32 killed $r5, $r5, implicit-def dead $sfr
+    ; COMMIT-NEXT: $r4 = ADD32 $r0, killed $r1
+    ; COMMIT-NEXT: $r5 = ADD32 killed $r4, killed $r2
+    ; COMMIT-NEXT: $r6 = XOR32 killed $r5, $r5
     ; COMMIT-NEXT: RET implicit $r15
     ;
     ; OPS-LABEL: name: hard_root_internal_read
     ; OPS: liveins: $r0, $r1, $r2, $r15
     ; OPS-NEXT: {{  $}}
-    ; OPS-NEXT: $r4 = ADD32 $r0, killed $r1, implicit-def dead $sfr
-    ; OPS-NEXT: $r5 = ADD32 killed $r4, killed $r2, implicit-def dead $sfr
-    ; OPS-NEXT: $r6 = XOR32 killed $r5, $r5, implicit-def dead $sfr
+    ; OPS-NEXT: $r4 = ADD32 $r0, killed $r1
+    ; OPS-NEXT: $r5 = ADD32 killed $r4, killed $r2
+    ; OPS-NEXT: $r6 = XOR32 killed $r5, $r5
     ; OPS-NEXT: RET implicit $r15
-    BUNDLE implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = ADD32 internal $r4, $r2, implicit-def dead $sfr
+    BUNDLE implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = ADD32 internal $r4, $r2
     }
-    $r6 = XOR32 $r5, $r5, implicit-def dead $sfr
+    $r6 = XOR32 $r5, $r5
     RET implicit $r15
 
 ...
@@ -155,16 +158,16 @@ body:             |
     ; Unstamped ADDI trip remat + SET: leaveMBB sequentializes (def then use).
     ; COMMIT-LABEL: name: set_trip_addi_no_coissue
     ; COMMIT: $r6 = ADDI32_W {{.*}}$r5, -1
-    ; COMMIT-NEXT: SET_HWLOOP_F2_W 1, %bb.1, %bb.1, {{.*}}$r6
+    ; COMMIT-NEXT: SET_HWLOOP_F2_W 0, %bb.1, %bb.1, {{.*}}$r6
     ; COMMIT-NEXT: RET implicit $r15
     ;
     ; OPS-LABEL: name: set_trip_addi_no_coissue
     ; OPS: $r6 = ADDI32_W {{.*}}$r5, -1
-    ; OPS-NEXT: SET_HWLOOP_F2_W 1, %bb.1, %bb.1, {{.*}}$r6
+    ; OPS-NEXT: SET_HWLOOP_F2_W 0, %bb.1, %bb.1, {{.*}}$r6
     ; OPS-NEXT: RET implicit $r15
     BUNDLE implicit-def $r6, implicit-def $sfr, implicit $r5 {
-      $r6 = ADDI32_W $r5, -1, implicit-def dead $sfr
-      SET_HWLOOP_F2_W 1, %bb.1, %bb.1, internal killed $r6, implicit-def $sfr
+      $r6 = ADDI32_W $r5, -1
+      SET_HWLOOP_F2_W 0, %bb.1, %bb.1, internal killed $r6, implicit-def $sfr
     }
     RET implicit $r15
 
@@ -183,17 +186,17 @@ body:             |
 
     ; Format-E stamped illegal trip coissue: leaveMBB re-probes and sequentializes.
     ; COMMIT-LABEL: name: set_trip_stamped_no_coissue
-    ; COMMIT: $r6 = ADDI32_W_S0 {{.*}}$r5, -1
-    ; COMMIT-NEXT: SET_HWLOOP_F2_W_S0 1, %bb.1, %bb.1, {{.*}}$r6
+    ; COMMIT: $r6 = ADDI32_W {{.*}}$r5, -1
+    ; COMMIT-NEXT: SET_HWLOOP_F2_W 0, %bb.1, %bb.1, {{.*}}$r6
     ; COMMIT-NEXT: RET implicit $r15
     ;
     ; OPS-LABEL: name: set_trip_stamped_no_coissue
-    ; OPS: $r6 = ADDI32_W_S0 {{.*}}$r5, -1
-    ; OPS-NEXT: SET_HWLOOP_F2_W_S0 1, %bb.1, %bb.1, {{.*}}$r6
+    ; OPS: $r6 = ADDI32_W {{.*}}$r5, -1
+    ; OPS-NEXT: SET_HWLOOP_F2_W 0, %bb.1, %bb.1, {{.*}}$r6
     ; OPS-NEXT: RET implicit $r15
     BUNDLE 0, 0, implicit-def dead $r6, implicit-def $sfr, implicit $r5 {
-      $r6 = ADDI32_W_S0 $r5, -1, implicit-def dead $sfr
-      SET_HWLOOP_F2_W_S0 1, %bb.1, %bb.1, internal killed $r6, implicit-def $sfr
+      $r6 = ADDI32_W $r5, -1
+      SET_HWLOOP_F2_W 0, %bb.1, %bb.1, internal killed $r6, implicit-def $sfr
     }
     RET implicit $r15
 

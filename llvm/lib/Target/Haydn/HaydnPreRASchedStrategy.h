@@ -52,12 +52,10 @@
 // freeze stays permanently off (StageCount>1 containment; product multi-stage
 // is post-RA only).
 //
-// MI-versus-descriptor port differential (MOVE32-class, pre-RA surface):
-// PortModel MI accounting dedupes same-reg sources so `MOVE32 rd, rs, rs` is
-// 1R1W; descriptor-only shape (1 def + 2 uses, no identity) is 2R1W. Pre-RA
-// HR always takes the MI path. Pure constants below pin that intentional
-// overcount so list-sched / HR ownership is not confused with SMS MID placement.
-// Sibling SMS track owns ResourceCycle packing under those two demand models.
+// MOVE32-class ports (pre-RA surface): every explicit operand field
+// reserves one port. `MOVE32 rd, rs, rs` is 2R1W on the MI path and the
+// descriptor path. Pre-RA HR always takes the MI path. Sibling SMS owns
+// ResourceCycle packing under the same demand.
 //
 // Generic-pass dual-run baseline (plan §8.3 / §8.4 #11): Full-only product
 // ranking (matching-frontier ON, finer RP ON, isavail-delay OFF) must match
@@ -108,9 +106,9 @@
 // (CreateTargetMIHazardRecognizer IsPreRA) expands the same candidate set
 // via exact matching; scoreMatchingFrontier.Feasible is that probe.
 // Format accept/reject is opcode-keyed, so MI and descriptor forms of the
-// same logical multiset agree. Operand-dependent *port* demand (MOVE32-class
-// MI 1R1W vs desc 2R1W) is orthogonal and must not be misread as a format
-// differential. Sibling SMS owns live ResourceCycle packing differential
+// same logical multiset agree. MOVE32-class port demand is 2R1W on both
+// the MI and descriptor paths (per-field). Sibling SMS owns live
+// ResourceCycle packing under that one law
 // tests; pre-RA owns the HR / pure-exact polarity surface without touching
 // ResourceCycle. Metrics-only; never setDesc / member opcodes.
 //
@@ -668,42 +666,41 @@ public:
   }
 
   //===--------------------------------------------------------------------===//
-  // MI-versus-descriptor ports — MOVE32-class (pre-RA ownership pin)
+  // MOVE32-class ports — pre-RA ownership pin (per-field)
   //===--------------------------------------------------------------------===//
   // MCInstrDesc shape for MOVE32 is (outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2):
-  // NumDefs=1, two register uses. Without operand identity the descriptor path
-  // always charges 2R1W. PortModel MI path with rs1==rs2 dedupes to 1R1W.
+  // NumDefs=1, two register uses. Every explicit field reserves one port, so
+  // MOVE32 rd, rs, rs is 2R1W on the MI path and the descriptor path.
   // CreateTargetMIHazardRecognizer(IsPreRA) uses only the MI path.
 
-  /// MI PortModel demand for MOVE32 rd, rs, rs after same-reg read dedup.
-  static constexpr unsigned move32ClassMiRepeatedSrcGprReads = 1;
+  /// MI PortModel demand for MOVE32 rd, rs, rs (per-field, no identity dedup).
+  static constexpr unsigned move32ClassMiRepeatedSrcGprReads = 2;
   static constexpr unsigned move32ClassMiRepeatedSrcGprWrites = 1;
   /// Descriptor-only shape (1 def + 2 use slots) with no same-reg identity.
   static constexpr unsigned move32ClassDescShapeGprReads = 2;
   static constexpr unsigned move32ClassDescShapeGprWrites = 1;
 
-  /// True: descriptor-shape reads strictly overcount the MI repeated-src form.
+  /// Retired: both paths are 2R1W (per-field).
   static constexpr bool move32ClassDescOvercountsMiPorts() {
     return move32ClassDescShapeGprReads > move32ClassMiRepeatedSrcGprReads &&
            move32ClassDescShapeGprWrites == move32ClassMiRepeatedSrcGprWrites;
   }
 
   /// Port lower-bound ResMII for N identical MOVE32-class ops under the MI
-  /// repeated-source model (1R1W each). N=3 → ≥2 (write pool).
+  /// repeated-source model (2R1W each). N=3 → ≥2 (write pool and 6R).
   static unsigned move32ClassMiRepeatedSrcPortLowerBoundResMII(unsigned N) {
     return portLowerBoundResMII(N * move32ClassMiRepeatedSrcGprReads,
                                N * move32ClassMiRepeatedSrcGprWrites);
   }
 
   /// Port lower-bound ResMII for N identical MOVE32-class ops under the
-  /// descriptor-shape model (2R1W each). N=3 → ≥2 (reads also exceed 4R).
+  /// descriptor-shape model (2R1W each). Same as the MI path.
   static unsigned move32ClassDescShapePortLowerBoundResMII(unsigned N) {
     return portLowerBoundResMII(N * move32ClassDescShapeGprReads,
                                N * move32ClassDescShapeGprWrites);
   }
 
-  /// Same-cycle read-pool fit: N MI repeated-src MOVE32 fit under 4R while
-  /// the descriptor shape does not (N=3 → MI 3R OK, desc 6R over).
+  /// Retired: both shapes are 2R1W, so this is never true.
   static bool move32ClassDescSaturatesReadPoolEarlier(unsigned N) {
     const unsigned MiR = N * move32ClassMiRepeatedSrcGprReads;
     const unsigned DescR = N * move32ClassDescShapeGprReads;

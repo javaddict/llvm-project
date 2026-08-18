@@ -66,12 +66,14 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/Register.h"
 
 namespace llvm {
 
 class DebugLoc;
 class HaydnSubtarget;
+class MachineFunction;
 class MachineInstr;
 class TargetInstrInfo;
 
@@ -86,12 +88,47 @@ enum class PostRASoftZero : uint8_t {
 };
 
 // True if the soft-zero invariant holds at \p I (R0 is 0 / safe to read as
-// zero, and safe to borrow under AllowBorrow). Walks backward for the last
-// R0 def: XOR R0,R0,R0 → clean; any other def → dirty; no def in MBB → clean
-// only for the entry block (prologue zeros R0) or when R0 is not live-in
-// from a dirty path (conservative: non-entry requires a local restore).
+// zero, and safe to borrow under AllowBorrow). Last explicit R0 def in this
+// MBB: XOR R0,R0,R0 → clean; any other def → dirty. No local def → clean
+// only in the entry block or when R0 is live-in (ABI zero carried in).
 bool isSoftZeroR0Clean(const MachineBasicBlock &MBB,
                        MachineBasicBlock::const_iterator I);
+
+// One restore emitter: XOR32 R0,R0,R0 at \p I. Frame prologue/epilogue pass
+// FrameSetup / FrameDestroy; other callers leave NoFlags. Seed MatInt from
+// R0 or borrow it as a temp only after ensureSoftZeroR0Clean.
+void restoreSoftZeroR0(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                       const DebugLoc &DL, const TargetInstrInfo &TII,
+                       MachineInstr::MIFlag Flag = MachineInstr::NoFlags);
+
+// Restore when dirty, then assert the local cleanliness predicate. Product
+// borrow paths (withDR64PackBase, PEI large-offset, scratch) always restore
+// on unknown; the assert is the local check that a later read of R0 as
+// zero is legal at \p I.
+void ensureSoftZeroR0Clean(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                           const DebugLoc &DL, const TargetInstrInfo &TII,
+                           MachineInstr::MIFlag Flag = MachineInstr::NoFlags);
+
+// True only when this MBB has an explicit non-restore def of R0 before \p I.
+// Unknown (no local def, missing live-in) is not known-dirty: ExpandPseudos
+// already restores after JALR r0, and fallthrough from a clean predecessor
+// must not grow an extra XOR (MatInt expand sites use this).
+bool isSoftZeroR0KnownDirty(const MachineBasicBlock &MBB,
+                            MachineBasicBlock::const_iterator I);
+
+// Restore only on a proven dirty def. MatInt expand (LOAD_ADDR / LOADI32 /
+// LOADI64) seeds Cur=R0; a proven ADDI/JALR clobber must be restored, but
+// an unannotated fallthrough must not invent a second XOR.
+void ensureSoftZeroR0IfKnownDirty(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator I,
+                                  const DebugLoc &DL,
+                                  const TargetInstrInfo &TII,
+                                  MachineInstr::MIFlag Flag = MachineInstr::NoFlags);
+
+// After leftover expand: XOR-restore R0 after JAL/JAL_W/PseudoCALLIndirect
+// and at successors of BR_JT / JALR rd=R0. ExpandPseudos calls this once
+// the real call opcodes are visible; pack must see the restore bytes.
+bool insertSoftZeroR0AfterCalls(MachineFunction &MF, const TargetInstrInfo &TII);
 
 // --- Layer 1: short-lived scratch ------------------------------------------
 
@@ -113,6 +150,26 @@ void withPostRAScratch(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                        function_ref<void(Register Scr)> Fn,
                        ArrayRef<Register> Exclude = {},
                        PostRASoftZero SoftZero = PostRASoftZero::AllowBorrow);
+
+/// Soundness probe for windows whose produced value must OUTLIVE the
+/// bracket (e.g. the hwloop stack-counter demote latch: the decremented
+/// counter feeds BNEZ_W after the spill bracket closes). A NeedsSpill
+/// bracket restores the scratch's ORIGINAL live-through value over the
+/// produced one, and an R0 borrow XOR-zeroes it — both silently destroy
+/// the carried value. Such a window is legal only with a spill-free,
+/// non-R0 scratch, judged against the successor liveness AFTER any CFG
+/// rewrite the caller performs (\p Successors overrides MBB's current
+/// successors for the LivePhysRegs live-out seed; an EMPTY override means
+/// "use the block's real successors", never "no live-outs" — an empty
+/// live-out seed would judge live-through registers available and clobber
+/// them). Returns the chosen register, or an invalid Register when no
+/// spill-free non-R0 candidate exists (caller must refuse the
+/// transformation, never fall back to a spill bracket).
+Register findPostRAScratchNoSpill(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator I,
+                                  bool PreferNotR12,
+                                  ArrayRef<MachineBasicBlock *> Successors,
+                                  ArrayRef<Register> Exclude = {});
 
 // Emit a frame-relative LSU access (ST32 store or LD32 load) for a post-RA
 // in-frame spill slot. One closed rule, three monotone tiers tied to the

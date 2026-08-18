@@ -1,0 +1,39 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — dest-read windows and the late stall net must not treat
+# implicit-def dead $sfr as a Data_Latency dest. Independent ADD32s that
+# only share the status write still pack; an SFR window would invent a
+# full-NOP parcel between them.
+
+--- |
+  define void @two_addi_share_sfr() { ret void }
+...
+---
+name:            two_addi_share_sfr
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+body:             |
+  bb.0:
+    liveins: $r0, $r3
+
+    ; CHECK-LABEL: name: two_addi_share_sfr
+    ; CHECK-NOT: NOP
+    ; CHECK-DAG: ADDI32{{.*}}$r0, 10
+    ; CHECK-DAG: ADDI32{{.*}}$r3, 11
+    $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
+    $r6 = ADDI32 $r3, 11, implicit-def dead $sfr
+    $r0 = COPY $r6
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

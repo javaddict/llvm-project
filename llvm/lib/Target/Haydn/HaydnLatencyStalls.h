@@ -20,9 +20,12 @@
 //   * PostMachineScheduler may skip `optnone` (no reorder). FinalizeBundle
 //     still forms singleton Format E commits; this pass is the latency net
 //     for both plain O0 and optnone (standalone or BUNDLE cycles).
-//   * at -O1+ the schedule should already leave empty cycles; insertions are
-//     counted as unexpected and still applied if a later mutation reopens a
-//     latency window (zero-unexpected is the product goal, not a hard fail)
+//   * at -O1+ the post-RA HR dest-read window should already serialize
+//     readers; insertions are counted as unexpected and still applied if a
+//     later mutation reopens a latency window (zero-unexpected is the
+//     product goal, not a hard fail). Product seat is addPreSched2 between
+//     PostMachineScheduler and the first Finalize so stall NOPs are
+//     committed by that same Finalize+Verify lane.
 //
 // BundleSim cannot catch this either — it is a purely functional bundle
 // simulator with no timing model, so a violating program still produces the
@@ -30,8 +33,8 @@
 //
 // Walk each block in bundle order and insert NOP stall bundles wherever a
 // read would land inside a producer's latency window. Runs at every
-// optimization level, before BranchRelaxation and HaydnFixupHwLoops so those
-// absorb the size growth and recompute hwloop offsets.
+// optimization level in addPreSched2, after pack and before the first
+// Finalize, so BranchRelaxation / Fixup absorb any size growth.
 //
 //===----------------------------------------------------------------------===//
 
@@ -54,6 +57,11 @@ public:
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
+
+private:
+  /// Same availability-aware pin pre-RA / post-RA / HR consume. Pass
+  /// member, not a function-local static (one check per pipeline instance).
+  bool ResourceAdmissionPinned = false;
 };
 
 FunctionPass *createHaydnLatencyStallsPass();

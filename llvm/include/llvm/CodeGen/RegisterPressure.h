@@ -402,7 +402,7 @@ public:
   RegPressureTracker(RegionPressure &rp) : P(rp), RequireIntervals(false) {}
 
   /// Live register set at the current tracker position (AIE PreRA pressure
-  /// heuristics / estimatePressureDiff).
+  /// heuristics / estimatePressureDiff; D1000 HC#0 exception).
   const LiveRegSet &getLiveRegs() const { return LiveRegs; }
 
   LLVM_ABI void reset();

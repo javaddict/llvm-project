@@ -17,6 +17,11 @@
 # adjacent MAC traffic (no split / lost members).
 #
 # F2MULAA32R_HHLL Slot12_MAC OperandCycles [2,1,1,2]: result→rs1 latency 2.
+#
+# W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
+# operands on ALU members were removed (ALU descs carry no implicit SFR def;
+# under the unified no-dual-write law they mask the intended packing). W39
+# itself is pinned by w39-dead-def-dual-write-waw.mir.
 
 --- |
   define void @root_to_consumer_raw() { ret void }
@@ -31,12 +36,12 @@ body:             |
     liveins: $d0, $d1, $d2, $d3, $d4, $r0, $r1, $r15
 
     ; Hard root: MAC writeback of $d0 co-issued with independent ADD32.
-    BUNDLE implicit-def $d0, implicit-def $r4, implicit-def dead $sfr, implicit $d1, implicit $d2, implicit $r0, implicit $r1 {
-      $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    BUNDLE implicit-def $d0, implicit-def $r4, implicit $d1, implicit $d2, implicit $r0, implicit $r1 {
+      $d0 = F2MULAA32R_HHLL $d0, $d1, $d2
+      $r4 = ADD32 $r0, $r1
     }
     ; Consumer in the next region: non-tied rs1 use of $d0 (latency 2).
-    $d3 = F2MULAA32R_HHLL $d3, $d0, $d4, implicit-def dead $sfr
+    $d3 = F2MULAA32R_HHLL $d3, $d0, $d4
     RET implicit $r15
 
 ...
@@ -49,11 +54,11 @@ body:             |
     liveins: $d0, $d1, $d2, $r0, $r1, $r2, $r3, $r15
 
     ; Producer before the hard-root fence.
-    $d0 = F2MULAA32R_HHLL $d0, $d1, $d2, implicit-def dead $sfr
+    $d0 = F2MULAA32R_HHLL $d0, $d1, $d2
     ; Hard root exact-commits (two ADD32); independent of $d0.
-    BUNDLE implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = ADD32 $r2, $r3
     }
     RET implicit $r15
 

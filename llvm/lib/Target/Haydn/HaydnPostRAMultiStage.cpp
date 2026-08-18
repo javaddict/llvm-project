@@ -15,16 +15,24 @@
 #include "HaydnPostRAMultiStage.h"
 #include "Haydn.h"
 #include "HaydnBundleMaterialize.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnMachineScheduler.h"
+#include "HaydnPackLegality.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnResourceCycle.h"
+#include "HaydnResourceRestrictionClasses.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -40,6 +48,8 @@
 #include "llvm/CodeGen/ScheduleDAGInstrs.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -84,6 +94,15 @@ void HaydnMultiStageNodeInfo::reset(bool FullReset) {
 HaydnMultiStageSMS::~HaydnMultiStageSMS() { clearPlan(); }
 
 namespace llvm {
+// Occupants already scheduled into one modulo cycle. Defined after the
+// opcode identity helpers; used by fitInInterval so placement sees the
+// same ARCTAN/SIN_COS-alone, CSRW↔SET_HWLOOP, and LUI/ADDI32_W e0-alone
+// laws as HR getHazardType (those flags live on the emit path, not on
+// checkConflict).
+static bool cycleViolatesHRSameCycleLaws(const HaydnHazardRecognizer &HR,
+                                         const MachineInstr &Cand,
+                                         ArrayRef<const MachineInstr *> Occ);
+
 /// AIE `PostPipelinerStrategy` (`AIEPostPipeliner.h:157-212`) with Haydn HR.
 class HaydnMultiStageStrategy {
 protected:
@@ -91,7 +110,6 @@ protected:
   HaydnMultiStageScheduleInfo &SI;
   int LatestBias = 0;
   bool Changed = false;
-
 public:
   HaydnMultiStageStrategy(ScheduleDAGInstrs &TheDAG,
                           HaydnMultiStageScheduleInfo &TheInfo, int LatestBiasIn)
@@ -137,10 +155,267 @@ public:
     const int Limit = Hi + Step;
     for (int C = Lo; C != Limit; C += Step) {
       const int Mod = C % InitiationInterval;
+      // SF1: canPlaceModulo (exactTryAddProduct) plus checkConflict,
+      // which now books PacketFormats Slots and asks isFormatAvailable /
+      // getFormatOrNull / productCovers (AIE FuncUnitWrapper::conflict).
+      if (!HR.canPlaceModulo(MI, Mod))
+        continue;
+      SmallVector<const MachineInstr *, 4> Occ;
+      for (int K = 0; K < SI.NInstr; ++K) {
+        if (!SI[K].Scheduled)
+          continue;
+        if ((SI[K].Cycle % InitiationInterval) != Mod)
+          continue;
+        if (K < 0 || static_cast<unsigned>(K) >= DAG.SUnits.size())
+          continue;
+        if (MachineInstr *OMI = DAG.SUnits[K].getInstr())
+          Occ.push_back(OMI);
+      }
+      if (cycleViolatesHRSameCycleLaws(HR, MI, Occ))
+        continue;
       if (!HR.checkConflict(Scoreboard, MI, Mod))
         return C;
     }
     return std::nullopt;
+  }
+
+};
+
+/// AIE `getMinOutputLat` (`AIEPostPipeliner.cpp:1091-1099`).
+static int getMinOutputLat(const SUnit &SU) {
+  int Min = std::numeric_limits<int>::max();
+  bool Any = false;
+  for (const SDep &Dep : SU.Succs) {
+    if (Dep.getKind() != SDep::Output)
+      continue;
+    Any = true;
+    Min = std::min(Min, static_cast<int>(Dep.getLatency()));
+  }
+  return Any ? Min : 0;
+}
+
+static bool isSideEffectFreeMI(const MachineInstr *MI) {
+  if (!MI)
+    return false;
+  return !MI->mayStore() && !MI->hasUnmodeledSideEffects() && !MI->isCall() &&
+         !MI->isInlineAsm() && !MI->isBranch() && !MI->isReturn();
+}
+
+/// AIE `IterCountSlackStrategy` (`AIEPostPipeliner.cpp:1156-1190`).
+class HaydnIterCountSlackStrategy : public HaydnMultiStageStrategy {
+  bool TopDown = true;
+
+public:
+  HaydnIterCountSlackStrategy(ScheduleDAGInstrs &TheDAG,
+                              HaydnMultiStageScheduleInfo &TheInfo, int Bias)
+      : HaydnMultiStageStrategy(TheDAG, TheInfo, Bias) {}
+  std::string name() override { return "IterCountSlackStrategy"; }
+  bool fromTop() override { return TopDown; }
+  bool better(const SUnit &A, const SUnit &B) override {
+    if (!TopDown)
+      return SI[A.NodeNum].Earliest > SI[B.NodeNum].Earliest;
+    const bool SEFA = isSideEffectFreeMI(A.getInstr());
+    const bool SEFB = isSideEffectFreeMI(B.getInstr());
+    if (SEFA != SEFB)
+      return SEFA;
+    return SI[A.NodeNum].Latest > SI[B.NodeNum].Latest;
+  }
+  void selected(const SUnit &N) override {
+    if (TopDown && !isSideEffectFreeMI(N.getInstr()))
+      TopDown = false;
+  }
+};
+
+/// AIE `ConfigStrategy` (`AIEPostPipeliner.cpp:1192-1398`).
+class HaydnConfigStrategy : public HaydnMultiStageStrategy {
+public:
+  enum PriorityComponent {
+    NodeNum,
+    Latest,
+    Critical,
+    Sibling,
+    LCDLatest,
+    DepLength,
+    Liveness,
+    EffHeight,
+    Size
+  };
+  enum PlacementModifier { DeferNonCritical, PlacementSize };
+  struct Configuration {
+    int ExtraStages = 0;
+    bool TopDown = true;
+    bool Alternate = false;
+    int Runs = 0;
+    SmallVector<PriorityComponent, 4> Components;
+    SmallVector<PlacementModifier, 2> Modifiers;
+  };
+
+private:
+  bool TopDown = true;
+  bool Alternate = false;
+  std::string Name;
+  SmallVector<PlacementModifier, 2> Modifiers;
+  DenseSet<int> SuccSiblingScheduled;
+  DenseSet<int> PredSiblingScheduled;
+  SmallVector<PriorityComponent, 4> Priority;
+
+  bool fromTop() override { return TopDown; }
+
+  bool better(const SUnit &A, const SUnit &B) override {
+    for (PriorityComponent P : Priority) {
+      const HaydnMultiStageNodeInfo &IA = SI[A.NodeNum];
+      const HaydnMultiStageNodeInfo &IB = SI[B.NodeNum];
+      bool Pref = false;
+      bool Decided = true;
+      switch (P) {
+      case NodeNum:
+        Pref = TopDown ? A.NodeNum < B.NodeNum : A.NodeNum > B.NodeNum;
+        break;
+      case Latest:
+        Pref = TopDown ? IA.Latest < IB.Latest : IA.Earliest > IB.Earliest;
+        break;
+      case Critical:
+        Pref = TopDown ? IA.NumPushedEarliest > IB.NumPushedEarliest
+                       : IA.NumPushedLatest > IB.NumPushedLatest;
+        break;
+      case Sibling: {
+        const DenseSet<int> &Sib =
+            TopDown ? SuccSiblingScheduled : PredSiblingScheduled;
+        Pref = Sib.count(static_cast<int>(A.NodeNum)) >
+               Sib.count(static_cast<int>(B.NodeNum));
+        break;
+      }
+      case LCDLatest:
+        Pref = IA.LCDLatest < IB.LCDLatest;
+        break;
+      case DepLength:
+        Pref = A.getDepth() > B.getDepth();
+        break;
+      case Liveness:
+        Pref = getMinOutputLat(A) < getMinOutputLat(B);
+        break;
+      case EffHeight:
+        Pref = IA.EffectiveHeight > IB.EffectiveHeight;
+        break;
+      default:
+        Decided = false;
+        break;
+      }
+      if (Decided && Pref)
+        return true;
+      if (Decided) {
+        bool Other = false;
+        switch (P) {
+        case NodeNum:
+          Other = TopDown ? B.NodeNum < A.NodeNum : B.NodeNum > A.NodeNum;
+          break;
+        case Latest:
+          Other = TopDown ? IB.Latest < IA.Latest : IB.Earliest > IA.Earliest;
+          break;
+        case Critical:
+          Other = TopDown ? IB.NumPushedEarliest > IA.NumPushedEarliest
+                          : IB.NumPushedLatest > IA.NumPushedLatest;
+          break;
+        case Sibling: {
+          const DenseSet<int> &Sib =
+              TopDown ? SuccSiblingScheduled : PredSiblingScheduled;
+          Other = Sib.count(static_cast<int>(B.NodeNum)) >
+                  Sib.count(static_cast<int>(A.NodeNum));
+          break;
+        }
+        case LCDLatest:
+          Other = IB.LCDLatest < IA.LCDLatest;
+          break;
+        case DepLength:
+          Other = B.getDepth() > A.getDepth();
+          break;
+        case Liveness:
+          Other = getMinOutputLat(B) < getMinOutputLat(A);
+          break;
+        case EffHeight:
+          Other = IB.EffectiveHeight > IA.EffectiveHeight;
+          break;
+        default:
+          break;
+        }
+        if (Other)
+          return false;
+      }
+    }
+    return false;
+  }
+
+  void selected(const SUnit &N) override {
+    HaydnMultiStageNodeInfo *Pushed = &SI[static_cast<int>(N.NodeNum)];
+    // Bound the AIE critical-path walk. A LastEarliestPusher cycle is
+    // the T4 post-RA hang on dense MAC bodies (bkfir).
+    int Guard = 0;
+    const int Cap = static_cast<int>(SI.Nodes.size()) + 1;
+    SmallSet<int, 8> Seen;
+    while (Pushed->LastEarliestPusher && Guard++ < Cap) {
+      const int P = *Pushed->LastEarliestPusher;
+      if (P < 0 || P >= static_cast<int>(SI.Nodes.size()) ||
+          !Seen.insert(P).second)
+        break;
+      Pushed = &SI[P];
+      Pushed->NumPushedEarliest++;
+      setChanged();
+    }
+    for (const SDep &SDepE : N.Succs) {
+      if (SDepE.getKind() != SDep::Data)
+        continue;
+      for (const SDep &PDep : SDepE.getSUnit()->Preds) {
+        if (PDep.getKind() != SDep::Data)
+          continue;
+        SuccSiblingScheduled.insert(static_cast<int>(PDep.getSUnit()->NodeNum));
+      }
+    }
+    for (const SDep &PDep : N.Preds) {
+      if (PDep.getKind() != SDep::Data)
+        continue;
+      for (const SDep &SDepE : PDep.getSUnit()->Succs) {
+        if (SDepE.getKind() != SDep::Data)
+          continue;
+        PredSiblingScheduled.insert(static_cast<int>(PDep.getSUnit()->NodeNum));
+      }
+    }
+    if (Alternate)
+      TopDown = !TopDown;
+  }
+
+public:
+  std::string name() override { return Name; }
+  HaydnConfigStrategy(ScheduleDAGInstrs &TheDAG,
+                      HaydnMultiStageScheduleInfo &TheInfo, int Length,
+                      bool FromTop, bool Alt,
+                      ArrayRef<PriorityComponent> Components,
+                      ArrayRef<PlacementModifier> Mods = {})
+      : HaydnMultiStageStrategy(TheDAG, TheInfo, Length), TopDown(FromTop),
+        Alternate(Alt), Modifiers(Mods.begin(), Mods.end()) {
+    Name = (Twine("Config_") + Twine(Length) + "_" + Twine(FromTop) + "_" +
+            Twine(Alt))
+               .str();
+    for (PriorityComponent Comp : Components)
+      Priority.push_back(Comp);
+  }
+
+  std::optional<int>
+  fitInInterval(const SUnit &SU, int First, int Last, int InitiationInterval,
+                const HaydnHazardRecognizer &HR,
+                ResourceScoreboard<HaydnFuncUnitWrapper> &Scoreboard) override {
+    const bool ShouldDefer =
+        llvm::is_contained(Modifiers, DeferNonCritical) &&
+        SI[SU.NodeNum].EffectiveHeight == 0;
+    if (ShouldDefer && First + 1 <= Last) {
+      auto Result = HaydnMultiStageStrategy::fitInInterval(
+          SU, First + 1, Last, InitiationInterval, HR, Scoreboard);
+      if (Result)
+        return Result;
+      return HaydnMultiStageStrategy::fitInInterval(
+          SU, First, First, InitiationInterval, HR, Scoreboard);
+    }
+    return HaydnMultiStageStrategy::fitInInterval(
+        SU, First, Last, InitiationInterval, HR, Scoreboard);
   }
 };
 } // namespace llvm
@@ -161,6 +436,8 @@ STATISTIC(NumMultiStageKernelParcels,
           "Number of multi-MI kernel parcels committed by post-RA pipeliner");
 STATISTIC(NumMultiStagePeels,
           "Number of prolog+epilog peels inserted by post-RA pipeliner");
+STATISTIC(NumMultiStageQualifySeated,
+          "Number of multi-stage accepts with parcels-per-iter equal to II");
 
 // Defined in namespace llvm to match the extern in HaydnMultiStageSMS.h.
 namespace llvm {
@@ -191,8 +468,14 @@ cl::opt<std::string> HaydnMultiStageSMSForceFailSeat(
 // Maximum body instructions the engine will attempt (keeps search cheap).
 // bkfir32x32 L1 MAC is ~26 real ops; leave headroom for similar FIR kernels.
 static constexpr unsigned MaxBodyInstrs = 40;
+// Dense MAC bodies (bkfir) used to livelock Latest / LastEarliestPusher
+// walks. Those walks are capped; this bound also shrinks the Config
+// lattice so a later post-RA enable cannot look like a hang.
+static constexpr int LargeBodyInstrs = 20;
 // Cap II search distance.
 static constexpr int MaxIISearch = 24;
+// Bound on the F39 static-trip materialization-chain walk (preheader only).
+static constexpr unsigned MaxTripConstWalk = 8;
 
 static const char *const PreflightNames[] = {
     "PF-CFG", "PF-PHI", "PF-TRIP", "PF-STAGE",
@@ -509,6 +792,17 @@ static bool isHwLoopSetup(const MachineInstr &MI) {
   return TII->isHardwareLoopSetupInstr(MI);
 }
 
+namespace llvm {
+static bool cycleViolatesHRSameCycleLaws(const HaydnHazardRecognizer &HR,
+                                         const MachineInstr &Cand,
+                                         ArrayRef<const MachineInstr *> Occ) {
+  // One law: HR emit path + pack + this placement conjunct
+  // (HaydnPackLegality.h cycleViolatesNamedSameCycleLaws).
+  (void)HR;
+  return HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(Cand, Occ);
+}
+} // namespace llvm
+
 // True when a product SET_HWLOOP form encodes \p Loop as its start MBB.
 // Operand shape: sel, loop_start MBB, loop_end MBB, cnt/rs (logical/wide).
 // LoopStart has no MBB operands — handled separately by findHwLoopSetup.
@@ -624,6 +918,88 @@ static bool hasSelfBackedge(const MachineBasicBlock &Loop) {
   return llvm::is_contained(Loop.successors(), &Loop);
 }
 
+/// F39 static trip oracle: recover the constant feeding a physical trip
+/// register by walking the dedicated preheader from the last def of \p Trip.
+/// Post-RA materialization shapes only (LOADI32 imm; ADDI32/ADDI32_W/SUBI32
+/// reg+imm chains bottoming at R0), bounded to the preheader and to
+/// MaxTripConstWalk steps. Returns std::nullopt when the value is not
+/// provably constant inside the preheader (variable trip) — the caller must
+/// then fail closed, never guess.
+static std::optional<int64_t>
+staticPhysTripConstant(Register Trip, const MachineBasicBlock &Preheader) {
+  if (!Trip || !Trip.isPhysical() || Trip == Haydn::R0)
+    return std::nullopt;
+  auto lastDefOf = [&Preheader](Register R) -> const MachineInstr * {
+    const MachineInstr *Def = nullptr;
+    for (const MachineInstr &MI : Preheader)
+      for (const MachineOperand &MO : MI.operands())
+        if (MO.isReg() && MO.isDef() && MO.getReg() == R)
+          Def = &MI;
+    return Def;
+  };
+  Register Base = Trip;
+  int64_t Offset = 0;
+  for (unsigned Step = 0; Step < MaxTripConstWalk; ++Step) {
+    const MachineInstr *BaseDef = lastDefOf(Base);
+    if (!BaseDef)
+      return std::nullopt; // defined outside the preheader; unprovable
+    const unsigned Opc = BaseDef->getOpcode();
+    // LOADI32 rd, imm — terminal constant.
+    if (Opc == Haydn::LOADI32 && BaseDef->getNumOperands() > 1 &&
+        BaseDef->getOperand(1).isImm())
+      return BaseDef->getOperand(1).getImm() + Offset;
+    // ADDI32/ADDI32_W rd, rs, imm / SUBI32 rd, rs, imm — accumulate and
+    // follow rs; chain bottoms at R0 (soft zero).
+    if ((Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W ||
+         Opc == Haydn::SUBI32) &&
+        BaseDef->getNumOperands() > 2 && BaseDef->getOperand(1).isReg() &&
+        BaseDef->getOperand(2).isImm()) {
+      const int64_t Imm = BaseDef->getOperand(2).getImm();
+      Offset += (Opc == Haydn::SUBI32) ? -Imm : Imm;
+      Register Src = BaseDef->getOperand(1).getReg();
+      if (Src == Haydn::R0)
+        return Offset;
+      if (!Src.isPhysical())
+        return std::nullopt;
+      Base = Src;
+      continue;
+    }
+    // Any other def shape (LUI pairs, computed values, incoming params) is
+    // not a provable in-preheader constant for this purpose.
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+/// F39 metadata oracle: `llvm.loop.itercount.range` on the loop header's
+/// backedge terminator carries a proven minimum iteration count (same shape
+/// as the AIE fork's LLVMLoopIterCount). Authoritative when present — the
+/// front end guarantees it. Returns std::nullopt when absent/malformed.
+static std::optional<int64_t>
+loopMDMinTripCount(const MachineBasicBlock &LoopBB) {
+  const BasicBlock *BB = LoopBB.getBasicBlock();
+  if (!BB)
+    return std::nullopt;
+  const Instruction *Term = BB->getTerminator();
+  if (!Term)
+    return std::nullopt;
+  const MDNode *LoopID = Term->getMetadata(LLVMContext::MD_loop);
+  if (!LoopID)
+    return std::nullopt;
+  for (unsigned I = 1, E = LoopID->getNumOperands(); I < E; ++I) {
+    const MDNode *MD = dyn_cast<MDNode>(LoopID->getOperand(I));
+    if (!MD || MD->getNumOperands() < 2)
+      continue;
+    const MDString *S = dyn_cast<MDString>(MD->getOperand(0));
+    if (!S || S->getString() != "llvm.loop.itercount.range")
+      continue;
+    const auto *C = mdconst::dyn_extract_or_null<ConstantInt>(MD->getOperand(1));
+    if (C)
+      return C->getSExtValue();
+  }
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // Candidate / ResMII
 //===----------------------------------------------------------------------===//
@@ -634,8 +1010,25 @@ static bool hasSelfBackedge(const MachineBasicBlock &Loop) {
 
 static int depLat(const SDep &Dep) {
   // AIE uses SDep::getSignedLatency(); LLVM 22 SDep only has unsigned
-  // getLatency(). Negative-latency WAR folding is an AIE fork and is omitted.
+  // getLatency(). Anti/Output typically publish 0, which still constrains
+  // same-cycle order (successor earliest >= predecessor earliest).
   return static_cast<int>(Dep.getLatency());
+}
+
+/// Placement-relevant edges: Data, Anti, Output, and memory Order.
+/// AIE computeForward/scheduleNode walk every signed-latency succ
+/// (AIEPostPipeliner.cpp:239-256 / :320-360). Barrier/Artificial/Weak
+/// Order stays excluded — those are two-copy seam artifacts.
+static bool isPlacementDep(const SDep &Dep) {
+  switch (Dep.getKind()) {
+  case SDep::Data:
+  case SDep::Anti:
+  case SDep::Output:
+    return true;
+  case SDep::Order:
+    return Dep.isNormalMemory();
+  }
+  return false;
 }
 
 /// Loop-carried facts from the two-copy graph: register Data/Anti/Output
@@ -682,6 +1075,11 @@ static void pruneTwoCopySeamArtifacts(ScheduleDAGInstrs &G, int NInstr) {
 }
 
 void HaydnMultiStageSMS::destroyTwoCopyGraph() {
+  if (TwoCopyDAG) {
+    for (SUnit &SU : TwoCopyDAG->SUnits)
+      if (MachineInstr *MI = SU.getInstr())
+        MemberPin.erase(MI);
+  }
   TwoCopyDAG.reset();
   PipeHR = nullptr;
   if (!TwoCopyMBB)
@@ -862,8 +1260,6 @@ int HaydnMultiStageSMS::computeRecMII() {
 }
 
 bool HaydnMultiStageSMS::proveLivePhysNoSpillSubreg() const {
-  if (!certificateLifetimesNoSpill())
-    return false;
   if (!HasValidPlan || II < 1 || Body.empty() || !DAG)
     return false;
   const TargetRegisterInfo *TRI = DAG->MF.getSubtarget().getRegisterInfo();
@@ -918,6 +1314,10 @@ bool HaydnMultiStageSMS::proveLivePhysNoSpillSubreg() const {
 }
 
 bool HaydnMultiStageSMS::computeLivePhysFixpoint() {
+  // SF8: AIE LiveRegs worklist (AIELiveRegs.cpp:82-107) over the SMS
+  // region. Replaces the hash-theater loop whose digest could not change
+  // between iterations. Search-time no-spill stays proveLivePhysNoSpillSubreg
+  // (regsOverlap).
   if (!LoopBB || !Preheader || !ExitBB || !DAG)
     return false;
   const TargetRegisterInfo *TRI = DAG->MF.getSubtarget().getRegisterInfo();
@@ -930,37 +1330,64 @@ bool HaydnMultiStageSMS::computeLivePhysFixpoint() {
   if (EpilogMBB)
     Region.push_back(EpilogMBB);
 
-  auto computedLiveInHash = [&](MachineBasicBlock &MBB) -> uint64_t {
-    LivePhysRegs Live(*TRI);
-    Live.addLiveOutsNoPristines(MBB);
-    for (MachineInstr &MI : reverse(MBB))
-      Live.stepBackward(MI);
-    uint64_t H = 0;
-    unsigned NLive = 0;
-    for (MCPhysReg R : Live) {
-      H = (H * 131) ^ static_cast<uint64_t>(R);
-      ++NLive;
-    }
-    return H ^ (static_cast<uint64_t>(NLive) << 32);
+  DenseMap<const MachineBasicBlock *, SmallVector<MCPhysReg, 8>> LiveIns;
+  SmallVector<const MachineBasicBlock *, 8> Work;
+  DenseMap<const MachineBasicBlock *, bool> InWork;
+  auto enqueue = [&](const MachineBasicBlock *MBB) {
+    if (!MBB || InWork.lookup(MBB))
+      return;
+    Work.push_back(MBB);
+    InWork[MBB] = true;
+  };
+  for (MachineBasicBlock *MBB : Region)
+    enqueue(MBB);
+
+  auto snapshot = [](const LivePhysRegs &L) {
+    SmallVector<MCPhysReg, 8> V;
+    for (MCPhysReg R : L)
+      V.push_back(R);
+    llvm::sort(V);
+    return V;
   };
 
-  uint64_t Prev = 0;
-  bool Stable = false;
-  for (unsigned Iter = 0; Iter < 8; ++Iter) {
-    uint64_t Cur = 0;
-    for (unsigned I = 0, E = Region.size(); I != E; ++I)
-      Cur ^= computedLiveInHash(*Region[I]) << I;
-    if (Iter && Cur == Prev) {
-      Stable = true;
-      break;
+  unsigned Guard = 0;
+  const unsigned GuardMax = 32 * std::max<unsigned>(1, Region.size());
+  while (!Work.empty() && Guard++ < GuardMax) {
+    const MachineBasicBlock *MBB = Work.pop_back_val();
+    InWork[MBB] = false;
+    LivePhysRegs Current(*TRI);
+    for (const MachineBasicBlock *Succ : MBB->successors()) {
+      auto It = LiveIns.find(Succ);
+      if (It == LiveIns.end())
+        continue;
+      for (MCPhysReg R : It->second)
+        Current.addReg(R);
     }
-    Prev = Cur;
+    for (const MachineInstr &MI : llvm::reverse(*MBB))
+      Current.stepBackward(MI);
+    SmallVector<MCPhysReg, 8> Next = snapshot(Current);
+    auto &Old = LiveIns[MBB];
+    if (Old == Next)
+      continue;
+    Old = std::move(Next);
+    for (const MachineBasicBlock *Pred : MBB->predecessors()) {
+      bool InRegion = false;
+      for (MachineBasicBlock *R : Region)
+        if (R == Pred) {
+          InRegion = true;
+          break;
+        }
+      if (InRegion)
+        enqueue(Pred);
+    }
   }
-  if (!Stable)
+  if (Guard >= GuardMax)
     return false;
   if (!proveLivePhysNoSpillSubreg())
     return false;
 
+  if (NStages < 2)
+    return true;
   MachineBasicBlock::iterator PrologInsertPt = Preheader->getFirstTerminator();
   for (MachineInstr &MI : *Preheader)
     if (isHwLoopSetup(MI))
@@ -972,6 +1399,11 @@ bool HaydnMultiStageSMS::resourcesConverged(
     const HaydnHazardRecognizer &HR) const {
   if (!HasValidPlan || II < 1 || Body.empty())
     return false;
+  // SF1 const verifier path: replay the T4 oracle type (same
+  // ModuloCyclePlacementOracle as HR.ModuloOracle) on a private instance.
+  // This method is const; the search-path HR oracle is not copied here.
+  haydn::bundle::ModuloCyclePlacementOracle VerifyOracle;
+  VerifyOracle.init(static_cast<unsigned>(II), haydnDefaultMCFormats());
   ResourceScoreboard<HaydnFuncUnitWrapper> Scoreboard;
   Scoreboard.config(0, II - 1);
   const int N = static_cast<int>(Body.size());
@@ -984,6 +1416,11 @@ bool HaydnMultiStageSMS::resourcesConverged(
     const int Mod = Sched[I].ModuloCycle;
     if (Mod < 0 || Mod >= II)
       return false;
+    if (!VerifyOracle.place(placementOpcode(*MI), Mod)) {
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: resourcesConverged format "
+                        << "reject SU=" << I << " mod=" << Mod << "\n");
+      return false;
+    }
     if (HR.checkConflict(Scoreboard, *MI, Mod))
       return false;
     HR.emitInScoreboard(Scoreboard, *MI, Mod);
@@ -1017,7 +1454,7 @@ bool HaydnMultiStageSMS::preflightTrip() {
 }
 bool HaydnMultiStageSMS::preflightStage() {
   if (forceFailPreflight(HaydnMultiStagePreflightSeat::PF_STAGE)) { LastRejectReason="PF-STAGE-force"; return false; }
-  if (!HasValidPlan || NStages < 2) return false;
+  if (!HasValidPlan || NStages < 1) return false;
   for (int I = 0; I < NInstr; ++I) {
     const HaydnMultiStageNodeInfo &N = Sched[I];
     if (!N.Scheduled || N.Stage < 0 || N.Stage >= NStages ||
@@ -1041,7 +1478,7 @@ bool HaydnMultiStageSMS::preflightStage() {
                "lcd two-iteration RecMII=" + Twine(RecMII) +
                    " edges=" + Twine(static_cast<unsigned>(LCDEdges.size())) +
                    " mem=" + Twine(MemLCD) + " stages=" + Twine(NStages) +
-                   " lcd-as-windows");
+                   " lcd-as-windows placement-deps=data+anti+output+mem");
   }
   return true;
 }
@@ -1060,6 +1497,22 @@ bool HaydnMultiStageSMS::preflightLive() {
 }
 bool HaydnMultiStageSMS::preflightAlt() {
   if (forceFailPreflight(HaydnMultiStagePreflightSeat::PF_ALT)) { LastRejectReason="PF-ALT-force"; return false; }
+  // SF2: every tracked MultiSlot logical in the body must have a transient
+  // member pin so placement saw real unit/entry geometry. Untracked
+  // opcodes (no PlacementAlternatives) never consult the solver.
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  for (SUnit *SU : Body) {
+    MachineInstr *MI = SU->getInstr();
+    if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
+      continue;
+    const unsigned Log = MI->getOpcode();
+    if (!hasPlacementAlternatives(Fmts, Log))
+      continue;
+    if (!MemberPin.count(MI)) {
+      LastRejectReason = "member-pin";
+      return false;
+    }
+  }
   return true;
 }
 bool HaydnMultiStageSMS::preflightBundle() {
@@ -1067,13 +1520,29 @@ bool HaydnMultiStageSMS::preflightBundle() {
     LastRejectReason = "PF-BUNDLE-force";
     return false;
   }
-  if (!certificateKernelPlan() || !certificateExactCommitPlan())
+  if (!certificateKernelPlan()) {
+    LastRejectReason = "kernel-plan";
     return false;
+  }
+  if (!certificateExactCommitPlan()) {
+    LastRejectReason = "exact-commit-plan";
+    return false;
+  }
+  // F44 pack-alias is a tryII placement certificate (II search can separate
+  // a may-alias pair into different pack windows); preflightBundle only
+  // re-verifies it as a belt-and-braces no-mutation gate.
+  if (!certificatePackAlias()) {
+    LastRejectReason = "pack-alias";
+    return false;
+  }
   if (!DAG)
     return false;
   const TargetSubtargetInfo &ST = DAG->MF.getSubtarget();
+  // Same SearchAlts pin the II-search HR used (AIE setDesc on the
+  // candidate MBB). Without it, checkConflict books the logical opcode
+  // and the format overlay diverges from placement.
   HaydnHazardRecognizer HR(ST.getInstrInfo(), ST.getInstrItineraryData(),
-                           /*IsPreRA=*/false);
+                           /*IsPreRA=*/false, &SearchAlts);
   if (!resourcesConverged(HR)) {
     LastRejectReason = "resource-converge";
     return false;
@@ -1225,21 +1694,64 @@ bool HaydnMultiStageSMS::isCandidate(MachineBasicBlock &LoopBlock) {
 }
 
 int HaydnMultiStageSMS::getResMII(MachineBasicBlock &LoopBlock) const {
-  // Issue-width ResMII: ceil(NBody / ISSUE_SLOT_COUNT). Slot exclusivity may
-  // raise this; accept a lower bound and let tryII fail closed on conflicts.
+  // SF6 ResMII = max(row-capacity, logical primary-slot, pinned SlotCounts).
+  // Row term: ceil((NBody + ceil(N_E2only/2)) / 3). Logical slot term: AIE
+  // getSlotCounts / Counts.max() (AIEPostPipeliner.cpp:216-228) over
+  // MultiSlot unused-slot assignment. Pin term: booked-member getSlotSet
+  // occupancy (AIE SlotCounts on the materialized opcode). moduloPrimarySlotII
+  // / countE2OnlyBodyOps enumerate PlacementAlternatives, which members do
+  // not have — feeding placementOpcode skipped every slot increment and
+  // left SlotMII=1. RecMII is computed separately before StartII.
   unsigned NBody = 0;
-  for (const MachineInstr &MI : LoopBlock) {
+  SmallVector<unsigned, 16> LogicalOps;
+  SmallVector<unsigned, 16> BookedOps;
+  auto pushBodyOp = [&](const MachineInstr &MI) {
     if (isZOLTerminator(MI) || isSkippableBodyMI(MI))
-      continue;
+      return;
     if (MI.isPseudo() && !MI.isCopy())
-      continue;
+      return;
     ++NBody;
+    LogicalOps.push_back(MI.getOpcode());
+    BookedOps.push_back(placementOpcode(MI));
+  };
+  if (!Body.empty()) {
+    for (SUnit *SU : Body) {
+      if (MachineInstr *MI = SU->getInstr())
+        pushBodyOp(*MI);
+    }
+  } else {
+    for (const MachineInstr &MI : LoopBlock)
+      pushBodyOp(MI);
   }
-  const unsigned IssueWidth = Haydn::ISSUE_SLOT_COUNT;
-  int MII = std::max(
-      1, static_cast<int>((NBody + IssueWidth - 1) / IssueWidth));
+  const unsigned NE2Only = haydn::bundle::countE2OnlyBodyOps(LogicalOps);
+  const int RowMII = static_cast<int>(
+      haydn::bundle::moduloRowCapacityII(NBody, NE2Only));
+  const int LogicalSlotMII = static_cast<int>(
+      haydn::bundle::moduloPrimarySlotII(LogicalOps));
+  // SF9 SlotCounts bias residual: booked-member primary-slot occupancy.
+  // AIE PostPipeliner.cpp:216-228 counts the materialized slot, not the
+  // logical unused-slot assignment.
+  HaydnMultiStageSlotCounts PinSlots;
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  for (unsigned Opc : BookedOps) {
+    const MCSlotKind Kind = Fmts.getSlotKind(Opc);
+    if (Kind == MCSlotKind())
+      continue;
+    const MCSlotInfo *SI = Fmts.getSlotInfo(Kind);
+    if (!SI)
+      continue;
+    SlotBits Bits = SI->getSlotSet();
+    if (!Bits)
+      Bits = SI->getConflictSet();
+    PinSlots += HaydnMultiStageSlotCounts(Bits);
+  }
+  const int PinSlotMII = PinSlots.max();
+  const int SlotMII = std::max(LogicalSlotMII, PinSlotMII);
+  const int MII = std::max(std::max(RowMII, SlotMII), 1);
   LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: ResMII=" << MII << " (NBody="
-                    << NBody << ")\n");
+                    << NBody << " E2only=" << NE2Only
+                    << " LogicalSlotMII=" << LogicalSlotMII
+                    << " PinSlotMII=" << PinSlotMII << ")\n");
   return MII;
 }
 
@@ -1247,20 +1759,73 @@ int HaydnMultiStageSMS::getResMII(MachineBasicBlock &LoopBlock) const {
 // Loop-carried windows + pipe schedule (AIE PostPipeliner core)
 //===----------------------------------------------------------------------===//
 
+HaydnMultiStageSlotCounts
+HaydnMultiStageSMS::conflictSlotsForMI(const MachineInstr &MI) const {
+  // AIE getConflictCounts (AIESlotUtils.cpp:23-26): MCSlotInfo conflict set.
+  // Overlay: booked / pinned member FieldSlots when conflict bits are empty.
+  const unsigned Booked = placementOpcode(MI);
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  const MCSlotKind Kind = Fmts.getSlotKind(Booked);
+  if (Kind == MCSlotKind())
+    return HaydnMultiStageSlotCounts();
+  const MCSlotInfo *SI = Fmts.getSlotInfo(Kind);
+  if (!SI)
+    return HaydnMultiStageSlotCounts();
+  SlotBits Bits = SI->getConflictSet();
+  if (!Bits)
+    Bits = SI->getSlotSet();
+  return HaydnMultiStageSlotCounts(Bits);
+}
+
+void HaydnMultiStageSMS::biasForLocalResourceContention(
+    HaydnMultiStageNodeInfo &NI, const SUnit &SU) {
+  // AIE PostPipeliner::biasForLocalResourceContention
+  // (AIEPostPipeliner.cpp:286-318).
+  HaydnMultiStageSlotCounts Slots(NI.Slots);
+  int PredEarliest = std::numeric_limits<int>::max();
+  SmallSet<int, 8> UniqueAncestors;
+  int Count = 0;
+  for (const SDep &Dep : SU.Preds) {
+    if (Dep.getKind() != SDep::Data)
+      continue;
+    const int P = static_cast<int>(Dep.getSUnit()->NodeNum);
+    if (P < 0 || P >= NInstr)
+      continue;
+    const HaydnMultiStageNodeInfo &Pred = Sched[P];
+    if (P >= static_cast<int>(SU.NodeNum))
+      continue;
+    if (UniqueAncestors.insert(P).second) {
+      Slots += Pred.Slots;
+      ++Count;
+    }
+    PredEarliest = std::min(PredEarliest, Pred.Earliest);
+  }
+  if (Count > 0 && Slots.max() > Count) {
+    const int NewEarliest = PredEarliest + Slots.max() - 1;
+    if (NewEarliest > NI.Earliest) {
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: bias SU=" << SU.NodeNum
+                        << " MaxSlots=" << Slots.max() << " Earliest "
+                        << NI.Earliest << " -> " << NewEarliest << "\n");
+      NI.Earliest = NewEarliest;
+      LastResourceBias = true;
+    }
+  }
+}
+
 void HaydnMultiStageSMS::computeForward() {
   // AIE PostPipeliner::computeForward (AIEPostPipeliner.cpp:320-360).
-  // SlotCounts local-resource bias omitted: Haydn HR owns unit occupancy.
-  // Earliest follows Data and memory Order only. LLVM 22 Anti/Output
-  // latency is unsigned 0, not AIE getSignedLatency() negative WAR;
-  // counting those succs serializes the two-copy body.
+  // Earliest follows every placement-relevant edge (AIE computeForward
+  // signed-latency succs). Anti/Output with unsigned latency 0 still
+  // order same-cycle WAR/WAW; Barrier/Artificial seams stay excluded.
   for (int K = 0; K < NInstr; ++K) {
     HaydnMultiStageNodeInfo &Me = Sched[K];
     SUnit &SU = TwoCopyDAG->SUnits[K];
+    biasForLocalResourceContention(Me, SU);
     for (auto &Dep : SU.Preds) {
       if (Dep.getKind() != SDep::Data)
         continue;
       int P = static_cast<int>(Dep.getSUnit()->NodeNum);
-      if (P < 0 || P >= NInstr)
+      if (P < 0 || P >= NInstr || P >= K)
         continue;
       const HaydnMultiStageNodeInfo &Pred = Sched[P];
       Me.Ancestors.insert(P);
@@ -1271,9 +1836,18 @@ void HaydnMultiStageSMS::computeForward() {
       SUnit *Succ = Dep.getSUnit();
       if (Succ->isBoundaryNode())
         continue;
-      if (Dep.getKind() != SDep::Data && !Dep.isNormalMemory())
+      const int SNum = static_cast<int>(Succ->NodeNum);
+      // AIE computeForward walks every signed-latency succ
+      // (AIEPostPipeliner.cpp:346-358). Two-copy Anti/Output stay off
+      // the Earliest walk: LLVM 22 publishes unsigned latency 0, which
+      // would serialize the concatenated body. Those LCDs still fold
+      // into LCDLatest / addLCD.
+      if (!isPlacementDep(Dep))
         continue;
-      HaydnMultiStageNodeInfo &SInfo = Sched[static_cast<int>(Succ->NodeNum)];
+      if ((Dep.getKind() == SDep::Anti || Dep.getKind() == SDep::Output) &&
+          SNum >= NInstr)
+        continue;
+      HaydnMultiStageNodeInfo &SInfo = Sched[SNum];
       const int NewEarliest = Me.Earliest + depLat(Dep);
       if (NewEarliest > SInfo.Earliest)
         SInfo.Earliest = NewEarliest;
@@ -1334,7 +1908,7 @@ void HaydnMultiStageSMS::computeEffectiveHeight() {
 
 bool HaydnMultiStageSMS::computeLoopCarriedParameters() {
   // AIE PostPipeliner::computeLoopCarriedParameters (AIEPostPipeliner.cpp:517-606).
-  // Ancestor/offspring SlotCounts bias omitted (Haydn HR owns slots).
+  LastResourceBias = false;
   for (HaydnMultiStageNodeInfo &N : Sched.Nodes) {
     N.Earliest = 0;
     N.Latest = -1;
@@ -1346,11 +1920,46 @@ bool HaydnMultiStageSMS::computeLoopCarriedParameters() {
     N.Cycle = 0;
     N.TweakedEarliest.reset();
     N.TweakedLatest.reset();
+    N.Slots = HaydnMultiStageSlotCounts();
+  }
+  for (int K = 0; K < NInstr; ++K) {
+    if (MachineInstr *MI = TwoCopyDAG->SUnits[K].getInstr())
+      Sched[K].Slots = conflictSlotsForMI(*MI);
   }
   computeForward();
-  while (computeBackward())
+  // Bound the Latest fixpoint: Data-only Latest only decreases, but a
+  // cyclic first-copy edge would otherwise walk Latest to -inf (T4 hang).
+  // Hitting the cap means the first-copy graph is cyclic; a partial
+  // Latest is wider than the true window, so fail closed and retry II.
+  int BackwardGuard = 0;
+  const int BackwardCap = std::max(NInstr * 2, 8);
+  while (computeBackward() && ++BackwardGuard < BackwardCap)
     ;
+  if (BackwardGuard >= BackwardCap) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: Latest fixpoint did not "
+                         "converge (T4 cycle cap)\n");
+    return false;
+  }
   computeRecMIIFromDAG();
+  for (int K = 0; K < NInstr; ++K) {
+    HaydnMultiStageNodeInfo &Me = Sched[K];
+    HaydnMultiStageSlotCounts ASlots(Me.Slots);
+    for (int A : Me.Ancestors) {
+      if (A >= 0 && A < NInstr)
+        ASlots += Sched[A].Slots;
+    }
+    HaydnMultiStageSlotCounts OSlots(Me.Slots);
+    for (int O : Me.Offspring) {
+      if (O >= 0 && O < NInstr)
+        OSlots += Sched[O].Slots;
+    }
+    const int NewEarliest = 0 + (ASlots.max() - 1);
+    const int NewLatest = -1 - (OSlots.max() - 1);
+    if (NewEarliest > Me.Earliest || NewLatest < Me.Latest)
+      LastResourceBias = true;
+    Me.Earliest = std::max(Me.Earliest, NewEarliest);
+    Me.Latest = std::min(Me.Latest, NewLatest);
+  }
   for (int K = 0; K < NInstr; ++K) {
     const int KNext = K + NInstr;
     const int Earliest = Sched[KNext].Earliest - II;
@@ -1383,10 +1992,16 @@ bool HaydnMultiStageSMS::computeLoopCarriedParameters() {
 
 int HaydnMultiStageSMS::computeMinScheduleLength() const {
   int ML = II;
+  const int Cap = II * std::max(NInstr + 4, 8);
   for (int K = 0; K < NInstr; ++K) {
     const HaydnMultiStageNodeInfo &Node = Sched[K];
-    while (Node.Earliest > Node.Latest + ML)
+    while (Node.Earliest > Node.Latest + ML) {
       ML += II;
+      if (ML > Cap) {
+        ML = Cap;
+        break;
+      }
+    }
   }
   return ML;
 }
@@ -1396,13 +2011,20 @@ void HaydnMultiStageSMS::schedulePipeNode(SUnit &SU, int Cycle,
   // AIE PostPipeliner::scheduleNode (AIEPostPipeliner.cpp:232-282).
   Sched[static_cast<int>(SU.NodeNum)].Cycle = Cycle;
   for (auto &Dep : SU.Succs) {
-    if (Dep.getKind() != SDep::Data && !Dep.isNormalMemory())
-      continue;
-    int Latency = depLat(Dep);
+    // AIE scheduleNode walks every signed-latency succ
+    // (AIEPostPipeliner.cpp:239-256). Barrier/Artificial two-copy seams
+    // stay excluded. Anti/Output only constrain the intra-iteration copy
+    // (unsigned latency 0 would serialize copy-1).
     SUnit *Succ = Dep.getSUnit();
     if (Succ->isBoundaryNode())
       continue;
     const int SNum = static_cast<int>(Succ->NodeNum);
+    if (!isPlacementDep(Dep))
+      continue;
+    if ((Dep.getKind() == SDep::Anti || Dep.getKind() == SDep::Output) &&
+        SNum >= NInstr)
+      continue;
+    int Latency = depLat(Dep);
     const int NewEarliest = Cycle + Latency;
     if (NewEarliest > Strategy.earliest(*Succ)) {
       Sched[SNum].LastEarliestPusher = static_cast<int>(SU.NodeNum);
@@ -1412,13 +2034,20 @@ void HaydnMultiStageSMS::schedulePipeNode(SUnit &SU, int Cycle,
     }
   }
   for (auto &Dep : SU.Preds) {
-    if (Dep.getKind() != SDep::Data)
-      continue;
-    int Latency = depLat(Dep);
+    // AIE scheduleNode walks every pred; Haydn keeps Data for Latest
+    // (AIE computeBackward is Data-only) plus intra-iteration Anti/Output
+    // so WAR/WAW order the same cycle without two-copy serialization.
     SUnit *Pred = Dep.getSUnit();
     if (Pred->isBoundaryNode())
       continue;
     const int PNum = static_cast<int>(Pred->NodeNum);
+    if (Dep.getKind() == SDep::Anti || Dep.getKind() == SDep::Output) {
+      if (PNum >= NInstr)
+        continue;
+    } else if (Dep.getKind() != SDep::Data) {
+      continue;
+    }
+    int Latency = depLat(Dep);
     const int OldLatest = Strategy.latest(*Pred);
     const int NewLatest = Cycle - Latency;
     if (NewLatest < OldLatest) {
@@ -1435,12 +2064,17 @@ void HaydnMultiStageSMS::schedulePipeNode(SUnit &SU, int Cycle,
 
 int HaydnMultiStageSMS::mostUrgent(HaydnMultiStageStrategy &Strategy) {
   // AIE PostPipeliner::mostUrgent (AIEPostPipeliner.cpp:788-825).
-  assert(FirstUnscheduled <= LastUnscheduled);
-  while (Sched[FirstUnscheduled].Scheduled)
+  if (FirstUnscheduled > LastUnscheduled)
+    return -1;
+  while (FirstUnscheduled <= LastUnscheduled && FirstUnscheduled < NInstr &&
+         Sched[FirstUnscheduled].Scheduled)
     ++FirstUnscheduled;
-  while (Sched[LastUnscheduled].Scheduled)
+  while (LastUnscheduled >= FirstUnscheduled && LastUnscheduled >= 0 &&
+         Sched[LastUnscheduled].Scheduled)
     --LastUnscheduled;
-  assert(FirstUnscheduled <= LastUnscheduled);
+  if (FirstUnscheduled > LastUnscheduled || FirstUnscheduled >= NInstr ||
+      LastUnscheduled < 0)
+    return -1;
   auto notScheduled = [this](const SDep &Dep) {
     SUnit *SU = Dep.getSUnit();
     if (SU->isBoundaryNode())
@@ -1457,7 +2091,6 @@ int HaydnMultiStageSMS::mostUrgent(HaydnMultiStageStrategy &Strategy) {
     if (Best == -1 || Strategy.better(SU, TwoCopyDAG->SUnits[Best]))
       Best = K;
   }
-  assert(Best >= 0);
   return Best;
 }
 
@@ -1482,6 +2115,8 @@ bool HaydnMultiStageSMS::scheduleFirstIteration(
   // AIE PostPipeliner::scheduleFirstIteration (AIEPostPipeliner.cpp:843-908).
   for (int K = 0; K < NInstr; ++K) {
     const int N = mostUrgent(Strategy);
+    if (N < 0)
+      return false;
     SUnit &SU = TwoCopyDAG->SUnits[N];
     MachineInstr *const MI = SU.getInstr();
     const int Earliest = Strategy.earliest(SU);
@@ -1514,12 +2149,27 @@ bool HaydnMultiStageSMS::scheduleFirstIteration(
     const int Actual = *OptCycle;
     Strategy.selected(SU);
     const int ModCycle = Actual % II;
-    // Haydn itinerary pipeline depth is often 1, so AIE's
-    // Horizon=min(II+PD, Size-PD) emits only one copy. Always occupy
-    // two kernel iterations so first-iter matches other-iter's
-    // 2*II+PD resource check (AIEPostPipeliner.cpp:1048-1058).
+    // SF1 accept path: mutate the T4 HR modulo oracle. A reject here
+    // means fitInInterval skipped the format gate (stale II); fail closed.
+    if (!PipeHR->placeModulo(*MI, ModCycle)) {
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: format oracle reject SU=" << N
+                        << " mod=" << ModCycle << "\n");
+      return false;
+    }
+    // SF7: AIE first-iter emit horizon is min(II+PD, Size-PD)
+    // (AIEPostPipeliner scoreboard wrap). ProductMaxInstrStageCycles==1
+    // makes one wrap enough; the static pin below trips if a multi-cycle
+    // itinerary lands.
     int Cycle = ModCycle;
-    const int Horizon = std::min(2 * II, ScoreboardSize);
+    const int PD = std::max(PipeHR->getPipelineDepth(), 1);
+    if (haydn::restriction::ProductMaxInstrStageCycles > 1) {
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: multi-cycle itinerary pin "
+                           "tripped ProductMaxInstrStageCycles="
+                        << haydn::restriction::ProductMaxInstrStageCycles
+                        << "\n");
+      return false;
+    }
+    const int Horizon = std::min(II + PD, ScoreboardSize - PD);
     while (Cycle < Horizon) {
       if (PipeHR->checkConflict(PipeScoreboard, *MI, Cycle)) {
         LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: scoreboard conflict SU=" << N
@@ -1542,24 +2192,22 @@ bool HaydnMultiStageSMS::scheduleFirstIteration(
                     << " II=" << II << "\n");
   if (NStages > 4)
     return false;
-  if (NStages >= 2)
-    return true;
-  // Haydn materialize requires distinct prolog/kernel/epilog (NStages>=2).
-  // Force the later half into stage 1 via TweakedEarliest and retry
-  // (AIE resetSchedule Static vs Tweaked, AIEPostPipeliner.cpp:827-841).
-  if (NInstr < 3)
+  if (NStages < 1)
     return false;
-  bool Tweaked = false;
-  for (int K = NInstr / 2; K < NInstr; ++K) {
-    const int Forced = std::max(Sched[K].StaticEarliest, II);
-    if (!Sched[K].TweakedEarliest || *Sched[K].TweakedEarliest < Forced) {
-      Sched[K].TweakedEarliest = Forced;
-      Tweaked = true;
-    }
+  // AIE checkStages accepts NS==1 (AIEPostPipeliner.cpp:1678-1695).
+  // A legal single-stage schedule is kernel-only — no manufactured
+  // overlap. Materialize skips peel MBBs when NStages==1.
+  // Trip is an II-search constraint: insufficient static trip rejects
+  // this II so a later II (fewer stages) can still win. Auto-applying
+  // peelSideEffectFree here without AIE cycle rotation would drop an
+  // epilogue completion (wrong last-iteration late stages). The SEF
+  // helper stays available; rotation is the remaining SF10 optional.
+  if (!hasSufficientTripCount()) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: trip < NStages=" << NStages
+                      << " — reject II (retry)\n");
+    return false;
   }
-  if (Tweaked)
-    Strategy.setChanged();
-  return false;
+  return true;
 }
 
 bool HaydnMultiStageSMS::scheduleOtherIterations(
@@ -1567,10 +2215,17 @@ bool HaydnMultiStageSMS::scheduleOtherIterations(
   // AIE PostPipeliner::scheduleOtherIterations (AIEPostPipeliner.cpp:949-1067).
   auto isOnEarliestChain = [&](int Start, int Target) {
     std::optional<int> Prev = Sched[Start].LastEarliestPusher;
-    while (Prev) {
-      if (*Prev == Target)
+    SmallSet<int, 8> Seen;
+    int Guard = 0;
+    const int Cap = static_cast<int>(Sched.Nodes.size()) + 1;
+    while (Prev && Guard++ < Cap) {
+      const int P = *Prev;
+      if (P == Target)
         return true;
-      Prev = Sched[*Prev].LastEarliestPusher;
+      if (P < 0 || P >= static_cast<int>(Sched.Nodes.size()) ||
+          !Seen.insert(P).second)
+        return false;
+      Prev = Sched[P].LastEarliestPusher;
     }
     return false;
   };
@@ -1618,6 +2273,23 @@ bool HaydnMultiStageSMS::scheduleOtherIterations(
     schedulePipeNode(SU, Insert, Strategy);
   }
   const int PipelineDepth = std::max(PipeHR->getPipelineDepth(), 1);
+  // SF1 steady-state format check: each iteration issues the IDENTICAL
+  // modulo cycle set, so format feasibility is iteration-invariant — verify
+  // once against a fresh local oracle seeded with the accepted copy-0
+  // placements (place() per op; a second place of the same op must fail,
+  // which is exactly why this is NOT inside the Start loop). The member
+  // oracle cannot be reused: first-iteration already placed every op.
+  haydn::bundle::ModuloCyclePlacementOracle SteadyOracle;
+  SteadyOracle.init(static_cast<unsigned>(II), haydnDefaultMCFormats());
+  for (int I = 0; I < NInstr; ++I) {
+    MachineInstr &MI = *TwoCopyDAG->SUnits[I].getInstr();
+    if (!SteadyOracle.place(placementOpcode(MI), Sched[I].ModuloCycle)) {
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: steady-state format conflict"
+                        << " SU=" << I << " mod=" << Sched[I].ModuloCycle
+                        << "\n");
+      return false;
+    }
+  }
   ResourceScoreboard<HaydnFuncUnitWrapper> Resources;
   Resources.config(0, 2 * II + PipelineDepth);
   for (int Start = 0; Start < II + PipelineDepth; Start += II) {
@@ -1644,35 +2316,84 @@ bool HaydnMultiStageSMS::scheduleWithStrategy(HaydnMultiStageStrategy &S) {
   return scheduleOtherIterations(S);
 }
 
-bool HaydnMultiStageSMS::tryPipeApproaches(const HaydnHazardRecognizer &HR) {
-  // AIE tryApproaches Static vs Tweaked reset/retry (AIEPostPipeliner.cpp:1441-1466).
-  // ExtraStages 0/1 is AIE ConfigStrategy.LatestBias = MinLength + Extra*II.
-  // Full ConfigStrategy lattice / SWPSolver omitted (do not import AIE solver).
+bool HaydnMultiStageSMS::tryPipeApproaches(HaydnHazardRecognizer &HR) {
+  // AIE tryApproaches ConfigStrategy lattice (AIEPostPipeliner.cpp:1441-1473).
+  // AIE then calls SWPSolver (AIESWPSolver.cpp, Z3). Haydn does not
+  // ship LLVM_WITH_Z3 and has no pragma-II; the seat is fail-closed.
   PipeHR = &HR;
+  LastSWPSolverStatus = "unavailable";
   const int PipeDepth = std::max(HR.getPipelineDepth(), 1);
   ScoreboardSize = 2 * II + PipeDepth;
   PipeScoreboard.config(0, ScoreboardSize - 1);
-  constexpr int HeuristicRuns = 8;
-  const int ExtraStages[] = {1, 0};
-  for (int Extra : ExtraStages) {
-    HaydnMultiStageStrategy Strategy(*TwoCopyDAG, Sched,
-                                     MinLength + Extra * II);
+  using Prio = HaydnConfigStrategy::PriorityComponent;
+  using Plc = HaydnConfigStrategy::PlacementModifier;
+  // AIE tryApproaches uses HeuristicRuns=8. Dense MAC bodies (bkfir)
+  // times that lattice livelocked post-RA; shrink the run count so the
+  // Latest / pusher caps stay the hang bound.
+  const int HeuristicRuns = NInstr > LargeBodyInstrs ? 2 : 8;
+  const HaydnConfigStrategy::Configuration Heuristics[] = {
+      {1, true, false, 1, {Prio::NodeNum}, {}},
+      {0, true, false, HeuristicRuns, {Prio::NodeNum}, {}},
+      {1, true, false, HeuristicRuns, {Prio::Latest}, {}},
+      {1, true, false, HeuristicRuns, {Prio::Critical}, {}},
+      {1, true, false, HeuristicRuns, {Prio::Latest, Prio::Sibling}, {}},
+      {1, true, false, HeuristicRuns, {Prio::DepLength, Prio::Latest}, {}},
+      {1, true, false, HeuristicRuns, {Prio::Critical, Prio::LCDLatest}, {}},
+      {1, true, false, HeuristicRuns, {Prio::Liveness, Prio::Latest}, {}},
+      {1,
+       true,
+       false,
+       HeuristicRuns,
+       {Prio::EffHeight, Prio::Latest},
+       {Plc::DeferNonCritical}},
+      {0, false, false, 2, {Prio::Critical, Prio::LCDLatest}, {}},
+      {1, false, false, 2, {Prio::Critical, Prio::LCDLatest}, {}},
+      {1, false, false, 1, {Prio::NodeNum}, {}},
+  };
+  for (const auto &Config : Heuristics) {
+    HaydnConfigStrategy Strategy(*TwoCopyDAG, Sched,
+                                 MinLength + Config.ExtraStages * II,
+                                 Config.TopDown, Config.Alternate,
+                                 Config.Components, Config.Modifiers);
     resetPipeSchedule(/*FullReset=*/true);
-    for (int Run = 0; Run < HeuristicRuns; ++Run) {
-      if (scheduleWithStrategy(Strategy))
+    for (int Run = 0; Run < Config.Runs && Run < HeuristicRuns; ++Run) {
+      if (scheduleWithStrategy(Strategy)) {
+        LastStrategyName = "Config";
         return true;
+      }
       if (!Strategy.checkAndResetChanged())
         break;
       resetPipeSchedule(/*FullReset=*/false);
     }
   }
+  HaydnIterCountSlackStrategy Relaxed(*TwoCopyDAG, Sched, MinLength + II);
+  resetPipeSchedule(/*FullReset=*/true);
+  if (scheduleWithStrategy(Relaxed)) {
+    LastStrategyName = "IterCountSlack";
+    return true;
+  }
+  // AIE PostPipeliner::tryApproaches last arm is SWPSolver (Z3).
+  // Without Z3 / pragma-II the arm does not invent a second solver.
+  LastSWPSolverStatus = "unavailable";
   return false;
 }
 
 bool HaydnMultiStageSMS::computeASAPEarliest() {
   // Intra-iteration ASAP is computeForward; LCD fold is computeLoopCarriedParameters.
+  // Seed conflict-set SlotCounts first so biasForLocalResourceContention
+  // (AIEPostPipeliner.cpp:286-318) participates in LinearLength. Without
+  // this, MaxII is the unbiased window and SF9 bias cannot widen search.
   if (!TwoCopyDAG || NInstr < 1)
     return false;
+  LastResourceBias = false;
+  for (int K = 0; K < NInstr; ++K) {
+    Sched[K].Earliest = 0;
+    Sched[K].Ancestors.clear();
+    if (MachineInstr *MI = TwoCopyDAG->SUnits[K].getInstr())
+      Sched[K].Slots = conflictSlotsForMI(*MI);
+    else
+      Sched[K].Slots = HaydnMultiStageSlotCounts();
+  }
   computeForward();
   LinearLength = 0;
   for (int I = 0; I < NInstr; ++I)
@@ -1680,11 +2401,28 @@ bool HaydnMultiStageSMS::computeASAPEarliest() {
   return LinearLength >= 1;
 }
 
-bool HaydnMultiStageSMS::tryII(int TryII, const HaydnHazardRecognizer &HR) {
+bool HaydnMultiStageSMS::tryII(int TryII, HaydnHazardRecognizer &HR) {
   assert(TryII >= 1);
   if (TryII < RecMII)
     return false;
   II = TryII;
+  // SF2: HR occupancySlots / resolveBookingOpcode read the transient pin
+  // so checkConflict books the same member SlotSet the oracle searched.
+  // Restore the function-lifetime map on every exit of this attempt.
+  struct AltDescScope {
+    HaydnHazardRecognizer &HR;
+    HaydnAlternateDescriptors *Saved;
+    AltDescScope(HaydnHazardRecognizer &H, HaydnAlternateDescriptors *A)
+        : HR(H), Saved(H.getAlternateDescriptors()) {
+      HR.setAlternateDescriptors(A);
+    }
+    ~AltDescScope() { HR.setAlternateDescriptors(Saved); }
+  } PinScope(HR, &SearchAlts);
+  // SF1: seed the HR modulo oracle wholesale — a rejected II discards
+  // the state (next tryII re-inits). Placement probes use canPlaceModulo;
+  // the accept path mutates via placeModulo. checkConflict now also
+  // asks isFormatAvailable / getFormatOrNull on booked Slots.
+  HR.ModuloOracle.init(static_cast<unsigned>(TryII), haydnDefaultMCFormats());
   if (!computeLoopCarriedParameters())
     return false;
   if (TryII < RecMII) {
@@ -1719,6 +2457,39 @@ bool HaydnMultiStageSMS::tryII(int TryII, const HaydnHazardRecognizer &HR) {
     ++ResourceRetryCount;
     return false;
   }
+  // F44 placement-legality certificate (golden Constraints:67): no
+  // may-alias store→load pair inside one modulo-cycle pack group. This is a
+  // property of the PLACEMENT itself, so it gates every tryII candidate
+  // (raising II may separate the pair into different pack windows).
+  if (!certificatePackAlias()) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: reject pack-alias\n");
+    HasValidPlan = false;
+    ++ResourceRetryCount;
+    return false;
+  }
+  // SF3: format infeasibility rejects this II — never sequentialize.
+  if (!certificateExactCommitPlan()) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: reject exact-commit (format)\n");
+    HasValidPlan = false;
+    ++ResourceRetryCount;
+    return false;
+  }
+  if (!certificateKernelPlan()) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: reject kernel-plan\n");
+    HasValidPlan = false;
+    ++ResourceRetryCount;
+    return false;
+  }
+  // Planned parcels are counted from ExactCommitPlan, not copied from II.
+  const int Planned = countPlannedParcels();
+  if (Planned != II) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: reject planned-parcels="
+                      << Planned << " != II=" << II << "\n");
+    HasValidPlan = false;
+    ++ResourceRetryCount;
+    return false;
+  }
+  MeasuredII = Planned;
   LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: tryII success II=" << II
                     << " NStages=" << NStages << "\n");
   return true;
@@ -1888,9 +2659,13 @@ static bool prologUsesAreAvailable(
   return true;
 }
 
-// Loop-carried self-bump (iv = iv + step). Peeling these into the prolog
-// is wrong: the dest is not live at insert (P2 vec_scale: ADD32 r14,r14,r6
-// aborted materialize after tryII II=2). Leave them in the kernel only.
+// Loop-carried self-bump (iv = iv + step). F40: a stage-s consumer of a
+// bumped IV needs k+s bumps before the kernel starts; the kernel body runs
+// only the remaining k, so every skipped bump is a stale-address deficit.
+// The ONLY skippable self-bump is the soft TRIP bump — its deficit is
+// exactly absorbed by adjustSoftTripCount's preheader ADDI32. All other
+// self-bumps (pointer IVs) must be cloned into the prologue, or the plan
+// rejected when the clone's uses are not live at the insert point.
 static bool isLoopCarriedSelfBump(const MachineInstr &MI) {
   unsigned Opc = MI.getOpcode();
   if (Opc != Haydn::ADD32 && Opc != Haydn::SUB32 && Opc != Haydn::ADDI32 &&
@@ -1907,6 +2682,14 @@ static bool isLoopCarriedSelfBump(const MachineInstr &MI) {
       return true;
   }
   return false;
+}
+
+// The one self-bump whose prologue deficit has a closed-form correction:
+// the soft countdown trip itself (adjustSoftTripCount re-bases the counter
+// in the preheader, so cloning it into the prologue would double-count).
+static bool isSoftTripBumpMI(const MachineInstr &MI) {
+  Register Trip;
+  return isSoftCountdownBump(MI, Trip);
 }
 
 void HaydnMultiStageSMS::clearPlan() {
@@ -1928,11 +2711,98 @@ void HaydnMultiStageSMS::clearPlan() {
   destroyTwoCopyGraph();
   LCDEdges.clear();
   ExactCommitPlan.clear();
+  MemberPin.clear();
+  SearchAlts.clear();
+  MeasuredII = 0;
+  LastStrategyName = nullptr;
+  LastSWPSolverStatus = "unavailable";
+  LastResourceBias = false;
+  LastEpiloguePreseed = false;
   OrdinarySnapshot.clear();
 }
 
+unsigned HaydnMultiStageSMS::placementOpcode(const MachineInstr &MI) const {
+  auto It = MemberPin.find(&MI);
+  if (It != MemberPin.end())
+    return It->second;
+  return MI.getOpcode();
+}
+
+bool HaydnMultiStageSMS::pinTransientMembers() {
+  // SF2: AIE staticallyMaterializeMultiSlotInstructions
+  // (AIEInterBlockScheduling.cpp:1560-1571). Pin each MultiSlot logical to
+  // one generated member before placement. Instance-aware least-loaded
+  // FieldSlots bit (AIE unused-slot assignment). Analysis-only never
+  // setDesc's the MI.
+  MemberPin.clear();
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  unsigned SlotOcc[Haydn::ISSUE_SLOT_COUNT] = {};
+  for (SUnit *SU : Body) {
+    MachineInstr *MI = SU->getInstr();
+    if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
+      continue;
+    const unsigned Log = MI->getOpcode();
+    if (!hasPlacementAlternatives(Fmts, Log))
+      continue;
+    SmallVector<PlacementAlternative, 8> Alts;
+    if (!enumeratePlacementAlternatives(Fmts, Log, Alts) || Alts.empty())
+      return false;
+    const PlacementAlternative *Best = nullptr;
+    unsigned BestS = Haydn::ISSUE_SLOT_COUNT;
+    unsigned BestLoad = ~0u;
+    for (const PlacementAlternative &A : Alts) {
+      if (!A.MemberOpcode || !A.FieldSlots)
+        continue;
+      for (unsigned S = 0; S < Haydn::ISSUE_SLOT_COUNT; ++S) {
+        if (!(A.FieldSlots & (SlotBits(1) << S)))
+          continue;
+        if (SlotOcc[S] < BestLoad ||
+            (SlotOcc[S] == BestLoad && S < BestS)) {
+          BestLoad = SlotOcc[S];
+          BestS = S;
+          Best = &A;
+        }
+      }
+    }
+    if (!Best)
+      Best = &Alts.front();
+    if (!Best->MemberOpcode)
+      return false;
+    MemberPin[MI] = Best->MemberOpcode;
+    if (BestS < Haydn::ISSUE_SLOT_COUNT)
+      ++SlotOcc[BestS];
+  }
+  return true;
+}
+
+bool HaydnMultiStageSMS::peelSideEffectFree() {
+  // AIE PostPipeliner::peelSideEffectFree (AIEPostPipeliner.cpp:1630-1676).
+  // If stage 0 is entirely side-effect-free and trip covers NStages-1,
+  // drop that stage instead of rejecting the schedule.
+  if (NStages < 2 || !TwoCopyDAG)
+    return false;
+  const int OneFewer = NStages - 1;
+  const int Saved = NStages;
+  NStages = OneFewer;
+  const bool TripOK = hasSufficientTripCount();
+  NStages = Saved;
+  if (!TripOK)
+    return false;
+  for (int K = 0; K < NInstr; ++K) {
+    if (Sched[K].Stage != 0)
+      continue;
+    MachineInstr *MI = TwoCopyDAG->SUnits[K].getInstr();
+    if (!isSideEffectFreeMI(MI))
+      return false;
+  }
+  --NStages;
+  LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: peeled SEF stage, NStages="
+                    << NStages << "\n");
+  return NStages >= 1;
+}
+
 bool HaydnMultiStageSMS::hasSufficientTripCount() const {
-  if (!TripCountDef || NStages < 2 || NStages > 4)
+  if (!TripCountDef || NStages < 1 || NStages > 4)
     return false;
   // tryII already rejects NStages > 4. Peels consume NStages-1 iterations;
   // require the static trip (when known) to cover full stage depth.
@@ -1943,7 +2813,15 @@ bool HaydnMultiStageSMS::hasSufficientTripCount() const {
     Register Trip;
     if (!isSoftCountdownBump(*TripCountDef, Trip))
       return false;
-    return Trip.isPhysical() && Trip != Haydn::R0 && Preheader != nullptr;
+    if (!Trip.isPhysical() || Trip == Haydn::R0 || !Preheader)
+      return false;
+    // F39: the prologue unconditionally peels NStages-1 iterations before
+    // the kernel runs; if the real trip is smaller, peeled stage ops execute
+    // for iterations that never happen (OOB loads/stores) and the preheader
+    // ADDI32 drives the countdown negative. There is no runtime guard, so a
+    // static min-trip proof (exact preheader constant, or the loop-MD
+    // itercount.range floor) is mandatory; unknown trip fails closed.
+    return provenMinTripCount().has_value();
   }
 
   const unsigned Opc = TripCountDef->getOpcode();
@@ -1957,25 +2835,63 @@ bool HaydnMultiStageSMS::hasSufficientTripCount() const {
     // After -(NStages-1) the remaining kernel trip must stay positive.
     return Cnt >= Need && (Cnt - PeelIters) >= 1;
   }
-  // LoopStart: adj is simm6; require the peel delta stays encodable. Static
-  // trip lives in $src and is not always an imm at this point.
+  // LoopStart: $src holds the static trip, $adj (simm6) is the SMS delta.
+  // F39: the peel still executes NStages-1 real iterations, so $src needs a
+  // static min-trip proof AND the adjusted adj must stay encodable.
   if (Opc == Haydn::LoopStart) {
     if (TripCountDef->getNumOperands() < 2 ||
+        !TripCountDef->getOperand(0).isReg() ||
         !TripCountDef->getOperand(1).isImm())
       return false;
     int64_t NewAdj = TripCountDef->getOperand(1).getImm() - PeelIters;
-    return NewAdj >= -32 && NewAdj <= 31;
+    if (NewAdj < -32 || NewAdj > 31)
+      return false;
+    return provenMinTripCount().has_value();
   }
-  // Register-trip: static trip not known; remat absorbs -(NStages-1). Require
-  // a non-R0 physreg trip source so remat has a real Src.
+  // Register-trip: remat absorbs -(NStages-1) into the count register, but
+  // F39 still needs a static min-trip proof >= NStages — the prologue peels
+  // real iterations before the ZOL kernel starts.
   if (TII->isHardwareLoopRegTripOpcode(Opc)) {
     if (TripCountDef->getNumOperands() <= 3 ||
         !TripCountDef->getOperand(3).isReg())
       return false;
     Register Cnt = TripCountDef->getOperand(3).getReg();
-    return Cnt.isPhysical() && Cnt != Haydn::R0;
+    if (!Cnt.isPhysical() || Cnt == Haydn::R0)
+      return false;
+    return provenMinTripCount().has_value();
   }
   return false;
+}
+
+/// F39 combined static-trip proof: exact preheader constant (authoritative),
+/// else the loop-MD minimum, else the -haydn-loop-min-tripcount soak floor
+/// (the same single option the pre-RA ZOL gate uses). Either source must
+/// prove trip >= Need and trip - PeelIters >= 1; otherwise std::nullopt
+/// (fail closed).
+std::optional<int64_t> HaydnMultiStageSMS::provenMinTripCount() const {
+  if (!LoopBB || !Preheader)
+    return std::nullopt;
+  const int Need = NStages;
+  const int PeelIters = NStages - 1;
+  auto sufficient = [&](int64_t C) {
+    return C >= Need && (C - PeelIters) >= 1;
+  };
+  std::optional<int64_t> Exact;
+  if (IsSoftCounted) {
+    Register Trip;
+    if (!isSoftCountdownBump(*TripCountDef, Trip) || !Trip.isPhysical() ||
+        Trip == Haydn::R0)
+      return std::nullopt;
+    Exact = staticPhysTripConstant(Trip, *Preheader);
+  }
+  if (Exact)
+    return sufficient(*Exact) ? Exact : std::nullopt;
+  std::optional<int64_t> MD = loopMDMinTripCount(*LoopBB);
+  if (MD && sufficient(*MD))
+    return MD;
+  if (HaydnLoopMinTripCount > 0 && sufficient(HaydnLoopMinTripCount))
+    return static_cast<int64_t>(HaydnLoopMinTripCount.getValue());
+  return std::nullopt;
 }
 
 bool HaydnMultiStageSMS::certificateTripAdjust() const {
@@ -1987,7 +2903,7 @@ bool HaydnMultiStageSMS::certificateTripAdjust() const {
 bool HaydnMultiStageSMS::certificateKernelPlan() const {
   assert(HasValidPlan && II >= 1);
   const int N = static_cast<int>(Body.size());
-  if (N < 2 || NStages < 2 || NStages > 4 || II < 1)
+  if (N < 2 || NStages < 1 || NStages > 4 || II < 1)
     return false;
 
   int MaxStage = 0;
@@ -2005,10 +2921,14 @@ bool HaydnMultiStageSMS::certificateKernelPlan() const {
   if (MaxStage + 1 != NStages)
     return false;
 
-  // Latency deps still hold under absolute cycles (including wrap via stage).
+  // SF4: all placement-relevant kinds re-check the kernel (certificate,
+  // not window). Data/memory already constrained placement; Anti/Output
+  // with unsigned latency 0 require Cycle[use] >= Cycle[def].
   for (int I = 0; I < N; ++I) {
     for (const SDep &Pred : Body[I]->Preds) {
       if (Pred.getSUnit()->isBoundaryNode())
+        continue;
+      if (!isPlacementDep(Pred))
         continue;
       for (int J = 0; J < N; ++J) {
         if (Body[J] != Pred.getSUnit())
@@ -2020,10 +2940,9 @@ bool HaydnMultiStageSMS::certificateKernelPlan() const {
     }
   }
 
-  // Kernel certificate: every modulo group is at most issue-width wide.
-  // Multi-MI groups that pass canCoissueProductCycle exact-commit as one
-  // Format E parcel; groups that fail coissue stay sequential parcels
-  // (still a legal multi-stage schedule via prolog/epilog peels).
+  // SF3: every modulo group is at most issue-width wide. Multi-MI groups
+  // must be able to exact-commit as one Format E parcel — sequential
+  // fallback is not a legal accepted kernel.
   for (int M = 0; M < II; ++M) {
     unsigned Count = 0;
     for (int I = 0; I < N; ++I) {
@@ -2034,7 +2953,7 @@ bool HaydnMultiStageSMS::certificateKernelPlan() const {
         continue;
       ++Count;
     }
-    if (Count > 3)
+    if (Count > Haydn::ISSUE_SLOT_COUNT)
       return false;
   }
   return true;
@@ -2055,11 +2974,76 @@ bool HaydnMultiStageSMS::certificateExactCommitPlan() {
         continue;
       Group.push_back(MI);
     }
-    if (Group.size() < 2)
+    if (Group.empty()) {
+      ExactCommitPlan[M] = true; // idle parcel of the II
       continue;
-    const unsigned NBundle = std::min<unsigned>(Group.size(), 3);
-    ArrayRef<MachineInstr *> Slice(Group.data(), NBundle);
-    ExactCommitPlan[M] = haydn::bundle::canCoissueProductCycle(Slice);
+    }
+    if (Group.size() == 1) {
+      ExactCommitPlan[M] = true; // singleton parcel
+      continue;
+    }
+    // More than issue-width members would sequentialize leftovers.
+    // Format infeasibility rejects the II — never a 3+tail split.
+    if (Group.size() > Haydn::ISSUE_SLOT_COUNT)
+      return false;
+    ArrayRef<MachineInstr *> Slice(Group.data(), Group.size());
+    if (!haydn::bundle::canCoissueProductCycle(Slice))
+      return false;
+    ExactCommitPlan[M] = true;
+  }
+  return true;
+}
+
+int HaydnMultiStageSMS::countPlannedParcels() const {
+  // AIE visitPipelineSection (AIEPostPipeliner.cpp:1706-1715) walks
+  // M=0..II-1 and emits one bundle per modulo cycle. Overlay: each cycle
+  // is one Format E parcel once ExactCommitPlan[M] is true. A false slot
+  // would sequentialize leftovers — fail closed (0) rather than report II.
+  if (II < 1 || ExactCommitPlan.size() != static_cast<size_t>(II))
+    return 0;
+  int Planned = 0;
+  for (int M = 0; M < II; ++M) {
+    if (!ExactCommitPlan[M])
+      return 0;
+    ++Planned;
+  }
+  return Planned;
+}
+
+/// F44 pack-boundary alias law (golden Constraints:67): within one Format E
+/// parcel, a store and a load must not target overlapping addresses; if
+/// non-overlap cannot be PROVEN, the compiler must place them in separate
+/// parcels. The multi-stage kernel packs each modulo cycle's group into one
+/// issue cycle; checkConflict now covers Format E occupancy, but alias is
+/// a memory law, not a slot-cover law. Fail closed per pair:
+/// AA NoAlias (or trivially disjoint accesses) is the only accept.
+bool HaydnMultiStageSMS::certificatePackAlias() const {
+  if (!HasValidPlan || II < 1 || Body.empty())
+    return false;
+  AAResults *AA =
+      DAG ? static_cast<HaydnScheduleDAGMI *>(DAG)->getAliasAnalysis()
+          : nullptr;
+  const int N = static_cast<int>(Body.size());
+  for (int M = 0; M < II; ++M) {
+    SmallVector<MachineInstr *, 4> Group;
+    for (int I = 0; I < N; ++I) {
+      if (Sched[I].ModuloCycle != M)
+        continue;
+      MachineInstr *MI = Body[I]->getInstr();
+      if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
+        continue;
+      Group.push_back(MI);
+    }
+    // Pack-layer gate (HaydnPackLegality, Constraints:67). Same predicate
+    // the ordinary ReadyCycle path does not own — Order latency 0 would
+    // otherwise let a may-alias store/load share one Format E parcel.
+    if (haydn::pack::cycleHasMayAliasStoreLoad(ArrayRef<MachineInstr *>(Group),
+                                               AA)) {
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: may-alias store/load in pack "
+                           "cycle "
+                        << M << "\n");
+      return false;
+    }
   }
   return true;
 }
@@ -2097,54 +3081,12 @@ bool HaydnMultiStageSMS::certificateLCDTwoIteration() const {
 }
 
 bool HaydnMultiStageSMS::certificateLifetimesNoSpill() const {
-  if (!HasValidPlan || II < 1 || Body.empty())
-    return false;
-  const int N = static_cast<int>(Body.size());
-  SmallVector<int, 16> Order;
-  for (int I = 0; I < N; ++I) {
-    if (!Sched[I].Scheduled)
-      return false;
-    Order.push_back(I);
-  }
-  llvm::stable_sort(Order, [&](int A, int B) {
-    if (Sched[A].Cycle != Sched[B].Cycle)
-      return Sched[A].Cycle < Sched[B].Cycle;
-    return A < B;
-  });
-  DenseMap<unsigned, int> OpenDef;
-  for (int Idx : Order) {
-    MachineInstr *MI = Body[Idx]->getInstr();
-    if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
-      continue;
-    const int C = Sched[Idx].Cycle;
-    for (const MachineOperand &MO : MI->operands()) {
-      if (!MO.isReg() || !MO.readsReg() || !MO.getReg().isPhysical())
-        continue;
-      Register Reg = MO.getReg();
-      if (Reg == Haydn::R0)
-        continue;
-      auto It = OpenDef.find(Reg.id());
-      if (It == OpenDef.end())
-        continue;
-      if (C >= It->second && (C - It->second) >= II)
-        return false;
-    }
-    for (const MachineOperand &MO : MI->operands()) {
-      if (!MO.isReg() || !MO.isDef() || !MO.getReg().isPhysical())
-        continue;
-      Register Reg = MO.getReg();
-      if (Reg == Haydn::R0)
-        continue;
-      OpenDef.erase(Reg.id());
-      if (!MO.isDead())
-        OpenDef[Reg.id()] = C;
-    }
-  }
-  return true;
+  // SF8: one regsOverlap lifetime proof at search time.
+  return proveLivePhysNoSpillSubreg();
 }
 
 bool HaydnMultiStageSMS::certificateDistinctStageOccupancy() const {
-  if (!HasValidPlan || NStages < 2 || Body.empty())
+  if (!HasValidPlan || NStages < 1 || Body.empty())
     return false;
   SmallVector<bool, 4> Occupied(NStages, false);
   for (int I = 0; I < NInstr; ++I) {
@@ -2160,21 +3102,27 @@ bool HaydnMultiStageSMS::certificateDistinctStageOccupancy() const {
 }
 
 void HaydnMultiStageSMS::recordSWPSAnnotation() const {
-  if (!HasValidPlan || !LoopBB || !DAG || II < 1 || NStages < 2)
+  if (!HasValidPlan || !LoopBB || !DAG || II < 1 || NStages < 1)
+    return;
+  // Never stamp an assumed II. Analysis-only does not reach here;
+  // materialize only calls this after ParcelsCommitted == II.
+  if (MeasuredII != II)
     return;
   auto *MFI = DAG->MF.getInfo<HaydnMachineFunctionInfo>();
   if (!MFI)
     return;
+  const int ReportII = MeasuredII;
   HaydnMachineFunctionInfo::SMSSWPSInfo SW;
   SW.ResMII = static_cast<unsigned>(std::max(0, LastResMII));
   SW.RecMII = static_cast<unsigned>(std::max(0, RecMII));
   SW.MII = std::max(SW.ResMII, SW.RecMII);
   SW.StageCount = static_cast<unsigned>(NStages);
   SW.NumOps = static_cast<unsigned>(Body.size());
-  SW.ScheduledII = static_cast<unsigned>(II);
+  SW.ScheduledII = static_cast<unsigned>(ReportII);
   MFI->recordSMSLoop(LoopBB, SW);
   emitRemark(*LoopBB, "MultiStageSWPS",
-             "swps II=" + Twine(II) + " stages=" + Twine(NStages) +
+             "swps measured-II=" + Twine(ReportII) + " searched-II=" +
+                 Twine(II) + " stages=" + Twine(NStages) +
                  " ResMII=" + Twine(LastResMII) + " RecMII=" + Twine(RecMII) +
                  " ops=" + Twine((unsigned)Body.size()));
 }
@@ -2253,16 +3201,133 @@ bool HaydnMultiStageSMS::certificatePrologLiveness(
         if (Sched[I].ModuloCycle != M || Sched[I].Cycle >= (S + 1) * II)
           continue;
         MachineInstr *Orig = Body[I]->getInstr();
+        // Soft trip bump is never cloned: adjustSoftTripCount's preheader
+        // ADDI32 absorbs the peel deficit. Cloning it when uses happen to
+        // be live would double-count (ADDI32 plus peeled decrements).
+        // Every other self-bump (pointer IVs) must stay in the peel, or
+        // the plan rejects when uses are not live at the insert point.
+        if (IsSoftCounted && isSoftTripBumpMI(*Orig))
+          continue;
         if (!prologUsesAreAvailable(*Preheader, PrologInsertPt, SimulatedProlog,
-                                    *Orig)) {
-          if (isLoopCarriedSelfBump(*Orig))
-            continue;
+                                    *Orig))
           return false;
-        }
         SimulatedProlog.push_back(Orig);
       }
     }
   }
+  return true;
+}
+
+bool HaydnMultiStageSMS::emitEpilogueWithKernelPreseed(
+    SmallVectorImpl<MachineInstr *> &EpilogMIs,
+    ArrayRef<SmallVector<int, 4>> KernelByMod) {
+  // AIE initializeTopScoreBoard (AIEMachineScheduler.cpp:407-447) plus
+  // visitPipelineSection empty-bundle emission (AIEPostPipeliner.cpp:1697-
+  // 1717 / PipelineExtractor finish trim). Replay kernel parcels until
+  // steady, then emit epilogue clones cycle-accurately. Leftover occupancy
+  // and internal empty peel cycles become architectural NOP idle; trailing
+  // empty cycles are dropped (AIE finish() NonEmpty trim).
+  LastEpiloguePreseed = false;
+  if (!EpilogMBB || !DAG || II < 1 || NInstr < 1 || NStages < 2)
+    return false;
+  if (static_cast<int>(KernelByMod.size()) < II)
+    return false;
+
+  const TargetSubtargetInfo &ST = DAG->MF.getSubtarget();
+  const TargetInstrInfo *TII = ST.getInstrInfo();
+  // SearchAlts keys two-copy clones. Epilogue replay/peel uses original
+  // body MIs and off-side clones, so stamp a local map from MemberPin
+  // (AIE MultiSlot materialize before scoreboard emit).
+  HaydnAlternateDescriptors EpiAlts;
+  for (int I = 0; I < NInstr; ++I) {
+    MachineInstr *Orig = Body[I] ? Body[I]->getInstr() : nullptr;
+    if (!Orig)
+      continue;
+    auto It = MemberPin.find(Orig);
+    if (It != MemberPin.end())
+      EpiAlts.setAlternateDescriptor(Orig, It->second, *TII);
+  }
+  HaydnHazardRecognizer EpiHR(TII, ST.getInstrItineraryData(),
+                              /*IsPreRA=*/false, &EpiAlts);
+  ResourceScoreboard<HaydnFuncUnitWrapper> EpiSB;
+  // AIE initializeTopScoreBoard (AIEMachineScheduler.cpp:427-433):
+  // replay = ceil(LoopSize / getConflictHorizon()). Overlay: Haydn peels
+  // into a distinct EpilogMBB, so this local scoreboard is the live Top
+  // HR. reset(D) == config(-D, D-1) keeps the booked cycle after
+  // advance(); config(0, …) would clear it (pre-seed absent).
+  const int ConflictHorizon = EpiHR.getConflictHorizon();
+  const int Window = ConflictHorizon + std::max(II, 1);
+  EpiSB.reset(Window);
+  const int LoopReplayTimes = (II + ConflictHorizon - 1) / ConflictHorizon;
+  for (int R = 0; R < LoopReplayTimes; ++R) {
+    for (int M = 0; M < II; ++M) {
+      for (int Idx : KernelByMod[M]) {
+        if (Idx < 0 || Idx >= NInstr)
+          continue;
+        if (MachineInstr *MI = Body[Idx]->getInstr())
+          EpiHR.emitInScoreboard(EpiSB, *MI, 0);
+      }
+      EpiSB.advance();
+    }
+  }
+
+  const int N = static_cast<int>(Body.size());
+  const int EpiBase = 1;
+  const int Cap = ConflictHorizon + II;
+  size_t EpiIdx = 0;
+  int PendingEmpty = 0;
+  auto emitIdle = [&]() {
+    TII->insertNoop(*EpilogMBB, EpilogMBB->end());
+    EpiSB.advance();
+  };
+
+  for (int S = 0; S < NStages - 1; ++S) {
+    for (int M = 0; M < II; ++M) {
+      SmallVector<MachineInstr *, 4> Cycle;
+      for (int I = 0; I < N; ++I) {
+        if (Sched[I].ModuloCycle != M ||
+            Sched[I].Cycle < (EpiBase + S) * II)
+          continue;
+        if (EpiIdx >= EpilogMIs.size())
+          return false;
+        MachineInstr *Clone = EpilogMIs[EpiIdx++];
+        if (MachineInstr *Orig = Body[I]->getInstr()) {
+          auto Pin = MemberPin.find(Orig);
+          if (Pin != MemberPin.end())
+            EpiAlts.setAlternateDescriptor(Clone, Pin->second, *TII);
+        }
+        Cycle.push_back(Clone);
+      }
+      if (Cycle.empty()) {
+        ++PendingEmpty;
+        continue;
+      }
+      while (PendingEmpty > 0) {
+        emitIdle();
+        --PendingEmpty;
+      }
+      auto cycleConflicts = [&]() {
+        for (MachineInstr *C : Cycle)
+          if (EpiHR.checkConflict(EpiSB, *C, 0))
+            return true;
+        return false;
+      };
+      int Guard = 0;
+      while (cycleConflicts() && Guard++ < Cap)
+        emitIdle();
+      if (cycleConflicts())
+        return false;
+      for (MachineInstr *Clone : Cycle) {
+        EpilogMBB->insert(EpilogMBB->end(), Clone);
+        addUsesAsLiveIns(*EpilogMBB, *Clone);
+        EpiHR.emitInScoreboard(EpiSB, *Clone, 0);
+      }
+      EpiSB.advance();
+    }
+  }
+  if (EpiIdx != EpilogMIs.size())
+    return false;
+  LastEpiloguePreseed = true;
   return true;
 }
 
@@ -2276,18 +3341,6 @@ bool HaydnMultiStageSMS::materialize() {
   }
 
   OrdinarySnapshot.capture(Preheader, LoopBB, ExitBB);
-  auto rejectNoMutate = [&](const char *Why) -> bool {
-    ++NumMultiStageCertReject;
-    ++NumMultiStageFail;
-    LastRejectReason = Why;
-    OrdinarySnapshot.clear();
-    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: force-fail pre-mutation — "
-                      << Why << "\n");
-    if (LoopBB)
-      emitRemark(*LoopBB, "MultiStageReject",
-                 Twine("force-fail before mutation (") + Why + ")");
-    return false;
-  };
   auto rollback = [&](const char *Why) -> bool {
     ++NumMultiStageCertReject;
     ++NumMultiStageFail;
@@ -2315,7 +3368,7 @@ bool HaydnMultiStageSMS::materialize() {
                      ")");
     return false;
   };
-  if (!certificateTripAdjust())
+  if (NStages >= 2 && !certificateTripAdjust())
     return rejectCert("trip-adjust");
   if (!certificateKernelPlan())
     return rejectCert("kernel-plan");
@@ -2324,15 +3377,16 @@ bool HaydnMultiStageSMS::materialize() {
     return rejectCert("exact-commit-plan");
 
   // Compute prolog insert point and run off-side prolog/epilog certificates.
+  // SF5: NStages==1 is kernel-only — no peel blocks, no trip peel.
   MachineBasicBlock::iterator PrologInsertPt =
       Preheader->getFirstTerminator();
   for (MachineInstr &MI : *Preheader) {
     if (isHwLoopSetup(MI))
       PrologInsertPt = std::next(MI.getIterator());
   }
-  if (!certificatePrologLiveness(PrologInsertPt))
+  if (NStages >= 2 && !certificatePrologLiveness(PrologInsertPt))
     return rejectCert("prolog-liveness");
-  if (!certificateEpilogUses())
+  if (NStages >= 2 && !certificateEpilogUses())
     return rejectCert("epilog-uses");
 
   const int N = static_cast<int>(Body.size());
@@ -2353,16 +3407,15 @@ bool HaydnMultiStageSMS::materialize() {
   }
 
   // ---- Off-side clone plan (MF still unmodified) ----
-  // Prologue (AIE visitPipelineSchedule): for each prologue stage S, emit
-  // nodes with ModuloCycle==M && Cycle < (S+1)*II. Cap NStages at 4 in tryII.
-  // Skip loop-carried self-bumps (stay in kernel). Certificate already proved
-  // every non-bump peel is live; a post-cert liveness miss is fail-closed
-  // before any insert (delete orphan clones, leave MF unchanged).
-  const int NPrologStages = NStages - 1;
+  // SF10: AIE visitPipelineSection (AIEPostPipeliner.cpp:1697-1717) —
+  // for each prologue stage S, for each modulo cycle M, emit nodes with
+  // ModuloCycle==M && Cycle < (S+1)*II. NStages==1 is kernel-only.
+  const int NPrologStages = std::max(0, NStages - 1);
   SmallVector<MachineInstr *, 8> PrologMIs;
   auto discardOrphanClones = [&](SmallVectorImpl<MachineInstr *> &Clones) {
     for (MachineInstr *C : Clones)
-      MF.deleteMachineInstr(C);
+      if (C && !C->getParent())
+        MF.deleteMachineInstr(C);
     Clones.clear();
   };
   for (int S = 0; S < NPrologStages; ++S) {
@@ -2371,15 +3424,15 @@ bool HaydnMultiStageSMS::materialize() {
         if (Sched[I].ModuloCycle != M || Sched[I].Cycle >= (S + 1) * II)
           continue;
         MachineInstr *Orig = Body[I]->getInstr();
+        if (IsSoftCounted && isSoftTripBumpMI(*Orig)) {
+          LLVM_DEBUG(dbgs()
+                     << "HaydnMultiStageSMS: skip prolog peel "
+                        "(soft trip bump; preheader re-base): "
+                     << *Orig);
+          continue;
+        }
         if (!prologUsesAreAvailable(*Preheader, PrologInsertPt, PrologMIs,
                                     *Orig)) {
-          if (isLoopCarriedSelfBump(*Orig)) {
-            LLVM_DEBUG(dbgs()
-                       << "HaydnMultiStageSMS: skip prolog peel "
-                          "(self-bump not live at insert): "
-                       << *Orig);
-            continue;
-          }
           discardOrphanClones(PrologMIs);
           return rejectCert("unsafe-prolog-peel");
         }
@@ -2406,6 +3459,8 @@ bool HaydnMultiStageSMS::materialize() {
     }
   }
 
+  const bool KernelOnly = NStages < 2;
+
   // ---- Mutation boundary: distinct stage MBBs + journaled rollback ----
   auto retargetSuccessor = [&](MachineBasicBlock *From, MachineBasicBlock *Old,
                                MachineBasicBlock *New) {
@@ -2430,27 +3485,32 @@ bool HaydnMultiStageSMS::materialize() {
     }
   };
 
-  PrologMBB = MF.CreateMachineBasicBlock();
-  EpilogMBB = MF.CreateMachineBasicBlock();
-  MF.insert(LoopBB->getIterator(), PrologMBB);
-  MF.insert(std::next(LoopBB->getIterator()), EpilogMBB);
-  OrdinarySnapshot.registerCreated(PrologMBB);
-  OrdinarySnapshot.registerCreated(EpilogMBB);
-  retargetSuccessor(Preheader, LoopBB, PrologMBB);
-  if (!PrologMBB->isSuccessor(LoopBB))
-    PrologMBB->addSuccessor(LoopBB);
-  retargetSuccessor(LoopBB, ExitBB, EpilogMBB);
-  if (!EpilogMBB->isSuccessor(ExitBB))
-    EpilogMBB->addSuccessor(ExitBB);
-  retargetPHIIncoming(ExitBB, LoopBB, EpilogMBB);
+  if (!KernelOnly) {
+    PrologMBB = MF.CreateMachineBasicBlock();
+    EpilogMBB = MF.CreateMachineBasicBlock();
+    MF.insert(LoopBB->getIterator(), PrologMBB);
+    MF.insert(std::next(LoopBB->getIterator()), EpilogMBB);
+    OrdinarySnapshot.registerCreated(PrologMBB);
+    OrdinarySnapshot.registerCreated(EpilogMBB);
+    retargetSuccessor(Preheader, LoopBB, PrologMBB);
+    if (!PrologMBB->isSuccessor(LoopBB))
+      PrologMBB->addSuccessor(LoopBB);
+    retargetSuccessor(LoopBB, ExitBB, EpilogMBB);
+    if (!EpilogMBB->isSuccessor(ExitBB))
+      EpilogMBB->addSuccessor(ExitBB);
+    retargetPHIIncoming(ExitBB, LoopBB, EpilogMBB);
+  }
   if (forceFailJournal(HaydnMultiStageJournalSeat::JM_ALLOC))
     return rollback("JM-ALLOC-force");
 
-  for (MachineInstr *Clone : PrologMIs)
-    PrologMBB->insert(PrologMBB->end(), Clone);
-  for (MachineInstr *Clone : EpilogMIs) {
-    EpilogMBB->insert(EpilogMBB->end(), Clone);
-    addUsesAsLiveIns(*EpilogMBB, *Clone);
+  LastEpiloguePreseed = false;
+  if (!KernelOnly) {
+    for (MachineInstr *Clone : PrologMIs)
+      PrologMBB->insert(PrologMBB->end(), Clone);
+    if (!emitEpilogueWithKernelPreseed(EpilogMIs, KernelByMod)) {
+      discardOrphanClones(EpilogMIs);
+      return rollback("epilogue-preseed");
+    }
   }
 
   MachineBasicBlock::iterator Anchor = LoopBB->end();
@@ -2476,12 +3536,28 @@ bool HaydnMultiStageSMS::materialize() {
     return rollback("JM-SPLICE-force");
 
   // Trip adjust before exact commit (JM-TRIP) while soft-countdown
-  // opcodes are still recognized by isSoftCountdownBump. Reg-trip remat
-  // mutates the setup use register; F4 snapshot restores it.
-  if (!adjustTripCount(-(NStages - 1)))
+  // opcodes are still recognized by isSoftCountdownBump. Kernel-only
+  // (NStages==1) peels zero iterations.
+  if (NStages >= 2 && !adjustTripCount(-(NStages - 1)))
     return rollback("JM-TRIP-restore");
   if (forceFailJournal(HaydnMultiStageJournalSeat::JM_TRIP))
     return rollback("JM-TRIP-force");
+
+  // SF2: stamp AltDescs from the transient member pin so commit sees
+  // the same geometry the oracle searched. setDesc stays inside
+  // commitExactMultiMIProductCycle.
+  if (DAG) {
+    const TargetInstrInfo *TII = DAG->MF.getSubtarget().getInstrInfo();
+    auto &Alts = DAG->MF.getInfo<HaydnMachineFunctionInfo>()->getAltDescs();
+    for (SUnit *SU : Body) {
+      MachineInstr *MI = SU->getInstr();
+      if (!MI)
+        continue;
+      auto It = MemberPin.find(MI);
+      if (It != MemberPin.end())
+        Alts.setAlternateDescriptor(MI, It->second, *TII);
+    }
+  }
 
   unsigned ParcelsCommitted = 0;
   for (int M = 0; M < II; ++M) {
@@ -2492,23 +3568,25 @@ bool HaydnMultiStageSMS::materialize() {
         continue;
       Group.push_back(MI);
     }
-    if (Group.size() < 2)
-      continue;
-    const unsigned NBundle = std::min<unsigned>(Group.size(), 3);
-    ArrayRef<MachineInstr *> Slice(Group.data(), NBundle);
-    const bool WantExact =
-        M < (int)ExactCommitPlan.size() && ExactCommitPlan[M];
-    if (!WantExact) {
-      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: mod=" << M
-                        << " sequential (preflight)\n");
+    // SF3: every modulo cycle is one parcel. Empty = idle (counts).
+    // Singleton = one parcel. Multi-MI must exact-commit or rollback —
+    // never sequentialize leftovers past issue width.
+    if (Group.size() > Haydn::ISSUE_SLOT_COUNT)
+      return rollback("JM-COMMIT-restore");
+    if (Group.size() < 2) {
+      ++ParcelsCommitted;
       continue;
     }
+    ArrayRef<MachineInstr *> Slice(Group.data(), Group.size());
     if (!haydn::bundle::canCoissueProductCycle(Slice) ||
         !haydn::bundle::commitExactMultiMIProductCycle(Slice)) {
       return rollback("JM-COMMIT-restore");
     }
     ++ParcelsCommitted;
   }
+  if (static_cast<int>(ParcelsCommitted) != II)
+    return rollback("measured-ii-mismatch");
+  MeasuredII = static_cast<int>(ParcelsCommitted);
   // F5: JM-COMMIT fires after exact commit, not at splice.
   if (forceFailJournal(HaydnMultiStageJournalSeat::JM_COMMIT))
     return rollback("JM-COMMIT-force");
@@ -2562,11 +3640,20 @@ bool HaydnMultiStageSMS::materialize() {
 
   NumMultiStagePeels += PrologMIs.size() + EpilogMIs.size();
   NumMultiStageKernelParcels += ParcelsCommitted;
-  if (LoopBB)
+  if (LoopBB && PrologMBB && EpilogMBB)
     emitRemark(*LoopBB, "MultiStageStageMBB",
                "stage-mbb prolog=" + Twine(PrologMBB->getNumber()) +
                    " epilog=" + Twine(EpilogMBB->getNumber()) +
-                   " stages=" + Twine(NStages));
+                   " stages=" + Twine(NStages) +
+                   " peel-order=modulo-cycle measured-II=" +
+                   Twine(MeasuredII) + " epilogue-preseed=" +
+                   Twine(LastEpiloguePreseed ? "kernel-steady" : "absent"));
+  else if (LoopBB)
+    emitRemark(*LoopBB, "MultiStageStageMBB",
+               "stage-mbb kernel-only stages=" + Twine(NStages) +
+                   " measured-II=" + Twine(MeasuredII) +
+                   " peel-order=modulo-cycle epilogue-preseed=" +
+                   Twine(LastEpiloguePreseed ? "kernel-steady" : "none"));
   OrdinarySnapshot.clear();
   ++NumMultiStageSuccess;
   LLVM_DEBUG({
@@ -2664,54 +3751,130 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                "rejected: fewer than 2 body SUnits");
     return false;
   }
+  if (Body.size() > MaxBodyInstrs) {
+    ++NumMultiStageFail;
+    LastRejectReason = "body-too-large";
+    emitRemark(MBB, "MultiStageReject",
+               "rejected: body SUnits=" + Twine((unsigned)Body.size()) +
+                   " > cap=" + Twine(MaxBodyInstrs) +
+                   " hang-containment no-seq-fallback");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    return false;
+  }
+
+  if (!pinTransientMembers()) {
+    ++NumMultiStageFail;
+    LastRejectReason = "member-pin";
+    emitRemark(MBB, "MultiStageReject",
+               "rejected: transient member pin failed no-seq-fallback");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    return false;
+  }
+  emitRemark(MBB, "MultiStagePin",
+             "member-pin n=" + Twine((unsigned)MemberPin.size()) +
+                 " placement-deps=data+anti+output+mem no-seq-fallback"
+                 " hr-same-cycle=arctan-sincos+csrw-set+abs-e0"
+                 " resource-bias=slot-windows"
+                 " swpsolver=unavailable");
 
   if (!buildTwoCopyGraph(TheDAG)) {
     ++NumMultiStageFail;
     LastRejectReason = "two-copy-graph";
     emitRemark(MBB, "MultiStageReject",
-               "rejected: two-copy buildSchedGraph failed");
+               "rejected: two-copy buildSchedGraph failed no-seq-fallback");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
     return false;
   }
+  // Two-copy clones are distinct MI*; copy the instance pin so the
+  // format oracle sees the same member on both copies. SearchAlts is
+  // local to this attempt — AIEInterBlockScheduling.cpp:1568 setDesc on
+  // the candidate MBB; Haydn keeps the original body logical.
+  SearchAlts.clear();
+  if (TwoCopyDAG && DAG) {
+    const TargetInstrInfo *PinTII = DAG->MF.getSubtarget().getInstrInfo();
+    for (int K = 0; K < NInstr; ++K) {
+      MachineInstr *Orig = Body[K]->getInstr();
+      auto It = MemberPin.find(Orig);
+      if (It == MemberPin.end())
+        continue;
+      const unsigned Mem = It->second;
+      MachineInstr *C0 = TwoCopyDAG->SUnits[K].getInstr();
+      MachineInstr *C1 = TwoCopyDAG->SUnits[K + NInstr].getInstr();
+      if (C0) {
+        MemberPin[C0] = Mem;
+        SearchAlts.setAlternateDescriptor(C0, Mem, *PinTII);
+      }
+      if (C1) {
+        MemberPin[C1] = Mem;
+        SearchAlts.setAlternateDescriptor(C1, Mem, *PinTII);
+      }
+    }
+  }
   RecMII = computeRecMII();
+  int ResMII = getResMII(MBB);
+  LastResMII = ResMII;
   AAResults *AA =
       static_cast<HaydnScheduleDAGMI &>(TheDAG).getAliasAnalysis();
   const unsigned MemLCD = countMayAliasStoreLoadPairs(Body, AA);
   emitRemark(MBB, "MultiStageLCD",
              "lcd two-iteration RecMII=" + Twine(RecMII) +
                  " edges=" + Twine(static_cast<unsigned>(LCDEdges.size())) +
-                 " mem=" + Twine(MemLCD) + " lcd-as-windows");
+                 " mem=" + Twine(MemLCD) +
+                 " ResMII=" + Twine(ResMII) +
+                 " lcd-as-windows placement-deps=data+anti+output+mem");
 
   if (!computeASAPEarliest()) {
     ++NumMultiStageFail;
     LastRejectReason = "asap-fail";
     emitRemark(MBB, "MultiStageReject",
-               "rejected: ASAP earliest placement did not converge");
+               "rejected: ASAP earliest placement did not converge ResMII=" +
+                   Twine(ResMII) + " RecMII=" + Twine(RecMII) +
+                   " no-seq-fallback");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
     return false;
   }
 
   const TargetSubtargetInfo &ST = TheDAG.MF.getSubtarget();
   const TargetInstrInfo *TII = ST.getInstrInfo();
   const InstrItineraryData *Itin = ST.getInstrItineraryData();
-  HaydnHazardRecognizer HR(TII, Itin, /*IsPreRA=*/false);
+  HaydnHazardRecognizer HR(TII, Itin, /*IsPreRA=*/false, &SearchAlts);
 
-  int ResMII = getResMII(MBB);
-  int StartII = std::max(ResMII, RecMII);
+  int StartII = std::max(std::max(ResMII, RecMII), 1);
   if (IIHint > 0)
     StartII = static_cast<int>(IIHint);
 
   bool Found = false;
-  // Only accept II < LinearLength so multi-stage is a real overlap win vs list.
-  if (LinearLength < 2) {
+  // SF5: II==LinearLength is a legal kernel-only schedule (AIE checkStages
+  // accepts NS==1). SF6: search starts at ResMII even when that equals
+  // LinearLength — a strict II < LinearLength left ResMII untried.
+  if (LinearLength < 1) {
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: LinearLength=" << LinearLength
-                      << " — no multi-stage headroom\n");
+                      << " — no schedule length\n");
     ++NumMultiStageFail;
     LastRejectReason = "no-headroom";
     emitRemark(MBB, "MultiStageReject",
-               "rejected: no multi-stage headroom (LinearLength=" +
-                   Twine(LinearLength) + ")");
+               "rejected: no schedule length (LinearLength=" +
+                   Twine(LinearLength) + ") ResMII=" + Twine(ResMII) +
+                   " RecMII=" + Twine(RecMII) + " no-seq-fallback");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
     return false;
   }
-  const int ListBaseline = LinearLength - 1; // strict: II < LinearLength
+  const int ListBaseline = std::max(LinearLength, StartII);
   const int MaxII = std::min(ListBaseline, MaxIISearch);
   if (StartII > MaxII) {
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: StartII=" << StartII
@@ -2723,7 +3886,13 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
     emitRemark(MBB, "MultiStageExhaustion",
                "exhausted: empty II window StartII=" + Twine(StartII) +
                    " MaxII=" + Twine(MaxII) + " ResMII=" + Twine(ResMII) +
-                   " LinearLength=" + Twine(LinearLength));
+                   " LinearLength=" + Twine(LinearLength) +
+                   " pins=" + Twine((unsigned)MemberPin.size()) +
+                   " no-seq-fallback qualify-or-cut=seated product-off");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
     return false;
   }
   LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: II search [" << StartII << ","
@@ -2731,14 +3900,9 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                     << " LinearLength=" << LinearLength
                     << " ListBaseline=" << ListBaseline << "\n");
   auto acceptII = [&]() {
-    if (II >= LinearLength) {
+    if (II < 1 || II > MaxII) {
       LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: reject II=" << II
-                        << " >= LinearLength=" << LinearLength << "\n");
-      return false;
-    }
-    if (II > ListBaseline) {
-      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: reject II=" << II
-                        << " > ListBaseline=" << ListBaseline << "\n");
+                        << " outside [" << StartII << "," << MaxII << "]\n");
       return false;
     }
     return true;
@@ -2768,19 +3932,63 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
     emitRemark(MBB, "MultiStageExhaustion",
                "exhausted: no feasible II in [" + Twine(StartII) + "," +
                    Twine(MaxII) + "] ResMII=" + Twine(ResMII) +
-                   " LinearLength=" + Twine(LinearLength));
+                   " LinearLength=" + Twine(LinearLength) +
+                   " pins=" + Twine((unsigned)MemberPin.size()) +
+                   " no-seq-fallback qualify-or-cut=seated product-off");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
     return false;
   }
 
   HasValidPlan = true;
   LastRejectReason = nullptr;
+  // Independent recount: countPlannedParcels walks ExactCommitPlan.
+  // A mismatch is an II lie — fail closed, no SWPS stamp.
+  MeasuredII = countPlannedParcels();
+  if (MeasuredII != II) {
+    ++NumMultiStageFail;
+    LastRejectReason = "measured-ii-mismatch";
+    HasValidPlan = false;
+    emitRemark(MBB, "MultiStageReject",
+               "rejected: measured-II=" + Twine(MeasuredII) +
+                   " != searched II=" + Twine(II) + " ResMII=" +
+                   Twine(ResMII) + " no-seq-fallback");
+    emitRemark(MBB, "MultiStagePolicy",
+               "qualify-or-cut: seated product-off host-live "
+               "swpsolver=unavailable hwloop-combined=off "
+               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    return false;
+  }
+  ++NumMultiStageQualifySeated;
   LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: analyze accept II=" << II
                     << " NStages=" << NStages << "\n");
   emitRemark(MBB, "MultiStageAccept",
              "accepted II=" + Twine(II) + " stages=" + Twine(NStages) +
                  " body=" + Twine((unsigned)Body.size()) +
                  " ResMII=" + Twine(ResMII) +
-                 " LinearLength=" + Twine(LinearLength));
+                 " LinearLength=" + Twine(LinearLength) +
+                 " measured-II=" + Twine(MeasuredII) +
+                 " pins=" + Twine((unsigned)MemberPin.size()) +
+                 " strategy=" +
+                 Twine(LastStrategyName ? LastStrategyName : "none") +
+                 " resource-bias=" +
+                 Twine(LastResourceBias ? "applied" : "idle") +
+                 " no-seq-fallback qualify-or-cut=seated product-off");
+  emitRemark(MBB, "MultiStageQualify",
+             "qualify parcels-per-iter=" + Twine(MeasuredII) +
+                 " searched-II=" + Twine(II));
+  emitRemark(MBB, "MultiStageSWPS",
+             "swps observe-only measured-II=" + Twine(MeasuredII) +
+                 " searched-II=" + Twine(II) + " no-asm-stamp");
+  emitRemark(MBB, "MultiStagePolicy",
+             "qualify-or-cut: seated product-off host-live "
+             "swpsolver=" +
+                 Twine(LastSWPSolverStatus ? LastSWPSolverStatus
+                                           : "unavailable") +
+                 " hwloop-combined=off "
+                 "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
   return true;
 }
 
@@ -2788,8 +3996,10 @@ bool HaydnMultiStageSMS::tryAfterOrdinarySchedule(ScheduleDAGMI &TheDAG,
                                                   unsigned IIHint) {
   if (!EnableHaydnMultiStageSMS)
     return false;
-  if (!analyze(TheDAG, IIHint))
+  if (!analyze(TheDAG, IIHint)) {
+    destroyTwoCopyGraph();
     return false;
+  }
   if (!runPreflight()) {
     ++NumMultiStageCertReject;
     ++NumMultiStageFail;
@@ -2797,10 +4007,12 @@ bool HaydnMultiStageSMS::tryAfterOrdinarySchedule(ScheduleDAGMI &TheDAG,
       emitRemark(*LoopBB, "MultiStageReject",
                  Twine("preflight reject: ") +
                      (LastRejectReason ? LastRejectReason : "unknown"));
+    destroyTwoCopyGraph();
     return false;
   }
   if (HaydnMultiStageSMSAnalysisOnly) {
     ++NumMultiStageAnalysisAccept;
+    destroyTwoCopyGraph();
     return false;
   }
   if (HaydnMultiStageSMSForceFail) {

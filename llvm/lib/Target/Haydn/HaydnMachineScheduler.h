@@ -27,6 +27,7 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNMACHINESCHEDULER_H
 
 #include "HaydnPreRASchedStrategy.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include <memory>
 
@@ -34,6 +35,13 @@ namespace llvm {
 
 // Post-RA ScheduleDAGMI subclass. Overrides exitRegion to form bundles.
 class HaydnScheduleDAGMI : public ScheduleDAGMI {
+  /// AIE InterBlockScheduling::BlockState::isScheduled overlay
+  /// (`AIEMachineScheduler.cpp:251-258`). Record finished MBBs so
+  /// MaxLatencyFinder can ask successorsAreScheduled. PerSuccEdges
+  /// replay is residual; this set is the first brick and stays
+  /// conservative (unknown / empty succs = not scheduled).
+  SmallPtrSet<const MachineBasicBlock *, 16> ScheduledMBBs;
+
 public:
   HaydnScheduleDAGMI(MachineSchedContext *C,
                      std::unique_ptr<MachineSchedStrategy> S, bool IsPreRA)
@@ -44,7 +52,14 @@ public:
   /// `ScheduleDAGMI::AA` without calling protected `getAAForDep`.
   AAResults *getAliasAnalysis() const { return AA; }
 
+  /// AIE `AIEPostRASchedStrategy::successorsAreScheduled`.
+  /// False when MBB is missing, has no successors, or any successor
+  /// has not finished scheduling. Conservative: fail closed to full
+  /// stage latency (no invented remaining-latency cut).
+  bool successorsAreScheduled(const MachineBasicBlock *MBB) const;
+
   void exitRegion() override;
+  void finishBlock() override;
   void schedule() override;
 };
 

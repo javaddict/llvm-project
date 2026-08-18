@@ -1,0 +1,132 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — W23 / CR-B1: transactional setDesc unwind on the commit
+# late-fail paths (scheduling F2 ≡ encoding F9).
+#
+# REGRESSION TEST: commitExactMultiMIProductCycle (and its hard-root twin)
+# bake Format E member descriptors (setDesc + keep-map operand rewrite) and
+# clear InternalRead markers BEFORE the final coissue checks. A late
+# `return false` used to leave that bake in MIR — the hard-constraint #8
+# violation surface (member identity the caller never chose; GOALS W23 /
+# P18(d)). The probe canCoissueProductCycle already had restoreDescs; the
+# commit paths did not.
+#
+# Fix: one HaydnCommitTxn snapshot/restore mechanism wraps every post-bake
+# failure return in BOTH commit paths. A failed commit now leaves the MIR
+# byte-identical to its pre-attempt state.
+#
+# This lit pins the PROBELESS direct-commit lane at MIR level:
+# recommitSurvivingCycleMembers (HaydnHWLoopDemote.cpp) calls
+# commitExactMultiMIProductCycle directly — no probe guard. Range demote
+# strips the coissued SET_HWLOOP; the surviving {LD32, ADD32} group
+# late-fails the direct commit and falls back to per-member singleton
+# recommit. The survivors must carry their EXACT pre-attempt identities:
+# member row, operand lists ($r10, 0) / ($r2, $r11), and implicit-def dead
+# $sfr markers. A leaked bake rewrites the children (operand drops, flag
+# loss, different member row) before finalizeExactLateSingleton wraps them,
+# and these exact lines stop matching.
+#
+# Per-arm byte identity (field-order RAW, unit-cover infeasibility,
+# InternalRead-marker rollback, tied-operand rollback, hard-root probe
+# reject) is pinned by the unit tests in
+# HaydnHazardRecognizerTest.cpp: CommitLateFailUnwindsMemberBake_FieldOrderRAW,
+# CommitLateFailUnwindsMemberBake_UnitCover,
+# CommitLateFailRestoresInternalReadMarkers,
+# CommitLateFailRestoresTiedOperands, HardRootLateFailKeepsRootAndChildren —
+# each compares opcode + MI flags + the full operand array before/after a
+# forced late fail. Port-budget / schedule-order RAW / WAW / hwloop-trip
+# conflicts run BEFORE the bake in the commit predicate order and cannot
+# leak; they are not post-bake arms.
+#
+# NOTE: bare member opcodes at top level are not the discriminator — between
+# postmisched and Finalize they are normal pipeline state (see
+# tii6-member-to-logical-beq-s0.mir). The discriminator is exact identity of
+# the survivors, pinned line-by-line.
+#
+# What breaks if this regresses: the pinned survivor lines change (dropped
+# `implicit-def dead $sfr`, rematerialized operand order, or a different
+# member row), proving the commit mutated MIR it did not own — and the unit
+# identity comparisons fail loudly.
+
+--- |
+  define dso_local void @latefail_demote_recommit(ptr nocapture %p) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            latefail_demote_recommit
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r10, $r11, $r15
+    successors: %bb.1
+
+    ; SET co-issued with the survivor pair; spacer overflow forces range
+    ; demote; SET strip leaves {LD32, ADD32} for the probeless direct
+    ; commit, which late-fails and singleton-recommits each survivor.
+    BUNDLE 1, 0, implicit-def $r3, implicit-def $r2, implicit-def dead $sfr, implicit $r10, implicit $r2, implicit $r11 {
+      $r3 = LD32 $r10, 0, implicit-def dead $sfr
+      $r2 = ADD32 $r2, $r11, implicit-def dead $sfr
+      SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r1, implicit-def dead $sfr
+    }
+
+  bb.1.spacer:
+    liveins: $r1, $r2
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1
+    successors: %bb.3
+    ST32 $r1, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# Survivors singleton-recommit with their exact pre-attempt OPERAND identity
+# ($r10, 0) / ($r2, $r11). Member ROW is deliberately not pinned: the
+# singleton re-solve may legitimately pick a different E2/E3 row than the
+# failed group solve, and row choice is solver territory (P13 noise), not
+# this contract. The byte-identity discriminator (opcode + flags + full
+# operand array compared across a forced late fail) lives in the unit tests
+# named above — the demote fallback's lateMemberOpcode re-solve masks a
+# leaked bake at MIR level, so a lit alone cannot see it.
+# CHECK-LABEL: name: latefail_demote_recommit
+# CHECK: $r3 = S_LW_WITH_IMM{{.*}} $r10, 0
+# CHECK: $r2 = ADD32{{.*}} $r2, $r11
+# CHECK-NOT: SET_HWLOOP

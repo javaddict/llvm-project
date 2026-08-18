@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Pin First/LastMemoryCycle tables for Slot0_LS / Slot1_LD / Slot01_LD and the
-// product vs opt-in accurate getMemoryLatency contract. Product path always
-// returns latency 1; -haydn-accurate-memory-latency computes
-// max(1, LastSrc-FirstDst+1) for memory itineraries only (nullopt otherwise).
-// NatureDSP density A/B kept product latency-1 (accurate regressed packing);
-// no densify invent; accurate flag stays opt-in default OFF.
+// Pin First/LastMemoryCycle tables for Slot0_LS / Slot1_LD / Slot01_LD /
+// Slot2_LS and the product architectural getMemoryLatency contract.
+// Product default is ON (Last-First+1 = 2). Soak-off
+// -haydn-accurate-memory-latency=false returns class-agnostic 1.
+// A published memory itinerary with no table row is a generator hole
+// (ExactLatencies fatality in MemoryEdges).
 //
 //===----------------------------------------------------------------------===//
 
@@ -98,22 +98,22 @@ protected:
                                            /*FunctionNum=*/0);
 
     // Product default between tests.
-    setAccurateMemoryLatency(false);
+    setAccurateMemoryLatency(true);
   }
 
-  void TearDown() override { setAccurateMemoryLatency(false); }
+  void TearDown() override { setAccurateMemoryLatency(true); }
 
   const HaydnInstrInfo &TII() const { return *ST->getInstrInfo(); }
 };
 
-// Product default for -haydn-accurate-memory-latency is OFF.
-TEST_F(HaydnMemoryCycleTest, AccurateFlagDefaultOff) {
+// Product default for -haydn-accurate-memory-latency is ON.
+TEST_F(HaydnMemoryCycleTest, AccurateFlagDefaultOn) {
   auto &Opts = cl::getRegisteredOptions();
   auto It = Opts.find("haydn-accurate-memory-latency");
   ASSERT_NE(It, Opts.end());
   auto *Opt = static_cast<cl::opt<bool> *>(It->second);
   ASSERT_NE(Opt, nullptr);
-  EXPECT_FALSE(Opt->getValue());
+  EXPECT_TRUE(Opt->getValue());
 }
 
 // Memory itineraries: first=0, last=1 (OperandCycles [2] / LoadLatency=2).
@@ -121,7 +121,7 @@ TEST_F(HaydnMemoryCycleTest, FirstLastMemoryCycleTables) {
   using namespace Haydn::Sched;
   const HaydnInstrInfo &II = TII();
 
-  for (unsigned SC : {Slot0_LS, Slot1_LD, Slot01_LD}) {
+  for (unsigned SC : {Slot0_LS, Slot1_LD, Slot01_LD, Slot2_LS}) {
     auto First = II.getFirstMemoryCycle(SC);
     auto Last = II.getLastMemoryCycle(SC);
     ASSERT_TRUE(First.has_value()) << "SC=" << SC;
@@ -155,15 +155,17 @@ TEST_F(HaydnMemoryCycleTest, OpcodeSchedClassesAreMemoryItineraries) {
   EXPECT_EQ(II.get(Haydn::S_LW_WITH_IMM_E2_E1_LOAD1_RI6).getSchedClass(),
             static_cast<unsigned>(Slot1_LD));
   EXPECT_EQ(II.get(Haydn::LD64).getSchedClass(), static_cast<unsigned>(Slot01_LD));
+  EXPECT_EQ(II.get(Haydn::D_LQHWUA_POST_S2).getSchedClass(),
+            static_cast<unsigned>(Slot2_LS));
 }
 
-// Product path: class-agnostic latency 1 for every src/dst pair.
-TEST_F(HaydnMemoryCycleTest, ProductGetMemoryLatencyAlwaysOne) {
+// Soak-off path: class-agnostic latency 1 for every src/dst pair.
+TEST_F(HaydnMemoryCycleTest, SoakOffGetMemoryLatencyAlwaysOne) {
   using namespace Haydn::Sched;
   const HaydnInstrInfo &II = TII();
   setAccurateMemoryLatency(false);
 
-  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD};
+  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD, Slot2_LS};
   const unsigned NonMem[] = {Slot0_ALU, Slot012_ALU};
 
   for (unsigned Src : Mem) {
@@ -184,13 +186,15 @@ TEST_F(HaydnMemoryCycleTest, ProductGetMemoryLatencyAlwaysOne) {
   EXPECT_EQ(*Cross, 1);
 }
 
-// Opt-in accurate path: max(1, Last-First+1)=2 for memory pairs; nullopt else.
+// Product architectural path: max(1, Last-First+1)=2 for memory pairs;
+// nullopt else (MemoryEdges fatals only when a published class is missing
+// its First/Last row — Slot2_LS is published).
 TEST_F(HaydnMemoryCycleTest, AccurateGetMemoryLatencyFromTables) {
   using namespace Haydn::Sched;
   const HaydnInstrInfo &II = TII();
   setAccurateMemoryLatency(true);
 
-  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD};
+  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD, Slot2_LS};
   for (unsigned Src : Mem) {
     for (unsigned Dst : Mem) {
       auto Lat = II.getMemoryLatency(Src, Dst);
@@ -199,7 +203,11 @@ TEST_F(HaydnMemoryCycleTest, AccurateGetMemoryLatencyFromTables) {
     }
   }
 
-  // Unknown cycle → nullopt (MemoryEdges keeps its local default of 1).
+  EXPECT_TRUE(HaydnInstrInfo::isPublishedMemoryItinerary(Slot2_LS));
+  EXPECT_TRUE(II.getLastMemoryCycle(Slot2_LS).has_value());
+  EXPECT_TRUE(II.getFirstMemoryCycle(Slot2_LS).has_value());
+
+  // Unknown cycle → nullopt (non-published class is not table-driven).
   EXPECT_FALSE(II.getMemoryLatency(Slot0_LS, Slot0_ALU).has_value());
   EXPECT_FALSE(II.getMemoryLatency(Slot0_ALU, Slot0_LS).has_value());
   EXPECT_FALSE(II.getMemoryLatency(Slot012_ALU, Slot012_ALU).has_value());

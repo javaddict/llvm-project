@@ -9,9 +9,8 @@
 #
 # VF0.2 / G-PACK-LEGAL product classification seal:
 #   ARCTAN / SIN_COS issue alone in their issue cycle only.
-#   No multi-cycle (uimm4+2) slot lock is product-enabled — AdvanceCycle clears
-#   the alone flag; subsequent independent ops may issue freely in later cycles.
-#   Spec §Special draft multi-cycle structural lock remains deferred (not VF0).
+#   Issue-alone stays class-1. The HR also books the uimm4+2 dest-read window,
+#   so a COPY of the ARCTAN dest may insert idle NOP before a later consumer.
 #
 # REGRESSION TEST : ARCTAN / SIN_COS must issue alone (single-instruction
 # bundle / cycle). The minimal guard forces them into a standalone cycle;
@@ -63,7 +62,7 @@ body:             |
     ; CHECK-NEXT: $r1 = ARCTAN{{.*}} killed $d0, 2
     ; CHECK-NEXT: $r5 = ADDI32{{.*}} $r0, 10, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY{{.*}} killed $r1
-    ; CHECK-NEXT: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK: $r0 = JALR{{.*}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r1 = ARCTAN $d0, 2
     $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
 

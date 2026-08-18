@@ -60,11 +60,11 @@ body:             |
     ; EXPAND: RET
     ;
     ; PACK-LABEL: name: expand_addrs
-    ; Member setDesc after postmisched leaveRegion (s0-only CSRW).
-    ; PACK: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; PACK: CSRW_W_S0 45, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; PACK: CSRW_W_S0 46, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr1
-    ; PACK: CSRW_W_S0 47, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr1
+    ; One-commit bake stamps generated Format E members (not residual _S*).
+    ; PACK: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 45, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 46, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr1
+    ; PACK: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 47, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr1
     ; PACK-NOT: SETCBR
     ; PACK-NOT: {{^    CSRW_W }}
     SETCBR_BEGIN 0, $r1
@@ -82,7 +82,7 @@ body:             |
   bb.0:
     liveins: $r1, $r2, $r3, $r15
 
-    ; Expand SETCBR then postmisched setDesc: CSRW_W_S0 + ADD32_S*.
+    ; Expand SETCBR then one-commit bake: generated CSRW + ADD32 members.
     ; Product may leave them as sequential singletons or co-issue; pin
     ; member identity and no residual SETCBR/logical CSRW_W.
     ; EXPAND-LABEL: name: pack_csrw_with_alu
@@ -91,7 +91,7 @@ body:             |
     ; EXPAND-NOT: SETCBR
     ;
     ; PACK-LABEL: name: pack_csrw_with_alu
-    ; PACK-DAG: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK-DAG: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
     ; PACK-DAG: $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
     ; PACK-NOT: SETCBR
     ; PACK-NOT: {{^    CSRW_W }}
@@ -116,8 +116,8 @@ body:             |
     ; EXPAND-NEXT: $r2 = D_SDW_CB_IMM $d0, $r2, 0, 1, implicit $cbr0, implicit-def dead $sfr
     ;
     ; PACK-LABEL: name: cbr_raw_order
-    ; PACK: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; PACK-NEXT: $r2 = D_SDW_CB_IMM_S{{[012]}} {{.*}}$d0, {{.*}}$r2, 0, 1, implicit $cbr0, implicit-def dead $sfr
+    ; PACK: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK-NEXT: {{.*}}D_SDW_CB_IMM_E{{[23]}}_E{{[0-2]}}_LOADSTORE0_CBRI 0, {{.*}}$d0, {{.*}}$r2, 1, implicit $cbr0, implicit-def dead $sfr
     ; PACK-NOT: SETCBR
     SETCBR_BEGIN 0, $r1
     $r2 = D_SDW_CB_IMM $d0, $r2, 0, 1, implicit $cbr0, implicit-def dead $sfr
@@ -143,8 +143,8 @@ body:             |
     ; EXPAND-NOT: SETCBR
     ;
     ; PACK-LABEL: name: expand_then_cb
-    ; PACK: CSRW_W_S0 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; PACK: CSRW_W_S0 45, {{.*}}$r2, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; PACK: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 45, {{.*}}$r2, implicit-def $sfr, implicit-def $cbr0
     ; PACK: D_SDW_CB_IMM
     ; PACK-NOT: SETCBR
     ; PACK-NOT: {{^    CSRW_W }}
@@ -168,7 +168,7 @@ body:             |
 
     ; DIRECT-LABEL: name: direct_csrw_multi_mi
     ; One-SFR-writer law: CSRW and flag-writing ADD32 cannot co-issue.
-    ; DIRECT: CSRW_W_S0 44, {{.*}}$r1, implicit-def {{(dead )?}}$sfr, implicit-def $cbr0
+    ; DIRECT: CSRW_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_I8 44, {{.*}}$r1, implicit-def {{(dead )?}}$sfr, implicit-def $cbr0
     ; DIRECT-NEXT: $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}}$r2, {{.*}}$r3, implicit-def dead $sfr
     ; DIRECT-NOT: SETCBR
     ; DIRECT-NOT: {{^    CSRW_W }}

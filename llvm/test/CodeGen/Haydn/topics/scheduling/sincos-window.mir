@@ -1,0 +1,69 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — SIN_COS/ARCTAN window: issue-alone at commit, dest reader
+# waits uimm4+2, companion ALU sequentializes.
+
+--- |
+  define void @arctan_dest_reader_waits() { ret void }
+  define void @sincos_stays_alone() { ret void }
+...
+---
+name:            arctan_dest_reader_waits
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $d0, $r2
+
+    ; CHECK-LABEL: name: arctan_dest_reader_waits
+    ; CHECK: $r1 = ARCTAN{{.*}} $d0, 2
+    ; CHECK-NOT: $r7 = ADD32{{.*}}$r1
+    ; CHECK: NOP
+    ; CHECK: $r7 = ADD32{{.*}}$r1
+    $r1 = ARCTAN $d0, 2
+    $r7 = ADD32 $r1, $r2
+    $r0 = COPY $r7
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            sincos_stays_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+body:             |
+  bb.0:
+    liveins: $r0, $r3
+
+    ; CHECK-LABEL: name: sincos_stays_alone
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: SIN_COS
+    ; CHECK-NOT: BUNDLE
+    $d1 = SIN_COS $r0, 3
+    $r5 = ADDI32 $r3, 10, implicit-def dead $sfr
+    $r0 = COPY $r5
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

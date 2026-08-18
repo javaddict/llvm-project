@@ -21,7 +21,8 @@
 // SMS never freezes multi-member BUNDLE). leaveRegion reconstructs Top/Bot
 // zones into an in-memory cycle list, runs handleRegionConflicts, then
 // merges. leaveMBB free-packs scheduled multi-MI via
-// commitExactMultiMIProductCycle (sole scheduled multi-MI producer), commits
+// commitOneProductCycle (sole scheduled multi-MI producer; AIE
+// applyBundles size()>1 peer at AIEHazardRecognizer.cpp:325-352), commits
 // residual unstamped multi-member shells with the same ordinary multi-MI
 // path when the product coissue probe says they are jointly legal. Illegal
 // shells sequentialize in schedule order as recovery only — sequentialize
@@ -78,6 +79,7 @@ public:
   // current cycle base); (2) prefer memory as the cycle's first issue to hide
   // load latency while still allowing a ready MAC/ALU to beat a non-load
   // once a load is already best — dual-load + MAC co-issue for hot-loop fill.
+  // Sequentialize after a failed product commit stays recovery-only.
   bool tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand) override;
 
   // Clear the per-pick SU score cache, then delegate. Within one pickNode the
@@ -94,6 +96,7 @@ public:
   // calls exitRegion even for skipped regions — MachineScheduler.cpp:862-866).
   void schedNode(SUnit *SU, bool IsTopNode) override {
     RegionWasScheduled = true;
+    ReadyAuctionScoreCache.clear();
     PostGenericScheduler::schedNode(SU, IsTopNode);
   }
 
@@ -176,6 +179,10 @@ private:
 
   const HaydnInstrInfo *HII = nullptr;
 
+  /// Same availability-aware pin pre-RA / HR consume. Instance member,
+  /// not a function-local static (one check per pipeline instance).
+  bool ResourceAdmissionPinned = false;
+
   // Current MBB (stashed in enterMBB; the DAG's BB is protected and has no
   // public accessor, so the strategy tracks the block itself).
   MachineBasicBlock *CurrentMBB = nullptr;
@@ -186,6 +193,10 @@ private:
   // 866) — leaveRegion must not compute bundles for those, because the DAG's
   // SUnits/region iterators are stale from the previous region.
   bool RegionWasScheduled = false;
+
+  // Per-pick memo of ready-subset auction scores. Cleared after every emit
+  // so a later pick cannot reuse a stale Available/base snapshot.
+  DenseMap<const SUnit *, unsigned> ReadyAuctionScoreCache;
 
   // Push the in-progress bundle as the current cycle, then pad with empty
   // bundles until reaching \p ToCycle. Invariant: Bundles.size == current
@@ -208,14 +219,15 @@ private:
 
   // AIE handleRegionConflicts peer (AIEMachineScheduler.cpp:1176-1201):
   // ExitReadyCycle pad, then bump Top (and TopBundles) until inter-zone
-  // scoreboard + TopReadyCycle deps are clear.
+  // scoreboard + TopReadyCycle deps are clear. Pads are capped at the
+  // published occupancy horizon so dense MAC bodies cannot hang.
   void handleRegionConflicts(const SUnit &ExitSU,
                              SmallVectorImpl<CycleBundle> &TopBundles,
                              ArrayRef<CycleBundle> BotBundles);
 
   // Insert one NOP (via TII->insertNoop) per empty cycle in \p Bundles, and
-  // exact-commit each legal multi-MI cycle via shared
-  // haydn::bundle::commitExactMultiMIProductCycle. Already-bundled members
+  // exact-commit each legal multi-MI cycle via the one production site
+  // haydn::bundle::commitOneProductCycle. Already-bundled members
   // are refused. Illegal scheduled multi-MI fails closed (no production
   // greedy split; NumScheduledCyclesSplit diagnostic).
   void materializeBundles(MachineBasicBlock &MBB,

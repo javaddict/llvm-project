@@ -39,6 +39,7 @@
 # GEN: Auto-generated
 # GEN: ProcessorItineraries
 # GEN: InstrItinData<Slot0_ALU
+# GEN: InstrItinData<Slot2_LS
 # GEN-NOT: Slot12_ALU_AccLat
 # GEN-NOT: Slot2_ALU_AccLat
 # GEN-NOT: [5, 1, 1, 5]

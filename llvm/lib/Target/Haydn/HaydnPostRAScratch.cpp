@@ -8,6 +8,7 @@
 
 #include "HaydnPostRAScratch.h"
 #include "HaydnBundle.h"
+#include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -15,6 +16,8 @@
 #include "MCTargetDesc/HaydnMatInt.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -25,6 +28,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
+#include <cassert>
 
 using namespace llvm;
 
@@ -82,15 +86,141 @@ bool llvm::isSoftZeroR0Clean(const MachineBasicBlock &MBB,
   }
 
   // No def of R0 in this MBB before I.
-  // Entry: prologue zeros R0 (FrameLowering) — treat as clean at block start.
+  // Entry: prologue zeros R0 — treat as clean at block start.
   if (MBB.isEntryBlock())
     return true;
 
-  // Non-entry, no local def: only treat as clean if R0 is not live-in as a
-  // stale value. Live-in R0 usually means "ABI soft-zero carried in"; after
-  // ExpandPseudos call sites insert XOR restores, so live-in is the common
-  // clean case. If R0 is *not* live-in, nothing proves it is zero → dirty.
+  // Non-entry, no local def: live-in R0 is the ABI soft-zero carried in
+  // (ExpandPseudos restores after JAL/JALR). Missing live-in is not proof
+  // of zero — treat dirty so a later borrow cannot seed MatInt from garbage.
   return MBB.isLiveIn(Haydn::R0);
+}
+
+void llvm::restoreSoftZeroR0(MachineBasicBlock &MBB,
+                             MachineBasicBlock::iterator I, const DebugLoc &DL,
+                             const TargetInstrInfo &TII,
+                             MachineInstr::MIFlag Flag) {
+  BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Haydn::R0)
+      .addReg(Haydn::R0)
+      .addReg(Haydn::R0)
+      .setMIFlag(Flag);
+}
+
+void llvm::ensureSoftZeroR0Clean(MachineBasicBlock &MBB,
+                                 MachineBasicBlock::iterator I,
+                                 const DebugLoc &DL,
+                                 const TargetInstrInfo &TII,
+                                 MachineInstr::MIFlag Flag) {
+  if (!isSoftZeroR0Clean(MBB, I))
+    restoreSoftZeroR0(MBB, I, DL, TII, Flag);
+  assert(isSoftZeroR0Clean(MBB, I) &&
+         "soft-zero R0 must be clean before borrow or MatInt seed");
+}
+
+bool llvm::isSoftZeroR0KnownDirty(const MachineBasicBlock &MBB,
+                                  MachineBasicBlock::const_iterator I) {
+  for (MachineBasicBlock::const_iterator II = I; II != MBB.begin();) {
+    --II;
+    if (II->isDebugInstr() || II->isMetaInstruction())
+      continue;
+    bool DefsR0 = false;
+    for (const MachineOperand &MO : II->operands()) {
+      if (MO.isReg() && MO.isDef() && !MO.isDead() && MO.getReg() == Haydn::R0) {
+        DefsR0 = true;
+        break;
+      }
+    }
+    if (!DefsR0)
+      continue;
+    return !isSoftZeroRestore(*II);
+  }
+  return false;
+}
+
+void llvm::ensureSoftZeroR0IfKnownDirty(MachineBasicBlock &MBB,
+                                        MachineBasicBlock::iterator I,
+                                        const DebugLoc &DL,
+                                        const TargetInstrInfo &TII,
+                                        MachineInstr::MIFlag Flag) {
+  if (!isSoftZeroR0KnownDirty(MBB, I))
+    return;
+  restoreSoftZeroR0(MBB, I, DL, TII, Flag);
+  assert(isSoftZeroR0Clean(MBB, I) &&
+         "known-dirty R0 must be clean after restore");
+}
+
+bool llvm::insertSoftZeroR0AfterCalls(MachineFunction &MF,
+                                      const TargetInstrInfo &TII) {
+  bool Modified = false;
+
+  // Indirect transfers that write the link into soft-zero R0 clobber the
+  // architectural zero invariant. Re-zero at the head of every successor so
+  // PostRA pack and size models see the bytes (not printer injection):
+  //   * BR_JT — printer expands to JALR_W r0, addr (JALR_W is isCall; keep
+  //     the jump pseudo through MBP/pack)
+  //   * JALR_W / JALR with rd=R0 (G_BRINDIRECT pure jump; not a call)
+  // RET is also JALR_W r0,lr but has no executable successors that need zero.
+  DenseSet<MachineBasicBlock *> SoftZeroTargets;
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB) {
+      unsigned Opc = MI.getOpcode();
+      bool NeedsSuccRezero = false;
+      if (Opc == Haydn::BR_JT) {
+        NeedsSuccRezero = true;
+      } else if ((Opc == Haydn::JALR_W || Opc == Haydn::JALR) &&
+                 MI.getNumExplicitOperands() >= 1 && MI.getOperand(0).isReg() &&
+                 MI.getOperand(0).getReg() == Haydn::R0) {
+        NeedsSuccRezero = true;
+      }
+      if (!NeedsSuccRezero)
+        continue;
+      for (MachineBasicBlock *Succ : MBB.successors())
+        SoftZeroTargets.insert(Succ);
+    }
+  }
+  for (MachineBasicBlock *MBB : SoftZeroTargets) {
+    MachineBasicBlock::iterator InsertPt = MBB->begin();
+    while (InsertPt != MBB->end() &&
+           (InsertPt->isMetaInstruction() || InsertPt->isDebugInstr() ||
+            InsertPt->isCFIInstruction()))
+      ++InsertPt;
+    if (InsertPt != MBB->end() && isSoftZeroRestore(*InsertPt))
+      continue;
+    DebugLoc DL = InsertPt != MBB->end() ? InsertPt->getDebugLoc() : DebugLoc();
+    restoreSoftZeroR0(*MBB, InsertPt, DL, TII);
+    Modified = true;
+    LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: soft-zero R0 at indirect-target "
+                         "bb."
+                      << MBB->getNumber() << '\n');
+  }
+
+  // After calls: JAL/JAL_W and PseudoCALLIndirect. Callee RET is
+  // JALR_W r0,lr which clobbers R0. Direct calls are JAL_W from CallLowering.
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineBasicBlock::iterator MII = MBB.begin(), E = MBB.end();
+         MII != E;) {
+      MachineInstr &MI = *MII;
+      ++MII;
+      unsigned Opc = MI.getOpcode();
+      bool NeedsPostCallZero =
+          Opc == Haydn::JAL || Opc == Haydn::JAL_W ||
+          Opc == Haydn::PseudoCALLIndirect;
+      if (!NeedsPostCallZero)
+        continue;
+      MachineBasicBlock::iterator Next = MII;
+      while (Next != MBB.end() &&
+             (Next->isMetaInstruction() || Next->isDebugInstr()))
+        ++Next;
+      if (Next != MBB.end() && isSoftZeroRestore(*Next))
+        continue;
+      restoreSoftZeroR0(MBB, MII, MI.getDebugLoc(), TII);
+      Modified = true;
+      LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: soft-zero R0 after call in bb."
+                        << MBB.getNumber() << '\n');
+    }
+  }
+
+  return Modified;
 }
 
 Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
@@ -136,6 +266,56 @@ Register llvm::findPostRAScratchGPR(MachineBasicBlock &MBB,
   }
   report_fatal_error(
       "Haydn: no post-RA scratch GPR (all candidates reserved/excluded)");
+}
+
+Register llvm::findPostRAScratchNoSpill(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator I, bool PreferNotR12,
+    ArrayRef<MachineBasicBlock *> Successors, ArrayRef<Register> Exclude) {
+  // One mechanism with findPostRAScratchGPR (same priority order, same
+  // LivePhysRegs availability test) minus its NeedsSpill escape: the
+  // produced value must outlive the bracket, so a spill bracket is not a
+  // fallback but a wrong-code path. Successors seeds the live-out set for
+  // callers that rewrite the CFG after this probe (pre-rewrite successors
+  // can hide the back edge inside a pseudo).
+  const MachineFunction &MF = *MBB.getParent();
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
+
+  LivePhysRegs LPR(TRI);
+  // Seed the live-out set as LivePhysRegs::addLiveOuts would for the
+  // effective successor set: the caller's override when non-empty (the CFG
+  // will be rewritten to exactly those successors), else the block's real
+  // successors. An EMPTY override must NOT mean "no live-outs" — that would
+  // judge every live-through register available and clobber it (e.g. loop
+  // body arguments live out of a demote preheader).
+  SmallVector<const MachineBasicBlock *, 4> EffSuccs;
+  if (Successors.empty()) {
+    for (const MachineBasicBlock *S : MBB.successors())
+      EffSuccs.push_back(S);
+  } else {
+    for (const MachineBasicBlock *S : Successors)
+      EffSuccs.push_back(S);
+  }
+  for (const MachineBasicBlock *Succ : EffSuccs) {
+    if (!Succ)
+      continue;
+    for (const MachineBasicBlock::RegisterMaskPair &P : Succ->liveins())
+      LPR.addReg(P.PhysReg);
+  }
+  for (MachineBasicBlock::iterator II = MBB.end(); II != I;) {
+    --II;
+    LPR.stepBackward(*II);
+  }
+
+  for (MCPhysReg Cand : PostRAScratchPriority) {
+    if (PreferNotR12 && Cand == Haydn::R12)
+      continue;
+    if (MRI.isReserved(Cand) || isExcluded(Cand, Exclude))
+      continue;
+    if (LPR.available(MRI, Cand))
+      return Cand;
+  }
+  return Register();
 }
 
 namespace {
@@ -185,7 +365,9 @@ void llvm::emitFrameRelativeMemOp(MachineBasicBlock &MBB,
   }
 
   // Tiers 2/3: materialise the addressed byte in R0 = FrameReg + Off, then
-  // access element 0 through it, then restore R0 to soft-zero.
+  // access element 0 through it, then restore R0 to soft-zero. Tier 3
+  // MatInt seeds Cur=R0, so R0 must be clean before the borrow window.
+  ensureSoftZeroR0Clean(MBB, I, DL, TII);
   const Register Tmp = Haydn::R0;
   if (isInt<20>(Off)) {
     // Tier 2 - simm20 immediate add.
@@ -218,7 +400,7 @@ void llvm::emitFrameRelativeMemOp(MachineBasicBlock &MBB,
         .addImm(0);
   else
     BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Reg).addReg(Tmp).addImm(0);
-  BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Tmp).addReg(Tmp).addReg(Tmp);
+  restoreSoftZeroR0(MBB, I, DL, TII);
 }
 
 namespace {
@@ -237,8 +419,8 @@ ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
   if (SpillFI >= 0) {
     const HaydnFrameLowering *TFL = ST.getFrameLowering();
     Home.K = ScratchSpillHome::FrameIndex;
-    Home.Off =
-        TFL->getFrameIndexReference(MF, SpillFI, Home.FrameReg).getFixed();
+    Home.Off = TFL->getFrameIndexReferenceAt(MF, SpillFI, Home.FrameReg, MBB, I)
+                   .getFixed();
     emitFrameRelativeMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
                            /*IsStore=*/true, /*StoreFlags=*/0);
     return Home;
@@ -314,32 +496,31 @@ void glueDefToUse(MachineInstr &RematDef, MachineInstr &UseMI) {
   assert(AfterDef != MBB.end() && &*AfterDef == &UseMI &&
          "remat use not adjacent after splice");
 
-  // Only glue into one product cycle when encode-oracle canAdd accepts both
-  // (AIE Bundle canAdd). ADDI remat for SET_HWLOOP_REG is S0-only + SET is
-  // S0-only — co-issue is illegal; leave sequential standalones (two cycles).
+  // Only glue into one product cycle when encode-oracle canAdd accepts both.
+  // ADDI remat for SET_HWLOOP_REG is S0-only + SET is S0-only; leave sequential.
   {
     HaydnMCFormats Fmts;
     Haydn::Bundle<MachineInstr> Probe(&Fmts);
     if (!Probe.canAdd(RematDef.getOpcode()) ||
         (Probe.add(const_cast<MachineInstr *>(&RematDef)),
          !Probe.canAdd(UseMI.getOpcode()))) {
-      LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: remat def→use not slot-legal "
-                           "for one cycle — leave sequential\n");
+      LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: remat def->use not slot-legal "
+                           "for one cycle - leave sequential\n");
       return;
     }
   }
 
   UseMI.bundleWithPred();
   finalizeBundle(MBB, RematDef.getIterator());
-  // Durable Format E commit on multi-MI BUNDLE roots (same authority as
-  // HaydnPostRASchedStrategy::finalizeLegalMultiMI / HaydnBundleMaterialize).
-  // Two real members (remat def + use) → E96TwoEntry + AllEntriesReal.
   MachineInstr &Root = *getBundleStart(RematDef.getIterator());
   assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
-  haydn::bundle::stampBundleCommit(
-      Root, haydn::bundle::BundleFormatRowID::E96TwoEntry,
-      haydn::bundle::CompletionStateID::AllEntriesReal);
-  LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: glued remat def→use\n");
+  const TargetInstrInfo &TII =
+      *MBB.getParent()->getSubtarget().getInstrInfo();
+  const unsigned MemberOps[] = {RematDef.getOpcode(), UseMI.getOpcode()};
+  haydn::bundle::BundlePlan Plan = haydn::bundle::makeProductPlanForOpcodes(
+      /*Occupied=*/0, MemberOps, TII);
+  haydn::bundle::stampBundleCommit(Root, Plan);
+  LLVM_DEBUG(dbgs() << "HaydnPostRAScratch: glued remat def->use\n");
 }
 
 } // namespace
@@ -368,9 +549,7 @@ void llvm::withPostRAScratch(MachineBasicBlock &MBB,
   if (SoftZero == PostRASoftZero::AllowBorrow && !excluded(Haydn::R0) &&
       isSoftZeroR0Clean(MBB, I)) {
     Fn(Haydn::R0);
-    BuildMI(MBB, I, DL, TII.get(Haydn::XOR32), Haydn::R0)
-        .addReg(Haydn::R0)
-        .addReg(Haydn::R0);
+    restoreSoftZeroR0(MBB, I, DL, TII);
     return;
   }
 

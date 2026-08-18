@@ -16,6 +16,8 @@
 #include "HaydnPostRAMultiStage.h"
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSchedMutations.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/Support/Debug.h"
 #include <memory>
@@ -32,6 +34,23 @@ void HaydnScheduleDAGMI::schedule() {
     HaydnMultiStageSMS Host;
     (void)Host.tryAfterOrdinarySchedule(*this);
   }
+}
+
+bool HaydnScheduleDAGMI::successorsAreScheduled(
+    const MachineBasicBlock *MBB) const {
+  // AIE AIEMachineScheduler.cpp:251-258. Empty / unknown succs stay
+  // conservative so MaxLatencyFinder keeps stage latency.
+  if (!MBB || MBB->succ_empty())
+    return false;
+  return llvm::all_of(MBB->successors(), [&](const MachineBasicBlock *S) {
+    return ScheduledMBBs.contains(S);
+  });
+}
+
+void HaydnScheduleDAGMI::finishBlock() {
+  if (BB)
+    ScheduledMBBs.insert(BB);
+  ScheduleDAGMI::finishBlock();
 }
 
 void HaydnScheduleDAGMI::exitRegion() {

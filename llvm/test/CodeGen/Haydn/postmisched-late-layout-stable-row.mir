@@ -6,6 +6,12 @@
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,LATE
 
 # Role: MIR — Fixed late multi-pass order (product PreEmit after postmisched pack): BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->.
+#
+# W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
+# operands on ALU members were removed (ALU descs carry no implicit SFR def;
+# under the unified no-dual-write law they silently defeated the multi-MI
+# coissue this fixture exists to pin). W39 itself is pinned by
+# w39-dead-def-dual-write-waw.mir.
 
 # Fixed late multi-pass order (product PreEmit after postmisched pack):
 #   BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->
@@ -56,22 +62,23 @@ body:             |
     ;
     ; Full product multipass with postmisched: one-SFR-writer law packs each
     ; flag-writing ALU as its own Format E cycle (no dual dead $sfr coissue).
-    ; POSTRA: ADD32
-    ; POSTRA: XOR32
-    ; POSTRA: OR32
-    ; POSTRA: JALR
+    ; Member order is Format E field order (not source order).
+    ; POSTRA-DAG: ADD32{{.*}}
+    ; POSTRA-DAG: XOR32{{.*}}
+    ; POSTRA-DAG: OR32{{.*}}
+    ; POSTRA-DAG: JALR{{.*}}
     ; POSTRA-NOT: LoopDec
     ; POSTRA-NOT: LoopJNZ
     ;
     ; Late-only multipass (no postmisched auction): bare logicals re-commit as
     ; Full singletons. Still stable Full rows only.
-    ; LATE: ADD32
-    ; LATE: XOR32
-    ; LATE: OR32
-    ; LATE: JALR
-    $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-    $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
-    $r6 = OR32 $r4, $r5, implicit-def dead $sfr
+    ; LATE-DAG: ADD32{{.*}}
+    ; LATE-DAG: XOR32{{.*}}
+    ; LATE-DAG: OR32{{.*}}
+    ; LATE-DAG: JALR{{.*}}
+    $r4 = ADD32 $r0, $r1
+    $r5 = XOR32 $r2, $r3
+    $r6 = OR32 $r4, $r5
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 
 ...
@@ -90,16 +97,18 @@ body:             |
     ; CHECK-LABEL: name: multi_mi_survives_late_growth
     ;
     ; Multi-MI root stays two-member Full under both pass chains.
+    ; Member order is Format E field order after the one commit site
+    ; rebakes logical children (not source order).
     ; CHECK: BUNDLE {{[01]}}
-    ; CHECK: ADD32{{.*}}
-    ; CHECK: XOR32{{.*}}
+    ; CHECK-DAG: ADD32{{.*}}
+    ; CHECK-DAG: XOR32{{.*}}
     ;
     ; With postmisched, bare NOP+ADD coissue then cutover: pad NOP is
     ; CompletionState, ADD32 takes MemberId e0.
     ; POSTRA: ADD32{{.*}}
     ;
     ; Without postmisched, each bare residual is its own Full singleton.
-    ; LATE: NOP_S0
+    ; LATE: NOP
     ; LATE: ADD32{{.*}}
     ;
     ; CHECK: BUNDLE 0
@@ -109,11 +118,11 @@ body:             |
     ; CHECK-NOT: LoopDec
     ; CHECK-NOT: LoopJNZ
     BUNDLE 0 {
-      $r3 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r4 = XOR32 $r1, $r2, implicit-def dead $sfr
+      $r3 = ADD32 $r0, $r1
+      $r4 = XOR32 $r1, $r2
     }
     NOP
-    $r5 = ADD32 $r0, $r2, implicit-def dead $sfr
+    $r5 = ADD32 $r0, $r2
     B %bb.1
 
   bb.1:

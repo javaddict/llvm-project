@@ -1,0 +1,55 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-scheduler -verify-machineinstrs %s -o /dev/null
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — large independent ready set must not hang pre-RA list-sched.
+# Sixteen independent ADDI32s sit above the matching-frontier skip cap;
+# the test is that llc exits. Dest-window RecedeCycle must not grow
+# remaining (bottom-up ready set receding forever was the SIGKILL).
+#
+# If this regresses: dest-window RecedeCycle grows remaining, or the
+# matching-frontier probe enumerates the full ready set per compare.
+
+--- |
+  define void @wide_ilp_ready_set() { ret void }
+...
+---
+name:            wide_ilp_ready_set
+tracksRegLiveness: true
+selected:        true
+body:             |
+  bb.0:
+    liveins: $r1
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = ADDI32 %0:gpr32, 1, implicit-def dead $sfr
+    %2:gpr32 = ADDI32 %0:gpr32, 2, implicit-def dead $sfr
+    %3:gpr32 = ADDI32 %0:gpr32, 3, implicit-def dead $sfr
+    %4:gpr32 = ADDI32 %0:gpr32, 4, implicit-def dead $sfr
+    %5:gpr32 = ADDI32 %0:gpr32, 5, implicit-def dead $sfr
+    %6:gpr32 = ADDI32 %0:gpr32, 6, implicit-def dead $sfr
+    %7:gpr32 = ADDI32 %0:gpr32, 7, implicit-def dead $sfr
+    %8:gpr32 = ADDI32 %0:gpr32, 8, implicit-def dead $sfr
+    %9:gpr32 = ADDI32 %0:gpr32, 9, implicit-def dead $sfr
+    %10:gpr32 = ADDI32 %0:gpr32, 10, implicit-def dead $sfr
+    %11:gpr32 = ADDI32 %0:gpr32, 11, implicit-def dead $sfr
+    %12:gpr32 = ADDI32 %0:gpr32, 12, implicit-def dead $sfr
+    %13:gpr32 = ADDI32 %0:gpr32, 13, implicit-def dead $sfr
+    %14:gpr32 = ADDI32 %0:gpr32, 14, implicit-def dead $sfr
+    %15:gpr32 = ADDI32 %0:gpr32, 15, implicit-def dead $sfr
+    %16:gpr32 = ADDI32 %0:gpr32, 16, implicit-def dead $sfr
+    %17:gpr32 = ADD32 %1:gpr32, %2:gpr32, implicit-def dead $sfr
+    %18:gpr32 = ADD32 %17:gpr32, %3:gpr32, implicit-def dead $sfr
+    %19:gpr32 = ADD32 %18:gpr32, %4:gpr32, implicit-def dead $sfr
+    %20:gpr32 = ADD32 %19:gpr32, %5:gpr32, implicit-def dead $sfr
+    %21:gpr32 = ADD32 %20:gpr32, %6:gpr32, implicit-def dead $sfr
+    %22:gpr32 = ADD32 %21:gpr32, %7:gpr32, implicit-def dead $sfr
+    %23:gpr32 = ADD32 %22:gpr32, %8:gpr32, implicit-def dead $sfr
+    %24:gpr32 = ADD32 %23:gpr32, %9:gpr32, implicit-def dead $sfr
+    %25:gpr32 = ADD32 %24:gpr32, %10:gpr32, implicit-def dead $sfr
+    %26:gpr32 = ADD32 %25:gpr32, %11:gpr32, implicit-def dead $sfr
+    %27:gpr32 = ADD32 %26:gpr32, %12:gpr32, implicit-def dead $sfr
+    %28:gpr32 = ADD32 %27:gpr32, %13:gpr32, implicit-def dead $sfr
+    %29:gpr32 = ADD32 %28:gpr32, %14:gpr32, implicit-def dead $sfr
+    %30:gpr32 = ADD32 %29:gpr32, %15:gpr32, implicit-def dead $sfr
+    %31:gpr32 = ADD32 %30:gpr32, %16:gpr32, implicit-def dead $sfr
+    $r0 = COPY %31:gpr32
+    RET implicit $r0, implicit $r15

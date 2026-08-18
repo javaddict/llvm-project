@@ -1,0 +1,99 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s \
+# RUN:   -o - | FileCheck %s --check-prefix=COMMIT
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -stats \
+# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 | \
+# RUN:   FileCheck %s --check-prefix=STATS
+
+# Role: MIR — W39 unified no-dual-write WAW law at the committing path.
+
+# REGRESSION TEST: W39 — dead-def dual write in one issue cycle.
+#
+# Bug: the same-cycle WAW law existed as two divergent models.
+#   * materialize cycleMembersHaveWAW SKIPPED dead defs
+#     (HaydnBundleMaterialize.h `MO.isDead()` continue);
+#   * HR hasSameBundleWAW / ResourceCycle haydnHasIntraCycleWAW include them
+#     ("no dual write regardless of liveness").
+# commitExactMultiMIProductCycle / canCoissueProductCycle therefore had a
+# weaker WAW law than the placement authorities: any dead-def dual write that
+# reached the commit probe through a path the HR had not already split (a
+# pre-existing residual multi-member shell, an SMS handoff root, a late
+# recommit after SET erase) was evaluated by the weak law only — one law two
+# models, hard constraint #7. Golden Constraints: "Instructions within the
+# same bundle must not write to the same register" — a register-file property,
+# independent of liveness (dead defs still occupy the write port; one SFR
+# writer per cycle counts dead implicit-def $sfr).
+#
+# Fix: golden's no-dual-write law hoisted into ONE shared predicate
+# (llvm/lib/Target/Haydn/HaydnIntraCycleWAW.h). materialize
+# (cycleMembersHaveWAW), HR (hasSameBundleWAW/appendDefs), and SMS
+# HaydnResourceCycle (canReserveResources(MI)) all route through it.
+#
+# Test design: two functions, each one pre-existing UNSTAMPED 2-member hard
+# root entering postmisched (leaveMBB re-probes it via canCoissueProductCycle
+# then dissolves + commitExactMultiMIProductCycle — the committing path).
+#   * dead_dual_write_rejects: member 1 live-defs $r4, member 2 DEAD-defs
+#     $r4 — the W39 shape. The unified law rejects; leaveMBB sequentializes
+#     the root in schedule order (no BUNDLE survives in this function).
+#   * dead_def_disjoint_reg_packs: member 2 DEAD-defs $r8 (disjoint from
+#     every other def) — the control. A lone dead def is legal (dead-def
+#     cohabitation is RAW-legal; only the DUAL write is illegal); the root
+#     must still exact-commit as a BUNDLE.
+#
+# What breaks if the bug reappears: COMMIT finds a BUNDLE in
+# dead_dual_write_rejects (the materialize-only dead-def skip is back, two
+# WAW models again), or the control's COMMIT-NOT BUNDLE arm fails (an
+# over-broad law now rejects every dead def, conflating WAW with RAW).
+
+--- |
+  define void @dead_dual_write_rejects() { ret void }
+  define void @dead_def_disjoint_reg_packs() { ret void }
+...
+---
+name:            dead_dual_write_rejects
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r5, $r15
+
+    ; Member 1 live-defs $r4; member 2 DEAD-defs $r4. One register, two
+    ; writes in one cycle — a dual write the register file cannot serialize.
+    ; The dead flag does not clear the write port. Unified law rejects the
+    ; commit probe; the root sequentializes in schedule order.
+    ; COMMIT-LABEL: name: dead_dual_write_rejects
+    ; COMMIT-NOT: BUNDLE
+    ; COMMIT: $r4 = ADD32 $r0, killed $r1
+    ; COMMIT-NEXT: dead $r4 = XOR32 killed $r2, killed $r3
+    ; COMMIT-NEXT: $r9 = ADD32 killed $r5, $r5
+    BUNDLE implicit-def $r4, implicit-def dead $r4, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      dead $r4 = XOR32 $r2, $r3
+    }
+    $r9 = ADD32 $r5, $r5
+
+...
+---
+name:            dead_def_disjoint_reg_packs
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r5, $r15
+
+    ; Member 2 DEAD-defs $r8 — DISJOINT from every other def in the cycle.
+    ; A lone dead def is legal; only the dual write is illegal. The unified
+    ; law must still accept this root for exact commit.
+    ; COMMIT-LABEL: name: dead_def_disjoint_reg_packs
+    ; COMMIT: BUNDLE
+    ; COMMIT-DAG: $r4 = ADD32{{.*}} $r0, killed $r1
+    ; COMMIT-DAG: dead $r8 = XOR32{{.*}} killed $r2, killed $r3
+    ; COMMIT: }
+    BUNDLE implicit-def $r4, implicit-def dead $r8, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      dead $r8 = XOR32 $r2, $r3
+    }
+    $r9 = ADD32 $r5, $r5
+
+...
+# STATS: 1 {{.*}} multi-member hard BUNDLE roots transactionally exact-committed at post-RA leaveMBB
+# STATS: 1 {{.*}} multi-member shells recovered by schedule-order sequentialize after the product coissue probe rejected packing

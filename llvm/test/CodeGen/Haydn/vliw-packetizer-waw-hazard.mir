@@ -199,8 +199,8 @@ body:             |
     ; CHECK-LABEL: name: test3_waw_postinc_data_dest_no_bundle
     ; CHECK: liveins: $r5, $r6
     ; CHECK-NEXT: {{  $}}
-    ; CHECK-NEXT: $r2, $r5 = LD32_POST killed $r5, 1
-    ; CHECK-NEXT: $r2, $r6 = LD32_POST killed $r6, 1
+    ; CHECK-NEXT: $r2, $r5 = S_LW_POST_IMM{{.*}} killed $r5, 1
+    ; CHECK-NEXT: $r2, $r6 = S_LW_POST_IMM{{.*}} killed $r6, 1
     ; CHECK-NEXT: $r0 = COPY killed $r2
     ; CHECK-NEXT: NOP
     ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

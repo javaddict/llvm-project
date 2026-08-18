@@ -14,10 +14,12 @@
 // scoreboard / TopReadyCycle hazard pads, AIEMachineScheduler.cpp:1149-1201),
 // plus commitBlockSchedule / applyBundles materialize
 // (AIEMachineScheduler.cpp:806-863, AIEHazardRecognizer.cpp:317-351).
-// leaveMBB free-packs scheduled multi-MI via commitExactMultiMIProductCycle
-// (sole scheduled multi-MI producer), commits residual unstamped multi-member
+// leaveMBB free-packs scheduled multi-MI via commitOneProductCycle
+// (sole scheduled multi-MI producer; AIE applyBundles size()>1 peer at
+// AIEHazardRecognizer.cpp:326-352), commits residual unstamped multi-member
 // shells with the same ordinary multi-MI path when jointly legal (else
-// sequentializes), and replays multi-member parcel seam latency. No hard-root
+// sequentializes as recovery only), and replays multi-member parcel seam
+// latency. Sequentialize is not a packing legality authority. No hard-root
 // freeze identity and no force-coissue. Post-RA never invents SMS stages.
 //
 //===----------------------------------------------------------------------===//
@@ -27,6 +29,7 @@
 #include "HaydnBundle.h"
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMemberSetDesc.h"
@@ -114,14 +117,33 @@ STATISTIC(NumAuctionOpcodeMemoHits,
           "Number of auction scores served by the opcode-multiset memo");
 STATISTIC(NumAuctionSolves,
           "Number of auction scores that ran the subset/permutation solve");
+STATISTIC(NumInterZonePadCaps,
+          "Number of Top/Bot seam pads that hit the published occupancy "
+          "horizon (T4 hang-containment; continue, do not loop)");
 
 static cl::opt<bool> EnableHaydnPostRAReadySubsetAuction(
     "haydn-postra-ready-subset-auction", cl::init(true), cl::Hidden,
     cl::desc("Post-RA: rank tryCandidate by bounded ready-subset cycle "
              "auction (maximize issued ops under exact product matching)"));
 
+// Full 8-ready enumeration is 2^8·3! exact solves per tryCandidate compare.
+// Pathological ILP regions can still dominate compile time even after the
+// FormatE lookup memo; skip the auction entirely above this Available count.
+static cl::opt<unsigned> HaydnPostRAAuctionSkipReady(
+    "haydn-postra-auction-skip-ready", cl::init(24), cl::Hidden,
+    cl::desc("Skip the subset auction when Available exceeds this count"));
+
+// AIE handleRegionConflicts (AIEMachineScheduler.cpp:1192-1195) is
+// unbounded. Dense MAC bodies can leave TopReadyCycle / CurrCycle far
+// ahead of the reconstructed list and the while never returns. Bound
+// pads to the published occupancy horizon (SIN_COS uimm4+2 = 17) plus
+// scoreboard slack. Residual seam conflict after the cap continues —
+// fatal would re-stick the product path. Peer loop stays the shape.
+static constexpr unsigned HaydnPostRAMaxInterZonePads =
+    HAYDN_SINCOS_OCCUPANCY_MAX + 16;
+
 // legality + multi-MI MIR commit live on HaydnBundleMaterialize
-// (instrsFormOneLegalCycle / commitExactMultiMIProductCycle). PostRA owns
+// (instrsFormOneLegalCycle / commitOneProductCycle). PostRA owns
 // region grouping, free multi-MI exact commit, residual unstamped multi-member
 // ordinary commit/sequentialize, and multi-member seam latency replay.
 
@@ -162,21 +184,11 @@ static bool isBundleSkippable(const MachineInstr &MI);
 /// Build BaseOpcodes from the live HR current-cycle preferred matching and
 /// ReadyOpcodes with Focus first, then other Available (non-skippable) ops.
 /// Returns auction fill score for Focus (IssuedCount of densest legal subset
-/// that includes Focus).
+/// that includes Focus). High-ILP Available skips the auction.
 ///
 /// Memoized (CB-153a). The auction result used here is ONLY IssuedCount of
-/// the best subset that contains the focus, and auctionReadySubsetCycle
-/// enumerates every acceptance order of every subset, so for a fixed Base
-/// sequence the score cannot depend on the ORDER of the non-focus ready ops:
-/// any subset that is legal in some order is found regardless of how the
-/// ready list happened to be ordered, and IssuedCount ranks first among the
-/// tie-breaks. (The order-sensitive tie-breaks pick WHICH equally-dense
-/// auction wins; they never change the count.) The Ready list construction
-/// below — focus first, then the first MaxReadySubsetAuctionReady-1 eligible
-/// Available entries in queue order — is unchanged, so the truncated multiset
-/// the auction sees is exactly what it saw before; only recomputation of an
-/// identical pure function is skipped. Base stays in sequence order in the
-/// key (it is not permuted by the auction).
+/// the best subset that contains the focus. Base stays in sequence order in
+/// the key (it is not permuted by the auction).
 static unsigned scoreReadySubsetAuction(
     SchedBoundary &Zone, SUnit *Focus,
     std::unordered_map<std::vector<unsigned>, unsigned,
@@ -197,6 +209,13 @@ static unsigned scoreReadySubsetAuction(
   if (Base.size() >= Haydn::ISSUE_SLOT_COUNT)
     return Base.size();
 
+  if (Zone.Available.size() > HaydnPostRAAuctionSkipReady) {
+    return HR->getHazardType(Focus, /*DeltaCycles=*/0) ==
+                   ScheduleHazardRecognizer::NoHazard
+               ? 1u
+               : 0u;
+  }
+
   SmallVector<unsigned, 8> Ready;
   Ready.push_back(Focus->getInstr()->getOpcode());
   for (SUnit *SU : Zone.Available) {
@@ -210,7 +229,6 @@ static unsigned scoreReadySubsetAuction(
   }
 
   // Canonical key: Base in order | ~0u separator | focus | sorted rest.
-  // ~0u is not a valid opcode, so the separator cannot collide with content.
   std::vector<unsigned> Key;
   Key.reserve(Base.size() + 1 + Ready.size());
   Key.assign(Base.begin(), Base.end());
@@ -230,7 +248,7 @@ static unsigned scoreReadySubsetAuction(
   }
 
   ++NumAuctionSolves;
-  HaydnMCFormats Fmts;
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   const unsigned Score =
       haydn::bundle::auctionFocusFillScoreOnly(Base, Ready, Fmts, &LegalMemo);
   Memo.emplace(std::move(Key), Score);
@@ -244,6 +262,7 @@ SUnit *HaydnPostRASchedStrategy::pickNode(bool &IsTopNode) {
   SweepSUScore[0].clear();
   SweepSUScore[1].clear();
   SweepSUScoreCycle[0] = SweepSUScoreCycle[1] = ~0u;
+  ReadyAuctionScoreCache.clear();
   return PostGenericScheduler::pickNode(IsTopNode);
 }
 
@@ -261,8 +280,6 @@ bool HaydnPostRASchedStrategy::tryCandidate(SchedCandidate &Cand,
   // EmitInstruction / leaveRegion still exact-commit via BundleMaterialize.
   if (EnableHaydnPostRAReadySubsetAuction) {
     SchedBoundary &Zone = TryCand.AtTop ? Top : Bot;
-    // When comparing cross-zone candidates AtTop may differ; score each in its
-    // own zone. Same-zone picks (the common pickNodeFromQueue path) share Zone.
     SchedBoundary &CandZone = Cand.AtTop ? Top : Bot;
     auto scoreOnce = [&](SchedBoundary &Z, const SchedCandidate &C) {
       const unsigned ZIdx = C.AtTop ? 1 : 0;
@@ -303,7 +320,21 @@ bool HaydnPostRASchedStrategy::tryCandidate(SchedCandidate &Cand,
       TryCand.Reason = ResourceDemand;
       return true;
     }
-    // CandIsLoad && !TryIsLoad: fall through — do not return false.
+  }
+
+  // Auction-tie among equal-cost ready ops: keep region NodeOrder so the
+  // first issued SU is the first in the MBB. Preferred materialize then
+  // binds that SU to the highest free field. Do not override a height/
+  // depth difference — generic tryLatency still owns the critical path
+  // (post-call ADD vs R0 re-zero).
+  if (TryCand.SU->getHeight() == Cand.SU->getHeight() &&
+      TryCand.SU->getDepth() == Cand.SU->getDepth() &&
+      TryCand.SU->NodeNum != Cand.SU->NodeNum) {
+    if (TryCand.SU->NodeNum < Cand.SU->NodeNum) {
+      TryCand.Reason = NodeOrder;
+      return true;
+    }
+    return false;
   }
   return PostGenericScheduler::tryCandidate(Cand, TryCand);
 }
@@ -329,15 +360,26 @@ static bool isBundleSkippable(const MachineInstr &MI) {
       MI.getOpcode(), MI.isPseudo(), Fmts);
 }
 
+static unsigned clampForwardCycle(unsigned From, unsigned To) {
+  if (To <= From)
+    return From;
+  if (To - From > HaydnPostRAMaxInterZonePads)
+    return From + HaydnPostRAMaxInterZonePads;
+  return To;
+}
+
 void HaydnPostRASchedStrategy::bumpCycleForBundles(
     unsigned ToCycle, SmallVectorImpl<CycleBundle> &Bundles,
     CycleBundle &CurrBundle) {
   // Push the in-progress bundle as the current cycle, then pad with empty
   // bundles until reaching ToCycle. Mirrors AIE's bumpCycleForBundles
   // (AIEMachineScheduler.cpp:133-154). Invariant: Bundles.size == current
-  // cycle index.
+  // cycle index. Cap the forward delta so a UINT_MAX ReadyCycle cannot
+  // allocate an unbounded empty-cycle list (T4 hang-root).
   unsigned CurrCycle = Bundles.size();
-  assert(ToCycle > CurrCycle && "bumpCycleForBundles must move forward");
+  ToCycle = clampForwardCycle(CurrCycle, ToCycle);
+  if (ToCycle == CurrCycle)
+    return;
   Bundles.push_back(CurrBundle);
   ++CurrCycle;
   CurrBundle.Instrs.clear();
@@ -351,6 +393,7 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
   CurrentMBB = MBB;
   AuctionScoreCache.clear();
   LegalMemo->Map.clear();
+  ReadyAuctionScoreCache.clear();
   // Dual-load packing is HR tryAddProduct PlacementAlternatives → setDesc
   // members (AIEHazardRecognizer.cpp:389; AIEMachineScheduler.cpp:1121-1132).
   // No promoteLoadsToSlot1 / AlternateSlots residual (AIE
@@ -365,7 +408,6 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
     // import. LeaveMBB sequential fallout for illegal multi-member shells is
     // recovery only after the product coissue probe rejects packing — not an
     // independent legality authority.
-    static bool ResourceAdmissionPinned = false;
     if (!ResourceAdmissionPinned) {
       ResourceAdmissionPinned = true;
       if (!haydnAvailabilityAwareConsumePinsHold())
@@ -403,10 +445,11 @@ void HaydnPostRASchedStrategy::leaveMBB() {
   // SU (not a TII boundary). Fixup still residual-pads if useful-window fill
   // is short.
   //
-  // Product multi-MI: free scheduled packs only, then residual unstamped
-  // multi-member shells via ordinary commitExactMultiMIProductCycle (or
-  // sequentialize if illegal). Multi-member seam latency replay is not a
-  // hard-root freeze path.
+  // Product multi-MI: free scheduled packs only via commitOneProductCycle,
+  // then residual unstamped multi-member shells through the same site.
+  // Sequentialize is recovery after the product coissue probe rejects —
+  // not a second packing authority. Multi-member seam latency replay is
+  // not a hard-root freeze path.
   if (CurrentMBB) {
     // Snapshot multi-member children present before free pack. Seam latency
     // replay applies only to residual shells (and their ordinary multi-MI
@@ -478,9 +521,12 @@ HaydnPostRASchedStrategy::computeAndFinalizeBundles(SchedBoundary &Zone) {
 
       // Defensive clamp: pre-RA-style physreg reschedule can leave ReadyCycle
       // behind the emission order (AIE computeAndFinalizeBundles pre-RA arm).
-      // Post-RA should not hit this; keep progress monotonic.
+      // Post-RA should not hit this; keep progress monotonic. Also cap a
+      // huge ReadyCycle so reconstruction cannot hang (T4 hang-root).
       if (EmitCycle < Bundles.size())
         EmitCycle = Bundles.size();
+      else
+        EmitCycle = clampForwardCycle(Bundles.size(), EmitCycle);
 
       if (EmitCycle != Bundles.size())
         bumpCycleForBundles(EmitCycle, Bundles, CurrBundle);
@@ -511,9 +557,12 @@ HaydnPostRASchedStrategy::computeAndFinalizeBundles(SchedBoundary &Zone) {
 
   // Final CurrCycle flush: Top (and Bot after the sync above) may have been
   // advanced past the last emission cycle by hazards / issue stalls. Pad empty
-  // cycles so the reconstructed list covers the full scheduled window.
+  // cycles so the reconstructed list covers the full scheduled window. Cap
+  // a runaway CurrCycle (T4 hang-root).
   if (Zone.getCurrCycle() != Bundles.size())
-    bumpCycleForBundles(Zone.getCurrCycle(), Bundles, CurrBundle);
+    bumpCycleForBundles(
+        clampForwardCycle(Bundles.size(), Zone.getCurrCycle()), Bundles,
+        CurrBundle);
 
   // Bot reconstruction walks reverse emission order; canonicalize to MBB order
   // for applyBundles / rolling NOP insert.
@@ -526,9 +575,26 @@ HaydnPostRASchedStrategy::computeAndFinalizeBundles(SchedBoundary &Zone) {
 }
 
 // Splice skippable MIs out of [First,Last] so real members are contiguous.
-// Returns false if a skippable has a reg conflict with a real member (unsafe),
-// or if an opaque INLINEASM boundary lies strictly inside the multi-MI span
-// (compiler BUNDLE must never cross INLINEASM — fail closed, leave sequential).
+// Returns false if a skippable has a reg conflict with an instruction of the
+// remaining (not-yet-spliced) window set (unsafe), or if an opaque INLINEASM
+// boundary lies strictly inside the multi-MI span (compiler BUNDLE must never
+// cross INLINEASM — fail closed, leave sequential).
+//
+// W22 / CR-S2 (scheduling F4 family): the conflict oracle is the REMAINING
+// (not-yet-spliced) set of the cycle window — every real member plus every
+// window instruction that stays in place (non-member reals, refused
+// skippables, INLINEASM boundaries). A splice hoists MI above First and
+// therefore across every stayer between them, so the splice is refused when
+// MI conflicts with ANY stayer in any direction:
+//   * MI reads    a reg a stayer defines (RAW — hoisted reader would copy
+//     the stale pre-producer value),
+//   * MI defines  a reg a stayer reads   (WAR — stayer would observe the
+//     spliced writer's new value),
+//   * MI defines  a reg a stayer defines (WAW — window-final value swaps).
+// The pre-W22 member-only oracle let a COPY reading a def that STAYS in the
+// window (a WAR-refused skippable, an INLINEASM, a bundled kid) pass the
+// member check and be hoisted above its producer — silent wrong code. One
+// closed condition over the remaining set; no per-opcode cases.
 static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
                                      ArrayRef<MachineInstr *> Instrs) {
   if (Instrs.size() < 2)
@@ -538,37 +604,50 @@ static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
   const TargetRegisterInfo *TRI =
       MBB.getParent()->getSubtarget().getRegisterInfo();
   bool BundleUnsafe = false;
+  // Remaining (not-yet-spliced) set. Seeded with every real member: members
+  // never splice, and the F4 law (no splice across a member def/use
+  // boundary) is the member subset of the same closed condition.
+  SmallVector<MachineInstr *, 8> Staying(Instrs.begin(), Instrs.end());
   for (MachineBasicBlock::instr_iterator It = First->getIterator(),
                                          E = Last->getIterator();
        It != E;) {
     MachineInstr &MI = *It;
     ++It;
-    if (!isBundleSkippable(MI) || &MI == First)
+    if (&MI == First)
       continue;
     // INLINEASM is a layout/scheduling boundary, not movable glue. Presence
     // between same-cycle members would mean a BUNDLE crossing the opaque
-    // boundary — refuse the multi-MI pack rather than splice it aside.
+    // boundary — refuse the multi-MI pack rather than splice it aside. It
+    // also stays in the window, so later skippables may not cross it.
     if (MI.isInlineAsm()) {
       BundleUnsafe = true;
+      Staying.push_back(&MI);
       continue;
     }
-    // Do not splice meta/COPY across a member def/use boundary. A COPY
-    // that only *reads* a member-def'd reg used to pass the def-only
-    // check and was hoisted above its producer (stale value).
+    // Real (non-skippable) window instructions stay in place — cycle members
+    // (already seeded) and non-member reals alike.
+    if (!isBundleSkippable(MI)) {
+      if (!is_contained(Instrs, &MI))
+        Staying.push_back(&MI);
+      continue;
+    }
+    // Do not splice meta/COPY across a remaining def/use boundary. A COPY
+    // that only *reads* a reg defined by a stayer (member or not) must not
+    // be hoisted above its producer (stale value).
     bool HasRegConflict = false;
     for (const MachineOperand &MO : MI.operands()) {
       if (!MO.isReg() || !MO.getReg())
         continue;
       Register Reg = MO.getReg();
-      for (const MachineInstr *RealMI : Instrs) {
-        if (RealMI == &MI)
+      for (const MachineInstr *StayMI : Staying) {
+        if (StayMI == &MI)
           continue;
-        if (MO.isDef() && (RealMI->readsRegister(Reg, TRI) ||
-                           RealMI->definesRegister(Reg, TRI))) {
+        if (MO.isDef() && (StayMI->readsRegister(Reg, TRI) ||
+                           StayMI->definesRegister(Reg, TRI))) {
           HasRegConflict = true;
           break;
         }
-        if (MO.isUse() && RealMI->definesRegister(Reg, TRI)) {
+        if (MO.isUse() && StayMI->definesRegister(Reg, TRI)) {
           HasRegConflict = true;
           break;
         }
@@ -578,6 +657,7 @@ static bool spliceSkippablesForCycle(MachineBasicBlock &MBB,
     }
     if (HasRegConflict) {
       BundleUnsafe = true;
+      Staying.push_back(&MI);
       continue;
     }
     MBB.splice(First->getIterator(), &MBB, MI.getIterator());
@@ -711,9 +791,11 @@ static void materializeExactNoSplitCycle(
     return;
   }
 
-  // Layer 3: emission pack + field-order (canCoissueProductCycle).
-  if (haydn::bundle::canCoissueProductCycle(Instrs) &&
-      haydn::bundle::commitExactMultiMIProductCycle(Instrs)) {
+  // Layer 3: one production commit site (as-is generated members or
+  // rematch/bake). AIE applyBundles (AIEHazardRecognizer.cpp:326-352)
+  // packs already-setDesc members by getSlotKind inside that site —
+  // PostRA must not open a second bake path.
+  if (haydn::bundle::commitOneProductCycle(Instrs)) {
     ++NumMultiMIBundlesFinalized;
     return;
   }
@@ -735,8 +817,8 @@ void HaydnPostRASchedStrategy::materializeBundles(
   // Cycle ownership (exact no-split Format E encode):
   // * empty cycle → NOP at rolling position (before next real cycle / term)
   // * single MI → leave standalone here; HaydnFinalizeBundle wraps + stamps
-  // * 2-3 free MIs legal → shared commitExactMultiMIProductCycle
-  // * 2-3 free MIs illegal → fail closed (no production greedy split)
+  // * 2-3 free MIs legal → commitOneProductCycle (one bake site)
+  // * 2-3 free MIs illegal → leave sequential (recovery, not a pack law)
   for (unsigned Idx = 0; Idx < Bundles.size(); ++Idx) {
     CycleBundle &CB = Bundles[Idx];
     if (CB.Instrs.empty()) {
@@ -788,11 +870,13 @@ void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
       // rewrite from the keep-map. Slot comes from the format desc, not
       // an `_S*` postfix.
       const MCSlotKind Kind = haydnDefaultMCFormats().getSlotKind(*AltOpcode);
-      if ((haydn::bundle::formatECompositeSlotIsE2(Kind) ||
-           haydn::bundle::formatECompositeSlotIsE3(Kind)) &&
-          memberDescCompatible(MI, *AltOpcode, *HII))
-        rewriteFieldSlotToMember(MI, *AltOpcode, *HII);
-      else
+      if (haydn::bundle::formatECompositeSlotIsE2(Kind) ||
+          haydn::bundle::formatECompositeSlotIsE3(Kind)) {
+        // Keep-map rewrite only. Raw setDesc on a 5-op CB / 3-op WBARWUA
+        // logical leaves an imm in a register slot (cbr_sel vs dest2).
+        if (memberDescCompatible(MI, *AltOpcode, *HII))
+          rewriteFieldSlotToMember(MI, *AltOpcode, *HII);
+      } else
         MI.setDesc(HII->get(*AltOpcode));
     }
   };
@@ -869,16 +953,30 @@ void HaydnPostRASchedStrategy::handleRegionConflicts(
                     << ExitReadyCycle << " TopFinalCycle=" << TopFinalCycle
                     << " TopCurr=" << Top.getCurrCycle()
                     << " BotCurr=" << Bot.getCurrCycle() << "\n");
-  if (ExitReadyCycle > TopFinalCycle)
-    Top.bumpCycle(ExitReadyCycle - Bot.getCurrCycle());
+  if (ExitReadyCycle > TopFinalCycle) {
+    const unsigned Want = ExitReadyCycle - Bot.getCurrCycle();
+    Top.bumpCycle(clampForwardCycle(Top.getCurrCycle(), Want));
+  }
 
   // Pad NOPs between Top and Bot until scoreboards do not overlap and all
   // Bot TopReadyCycle deps are met. Each Top.bumpCycle advances Top's HR
   // (SchedBoundary::bumpCycle → AdvanceCycle) so multi-cycle FU tails slide
-  // past the Bot window.
-  while (checkInterZoneConflicts(BotBundles)) {
+  // past the Bot window. AIE's peer loop is unbounded
+  // (AIEMachineScheduler.cpp:1192-1195); Haydn caps it so dense MAC
+  // bodies cannot hang post-RA (T4 hang-root). Continue after the cap —
+  // fatal would re-stick the product path.
+  unsigned Guard = 0;
+  while (checkInterZoneConflicts(BotBundles) &&
+         Guard < HaydnPostRAMaxInterZonePads) {
     LLVM_DEBUG(dbgs() << "  handleRegionConflicts: Bump Top cycle\n");
     Top.bumpCycle(Top.getCurrCycle() + 1);
+    ++Guard;
+  }
+  if (Guard >= HaydnPostRAMaxInterZonePads &&
+      checkInterZoneConflicts(BotBundles)) {
+    ++NumInterZonePadCaps;
+    LLVM_DEBUG(dbgs() << "  handleRegionConflicts: pad cap "
+                      << HaydnPostRAMaxInterZonePads << " — continue\n");
   }
 
   // Reflect any Top CurrCycle growth into the Top cycle list as empty pads.
@@ -893,6 +991,10 @@ void HaydnPostRASchedStrategy::leaveRegion(const SUnit &ExitSU) {
   // append it to the per-MBB accumulator. The MBB is mutated later in leaveMBB.
   // Mirrors AIEPostRASchedStrategy::leaveRegion (AIEMachineScheduler.cpp:1073-
   // 1119) without the inter-block fixpoint gate / delay-slot fixup.
+  // AIE InterBlockScheduling (AIEInterBlockScheduling.cpp, ~59K+17K) is a
+  // separate unbounded port; this leaveRegion has no cross-block gate.
+  // successorsAreScheduled (AIEMachineScheduler.cpp:251-258) is the first
+  // brick and stays conservative (unknown / empty succs = not scheduled).
   //
   // CRITICAL: the base drive loop calls exitRegion (and thus this leaveRegion)
   // even for empty/single-MI regions that were SKIPPED (MachineScheduler.cpp:
@@ -979,6 +1081,8 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
   //   * illegal (true RAW / SET trip-Off conflict / field-order fail) →
   //     sequentialize in schedule order and clear InternalRead
   //
+  // The product coissue probe is the only legality authority. Sequentialize
+  // is recovery after that probe rejects — it must not invent a pack.
   // Stamped Format-E multi-member is re-probed: remat glue / free pack can
   // stamp a cycle product law refuses (snapshot no-forwarding SET trip).
   // Do not trust the stamp alone. Not a hard-root freeze path.
@@ -1015,10 +1119,25 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
       continue;
     }
 
-    if (haydn::bundle::getBundleRowID(*Root).has_value())
-      continue; // stamped and still jointly legal — keep
+    // A row stamp is not a committed product cycle while any child is
+    // still a logical with a generated member form (AIE applyBundles
+    // always setDesc's; AIEHazardRecognizer.cpp:326-352). Rebake through
+    // the one commit site. Keep only when every child is already a
+    // generated member.
+    bool KidsAreGeneratedMembers = true;
+    for (MachineInstr *K : Kids) {
+      const unsigned Opc = K->getOpcode();
+      if (haydn::format_e::logicalOpcodeOrSelf(Opc) == Opc &&
+          haydn::bundle::lateProductMemberOpcode(Opc) != Opc) {
+        KidsAreGeneratedMembers = false;
+        break;
+      }
+    }
+    if (haydn::bundle::getBundleRowID(*Root).has_value() &&
+        KidsAreGeneratedMembers)
+      continue;
 
-    // Unstamped residual: dissolve and ordinary multi-MI commit.
+    // Unstamped residual: dissolve, then the one bake site.
     for (MachineInstr *K : Kids) {
       for (MachineOperand &MO : K->operands()) {
         if (MO.isReg() && MO.isInternalRead())
@@ -1030,7 +1149,7 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
         K->unbundleFromSucc();
     }
     Root->eraseFromParent();
-    if (haydn::bundle::commitExactMultiMIProductCycle(Kids)) {
+    if (haydn::bundle::commitOneProductCycle(Kids)) {
       ++NumUnstampedMultiMemberCommitted;
       ++NumMultiMIBundlesFinalized;
       continue;

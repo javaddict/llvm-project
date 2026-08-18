@@ -305,7 +305,8 @@ public:
 
   /// Whether \p SU can enter the Available queue of \p Zone.
   /// Default: ready-cycle (if VerifyReadyCycle) + !Zone.checkHazard.
-  /// Targets may delay pressure-worsening nodes (AIE isAvailableNode peer).
+  /// Targets may delay pressure-worsening nodes (AIE isAvailableNode peer;
+  /// D1000 HC#0 exception).
   virtual bool isAvailableNode(SUnit &SU, SchedBoundary &Zone,
                                bool VerifyReadyCycle);
 };

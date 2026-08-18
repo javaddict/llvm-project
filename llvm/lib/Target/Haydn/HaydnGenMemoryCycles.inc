@@ -5,8 +5,9 @@
 //
 // Overlay of AIE MemInstrItinData (AIETarget.td:22-47) and
 // AIEMemoryCyclesEmitter.cpp:123-157 / AIE2InstrInfo.cpp:53.
-// Published Slot0_LS / Slot1_LD / Slot01_LD only. first=0 (issue),
-// last=Data_Latency-1 from the latency-2 scaffold. Not a per-op invent.
+// Published Slot0_LS / Slot1_LD / Slot01_LD / Slot2_LS. first=0
+// (issue), last=Data_Latency-1 from the latency-2 scaffold. Not a
+// per-op invent.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,6 +18,7 @@ HaydnInstrInfo::getFirstMemoryCycle(unsigned SchedClass) const {
   case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
   case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
   case Haydn::Sched::Slot01_LD: return 0; // Slot01_LD
+  case Haydn::Sched::Slot2_LS: return 0; // Slot2_LS
   }
 }
 
@@ -35,6 +37,7 @@ HaydnInstrInfo::getLastMemoryCycle(unsigned SchedClass) const {
   case Haydn::Sched::Slot0_LS: return 1; // Slot0_LS
   case Haydn::Sched::Slot1_LD: return 1; // Slot1_LD
   case Haydn::Sched::Slot01_LD: return 1; // Slot01_LD
+  case Haydn::Sched::Slot2_LS: return 1; // Slot2_LS
   }
 }
 

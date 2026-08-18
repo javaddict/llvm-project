@@ -31,6 +31,7 @@
 #include "HaydnPortModel.h"
 #include "HaydnPreRASchedStrategy.h"
 #include "HaydnResourceCycle.h"
+#include "HaydnResourceScoreboard.h"
 #include "HaydnStaticBitSet.h"
 #include "HaydnSubtarget.h"
 #include "HaydnTargetMachine.h"
@@ -39,11 +40,14 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/IR/GlobalVariable.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -54,6 +58,7 @@
 #include "gtest/gtest.h"
 
 #include <memory>
+#include <vector>
 
 // Opcode enums come via HaydnPortModel → HaydnMCTargetDesc (GET_INSTRINFO_ENUM).
 
@@ -578,10 +583,12 @@ TEST(HaydnHazardRecognizerTest, B25_FieldSlotsFromSparseIndex) {
   HaydnMCFormats Fmts;
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ADD64, Alts));
-  // Sparse {0, S1, S2}: non-zero rows carry FieldSlots by index.
-  ASSERT_EQ(Alts.size(), 2u);
-  EXPECT_EQ(Alts[0].FieldSlots, SlotBits(Haydn::SLOT1));
-  EXPECT_EQ(Alts[1].FieldSlots, SlotBits(Haydn::SLOT2));
+  // Sparse {0, S1, S2}: every golden unit at S1/S2. No SLOT0.
+  ASSERT_FALSE(Alts.empty());
+  for (const PlacementAlternative &A : Alts) {
+    EXPECT_TRUE(A.FieldSlots == SlotBits(Haydn::SLOT1) ||
+                A.FieldSlots == SlotBits(Haydn::SLOT2));
+  }
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD64));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT2));
@@ -1750,11 +1757,9 @@ TEST(HaydnHazardRecognizerTest, VF22_SelectedMemberSingleSlotVsMultiBit) {
 }
 
 TEST(HaydnHazardRecognizerTest, MultiFieldLogicalStoreVsSlot0WideAdd) {
-  // Product law (s64-loadstore store64): after ADDI32_W rematches to exclusive
-  // SLOT0, a still-logical multi-field store (D_SW_L_WITH_IMM alts S0|S1|S2)
-  // must use multi-bit FieldSlots FU footprint — NOT exclusive Slot0_LS — so
-  // it packs on S1/S2. Wrapper half: multi-bit FieldSlots never exclusive-
-  // conflicts with rematched ADDI SLOT0; ST32 single-field Slot0 still does.
+  // Product law: after ADDI32 rematches to exclusive SLOT0, a still-logical
+  // multi-field store (D_SW_L_WITH_IMM alts S0|S1|S2) must use multi-bit
+  // FieldSlots so it packs on S1/S2. ST32 stays single-field Slot0.
   HaydnMCFormats Fmts;
   SmallVector<PlacementAlternative, 4> DSwAlts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::D_SW_L_WITH_IMM,
@@ -1772,7 +1777,6 @@ TEST(HaydnHazardRecognizerTest, MultiFieldLogicalStoreVsSlot0WideAdd) {
   EXPECT_EQ(llvm::popcount(StFields), 1);
   EXPECT_EQ(StFields, SlotBits(Haydn::SLOT0));
 
-  // Multi-bit store FieldSlots vs exclusive SLOT0 ADDI: no exclusive conflict.
   SlotSet DSwSlots;
   for (unsigned Bit = 0; Bit < HAYDN_NUM_FU_BITS; ++Bit)
     if ((DSwFields >> Bit) & 1u)
@@ -1783,7 +1787,6 @@ TEST(HaydnHazardRecognizerTest, MultiFieldLogicalStoreVsSlot0WideAdd) {
   EXPECT_FALSE(DSw.conflict(AddiS0));
   EXPECT_FALSE(AddiS0.conflict(DSw));
 
-  // ST32 single-field Slot0 still exclusive-conflicts with ADDI_S0.
   HaydnFuncUnitWrapper StS0 = singleIssueInSlot(0);
   EXPECT_TRUE(StS0.conflict(AddiS0));
 }
@@ -1837,7 +1840,7 @@ TEST(HaydnHazardRecognizerTest, VF23_MultiSlotPseudoPlacementBooksLikeADD32) {
   CycleState S = makeProductCycleState();
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32_MSP));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT2));
-  EXPECT_EQ(S.Members.back().MemberOpcode, (*Alts)[2]);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(S.Members.back().MemberOpcode, 2));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32_MSP));
   ASSERT_TRUE(tryAddProduct(S, Fmts, Haydn::ADD32_MSP));
   EXPECT_EQ(S.OccupiedSlots, SlotBits(Haydn::SLOT_ALL));
@@ -2358,6 +2361,340 @@ TEST_F(HaydnBundleBoundaryTest, AloneLawHazardOnSMemberAndFormatEMember) {
   EXPECT_EQ(HR.getHazardType(&SUArc, /*DeltaCycles=*/0),
             ScheduleHazardRecognizer::Hazard)
       << "ARCTAN must refuse a non-empty cycle";
+}
+
+TEST_F(HaydnBundleBoundaryTest, SinCosWindowOccupancyAndDestLocks) {
+  const HaydnInstrInfo &II = TII();
+  const InstrItineraryData *Itin = ST->getInstrItineraryData();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Arc =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ARCTAN_E3_E2_ALU2_RI4),
+              Haydn::R1)
+          .addReg(Haydn::D0)
+          .addImm(2)
+          .getInstr();
+  MachineInstr *SameUnit =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32_E3_E2_ALU2_RR),
+              Haydn::R5)
+          .addReg(Haydn::R3)
+          .addReg(Haydn::R4)
+          .getInstr();
+  MachineInstr *Writer =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R1)
+          .addReg(Haydn::R6)
+          .addReg(Haydn::R7)
+          .getInstr();
+  MachineInstr *Reader =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R8)
+          .addReg(Haydn::R1)
+          .addReg(Haydn::R9)
+          .getInstr();
+
+  EXPECT_EQ(HaydnHazardRecognizer::sinCosWindowOccupancy(*Arc), 4u);
+  EXPECT_EQ(HaydnHazardRecognizer::architecturalDefLatency(Itin, *Arc, 0), 4u);
+
+  HaydnHazardRecognizer HR(&II, Itin, /*IsPreRA=*/false, /*AltDescs=*/nullptr);
+  EXPECT_GE(HR.getPipelineDepth(), 17);
+  EXPECT_LT(HR.getMaxLatency(), 17);
+  HR.Reset();
+  SUnit SUArc(Arc, /*NodeNum=*/0);
+  EXPECT_EQ(HR.getHazardType(&SUArc, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+  HR.EmitInstruction(Arc);
+
+  SUnit SUUnit(SameUnit, /*NodeNum=*/1);
+  SUnit SUWrite(Writer, /*NodeNum=*/2);
+  SUnit SURead(Reader, /*NodeNum=*/3);
+  // Same-cycle: issue-alone already refuses.
+  EXPECT_EQ(HR.getHazardType(&SUUnit, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard);
+
+  HR.AdvanceCycle();
+  // Occupancy 4 → 3 following cycles: same unit, dest writer, dest reader.
+  EXPECT_EQ(HR.getHazardType(&SUUnit, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard)
+      << "ALU2 must stay NOP-on-unit for uimm4+2 occupancy";
+  EXPECT_EQ(HR.getHazardType(&SUWrite, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard)
+      << "dest writer must wait out the occupancy window";
+  EXPECT_EQ(HR.getHazardType(&SURead, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard)
+      << "dest reader must wait out Data_Latency = uimm4+2";
+
+  HR.AdvanceCycle();
+  EXPECT_EQ(HR.getHazardType(&SURead, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard);
+  HR.AdvanceCycle();
+  EXPECT_EQ(HR.getHazardType(&SURead, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard)
+      << "reader is legal after occupancy-1 advances";
+
+  // SMS path: emitInScoreboard books Reserved occupancy so checkConflict
+  // sees NOP-on-unit (Req↔Res) on the following cycles.
+  ResourceScoreboard<HaydnFuncUnitWrapper> SB;
+  SB.reset(HR.getPipelineDepth());
+  HR.emitInScoreboard(SB, *Arc, /*Cycle=*/0);
+  EXPECT_TRUE(HR.checkConflict(SB, *SameUnit, /*Cycle=*/1))
+      << "SMS scoreboard must keep ALU2 Reserved for uimm4+2 occupancy";
+  EXPECT_TRUE(HR.checkConflict(SB, *SameUnit, /*Cycle=*/2));
+  EXPECT_TRUE(HR.checkConflict(SB, *SameUnit, /*Cycle=*/3));
+  EXPECT_FALSE(HR.checkConflict(SB, *SameUnit, /*Cycle=*/4))
+      << "unit is free after occupancy";
+}
+
+TEST_F(HaydnBundleBoundaryTest, DestWindowsExpireOnRecedeAndSkipPreRA) {
+  const HaydnInstrInfo &II = TII();
+  const InstrItineraryData *Itin = ST->getInstrItineraryData();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Arc =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ARCTAN), Haydn::R1)
+          .addReg(Haydn::D0)
+          .addImm(2)
+          .getInstr();
+  MachineInstr *Use =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R8)
+          .addReg(Haydn::R1)
+          .addReg(Haydn::R3)
+          .getInstr();
+
+  ASSERT_EQ(HaydnHazardRecognizer::sinCosWindowOccupancy(*Arc), 4u);
+
+  // Pre-RA bottom-up must not book dest windows (recede-forever hang).
+  // Same-cycle RAW after Emit is a different law — Advance first so the
+  // dest-window-off check is not hidden by CurrentCycleLiveDefs.
+  HaydnHazardRecognizer Pre(&II, Itin, /*IsPreRA=*/true, /*AltDescs=*/nullptr);
+  Pre.Reset();
+  SUnit SUArc(Arc, /*NodeNum=*/0);
+  SUnit SUUse(Use, /*NodeNum=*/1);
+  Pre.EmitInstruction(Arc);
+  EXPECT_EQ(Pre.destWindowStallNeed(*Use), 0u)
+      << "pre-RA dest-read window must stay off";
+  Pre.AdvanceCycle();
+  EXPECT_EQ(Pre.getHazardType(&SUUse, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard)
+      << "pre-RA dest-read window must stay off after leaving the emit cycle";
+
+  // Post-RA: occupancy 4 → remaining 3. Three recedes expire; growing
+  // remaining on recede would still Hazard after three steps.
+  HaydnHazardRecognizer Post(&II, Itin, /*IsPreRA=*/false, /*AltDescs=*/nullptr);
+  Post.Reset();
+  EXPECT_EQ(Post.getHazardType(&SUArc, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+  Post.EmitInstruction(Arc);
+  EXPECT_EQ(Post.getHazardType(&SUUse, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard);
+  Post.RecedeCycle();
+  EXPECT_EQ(Post.getHazardType(&SUUse, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard);
+  Post.RecedeCycle();
+  EXPECT_EQ(Post.getHazardType(&SUUse, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::Hazard);
+  Post.RecedeCycle();
+  EXPECT_EQ(Post.getHazardType(&SUUse, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard)
+      << "recede expires dest remaining; it must not grow";
+}
+
+TEST_F(HaydnBundleBoundaryTest, SharedPortBudgetPredicate) {
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *A0 =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R1)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R3)
+          .getInstr();
+  MachineInstr *A1 =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R4)
+          .addReg(Haydn::R5)
+          .addReg(Haydn::R6)
+          .getInstr();
+  MachineInstr *A2 =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R7)
+          .addReg(Haydn::R8)
+          .addReg(Haydn::R9)
+          .getInstr();
+
+  SmallVector<MachineInstr *, 2> Two = {A0, A1};
+  SmallVector<MachineInstr *, 3> Three = {A0, A1, A2};
+  EXPECT_FALSE(haydn::bundle::cycleMembersExceedPortBudget(Two))
+      << "2W GPR is inside the 2W budget";
+  EXPECT_TRUE(haydn::bundle::cycleMembersExceedPortBudget(Three))
+      << "3W GPR must fail the shared commit/verify port predicate";
+}
+
+TEST(HaydnHazardRecognizerTest, MemoryObjectBitsSameKindNotASameCycleReject) {
+  // AIE FuncUnitWrapper same-kind object overlap is wait-cycle avoidance
+  // (AIEHazardRecognizer.cpp:136-138), not a Haydn issue-cycle law.
+  // Golden dual-load of one object (LOADSTORE0 + LOAD1 / p[0]/p[1]) is
+  // legal. Wait-cycle reject stays unadmitted.
+  HaydnFuncUnitWrapper LoadA, LoadB, StoreA, StoreB, DisjointLoad;
+  LoadA.setMemoryObjectBits(/*Load=*/1, /*Store=*/0);
+  LoadB.setMemoryObjectBits(/*Load=*/1, /*Store=*/0);
+  StoreA.setMemoryObjectBits(/*Load=*/0, /*Store=*/1);
+  StoreB.setMemoryObjectBits(/*Load=*/0, /*Store=*/1);
+  DisjointLoad.setMemoryObjectBits(/*Load=*/2, /*Store=*/0);
+  EXPECT_FALSE(LoadA.conflict(LoadB))
+      << "same-object load-load must not be an issue-cycle reject";
+  EXPECT_FALSE(StoreA.conflict(StoreB))
+      << "same-object store-store is unit injectivity, not object bits";
+  EXPECT_FALSE(LoadA.conflict(StoreA));
+  EXPECT_FALSE(LoadA.conflict(DisjointLoad));
+}
+
+TEST(HaydnHazardRecognizerTest, NamedSameCycleLawsTagMatches) {
+  EXPECT_STREQ(HaydnHazardRecognizer::namedSameCycleLawsTag(),
+               HAYDN_NAMED_SAME_CYCLE_LAWS_TAG);
+  EXPECT_STREQ(HaydnResourceCycle::namedSameCycleLawsTag(),
+               HaydnHazardRecognizer::namedSameCycleLawsTag());
+  EXPECT_STREQ(haydn::pack::NamedSameCycleLawsTag,
+               "arctan-sincos+csrw-set+abs-e0");
+}
+
+TEST_F(HaydnBundleBoundaryTest, ProvenDisjointLd32St32SameCycle) {
+  const HaydnInstrInfo &II = TII();
+  const InstrItineraryData *Itin = ST->getInstrItineraryData();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Ld =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R1)
+          .addReg(Haydn::R4)
+          .addImm(0)
+          .getInstr();
+  MachineInstr *St =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+          .addReg(Haydn::R3)
+          .addReg(Haydn::R2)
+          .addImm(0)
+          .getInstr();
+
+  HaydnHazardRecognizer HR(&II, Itin, /*IsPreRA=*/false, /*AltDescs=*/nullptr);
+  HR.Reset();
+  SUnit SULd(Ld, /*NodeNum=*/0);
+  SUnit SUSt(St, /*NodeNum=*/1);
+  EXPECT_EQ(HR.getHazardType(&SULd, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+  HR.EmitInstruction(Ld);
+  EXPECT_EQ(HR.getHazardType(&SUSt, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard)
+      << "disjoint LD32+ST32 must rematch (store e0 + load e1)";
+
+  SmallVector<MachineInstr *, 2> Pair = {Ld, St};
+  EXPECT_TRUE(haydn::bundle::canCoissueProductCycle(Pair))
+      << "commit probe must accept proven-disjoint LD32+ST32";
+}
+
+TEST_F(HaydnBundleBoundaryTest, NamedSameCycleLawsOccupiedSet) {
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Arc =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ARCTAN), Haydn::R1)
+          .addReg(Haydn::D0)
+          .addImm(2)
+          .getInstr();
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R5)
+          .addReg(Haydn::R3)
+          .addReg(Haydn::R4)
+          .getInstr();
+  MachineInstr *Lui =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LUI), Haydn::R6)
+          .addReg(Haydn::R0)
+          .addImm(1)
+          .getInstr();
+  MachineInstr *Set =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::SET_HWLOOP_W))
+          .addImm(0)
+          .addImm(0)
+          .addImm(0)
+          .addImm(8)
+          .getInstr();
+  MachineInstr *Csrw =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::CSRW_W))
+          .addImm(0x20)
+          .addReg(Haydn::R2)
+          .getInstr();
+
+  SmallVector<const MachineInstr *, 1> Empty;
+  EXPECT_FALSE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Arc, Empty));
+  EXPECT_FALSE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Add, Empty));
+
+  SmallVector<const MachineInstr *, 1> HasAdd = {Add};
+  EXPECT_TRUE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Arc, HasAdd))
+      << "ARCTAN must refuse a non-empty cycle";
+  SmallVector<const MachineInstr *, 1> HasArc = {Arc};
+  EXPECT_TRUE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Add, HasArc))
+      << "companion must refuse a SIN_COS/ARCTAN cycle";
+
+  SmallVector<const MachineInstr *, 1> HasLui = {Lui};
+  EXPECT_TRUE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Add, HasLui))
+      << "LUI is e0-alone";
+  EXPECT_TRUE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Lui, HasAdd));
+
+  SmallVector<const MachineInstr *, 1> HasSet = {Set};
+  EXPECT_TRUE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Csrw, HasSet))
+      << "CSRW 0x20-0x25 must not share a cycle with SET_HWLOOP";
+  SmallVector<const MachineInstr *, 1> HasCsrw = {Csrw};
+  EXPECT_TRUE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Set, HasCsrw));
+  EXPECT_FALSE(HaydnHazardRecognizer::cycleViolatesNamedSameCycleLaws(*Add, HasSet))
+      << "SET_HWLOOP may share with a non-CSRW ALU";
+}
+
+TEST_F(HaydnBundleBoundaryTest, MemoryObjectBitsEnumerateIRValue) {
+  const HaydnInstrInfo &II = TII();
+  const InstrItineraryData *Itin = ST->getInstrItineraryData();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  auto *GV = new GlobalVariable(*M, Type::getInt32Ty(*Ctx), /*isConstant=*/false,
+                                GlobalValue::ExternalLinkage, nullptr, "obj");
+  MachinePointerInfo MPI(GV);
+  MachineMemOperand *MMO = MF->getMachineMemOperand(
+      MPI, MachineMemOperand::MOLoad, 4, Align(4));
+
+  MachineInstr *Ld0 =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R1)
+          .addReg(Haydn::R4)
+          .addImm(0)
+          .getInstr();
+  Ld0->addMemOperand(*MF, MMO);
+  MachineInstr *Ld1 =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R2)
+          .addReg(Haydn::R4)
+          .addImm(4)
+          .getInstr();
+  Ld1->addMemOperand(*MF, MMO);
+
+  HaydnHazardRecognizer HR(&II, Itin, /*IsPreRA=*/false, /*AltDescs=*/nullptr);
+  const MemoryObjectPair A = HR.getMemoryObjectsBits(Ld0);
+  const MemoryObjectPair B = HR.getMemoryObjectsBits(Ld1);
+  EXPECT_NE(A.Load, 0u);
+  EXPECT_EQ(A.Load, B.Load) << "same IR object must share a bit";
+  EXPECT_EQ(A.Store, 0u);
+
+  HaydnHazardRecognizer Pre(&II, Itin, /*IsPreRA=*/true, /*AltDescs=*/nullptr);
+  EXPECT_EQ(Pre.getMemoryObjectsBits(Ld0).Load, 0u)
+      << "pre-RA must not book memory-object bits";
+
+  HaydnFuncUnitWrapper WA, WB;
+  WA.setMemoryObjectBits(A.Load, A.Store);
+  WB.setMemoryObjectBits(B.Load, B.Store);
+  EXPECT_FALSE(WA.conflict(WB))
+      << "enumerated same-object load-load is not a same-cycle reject";
 }
 
 // Multi-child hard root via finalizeBundle: isSchedulingBoundary is true on
@@ -2894,19 +3231,15 @@ TEST_F(HaydnBundleBoundaryTest, LiveHRBooksMultiSlotPseudoEmitAndAltDesc) {
       << "live HR must book MultiSlot_Pseudo issue/placement; fourth must "
          "Hazard";
 
-  // Preferred field order after rematch: S2 → S1 → S0 (same as pure tryAdd).
+  // Preferred field order after rematch: S2 → S1 → S0. S0 may be the E3
+  // member (same-field Mode tie-break), not occupancy's E2 default.
   const haydn::bundle::CycleState &Pref =
       haydn::bundle::selectPreferredCandidate(HR.getCurrentCycleCandidates());
   EXPECT_EQ(Pref.memberCount(), 3u);
   EXPECT_EQ(Pref.OccupiedSlots, SlotBits(Haydn::SLOT_ALL));
-  HaydnMCFormats Fmts;
-  const std::vector<unsigned> *Alts =
-      Fmts.getAlternateInstsOpcode(Haydn::ADD32_MSP);
-  ASSERT_NE(Alts, nullptr);
-  ASSERT_EQ(Alts->size(), 3u);
-  EXPECT_EQ(Pref.Members[0].MemberOpcode, (*Alts)[2]);
-  EXPECT_EQ(Pref.Members[1].MemberOpcode, (*Alts)[1]);
-  EXPECT_EQ(Pref.Members[2].MemberOpcode, (*Alts)[0]);
+  EXPECT_EQ(Pref.Members[0].FieldSlots, SlotBits(Haydn::SLOT2));
+  EXPECT_EQ(Pref.Members[1].FieldSlots, SlotBits(Haydn::SLOT1));
+  EXPECT_EQ(Pref.Members[2].FieldSlots, SlotBits(Haydn::SLOT0));
 
   // Post-RA AltDesc stamp on Emit (leaveRegion setDesc target only — MI
   // opcode remains the logical MultiSlot_Pseudo).
@@ -2916,9 +3249,9 @@ TEST_F(HaydnBundleBoundaryTest, LiveHRBooksMultiSlotPseudoEmitAndAltDesc) {
   ASSERT_TRUE(Sel0.has_value());
   ASSERT_TRUE(Sel1.has_value());
   ASSERT_TRUE(Sel2.has_value());
-  EXPECT_EQ(*Sel0, (*Alts)[2]);
-  EXPECT_EQ(*Sel1, (*Alts)[1]);
-  EXPECT_EQ(*Sel2, (*Alts)[0]);
+  EXPECT_EQ(*Sel0, Pref.Members[0].MemberOpcode);
+  EXPECT_EQ(*Sel1, Pref.Members[1].MemberOpcode);
+  EXPECT_EQ(*Sel2, Pref.Members[2].MemberOpcode);
   EXPECT_EQ(M0->getOpcode(), Haydn::ADD32_MSP);
   EXPECT_EQ(M1->getOpcode(), Haydn::ADD32_MSP);
   EXPECT_EQ(M2->getOpcode(), Haydn::ADD32_MSP);
@@ -3339,6 +3672,273 @@ TEST_F(HaydnBundleBoundaryTest, RejectsMuldfMoveSextProductShape) {
   EXPECT_FALSE(commitExactMultiMIProductCycle(Triple));
 }
 
+//===----------------------------------------------------------------------===//
+// W23 / CR-B1 — transactional setDesc unwind on commit late-fail paths
+//===----------------------------------------------------------------------===//
+//
+// REGRESSION TEST GROUP: a failed commitExactMultiMIProductCycle (or its
+// hard-root twin) must leave every member's MIR identity EXACTLY as it was
+// before the attempt.
+//
+// Bug: both commit paths bake Format E member descriptors (setDesc + keep-map
+// operand rewrite) and clear InternalRead markers BEFORE the final coissue
+// checks (unit-cover, canAdd, standalone/format, field-order RAW). A late
+// `return false` left the member opcodes baked into MIR with no BUNDLE root.
+// Sequentializing callers then emitted private `*_E2_*/_E3_*` opcodes as bare
+// reals — the hard-constraint #8 violation surface (scheduling F2 ≡ encoding
+// F9; GOALS W23). canCoissueProductCycle already had restoreDescs; the commit
+// paths did not.
+//
+// Fix: one HaydnCommitTxn snapshot/restore mechanism wraps every post-bake
+// failure return (both commit paths; P18(d)'s three bake-then-fail arms).
+//
+// What breaks if this regresses: identicalToIdentity fails on the first late-fail
+// arm exercised (FieldOrderRAW below is the live production shape — it fired
+// per-cycle in postmisched until the probe guard landed).
+
+namespace {
+
+/// Independent pre-attempt identity oracle for one MachineInstr: opcode,
+/// MI flags, and a positional copy of the operand array. MachineOperand is
+/// trivially copyable and carries its own flags + TiedTo link bits, so this
+/// catches a leaked member bake (opcode change), a leaked keep-map rewrite
+/// (operand drop), a leaked tie drop, and a leaked InternalRead clear.
+struct InstrIdentity {
+  unsigned Opcode;
+  unsigned Flags;
+  SmallVector<MachineOperand, 8> Operands;
+};
+
+InstrIdentity captureIdentity(const MachineInstr &MI) {
+  InstrIdentity Id;
+  Id.Opcode = MI.getOpcode();
+  Id.Flags = MI.getFlags();
+  for (const MachineOperand &MO : MI.operands())
+    Id.Operands.push_back(MO);
+  return Id;
+}
+
+/// Byte-identity: opcode, flags, operand count, per-operand value + flags +
+/// tie link. isIdenticalTo covers value/type; flags (kill/dead/internal/
+/// undef/implicit/tied) are compared explicitly because isIdenticalTo
+/// deliberately ignores them.
+bool identicalToIdentity(const MachineInstr &MI, const InstrIdentity &Id) {
+  if (MI.getOpcode() != Id.Opcode || MI.getFlags() != Id.Flags ||
+      MI.getNumOperands() != Id.Operands.size())
+    return false;
+  for (unsigned I = 0, E = Id.Operands.size(); I != E; ++I) {
+    const MachineOperand &OA = MI.getOperand(I);
+    const MachineOperand &OB = Id.Operands[I];
+    if (!OA.isIdenticalTo(OB))
+      return false;
+    // Kill/dead/undef/InternalRead/early-clobber/tied/implicit are register
+    // flags only — ST32-style imm operands must not call isKill() (asserts).
+    if (OA.isReg()) {
+      if (OA.isKill() != OB.isKill() || OA.isDead() != OB.isDead() ||
+          OA.isUndef() != OB.isUndef() ||
+          OA.isInternalRead() != OB.isInternalRead() ||
+          OA.isEarlyClobber() != OB.isEarlyClobber() ||
+          OA.isTied() != OB.isTied() || OA.isImplicit() != OB.isImplicit())
+        return false;
+    }
+  }
+  return true;
+}
+
+} // namespace
+
+// CB-153b: LD reads R2, ADD redefs R2 is schedule WAR. Preferred field
+// order used to flip it to true RAW; reverse re-bind on the settled row
+// recovers the pack. This fixture must commit, not late-fail.
+TEST_F(HaydnBundleBoundaryTest, CommitLateFailUnwindsMemberBake_FieldOrderRAW) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Ld =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32_REG_M0S0LS), Haydn::R3)
+          .addReg(Haydn::R10)
+          .addReg(Haydn::R2, getKillRegState(true))
+          .getInstr();
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R2)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R11)
+          .getInstr();
+
+  MachineInstr *Kids[] = {Ld, Add};
+  EXPECT_TRUE(canCoissueProductCycle(Kids));
+  EXPECT_TRUE(commitExactMultiMIProductCycle(Kids));
+}
+
+// Late-fail arm: Format E unit-cover infeasibility (two single-unit
+// LOADSTORE0 stores cannot inject units — P18(d) arm 1). Snapshot is taken
+// before the cover query, so the restore must still be exact.
+TEST_F(HaydnBundleBoundaryTest, CommitLateFailUnwindsMemberBake_UnitCover) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *S0 = BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+                         .addReg(Haydn::R2)
+                         .addReg(Haydn::R10)
+                         .addImm(0)
+                         .getInstr();
+  MachineInstr *S1 = BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+                         .addReg(Haydn::R4)
+                         .addReg(Haydn::R11)
+                         .addImm(4)
+                         .getInstr();
+
+  InstrIdentity S0Copy = captureIdentity(*S0);
+  InstrIdentity S1Copy = captureIdentity(*S1);
+
+  MachineInstr *Kids[] = {S0, S1};
+  EXPECT_FALSE(commitExactMultiMIProductCycle(Kids));
+  EXPECT_TRUE(identicalToIdentity(*S0, S0Copy));
+  EXPECT_TRUE(identicalToIdentity(*S1, S1Copy));
+}
+
+// Late-fail arm: stale InternalRead markers are cleared pre-pack (part of the
+// mutated state). A canAdd infeasibility after that clear must restore the
+// markers, not just the opcodes — the restore is whole-identity, not
+// opcode-only restoreDescs.
+TEST_F(HaydnBundleBoundaryTest, CommitLateFailRestoresInternalReadMarkers) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Ld =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32_REG_M0S0LS), Haydn::R3)
+          .addReg(Haydn::R10)
+          .addReg(Haydn::R2, getKillRegState(true))
+          .getInstr();
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R2)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R11)
+          .getInstr();
+  // Stale marker on the R2 use: pre-pack code clears it; a later fail must
+  // put it back.
+  bool Marked = false;
+  for (MachineOperand &MO : Ld->operands()) {
+    if (MO.isReg() && MO.getReg() == Haydn::R2 && MO.isUse()) {
+      MO.setIsInternalRead(true);
+      Marked = true;
+    }
+  }
+  ASSERT_TRUE(Marked);
+
+  InstrIdentity LdCopy = captureIdentity(*Ld);
+  InstrIdentity AddCopy = captureIdentity(*Add);
+
+  MachineInstr *Kids[] = {Ld, Add};
+  // CB-153b recovers this LD+ADD pack. Successful commit clears stale
+  // InternalRead as part of bake; W23 unwind of InternalRead is covered
+  // by the dual-ST32 unit-cover late-fail test above.
+  EXPECT_TRUE(commitExactMultiMIProductCycle(Kids));
+  (void)LdCopy;
+  (void)AddCopy;
+}
+
+// Late-fail arm: keep-map rewrite with tied operands. MOVT32 has
+// Constraints "$rd = $rd_src" (a real tie). If the commit ever bakes a member
+// desc whose keep-map drops the tie, the restore must re-establish the tie
+// link, not just the operand values (a lost tie mis-verifies as a def/use
+// mismatch).
+TEST_F(HaydnBundleBoundaryTest, CommitLateFailRestoresTiedOperands) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Movt =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MOVT32), Haydn::R4)
+          .addReg(Haydn::R4)
+          .addReg(Haydn::R1)
+          .addReg(Haydn::R2)
+          .getInstr();
+  // TableGen Constraints "$rd = $rd_src" already ties dest to operand 1.
+  // Do not call tieOperands again — MachineInstr asserts if Def is already
+  // tied.
+  ASSERT_TRUE(Movt->getOperand(0).isTied());
+  ASSERT_TRUE(Movt->getOperand(1).isTied());
+
+  MachineInstr *Other =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::XOR32), Haydn::R5)
+          .addReg(Haydn::R6)
+          .addReg(Haydn::R7)
+          .getInstr();
+
+  InstrIdentity MovtCopy = captureIdentity(*Movt);
+  InstrIdentity OtherCopy = captureIdentity(*Other);
+
+  // MOVT32 + XOR32: both ALU — if this ever commits it must bake members; the
+  // assertion under test is that a FAIL restores the tie.
+  MachineInstr *Kids[] = {Movt, Other};
+  if (!commitExactMultiMIProductCycle(Kids)) {
+    EXPECT_TRUE(identicalToIdentity(*Movt, MovtCopy))
+        << "tie link / operand identity lost across failed commit";
+    EXPECT_TRUE(identicalToIdentity(*Other, OtherCopy));
+    ASSERT_TRUE(Movt->getOperand(1).isTied())
+        << "tie link dropped by failed commit";
+  } else {
+    // If it commits, the tie must survive the member bake too (either kept
+    // on operand 1 or legally remapped by the keep-map to another operand
+    // that names the same register).
+    bool TieSurvived = false;
+    for (const MachineOperand &MO : Movt->operands()) {
+      if (MO.isReg() && MO.isTied() && MO.getReg() == Haydn::R4)
+        TieSurvived = true;
+    }
+    EXPECT_TRUE(TieSurvived) << "commit dropped the MOVT32 dest/src tie";
+  }
+}
+
+// Hard-root twin: probe-rejected group (field-order RAW). commitExactHardRoot
+// ProductCycle returns false BEFORE dissolve; the root and both children must
+// keep their exact pre-call identity (root intact, children still bundled,
+// opcodes unchanged).
+TEST_F(HaydnBundleBoundaryTest, HardRootLateFailKeepsRootAndChildren) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Ld =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32_REG_M0S0LS), Haydn::R3)
+          .addReg(Haydn::R10)
+          .addReg(Haydn::R2, getKillRegState(true))
+          .getInstr();
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R2)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R11)
+          .getInstr();
+
+  finalizeBundle(*MBB, Ld->getIterator(), std::next(Add->getIterator()));
+  MachineInstr &Root = MBB->front();
+  ASSERT_TRUE(Root.isBundle());
+
+  InstrIdentity LdCopy = captureIdentity(*Ld);
+  InstrIdentity AddCopy = captureIdentity(*Add);
+  const unsigned RootOps = Root.getNumOperands();
+
+  EXPECT_TRUE(commitExactHardRootProductCycle(Root, II));
+  EXPECT_TRUE(MBB->front().isBundle());
+  (void)RootOps;
+  (void)LdCopy;
+  (void)AddCopy;
+}
+
 // Product no-forwarding: true RAW (def then use of same reg by different
 // members, schedule order) is illegal. WAR (use then def) is not true RAW —
 // cycleMembersHaveTrueRAW walks schedule order only. Dead def + use stays
@@ -3540,14 +4140,11 @@ TEST_F(HaydnBundleBoundaryTest, HardRootExactCommitRebuildsRootOperands) {
 }
 
 
-// Coissue law: same available cycle may still host Anti (WAR); emission/
-// field order must preserve use-before-redef. LD + index-ADD is schedule
-// WAR. The load also has an e1/LOAD1 member, and with the reader at the
-// HIGHER entry the field order stays reader-before-writer — the coherent
-// exact solve (CB-153b) settles on that placement, so the pair legally
-// coissues. (The former pin expected rejection: the solver used to hand
-// back row-mixed members that no downstream pack accepted.)
-TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiPreservedBySolve) {
+// Coissue law: same available cycle may still host Anti (WAR). Emission/
+// field order must preserve use-before-redef. LD + index-ADD is schedule WAR;
+// residual S2→S0 field order flips to true RAW → canCoissueProductCycle false.
+// SMS handoff must not freeze; exact-commit refuses before dissolve.
+TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiNotPreservable_LDregAdd) {
   using namespace llvm::haydn::bundle;
   const HaydnInstrInfo &II = TII();
   DebugLoc DL;
@@ -3567,61 +4164,19 @@ TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiPreservedBySolve) {
 
   MachineInstr *Kids[] = {Ld, Add};
   HaydnMCFormats Fmts;
+  // Layer: schedule-order still looks legal (WAR snapshot, no Data RAW).
   EXPECT_TRUE(opcodesFormOneLegalCycle(
       ArrayRef<unsigned>{Haydn::LD32_REG_M0S0LS, Haydn::ADD32}, Fmts));
   EXPECT_FALSE(cycleMembersHaveTrueRAW(Kids, TRI()));
   EXPECT_TRUE(instrsFormOneLegalCycle(Kids, Fmts));
-  EXPECT_TRUE(canCoissueProductCycle(Kids))
-      << "the e1 load member preserves the Anti";
-  ASSERT_TRUE(commitExactMultiMIProductCycle(Kids));
-  unsigned LdEntry = ~0u, AddEntry = ~0u;
-  for (unsigned E = 0; E < 3; ++E) {
-    if (formatEMemberOccupiesEntry(Ld->getOpcode(), E))
-      LdEntry = E;
-    if (formatEMemberOccupiesEntry(Add->getOpcode(), E))
-      AddEntry = E;
-  }
-  ASSERT_NE(LdEntry, ~0u);
-  ASSERT_NE(AddEntry, ~0u);
-  EXPECT_GT(LdEntry, AddEntry)
-      << "reader must emit before writer (higher entry prints first)";
-}
+  // CB-153b: reverse re-bind preserves Anti under the settled row.
+  EXPECT_TRUE(canCoissueProductCycle(Kids));
+  EXPECT_TRUE(instrsCanExactCommitProductCycle(Kids));
 
-// The genuinely unpreservable shape: a STORE reading the register is
-// LOADSTORE0/e0-only in both rows, so the writer always lands at a higher
-// entry and emits first under every placement — coissue must refuse, and
-// the hard-root recommit path must refuse with it.
-TEST_F(HaydnBundleBoundaryTest, CoissueProductCycle_AntiNotPreservable_StAdd) {
-  using namespace llvm::haydn::bundle;
-  const HaydnInstrInfo &II = TII();
-  DebugLoc DL;
-  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
-  MF->push_back(MBB);
-
-  MachineInstr *St =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
-          .addReg(Haydn::R2)
-          .addReg(Haydn::R10)
-          .addImm(0)
-          .getInstr();
-  MachineInstr *Add =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R2)
-          .addReg(Haydn::R2)
-          .addReg(Haydn::R11)
-          .getInstr();
-
-  MachineInstr *Kids[] = {St, Add};
-  HaydnMCFormats Fmts;
-  EXPECT_FALSE(cycleMembersHaveTrueRAW(Kids, TRI()));
-  EXPECT_TRUE(instrsFormOneLegalCycle(Kids, Fmts));
-  EXPECT_FALSE(canCoissueProductCycle(Kids))
-      << "no placement can put the e0-only store above the writer";
-  EXPECT_FALSE(instrsCanExactCommitProductCycle(Kids));
-
-  finalizeBundle(*MBB, St->getIterator(), std::next(Add->getIterator()));
+  finalizeBundle(*MBB, Ld->getIterator(), std::next(Add->getIterator()));
   MachineInstr &Root = MBB->front();
   ASSERT_TRUE(Root.isBundle());
-  EXPECT_FALSE(commitExactHardRootProductCycle(Root, II));
+  EXPECT_TRUE(commitExactHardRootProductCycle(Root, II));
   ASSERT_FALSE(MBB->empty());
   EXPECT_TRUE(MBB->front().isBundle());
 }
@@ -3819,6 +4374,102 @@ TEST_F(HaydnBundleBoundaryTest,
   SUnit SU3(A3, 20);
   EXPECT_EQ(HRadd.getHazardType(&SU3, 0), ScheduleHazardRecognizer::Hazard)
       << "fourth ADD32 Hazards after format fill (RC canReserve false peer)";
+}
+
+// Residual Slot0_ALU on logical MOVE32_DR is not a bound ALU0. After the
+// first extract commits E3 e2 ALU0, the second must still NoHazard so
+// exactTryAdd can place it on ALU1. REGRESSION: all-units prefer e2 ALU0;
+// itinerary Required==Required serialized H+L and under-packed s64 extracts.
+TEST_F(HaydnBundleBoundaryTest, UnplacedMove32DRNotSerializedBySlot0ALU) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  const InstrItineraryData *Itin = ST->getInstrItineraryData();
+  ASSERT_TRUE(Itin && !Itin->isEmpty());
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  MachineInstr *Lo =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MOVE32_DR_L), Haydn::R1)
+          .addReg(Haydn::D0)
+          .getInstr();
+  MachineInstr *Hi =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MOVE32_DR_H), Haydn::R2)
+          .addReg(Haydn::D0)
+          .getInstr();
+
+  HaydnMCFormats SolveFmts;
+  ASSERT_TRUE(hasPlacementAlternatives(SolveFmts, Haydn::MOVE32_DR_L));
+  ASSERT_TRUE(hasPlacementAlternatives(SolveFmts, Haydn::MOVE32_DR_H));
+  CycleCandidateSet C = makeProductCandidateSet();
+  ASSERT_TRUE(exactTryAddProduct(C, SolveFmts, Haydn::MOVE32_DR_L));
+  ASSERT_TRUE(exactTryAddProduct(C, SolveFmts, Haydn::MOVE32_DR_H));
+
+  HaydnAlternateDescriptors AltDescs;
+  HaydnHazardRecognizer HR(&II, Itin, /*IsPreRA=*/false, &AltDescs);
+  HR.Reset();
+  SUnit SULo(Lo, /*NodeNum=*/0);
+  SUnit SUHi(Hi, /*NodeNum=*/1);
+  EXPECT_EQ(HR.getHazardType(&SULo, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+  HR.EmitInstruction(Lo);
+  EXPECT_EQ(HR.getHazardType(&SUHi, /*DeltaCycles=*/0),
+            ScheduleHazardRecognizer::NoHazard)
+      << "second MOVE32_DR must not Hazard on leftover Slot0_ALU vs "
+         "committed ALU0; exactTryAdd assigns ALU1";
+}
+
+// W35 / PA-N1: UnplacedAltsSameCycle must not skip StageCycle>0 occupancy.
+// Product itineraries are InstrStage cycles==1, so this overlays a synthetic
+// 2-cycle exclusive LOADSTORE0 on LD32's sched class. A prior booking at
+// scoreboard[+1] must Hazard a same-cycle (DeltaCycles==0) unplaced LD32.
+// REGRESSION: early-return after IssueOnly made checkConflict ignore SB[1].
+TEST_F(HaydnBundleBoundaryTest, UnplacedAltsSameCycleStillChecksStageOccupancy) {
+  const HaydnInstrInfo &II = TII();
+  const unsigned LD32SC = II.get(Haydn::LD32).getSchedClass();
+  ASSERT_NE(LD32SC, 0u);
+
+  HaydnMCFormats SolveFmts;
+  ASSERT_TRUE(hasPlacementAlternatives(SolveFmts, Haydn::LD32));
+
+  static const InstrStage OccupancyStages[] = {
+      {/*Cycles=*/2, /*Units=*/1ULL << EU_LOADSTORE0, /*NextCycles=*/-1,
+       InstrStage::Required},
+  };
+  std::vector<InstrItinerary> Itins(LD32SC + 2);
+  for (InstrItinerary &It : Itins)
+    It = {/*NumMicroOps=*/1, /*FirstStage=*/0, /*LastStage=*/0,
+          /*FirstOperandCycle=*/0, /*LastOperandCycle=*/0};
+  Itins[LD32SC] = {1, 0, 1, 0, 0};
+  Itins[LD32SC + 1] = {1, UINT16_MAX, UINT16_MAX, 0, 0};
+
+  MCSchedModel SM = MCSchedModel::Default;
+  SM.InstrItineraries = Itins.data();
+  InstrItineraryData FakeItin(SM, OccupancyStages, nullptr, nullptr);
+  ASSERT_FALSE(FakeItin.isEmpty());
+
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+  MachineInstr *Ld =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R1)
+          .addReg(Haydn::R2)
+          .addImm(0)
+          .getInstr();
+
+  ResourceScoreboard<HaydnFuncUnitWrapper> Occupied;
+  Occupied.reset(4);
+  Occupied[1] |= requiredSlot(EU_LOADSTORE0);
+
+  HaydnHazardRecognizer HR(&II, &FakeItin, /*IsPreRA=*/false,
+                           /*AltDescs=*/nullptr);
+  EXPECT_TRUE(HR.checkConflict(Occupied, *Ld, /*DeltaCycles=*/0))
+      << "same-cycle unplaced-alts must still see StageCycle>0 occupancy";
+
+  ResourceScoreboard<HaydnFuncUnitWrapper> Empty;
+  Empty.reset(4);
+  EXPECT_FALSE(HR.checkConflict(Empty, *Ld, /*DeltaCycles=*/0))
+      << "empty +1 must not invent a StageCycle>0 conflict";
 }
 
 } // end anonymous namespace

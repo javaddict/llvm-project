@@ -1,0 +1,43 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — commit-side RF-port recheck (GPR 2W). Three independent
+# ADD32 writes need >=2 cycles; a single 3-member BUNDLE would exceed
+# the shared haydnCycleMembersExceedPortBudget predicate.
+
+--- |
+  define void @three_gpr_writes_need_two_cycles() { ret void }
+...
+---
+name:            three_gpr_writes_need_two_cycles
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r4, $r5
+
+    ; CHECK-LABEL: name: three_gpr_writes_need_two_cycles
+    ; Three 1W ADD32s cannot share one cycle under GPR 2W.
+    ; CHECK-NOT: BUNDLE{{.*}}$r6 = ADD32{{.*}}$r7 = ADD32{{.*}}$r8 = ADD32
+    $r6 = ADD32 $r0, $r1
+    $r7 = ADD32 $r2, $r3
+    $r8 = ADD32 $r4, $r5
+    $r0 = COPY $r8
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

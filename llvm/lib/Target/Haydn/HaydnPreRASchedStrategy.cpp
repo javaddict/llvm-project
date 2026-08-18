@@ -18,7 +18,8 @@
 //
 // productFeasibleFormatMask is the Pre-RA FormatID frontier (size-1 Full).
 // No setDesc / no FormatID freeze before RA (plan §7.1). SMS shares the same
-// Bundle/ResourceCycle getFeasibleFormatMask adapters. tryCandidate also
+// Bundle/ResourceCycle getFeasibleFormatMask adapters. MOVE32 port demand
+// is per-field 2R1W (same as the descriptor path). tryCandidate also
 // consumes the live HR MatchingFrontierScore (nondominated cardinality /
 // free-slot scarcity) after pressure/critical and before NodeOrder.
 //
@@ -57,8 +58,8 @@
 // pure exactTryAddProduct polarity shared with ResourceCycle and post-RA HR.
 // CreateTargetMIHazardRecognizer IsPreRA expands the same candidate set;
 // scoreMatchingFrontier is the list-sched probe. Format is opcode-keyed
-// (MI ≡ desc); MOVE32-class port overcount is orthogonal. Sibling SMS owns
-// live ResourceCycle packing differential. No setDesc / no ResourceCycle edit.
+// (MI ≡ desc). MOVE32 port demand is 2R1W on both the MI and descriptor
+// paths. Sibling SMS owns live ResourceCycle packing. No setDesc.
 //
 //===----------------------------------------------------------------------===//
 
@@ -137,6 +138,15 @@ static cl::opt<bool> EnableHaydnPreRAMatchingFrontier(
     cl::Hidden,
     cl::desc("Pre-RA: rank tryCandidate by matching-frontier cardinality and "
              "free-slot scarcity before NodeOrder"));
+
+// Matching-frontier is two exactTryAdd probes per compare. Large ILP
+// ready sets (IIR / CoreMark / Dhrystone) make that dominate compile time
+// the same way the post-RA subset auction did. Skip the probe and fall
+// through to NodeOrder above this Available count.
+static cl::opt<unsigned> HaydnPreRAFrontierSkipReady(
+    "haydn-prera-frontier-skip-ready", cl::init(12), cl::Hidden,
+    cl::desc("Skip pre-RA matching-frontier ranking when Available exceeds "
+             "this count"));
 
 //===----------------------------------------------------------------------===//
 // AIE helpers (AIEMachineScheduler.cpp) — stock VirtRegOrUnit API
@@ -467,7 +477,8 @@ bool HaydnPreRASchedStrategy::tryCandidate(SchedCandidate &Cand,
   // no AltDesc, no FormatID freeze. ResourceDemand reuses the generic reason
   // slot for "better packing demand / retained options."
   if (EnableHaydnPreRAMatchingFrontier && Zone && Zone->HazardRec &&
-      Zone->HazardRec->isEnabled()) {
+      Zone->HazardRec->isEnabled() &&
+      Zone->Available.size() <= HaydnPreRAFrontierSkipReady) {
     // CreateTargetMIHazardRecognizer always installs HaydnHazardRecognizer for
     // Haydn (pre-RA and post-RA). Safe static cast — no RTTI on HR base.
     auto *HR = static_cast<HaydnHazardRecognizer *>(Zone->HazardRec);

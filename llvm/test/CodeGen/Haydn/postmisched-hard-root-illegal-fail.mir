@@ -5,6 +5,11 @@
 # (Anti-order dissolve), not fail-closed. Four independent ADD32 cannot form
 # one product Format E cycle (issue width 3); membership cannot exact-commit,
 # so leaveMBB dissolves to bare ADDs instead of aborting the function.
+#
+# W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
+# operands on ALU members were removed (ALU descs carry no implicit SFR def;
+# under the unified no-dual-write law they mask the intended packing). W39
+# itself is pinned by w39-dead-def-dual-write-waw.mir.
 
 --- |
   define void @illegal_four_member_hard_root() { ret void }
@@ -24,10 +29,10 @@ body:             |
     ; CHECK: ADD32
     ; CHECK: ADD32
     ; CHECK: RET
-    BUNDLE implicit-def $r8, implicit-def $r9, implicit-def $r10, implicit-def $r11, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
-      $r8 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r9 = ADD32 $r2, $r3, implicit-def dead $sfr
-      $r10 = ADD32 $r4, $r5, implicit-def dead $sfr
-      $r11 = ADD32 $r6, $r7, implicit-def dead $sfr
+    BUNDLE implicit-def $r8, implicit-def $r9, implicit-def $r10, implicit-def $r11, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
+      $r8 = ADD32 $r0, $r1
+      $r9 = ADD32 $r2, $r3
+      $r10 = ADD32 $r4, $r5
+      $r11 = ADD32 $r6, $r7
     }
     RET implicit $r15

@@ -7,11 +7,14 @@ Unit names plus Data_Latency 1/2 and SIN_COS/ARCTAN (uimm4+2).
 
 Emits HaydnGenSchedRecords.inc: ProcessorItineraries InstrItinData rows for the
 published live classes (unit mapping + latency 1/2 scaffolds + conservative
-SIN_COS/ARCTAN dest bound). Also emits HaydnGenMemoryCycles.inc: C++
+SIN_COS/ARCTAN dest bound) plus generated Format E entry capacities
+(E2=2 / E3=3). Also emits HaydnGenMemoryCycles.inc: C++
 getFirst/LastMemoryCycle lookup for the published Slot0_LS / Slot1_LD /
-Slot01_LD latency-2 scaffold (AIE MemInstrItinData + AIEMemoryCyclesEmitter
-peer). Does not import per-operation port/latency/pipeline tables and does
-not set CompleteModel.
+Slot01_LD / Slot2_LS latency-2 scaffold (AIE MemInstrItinData +
+AIEMemoryCyclesEmitter peer). Does not import per-operation
+port/latency/pipeline tables and does not set CompleteModel.
+Emits generated Format E entry capacities (E2=2 / E3=3) so
+HaydnSchedModel.IssueWidth binds the E3 ProductRows EntryCount.
 
 Peer: AIE generated ProcessorItineraries + InstrItinData
 (llvm-aie llvm/lib/Target/AIE/aie2p/AIE2PGenSchedule.td:4226;
@@ -54,7 +57,7 @@ PINNED_JSON_SHA256 = (
     "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9"
 )
 PINNED_CANONICAL_SHA256 = (
-    "6d403139d2530efbcee741456be330ce63843482d7fd372a18eab94cdfb728f9"
+    "000cd92682adb7b88a727182318fa58bd0989547895ae36585c5cbd00f220c0d"
 )
 
 # Unreferenced 5-cycle AccLat classes of unknown provenance. Must not emit.
@@ -71,9 +74,13 @@ GENERATED_NAME = "HaydnGenSchedRecords.inc"
 GENERATED_MEMORY_CYCLES_NAME = "HaydnGenMemoryCycles.inc"
 
 # Published load/store itineraries that report a memory-access cycle.
-# Matches the product First/LastMemoryCycle surface (not Slot2_LS).
+# Matches the product First/LastMemoryCycle surface, including Slot2_LS
+# (S2 memory forms, `HaydnFormatsLS.td` Slot2_LS rows): every Slot*_LS /
+# Slot*_LD itinerary must publish a MemoryCycle pair, else post-RA
+# MemoryEdges fatals on the missing row (W21 / scheduling F1; silent
+# latency-1 fallback on a no-interlock machine is a silicon hazard).
 # first=0 (issue), last=Data_Latency-1 from the latency-2 scaffold.
-MEMORY_ITIN_NAMES = ("Slot0_LS", "Slot1_LD", "Slot01_LD")
+MEMORY_ITIN_NAMES = ("Slot0_LS", "Slot1_LD", "Slot01_LD", "Slot2_LS")
 
 
 def sha256_file(path: Path) -> str:
@@ -189,7 +196,6 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
     mem_first = 0
     mem_last = l2 - 1
     return (
-        PublishedItin("PSEUDO", (), ()),
         PublishedItin("Slot0_ALU", (u["ALU0"],), (l1,)),
         PublishedItin(
             "Slot0_LS", (u["LOADSTORE0"],), (l2,), mem_first, mem_last
@@ -207,7 +213,7 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
         PublishedItin("Slot12_MAC_AccFirst", (u["MAC0"], u["MAC1"]), mac_acc),
         PublishedItin("Slot1_MAC", (u["MAC0"],), mac_wb),
         PublishedItin("Slot2_ALU", (u["ALU2"],), (l1,)),
-        PublishedItin("Slot2_LS", (u["ALU2"],), (l2,)),
+        PublishedItin("Slot2_LS", (u["ALU2"],), (l2,), mem_first, mem_last),
         PublishedItin("Slot2_ALU_SinCosLat", (u["ALU2"],), (l17,)),
         PublishedItin("Slot2_MAC", (u["MAC1"],), mac_wb),
         # Per-slot AccFirst (CB-152c): committed members of FmtALU64Acc
@@ -288,8 +294,15 @@ def emit_sched_records_inc(
         "// (AIE MemInstrItinData / AIEMemoryCyclesEmitter peer), not here.\n"
         "// Per-operation port/latency/pipeline tables are not imported.\n"
         "// CompleteModel stays 0 in HaydnSchedule.td.\n"
+        "// Generated Format E entry capacities (ProductRows EntryCount):\n"
+        "// E2=2 / E3=3. HaydnSchedModel.IssueWidth binds E3. Not a\n"
+        "// competitive invent and not a second 2/3 literal at sched sites.\n"
         "//\n"
         "//===----------------------------------------------------------------------===//\n"
+        "\n"
+        "// Generated ProductRows EntryCount. One fact for E2=2 / E3=3.\n"
+        "defvar FormatEE2EntryCapacity = 2;\n"
+        "defvar FormatEE3EntryCapacity = 3;\n"
         "\n"
         "// Itinerary= alias for FmtALU64Acc. OperandCycles use only 1/2.\n"
         "def Slot12_MAC_AccFirst : InstrItinClass;\n"
@@ -330,8 +343,9 @@ def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
         "//\n"
         "// Overlay of AIE MemInstrItinData (AIETarget.td:22-47) and\n"
         "// AIEMemoryCyclesEmitter.cpp:123-157 / AIE2InstrInfo.cpp:53.\n"
-        "// Published Slot0_LS / Slot1_LD / Slot01_LD only. first=0 (issue),\n"
-        "// last=Data_Latency-1 from the latency-2 scaffold. Not a per-op invent.\n"
+        "// Published Slot0_LS / Slot1_LD / Slot01_LD / Slot2_LS. first=0\n"
+        "// (issue), last=Data_Latency-1 from the latency-2 scaffold. Not a\n"
+        "// per-op invent.\n"
         "//\n"
         "//===----------------------------------------------------------------------===//\n"
         "\n"
@@ -375,6 +389,16 @@ def prove_no_dead_classes(content: str) -> None:
             raise SystemExit(f"error: generated output contains dead class {name}")
     if "[5, 1, 1, 5]" in content:
         raise SystemExit("error: generated output contains 5-cycle AccLat data")
+
+
+def prove_generated_entry_capacities(content: str) -> None:
+    """W51: one generated E2=2 / E3=3 fact. CompleteModel stays 0."""
+    if "defvar FormatEE2EntryCapacity = 2;" not in content:
+        raise SystemExit("error: generated E2 entry capacity missing")
+    if "defvar FormatEE3EntryCapacity = 3;" not in content:
+        raise SystemExit("error: generated E3 entry capacity missing")
+    if "CompleteModel = 1" in content:
+        raise SystemExit("error: generated records must not set CompleteModel=1")
 
 
 def diff_generated_targets(
@@ -489,6 +513,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mem_content = emit_memory_cycles_inc(rows)
         prove_no_dead_classes(content)
         prove_no_dead_classes(mem_content)
+        prove_generated_entry_capacities(content)
     except SystemExit as exc:
         msg = str(exc)
         if msg:
@@ -512,7 +537,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(
             "OK sched itineraries "
             f"rows={len(rows)} units={len(surf.units)} "
-            f"sincos={surf.sincos_conservative} memcycles={mem_n}"
+            f"sincos={surf.sincos_conservative} memcycles={mem_n} "
+            "e2=2 e3=3 complete_model=0"
         )
         return 0
 

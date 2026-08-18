@@ -10,10 +10,14 @@
 //
 // Pre-RA: PropagateIncomingLatencies, EnforceCopyEdges, FuncArgCopyEdges
 // ( CopyConstrain in createHaydnPreRAScheduler)
-// Post-RA: RegionEndEdges, MemoryEdges, MachineSchedWAWEdges
+// Post-RA: RegionEndEdges (MaxLatencyFinder + successorsAreScheduled;
+// default off; -haydn-postra-interblock drops stage latency when
+// successors are scheduled — AIE IncludeStages brick, no PerSuccEdges
+// remaining-latency invent), MemoryEdges (ExactLatencies),
+// MachineSchedWAWEdges (SFR/CBR; default off).
 //
 // Parked (no Haydn peer): LockDelays, BiasDepth, EmitFixedSUnits
-// WAWStickyRegistersEdges.
+// WAWStickyRegistersEdges. PerSuccEdges replay is residual.
 //
 //===----------------------------------------------------------------------===//
 

@@ -1,0 +1,118 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -haydn-postra-waw-edges -haydn-postra-region-end-edges %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — ordinary post-RA one commit site.
+# Legal independent ALU packs through commitOneProductCycle (AIE applyBundles
+# size()>1 peer). Same-cycle RAW stays sequential (recovery after the
+# coissue probe; sequentialize is not a pack authority). LUI is e0-alone
+# so it cannot share a cycle with a second real. Peer: AIEHazardRecognizer.cpp
+# applyBundles 326-352; MaxLatencyFinder / isSimplifiableReservedReg stay
+# default-off on the first run and force-on on the second.
+
+--- |
+  define void @legal_dual_add_one_commit() { ret void }
+  define void @raw_stays_sequential() { ret void }
+  define void @lui_e0_alone() { ret void }
+...
+---
+name:            legal_dual_add_one_commit
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3
+
+    ; Two independent ADD32: 4R2W, injective units. One product cycle
+    ; through commitOneProductCycle (no leftover $sfr WAW).
+    ; CHECK-LABEL: name: legal_dual_add_one_commit
+    ; CHECK: BUNDLE
+    ; CHECK: ADD32
+    ; CHECK: ADD32
+    ; CHECK: }
+    $r4 = ADD32 $r0, $r1
+    $r5 = ADD32 $r2, $r3
+    $r0 = COPY $r5
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            raw_stays_sequential
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+
+    ; True RAW: consumer must observe the pre-cycle value. Probe rejects;
+    ; sequentialize recovery must not invent a pack.
+    ; CHECK-LABEL: name: raw_stays_sequential
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: ADD32
+    ; CHECK: ADD32
+    $r2 = ADD32 $r0, $r1
+    $r3 = ADD32 $r2, $r0
+    $r0 = COPY $r3
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            lui_e0_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r0, $r2, $r3
+
+    ; LUI / ADDI32_W e0-alone. Independent ADD32 must not join the cycle.
+    ; CHECK-LABEL: name: lui_e0_alone
+    ; CHECK-NOT: BUNDLE
+    ; CHECK-DAG: LUI
+    ; CHECK-DAG: ADD32
+    $r1 = LUI $r0, 1
+    $r4 = ADD32 $r2, $r3
+    $r0 = COPY $r4
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

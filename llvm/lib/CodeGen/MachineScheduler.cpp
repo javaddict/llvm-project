@@ -3241,7 +3241,7 @@ LLVM_DUMP_METHOD void SchedBoundary::dumpScheduledState() const {
 
 bool MachineSchedStrategy::isAvailableNode(SUnit &SU, SchedBoundary &Zone,
                                            bool VerifyReadyCycle) {
-  // Stock default (AIE base impl): ready cycle + hazard recognizer.
+  // Stock default (AIE base impl / D1000): ready cycle + hazard recognizer.
   unsigned ReadyCycle = Zone.isTop() ? SU.TopReadyCycle : SU.BotReadyCycle;
   if (VerifyReadyCycle && ReadyCycle > Zone.getCurrCycle())
     return false;

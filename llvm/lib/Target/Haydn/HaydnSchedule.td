@@ -50,15 +50,13 @@ def MAC1       : FuncUnit;
 // The two unreferenced 5-cycle accumulator-latency classes are deleted.
 //===----------------------------------------------------------------------===//
 
-def PSEUDO       : InstrItinClass;
 def Slot0_ALU    : InstrItinClass;  // control / scalar ALU scaffold → ALU0
 def Slot0_LS     : InstrItinClass;  // load/store → LOADSTORE0
 def Slot12_ALU   : InstrItinClass;  // wide ALU → ALU1|ALU2
 // SIN_COS / ARCTAN: Constraints Data_Latency = uimm4+2. uimm4 is 4-bit, so
-// the conservative bound is 15+2 = 17. Exact operand-dependent windows wait
-// for a generated per-op import. InstrStage stays 1 cycle:
-// ProductMaxInstrStageCycles=1; the uimm4+2 unit-occupancy lock is class-3
-// residual (ProductDraftArctanMultiCycleLockEnabled=false), not this class.
+// the conservative bound is 15+2 = 17. InstrStage stays 1 cycle
+// (ProductMaxInstrStageCycles=1 / SMS class-3 off). The HR books the
+// operand-dependent occupancy as Reserved on the selected unit.
 def Slot12_ALU_SinCosLat : InstrItinClass; // logical SIN_COS/ARCTAN → ALU1|ALU2
 def Slot012_ALU  : InstrItinClass;  // any ALU → ALU0|ALU1|ALU2
 def Slot1_LD     : InstrItinClass;  // load unit → LOAD1
@@ -83,8 +81,9 @@ include "HaydnGenSchedRecords.inc"
 //===----------------------------------------------------------------------===//
 
 def HaydnSchedModel : SchedMachineModel {
-  // Max issue per cycle == max Format E entries (E3).
-  let IssueWidth = 3;
+  // Max issue per cycle == generated E3 entry capacity (ProductRows
+  // EntryCount). Do not write a second 3 here.
+  let IssueWidth = FormatEE3EntryCapacity;
   let Itineraries = HaydnItineraries;
   // Common load Data_Latency scaffold (OperandCycles [2] on load classes).
   let LoadLatency = 2;

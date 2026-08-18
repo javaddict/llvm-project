@@ -1,0 +1,74 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: spliceSkippablesForCycle must refuse any splice whose
+# operands conflict with the REMAINING (not-yet-spliced) set of the cycle
+# window — not only the real members (W22 / CR-S2, scheduling F4 family).
+#
+# Bug: the pre-W22 oracle compared a skippable only against the cycle's real
+# members. A skippable COPY that reads a register defined by an instruction
+# that STAYS inside the window (a member-refused skippable — here the first
+# COPY, refused because it reads a member def) passed that member-only check
+# and was spliced above the window head, landing ABOVE ITS OWN PRODUCER and
+# copying the stale pre-producer value: silent miscompile in ordinary
+# post-RA scheduling. The same hole let a splice cross an in-window INLINEASM
+# boundary (opaque layout boundary) whenever no register operand happened to
+# overlap.
+#
+# Fix (closed condition, no per-opcode cases): the conflict oracle is the
+# remaining set — every real member plus every window instruction that stays
+# in place (refused skippables, INLINEASM, non-member reals). A splice is
+# refused when it reads a stayer def (RAW), writes a stayer read (WAR), or
+# writes a stayer write (WAW); once any stayer makes the pack unsafe, no
+# later splice may mutate layout either.
+#
+# Test design: ADD32 defs $r3 (member); COPY $r5 = $r3 reads a member def so
+# it can never be hoisted above the window head; COPY $r6 = $r5 reads the
+# STAYER's def — under the member-only oracle $r6 had no member conflict and
+# was hoisted above both ADD32s, i.e. above $r5, reading a stale $r5. The
+# CHECK order pins $r5 before $r6 and both below the $r3 producer. If the bug
+# returns, $r6 appears above $r5 (and above $r3) and this order fails.
+
+--- |
+  define void @splice_stayer_read() { ret void }
+  define void @splice_stayer_read_inlineasm() { ret void }
+...
+---
+name:            splice_stayer_read
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r5, $r7, $r15
+    ; CHECK-LABEL: name: splice_stayer_read
+    ; CHECK: $r3 = ADD32
+    ; CHECK: $r5 = COPY $r3
+    ; CHECK: $r6 = COPY $r5
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    $r5 = COPY $r3
+    $r6 = COPY $r5
+    $r4 = ADD32 $r5, $r7, implicit-def dead $sfr
+    RET implicit $r15, implicit $r3, implicit $r6
+...
+---
+name:            splice_stayer_read_inlineasm
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r5, $r7, $r15
+    ; CHECK-LABEL: name: splice_stayer_read_inlineasm
+    ; INLINEASM is an opaque layout boundary: the independent COPY may be
+    ; spliced for contiguity only if it does not cross the boundary; here the
+    ; reader of a stayer inside the window must stay in place, in order.
+    ; CHECK: $r3 = ADD32
+    ; CHECK: $r5 = COPY $r3
+    ; CHECK: $r6 = COPY $r5
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    $r5 = COPY $r3
+    $r6 = COPY $r5
+    INLINEASM &"nop", 1 /* sideeffect attdialect */
+    $r4 = ADD32 $r5, $r7, implicit-def dead $sfr
+    RET implicit $r15, implicit $r3, implicit $r6
+...

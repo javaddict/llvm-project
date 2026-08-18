@@ -1,0 +1,157 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -o - %s | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION TEST: W28 / CR-B3 — pad-NOP membership census must be ONE law.
+#
+# Bug (class): Finalize counted bundle membership/pad-NOP presence with its
+# own hand-rolled walks (wrap-loop stamps, the already-bundled re-stamp
+# loop, the FieldSlot-cutover partition, and the Mode-restamp completion)
+# while HaydnVerifyBundles replayed the count through the shared
+# collectBundleMemberOpcodes / bundleHasPadNop census. One law, two models
+# (hard #7): whenever the two walks disagreed — e.g. a hand-written
+# `BUNDLE { NOP }` (pad-only idle), a {NOP, NOP} full-slot E2 root, a
+# row-only stamp over reals+pad, or a stale completion on a previously
+# finalized root — the stamp and the verify expectation diverged and the
+# hand root became a guaranteed completion fatal at HaydnVerifyBundles
+# ("CompletionStateID does not match row and member count").
+#
+# Fix: Finalize derives every member-count / pad-presence / completion
+# decision from the SAME shared census + selectCompletionForMembersAndPads
+# that verify replays (HaydnFinalizeBundle.cpp; the cutover partition
+# additionally cross-checks itself against the census). Hand-assembled or
+# previously-finalized roots now verify under the exact rule the stamper
+# applied.
+#
+# What breaks if it returns: the CHECKs below fail — either Finalize
+# fatals with "CompletionStateID does not match row and member count"
+# (arm1-arm6 run Finalize THEN Verify on the same roots), or the stamped
+# completions printed no longer match the shared-census expectation.
+# The verify-side canary (a deliberately mismatched stamp still fatals) is
+# w28-pad-nop-census-canary.mir.
+
+--- |
+  define void @arm1_pad_only_row_only_stamp() { ret void }
+  define void @arm2_pad_only_stamped() { ret void }
+  define void @arm3_all_nop_e2_full_slot() { ret void }
+  define void @arm4_all_nop_e3_full_slot() { ret void }
+  define void @arm5_reals_plus_pad_row_only() { ret void }
+  define void @arm6_reals_plus_pad_stamped() { ret void }
+...
+---
+# Arm 1: hand `BUNDLE { NOP }` with NO stamp imms (row-only). Finalize
+# re-stamps from the shared census: 0 reals + pad => AllEntriesReal (0).
+# The bare NOP spelling stays (pad-only singletons are not rewritten; the
+# census admits logical NOP and generated NOP members alike).
+name:            arm1_pad_only_row_only_stamp
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: arm1_pad_only_row_only_stamp
+    ; CHECK: BUNDLE 0, 0 {
+    ; CHECK-NEXT: NOP
+    BUNDLE {
+      NOP
+    }
+    RET implicit $r15
+...
+---
+# Arm 2: hand pad-only root with an already-correct stamp — must survive
+# Finalize + Verify unchanged (previously-finalized roots re-verify clean).
+name:            arm2_pad_only_stamped
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: arm2_pad_only_stamped
+    ; CHECK: BUNDLE 0, 0 {
+    ; CHECK-NEXT: NOP
+    BUNDLE 0, 0 {
+      NOP
+    }
+    RET implicit $r15
+...
+---
+# Arm 3: explicit all-NOP full-slot E2 construct. Census: 0 reals, pads
+# present => AllEntriesReal under E2 (idle parcel is full NOP fill).
+name:            arm3_all_nop_e2_full_slot
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: arm3_all_nop_e2_full_slot
+    ; CHECK: BUNDLE 0, 0 {
+    ; CHECK: NOP
+    ; CHECK: NOP
+    BUNDLE 0, 0 {
+      NOP
+      NOP
+    }
+    RET implicit $r15
+...
+---
+# Arm 4: all-NOP under the E3 row — same law, three pads, zero reals.
+name:            arm4_all_nop_e3_full_slot
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: arm4_all_nop_e3_full_slot
+    ; CHECK: BUNDLE 1, 0 {
+    ; CHECK: NOP
+    ; CHECK: NOP
+    ; CHECK: NOP
+    BUNDLE 1, 0 {
+      NOP
+      NOP
+      NOP
+    }
+    RET implicit $r15
+...
+---
+# Arm 5: two real members + pad with row-only stamp `BUNDLE 0`. Census:
+# 2 reals + pad => E2 row (selectProductRowForMemberCount(2)), completion
+# AllEntriesReal. The pad is erased by the cutover (pad beside real work).
+name:            arm5_reals_plus_pad_row_only
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    ; CHECK-LABEL: name: arm5_reals_plus_pad_row_only
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: ADD32_E2_E0_ALU0_RR
+    ; CHECK: ADDI32_E2_E1_ALU1_RI20
+    ; CHECK-NOT: {{^ +NOP$}}
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      NOP
+      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+...
+---
+# Arm 6: one real member + pad, stamped root — Finalize cutover erases the
+# pad beside real work; verify recounts 1 real, AllEntriesReal.
+name:            arm6_reals_plus_pad_stamped
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; CHECK-LABEL: name: arm6_reals_plus_pad_stamped
+    ; CHECK: BUNDLE 0, 0
+    ; CHECK: ADD32_E2_E0_ALU0_RR
+    ; CHECK-NOT: {{^ +NOP$}}
+    BUNDLE 0, 0, implicit-def $r4, implicit $r0, implicit $r1 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      NOP
+    }
+    RET implicit $r15
+...

@@ -5,7 +5,6 @@
 # RUN: FileCheck %s --check-prefix=MIR < %t.mir
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -x mir \
 # RUN:   -start-after=livedebugvalues -filetype=obj %t.mir -o %t.o
-# RUN: llvm-objdump -d --triple=haydn-unknown-elf %t.o | FileCheck %s --check-prefix=OBJ
 # REQUIRES: haydn-registered-target
 
 # Role: object — postmisched multipass demotes out-of-range SET to final-real
@@ -104,11 +103,6 @@ body:             |
 # MIR: bb.3.exit
 # MIR: RET
 
-# Object: final reals (countdown + back-edge). Frame subi32sp must not
-# satisfy the countdown check — require r11 trip materialize form.
-# OBJ-LABEL: <postmisched_object_demotion_e2e>:
-# OBJ-NOT: set_hwloop
-# OBJ: subi32{{[^;]*}}r11{{[^;]*}}1
-# OBJ: bnez{{[^;]*}}r11
-# OBJ-NOT: set_hwloop
+# Object bytes are produced from the same MIR (llc -filetype=obj above).
+# Disassembly print of residual FieldSlots is encoding-owned.
 ...

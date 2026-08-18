@@ -1,0 +1,57 @@
+# RUN: FileCheck %s --check-prefix=MEM --input-file=%S/../../../../../lib/Target/Haydn/HaydnGenMemoryCycles.inc
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -debug-only=machine-scheduler %s -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=PRODUCT
+# REQUIRES: asserts
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — Slot2_LS publishes First/LastMemoryCycle. Live S2 load
+# (D_LQHWUA_POST_S2; store S2 FieldSlots have no e2 member) → load is
+# Latency=2, not a silent 1. A published Slot*_LS class with no table
+# row fatals (ExactLatencies). Do not invent a latency.
+#
+# MEM: Auto-generated
+# MEM: HaydnInstrInfo::getFirstMemoryCycle
+# MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
+# MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
+# MEM: case Haydn::Sched::Slot01_LD: return 0; // Slot01_LD
+# MEM: case Haydn::Sched::Slot2_LS: return 0; // Slot2_LS
+# MEM: HaydnInstrInfo::getLastMemoryCycle
+# MEM: case Haydn::Sched::Slot0_LS: return 1; // Slot0_LS
+# MEM: case Haydn::Sched::Slot1_LD: return 1; // Slot1_LD
+# MEM: case Haydn::Sched::Slot01_LD: return 1; // Slot01_LD
+# MEM: case Haydn::Sched::Slot2_LS: return 1; // Slot2_LS
+
+--- |
+  define i32 @slot2_ls_store_then_load(ptr %p, i64 %v) {
+  entry:
+    store i32 0, ptr %p, align 4
+    %x = load i32, ptr %p, align 4
+    ret i32 %x
+  }
+...
+---
+name:            slot2_ls_store_then_load
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r15
+
+    ; PRODUCT: D_LQHWUA_POST_S2{{.*}}load
+    ; PRODUCT: Ord{{ +}}Latency=2 {{Memory|Barrier}}
+    ; PRODUCT: ST32{{.*}}store
+    $d0, $r1 = D_LQHWUA_POST_S2 $r1, $r3, 0, 0 :: (load (s64) from %ir.p)
+    ST32 $r2, $r1, 0, implicit-def dead $sfr :: (store (s32) into %ir.p)
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

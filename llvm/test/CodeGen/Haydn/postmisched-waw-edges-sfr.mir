@@ -1,0 +1,44 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -haydn-postra-waw-edges -haydn-postra-region-end-edges %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -haydn-postra-waw-edges -haydn-postra-region-end-edges \
+# RUN:   -haydn-postra-interblock %s -o - | FileCheck %s
+#
+# Role: MIR — MaxLatencyFinder + isSimplifiableReservedReg are live (RegionEnd
+# rebuild is opt-in; WAWEdges is product-on). Dead SFR Output edges must not
+# block independent ALU packing, and the ExitSU rebuild must not crash.
+
+--- |
+  define void @dead_sfr_waw_does_not_serialize() { ret void }
+...
+---
+name:            dead_sfr_waw_does_not_serialize
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3
+
+    ; CHECK-LABEL: name: dead_sfr_waw_does_not_serialize
+    ; CHECK: ADD32
+    ; CHECK: ADD32
+    ; CHECK: JALR
+    $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    $r0 = COPY $r5
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

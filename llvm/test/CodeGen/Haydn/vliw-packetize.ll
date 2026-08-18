@@ -49,7 +49,6 @@ define void @test_independent_alu_cross_slot(i32 %a, i32 %b, i64 %c, i64 %d,
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st64 d0, r4, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -80,19 +79,17 @@ define void @test_3slot_bundle(i32* %ptr, i32 %a, i32 %b, i64 %c, i64 %d,
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r1, r1, 0; add32 r2, r2, r3; add64 d0, d0, d1 }
+; CHECK-NEXT:    { add32 r2, r2, r3; ld32 r1, r1, 0; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; st32 r1, r4, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st64 d0, r5, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
                                i32* %out32, i64* %out64) {
-; LD32 takes slot 0; the independent ADD32+ADD64 pair bundles together in
-; slot 1+2 of the next bundle (first bundle is consumed by xor32+ld32+nop).
+; Independent LD32+ADD32+ADD64 fill one three-entry parcel.
 entry:
   %loaded = load i32, i32* %ptr, align 4
   %sum32 = add i32 %a, %b
@@ -122,7 +119,6 @@ define i32 @test_raw_hazard(i32 %x) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 5 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -152,7 +148,6 @@ define i32 @test_memory_dependency(i32* %ptr, i32 %val) {
 ; CHECK-NEXT:    { nop; st32 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -180,10 +175,9 @@ define i32 @test_independent_loads(i32* %p1, i32* %p2) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
+; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
