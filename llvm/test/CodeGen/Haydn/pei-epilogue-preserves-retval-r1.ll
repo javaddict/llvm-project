@@ -20,7 +20,7 @@ declare void @ext(ptr)
 ; Large frame forces reg-offset CSR restores.
 ; Return sum is computed into r1 before the epilogue restore sequence.
 ; Epilogue materializes large restore offsets without clobbering r1.
-; Current lowering uses soft-zero r0 as the offset scratch + ld32_reg.
+; F21: offset materialize uses requirePEIScratchReg, never r0 or r1.
 
 define i32 @ret_after_csr_epilogue(i32 %x) {
 ; CHECK-LABEL: ret_after_csr_epilogue:
@@ -62,15 +62,12 @@ define i32 @ret_after_csr_epilogue(i32 %x) {
 ; CHECK-NEXT:    { nop; add32 r2, r3, r4 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32 r0, r0, 204 }
-; CHECK-NEXT:    { nop; ld32_reg lr, sp, r0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32 r0, r0, 208 }
-; CHECK-NEXT:    { nop; ld32_reg r9, sp, r0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; addi32 r0, r0, 212 }
-; CHECK-NEXT:    { nop; ld32_reg r8, sp, r0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 204 }
+; CHECK-NEXT:    { nop; ld32_reg lr, sp, r3 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 208 }
+; CHECK-NEXT:    { nop; ld32_reg r9, sp, r3 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 212 }
+; CHECK-NEXT:    { nop; ld32_reg r8, sp, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 216 }
 ; CHECK:    { nop; jalr r0, lr, 0 }
 entry:

@@ -13,6 +13,7 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNFRAMELOWERING_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNFRAMELOWERING_H
 
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
 
 namespace llvm {
@@ -49,6 +50,18 @@ public:
   StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
                                      Register &FrameReg) const override;
 
+  // Extra SP delta at I from post-PEI call-frame / transient SP adjusts
+  // that are not FrameSetup/Destroy (PEI replaceFrameIndices SPAdj).
+  // SUBI32 sp,sp,N adds N; ADDI32_W sp,sp,N subtracts N.
+  int64_t getCallFrameSPAdj(const MachineBasicBlock &MBB,
+                            MachineBasicBlock::const_iterator I) const;
+
+  // getFrameIndexReference plus getCallFrameSPAdj when FrameReg is SP.
+  StackOffset getFrameIndexReferenceAt(const MachineFunction &MF, int FI,
+                                       Register &FrameReg,
+                                       const MachineBasicBlock &MBB,
+                                       MachineBasicBlock::const_iterator I) const;
+
   bool hasFPImpl(const MachineFunction &MF) const override;
 
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
@@ -56,9 +69,11 @@ public:
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                            RegScavenger *RS) const override;
 
-  // Reserve emergency spill slots for scavengeFrameVirtualRegs / branch
-  // relaxation. AIE model (no free AT): keep one FI so scavenger may spill
-  // under pressure. Never always-N>1.
+  // PEI layout owner after calculateCallFrameInfo: finalize MaxCallFrameSize
+  // (VLA StackAlign snap; never add it into FrameSize) and fail-closed
+  // VLA+realign. Then reserve emergency spill slots for
+  // scavengeFrameVirtualRegs / branch relaxation. AIE model (no free AT):
+  // keep one FI so scavenger may spill under pressure. Never always-N>1.
   void processFunctionBeforeFrameFinalized(MachineFunction &MF,
                                            RegScavenger *RS) const override;
 
@@ -106,6 +121,8 @@ public:
   eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator MI) const override;
 
+  // Snap PEI-assigned StackSize to StackAlign. Does not write
+  // MaxCallFrameSize (that is processFunctionBeforeFrameFinalized).
   void determineFrameLayout(MachineFunction &MF) const;
 
   // Return initial CFA offset value (0 — CFA = SP at function entry).
@@ -113,6 +130,12 @@ public:
 
   // Return initial CFA register (SP / R13 at function entry).
   Register getInitialCFARegister(const MachineFunction &MF) const override;
+
+  // Product CFI: TM Options.EnableCFIFixup adds the generic pass; this
+  // predicate is what CFIFixup::runOnMachineFunction consults. Keep the
+  // common needsFrameMoves law so shrink-wrapped multi-exit frames restore
+  // CFA/CSR state. Do not claim the pass is enabled from comments alone.
+  bool enableCFIFixup(const MachineFunction &MF) const override;
 };
 
 } // namespace llvm

@@ -22,9 +22,13 @@
 ; Test design: We use four canonical leaf-function shapes (no-args void
 ; single-arg i32, multi-arg i32 arithmetic, i64 arithmetic) that require no
 ; stack allocation, no callee-saved spills, and no FP. Each must:
-; 1. Emit ONLY `xor32 r0, r0, r0` as the prologue (no SP adjustment, no ST32)
+; 1. Emit ONLY `xor32 r0, r0, r0` as the prologue (no ST32; PostRAScratch
+;    may still emit a small SP adjust)
 ; 2. NOT emit `.cfi_def_cfa_offset 0` — that's the load-bearing CHECK
 ; 3. Still emit the return sequence correctly
+;
+; F24 (2026-08-15): leaf no-call empty-CSI no longer emits epilogue xor32.
+; Rebaselined: the missing xor32 before addi32-sp is the intended model.
 
 define void @void_leaf() {
 ; The load-bearing check: no redundant CFI directive
@@ -33,7 +37,6 @@ define void @void_leaf() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK:    { nop; jalr r0, lr, 0 }
   ret void
@@ -46,7 +49,6 @@ define i32 @i32_leaf(i32 %x) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK:    { nop; jalr r0, lr, 0 }
   %r = add i32 %x, 1
@@ -63,7 +65,6 @@ define i32 @i32_leaf_multi(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; mull r3, r2, r3 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; sub32 r1, r3, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK:    { nop; jalr r0, lr, 0 }
   %s1 = add i32 %a, %b
@@ -79,7 +80,6 @@ define i64 @i64_leaf(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK:    { nop; jalr r0, lr, 0 }
   %r = add i64 %a, %b

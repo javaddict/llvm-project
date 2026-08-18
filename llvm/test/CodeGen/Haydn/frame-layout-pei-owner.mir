@@ -1,0 +1,103 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     -verify-machineinstrs -simplify-mir %s -o - | FileCheck %s
+#
+# Role: MIR — MaxCallFrameSize is finalized in
+# processFunctionBeforeFrameFinalized, not re-decided in emitPrologue.
+#
+# REGRESSION TEST: PEI-time MaxCallFrameSize owner (VLA StackAlign snap).
+#
+# Bug: determineFrameLayout inside emitPrologue called setMaxCallFrameSize
+# after calculateCallFrameInfo. Post-hoc, same class as a scavenger walk
+# that ran after the owning pass. For VLAs an unaligned outgoing amount
+# was snapped only when the prologue ran, after offsets were assigned.
+#
+# Fix: processFunctionBeforeFrameFinalized aligns MaxCallFrameSize for
+# VLAs. determineFrameLayout snaps StackSize only (RISCVFrameLowering
+# determineFrameLayout). Do not add MaxCallFrameSize into FrameSize.
+#
+# Test design: two VLAs that differ only in ADJCALLSTACK amount.
+# @vla_reg_only uses 0; @vla_unaligned_outgoing uses 12 (not StackAlign).
+# After PEI they share stackSize. The unaligned outgoing snaps to 16.
+# Prologue SUBI32 equals stackSize, not stackSize+16. The call site still
+# expands to SUBI32/ADDI32 16 (eliminateCallFramePseudoInstr aligns the
+# amount itself).
+#
+# If emitPrologue re-owns MaxCallFrameSize by adding it into FrameSize,
+# [[SZ]] diverges. If the PEI VLA snap is dropped, maxCallFrameSize stays 12.
+
+--- |
+  target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
+  target triple = "haydn-unknown-elf"
+
+  declare void @callee()
+
+  define void @vla_reg_only(i32 %n) {
+  entry:
+    ret void
+  }
+
+  define void @vla_unaligned_outgoing(i32 %n) {
+  entry:
+    ret void
+  }
+...
+---
+name:            vla_reg_only
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+  hasCalls:        true
+  adjustsStack:    true
+  maxCallFrameSize: 0
+stack:
+  - { id: 0, type: variable-sized, alignment: 8 }
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    ADJCALLSTACKDOWN 0, 0, implicit-def $r13, implicit $r13
+    $r15 = JAL_W @callee, csr_haydn, implicit-def $r15
+    ADJCALLSTACKUP 0, 0, implicit-def $r13, implicit $r13
+    RET implicit $r15
+
+...
+---
+name:            vla_unaligned_outgoing
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  maxAlignment:    8
+  hasCalls:        true
+  adjustsStack:    true
+  maxCallFrameSize: 12
+stack:
+  - { id: 0, type: variable-sized, alignment: 8 }
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    ADJCALLSTACKDOWN 12, 0, implicit-def $r13, implicit $r13
+    $r15 = JAL_W @callee, csr_haydn, implicit-def $r15
+    ADJCALLSTACKUP 12, 0, implicit-def $r13, implicit $r13
+    RET implicit $r15
+
+...
+# CHECK-LABEL: name: vla_reg_only
+# CHECK: stackSize: [[SZ:[0-9]+]]
+# CHECK: maxCallFrameSize: 0
+# CHECK: $r13 = frame-setup SUBI32 $r13, [[SZ]]
+#
+# CHECK-LABEL: name: vla_unaligned_outgoing
+# CHECK: stackSize: [[SZ]]
+# CHECK: maxCallFrameSize: 16
+# CHECK: $r13 = frame-setup SUBI32 $r13, [[SZ]]
+# CHECK: $r13 = SUBI32 $r13, 16
+# CHECK: JAL_W
+# CHECK: $r13 = ADDI32_W $r13, 16

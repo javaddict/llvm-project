@@ -36,7 +36,6 @@ define i32 @fixed_alloca(i32 %x) {
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -150,7 +149,6 @@ define void @multi_size_allocas(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; addi32 r1, r3, 4 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r3, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r1, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -174,7 +172,6 @@ define i32 @large_alloca(i32 %a) {
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 408 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -195,7 +192,6 @@ define void @aligned_alloca(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

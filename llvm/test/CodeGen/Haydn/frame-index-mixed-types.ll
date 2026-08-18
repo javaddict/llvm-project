@@ -31,7 +31,6 @@ define void @mixed_allocas() {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r3, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -58,7 +57,6 @@ define void @i32_only_allocas() {
 ; CHECK-NEXT:    { nop; st32 r3, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -92,7 +90,6 @@ define void @i64_only_allocas() {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

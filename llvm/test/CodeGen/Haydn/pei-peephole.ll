@@ -11,6 +11,7 @@
 ; hasFP() is true (F10). These CHECKs lock prologue/epilogue shape:
 ; 1. Soft-zero xor32 r0, r0, r0 in the prologue
 ; 2. No R14/FP setup when the function does not need a frame pointer
+; F24 (2026-08-15): leaf no-call empty-CSI no longer emits epilogue xor32.
 
 ;===----------------------------------------------------------------------===;;
 ; Test 1: Simple function without FP — prologue should have exactly one
@@ -24,7 +25,6 @@ define i32 @test_simple_no_fp(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -47,7 +47,6 @@ define i32 @test_stack_slot_no_fp(i32 %a) {
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -72,7 +71,6 @@ define i32 @test_leaf(i32 %x) {
 ; CHECK-NEXT:    { nop; mull r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -116,17 +114,19 @@ define i32 @test_multi_bb(i32 %n) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; slt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB4_2 }
 ; CHECK-NEXT:  // %bb.1: // %pos
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 10 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB4_3 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB4_2: // %neg
+; CHECK-NEXT:    .cfi_restore_state
 ; CHECK-NEXT:    { nop; sub32 r1, r2, r1 }
-; CHECK-NEXT:  .LBB4_3: // %pos
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -163,7 +163,6 @@ define i32 @test_many_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e,
 ; CHECK-NEXT:    { add32 r4, r7, r12; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r2, r3, r4 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

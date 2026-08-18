@@ -1,0 +1,192 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/interrupt.mir -o - 2>&1 | FileCheck %s --check-prefix=ISR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/naked.mir -o - 2>&1 | FileCheck %s --check-prefix=NAKED
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/ssp.mir -o - 2>&1 | FileCheck %s --check-prefix=SSP
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/i128.mir -o - 2>&1 | FileCheck %s --check-prefix=I128
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/inreg.mir -o - 2>&1 | FileCheck %s --check-prefix=INREG
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/nest.mir -o - 2>&1 | FileCheck %s --check-prefix=NEST
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/swiftself.mir -o - 2>&1 | FileCheck %s --check-prefix=SWIFT
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/byref.mir -o - 2>&1 | FileCheck %s --check-prefix=BYREF
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/half.mir -o - 2>&1 | FileCheck %s --check-prefix=HALF
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=prologepilog \
+# RUN:     %t/fp128.mir -o - 2>&1 | FileCheck %s --check-prefix=FP128
+#
+# Role: MIR — PEI last-line fail-closed for advertised-but-unsupported
+# frame/CC seats. CallLowering rejects the IR path first
+# (gisel/abi-fail-closed-residuals.ll). This pin is the layout firewall
+# if those attributes still reach processFunctionBeforeFrameFinalized.
+# Live INREG/nest/swift/byref text is the i128/inreg/nest/swift/byref seat.
+
+#--- interrupt.mir
+--- |
+  define void @isr() "interrupt"="machine" {
+    ret void
+  }
+...
+---
+name:            isr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; ISR: {{interrupt/naked/stack-protector/i128 have no product frame ABI}}
+    RET implicit $r15
+
+#--- naked.mir
+--- |
+  define void @naked_fn() naked {
+    ret void
+  }
+...
+---
+name:            naked_fn
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; NAKED: {{interrupt/naked/stack-protector/i128 have no product frame ABI}}
+    RET implicit $r15
+
+#--- ssp.mir
+--- |
+  define void @ssp_fn() ssp {
+    ret void
+  }
+...
+---
+name:            ssp_fn
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; SSP: {{interrupt/naked/stack-protector/i128 have no product frame ABI}}
+    RET implicit $r15
+
+#--- i128.mir
+--- |
+  define i128 @i128_formal(i128 %x) {
+    ret i128 %x
+  }
+...
+---
+name:            i128_formal
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; I128: {{interrupt/naked/stack-protector/i128 have no product frame ABI}}
+    RET implicit $r15
+
+#--- inreg.mir
+--- |
+  define i32 @inreg_formal(i32 inreg %x) {
+    ret i32 %x
+  }
+...
+---
+name:            inreg_formal
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; INREG: i128/inreg/nest/swift/byref have no product calling-convention seat
+    $r1 = COPY $r1
+    RET implicit $r15, implicit $r1
+
+#--- nest.mir
+--- |
+  define i32 @nest_formal(ptr nest %p) {
+    %v = load i32, ptr %p
+    ret i32 %v
+  }
+...
+---
+name:            nest_formal
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; NEST: i128/inreg/nest/swift/byref have no product calling-convention seat
+    RET implicit $r15, implicit $r1
+
+#--- swiftself.mir
+--- |
+  define i32 @swiftself_formal(ptr swiftself %p) {
+    %v = load i32, ptr %p
+    ret i32 %v
+  }
+...
+---
+name:            swiftself_formal
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SWIFT: i128/inreg/nest/swift/byref have no product calling-convention seat
+    RET implicit $r15, implicit $r1
+
+#--- byref.mir
+--- |
+  %T = type { i32 }
+  define i32 @byref_formal(ptr byref(%T) %p) {
+    %v = load i32, ptr %p
+    ret i32 %v
+  }
+...
+---
+name:            byref_formal
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BYREF: i128/inreg/nest/swift/byref have no product calling-convention seat
+    RET implicit $r15, implicit $r1
+
+#--- half.mir
+--- |
+  define half @half_formal(half %x) {
+    ret half %x
+  }
+...
+---
+name:            half_formal
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; HALF: {{interrupt/naked/stack-protector/i128 have no product frame ABI}}
+    RET implicit $r15
+
+#--- fp128.mir
+--- |
+  define fp128 @fp128_formal(fp128 %x) {
+    ret fp128 %x
+  }
+...
+---
+name:            fp128_formal
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; FP128: {{interrupt/naked/stack-protector/i128 have no product frame ABI}}
+    RET implicit $r15

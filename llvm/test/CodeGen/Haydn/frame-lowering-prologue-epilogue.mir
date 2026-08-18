@@ -61,8 +61,9 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # PostRAScratchFI may force a small frame even for otherwise frameless
 # leaves when R12 is allocatable. Accept either no-SUBI32 or SUBI32 for that slot.
-# Epilogue always re-zeros soft-zero R0 (covers mid-fn far-veneer residual).
-# CHECK: frame-destroy XOR32 $r0, $r0
+# F24: leaf no-call empty-CSI must not emit epilogue XOR32. Caller-side
+# re-zero is HaydnExpandPseudos; this MIR never has a call or CSI.
+# CHECK-NOT: frame-destroy XOR32
 # CHECK: RET
 
 ---
@@ -94,9 +95,8 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{8|16}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{8|16}}
-# Epilogue: re-zero soft-zero R0 before CSR/SP restore (linker far veneer
-# and JALR-rd=R0 leave R0 = link; LOADI32 CSR offsets need R0 == 0).
-# CHECK: frame-destroy XOR32 $r0, $r0
+# F24: no CSI, no calls — no epilogue XOR32. SP restore only.
+# CHECK-NOT: frame-destroy XOR32
 # CHECK: $r13 = frame-destroy ADDI32_W $r13, {{8|16}}
 # CHECK: RET
 
@@ -125,8 +125,8 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{64|72}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{64|72}}
-# Epilogue: R0 re-zero then SP increment by 64 (+ optional PostRAScratch)
-# CHECK: frame-destroy XOR32 $r0, $r0
+# F24: no CSI, no calls — no epilogue XOR32.
+# CHECK-NOT: frame-destroy XOR32
 # CHECK: $r13 = frame-destroy ADDI32_W $r13, {{64|72}}
 # CHECK: RET
 
@@ -159,7 +159,7 @@ body:             |
 # CHECK: frame-setup XOR32 $r0, $r0
 # CHECK: $r13 = frame-setup SUBI32 $r13, {{8|16}}
 # CHECK: frame-setup CFI_INSTRUCTION def_cfa_offset {{8|16}}
-# Epilogue: R0 re-zero then SP increment
-# CHECK: frame-destroy XOR32 $r0, $r0
+# F24: no CSI, no calls — no epilogue XOR32.
+# CHECK-NOT: frame-destroy XOR32
 # CHECK: $r13 = frame-destroy ADDI32_W $r13, {{8|16}}
 # CHECK: RET

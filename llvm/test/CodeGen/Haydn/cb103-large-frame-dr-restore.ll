@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O1 -verify-machineinstrs < %s | FileCheck %s
 
 ; Role: semantic — PEI epilogue DR64 CSR restore must not emit out-of-range ld64 dN, sp, imm (e.g.
 

@@ -121,7 +121,6 @@ define i32 @alloca_loop(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; bnez r5, .LBB2_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -193,7 +192,6 @@ define i32 @large_alloca() nounwind {
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 7 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -228,7 +226,6 @@ define i32 @cond_alloca(i1 %flag) nounwind {
 ; CHECK-NEXT:    { nop; st32 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -272,7 +269,6 @@ define i64 @alloca_i64() nounwind {
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:

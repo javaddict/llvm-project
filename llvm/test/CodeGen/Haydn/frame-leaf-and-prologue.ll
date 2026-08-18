@@ -9,6 +9,13 @@
 ; Do not need callee-save spills
 ; May not need a stack frame at all (no allocas, no locals)
 ; Still zero R0 in the prologue (reserved soft-zero register)
+;
+; F24 (2026-08-15): epilogue XOR32 R0 re-zero is gated on
+; hasCalls() || !CSI.empty(). Leaf no-call empty-CSI frames no longer
+; emit a second xor32 before the return. Rebaselined: the CHECK-NEXT
+; xor32 immediately before addi32-sp / jalr is the intended absence,
+; not a missing restore. Caller-side re-zero stays HaydnExpandPseudos.
+; @non_leaf still has the epilogue xor (hasCalls).
 
 ;Pure leaf: no stack frame at all
 
@@ -23,7 +30,6 @@ define i32 @pure_leaf(i32 %x) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -43,7 +49,6 @@ define i32 @leaf_arith(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; mull r3, r2, r3 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; sub32 r1, r3, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -62,7 +67,6 @@ define i64 @leaf_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -79,7 +83,6 @@ define i32 @leaf_cmp(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; max32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -131,7 +134,6 @@ define i32 @leaf_with_alloca(i32 %x) {
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -158,7 +160,6 @@ define i32 @leaf_multi_alloca(i32 %x) {
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r3, 0 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -179,7 +180,6 @@ define void @void_leaf() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -194,17 +194,19 @@ define i32 @leaf_branch(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; slt32 r3, r3, r1 }
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB8_2 }
 ; CHECK-NEXT:  // %bb.1: // %pos
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB8_3 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; CHECK-NEXT:  .LBB8_2: // %neg
+; CHECK-NEXT:    .cfi_restore_state
 ; CHECK-NEXT:    { nop; sub32 r1, r1, r2 }
-; CHECK-NEXT:  .LBB8_3: // %pos
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
