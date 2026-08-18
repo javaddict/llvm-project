@@ -1,5 +1,7 @@
-; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -stop-after=haydn-hwloops < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -haydn-enable-hwloops \
+; RUN:   -enable-pipeliner=false -enable-misched=false \
+; RUN:   -global-isel-abort=1 -verify-machineinstrs -mattr=+hwloop \
+; RUN:   -stop-after=haydn-hwloops < %s | FileCheck %s
 
 ; Role: MIR — Previously expected-fail (XFAIL marker removed): the kept ISA-27 compare/branch codegen (denser bundles; CHECK at line 84 no longer matches).
 
@@ -29,6 +31,10 @@
 ; directive would silently pass when the gap closes, hiding the fact that the
 ; behavior changed. A positive CHECK on the hardware-loop pseudos makes the
 ; change loud.
+;
+; -enable-pipeliner=false -enable-misched=false: pre-RA SMS and the pre-RA
+; machine scheduler hang on the IIR recurrence (bqriir). This file pins Role-A
+; expand output, not those passes.
 
 ; ===========================================================================
 ; Pattern 3 (GAP-2 CLOSED by): Count-up runtime trip, fused BLT latch.

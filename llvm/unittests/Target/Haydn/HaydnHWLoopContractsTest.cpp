@@ -24,8 +24,20 @@
 
 #include "HaydnBundlePlan.h"
 #include "HaydnHWLoopContracts.h"
+#include "HaydnSubtarget.h"
+#include "HaydnTargetMachine.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
+#include "llvm/Target/TargetOptions.h"
 #include "gtest/gtest.h"
+
+// Haydn::SET_HWLOOP opcode and Haydn::SFR register enums from tablegen.
+#define GET_INSTRINFO_ENUM
+#include "HaydnGenInstrInfo.inc"
+#define GET_REGINFO_ENUM
+#include "HaydnGenRegisterInfo.inc"
 
 using namespace llvm;
 using namespace llvm::haydn::bundle;
@@ -135,6 +147,12 @@ TEST(HaydnHWLoopContractsTest, OffsetFieldLimitsAndSafetyMargin) {
 // Late-layout stable row: Fixup charges MaxSingleBranchGrowthBytes per
 // still-relaxable short branch against residual Off margins so the second
 // BranchRelaxation cannot invalidate a hardware-form acceptance.
+TEST(HaydnHWLoopContractsTest, BranchRelaxSafetyBufferIsGrowthBudget) {
+  EXPECT_EQ(BranchRelaxSafetyBufferBytes, MaxSingleBranchGrowthBytes);
+  EXPECT_EQ(BranchRelaxSafetyBufferBytes,
+            productBundlesToBytes(MaxSingleBranchGrowthParcels));
+}
+
 TEST(HaydnHWLoopContractsTest, SecondBRGrowthBudgetFromProductParcel) {
   EXPECT_EQ(MaxSingleBranchGrowthParcels, 4u);
   EXPECT_EQ(MaxSingleBranchGrowthBytes,
@@ -184,4 +202,71 @@ TEST(HaydnHWLoopContractsTest, ProductParcelMatchesGeneratedVLIW) {
   EXPECT_EQ(productParcelBytes(), *FromPackets);
 }
 
+// REGRESSION (GOALS W46 / audit G-1): the sel constants were once INVERTED
+// vs the golden Reference Manual ("for nested loops, HWLR_*[0] is used for
+// the inner loop, and HWLR_*[1] for the outer loop") — Innermost=1/Outer=0.
+// Harmless only while nesting is unimplemented (single-BB Role-A expand was
+// the sole consumer and any in-domain sel programmed the same loop). The day
+// nesting lands, the inversion becomes wrong-loop-writes-wrong-CSR. This pin
+// freezes the golden convention by VALUE, not just domain membership.
+TEST(HaydnHWLoopContractsTest, SelectorConventionMatchesGoldenManual) {
+  EXPECT_EQ(InnermostProductSelector, 0);
+  EXPECT_EQ(OuterProductSelector, 1);
+  EXPECT_NE(InnermostProductSelector, OuterProductSelector);
+  EXPECT_TRUE(isProductSelector(InnermostProductSelector));
+  EXPECT_TRUE(isProductSelector(OuterProductSelector));
+}
+
+} // namespace
+
+namespace {
+using namespace llvm;
+// REGRESSION (GOALS W47 / audit PA2-G2): the golden Constraints same-sel
+// two-SETs-per-bundle ban must ride ONE mechanism — the SFR-space WAW the
+// HR already enforces ("one SFR writer per cycle") — for BOTH the real _W
+// forms and the residual SET_HWLOOP{,_REG} pseudos. The residual pseudos
+// once carried NO Defs and relied only on hasSideEffects=1's DAG Ord
+// barrier (topology, not a predicate): flipping hasSideEffects to 0
+// without Defs would have silently made two same-sel residual SETs
+// coissuable (both write HWLR_*[sel]; the second clobbers the first).
+// This descriptor-level pin makes the td law itself, independent of any
+// scheduler's barrier behavior.
+class HaydnHWLoopSetDefsTest : public testing::Test {
+protected:
+  std::unique_ptr<HaydnTargetMachine> TM;
+  std::unique_ptr<HaydnSubtarget> ST;
+
+  static void SetUpTestSuite() {
+    LLVMInitializeHaydnTargetInfo();
+    LLVMInitializeHaydnTarget();
+    LLVMInitializeHaydnTargetMC();
+  }
+
+  void SetUp() override {
+    std::string Error;
+    Triple TT("haydn-unknown-elf");
+    const Target *TheTarget = TargetRegistry::lookupTarget(TT, Error);
+    ASSERT_NE(TheTarget, nullptr) << Error;
+    TargetOptions Options;
+    TM.reset(static_cast<HaydnTargetMachine *>(TheTarget->createTargetMachine(
+        TT, "generic", "", Options, std::nullopt, std::nullopt,
+        CodeGenOptLevel::Default)));
+    ASSERT_NE(TM, nullptr);
+    ST = std::make_unique<HaydnSubtarget>(TM->getTargetTriple(), "generic",
+                                          "generic", "", *TM);
+    ASSERT_NE(ST, nullptr);
+  }
+
+  const HaydnInstrInfo &TII() const { return *ST->getInstrInfo(); }
+};
+
+TEST_F(HaydnHWLoopSetDefsTest, SetVariantsAllDefineSfrSymmetrically) {
+  for (unsigned Opc :
+       {Haydn::SET_HWLOOP, Haydn::SET_HWLOOP_REG, Haydn::SET_HWLOOP_W,
+        Haydn::SET_HWLOOP_F2_W, Haydn::SET_HWLOOP_REG_W}) {
+    const MCInstrDesc &D = TII().get(Opc);
+    EXPECT_TRUE(is_contained(D.implicit_defs(), Haydn::SFR))
+        << TII().getName(Opc) << " must carry td Defs=[SFR] (W47)";
+  }
+}
 } // namespace

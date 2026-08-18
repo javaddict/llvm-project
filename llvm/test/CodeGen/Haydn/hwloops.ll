@@ -9,17 +9,9 @@
 ; hardware-loop rearchitecture (prior revision) renamed the conversion
 ; pseudos from SET_HWLOOP_REG to LoopStart + PseudoLoopEnd. All single-BB
 ; countable loops below now convert and the CHECKs were rebaselined to match.
-; The `multi_bb_loop` subtest (test 6) is converted (GAP-4 multi-BB ZOL).
-; not convert multi-BB if/else bodies — this is now documented as a
-;
-; *** G1 gap documented inline: HWLoop recognizer does not handle multi-BB loops ***
-;
-; The HaydnHardwareLoops pass recognizes simple single-BB loops (tests 1-5)
-; and correctly rejects loops with calls (test 2) and early exits (test 7).
-; The multi-BB if/else loop body (test 6, `multi_bb_loop`) is converted (GAP-4).
-; converted to a hardware loop — the recognizer does not handle a latch that
-; receives merges from multiple predecessor blocks inside the loop body.
-; Tracked under G1 (HWLoop recognizer breadth) in CLAUDE.md.
+; Test 6 (`multi_bb_loop`) is the measured multi-BB SCEV/CFG extension:
+; innermost single-latch/single-exit diamond forms Role A. Test 7 (early
+; exit) stays declined. Never post-RA physical rediscovery.
 ;
 ; NOTE: this test uses `-stop-after=haydn-hwloops` so it is unaffected by the
 ; SMS pipeliner. The previous "SMS BUG" comment was stale.
@@ -42,7 +34,7 @@
 ; The loop runs 10 iterations: for (i=0; i<10; i++) sum += val
 ; After ConditionOptimizer, the latch ends with BLT (fused SLT32+BNEZ).
 ; The HWLoop pass should detect this and emit SET_HWLOOP with count=10.
-; Standalone (innermost) loops use sel=1.
+; Standalone (innermost) loops use the inner product selector.
 
 define i32 @simple_loop(ptr %p) {
 ; CHECK-LABEL: name: simple_loop
@@ -153,11 +145,12 @@ exit:
 }
 
 ; Test 6: Multi-BB loop with if/else inside the loop body.
-; Multi-BB Role B residual is soft (AIE-aligned decline); no SET_HWLOOP.
+; Measured SCEV/CFG extension: innermost single-latch/single-exit diamond
+; may form Role A (never post-RA rediscovery). Early-exit stays declined.
 define i32 @multi_bb_loop(ptr %p, ptr %q) {
 ; CHECK-LABEL: name: multi_bb_loop
-; CHECK-NOT: SET_HWLOOP
-; CHECK: {{BLT|BGE|BNEZ|BEQZ|BLTU|BGEU}}
+; CHECK: SET_HWLOOP
+; CHECK: PseudoLoopEnd
 entry:
   br label %loop.header
 

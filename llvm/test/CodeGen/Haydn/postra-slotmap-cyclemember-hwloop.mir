@@ -1,0 +1,75 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — mixed generated SET_HWLOOP_W + logical ALU in one region.
+# Bundle.add of the committed member used to rebuild PackingCandidates from
+# occupancy only (no CycleMembers). The next alts-bearing ADD32 then
+# tripped "SlotMap longer than CycleMember history" at leaveMBB commit.
+# SlotMap and CycleMember stay one history; the probe must not assert.
+
+--- |
+  define void @mix_set_then_alu() { ret void }
+  define void @mix_alu_then_set() { ret void }
+...
+---
+name:            mix_set_then_alu
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r4, $r5, $r15
+
+    ; CHECK-LABEL: name: mix_set_then_alu
+    ; CHECK-DAG: SET_HWLOOP
+    ; CHECK-DAG: ADD32
+    ; CHECK-DAG: XOR32
+    ; CHECK: JALR
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def dead $sfr
+    $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    $r3 = XOR32 $r4, $r5, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            mix_alu_then_set
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r4, $r5, $r15
+
+    ; CHECK-LABEL: name: mix_alu_then_set
+    ; CHECK-DAG: ADD32
+    ; CHECK-DAG: XOR32
+    ; CHECK-DAG: SET_HWLOOP
+    ; CHECK: JALR
+    $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    $r3 = XOR32 $r4, $r5, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

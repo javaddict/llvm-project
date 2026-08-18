@@ -1,0 +1,107 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,PRODUCT
+#
+# REGRESSION TEST: estimateMBBDistance charges MBB alignment in EncodedBytes.
+#
+# Bug: From→To layout distance ignored MBB.getAlignment(). Hexagon pads the
+# running offset; Haydn must pad with whole generated EncodedBytes parcels
+# (ceilProductParcels of the alignTo gap), not a magic 12/16 quantum.
+# align 4 is already met by product parcels (benign keep). align 256 after
+# InterveningCycles NOPs pushes StartOff past uimm6 252 → product demote.
+# If this regresses, align256_demote keeps SET_HWLOOP_W (false keep).
+
+--- |
+  define dso_local void @align4_keep(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @align256_demote(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            align4_keep
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; CHECK-LABEL: name: align4_keep
+  ; CHECK: SET_HWLOOP_W 0, %bb.2, %bb.2, 8
+  ; CHECK-NOT: SUBI32
+  ; CHECK-NOT: BNEZ_W
+  ; CHECK: bb.2.body
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+
+  bb.1.spacer (align 4):
+    successors: %bb.2
+
+  bb.2.body:
+    liveins: $r1, $r0
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            align256_demote
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; CHECK-LABEL: name: align256_demote
+  ; PRODUCT-NOT: SET_HWLOOP_W
+  ; PRODUCT-NOT: LoopDec
+  ; PRODUCT-NOT: LoopJNZ
+  ; PRODUCT: SUBI32
+  ; PRODUCT: BNEZ{{[^ ]*}}
+  ; CHECK: bb.3.exit
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+
+  bb.1.spacer (align 256):
+    successors: %bb.2
+
+  bb.2.body:
+    liveins: $r1, $r0
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15

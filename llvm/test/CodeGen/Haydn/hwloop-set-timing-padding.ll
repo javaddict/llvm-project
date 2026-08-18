@@ -21,7 +21,6 @@ define void @hwloop_t3(ptr nocapture %p, i32 %n) {
 ; CHECK-NEXT:    { nop; sltu32 r4, r3, r2 }
 ; CHECK-NEXT:    { nop; bnez r4, .LBB0_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

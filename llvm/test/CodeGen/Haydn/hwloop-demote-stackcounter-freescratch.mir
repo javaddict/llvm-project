@@ -1,0 +1,142 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+
+# Role: MIR — W30 / CR-H2 / F43 positive arm: stack-counter demote with a
+# spill-free latch scratch emits the closed window shape.
+#
+# REGRESSION TEST: when a spill-free non-R0 scratch exists at the latch
+# (judged against the post-rewrite successors {Header, Exit}), demote
+# installs the stack-counter soft edge WITHOUT any spill bracket:
+#   preheader: materialize trip (imm form) + ST32 into the counter FI
+#   latch:     LD32 scr ← counter FI; SUBI32 scr, scr, 1; ST32 scr → FI;
+#              BNEZ_W scr, Header (last; nothing after it but exit branch)
+#
+# Bug this pins: the old latch window bracketed the counter with
+# beginSpill/endSpill — the spill home aliases the counter FI (both resolve
+# BranchRelaxationScratchFI ?: PostRAScratchFI), destroying the stored
+# trip, and the restore made BNEZ read the wrong value. If the bracket
+# returns, extra ST32/LD32 pairs appear around the window and the
+# CHECK-NOT window-order lines fail.
+#
+# Shape: imm SET_HWLOOP_W + spacer forces range demote. Every pickCounterReg
+# GPR is mentioned in the loop blocks, so the counter goes to the stack FI;
+# $r7 is mentioned early but dead at the latch end, so the latch window
+# probes it spill-free. PEI first so the scratch FI exists. Exit (bb.3) is
+# layout-fallthrough — no trailing B to confuse the window.
+
+--- |
+  define dso_local void @demote_stackcounter_freescratch(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            demote_stackcounter_freescratch
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Discriminator between the two scratch mechanisms: pickCounterReg
+  ; requires NOT-MENTIONED in loop blocks; the latch no-spill probe only
+  ; requires availability at the latch end (post-rewrite successors
+  ; {Header, Exit} live-ins). $r7 IS mentioned (early XOR32 def-use) so
+  ; pickCounterReg refuses it and every candidate → stack-counter FI — but
+  ; it is dead by the latch end (zeroed, not live-out), so the latch window
+  ; probes $r7 spill-free. This is exactly the shape only the fixed demote
+  ; can install; the old code bracketed it (FI alias + wrong BNEZ value).
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    $r7 = XOR32 $r1, $r2, implicit-def dead $sfr
+    ST32 $r7, $r2, 0
+    $r1 = XOR32 $r1, $r1
+    $r2 = XOR32 $r2, $r2
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    ST32 $r1, $r2, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: demote_stackcounter_freescratch
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopDec
+# CHECK-NOT: LoopJNZ
+#
+# CHECK-LABEL: bb.2.body:
+# Closed window, no bracket: exactly one load, one decrement, one store on
+# the spill-free scratch ($r7), then the terminator. Any beginSpill/endSpill
+# pair adds a second store→load around the window — the CHECK-NOT after the
+# window fails if the bracket returns.
+#
+# REBALANCED 2026-08-15 (W30 landing): at haydn-fixup-hwloops the exact
+# placement has already committed Format E member opcodes (hard constraint
+# #8 — post-RA placement commits generated rows), so the window prints
+# member mnemonics (S_LW_WITH_IMM_*/SUBI32_E2_E1_*/S_SW_WITH_IMM_*/BNEZ_W_S0),
+# not logical LD32/SUBI32/ST32/BNEZ. The contract under test is unchanged:
+# one load, one destructive decrement, one store, terminator, no spill
+# bracket. Do NOT "fix" these back to logical mnemonics.
+# CHECK: $r7 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r7 = SUBI32{{.*}}$r7, 1
+# CHECK: S_SW_WITH_IMM{{.*}}$r7, $r13
+# CHECK: BNEZ{{.*}}$r7
+# CHECK-NOT: ST32
+# CHECK-NOT: LD32
+# CHECK-NOT: XOR32
+# CHECK-NOT: ADDI32
+# CHECK-NOT: S_LW
+# CHECK-NOT: S_SW
+# CHECK-LABEL: bb.3.exit:

@@ -10,9 +10,9 @@
 // -haydn-enable-hwloops is OFF.
 //
 // Sole product entry when the flag is on:
-//   1. Generic IR HardwareLoops + Haydn TTI prove trip/CFG (single-BB only;
-//      multi-BB is a separate measured SCEV/CFG extension, never post-RA
-//      physical rediscovery).
+//   1. Generic IR HardwareLoops + Haydn TTI prove trip/CFG (innermost
+//      single-latch/single-exit, including a measured multi-BB CFG
+//      extension; never post-RA physical rediscovery).
 //   2. GlobalISel lowers to LoopStart / PseudoLoopEnd logical pseudos.
 //   3. This pass (post-RA, before physical scheduling):
 //        stripEmptyZeroOverheadLoops — remove empty retained ZOLs only
@@ -22,9 +22,10 @@
 //          before any mutation (fatal).
 //   4. This pass owns software-loop demotion: if the retained body already
 //      cannot encode Off2, the soft edge is installed here (before layout).
-//   5. HaydnFixupHwLoops (pre-emit, flag-gated) pads/range-checks and may
-//      call the same formation demote helper for already-committed wide
-//      forms. Residual generic SET_HWLOOP{,_REG} fatals at Fixup.
+//   5. HaydnFixupHwLoops (pre-emit, flag-gated) pads/range-checks and calls
+//      llvm::demoteHardwareLoopToSoftware (this TU) plus the shared
+//      HaydnHWLoopDemote helpers for already-committed wide forms. Residual
+//      generic SET_HWLOOP{,_REG} fatals at Fixup.
 //
 // Post-RA soft-branch convert and its reconstruction helpers are permanently
 // deleted from this TU.
@@ -34,23 +35,24 @@
 #include "HaydnHardwareLoops.h"
 #include "Haydn.h"
 #include "HaydnBundleMaterialize.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnHWLoopContracts.h"
+#include "HaydnHWLoopDemote.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/Compiler.h"
@@ -72,6 +74,7 @@ STATISTIC(NumRoleARejected,
 using llvm::haydn::hwloop::InnermostProductSelector;
 using llvm::haydn::hwloop::InterveningCycles;
 using llvm::haydn::hwloop::isProductSelector;
+using llvm::haydn::hwloop::isUnpublishedHwlrCsrAddress;
 using llvm::haydn::hwloop::MaxEndOffsetBytes;
 using llvm::haydn::hwloop::MaxStartOffsetBytes;
 using llvm::haydn::hwloop::MinBodyBundles;
@@ -152,8 +155,8 @@ static bool stripEmptyZeroOverheadLoops(MachineFunction &MF) {
   bool Changed = false;
   for (MachineInstr *LS : LoopStarts) {
     MachineBasicBlock *Preheader = LS->getParent();
-    MachineBasicBlock *Body = nullptr;
-    MachineInstr *PLE = nullptr;
+    if (!Preheader)
+      continue;
 
     auto findPLE = [](MachineBasicBlock *BB) -> MachineInstr * {
       if (!BB)
@@ -163,71 +166,86 @@ static bool stripEmptyZeroOverheadLoops(MachineFunction &MF) {
           return &MI;
       return nullptr;
     };
-    for (const MachineOperand &MO : LS->operands()) {
-      if (MO.isMBB()) {
-        Body = MO.getMBB();
-        break;
-      }
-    }
-    if (Body)
-      PLE = findPLE(Body);
-    if (!Body || !PLE) {
-      Body = nullptr;
-      PLE = nullptr;
-      for (MachineBasicBlock *Succ : Preheader->successors()) {
-        if (MachineInstr *Cand = findPLE(Succ)) {
-          Body = Succ;
-          PLE = Cand;
-          break;
-        }
-      }
-    }
-    if (!Body || !PLE)
+
+    // AIE AIEBaseHardwareLoops.cpp:161-176 / :454-462 strips empty ZOL by
+    // MLI LoopEnd-parent occupancy. Haydn overlay is CFG successor/pred
+    // only (resolveBodyMBBCore + resolveLoopStartLatch) — same Header/Latch
+    // seats as expand, including Header != Latch.
+    MachineBasicBlock *Header = haydn::hwloop::resolveBodyMBBCore(*LS);
+    MachineBasicBlock *Latch =
+        haydn::hwloop::resolveLoopStartLatch(Header, Preheader);
+    if (!Latch)
+      Latch = Header;
+    MachineInstr *PLE = findPLE(Latch);
+    if (!PLE)
+      PLE = findPLE(Header);
+    if (!Header || !PLE)
       continue;
-    if (classifyZOLBody(*Body) != ZOLBodyKind::Empty)
+
+    haydn::hwloop::LoopBlockSet Blocks;
+    haydn::hwloop::collectLoopBlocks(Header, Latch, Preheader, Blocks);
+    unsigned RealOps = 0;
+    for (const MachineBasicBlock *BB : Blocks) {
+      if (!BB)
+        continue;
+      for (const MachineInstr &MI : *BB) {
+        unsigned Opc = MI.getOpcode();
+        if (Opc == Haydn::PseudoLoopEnd)
+          continue;
+        if (MI.isMetaInstruction() || MI.isDebugInstr() ||
+            MI.isImplicitDef() || MI.isKill() || MI.isPosition())
+          continue;
+        if (Opc == Haydn::B || Opc == Haydn::NOP)
+          continue;
+        ++RealOps;
+      }
+    }
+    if (RealOps != 0)
       continue;
 
     MachineBasicBlock *ExitBB = nullptr;
-    for (MachineBasicBlock *Succ : Body->successors()) {
-      if (Succ != Body) {
+    for (MachineBasicBlock *Succ : Latch->successors()) {
+      if (Succ != Header && Succ != Latch) {
         ExitBB = Succ;
         break;
       }
     }
     if (!ExitBB) {
-      MachineFunction::iterator NextIt = std::next(Body->getIterator());
-      if (NextIt != MF.end())
+      MachineFunction::iterator NextIt = std::next(Latch->getIterator());
+      if (NextIt != MF.end() && &*NextIt != Header)
         ExitBB = &*NextIt;
     }
     if (!ExitBB)
       continue;
 
     LLVM_DEBUG(dbgs() << "HaydnHWLoops: stripping empty IR ZOL "
-                      << printMBBReference(*Body) << " (LoopStart in "
+                      << printMBBReference(*Header) << " (LoopStart in "
                       << printMBBReference(*Preheader) << ")\n");
 
     DebugLoc DL = LS->getDebugLoc();
     LS->eraseFromParent();
     PLE->eraseFromParent();
 
-    if (Body->isSuccessor(Body))
-      Body->removeSuccessor(Body);
-    if (!Body->isSuccessor(ExitBB))
-      Body->addSuccessor(ExitBB);
+    if (Latch->isSuccessor(Header))
+      Latch->removeSuccessor(Header);
+    if (Latch->isSuccessor(Latch))
+      Latch->removeSuccessor(Latch);
+    if (!Latch->isSuccessor(ExitBB))
+      Latch->addSuccessor(ExitBB);
 
     bool HasExitBranch = false;
-    for (const MachineInstr &MI : Body->terminators()) {
+    for (const MachineInstr &MI : Latch->terminators()) {
       if (MI.getOpcode() == Haydn::B) {
         HasExitBranch = true;
         break;
       }
     }
     if (!HasExitBranch) {
-      MachineFunction::iterator NextIt = std::next(Body->getIterator());
+      MachineFunction::iterator NextIt = std::next(Latch->getIterator());
       bool ExitIsFallthrough =
           (NextIt != MF.end()) && (&*NextIt == ExitBB);
       if (!ExitIsFallthrough)
-        TII->insertBranch(*Body, ExitBB, /*FBB=*/nullptr,
+        TII->insertBranch(*Latch, ExitBB, /*FBB=*/nullptr,
                           /*Cond=*/SmallVector<MachineOperand, 0>(), DL);
     }
 
@@ -246,23 +264,26 @@ static MachineInstr *findPseudoLoopEnd(MachineBasicBlock *BB) {
   return nullptr;
 }
 
-// Resolve the Role-A body solely from preheader CFG successors that carry a
-// PseudoLoopEnd. Never invent a body from layout order: a next-MBB that is not
-// a successor is incomplete retained state and must reject fail-closed.
-static void resolveRoleABody(MachineInstr *LS, MachineBasicBlock *&Body,
-                             MachineInstr *&PLE) {
-  Body = nullptr;
+// Resolve Header/Latch/PLE from the shared CFG helpers only. Never invent
+// a body from layout order: a next-MBB that is not a successor is
+// incomplete retained state and must reject fail-closed.
+static void resolveRoleABody(MachineInstr *LS, MachineBasicBlock *&Header,
+                             MachineBasicBlock *&Latch, MachineInstr *&PLE) {
+  Header = nullptr;
+  Latch = nullptr;
   PLE = nullptr;
   if (!LS || !LS->getParent())
     return;
+  // One CFG mechanism (resolveBodyMBBCore + resolveLoopStartLatch).
+  // AIE walks MLI findLoopControlBlock (AIEBaseHardwareLoops.cpp:301-318);
+  // Haydn stays successor/pred only — never layout order, never MLI.
   MachineBasicBlock *Preheader = LS->getParent();
-  for (MachineBasicBlock *Succ : Preheader->successors()) {
-    if (MachineInstr *Cand = findPseudoLoopEnd(Succ)) {
-      Body = Succ;
-      PLE = Cand;
-      return;
-    }
-  }
+  Header = haydn::hwloop::resolveBodyMBBCore(*LS);
+  Latch = haydn::hwloop::resolveLoopStartLatch(Header, Preheader);
+  if (Latch)
+    PLE = findPseudoLoopEnd(Latch);
+  else if (Header)
+    PLE = findPseudoLoopEnd(Header);
 }
 
 static bool isNestedRoleASetupOpcode(const MachineInstr &MI) {
@@ -276,17 +297,8 @@ static bool isNestedRoleASetupOpcode(const MachineInstr &MI) {
   case Haydn::SET_HWLOOP_REG_W:
     return true;
   default:
-    break;
-  }
-  const MachineFunction *MF = MI.getMF();
-  if (!MF)
     return false;
-  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
-  const std::string Log =
-      haydn::format_e::peelLogicalOpcodeName(TII->getName(Opc));
-  return StringRef(Log).equals_insensitive("SET_HWLOOP") ||
-         StringRef(Log).equals_insensitive("SET_HWLOOP_F2") ||
-         StringRef(Log).equals_insensitive("SET_HWLOOP_REG");
+  }
 }
 
 [[noreturn]] static void rejectIncompleteRoleA(MachineInstr *LS, MachineBasicBlock *Body,
@@ -304,43 +316,23 @@ static bool isNestedRoleASetupOpcode(const MachineInstr &MI) {
   report_fatal_error(Twine(Msg), /*GenCrashDiag=*/false);
 }
 
-static bool preflightRoleABody(MachineBasicBlock *Body, MachineInstr *PLE,
-                               std::string &Why) {
-  if (!Body) {
-    Why = "no body MBB";
+static bool scanRoleABlock(const MachineBasicBlock &BB,
+                           const haydn::hwloop::LoopBlockSet *Blocks,
+                           bool AllowInternalBranch, unsigned &PLECount,
+                           unsigned &RealOps, std::string &Why) {
+  // Unpublished HWLR CSR is fail-closed even when packed inside a BUNDLE.
+  // AIE AIEBaseHardwareLoops.cpp:348-370 walks every MI; Haydn overlay
+  // refuses the unpublished 0x20-0x25 window (SET-only program).
+  if (haydn::hwloop::blockContainsUnpublishedHwlrCsr(BB)) {
+    Why = "body contains unpublished HWLR CSR write";
     return false;
   }
-  if (!PLE || PLE->getParent() != Body) {
-    Why = "PseudoLoopEnd missing or not on body";
-    return false;
-  }
-  if (!Body->isSuccessor(Body)) {
-    Why = "body missing self back-edge";
-    return false;
-  }
-  unsigned NonSelfSucc = 0;
-  for (const MachineBasicBlock *Succ : Body->successors()) {
-    if (Succ != Body)
-      ++NonSelfSucc;
-  }
-  if (NonSelfSucc != 1) {
-    Why = "body must have exactly one non-self exit";
-    return false;
-  }
-  ZOLBodyKind Kind = classifyZOLBody(*Body);
-  if (Kind == ZOLBodyKind::Empty) {
-    Why = "empty body (should have been stripped)";
-    return false;
-  }
-  if (Kind == ZOLBodyKind::NotZOL) {
-    Why = "body is not ZOL form";
-    return false;
-  }
-  unsigned PLECount = 0;
-  for (const MachineInstr &MI : *Body) {
+  bool SeenPLE = false;
+  for (const MachineInstr &MI : BB) {
     unsigned Opc = MI.getOpcode();
     if (Opc == Haydn::PseudoLoopEnd) {
       ++PLECount;
+      SeenPLE = true;
       continue;
     }
     if (isNestedRoleASetupOpcode(MI)) {
@@ -351,12 +343,285 @@ static bool preflightRoleABody(MachineBasicBlock *Body, MachineInstr *PLE,
       Why = "body contains call/indirect/return";
       return false;
     }
+    if (MI.isBranch()) {
+      if (SeenPLE)
+        continue;
+      if (!AllowInternalBranch) {
+        Why = "body contains early-exit branch before PseudoLoopEnd";
+        return false;
+      }
+      for (const MachineOperand &MO : MI.operands()) {
+        if (MO.isMBB() && Blocks && !Blocks->contains(MO.getMBB())) {
+          Why = "body contains early-exit branch before PseudoLoopEnd";
+          return false;
+        }
+      }
+    }
+    if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isImplicitDef() ||
+        MI.isKill() || MI.isPosition())
+      continue;
+    if (Opc == Haydn::B || Opc == Haydn::NOP)
+      continue;
+    ++RealOps;
+  }
+  return true;
+}
+
+static bool preflightRoleABody(MachineBasicBlock *Header,
+                               MachineBasicBlock *Latch,
+                               MachineBasicBlock *Preheader, MachineInstr *PLE,
+                               std::string &Why) {
+  if (!Header) {
+    Why = "no body MBB";
+    return false;
+  }
+  if (!Latch)
+    Latch = Header;
+  if (!PLE || PLE->getParent() != Latch) {
+    Why = Header == Latch ? "PseudoLoopEnd missing or not on body"
+                          : "PseudoLoopEnd missing or not on latch";
+    return false;
+  }
+
+  if (Header == Latch) {
+    if (!Header->isSuccessor(Header)) {
+      Why = "body missing self back-edge";
+      return false;
+    }
+    unsigned NonSelfSucc = 0;
+    for (const MachineBasicBlock *Succ : Header->successors()) {
+      if (Succ != Header)
+        ++NonSelfSucc;
+    }
+    if (NonSelfSucc != 1) {
+      Why = "body must have exactly one non-self exit";
+      return false;
+    }
+    ZOLBodyKind Kind = classifyZOLBody(*Header);
+    if (Kind == ZOLBodyKind::Empty) {
+      Why = "empty body (should have been stripped)";
+      return false;
+    }
+    if (Kind == ZOLBodyKind::NotZOL) {
+      Why = "body is not ZOL form";
+      return false;
+    }
+    unsigned PLECount = 0;
+    unsigned RealOps = 0;
+    if (!scanRoleABlock(*Header, /*Blocks=*/nullptr,
+                        /*AllowInternalBranch=*/false, PLECount, RealOps, Why))
+      return false;
+    if (PLECount != 1) {
+      Why = "body must carry exactly one PseudoLoopEnd";
+      return false;
+    }
+    return true;
+  }
+
+  if (!Latch->isSuccessor(Header)) {
+    Why = "latch missing back-edge to header";
+    return false;
+  }
+  unsigned NonHeaderSucc = 0;
+  for (const MachineBasicBlock *Succ : Latch->successors()) {
+    if (Succ != Header)
+      ++NonHeaderSucc;
+  }
+  if (NonHeaderSucc != 1) {
+    Why = "latch must have exactly one non-header exit";
+    return false;
+  }
+
+  haydn::hwloop::LoopBlockSet Blocks;
+  haydn::hwloop::collectLoopBlocks(Header, Latch, Preheader, Blocks);
+
+  // Reverse-CFG collect misses a Header successor that never reaches
+  // Latch (fallthrough/branch early-exit). Those blocks are not in the
+  // natural loop and must not stay armed. Same reject string as the
+  // interior-branch scan so the preflight seats stay one law.
+  for (const MachineBasicBlock *BB : Blocks) {
+    if (!BB || BB == Latch)
+      continue;
+    for (const MachineBasicBlock *Succ : BB->successors()) {
+      if (!Blocks.contains(Succ)) {
+        Why = "body contains early-exit branch before PseudoLoopEnd";
+        return false;
+      }
+    }
+  }
+
+  unsigned PLECount = 0;
+  unsigned RealOps = 0;
+  for (const MachineBasicBlock *BB : Blocks) {
+    if (!BB)
+      continue;
+    if (!scanRoleABlock(*BB, &Blocks, /*AllowInternalBranch=*/true, PLECount,
+                        RealOps, Why))
+      return false;
   }
   if (PLECount != 1) {
     Why = "body must carry exactly one PseudoLoopEnd";
     return false;
   }
+  if (RealOps == 0) {
+    Why = "empty body (should have been stripped)";
+    return false;
+  }
   return true;
+}
+
+// Golden END follows BEGIN (Off2 > Off1). AIE splitLoopEndJump
+// (AIEBaseHardwareLoops.cpp:227-264) forces the ZOL exit to the layout
+// successor; Haydn overlay (no MLI) also puts Preheader, Header, interiors,
+// Latch in that layout order so Fixup Off1/Off2 stay ordered.
+// Interiors keep their existing function order — SmallPtrSet walk would
+// scramble then/else fallthrough. MBP may leave Latch before Header; that
+// is legal CFG and illegal ZOL.
+static void placeLoopBlocksForZOL(MachineBasicBlock *Preheader,
+                                  MachineBasicBlock *Header,
+                                  MachineBasicBlock *Latch,
+                                  const haydn::hwloop::LoopBlockSet &Blocks) {
+  if (!Preheader || !Header || !Latch || Header == Latch)
+    return;
+  MachineFunction &MF = *Header->getParent();
+
+  auto layoutSucc = [&](MachineBasicBlock *BB) -> MachineBasicBlock * {
+    auto N = std::next(BB->getIterator());
+    return N == MF.end() ? nullptr : &*N;
+  };
+
+  SmallVector<MachineBasicBlock *, 8> Interiors;
+  for (MachineBasicBlock &BB : MF) {
+    if (!Blocks.contains(&BB) || &BB == Header || &BB == Latch ||
+        &BB == Preheader)
+      continue;
+    Interiors.push_back(&BB);
+  }
+
+  bool HeaderBeforeLatch = false;
+  for (auto I = Header->getIterator(), E = MF.end(); I != E; ++I) {
+    if (&*I == Latch) {
+      HeaderBeforeLatch = true;
+      break;
+    }
+  }
+  bool AllBetween = HeaderBeforeLatch;
+  if (HeaderBeforeLatch) {
+    for (MachineBasicBlock *BB : Interiors) {
+      bool Seen = false;
+      for (auto I = std::next(Header->getIterator());
+           I != MF.end() && &*I != Latch; ++I) {
+        if (&*I == BB) {
+          Seen = true;
+          break;
+        }
+      }
+      if (!Seen) {
+        AllBetween = false;
+        break;
+      }
+    }
+  }
+  if (layoutSucc(Preheader) == Header && AllBetween)
+    return;
+
+  SmallVector<MachineBasicBlock *, 8> Order;
+  Order.push_back(Header);
+  Order.append(Interiors.begin(), Interiors.end());
+  Order.push_back(Latch);
+
+  SmallDenseMap<MachineBasicBlock *, MachineBasicBlock *, 8> PrevFall;
+  PrevFall[Preheader] = layoutSucc(Preheader);
+  for (MachineBasicBlock *BB : Order)
+    PrevFall[BB] = layoutSucc(BB);
+
+  MachineBasicBlock *After = Preheader;
+  for (MachineBasicBlock *BB : Order) {
+    if (std::next(After->getIterator()) != BB->getIterator())
+      BB->moveAfter(After);
+    After = BB;
+  }
+
+  Preheader->updateTerminator(PrevFall[Preheader]);
+  for (MachineBasicBlock *BB : Order)
+    BB->updateTerminator(PrevFall[BB]);
+}
+
+// Parcel census used by both the expand pads and the post-expand QUALIFY
+// seal. Same walk as Fixup countFollowingBundles / bodyParcelsFromOffsets:
+// size-bearing parcels only (AIE ZOLSupport LoopSetupDistance overlay;
+// AIEBaseHardwareLoops.cpp:391-428 expandLoopStart does not pad — Haydn
+// enforces InterveningCycles + MinBodyBundles here because SET is one
+// combined Off1/Off2 form, not AIE's separate LC/LS/LE writes).
+static unsigned countFollowingSizeBearing(const MachineInstr &SetMI,
+                                          const HaydnInstrInfo &TII) {
+  const MachineBasicBlock *Preheader = SetMI.getParent();
+  if (!Preheader)
+    return 0;
+  unsigned FollowingBundles = 0;
+  for (MachineBasicBlock::const_iterator I = std::next(SetMI.getIterator()),
+                                         E = Preheader->end();
+       I != E; ++I) {
+    if (I->isMetaInstruction() || I->isDebugInstr() || I->isImplicitDef() ||
+        I->isKill())
+      continue;
+    if (I->isTerminator() && !I->isCall())
+      break;
+    unsigned Bytes = TII.getInstSizeInBytes(*I);
+    if (Bytes == 0)
+      continue;
+    FollowingBundles += ceilProductParcels(Bytes);
+  }
+  return FollowingBundles;
+}
+
+static unsigned
+countLoopBodyParcels(const haydn::hwloop::LoopBlockSet &Blocks,
+                     const HaydnInstrInfo &TII) {
+  unsigned BodyParcels = 0;
+  for (const MachineBasicBlock *BB : Blocks) {
+    if (!BB)
+      continue;
+    for (const MachineInstr &MI : *BB) {
+      unsigned Opc = MI.getOpcode();
+      if (Opc == Haydn::PseudoLoopEnd || Opc == Haydn::B)
+        continue;
+      if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isImplicitDef() ||
+          MI.isKill() || MI.isPosition())
+        continue;
+      unsigned Bytes = TII.getInstSizeInBytes(MI);
+      if (Bytes == 0)
+        continue;
+      BodyParcels += ceilProductParcels(Bytes);
+    }
+  }
+  return BodyParcels;
+}
+
+// Fail-closed QUALIFY after pads/remat: SET-only program, product selector,
+// Following floor, body floor, no unpublished HWLR CSR. Incomplete
+// geometry rejects before LoopStart is erased so the retained seat
+// never becomes a half-expanded SET.
+static void qualifyExpandedRoleA(MachineInstr *LS, MachineInstr &SetMI,
+                                 MachineBasicBlock *Header, MachineInstr *PLE,
+                                 const haydn::hwloop::LoopBlockSet &Blocks,
+                                 const HaydnInstrInfo &TII) {
+  if (SetMI.getOpcode() != Haydn::SET_HWLOOP_F2_W)
+    rejectIncompleteRoleA(LS, Header, PLE,
+                          "expanded setup is not SET_HWLOOP_F2_W");
+  if (SetMI.getNumOperands() < 4 || !SetMI.getOperand(0).isImm() ||
+      !isProductSelector(SetMI.getOperand(0).getImm()))
+    rejectIncompleteRoleA(LS, Header, PLE,
+                          "expanded SET selector not in product domain");
+  if (countFollowingSizeBearing(SetMI, TII) < InterveningCycles)
+    rejectIncompleteRoleA(LS, Header, PLE,
+                          "expanded SET misses setup Following floor");
+  if (countLoopBodyParcels(Blocks, TII) < MinBodyBundles)
+    rejectIncompleteRoleA(LS, Header, PLE,
+                          "expanded body misses MinBodyBundles");
+  if (haydn::hwloop::loopBlocksContainUnpublishedHwlrCsr(Blocks))
+    rejectIncompleteRoleA(LS, Header, PLE,
+                          "expanded body contains unpublished HWLR CSR");
 }
 
 static bool expandRoleALoopStarts(MachineFunction &MF) {
@@ -372,13 +637,14 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
     if (!LS->getParent())
       continue;
 
-    MachineBasicBlock *Body = nullptr;
+    MachineBasicBlock *Header = nullptr;
+    MachineBasicBlock *Latch = nullptr;
     MachineInstr *PLE = nullptr;
-    resolveRoleABody(LS, Body, PLE);
+    resolveRoleABody(LS, Header, Latch, PLE);
 
     if (LS->getNumOperands() < 2 || !LS->getOperand(0).isReg() ||
         !LS->getOperand(1).isImm()) {
-      rejectIncompleteRoleA(LS, Body, PLE, "incomplete LoopStart operands");
+      rejectIncompleteRoleA(LS, Header, PLE, "incomplete LoopStart operands");
     }
 
     MachineBasicBlock *Preheader = LS->getParent();
@@ -387,49 +653,61 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
     DebugLoc DL = LS->getDebugLoc();
 
     if (!TripReg.isPhysical() || TripReg == Haydn::R0) {
-      rejectIncompleteRoleA(LS, Body, PLE, "trip reg not a physical GPR");
+      rejectIncompleteRoleA(LS, Header, PLE, "trip reg not a physical GPR");
     }
 
     std::string Why;
-    if (!preflightRoleABody(Body, PLE, Why)) {
-      rejectIncompleteRoleA(LS, Body, PLE, Why);
+    if (!preflightRoleABody(Header, Latch, Preheader, PLE, Why)) {
+      rejectIncompleteRoleA(LS, Header, PLE, Why);
     }
+
+    haydn::hwloop::LoopBlockSet LoopBlocks;
+    haydn::hwloop::collectLoopBlocks(Header, Latch, Preheader, LoopBlocks);
+    placeLoopBlocksForZOL(Preheader, Header, Latch, LoopBlocks);
 
     {
       int64_t BodyBytes = 0;
-      for (const MachineInstr &MI : *Body) {
-        unsigned Opc = MI.getOpcode();
-        if (Opc == Haydn::PseudoLoopEnd || Opc == Haydn::B)
+      for (const MachineBasicBlock *BB : LoopBlocks) {
+        if (!BB)
           continue;
-        if (MI.isMetaInstruction() || MI.isDebugInstr() ||
-            MI.isImplicitDef() || MI.isKill() || MI.isPosition())
-          continue;
-        BodyBytes += TII->getInstSizeInBytes(MI);
+        for (const MachineInstr &MI : *BB) {
+          unsigned Opc = MI.getOpcode();
+          if (Opc == Haydn::PseudoLoopEnd || Opc == Haydn::B)
+            continue;
+          if (MI.isMetaInstruction() || MI.isDebugInstr() ||
+              MI.isImplicitDef() || MI.isKill() || MI.isPosition())
+            continue;
+          BodyBytes += TII->getInstSizeInBytes(MI);
+        }
       }
       if (MinSetupBytes + BodyBytes > MaxHWLoopEndOffsetBytes) {
         if (!demoteHardwareLoopToSoftware(*LS, *TII))
           rejectIncompleteRoleA(
-              LS, Body, PLE,
+              LS, Header, PLE,
               "unencodable body cannot install software loop");
         Changed = true;
         continue;
       }
     }
 
-    MachineBasicBlock *Header = Body;
-    MachineBasicBlock *Latch = Body;
     Header->setLabelMustBeEmitted();
     Latch->setLabelMustBeEmitted();
 
     // Product selector domain is {0,1}. Innermost Role-A expand always arms
-    // sel=1 via SET_HWLOOP only — never invent free HWLR CSR addresses or
-    // out-of-domain selectors. Fixup demotes residual out-of-domain seats.
+    // the inner selector via SET_HWLOOP only — never invent free HWLR CSR
+    // addresses (unpublished 0x20-0x25 window) or out-of-domain selectors.
+    // Fixup demotes residual out-of-domain seats.
     static_assert(isProductSelector(InnermostProductSelector),
                   "Role-A expand selector must stay in product domain");
     static_assert(isProductSelector(InnermostProductSelector) &&
                       !isProductSelector(2) && !isProductSelector(3),
                   "expand must not invent out-of-domain selectors");
+    static_assert(!isUnpublishedHwlrCsrAddress(InnermostProductSelector),
+                  "product selector is not an unpublished HWLR CSR address");
     MachineBasicBlock::iterator InsertPt = LS->getIterator();
+    // SET-only program: product sel via SET_HWLOOP_F2_W. Descriptor
+    // Defs=[SFR] supplies the implicit SFR write; never a free CSRW
+    // to the unpublished HWLR window (HaydnPortModel.h haydnHwloopCsrAddr).
     MachineInstr *SetMI =
         BuildMI(*Preheader, InsertPt, DL, TII->get(Haydn::SET_HWLOOP_F2_W))
             .addImm(InnermostProductSelector)
@@ -438,20 +716,7 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
             .addReg(TripReg);
 
     {
-      unsigned FollowingBundles = 0;
-      for (MachineBasicBlock::iterator I = std::next(SetMI->getIterator()),
-                                       E = Preheader->end();
-           I != E; ++I) {
-        if (I->isMetaInstruction() || I->isDebugInstr() ||
-            I->isImplicitDef() || I->isKill())
-          continue;
-        if (I->isTerminator() && !I->isCall())
-          break;
-        unsigned Bytes = TII->getInstSizeInBytes(*I);
-        if (Bytes == 0)
-          continue;
-        FollowingBundles += ceilProductParcels(Bytes);
-      }
+      unsigned FollowingBundles = countFollowingSizeBearing(*SetMI, *TII);
       if (FollowingBundles < HWLoopSetupPadBundles) {
         unsigned Deficit = HWLoopSetupPadBundles - FollowingBundles;
         MachineBasicBlock::iterator AfterSet =
@@ -462,24 +727,12 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
     }
 
     {
-      unsigned BodyParcels = 0;
-      for (const MachineInstr &MI : *Body) {
-        unsigned Opc = MI.getOpcode();
-        if (Opc == Haydn::PseudoLoopEnd || Opc == Haydn::B)
-          continue;
-        if (MI.isMetaInstruction() || MI.isDebugInstr() ||
-            MI.isImplicitDef() || MI.isKill() || MI.isPosition())
-          continue;
-        unsigned Bytes = TII->getInstSizeInBytes(MI);
-        if (Bytes == 0)
-          continue;
-        BodyParcels += ceilProductParcels(Bytes);
-      }
+      unsigned BodyParcels = countLoopBodyParcels(LoopBlocks, *TII);
       if (BodyParcels < MinBodyBundles) {
         unsigned Deficit = MinBodyBundles - BodyParcels;
         MachineBasicBlock::iterator BeforePLE = PLE->getIterator();
         for (unsigned I = 0; I < Deficit; ++I)
-          BuildMI(*Body, BeforePLE, DL, TII->get(Haydn::NOP));
+          BuildMI(*Latch, BeforePLE, DL, TII->get(Haydn::NOP));
         LLVM_DEBUG(dbgs() << "HaydnHWLoops: Role A body pad " << Deficit
                           << " NOP bundle(s) before PLE (MinBodyBundles="
                           << MinBodyBundles << ")\n");
@@ -491,6 +744,8 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
           rematerializeAddImmForUse(*SetMI, /*UseOpIdx=*/3, Adj);
       (void)Count;
     }
+
+    qualifyExpandedRoleA(LS, *SetMI, Header, PLE, LoopBlocks, *TII);
 
     LS->eraseFromParent();
     ++NumRoleAExpanded;
@@ -522,435 +777,33 @@ bool HaydnHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
 // lock-in. Late Fixup may call the same helpers for already-committed wide
 // forms. Residual generic SET_HWLOOP{,_REG} is not rewritten here or in Fixup.
 //===----------------------------------------------------------------------===//
+// MI-level demote/erase helpers shared with HaydnFixupHwLoops live in
+// HaydnHWLoopDemote.{h,cpp} (single owner; previously duplicated verbatim).
+// Body resolution here is CFG-only via resolveBodyMBBCore: formation must
+// never resolve a body from layout order — incomplete retained state rejects
+// fail-closed (resolveRoleABody law above).
+using haydn::hwloop::LoopBlockSet;
+using haydn::hwloop::collectLoopBlocks;
+using haydn::hwloop::resolveLoopStartLatch;
+using haydn::hwloop::emitExactLate;
+using haydn::hwloop::emitExactLateDef;
+using haydn::hwloop::eraseInstrSafe;
+using haydn::hwloop::eraseSetMemberAndRecommitSiblings;
+using haydn::hwloop::isLiveMBB;
+using haydn::hwloop::materializeTripCount;
+using haydn::hwloop::pickCounterReg;
+using haydn::hwloop::regClobberedNonCountdownIn;
+using haydn::hwloop::stripResidualCountdown;
+using haydn::hwloop::topLevelForLayout;
 
-static void eraseEmptyBundleRoot(MachineInstr *BundleRoot) {
-  if (!BundleRoot || !BundleRoot->isBundle() || !BundleRoot->getParent())
-    return;
-  MachineBasicBlock::instr_iterator Next =
-      std::next(BundleRoot->getIterator());
-  MachineBasicBlock *MBB = BundleRoot->getParent();
-  if (Next != MBB->instr_end() && Next->isBundledWithPred())
-    return;
-  BundleRoot->eraseFromParent();
-}
-
-static void eraseInstrSafe(MachineInstr *MI) {
-  if (!MI || !MI->getParent())
-    return;
-  MachineInstr *BundleRoot = nullptr;
-  if (MI->isBundledWithPred()) {
-    BundleRoot = &*getBundleStart(MI->getIterator());
-    MI->unbundleFromPred();
-  }
-  if (MI->isBundledWithSucc())
-    MI->unbundleFromSucc();
-  MI->eraseFromParent();
-  eraseEmptyBundleRoot(BundleRoot);
-}
-
-static bool isLiveMBB(const MachineFunction &MF, const MachineBasicBlock *MBB) {
-  return MBB && MBB->getParent() == &MF && MBB->getNumber() >= 0;
-}
-
-static MachineBasicBlock *resolveBodyMBB(MachineInstr &SetMI) {
-  const MachineFunction *MF =
-      SetMI.getParent() ? SetMI.getParent()->getParent() : nullptr;
-  if (!MF)
-    return nullptr;
-  unsigned Opc = SetMI.getOpcode();
-  if (Opc != Haydn::LoopStart && SetMI.getNumOperands() >= 3 &&
-      SetMI.getOperand(1).isMBB()) {
-    MachineBasicBlock *H = SetMI.getOperand(1).getMBB();
-    return isLiveMBB(*MF, H) ? H : nullptr;
-  }
-  if (Opc == Haydn::LoopStart) {
-    MachineBasicBlock *Pre = SetMI.getParent();
-    for (MachineBasicBlock *Succ : Pre->successors()) {
-      if (!isLiveMBB(*MF, Succ))
-        continue;
-      for (const MachineInstr &T : Succ->terminators()) {
-        if (T.getOpcode() == Haydn::PseudoLoopEnd)
-          return Succ;
-      }
-    }
-    if (Pre->succ_size() == 1) {
-      MachineBasicBlock *S = *Pre->succ_begin();
-      return isLiveMBB(*MF, S) ? S : nullptr;
-    }
-  }
-  return nullptr;
-}
-
-using LoopBlockSet = SmallPtrSet<const MachineBasicBlock *, 8>;
-
-static unsigned lateMemberOpcode(unsigned LogicalOpc) {
-  return haydn::bundle::lateProductMemberOpcode(LogicalOpc);
-}
-
-static void finalizeExactLateSingleton(MachineInstr &MI) {
-  haydn::bundle::finalizeExactLateSingleton(MI);
-}
-
-/// After SET-member erase from a multi-member product cycle, re-exact-commit
-/// surviving coissued siblings so the BUNDLE root is rebuilt (consolidated
-/// defs/uses, kill flags, FormatID). Bare survivors would leave residual
-/// real MIs for the late firewall and stale root operands.
-static void recommitSurvivingCycleMembers(ArrayRef<MachineInstr *> Keep,
-                                          const HaydnInstrInfo &TII) {
-  if (Keep.empty())
-    return;
-
-  for (MachineInstr *K : Keep) {
-    if (!K || !K->getParent())
-      continue;
-    if (K->isBundledWithPred())
-      K->unbundleFromPred();
-    if (K->isBundledWithSucc())
-      K->unbundleFromSucc();
-  }
-
-  SmallVector<MachineInstr *, 3> Live;
-  Live.reserve(Keep.size());
-  for (MachineInstr *K : Keep)
-    if (K && K->getParent())
-      Live.push_back(K);
-  if (Live.empty())
-    return;
-
-  if (Live.size() == 1) {
-    MachineInstr *MI = Live[0];
-    unsigned Member = lateMemberOpcode(MI->getOpcode());
-    if (Member != MI->getOpcode())
-      MI->setDesc(TII.get(Member));
-    finalizeExactLateSingleton(*MI);
-    return;
-  }
-
-  // Multi-survivor coissue: transactional multi-MI exact commit rebuilds
-  // root operands/kills/internal-reads + Format E row/completion. Fall back to
-  // per-member singletons rather than leave bare reals if membership is
-  // no longer one legal product cycle after SET removal.
-  if (!haydn::bundle::commitExactMultiMIProductCycle(Live)) {
-    LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: coissue survivors not one "
-                         "legal multi-MI cycle after SET erase — "
-                         "singleton exact-commit each\n");
-    for (MachineInstr *MI : Live) {
-      unsigned Member = lateMemberOpcode(MI->getOpcode());
-      if (Member != MI->getOpcode())
-        MI->setDesc(TII.get(Member));
-      finalizeExactLateSingleton(*MI);
-    }
-  }
-}
-
-/// SET/LoopStart-member erase that preserves coissued siblings as an exact
-/// product cycle. Dissolves the old root, erases only the setup member, then
-/// recommits remaining children so consolidated root operands match the
-/// surviving membership (plan hard-root operand recommit peer for Fixup).
-static void eraseSetMemberAndRecommitSiblings(MachineInstr &SetMI,
-                                              const HaydnInstrInfo &TII) {
-  MachineBasicBlock *MBB = SetMI.getParent();
-  if (!MBB)
-    return;
-
-  SmallVector<MachineInstr *, 3> Keep;
-  if (SetMI.isBundledWithPred() || SetMI.isBundledWithSucc()) {
-    MachineInstr *Root = &*getBundleStart(SetMI.getIterator());
-    for (MachineBasicBlock::instr_iterator I = std::next(Root->getIterator());
-         I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
-      if (&*I != &SetMI)
-        Keep.push_back(&*I);
-    }
-    // Dissolve every child from the old root before erasing the header so no
-    // pass observes a half-unbundled multi-member shell.
-    for (MachineInstr *K : Keep) {
-      if (K->isBundledWithPred())
-        K->unbundleFromPred();
-      if (K->isBundledWithSucc())
-        K->unbundleFromSucc();
-    }
-    if (SetMI.isBundledWithPred())
-      SetMI.unbundleFromPred();
-    if (SetMI.isBundledWithSucc())
-      SetMI.unbundleFromSucc();
-    Root->eraseFromParent();
-  }
-
-  SetMI.eraseFromParent();
-  recommitSurvivingCycleMembers(Keep, TII);
-}
-
-/// Build a late singleton with exact-commit member opcode (dest form).
-static MachineInstrBuilder
-buildExactLateDef(MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
-                  const DebugLoc &DL, const TargetInstrInfo &TII,
-                  unsigned LogicalOpc, Register Dest) {
-  return BuildMI(MBB, InsertPt, DL, TII.get(lateMemberOpcode(LogicalOpc)),
-                 Dest);
-}
-
-/// Build a late singleton with exact-commit member opcode (no dest).
-static MachineInstrBuilder
-buildExactLate(MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
-               const DebugLoc &DL, const TargetInstrInfo &TII,
-               unsigned LogicalOpc) {
-  return BuildMI(MBB, InsertPt, DL, TII.get(lateMemberOpcode(LogicalOpc)));
-}
-
-/// Emit one exact-committed singleton (dest form) and stamp Format E commit.
-template <typename AddOpsFn>
-static MachineInstr *
-emitExactLateDef(MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
-                 const DebugLoc &DL, const TargetInstrInfo &TII,
-                 unsigned LogicalOpc, Register Dest, AddOpsFn AddOps) {
-  MachineInstrBuilder MIB =
-      buildExactLateDef(MBB, InsertPt, DL, TII, LogicalOpc, Dest);
-  AddOps(MIB);
-  finalizeExactLateSingleton(*MIB);
-  return MIB;
-}
-
-/// Emit one exact-committed singleton (no dest) and stamp Format E commit.
-template <typename AddOpsFn>
-static MachineInstr *
-emitExactLate(MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt,
-              const DebugLoc &DL, const TargetInstrInfo &TII,
-              unsigned LogicalOpc, AddOpsFn AddOps) {
-  MachineInstrBuilder MIB = buildExactLate(MBB, InsertPt, DL, TII, LogicalOpc);
-  AddOps(MIB);
-  finalizeExactLateSingleton(*MIB);
-  return MIB;
-}
-// Bundle-preserving Fixup splices/pads relative to this root, never unbundles
-// a legal coissued SET cycle just to walk iterators.
-static MachineInstr &topLevelForLayout(MachineInstr &MI) {
-  if (MI.isBundledWithPred() || MI.isBundledWithSucc())
-    return *getBundleStart(MI.getIterator());
-  return MI;
-}
-static void collectLoopBlocks(const MachineBasicBlock *Header,
-                                          const MachineBasicBlock *Latch,
-                                          const MachineBasicBlock *Preheader,
-                                          LoopBlockSet &Out) {
-  Out.clear();
-  if (!Header || !Latch)
-    return;
-  Out.insert(Header);
-  Out.insert(Latch);
-  if (Header == Latch)
-    return;
-
-  // Reverse CFG from Latch: every predecessor that is not Preheader and not
-  // outside the loop. Cap work to avoid runaway on malformed CFG.
-  SmallVector<const MachineBasicBlock *, 8> Work(Latch->pred_begin(),
-                                                 Latch->pred_end());
-  unsigned Guard = 0;
-  while (!Work.empty() && Guard++ < 256) {
-    const MachineBasicBlock *B = Work.pop_back_val();
-    if (!B || B == Preheader)
-      continue;
-    if (!Out.insert(B).second)
-      continue;
-    if (B == Header)
-      continue;
-    for (const MachineBasicBlock *P : B->predecessors())
-      Work.push_back(P);
-  }
-}
-
-static bool isCountdownStepOf(const MachineInstr &MI,
-                                          Register Reg) {
-  if (!Reg.isPhysical() || MI.isMetaInstruction() || MI.isDebugInstr() ||
-      MI.isBundle())
-    return false;
-  // Must def Reg.
-  bool Defs = false;
-  for (const MachineOperand &MO : MI.operands()) {
-    if (MO.isReg() && MO.isDef() && MO.getReg() == Reg) {
-      Defs = true;
-      break;
-    }
-  }
-  if (!Defs)
-    return false;
-
-  unsigned Opc = MI.getOpcode();
-  if (Opc == Haydn::LoopDec)
-    return true;
-  if (Opc == Haydn::ADDI32 || Opc == Haydn::ADDI32_W) {
-    return MI.getNumOperands() >= 3 && MI.getOperand(1).isReg() &&
-           MI.getOperand(1).getReg() == Reg && MI.getOperand(2).isImm() &&
-           MI.getOperand(2).getImm() == -1;
-  }
-  if (Opc == Haydn::SUBI32) {
-    return MI.getNumOperands() >= 3 && MI.getOperand(1).isReg() &&
-           MI.getOperand(1).getReg() == Reg && MI.getOperand(2).isImm() &&
-           MI.getOperand(2).getImm() == 1;
-  }
-  if (Opc == Haydn::ADD32 || Opc == Haydn::SUB32) {
-    // Prefer = Prefer + K / Prefer - K (K often a phys holding -1).
-    return MI.getNumOperands() >= 3 && MI.getOperand(1).isReg() &&
-           MI.getOperand(1).getReg() == Reg;
-  }
-  // Flex / slot-suffixed forms (ADD32_S0, …): operand-shape fallback.
-  if (MI.getNumOperands() >= 3 && MI.getOperand(0).isReg() &&
-      MI.getOperand(0).getReg() == Reg && MI.getOperand(1).isReg() &&
-      MI.getOperand(1).getReg() == Reg) {
-    if (MI.getOperand(2).isImm()) {
-      int64_t Imm = MI.getOperand(2).getImm();
-      return Imm == -1 || Imm == 1;
-    }
-    if (MI.getOperand(2).isReg())
-      return true;
-  }
-  return false;
-}
-
-static bool regMentionedInBlocks(Register Reg,
-                                             const LoopBlockSet &Blocks) {
-  if (!Reg.isPhysical())
-    return false;
-  for (const MachineBasicBlock *MBB : Blocks) {
-    if (!MBB)
-      continue;
-    for (const MachineInstr &MI : MBB->instrs()) {
-      if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isBundle())
-        continue;
-      for (const MachineOperand &MO : MI.operands()) {
-        if (MO.isReg() && MO.getReg() == Reg)
-          return true;
-      }
-    }
-  }
-  return false;
-}
-
-static bool regClobberedNonCountdownIn(Register Reg,
-                                                   const LoopBlockSet &Blocks) {
-  if (!Reg.isPhysical())
-    return false;
-  for (const MachineBasicBlock *MBB : Blocks) {
-    if (!MBB)
-      continue;
-    for (const MachineInstr &MI : MBB->instrs()) {
-      if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isBundle())
-        continue;
-      bool Defs = false;
-      for (const MachineOperand &MO : MI.operands()) {
-        if (MO.isReg() && MO.isDef() && MO.getReg() == Reg) {
-          Defs = true;
-          break;
-        }
-      }
-      if (!Defs)
-        continue;
-      if (isCountdownStepOf(MI, Reg))
-        continue;
-      return true;
-    }
-  }
-  return false;
-}
-
-static void stripResidualCountdown(MachineBasicBlock *Latch,
-                                               Register Reg) {
-  if (!Latch || !Reg.isPhysical())
-    return;
-  SmallVector<MachineInstr *, 4> Kill;
-  for (MachineInstr &MI : Latch->instrs()) {
-    if (isCountdownStepOf(MI, Reg) && MI.getOpcode() != Haydn::LoopDec)
-      Kill.push_back(&MI);
-  }
-  for (MachineInstr *MI : Kill)
-    eraseInstrSafe(MI);
-}
-
-static Register pickCounterReg(
-    const LoopBlockSet &Blocks, Register Prefer, const HaydnSubtarget &ST,
-    MachineBasicBlock &Preheader, MachineBasicBlock::iterator InsertPt) {
-  // Free counter must be:
-  // 1) not mentioned in any CFG loop block (lc_dp_lis: layout range missed
-  // latch earlier in the function — CFG Blocks is required);
-  // 2) available at the SET insert point (LivePhysRegs — AIE/RISC-V style
-  // post-RA scavenge, not "first preferred even if live").
-  // Fail-closed: return invalid Register rather than Prefer/R11 when both
-  // are live (old code clobbered live-through temps under demote).
-  const TargetRegisterInfo &TRI = *ST.getRegisterInfo();
-  const MachineRegisterInfo &MRI = Preheader.getParent()->getRegInfo();
-
-  LivePhysRegs LPR(TRI);
-  LPR.addLiveOuts(Preheader);
-  for (MachineBasicBlock::iterator II = Preheader.end(); II != InsertPt;) {
-    --II;
-    LPR.stepBackward(*II);
-  }
-
-  auto isUsable = [&](Register R) -> bool {
-    if (!R.isPhysical() || R == Haydn::R0 || R == Haydn::R13 || R == Haydn::R15)
-      return false;
-    if (MRI.isReserved(R))
-      return false;
-    if (regMentionedInBlocks(R, Blocks))
-      return false;
-    if (!LPR.available(MRI, R))
-      return false;
-    return true;
-  };
-
-  if (isUsable(Prefer))
-    return Prefer;
-
-  // Call-clobbered temps first. R12 last (normal GPR; AIE: no free AT).
-  static const MCPhysReg CandsGPR[] = {
-      Haydn::R11, Haydn::R10, Haydn::R9, Haydn::R8, Haydn::R7,
-      Haydn::R4,  Haydn::R3,  Haydn::R2, Haydn::R1, Haydn::R12};
-  for (MCPhysReg R : CandsGPR) {
-    if (Prefer.isPhysical() && R == Prefer)
-      continue;
-    if (isUsable(R))
-      return R;
-  }
-  LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: pickCounterReg — no free GPR "
-                       "(LivePhysRegs + loop mention); demote refuses "
-                       "erase-only on live body\n");
-  return Register();
-}
-static void materializeTripCount(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator InsertPt, DebugLoc DL,
-    const HaydnInstrInfo &TII, Register Dst, Register SrcReg, int64_t SrcImm,
-    bool HasImm) {
-  // Every demote trip-materialize MI is exact-committed before the
-  // second BranchRelaxation (shared commitLateProductCycle surface).
-  if (!HasImm) {
-    if (SrcReg == Dst)
-      return;
-    // Post-RA: real MOVE32 (not generic COPY — expand-pseudos already ran).
-    // Canonical MOVE32 encoding needs rs1=rs2=Src.
-    emitExactLateDef(MBB, InsertPt, DL, TII, Haydn::MOVE32, Dst,
-                     [&](MachineInstrBuilder MIB) {
-                       MIB.addReg(SrcReg).addReg(SrcReg);
-                     });
-    return;
-  }
-
-  // uimm16 trip counts: XOR-zero then ADDI32_W (expandPostRA already ran).
-  if (SrcImm == 0) {
-    emitExactLateDef(MBB, InsertPt, DL, TII, Haydn::XOR32, Dst,
-                     [&](MachineInstrBuilder MIB) {
-                       MIB.addReg(Haydn::R0).addReg(Haydn::R0);
-                     });
-    return;
-  }
-  emitExactLateDef(MBB, InsertPt, DL, TII, Haydn::XOR32, Dst,
-                   [&](MachineInstrBuilder MIB) {
-                     MIB.addReg(Haydn::R0).addReg(Haydn::R0);
-                   });
-  emitExactLateDef(MBB, InsertPt, DL, TII, Haydn::ADDI32_W, Dst,
-                   [&](MachineInstrBuilder MIB) {
-                     MIB.addReg(Dst).addImm(SrcImm);
-                   });
-}
-bool llvm::eraseHardwareLoopSetup(MachineInstr &SetMI) {
+bool llvm::eraseHardwareLoopSetup(
+    MachineInstr &SetMI, const char *DebugPrefix,
+    MachineBasicBlock *(*ResolveBody)(MachineInstr &)) {
+  // Body-resolution law: default is the CFG-only core; only pre-emit Fixup
+  // passes its final-layout tail resolver (layout order is not a formation
+  // body proof — resolveRoleABody rejects incomplete retained state).
+  MachineBasicBlock *(*const ResolveBodyFn)(MachineInstr &) =
+      ResolveBody ? ResolveBody : haydn::hwloop::resolveBodyMBBCore;
   MachineBasicBlock *Pre = SetMI.getParent();
   if (!Pre)
     return false;
@@ -974,7 +827,9 @@ bool llvm::eraseHardwareLoopSetup(MachineInstr &SetMI) {
 
   unsigned Opc = SetMI.getOpcode();
   if (Opc == Haydn::LoopStart) {
-    collectPLE(resolveBodyMBB(SetMI));
+    MachineBasicBlock *Body = ResolveBodyFn(SetMI);
+    collectPLE(Body);
+    collectPLE(haydn::hwloop::resolveLoopStartLatch(Body, Pre));
   } else if (SetMI.getNumOperands() >= 3) {
     if (SetMI.getOperand(1).isMBB())
       collectPLE(SetMI.getOperand(1).getMBB());
@@ -986,7 +841,7 @@ bool llvm::eraseHardwareLoopSetup(MachineInstr &SetMI) {
   }
 
   // SET/LoopStart first: sibling recommit needs the coissue root intact.
-  eraseSetMemberAndRecommitSiblings(SetMI, TII);
+  eraseSetMemberAndRecommitSiblings(SetMI, TII, DebugPrefix);
 
   SmallPtrSet<MachineInstr *, 8> Seen;
   for (MachineInstr *MI : PLEs) {
@@ -1010,8 +865,11 @@ bool llvm::eraseHardwareLoopSetup(MachineInstr &SetMI) {
 // NOT erase-only: keep SET (pad already applied) or fatal.
 // Fail-closed on dead MBB: if Header/Latch are not live (e.g. `%bb.-1`)
 // only erase the SET — never walk a dead MBB.
-bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
-                                           const HaydnInstrInfo &TII) {
+bool llvm::demoteHardwareLoopToSoftware(
+    MachineInstr &SetMI, const HaydnInstrInfo &TII,
+    const char *DebugPrefix, MachineBasicBlock *(*ResolveBody)(MachineInstr &)) {
+  MachineBasicBlock *(*const ResolveBodyFn)(MachineInstr &) =
+      ResolveBody ? ResolveBody : haydn::hwloop::resolveBodyMBBCore;
   unsigned Opc = SetMI.getOpcode();
   const bool IsLoopStart = Opc == Haydn::LoopStart;
   if (!TII.isHardwareLoopSetupOpcode(Opc) && !IsLoopStart)
@@ -1028,25 +886,45 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
   int64_t Imm = 0;
   bool HasImm = false;
 
+  // Debug-only demote OFF: never erase a SET whose body is not proven
+  // dead. Hexagon FixupHwLoops.cpp:137-148 converts out-of-range LOOP
+  // to the extended form or leaves it; Haydn has no extended form, so
+  // refuse the soft-edge / erase and let the caller fatal.
+  auto eraseOnlyIfDemoteAllowed = [&]() -> bool {
+    if (!haydn::hwloop::isHwLoopDemoteEnabled()) {
+      LLVM_DEBUG(dbgs() << DebugPrefix
+                        << ": demote disabled — refuse erase-only "
+                           "once-through\n");
+      return false;
+    }
+    return eraseHardwareLoopSetup(SetMI, DebugPrefix);
+  };
+
   if (IsLoopStart) {
     if (!SetMI.getOperand(0).isReg())
-      return eraseHardwareLoopSetup(SetMI);
+      return eraseOnlyIfDemoteAllowed();
     Prefer = SetMI.getOperand(0).getReg();
-    Header = resolveBodyMBB(SetMI);
-    Latch = Header;
+    Header = ResolveBodyFn(SetMI);
+    Latch = haydn::hwloop::resolveLoopStartLatch(Header, Preheader);
+    if (Header && !Latch) {
+      LLVM_DEBUG(dbgs() << DebugPrefix
+                        << ": demote refused — LoopStart latch unresolved "
+                           "(live body)\n");
+      return false;
+    }
   } else {
     if (SetMI.getNumOperands() < 4 || !SetMI.getOperand(1).isMBB() ||
         !SetMI.getOperand(2).isMBB())
-      return eraseHardwareLoopSetup(SetMI);
+      return eraseOnlyIfDemoteAllowed();
     Header = SetMI.getOperand(1).getMBB();
     Latch = SetMI.getOperand(2).getMBB();
     if (TII.isHardwareLoopRegTripOpcode(Opc)) {
       if (!SetMI.getOperand(3).isReg())
-        return eraseHardwareLoopSetup(SetMI);
+        return eraseOnlyIfDemoteAllowed();
       Prefer = SetMI.getOperand(3).getReg();
     } else {
       if (!SetMI.getOperand(3).isImm())
-        return eraseHardwareLoopSetup(SetMI);
+        return eraseOnlyIfDemoteAllowed();
       Imm = SetMI.getOperand(3).getImm();
       HasImm = true;
     }
@@ -1054,9 +932,20 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
 
   // Contract §1: dead MBB operands → L1 erase only (body gone).
   if (!isLiveMBB(MF, Header) || !isLiveMBB(MF, Latch)) {
-    LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demote L1-only — Header/Latch "
+    LLVM_DEBUG(dbgs() << DebugPrefix << ": demote L1-only — Header/Latch "
                          "not live in MF (stale %bb.-1 or erased body)\n");
-    return eraseHardwareLoopSetup(SetMI);
+    return eraseHardwareLoopSetup(SetMI, DebugPrefix);
+  }
+
+  // Live body. Debug-only demote OFF: Hexagon FixupHwLoops skips
+  // conversion when the loop cannot stay legal
+  // (HexagonFixupHwLoops.cpp:97-148). Overlay: refuse the soft-edge
+  // install so the caller fatals rather than erase-only once-through.
+  if (!haydn::hwloop::isHwLoopDemoteEnabled()) {
+    LLVM_DEBUG(dbgs() << DebugPrefix
+                      << ": demote disabled on live body — refuse "
+                         "erase-only once-through\n");
+    return false;
   }
 
   DebugLoc DL = SetMI.getDebugLoc();
@@ -1135,21 +1024,8 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
         return true;
       if (Cur->succ_size() != 1)
         return false;
-      // Allow empty blocks and pure far-jump materialization (LUI/ADDI/JALR).
-      for (const MachineInstr &MI : Cur->instrs()) {
-        if (MI.isMetaInstruction() || MI.isCFIInstruction() || MI.isKill() ||
-            MI.isImplicitDef())
-          continue;
-        if (MI.isBundle())
-          continue;
-        unsigned Opc = MI.getOpcode();
-        const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(Opc);
-        if (Log == Haydn::NOP || Log == Haydn::LUI || Log == Haydn::ADDI32_W ||
-            Log == Haydn::JALR_W || Log == Haydn::JALR || Log == Haydn::B)
-          continue;
-        // Real work — not a trampoline.
+      if (!haydn::hwloop::isContinueTrampolineBlock(Cur))
         return false;
-      }
       Cur = *Cur->succ_begin();
     }
     return false;
@@ -1182,7 +1058,7 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
   if (!isLiveMBB(MF, Exit)) {
     // Live body but no usable exit — cannot install soft edge. Leave SET
     // intact for the caller (never erase-only once-through).
-    LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demote refused — no live exit "
+    LLVM_DEBUG(dbgs() << DebugPrefix << ": demote refused — no live exit "
                          "(body still live)\n");
     return false;
   }
@@ -1191,7 +1067,7 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
   // Decide CountReg *before* any erase. Only then L1 erase + L2 soft edge.
   // Never erase SET when soft edge cannot be installed on a live body.
 
-  LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demoting hwloop header="
+  LLVM_DEBUG(dbgs() << DebugPrefix << ": demoting hwloop header="
                     << printMBBReference(*Header) << " latch="
                     << printMBBReference(*Latch) << " exit="
                     << printMBBReference(*Exit)
@@ -1203,6 +1079,7 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
 
   // Snapshot soft-loop decision *before* erasing SetMI (operands die with it).
   Register CountReg;
+  Register LatchScr; // stack-counter latch scratch (probed spill-free)
   bool InstallSoftLoop = false;
   bool UseStackCounter = false;
   int StackCounterFI = -1;
@@ -1236,12 +1113,13 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
       CountReg = Prefer;
       InstallSoftLoop = true;
     } else {
-      CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins);
+      CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins,
+                        DebugPrefix);
       if (CountReg.isPhysical()) {
         materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, 0,
                              /*HasImm=*/false);
         InstallSoftLoop = true;
-        LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demote trip "
+        LLVM_DEBUG(dbgs() << DebugPrefix << ": demote trip "
                           << printReg(Prefer)
                           << " clobbered in body — counter "
                           << printReg(CountReg) << "\n");
@@ -1252,7 +1130,8 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
     // Imm form: need a free GPR + materialize.
     MachineBasicBlock::iterator Ins =
         topLevelForLayout(SetMI).getIterator();
-    CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins);
+    CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins,
+                        DebugPrefix);
     if (CountReg.isPhysical()) {
       materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, Imm,
                            /*HasImm=*/true);
@@ -1268,93 +1147,105 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
         ((Prefer.isPhysical() && Prefer != Haydn::R0) || HasImm)) {
       MachineBasicBlock::iterator Ins =
           topLevelForLayout(SetMI).getIterator();
+
       Register FrameReg;
       int64_t Off =
           TFL->getFrameIndexReference(MF, StackCounterFI, FrameReg).getFixed();
-      // FI ref is bytes; ST32/LD32 take word element indices (imm<<2).
-      assert((Off % 4) == 0 && "stack-counter FI must be word-aligned");
+      // ST32/LD32 take word element indices (imm<<2). A non-simm6 or
+      // misaligned FI would need an R0 address temp + XOR-zero; that
+      // restore can land after BNEZ_W and the XOR clobbers a live R0.
+      // PostRA scratch FI is a small slot — refuse rather than invent
+      // an address-temp window.
+      if ((Off % 4) != 0 || !isInt<6>(Off / 4)) {
+        LLVM_DEBUG(dbgs() << DebugPrefix
+                          << ": demote refused — stack-counter FI#"
+                          << StackCounterFI << " offset " << Off
+                          << " is not a word-aligned simm6 element\n");
+        return false;
+      }
       const int64_t Elem = Off / 4;
+
+      // Scratch-window soundness: every demote
+      // scratch window that touches the counter FI must be spill-free and
+      // non-R0, decided BEFORE any mutation.
+      //   Latch window: the decremented counter feeds BNEZ_W after the
+      //     bracket closes — a NeedsSpill bracket restores the scratch's
+      //     original live-through value over it AND beginSpill's spill home
+      //     resolves to the same BranchRelaxation/PostRA FI as the counter
+      //     (destroying the stored trip); an R0 borrow XOR-zeroes it. Both
+      //     are silent wrong code (fixed-address / single-pass loop).
+      //   Imm-trip preheader window: stores the trip into the counter FI —
+      //     a NeedsSpill bracket here aliases the same FI.
+      // Probe against the POST-REWRITE latch successors {Header, Exit}:
+      // the pre-rewrite CFG hides the back-edge liveness inside
+      // PseudoLoopEnd. No spill-free candidate → refuse demote (caller
+      // fatal ladder), never fall back to a spill bracket.
+      const ArrayRef<Register> NoExclude;
+      LatchScr = findPostRAScratchNoSpill(
+          *Latch, Latch->end(), /*PreferNotR12=*/true, {Header, Exit},
+          Prefer.isPhysical() ? ArrayRef<Register>{Prefer} : NoExclude);
+      Register PreheaderScr;
+      if (HasImm)
+        PreheaderScr = findPostRAScratchNoSpill(
+            *Preheader, Ins, /*PreferNotR12=*/true, {},
+            Prefer.isPhysical() ? ArrayRef<Register>{Prefer} : NoExclude);
+      if (!(LatchScr.isPhysical() &&
+            (!HasImm || PreheaderScr.isPhysical()))) {
+        LLVM_DEBUG(dbgs() << DebugPrefix
+                          << ": demote refused — no spill-free non-R0 "
+                             "scratch for stack-counter windows (latch "
+                          << (LatchScr.isPhysical() ? "ok" : "NONE")
+                          << ", preheader "
+                          << (!HasImm || PreheaderScr.isPhysical() ? "ok"
+                                                                   : "NONE")
+                          << "); never a spill bracket over the counter\n");
+        return false;
+      }
+
       if (HasImm) {
-        // Materialize imm into a free/scratch temp, then store to FI.
-  // ST/address glue exact-committed (trip mat already is).
-        withPostRAScratch(
-            *Preheader, Ins, DL, TII, ST, /*PreferNotR12=*/true,
-            [&](Register Scr) {
-              materializeTripCount(*Preheader, Ins, DL, TII, Scr, Prefer, Imm,
-                                   /*HasImm=*/true);
-              if (isInt<6>(Elem)) {
-                emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
-                              [&](MachineInstrBuilder MIB) {
-                                MIB.addReg(Scr, getKillRegState(true))
-                                    .addReg(FrameReg)
-                                    .addImm(Elem);
-                              });
-              } else {
-                // Rare large FI: use R0 as address temp (xor-zero after).
-                // ADDI takes byte offset; ST32 at [R0+0].
-                emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W,
-                                 Haydn::R0, [&](MachineInstrBuilder MIB) {
-                                   MIB.addReg(FrameReg).addImm(Off);
-                                 });
-                emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
-                              [&](MachineInstrBuilder MIB) {
-                                MIB.addReg(Scr, getKillRegState(true))
-                                    .addReg(Haydn::R0)
-                                    .addImm(0);
-                              });
-                emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::XOR32,
-                                 Haydn::R0, [&](MachineInstrBuilder MIB) {
-                                   MIB.addReg(Haydn::R0).addReg(Haydn::R0);
-                                 });
-              }
-            },
-            /*Exclude=*/Prefer.isPhysical() ? ArrayRef<Register>{Prefer}
-                                            : ArrayRef<Register>{});
+        // Materialize imm into the probed spill-free temp, then store to FI.
+        // No withPostRAScratch bracket: its NeedsSpill home aliases this
+        // same counter FI. The probe above is the single mechanism that
+        // picked PreheaderScr.
+        materializeTripCount(*Preheader, Ins, DL, TII, PreheaderScr, Prefer,
+                             Imm, /*HasImm=*/true);
+        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
+                      [&](MachineInstrBuilder MIB) {
+                        MIB.addReg(PreheaderScr, getKillRegState(true))
+                            .addReg(FrameReg)
+                            .addImm(Elem);
+                      });
       } else {
         // Prefer holds trip at SET; store it to FI before erase.
-        if (isInt<6>(Elem)) {
-          emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
-                        [&](MachineInstrBuilder MIB) {
-                          MIB.addReg(Prefer).addReg(FrameReg).addImm(Elem);
-                        });
-        } else {
-          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W, Haydn::R0,
-                           [&](MachineInstrBuilder MIB) {
-                             MIB.addReg(FrameReg).addImm(Off);
-                           });
-          emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
-                        [&](MachineInstrBuilder MIB) {
-                          MIB.addReg(Prefer).addReg(Haydn::R0).addImm(0);
-                        });
-          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::XOR32, Haydn::R0,
-                           [&](MachineInstrBuilder MIB) {
-                             MIB.addReg(Haydn::R0).addReg(Haydn::R0);
-                           });
-        }
+        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
+                      [&](MachineInstrBuilder MIB) {
+                        MIB.addReg(Prefer).addReg(FrameReg).addImm(Elem);
+                      });
       }
       UseStackCounter = true;
       InstallSoftLoop = true;
-      LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demote stack-counter FI#"
+      LLVM_DEBUG(dbgs() << DebugPrefix << ": demote stack-counter FI#"
                         << StackCounterFI << "\n");
     }
   }
 
   if (!InstallSoftLoop) {
     // Live body, no free counter / unusable trip — refuse erase-only.
-    LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demote refused — no free counter "
+    LLVM_DEBUG(dbgs() << DebugPrefix << ": demote refused — no free counter "
                          "GPR for soft edge (body still live)\n");
     return false;
   }
 
   // Strip residual countdown of CountReg *before* erasing SET / rewriting
-  // latch, while Latch is still intact. (prior remat may leave Prefer+=-1.)
+  // the latch, while the body is still intact. Walk every CFG loop block:
+  // a proven Prefer+=-1 can sit in the header of a multi-BB diamond.
   if (!UseStackCounter)
-    stripResidualCountdown(Latch, CountReg);
+    stripResidualCountdown(LoopBlocks, CountReg);
   else if (Prefer.isPhysical())
-    stripResidualCountdown(Latch, Prefer);
+    stripResidualCountdown(LoopBlocks, Prefer);
 
   // L1: erase hardware setup (SET + PLE)
-  eraseHardwareLoopSetup(SetMI);
+  eraseHardwareLoopSetup(SetMI, DebugPrefix);
   // SetMI is gone; do not touch it again.
 
   // Re-validate live blocks after erase (should still be live).
@@ -1375,11 +1266,15 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
     ensureLiveIn(Latch, CountReg);
   }
 
-  // Drop existing top-level terminators, then final-real SUBI32+BNEZ_W +
- // optional B Exit. : no residual LoopDec/LoopJNZ after late commit.
-  SmallVector<MachineInstr *, 4> Terms;
+  // Drop every latch terminator, including BUNDLE interiors. A BUNDLE
+  // root is not itself a terminator, so a top-level-only walk leaves
+  // `BUNDLE { B Exit }` in place; later exact-commit SUBI32/BNEZ_W
+  // then append after that first terminator (verifier break). Walk
+  // instrs() so the interior B/cond/PLE is erased and the empty shell
+  // is dropped. Then the soft edge is the only terminator sequence.
+  SmallVector<MachineInstr *, 8> Terms;
   for (MachineInstr &MI : Latch->instrs()) {
-    if (MI.isBundledWithPred())
+    if (MI.getOpcode() == TargetOpcode::BUNDLE)
       continue;
     if (MI.isTerminator())
       Terms.push_back(&MI);
@@ -1397,79 +1292,62 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
     Register FrameReg;
     int64_t Off =
         TFL->getFrameIndexReference(MF, StackCounterFI, FrameReg).getFixed();
-    assert((Off % 4) == 0 && "stack-counter FI must be word-aligned");
+    assert((Off % 4) == 0 && isInt<6>(Off / 4) &&
+           "stack-counter FI refused unless word-aligned simm6");
     const int64_t Elem = Off / 4;
-    MachineBasicBlock::iterator LatchEnd = Latch->end();
+    // Insert before any leftover terminator so LD/SUBI/ST stay in the
+    // body (never after BNEZ_W / B). After the terminator sweep above
+    // this is Latch->end().
+    MachineBasicBlock::iterator LatchEnd = Latch->getFirstTerminator();
     // Stack-counter path builds several real MIs; exact-commit each singleton
     // so second BR / Verify see committed FormatID cycles (no residual bare
     // SUBI32/BNEZ_W for the late firewall to invent).
-    withPostRAScratch(
-        *Latch, LatchEnd, DL, TII, ST, /*PreferNotR12=*/true,
-        [&](Register Scr) {
-          if (isInt<6>(Elem)) {
-            emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::LD32, Scr,
-                             [&](MachineInstrBuilder MIB) {
-                               MIB.addReg(FrameReg).addImm(Elem);
-                             });
-          } else {
-            emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::ADDI32_W,
-                             Haydn::R0, [&](MachineInstrBuilder MIB) {
-                               MIB.addReg(FrameReg).addImm(Off);
-                             });
-            emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::LD32, Scr,
-                             [&](MachineInstrBuilder MIB) {
-                               MIB.addReg(Haydn::R0).addImm(0);
-                             });
-            emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::XOR32, Haydn::R0,
-                             [&](MachineInstrBuilder MIB) {
-                               MIB.addReg(Haydn::R0).addReg(Haydn::R0);
-                             });
-          }
-          // Final-real countdown: counter -= 1; branch if nonzero.
-          emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::SUBI32, Scr,
-                           [&](MachineInstrBuilder MIB) {
-                             MIB.addReg(Scr).addImm(1);
-                           });
-          if (isInt<6>(Elem)) {
-            emitExactLate(*Latch, LatchEnd, DL, TII, Haydn::ST32,
-                          [&](MachineInstrBuilder MIB) {
-                            MIB.addReg(Scr).addReg(FrameReg).addImm(Elem);
-                          });
-          } else {
-            emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::ADDI32_W,
-                             Haydn::R0, [&](MachineInstrBuilder MIB) {
-                               MIB.addReg(FrameReg).addImm(Off);
-                             });
-            emitExactLate(*Latch, LatchEnd, DL, TII, Haydn::ST32,
-                          [&](MachineInstrBuilder MIB) {
-                            MIB.addReg(Scr).addReg(Haydn::R0).addImm(0);
-                          });
-            emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::XOR32, Haydn::R0,
-                             [&](MachineInstrBuilder MIB) {
-                               MIB.addReg(Haydn::R0).addReg(Haydn::R0);
-                             });
-          }
-          emitExactLate(*Latch, LatchEnd, DL, TII, Haydn::BNEZ_W,
-                        [&](MachineInstrBuilder MIB) {
-                          MIB.addReg(Scr, getKillRegState(true)).addMBB(Header);
-                        });
-        });
-    LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demote stack-counter exact-commit "
+    //
+    // Closed order: no scratch bracket at all in the latch.
+    // LatchScr was probed spill-free and non-R0 against the POST-REWRITE
+    // successors {Header, Exit} at decision time — a withPostRAScratch
+    // bracket here is structurally wrong twice: its restore (endSpill /
+    // XOR-zero) lands between the decremented counter and BNEZ_W, and its
+    // NeedsSpill home aliases the counter FI itself (both resolve
+    // BranchRelaxationScratchFI ?: PostRAScratchFI), destroying the stored
+    // trip. Terminators come last; nothing follows BNEZ_W except the
+    // optional exit branch. Large-FI R0 address-temp is refused above.
+    emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::LD32, LatchScr,
+                     [&](MachineInstrBuilder MIB) {
+                       MIB.addReg(FrameReg).addImm(Elem);
+                     });
+    // Final-real countdown: counter -= 1; store back. No terminator here.
+    emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::SUBI32, LatchScr,
+                     [&](MachineInstrBuilder MIB) {
+                       MIB.addReg(LatchScr).addImm(1);
+                     });
+    emitExactLate(*Latch, LatchEnd, DL, TII, Haydn::ST32,
+                  [&](MachineInstrBuilder MIB) {
+                    MIB.addReg(LatchScr).addReg(FrameReg).addImm(Elem);
+                  });
+    // Counter read happens before the store that may follow on the exit
+    // path; branch on the register, not on memory.
+    emitExactLate(*Latch, Latch->getFirstTerminator(), DL, TII, Haydn::BNEZ_W,
+                  [&](MachineInstrBuilder MIB) {
+                    MIB.addReg(LatchScr).addMBB(Header);
+                  });
+    LLVM_DEBUG(dbgs() << DebugPrefix << ": demote stack-counter exact-commit "
                          "SUBI32+BNEZ_W FI#"
                       << StackCounterFI << "\n");
   } else {
     // Final-real soft edge: SUBI32 count,count,1 + BNEZ_W count, Header.
     // Residual countdown was stripped above; never double-dec.
   // Exact-commit each edge as a product singleton before second BR.
-    emitExactLateDef(*Latch, Latch->end(), DL, TII, Haydn::SUBI32, CountReg,
+    emitExactLateDef(*Latch, Latch->getFirstTerminator(), DL, TII,
+                     Haydn::SUBI32, CountReg,
                      [&](MachineInstrBuilder MIB) {
                        MIB.addReg(CountReg).addImm(1);
                      });
-    emitExactLate(*Latch, Latch->end(), DL, TII, Haydn::BNEZ_W,
+    emitExactLate(*Latch, Latch->getFirstTerminator(), DL, TII, Haydn::BNEZ_W,
                   [&](MachineInstrBuilder MIB) {
                     MIB.addReg(CountReg).addMBB(Header);
                   });
-    LLVM_DEBUG(dbgs() << "HaydnHardwareLoops: demote exact-commit SUBI32+BNEZ_W on "
+    LLVM_DEBUG(dbgs() << DebugPrefix << ": demote exact-commit SUBI32+BNEZ_W on "
                       << printReg(CountReg) << "\n");
   }
 
@@ -1484,6 +1362,35 @@ bool llvm::demoteHardwareLoopToSoftware(MachineInstr &SetMI,
     emitExactLate(*Latch, Latch->end(), DL, TII, Haydn::B,
                   [&](MachineInstrBuilder MIB) { MIB.addMBB(Exit); });
   }
+
+#ifndef NDEBUG
+  // Latch law: the counted back-edge is residual BNEZ_W or the golden
+  // Format E BNEZ member after late exact-commit. The only instructions
+  // that may follow it are architectural NOP pad in the same cycle and
+  // an exact-commit exit B. A scratch restore, spill, or XOR-zero after
+  // the terminator is the per-iteration SP leak / R0 clobber.
+  {
+    bool SeenBnez = false;
+    for (const MachineInstr &MI : Latch->instrs()) {
+      if (MI.isMetaInstruction() || MI.isDebugInstr() ||
+          MI.getOpcode() == TargetOpcode::BUNDLE)
+        continue;
+      if (haydn::hwloop::isSoftLatchBnezOpcode(MI.getOpcode())) {
+        SeenBnez = true;
+        continue;
+      }
+      if (!SeenBnez)
+        continue;
+      const unsigned LateLog =
+          haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
+      if (LateLog == Haydn::B || LateLog == Haydn::NOP)
+        continue;
+      llvm_unreachable(
+          "hwloop demote: only an exit B may follow latch BNEZ_W");
+    }
+    assert(SeenBnez && "hwloop demote: latch missing BNEZ_W soft edge");
+  }
+#endif
 
   return true;
 }

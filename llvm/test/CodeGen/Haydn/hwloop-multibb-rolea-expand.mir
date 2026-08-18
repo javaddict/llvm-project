@@ -1,0 +1,127 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — multi-BB Role-A expand (Header != Latch).
+#
+# REGRESSION TEST: retained LoopStart in the preheader with PLE on the
+# latch (not the header) expands to SET_HWLOOP_F2_W header,latch.
+# Internal diamond branches stay inside the loop. Default product flag
+# is OFF; this pass runs only because the MIR already holds LoopStart.
+
+# CHECK-LABEL: name: multibb_rolea_expand
+# CHECK: SET_HWLOOP_F2_W 0, %bb.1, %bb.4
+# CHECK-NOT: LoopStart
+# CHECK: PseudoLoopEnd
+# CHECK: bb.5.exit
+#
+# Empty multi-BB (Header != Latch, only NOP/B): strip, do not fatal.
+# CHECK-LABEL: name: multibb_empty_strip
+# CHECK-NOT: LoopStart
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: PseudoLoopEnd
+
+--- |
+  define dso_local void @multibb_rolea_expand(ptr %p, i32 %c) {
+  entry:
+    br label %header
+  header:
+    br i1 undef, label %then, label %else
+  then:
+    store i32 0, ptr %p
+    br label %latch
+  else:
+    store i32 1, ptr %p
+    br label %latch
+  latch:
+    br i1 undef, label %header, label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @multibb_empty_strip() {
+  entry:
+    br label %header
+  header:
+    br label %latch
+  latch:
+    br i1 undef, label %header, label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            multibb_rolea_expand
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, 0
+    NOP
+    NOP
+    NOP
+
+  bb.1.header:
+    liveins: $r1, $r2, $r3, $r15
+    successors: %bb.2, %bb.3
+    BEQZ_W $r2, %bb.3
+
+  bb.2.then:
+    liveins: $r1, $r3, $r15
+    successors: %bb.4
+    ST32 $r0, $r1, 0
+    B %bb.4
+
+  bb.3.else:
+    liveins: $r1, $r3, $r15
+    successors: %bb.4
+    $r4 = ADDI32_W $r0, 1
+    ST32 $r4, $r1, 0
+
+  bb.4.latch:
+    liveins: $r1, $r2, $r3, $r15
+    successors: %bb.1, %bb.5
+    NOP
+    NOP
+    NOP
+    PseudoLoopEnd %bb.1
+
+  bb.5.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+...
+---
+name:            multibb_empty_strip
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, 0
+    NOP
+    NOP
+    NOP
+
+  bb.1.header:
+    liveins: $r3, $r15
+    successors: %bb.2
+    B %bb.2
+
+  bb.2.latch:
+    liveins: $r3, $r15
+    successors: %bb.1, %bb.3
+    NOP
+    NOP
+    NOP
+    PseudoLoopEnd %bb.1
+
+  bb.3.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15

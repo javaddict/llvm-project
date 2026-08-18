@@ -1,23 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
-; Role: semantic — (GAP-4 multibb): a multi-BB loop must NOT be lowered to a hardware loop (ZOL) via the IR-level pass.
+; Role: semantic — product default OFF: a multi-BB diamond stays a software
+; loop. Measured HWON Role-A expand is pinned by hwloop-multibb.ll.
 
-; REGRESSION TEST (GAP-4 multibb): a multi-BB loop must NOT be lowered to a
-; hardware loop (ZOL) via the IR-level pass.
-;
-; the AsmPrinter's LoopStart handler assumes the ZOL body is a
-; single basic block — it registers the HWLR_END label on `LoopBody` and emits
-; it at that block's last real instruction. For a multi-BB loop `LoopBody`
-; resolves to the header, whose only instruction is a terminator, so the END
-; label is never emitted -> llvm-mc "Undefined temporary symbol.LLhwloop_end0"
-; build abort. So isHardwareLoopProfitable now rejects any multi-BB loop
-; (HaydnTargetTransformInfo.cpp); this loop correctly stays a SOFTWARE loop
-; (compare-and-branch back-edge). The post-RA recognizer may still form a
-; hwloop for multi-BB loops it can correctly bound (single latch, placeable
-; END); this clamp shape is not one of them.
-;
-; Asserting NO set_hwloop here guards the fix: if a future change re-opens
-; the multi-BB IR-ZOL path, this test fails (and the build would abort).
+; REGRESSION TEST: product `-haydn-enable-hwloops` is OFF. TTI may accept an
+; innermost single-latch/single-exit diamond, but the expand pass is not in
+; the product pipeline, so this shape must stay a compare-and-branch
+; back-edge. Opening the product flag is a separate policy change.
 
 define void @ii_hwloop_multibb(ptr %dst, ptr readonly %src, i32 %n) {
 ; CHECK-LABEL: ii_hwloop_multibb:

@@ -124,14 +124,13 @@ body:             |
 
     ; CHECK-LABEL: name: test1_csrw_hwlr_set_hwloop_no_bundle
     ; CHECK: liveins: $r1, $r2
-    ; CHECK-NEXT: {{^ +$}}
-    ; SET is a region SU; postmisched may setDesc to *_S0 member.
-    ; Hazard: CSR 0x20 must NOT share a BUNDLE with SET (standalone sequence).
-    ; CHECK-NEXT: CSRW_W{{(_S0)?}} 32, $r1, implicit-def $sfr
-    ; CHECK-NEXT: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
-    ; ExitSU SetupIssueDistance trailing flush may insert idle NOPs after SET
-    ; before the JALR boundary — hazard still forbids coissue of CSR+SET.
+    ; SET is a region SU; postmisched may setDesc members and may reorder
+    ; SET ahead of CSRW. Hazard: CSR 0x20 must NOT share a BUNDLE with SET.
+    ; CHECK-NOT forbids a BUNDLE root before either op (coissue). A later
+    ; idle/JALR BUNDLE is allowed — do not CHECK-NOT BUNDLE after the pair.
     ; CHECK-NOT: BUNDLE
+    ; CHECK-DAG: CSRW{{[^ ]*}} 32, $r1, implicit-def $sfr
+    ; CHECK-DAG: SET_HWLOOP{{[^ ]*}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
     ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     CSRW_W 32, $r1, implicit-def $sfr
     SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
@@ -176,8 +175,8 @@ body:             |
     ; CHECK: liveins: $r1, $r2
     ; CHECK-NEXT: {{^ +$}}
     ; Non-HWLR CSR 0x10 may coissue under HWLOOP-SU (legal) or stay sequential.
-    ; CHECK-DAG: CSRW_W{{(_S0)?}} 16, $r1, implicit-def $sfr
-    ; CHECK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; CHECK-DAG: CSRW{{[^ ]*}} 16, $r1, implicit-def $sfr
+    ; CHECK-DAG: SET_HWLOOP{{[^ ]*}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
     ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     CSRW_W 16, $r1, implicit-def $sfr
     SET_HWLOOP_W 0, %bb.0, %bb.0, 1, implicit-def $sfr
@@ -206,8 +205,8 @@ body:             |
     liveins: $r1, $r15
 
     ; CHECK-LABEL: name: test3_csrw_cbr_set_hwloop_no_false_hazard
-    ; CHECK-DAG: CSRW_W{{(_S0)?}} 44, $r1, implicit-def $sfr, implicit-def $cbr0
-    ; CHECK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; CHECK-DAG: CSRW{{[^ ]*}} 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    ; CHECK-DAG: SET_HWLOOP{{[^ ]*}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
     ; CHECK: NOP
     ; CHECK: NOP
     ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -239,10 +238,10 @@ body:             |
     liveins: $r1, $r15
 
     ; EXPANDPACK-LABEL: name: test4_setcbr_expand_then_set_hwloop
-    ; EXPANDPACK-DAG: CSRW_W{{(_S0)?}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
-    ; EXPANDPACK-DAG: SET_HWLOOP_W{{(_S0)?}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
+    ; EXPANDPACK-DAG: CSRW{{[^ ]*}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0
+    ; EXPANDPACK-DAG: SET_HWLOOP{{[^ ]*}} 0, %bb.0, %bb.0, 1, implicit-def $sfr
     ; EXPANDPACK-NOT: SETCBR
-    ; EXPANDPACK: NOP
+    ; HWLOOP-SU may emit one or more idle NOPs after SET; do not pin count.
     ; EXPANDPACK: NOP
     ; EXPANDPACK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     SETCBR_BEGIN 0, $r1

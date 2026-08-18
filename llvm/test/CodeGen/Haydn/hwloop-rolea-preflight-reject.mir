@@ -17,10 +17,20 @@
 # RUN:   %t/non_successor_body.mir -o - 2>&1 | FileCheck %s --check-prefix=NSUCC
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   %t/incomplete_operands.mir -o - 2>&1 | FileCheck %s --check-prefix=OPS
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/cond_early_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=CEXIT
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/multibb_early_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=MBEXIT
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
+# RUN:   %t/hwlr_csr.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
 
 # Role: MIR — incomplete Role-A retained seats reject fail-closed before mutation.
 # Covers trip reg / call / multi-exit / nested setup / multi-PLE / missing
-# self-edge / missing PLE / non-successor layout invent (successor-only body).
+# self-edge / missing PLE / non-successor layout invent (successor-only body) /
+# pre-PLE conditional early-exit (golden Constraints: branches must not leave
+# an active hwloop before HWLR_END; one non-self successor so this is not MEXIT)
+# / multi-BB Header successor that never reaches Latch (same reject string) /
+# unpublished HWLR CSR write in the retained body (SET-only program).
 
 # TRIP: incomplete Role-A retained state rejected before mutation
 # TRIP: trip reg not a physical GPR
@@ -32,6 +42,9 @@
 # NOPLE: no body MBB
 # NSUCC: no body MBB
 # OPS: incomplete LoopStart operands
+# CEXIT: body contains early-exit branch before PseudoLoopEnd
+# MBEXIT: body contains early-exit branch before PseudoLoopEnd
+# HWLR: body contains unpublished HWLR CSR write
 
 #--- trip_r0.mir
 --- |
@@ -355,6 +368,137 @@ body:             |
     successors: %bb.1, %bb.2
     liveins: $r1, $r15
     ST32 $r0, $r1, 0
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- cond_early_exit.mir
+--- |
+  define dso_local void @cond_early_exit(ptr %p, i32 %c) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br i1 undef, label %exit, label %body
+  exit:
+    ret void
+  }
+...
+---
+name:            cond_early_exit
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ST32 $r0, $r1, 0
+    BNEZ_W $r2, %bb.2
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- multibb_early_exit.mir
+--- |
+  define dso_local void @multibb_early_exit(ptr %p, i32 %c) {
+  entry:
+    br label %header
+  header:
+    br i1 undef, label %then, label %else
+  then:
+    store i32 0, ptr %p
+    br label %exit
+  else:
+    store i32 1, ptr %p
+    br label %latch
+  latch:
+    br i1 undef, label %header, label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            multibb_early_exit
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, 0
+    NOP
+    NOP
+    NOP
+  bb.1.header:
+    liveins: $r1, $r2, $r3, $r15
+    successors: %bb.2, %bb.3
+    BEQZ_W $r2, %bb.3
+  bb.2.then:
+    liveins: $r1, $r3, $r15
+    successors: %bb.5
+    ST32 $r0, $r1, 0
+    B %bb.5
+  bb.3.else:
+    liveins: $r1, $r3, $r15
+    successors: %bb.4
+    $r4 = ADDI32_W $r0, 1
+    ST32 $r4, $r1, 0
+    B %bb.4
+  bb.4.latch:
+    liveins: $r1, $r2, $r3, $r15
+    successors: %bb.1, %bb.5
+    NOP
+    NOP
+    NOP
+    PseudoLoopEnd %bb.1
+  bb.5.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- hwlr_csr.mir
+--- |
+  define dso_local void @hwlr_csr(ptr %p, i32 %v) {
+  entry:
+    br label %body
+  body:
+    store i32 %v, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            hwlr_csr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ST32 $r2, $r1, 0
+    CSRW_W 32, $r2, implicit-def $sfr
     PseudoLoopEnd %bb.1
   bb.2.exit:
     liveins: $r15

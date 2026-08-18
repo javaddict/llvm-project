@@ -162,9 +162,10 @@ body:             |
 
 # CHECK-LABEL: name: demote_sel2
 # CHECK-NOT: SET_HWLOOP_W
-# Soft residual after fail-closed demote:
+# Soft residual after fail-closed demote. Late exact-commit rewrites
+# residual BNEZ_W to the golden Format E BNEZ member.
 # CHECK: SUBI32
-# CHECK: BNEZ_W
+# CHECK: BNEZ
 
 ---
 name:            demote_sel3
@@ -196,7 +197,7 @@ body:             |
 # CHECK-LABEL: name: demote_sel3
 # CHECK-NOT: SET_HWLOOP_W
 # CHECK: SUBI32
-# CHECK: BNEZ_W
+# CHECK: BNEZ
 
 ---
 name:            demote_sel_neg
@@ -228,7 +229,7 @@ body:             |
 # CHECK-LABEL: name: demote_sel_neg
 # CHECK-NOT: SET_HWLOOP_W
 # CHECK: SUBI32
-# CHECK: BNEZ_W
+# CHECK: BNEZ
 
 ---
 name:            demote_zero_count
@@ -261,4 +262,4 @@ body:             |
 # CHECK-LABEL: name: demote_zero_count
 # CHECK-NOT: SET_HWLOOP_W
 # CHECK: SUBI32
-# CHECK: BNEZ_W
+# CHECK: BNEZ

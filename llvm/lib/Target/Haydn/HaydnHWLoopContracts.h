@@ -83,13 +83,22 @@
 // Pipeline (no free AT invent; no ad hoc multi-BB conversion):
 //   SCEV-proven IR + retained LoopStart→SET expansion before post-RA pack only;
 //   incomplete retained seats reject fail-closed before mutation (fatal);
-//   post-RA semantic rediscovery helpers stay deleted; multi-BB is a separate
-//   SCEV/CFG extension. Multi-stage SMS is an active target and qualifies first
+//   post-RA semantic rediscovery helpers stay deleted; multi-BB is a measured
+//   SCEV/CFG extension (innermost single-latch/single-exit) after single-BB
+//   qualify — never late physical rediscovery. Multi-stage SMS qualifies first
 //   with hardware loops OFF; their combined interaction qualifies afterward.
+//   Demote latch windows never emit scratch restore after BNEZ_W (SP leak);
+//   stack-counter FI that is not a word-aligned simm6 element refuses
+//   (no R0 address-temp XOR after the terminator); unverifiable countdown
+//   addends are clobbers, not strip candidates.
 //   Formation owns software-loop demotion (encodability or soft edge before
 //   layout lock-in). Fixup: intervening pad → order-preserving shorten →
 //   range recheck; residual generic setup fatals; late range may still call
 //   the formation demote helper for already-committed wide forms.
+//   Debug -haydn-enable-hwloop-demote=false refuses the soft-edge install
+//   on a live body (Hexagon FixupHwLoops skip overlay) — callers fatal,
+//   never erase-only once-through. Unpublished HWLR CSR addresses stay
+//   unavailable (product programs HWLR only through SET_HWLOOP).
 //
 //===----------------------------------------------------------------------===//
 
@@ -196,6 +205,18 @@ static_assert(MaxSingleBranchGrowthBytes ==
                       ProductParcelBytes,
               "growth bytes must be parcels × product EncodedBytes");
 
+/// Residual BranchRelaxation distance buffer after named growth is charged
+/// in getInstSizeInBytes. Equals one insertIndirectBranch sequence — never
+/// a free-standing 200/1024. TII `haydn-branch-relax-safety-buffer` must
+/// initialize from this value (HaydnInstrInfo.cpp cl::init).
+inline constexpr int64_t BranchRelaxSafetyBufferBytes =
+    MaxSingleBranchGrowthBytes;
+static_assert(BranchRelaxSafetyBufferBytes == MaxSingleBranchGrowthBytes,
+              "BR safety buffer is the contracts growth budget");
+static_assert(BranchRelaxSafetyBufferBytes ==
+                  bundle::productBundlesToBytes(MaxSingleBranchGrowthParcels),
+              "BR safety buffer is 4 product parcels, not 200/1024");
+
 //===----------------------------------------------------------------------===//
 // Setup arithmetic (width-independent issue-cycle inequality)
 //===----------------------------------------------------------------------===//
@@ -287,8 +308,10 @@ static_assert(MinCount == 1, "activated COUNT must be >= 1");
 //
 // SET_HWLOOP carries a selector that names which HWLR slot is programmed.
 // Only sel in {0,1} is available on the product retained-state path:
-//   * InnermostProductSelector (= 1): preferred for single-BB ZOL expand
-//   * OuterProductSelector     (= 0): reserved-no-consumer product seat
+//   * InnermostProductSelector (= 0): golden manual §6.4/§6.5 — nested
+//     loops use HWLR_*[0] for the inner loop, HWLR_*[1] for the outer;
+//     single-BB ZOL expand arms the inner seat.
+//   * OuterProductSelector     (= 1): reserved-no-consumer product seat
 // Values outside this domain stay unavailable and fail-closed at expand/fixup
 // (never invent extra CSR/selector identities). Multi-block formation is a
 // separate SCEV/CFG extension and does not widen the selector domain.
@@ -298,12 +321,16 @@ static_assert(MinCount == 1, "activated COUNT must be >= 1");
 inline constexpr int64_t ProductSelectorMin = 0;
 inline constexpr int64_t ProductSelectorMax = 1;
 
-/// Preferred selector for innermost single-BB Role-A expand.
-inline constexpr int64_t InnermostProductSelector = 1;
+/// Preferred selector for innermost single-BB Role-A expand. Golden manual
+/// (§"two independent hardware loop registers"): HWLR_*[0] is the INNER
+/// loop seat in a nesting; single-BB Role-A expand is innermost by
+/// construction, so it arms sel 0.
+inline constexpr int64_t InnermostProductSelector = 0;
 
-/// Reserved-no-consumer product selector 0. Not a nesting free-list companion;
-/// no live consumer. Innermost expand arms selector 1 only.
-inline constexpr int64_t OuterProductSelector = 0;
+/// Reserved-no-consumer product selector 1 (golden outer-loop seat). Not a
+/// nesting free-list companion; no live consumer. Innermost expand arms
+/// selector 0 only.
+inline constexpr int64_t OuterProductSelector = 1;
 
 /// True iff Sel is in the product selector domain {0,1}.
 inline constexpr bool isProductSelector(int64_t Sel) {
@@ -314,6 +341,10 @@ static_assert(isProductSelector(InnermostProductSelector),
               "innermost product selector must be in domain");
 static_assert(isProductSelector(OuterProductSelector),
               "outer product selector must be in domain");
+static_assert(InnermostProductSelector == 0 && OuterProductSelector == 1,
+              "golden manual: HWLR_*[0] = inner loop seat, HWLR_*[1] = outer");
+static_assert(InnermostProductSelector != OuterProductSelector,
+              "inner/outer seats are distinct");
 static_assert(!isProductSelector(2) && !isProductSelector(3) &&
                   !isProductSelector(-1),
               "out-of-domain selectors stay unavailable");
@@ -367,6 +398,26 @@ static_assert(offsetsMeetImmRelocLaw(MinSetupBytes,
               "min legal geometry must meet reloc law");
 static_assert(countMeetsMinLaw(MinCount) && !countMeetsMinLaw(0),
               "COUNT floor is MinCount");
+
+// Unpublished HWLR CSR window already named by haydnHwloopCsrAddr
+// (HaydnPortModel.h:288-297). Product programs HWLR only through
+// SET_HWLOOP with a product selector. CSRW to this window is unavailable
+// — do not invent a catalog address or emit CSR writes here.
+inline constexpr int64_t UnpublishedHwlrCsrAddrMin = 0x20;
+inline constexpr int64_t UnpublishedHwlrCsrAddrMax = 0x25;
+
+inline constexpr bool isUnpublishedHwlrCsrAddress(int64_t Addr) {
+  return Addr >= UnpublishedHwlrCsrAddrMin && Addr <= UnpublishedHwlrCsrAddrMax;
+}
+
+static_assert(!isUnpublishedHwlrCsrAddress(InnermostProductSelector) &&
+                  !isUnpublishedHwlrCsrAddress(OuterProductSelector),
+              "product selectors are not CSR addresses");
+static_assert(isUnpublishedHwlrCsrAddress(0x20) &&
+                  isUnpublishedHwlrCsrAddress(0x25) &&
+                  !isUnpublishedHwlrCsrAddress(0x1f) &&
+                  !isUnpublishedHwlrCsrAddress(0x26),
+              "unpublished HWLR CSR window stays 0x20-0x25 fail-closed");
 
 /// Inclusive body parcel count from StartOff/EndOff (END = last cycle start).
 /// Returns 0 if offsets are unordered or unaligned to the product parcel.

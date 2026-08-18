@@ -1,13 +1,11 @@
-; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -mattr=+hwloop -O2 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -haydn-enable-hwloops -mattr=+hwloop -O2 < %s | FileCheck %s
 
-; Role: semantic — default layout-owned setup places Following >= InterveningCycles (=3) size-bearing Full parcels after SET_HWLOOP (SetupIssueDistance=4).
-
-; Default layout-owned setup places Following >= InterveningCycles (=3)
-; size-bearing Full parcels after SET_HWLOOP (SetupIssueDistance=4).
+; Role: semantic — layout-owned setup places Following >= InterveningCycles
+; (2) size-bearing parcels after SET_HWLOOP (SetupIssueDistance = 3).
+;
 ; Preheader useful work (e.g. address setup) must not reverse-order through
 ; Fixup shorten. A simple countdown loop must still form a hardware loop.
-; Following floor is three size-bearing parcels; useful work may sit in the
-; setup window and still count toward Following.
+; Useful work may sit in the setup window and still count toward Following.
 
 define dso_local void @count_store(ptr nocapture writeonly %p, i32 %n) {
 ; CHECK-LABEL: count_store:

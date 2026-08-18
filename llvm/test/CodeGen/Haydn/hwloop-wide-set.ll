@@ -28,7 +28,7 @@
 ; set_hwloop_f2 (not the 5-bundle dance). The CHECK-NOTs assert the dance
 ; is GONE: no R12 scratch spill/restore, no set_hwloop_f2 (the OLD
 ; register-count mnemonic rendered by the placeholder path). The CHECK
-; confirms exactly one set_hwloop_f2 with sel=1 and the loop-body symbol
+; confirms exactly one set_hwloop_f2 with sel=0 (golden inner seat) and the loop-body symbol
 ; as the start offset.
 ;
 ; The all-immediate SET_HWLOOP_W (§5.11) form is reached via the same
@@ -48,7 +48,7 @@ define i32 @hwloop_wide_set(ptr %p) {
 ; CHECK-LABEL: hwloop_wide_set:
 ; CHECK-NOT: set_hwloop_f2 {{[0-9]+}}, .LBB0_1, .LLhwloop_end0, {{r[0-9]+}}
 ; CHECK-NOT: set_hwloop_reg
-; CHECK:     set_hwloop_f2 1, .LLhwloop_start{{[0-9]+}}, .LLhwloop_end0, {{r[0-9]+}}
+; CHECK:     set_hwloop_f2 0, .LLhwloop_start{{[0-9]+}}, .LLhwloop_end0, {{r[0-9]+}}
 ; CHECK-NOT: set_hwloop_f2 {{[0-9]+}}, .LBB0_1, .LLhwloop_end0, {{r[0-9]+}}
 ; CHECK-NOT: set_hwloop_reg
 entry:

@@ -1,0 +1,32 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+
+# Role: MIR — malformed SET on a live function is fatal, never erase-only.
+#
+# REGRESSION TEST: a SET_HWLOOP_W missing MBB operands used to be erased
+# unconditionally (once-through if a body still existed). Live-body law:
+# refuse erase-only; fatal.
+
+# FATAL: malformed SET_HWLOOP
+# FATAL: refusing erase-only once-through
+
+--- |
+  define dso_local void @malformed_set(ptr nocapture writeonly %out) {
+  entry:
+    store i32 0, ptr %out, align 4
+    ret void
+  }
+...
+---
+name:            malformed_set
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    $r0 = frame-setup XOR32 $r0, $r0
+    ; Offsets are immediates, not MBBs — malformed live SET.
+    SET_HWLOOP_W 0, 4, 8, 8, implicit-def dead $sfr
+    ST32 $r0, $r1, 0
+    RET implicit killed $r15

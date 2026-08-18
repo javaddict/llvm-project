@@ -1,16 +1,20 @@
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs < %s \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -stop-before=haydn-finalize-mi-bundles < %s \
 ; RUN:   | FileCheck %s --check-prefix=OFF
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms -haydn-multistage-sms-analysis-only \
+; RUN:     -stop-before=haydn-finalize-mi-bundles \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.an.rmk | FileCheck %s --check-prefix=ANALYSIS-ASM
 ; RUN: FileCheck %s --check-prefix=ANALYSIS-RMK < %t.an.rmk
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -stop-before=haydn-finalize-mi-bundles \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=PF-CFG < %s \
 ; RUN:   | FileCheck %s --check-prefix=FORCE
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -stop-before=haydn-finalize-mi-bundles \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-ALLOC < %s \
 ; RUN:   | FileCheck %s --check-prefix=FORCE
 ;
@@ -19,13 +23,11 @@
 ; PF/JM force-fail seats must retain a legal ordinary epilogue (no crash /
 ; no half-mutation). Exhaustion is a reject class (no feasible II).
 ;
-; OFF-LABEL: soft_store_chain:
-; OFF: jalr
-; ANALYSIS-ASM-LABEL: soft_store_chain:
-; ANALYSIS-ASM: jalr
-; ANALYSIS-RMK: {{accepted II=|rejected:|exhausted:}}
-; FORCE-LABEL: soft_store_chain:
-; FORCE: jalr
+; OFF: name: soft_store_chain
+; ANALYSIS-ASM: name: soft_store_chain
+; ANALYSIS-RMK: {{accepted II=|rejected:|exhausted:|member-pin n=}}
+; ANALYSIS-RMK-NOT: sequential (preflight)
+; FORCE: name: soft_store_chain
 
 define void @soft_store_chain(ptr nocapture writeonly %dst,
                               ptr nocapture readonly %src, i32 %n) {

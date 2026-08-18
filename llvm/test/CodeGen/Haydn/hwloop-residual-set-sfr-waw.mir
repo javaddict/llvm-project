@@ -1,0 +1,84 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=RAW
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-expand-pseudos,postmisched -verify-machineinstrs %s \
+# RUN:   -o - | FileCheck %s --check-prefix=EXPAND
+
+# Role: MIR — golden Constraints same-sel SET_HWLOOP same-bundle ban rides
+# the HR same-bundle WAW predicate for the RESIDUAL pseudos too, via td
+# Defs=[SFR] symmetry with the real _W forms (GOALS W47 / audit PA2-G2).
+
+# REGRESSION TEST: residual SET_HWLOOP{,_REG} pseudos had no Defs=[SFR].
+#
+# Bug: golden Constraints ("SET_HWLOOP, SET_HWLOOP_F2, and SET_HWLOOP_REG
+# instructions targeting the same hwlr_sel must not appear in the same
+# bundle, as they would simultaneously write to the same HWLR_BEGIN/
+# HWLR_COUNT[hwlr_sel] CSRs") was enforced by TWO asymmetric mechanisms:
+#   (1) real _W forms carry Defs=[SFR], hasSideEffects=0 — any two collide
+#       on the SFR write port / WAW in HaydnHazardRecognizer
+#       (HaydnInstrInfo.td:1908-1921);
+#   (2) residual pseudos SET_HWLOOP / SET_HWLOOP_REG relied ONLY on
+#       hasSideEffects=1's DAG Ord-barrier serialization (:772-782) —
+#       topology protection, not an HR predicate. If any future edit flips
+#       hasSideEffects to 0 (exactly what the _W forms did) WITHOUT adding
+#       Defs, two same-sel residual SETs would silently become coissuable:
+#       both write HWLR_*[sel], the second clobbers the first, the loop
+#       body/END of the first loop is lost = wrong code.
+#
+# Fix: give the residual pseudos `Defs = [SFR]` (same let-block as the _W
+# forms' symmetry) so the SAME one-SFR-writer-per-cycle WAW law covers
+# residual and real forms identically. One law, one predicate, two
+# representations.
+#
+# Test design: two residual SET_HWLOOP pseudos back-to-back in one region
+# (both sel 0, both targeting distinct loop bodies — the MBB operands differ
+# so this is not a trivial duplicate). They have NO data dependency on each
+# other, so without the SFR WAW the post-RA packer would freely coissue them
+# into one bundle. With Defs=[SFR] both def $sfr and the HR same-bundle WAW
+# (hasSameBundleWAW — "SFR is included: product law is one SFR writer per
+# cycle") must refuse.
+#
+# RAW arm: postmisched directly on the residual pseudos (pre-expand window).
+# EXPAND arm: the real pipeline order (expand first). ExpandPseudos rewrites
+# residual → SET_HWLOOP_W (which has its own Defs=[SFR]); the two real forms
+# must STILL not share a bundle — the law is representation-independent.
+#
+# What breaks if the bug reappears: dropping Defs=[SFR] (or flipping
+# hasSideEffects without Defs) lets both SETs pack into one BUNDLE in the
+# RAW arm; the CHECK-NOT BUNDLE fails.
+
+--- |
+  define void @two_sets_same_sel() { ret void }
+...
+---
+name:            two_sets_same_sel
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3, $r15
+    successors: %bb.1
+
+    ; RAW arm: two residual SETs, no mutual data dep. WAW on $sfr must
+    ; separate them — each SET stands alone, never one BUNDLE.
+    ; RAW-LABEL: name: two_sets_same_sel
+    ; RAW-NOT: BUNDLE
+    ; Logical or Format E member stamp is accepted; this pin is sequential
+    ; SFR WAW, not a residual mnemonic freeze.
+    ; RAW: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    ; RAW-NEXT: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    ;
+    ; EXPAND arm: real pipeline order. ExpandPseudos rewrote both residual
+    ; SETs to the real wide form (may carry the _S0 member stamp); the two
+    ; real forms must STILL not share a bundle — the law is representation-
+    ; independent.
+    ; EXPAND-LABEL: name: two_sets_same_sel
+    ; EXPAND-NOT: BUNDLE
+    ; EXPAND: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    ; EXPAND-NEXT: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    SET_HWLOOP 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    SET_HWLOOP 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15

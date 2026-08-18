@@ -1,0 +1,60 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+#
+# REGRESSION TEST: EndOff is the last size-bearing non-terminator cycle.
+#
+# Bug: computeOffsets walked every size-bearing MI in EndMBB, including the
+# post-PLE soft-exit B (one product parcel). AsmPrinter HWLR_END skips
+# terminators (getLastRealInstr). A 2-parcel body + post-PLE B looked like
+# MinBodyBundles=3, so Fixup skipped the body pad — Off2 near MaxOff2 then
+# false-demoted, or a short body was accepted as legal.
+# Fix: one closed walk — skip terminators; last real cycle start is END.
+# If this regresses, the body keeps a single NOP before PseudoLoopEnd.
+
+# CHECK-LABEL: name: endoff_skips_post_ple_b
+# CHECK: SET_HWLOOP_W
+# CHECK: bb.1.body:
+# CHECK: ST32
+# CHECK: NOP
+# CHECK: NOP
+# CHECK: PseudoLoopEnd %bb.1
+# CHECK: B %bb.2
+# CHECK-NOT: SUBI32
+# CHECK-NOT: BNEZ_W
+
+--- |
+  define dso_local void @endoff_skips_post_ple_b(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            endoff_skips_post_ple_b
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1, %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    PseudoLoopEnd %bb.1
+    B %bb.2
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15

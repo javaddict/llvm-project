@@ -1,0 +1,176 @@
+# RUN: split-file %s %t
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/sel2.mir -o - 2>&1 | FileCheck %s --check-prefix=SEL
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/count0.mir -o - 2>&1 | FileCheck %s --check-prefix=COUNT
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/hwlr_csr.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/hwlr_csr.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/hwlr_csr_bundled.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
+
+# Role: MIR — demote OFF on live illegal selector / COUNT=0 must fatal,
+# never erase-only once-through. Product selector domain is {0,1}; COUNT
+# floor is 1. Out-of-domain sel and zero COUNT stay unavailable.
+# Unpublished HWLR CSR in a SET body is fatal even with demote ON —
+# demote would leave the write; product programs HWLR only through SET.
+# Bundled CSRW child (post-RA pack shape) uses the same fatal — walk
+# instrs(), not top-level range-for.
+
+# SEL: refusing erase-only once-through
+# COUNT: refusing erase-only once-through
+# HWLR: unpublished HWLR CSR write
+
+#--- sel2.mir
+--- |
+  define dso_local void @demote_false_sel2(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            demote_false_sel2
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 2, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- count0.mir
+--- |
+  define dso_local void @demote_false_count0(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            demote_false_count0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 0, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- hwlr_csr.mir
+--- |
+  define dso_local void @demote_false_hwlr_csr(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            demote_false_hwlr_csr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    liveins: $r1, $r0, $r2
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    CSRW_W 32, $r2, implicit-def $sfr
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- hwlr_csr_bundled.mir
+--- |
+  define dso_local void @demote_false_hwlr_csr_bundled(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            demote_false_hwlr_csr_bundled
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    liveins: $r1, $r0, $r2
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    BUNDLE implicit-def $sfr, implicit $r2 {
+      CSRW_W 32, $r2, implicit-def $sfr
+    }
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15

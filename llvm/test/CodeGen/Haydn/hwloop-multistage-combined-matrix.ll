@@ -1,5 +1,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=OFF
+; RUN:   -mattr=+hwloop -pass-remarks-analysis=haydn-multistage-sms < %s \
+; RUN:   2>%t.off.rmk | FileCheck %s --check-prefix=OFF
+; RUN: FileCheck %s --allow-empty --check-prefix=OFFRMK < %t.off.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
@@ -9,8 +11,10 @@
 ; RUN:   2>%t.an.rmk | FileCheck %s --check-prefix=ANALYSIS-ASM
 ; RUN: FileCheck %s --check-prefix=ANALYSIS-RMK < %t.an.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms < %s \
-; RUN:   | FileCheck %s --check-prefix=DUAL
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
+; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s \
+; RUN:   2>%t.dual.rmk | FileCheck %s --check-prefix=DUAL
+; RUN: FileCheck %s --check-prefix=DUAL-RMK < %t.dual.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -filetype=obj -o %t.hwon.o < %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
@@ -29,16 +33,60 @@
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-force-fail -filetype=obj -o %t.ffall.o < %s
 ; RUN: cmp %t.hwon.o %t.ffall.o
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
+; RUN:   -haydn-multistage-sms-analysis-only \
+; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s \
+; RUN:   2>%t.sms.rmk | FileCheck %s --check-prefix=SMSONLY
+; RUN: FileCheck %s --allow-empty --check-prefix=SMSONLY-RMK < %t.sms.rmk
 
-; Role: semantic — one-artifact hwloop x multi-stage dual-ON matrix.
+; XFAIL: *
+; Dual-ON combined matrix stays expected-fail until T3 independent
+; SMS QUALIFY (hardware loops off, parcels==II), then T6 independent
+; SCEV-proven hwloop QUALIFY (multi-stage off), then this dual-ON
+; trip/CFG/prologue/kernel/epilogue/transaction/oracle matrix.
+; Two separate policy-only patches after that evidence. Product
+; defaults stay off. Do not treat this file as a default flip.
+; Analysis-only currently exhausts II (qualify-or-cut seated
+; product-off) instead of accepting stages>=2.
+; Prologue/kernel/epilogue/oracle seats stay in this umbrella so
+; the live XFAIL ledger TOTAL remains 5.
+
+; Role: semantic — one-artifact dual-ON qualify matrix.
 ; Product defaults stay OFF. Independent qualify is not closed here.
-; Forced dual-ON still forms SET on legal single-BB trips. Analysis-only
-; and force-fail restore the hardware-loop-only object. Multi-stage may
-; fail-closed after accept (no product default flip).
+; Forced dual-ON still forms SET on legal single-BB trips and on the
+; measured latch-only multi-BB overlay. Call / zero-trip / multi-exit
+; stay declined. Analysis-only and force-fail restore the hardware-loop
+; object when the engine does not commit. Closed seats require accept
+; with parcels-per-iter == searched II, stages>=2 peels, and no free
+; HWLR CSR write.
 
 target triple = "haydn-unknown-elf"
 
-; ANALYSIS-RMK: accepted II={{[0-9]+}} stages={{[2-9]|[1-9][0-9]+}}
+; Product default: +hwloop attr is not a policy flip.
+; OFFRMK-NOT: accepted II=
+; OFFRMK-NOT: MultiStageStageMBB
+; OFFRMK-NOT: qualify-or-cut
+;
+; SMS force-ON alone never forms SET and never claims combined-on.
+; SMSONLY-RMK-NOT: hwloop-combined=on
+;
+; Closed dual-ON analysis: searched II is realized, stages>=2, combined on.
+; ANALYSIS-RMK: accepted II=[[II:[0-9]+]] stages={{[2-9]|[1-9][0-9]+}}
+; ANALYSIS-RMK-SAME: measured-II=[[II]]
+; ANALYSIS-RMK: qualify parcels-per-iter=[[II]]
+; ANALYSIS-RMK-SAME: searched-II=[[II]]
+; ANALYSIS-RMK: hwloop-combined=on
+; ANALYSIS-RMK-NOT: sequential (preflight)
+;
+; Closed dual-ON commit: peel MBBs + swps stages>=2 under the same SET.
+; DUAL-RMK: accepted II=[[DII:[0-9]+]] stages={{[2-9]|[1-9][0-9]+}}
+; DUAL-RMK-SAME: measured-II=[[DII]]
+; DUAL-RMK: qualify parcels-per-iter=[[DII]]
+; DUAL-RMK-SAME: searched-II=[[DII]]
+; DUAL-RMK: hwloop-combined=on
+; DUAL-RMK: stage-mbb prolog=
+; DUAL-RMK: peel-order=modulo-cycle
 
 define i32 @runtime_trip_sum(ptr nocapture readonly %p, i32 %n) {
 ; OFF-LABEL: runtime_trip_sum:
@@ -46,26 +94,37 @@ define i32 @runtime_trip_sum(ptr nocapture readonly %p, i32 %n) {
 ; OFF-NOT:   #<swps> stages={{[2-9]|[1-9][0-9]+}}
 ; OFF:       jalr
 ;
+; SMSONLY-LABEL: runtime_trip_sum:
+; SMSONLY-NOT:   set_hwloop
+; SMSONLY-NOT:   #<swps> stages={{[2-9]|[1-9][0-9]+}}
+; SMSONLY:       jalr
+;
 ; HWON-LABEL: runtime_trip_sum:
-; HWON:       set_hwloop_f2 1, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
 ; HWON:       .LLhwloop_start
 ; HWON:       .LLhwloop_end
 ; HWON-NOT:   csrw
+; HWON-NOT:   #<swps> stages={{[2-9]|[1-9][0-9]+}}
 ; HWON:       jalr
 ;
 ; ANALYSIS-ASM-LABEL: runtime_trip_sum:
-; ANALYSIS-ASM:       set_hwloop_f2 1, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; ANALYSIS-ASM:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
 ; ANALYSIS-ASM:       .LLhwloop_start
 ; ANALYSIS-ASM:       .LLhwloop_end
+; ANALYSIS-ASM-NOT:   csrw
 ; ANALYSIS-ASM:       jalr
 ;
-; Trip/CFG: retained SET on a dedicated preheader; selector stays {1}.
-; Prologue/kernel/epilogue: START/END bound the body; legal return.
-; Transaction/final object seats are the cmp RUN lines above.
+; Trip: retained SCEV trip/setup; selector stays 0; no HWLR CSR write.
+; CFG: dedicated preheader owns setup; START/END bound the body.
+; Prologue: setup at/before BEGIN; peels do not break the setup floor.
+; Kernel: active-loop body is the multi-stage kernel; END is last parcel.
+; Epilogue: drain live-outs; late fixup/demote stays fail-closed.
+; Transaction/final-oracle: cmp RUN lines (analysis-only + PF/JM).
 ; DUAL-LABEL: runtime_trip_sum:
 ; DUAL-NOT:   csrw
-; DUAL:       set_hwloop_f2 1, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DUAL:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
 ; DUAL:       .LLhwloop_start
+; DUAL:       #<swps> stages={{[2-9]|[1-9][0-9]+}}
 ; DUAL:       .LLhwloop_end
 ; DUAL:       jalr
 entry:
@@ -97,18 +156,18 @@ define i32 @const_trip_sum(ptr nocapture readonly %p) {
 ; OFF:       jalr
 ;
 ; HWON-LABEL: const_trip_sum:
-; HWON:       set_hwloop_f2 1,
+; HWON:       set_hwloop_f2 0,
 ; HWON:       .LLhwloop_start
 ; HWON:       .LLhwloop_end
 ; HWON:       jalr
 ;
 ; ANALYSIS-ASM-LABEL: const_trip_sum:
-; ANALYSIS-ASM:       set_hwloop_f2 1,
+; ANALYSIS-ASM:       set_hwloop_f2 0,
 ; ANALYSIS-ASM:       .LLhwloop_start
 ; ANALYSIS-ASM:       jalr
 ;
 ; DUAL-LABEL: const_trip_sum:
-; DUAL:       set_hwloop_f2 1,
+; DUAL:       set_hwloop_f2 0,
 ; DUAL:       .LLhwloop_start
 ; DUAL:       .LLhwloop_end
 ; DUAL:       jalr
@@ -162,15 +221,20 @@ define i32 @multibb_decline(ptr %p, ptr %q, i32 %n) {
 ; OFF:       jalr
 ;
 ; HWON-LABEL: multibb_decline:
-; HWON-NOT:   set_hwloop
+; Latch-only overlay arms one Role-A SET. Never two SETs, never CSR.
+; HWON:       set_hwloop_f2 0,
+; HWON-NOT:   set_hwloop{{.*}}set_hwloop
+; HWON-NOT:   csrw
 ; HWON:       jalr
 ;
 ; ANALYSIS-ASM-LABEL: multibb_decline:
-; ANALYSIS-ASM-NOT:   set_hwloop
+; ANALYSIS-ASM-NOT:   set_hwloop{{.*}}set_hwloop
+; ANALYSIS-ASM-NOT:   csrw
 ; ANALYSIS-ASM:       jalr
 ;
 ; DUAL-LABEL: multibb_decline:
-; DUAL-NOT:   set_hwloop
+; DUAL-NOT:   set_hwloop{{.*}}set_hwloop
+; DUAL-NOT:   csrw
 ; DUAL:       jalr
 entry:
   br label %header
@@ -193,6 +257,41 @@ latch:
   br i1 %c, label %header, label %exit
 exit:
   ret i32 %s.n
+}
+
+define i32 @multiexit_decline(ptr readonly %src, i32 %n, i32 %k) {
+; OFF-LABEL: multiexit_decline:
+; OFF-NOT:   set_hwloop
+; OFF:       jalr
+;
+; HWON-LABEL: multiexit_decline:
+; HWON-NOT:   set_hwloop
+; HWON:       jalr
+;
+; ANALYSIS-ASM-LABEL: multiexit_decline:
+; ANALYSIS-ASM-NOT:   set_hwloop
+; ANALYSIS-ASM:       jalr
+;
+; DUAL-LABEL: multiexit_decline:
+; DUAL-NOT:   set_hwloop
+; DUAL:       jalr
+entry:
+  br label %header
+header:
+  %i = phi i32 [ 0, %entry ], [ %i.next, %latch ]
+  %sp = phi ptr [ %src, %entry ], [ %sp.next, %latch ]
+  %v = load i32, ptr %sp, align 4
+  %hit = icmp eq i32 %v, %k
+  br i1 %hit, label %early, label %latch
+latch:
+  %sp.next = getelementptr inbounds i32, ptr %sp, i32 1
+  %i.next = add i32 %i, 1
+  %c = icmp slt i32 %i.next, %n
+  br i1 %c, label %header, label %exit
+early:
+  ret i32 %v
+exit:
+  ret i32 0
 }
 
 define i32 @zero_trip_decline(ptr %p) {

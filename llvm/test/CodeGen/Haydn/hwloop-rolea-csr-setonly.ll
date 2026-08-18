@@ -20,7 +20,7 @@ define i32 @csr_setonly_sum(ptr readonly %p, i32 %n) nounwind {
 ; DEFAULT:       jalr
 ;
 ; HWON-LABEL: csr_setonly_sum:
-; HWON:       set_hwloop_f2 1,
+; HWON:       set_hwloop_f2 0,
 ; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
 ; HWON:       .LLhwloop_start
 ; HWON:       .LLhwloop_end

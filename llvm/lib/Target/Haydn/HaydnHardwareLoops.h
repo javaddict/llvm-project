@@ -20,11 +20,20 @@
 namespace llvm {
 
 class HaydnInstrInfo;
+class MachineBasicBlock;
 class MachineInstr;
 
-bool eraseHardwareLoopSetup(MachineInstr &SetMI);
-bool demoteHardwareLoopToSoftware(MachineInstr &SetMI,
-                                  const HaydnInstrInfo &TII);
+/// \p DebugPrefix selects the per-pass LLVM_DEBUG tag; \p ResolveBody may
+/// override body resolution (default: CFG-only resolveBodyMBBCore). Only
+/// pre-emit Fixup passes its final-layout tail resolver — layout order is
+/// never a formation body proof (resolveRoleABody rejects fail-closed).
+bool eraseHardwareLoopSetup(
+    MachineInstr &SetMI, const char *DebugPrefix = "HaydnHardwareLoops",
+    MachineBasicBlock *(*ResolveBody)(MachineInstr &) = nullptr);
+bool demoteHardwareLoopToSoftware(
+    MachineInstr &SetMI, const HaydnInstrInfo &TII,
+    const char *DebugPrefix = "HaydnHardwareLoops",
+    MachineBasicBlock *(*ResolveBody)(MachineInstr &) = nullptr);
 
 class HaydnHardwareLoops : public MachineFunctionPass {
 public:

@@ -1,0 +1,75 @@
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+
+# Role: MIR — live body + demote disabled must be fatal, never erase-only.
+#
+# REGRESSION TEST: -haydn-enable-hwloop-demote=false on an out-of-range
+# live SET must report_fatal_error. The old debug path erased setup and
+# left a once-through body (silent wrong trip). Product demote stays ON;
+# this flag is debug-only and still refuses erase-only on a live body.
+
+# FATAL: refusing erase-only once-through
+
+--- |
+  define dso_local void @demote_false_live(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            demote_false_live
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15

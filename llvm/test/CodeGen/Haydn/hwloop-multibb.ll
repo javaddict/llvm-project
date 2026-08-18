@@ -1,28 +1,26 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=DEFAULT
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
+; RUN:   -mattr=+hwloop -stop-before=haydn-finalize-mi-bundles < %s | \
+; RUN:   FileCheck %s --check-prefix=DEFAULT
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -stop-before=haydn-finalize-mi-bundles < %s | \
+; RUN:   FileCheck %s --check-prefix=HWON
 
-; Role: semantic — multi-BB KPI seat for Role-A OFF qualification.
-; Multi-BB formation is FUTURE/KPI-gated greenfield (never Role-B physical
-; rediscovery). Product default OFF; even under HWON, multi-BB side-effect
-; control flow must stay soft (no set_hwloop). Single-BB Role A is covered
-; by hwloop-rolea-*. This file only pins the multi-BB decline seat.
+; Role: semantic — multi-BB Role-A CFG extension (measured latch-only diamond).
+; Product default OFF: no set_hwloop. HWON forms Role A on an innermost
+; single-latch/single-exit diamond (never post-RA rediscovery). Multi-exit
+; stays declined. Combined SMS+hwloop and default-ON stay out of scope.
 
 target triple = "haydn-unknown-elf"
 
-; Multi-BB body with stores in both arms — resists if-conversion and must
-; not arm SET under DEFAULT OFF or HWON.
+; Multi-BB body with stores in both arms — resists if-conversion.
+; Innermost single-latch/single-exit diamond is the measured SCEV/CFG
+; overlay of AIE's all-multi-BB decline. Product default stays OFF.
 define void @multibb_side_effect_stores(ptr %dst, ptr readonly %src, i32 %n) nounwind {
-; DEFAULT-LABEL: multibb_side_effect_stores:
-; DEFAULT-NOT:   set_hwloop
-; DEFAULT:       jalr
+; DEFAULT-LABEL: name: multibb_side_effect_stores
+; DEFAULT-NOT:   SET_HWLOOP
 ;
-; HWON-LABEL: multibb_side_effect_stores:
-; HWON-NOT:   set_hwloop
-; Soft multi-BB residual (any cond back-edge form remains):
-; HWON:       {{blt|bge|bnez|beqz|bltu|bgeu}}
-; HWON:       jalr
+; HWON-LABEL: name: multibb_side_effect_stores
+; HWON:       SET_HWLOOP
 entry:
   br label %loop
 
@@ -53,20 +51,16 @@ exit:
   ret void
 }
 
-; Two-way branch with arithmetic in each arm. If if-converted to single-BB,
-; Role-A may legally arm SET under HWON; the KPI seat is only that multi-BB
-; control never invents multi-BB formation. Pin: never more than one SET for
-; this shape, and DEFAULT stays soft.
+; Two-way branch with arithmetic in each arm. Latch-only overlay (or
+; if-converted single-BB) may arm one Role-A SET under HWON. DEFAULT stays
+; soft. Never two SETs.
 define i32 @multibb_arith_arms(ptr readonly %src, i32 %n, i32 %k) nounwind {
-; DEFAULT-LABEL: multibb_arith_arms:
-; DEFAULT-NOT:   set_hwloop
-; DEFAULT:       jalr
+; DEFAULT-LABEL: name: multibb_arith_arms
+; DEFAULT-NOT:   SET_HWLOOP
 ;
-; HWON-LABEL: multibb_arith_arms:
-; If-converted single-BB may form Role A; multi-BB residual must not invent
-; a second nested multi-BB SET path. At most one SET (or none if still multi-BB).
-; HWON-NOT:   set_hwloop{{.*}}set_hwloop
-; HWON:       jalr
+; HWON-LABEL: name: multibb_arith_arms
+; HWON:       SET_HWLOOP
+; HWON-NOT:   SET_HWLOOP{{.*}}SET_HWLOOP
 entry:
   br label %loop
 
@@ -97,4 +91,34 @@ latch:
 
 exit:
   ret i32 %acc.next
+}
+
+; Multi-exit stays declined (early exit != latch). Soft under HWON.
+define i32 @multibb_early_exit(ptr readonly %src, i32 %n, i32 %k) nounwind {
+; DEFAULT-LABEL: name: multibb_early_exit
+; DEFAULT-NOT:   SET_HWLOOP
+;
+; HWON-LABEL: name: multibb_early_exit
+; HWON-NOT:   SET_HWLOOP
+entry:
+  br label %loop
+
+loop:
+  %i = phi i32 [ 0, %entry ], [ %i.next, %latch ]
+  %sp = phi ptr [ %src, %entry ], [ %sp.next, %latch ]
+  %v = load i32, ptr %sp
+  %hit = icmp eq i32 %v, %k
+  br i1 %hit, label %early, label %latch
+
+latch:
+  %sp.next = getelementptr inbounds i32, ptr %sp, i32 1
+  %i.next = add i32 %i, 1
+  %cmp = icmp slt i32 %i.next, %n
+  br i1 %cmp, label %loop, label %exit
+
+early:
+  ret i32 %v
+
+exit:
+  ret i32 0
 }

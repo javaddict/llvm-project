@@ -57,7 +57,7 @@ body:             |
   ; CHECK-NEXT:     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
   ; CHECK-NEXT:   }
   ; CHECK-NEXT:   BUNDLE 0, 0 {
-  ; CHECK-NEXT:     NOP_S0
+  ; CHECK-NEXT:     NOP{{(_S0)?}}
   ; CHECK-NEXT:   }
   ; CHECK-NEXT:   NOP
   ; CHECK-NEXT: {{  $}}

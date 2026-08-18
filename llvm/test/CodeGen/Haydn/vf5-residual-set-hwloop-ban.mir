@@ -20,7 +20,7 @@ body:             |
     liveins: $r1, $r15
     successors: %bb.1
     ; CHECK: residual cycle-forming pseudo
-    SET_HWLOOP 0, %bb.1, %bb.1, 8
+    SET_HWLOOP 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
     RET implicit $r15
   bb.1:
     RET implicit $r15

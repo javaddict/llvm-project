@@ -1,0 +1,129 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=prologepilog,haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+
+# Role: MIR — W30 / CR-H2 / F43: the stack-counter demote latch window must
+# never be bracketed by a spill/restore, and no window touching the counter
+# FI may spill at all.
+#
+# REGRESSION TEST: stack-counter demote under full register pressure must
+# refuse (fatal), never emit a spill bracket around the latch counter.
+#
+# Bug (three coupled defects, all silent wrong code under hwloops-ON +
+# product demote-ON):
+#   (1) withPostRAScratch emitted BNEZ_W inside Fn; its restore landed
+#       after the terminator (verifier break; NeedsSpill endSpill skipped
+#       on the taken back-edge → 8-byte SP leak per iteration).
+#   (2) The interim "close the bracket, then BNEZ" reorder made BNEZ read
+#       the endSpill-RESTORED live-through value, not the decremented
+#       counter — and beginSpill's spill home resolves to the SAME FI as
+#       the stack counter (both BranchRelaxationScratchFI ?: PostRAScratchFI),
+#       so the spill destroyed the stored trip count. Dumped shape:
+#         ST32 scr, sp, 0   ; beginSpill — overwrites stored trip
+#         LD32 scr, sp, 0   ; counter load reads the clobbered slot
+#         SUBI32 scr, scr, 1
+#         ST32 scr, sp, 0
+#         LD32 scr, sp, 0   ; endSpill restore — BNEZ reads THIS (wrong)
+#         BNEZ_W scr, Header
+#   (3) An AllowBorrow R0 scratch XOR-zeroes the branch operand after the
+#       window (single-pass loop).
+#
+# Fix (closed law): a demote scratch window whose produced value must
+# outlive the bracket is legal ONLY with a spill-free non-R0 scratch,
+# probed at decision time against the post-rewrite successors
+# {Header, Exit}. No candidate → demote returns false → caller fatal
+# ladder (never a silent spill bracket, never erase-only once-through).
+#
+# This file is the full-pressure arm: every GPR is live across BOTH windows
+# (preheader live-outs R1–R12 leave no spill-free imm-materialize scratch;
+# latch live-ins R1–R11 + a non-restore R0 def block the borrow), so demote
+# must refuse → fatal. The positive (free-scratch) window shape is pinned by
+# hwloop-demote-stackcounter-freescratch.mir. If the spill bracket
+# returns, the run compiles and FileCheck FATAL fails (no fatal message).
+
+--- |
+  define dso_local void @demote_scratch_before_term(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            demote_scratch_before_term
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Every pickCounterReg GPR is live across the latch; local ADDI32_W $r0
+  ; is a non-restore def so AllowBorrow cannot take R0 either. No spill-free
+  ; latch scratch exists — demote must refuse (fatal), never spill-bracket.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    $r0 = ADDI32_W $r1, 0, implicit-def dead $sfr
+    $r1 = XOR32 $r1, $r1
+    $r2 = XOR32 $r2, $r2
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    ST32 $r1, $r2, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# FATAL: cannot demote to software loop
+# FATAL: refusing erase-only once-through

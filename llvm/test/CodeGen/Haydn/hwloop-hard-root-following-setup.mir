@@ -21,6 +21,11 @@
 #     Fixup exact-commits one singleton NOP pad between SET and the hard root.
 #   coissue_set_then_hard — coissued SET+ADD cycle then hard root; coissue and
 #     hard membership both survive; deficit pads (if any) stay top-level.
+#
+# W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
+# operands on ALU members were removed (ALU descs carry no implicit SFR def;
+# under the unified no-dual-write law they mask the intended packing). W39
+# itself is pinned by w39-dead-def-dual-write-waw.mir.
 
 --- |
   define dso_local void @hard_following_floor() {
@@ -52,12 +57,12 @@ body:             |
     liveins: $r0, $r1, $r2, $r3, $r15
     successors: %bb.1
 
-    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    $r0 = frame-setup XOR32 $r0, $r0
     SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
     ; Hard multi-member product cycle (FormatID 0) counts as Following=1.
-    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = ADD32 $r2, $r3
     }
     NOP
     NOP
@@ -105,13 +110,13 @@ body:             |
     liveins: $r0, $r1, $r2, $r3, $r15
     successors: %bb.1
 
-    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    $r0 = frame-setup XOR32 $r0, $r0
     SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
     ; Only one following parcel (hard root). Fixup must insert 1 pad *before*
     ; the hard root (after SET cycle), never splice into the hard cycle.
-    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = ADD32 $r2, $r3
     }
 
   bb.1:
@@ -157,15 +162,15 @@ body:             |
     liveins: $r0, $r1, $r2, $r3, $r15
     successors: %bb.1
 
-    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    $r0 = frame-setup XOR32 $r0, $r0
     ; Coissued SET cycle (post-exact-commit shape) then hard multi-member cycle.
-    BUNDLE 0, implicit-def $r6, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+    BUNDLE 0, implicit-def $r6, implicit $r0, implicit $r1 {
       SET_HWLOOP_W 0, %bb.1, %bb.1, 4, implicit-def dead $sfr
-      $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r6 = ADD32 $r0, $r1
     }
-    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = ADD32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = ADD32 $r2, $r3
     }
     ; Following = hard root only (1) → one deficit pad after SET cycle,
     ; before the hard root (never spliced into either multi-member cycle).

@@ -1,16 +1,21 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms=false \
+; RUN:   < %s | FileCheck %s --check-prefix=HWON
 
-; Role: semantic — Role-A OFF-by-default qualification matrix.
+; Role: semantic — independent Role-A qualification while product
+; defaults stay OFF. HWON force-enables hardware loops with multi-stage
+; SMS explicitly OFF. Combined dual-ON and default-ON stay out of scope.
 
 define i32 @const_trip(ptr %p) {
 ; DEFAULT-LABEL: const_trip:
 ; DEFAULT-NOT: set_hwloop
 ; DEFAULT: bnez
 ; HWON-LABEL: const_trip:
-; HWON: set_hwloop_f2
+; Inner product selector only; never a free CSR program of HWLR.
+; HWON: set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; HWON-NOT: csrw
 ; HWON-NOT: bnez
 entry:
   br label %loop
@@ -30,7 +35,8 @@ define i32 @runtime_trip(ptr %p, i32 %n) {
 ; DEFAULT-LABEL: runtime_trip:
 ; DEFAULT-NOT: set_hwloop
 ; HWON-LABEL: runtime_trip:
-; HWON: set_hwloop_f2
+; HWON: set_hwloop_f2 0,
+; HWON-NOT: csrw
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %pre, label %exit
@@ -71,7 +77,10 @@ define i32 @multibb_decline(ptr %p, ptr %q, i32 %n) {
 ; DEFAULT-LABEL: multibb_decline:
 ; DEFAULT-NOT: set_hwloop
 ; HWON-LABEL: multibb_decline:
-; HWON-NOT: set_hwloop
+; Latch-only multi-BB is the measured SCEV/CFG extension: HWON arms one
+; Role-A SET. Never two SETs.
+; HWON: set_hwloop_f2 0,
+; HWON-NOT: set_hwloop{{.*}}set_hwloop
 entry:
   br label %header
 header:
@@ -100,7 +109,8 @@ define i32 @nested_inner_only(ptr noalias %a, i32 %n, i32 %m) {
 ; DEFAULT-NOT: set_hwloop
 ; DEFAULT: jalr
 ; HWON-LABEL: nested_inner_only:
-; HWON: set_hwloop_f2
+; HWON: set_hwloop_f2 0,
+; HWON-NOT: csrw
 ; HWON: jalr
 entry:
   %cmp.n = icmp sgt i32 %n, 0
@@ -180,7 +190,8 @@ define i32 @trip2_const_form(ptr %p) {
 ; DEFAULT-LABEL: trip2_const_form:
 ; DEFAULT-NOT: set_hwloop
 ; HWON-LABEL: trip2_const_form:
-; HWON: set_hwloop_f2
+; HWON: set_hwloop_f2 0,
+; HWON-NOT: csrw
 entry:
   br label %loop
 loop:
@@ -193,4 +204,63 @@ loop:
   br i1 %c, label %loop, label %exit
 exit:
   ret i32 %s.n
+}
+
+; Innermost latch-only diamond with stores (resists if-conversion).
+; Measured SCEV/CFG overlay of AIE's all-multi-BB decline. Never a free
+; HWLR CSR.
+define void @multibb_latch_stores(ptr %dst, ptr readonly %src, i32 %n) {
+; DEFAULT-LABEL: multibb_latch_stores:
+; DEFAULT-NOT: set_hwloop
+; HWON-LABEL: multibb_latch_stores:
+; HWON: set_hwloop_f2 0,
+; HWON-NOT: csrw
+entry:
+  %cmp = icmp sgt i32 %n, 0
+  br i1 %cmp, label %header, label %exit
+header:
+  %i = phi i32 [ 0, %entry ], [ %i.next, %latch ]
+  %sp = phi ptr [ %src, %entry ], [ %sp.next, %latch ]
+  %dp = phi ptr [ %dst, %entry ], [ %dp.next, %latch ]
+  %v = load i32, ptr %sp, align 4
+  %neg = icmp slt i32 %v, 0
+  br i1 %neg, label %then, label %else
+then:
+  store i32 0, ptr %dp, align 4
+  br label %latch
+else:
+  store i32 %v, ptr %dp, align 4
+  br label %latch
+latch:
+  %sp.next = getelementptr inbounds i32, ptr %sp, i32 1
+  %dp.next = getelementptr inbounds i32, ptr %dp, i32 1
+  %i.next = add i32 %i, 1
+  %c = icmp slt i32 %i.next, %n
+  br i1 %c, label %header, label %exit
+exit:
+  ret void
+}
+
+define i32 @multiexit_decline(ptr readonly %src, i32 %n, i32 %k) {
+; DEFAULT-LABEL: multiexit_decline:
+; DEFAULT-NOT: set_hwloop
+; HWON-LABEL: multiexit_decline:
+; HWON-NOT: set_hwloop
+entry:
+  br label %header
+header:
+  %i = phi i32 [ 0, %entry ], [ %i.next, %latch ]
+  %sp = phi ptr [ %src, %entry ], [ %sp.next, %latch ]
+  %v = load i32, ptr %sp, align 4
+  %hit = icmp eq i32 %v, %k
+  br i1 %hit, label %early, label %latch
+latch:
+  %sp.next = getelementptr inbounds i32, ptr %sp, i32 1
+  %i.next = add i32 %i, 1
+  %c = icmp slt i32 %i.next, %n
+  br i1 %c, label %header, label %exit
+early:
+  ret i32 %v
+exit:
+  ret i32 0
 }

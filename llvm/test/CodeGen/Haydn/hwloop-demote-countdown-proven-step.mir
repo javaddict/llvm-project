@@ -1,0 +1,477 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=DEMOTE-OFF
+
+# Role: MIR — W29 / CR-H1: isCountdownStepOf accepts proven ±1 only.
+#
+# REGRESSION TEST: demote must not treat unproven same-reg ADD32/SUB32 as
+# a residual countdown.
+#
+# Bug: isCountdownStepOf's ADD32/SUB32 register arm accepted any
+#   Prefer = Prefer + K / Prefer - K
+# without proving K is ±1. After RA the dead trip physreg is reused as a
+# pointer bump; stripResidualCountdown then erased the bump, so the
+# software loop (hwloops-ON + product demote) iterated a fixed address.
+# F48 left one copy in HaydnHWLoopDemote::isCountdownStepOf.
+#
+# Fix: closed predicate — proven ±1 immediate only (ADDI32/ADDI32_W -1,
+# SUBI32 +1, LoopDec, member imm ±1). Unproven RR ADD32/SUB32 is a
+# clobber: demote materializes a free counter and leaves the bump.
+#
+# keep_pointer_bump: SET_HWLOOP_F2_W trip $r1; latch $r1 = ADD32 $r1, $r2
+# (stride, not ±1). Spacer forces range demote. ADD32 must survive;
+# soft edge is SUBI32+BNEZ_W on a different counter.
+# keep_pointer_bump_sub: same with SUB32 $r1, $r1, $r2 (unverifiable
+# addend = clobber, not a countdown).
+# strip_proven_addi: leftover $r3 = ADDI32 $r3, -1 is a proven countdown
+# and must be stripped so demote's SUBI32 is the sole decrement.
+# strip_proven_addi_header: same leftover sits in the header of a
+# Header!=Latch diamond; strip walks every CFG loop block, not just latch.
+# If the reg arm returns, keep_pointer_bump loses ADD32 (FileCheck fail).
+#
+# Selector / COUNT matrix (same pass): sel=0 in-range keeps hardware form;
+# sel=2 and COUNT=0 demote fail-closed (never invent extra HWLR seats).
+#
+# Debug demote-OFF (second RUN): keep_pointer_bump is range-bad with a
+# free counter. Product demote-ON installs SUBI32+BNEZ_W (first RUN).
+# Debug demote-OFF must fatal rather than erase-only once-through
+# (Hexagon FixupHwLoops skips conversion when the equivalent path
+# cannot keep a legal loop).
+
+# DEMOTE-OFF: refusing erase-only once-through
+
+--- |
+  define dso_local void @keep_pointer_bump(ptr nocapture %p, i32 %stride) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @keep_pointer_bump_sub(ptr nocapture %p, i32 %stride) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @strip_proven_addi(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @strip_proven_addi_header(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %header
+  header:
+    br label %latch
+  latch:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @keep_sel0(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @demote_sel2(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @demote_zero_count(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            keep_pointer_bump
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+
+    ; Trip physreg $r1 is also the pointer. Post-RA reuse shape.
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r1, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    $r1 = ADD32 $r1, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: keep_pointer_bump
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopDec
+# CHECK-NOT: LoopJNZ
+# Trip copied onto a free counter (late MOVE32 member is dest+src).
+# CHECK: MOVE32
+# Pointer bump must survive (unproven RR ADD32 is not a countdown).
+# CHECK: $r1 = ADD32 $r1, $r2
+# Soft edge is the sole decrement.
+# CHECK: SUBI32
+# CHECK: BNEZ
+# CHECK: bb.3.exit
+
+...
+---
+name:            keep_pointer_bump_sub
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r1, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    $r1 = SUB32 $r1, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: keep_pointer_bump_sub
+# CHECK-NOT: SET_HWLOOP
+# Unproven RR SUB32 is a clobber, not a countdown.
+# CHECK: $r1 = SUB32 $r1, $r2
+# CHECK: SUBI32
+# CHECK: BNEZ
+# CHECK: bb.3.exit
+
+...
+---
+name:            strip_proven_addi
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r3, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r3, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r3
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r3
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    $r3 = ADDI32 $r3, -1, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: strip_proven_addi
+# CHECK-NOT: SET_HWLOOP
+# Proven leftover Prefer+=-1 is stripped; demote SUBI32 is the sole dec.
+# CHECK-NOT: ADDI32 $r3, -1
+# CHECK-NOT: $r3 = ADDI32
+# CHECK: SUBI32
+# CHECK: BNEZ
+# CHECK: bb.3.exit
+
+...
+---
+name:            strip_proven_addi_header
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r3, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.3, $r3, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r3
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.header:
+    liveins: $r1, $r3
+    successors: %bb.3
+    $r3 = ADDI32 $r3, -1, implicit-def dead $sfr
+    B %bb.3
+
+  bb.3.latch:
+    liveins: $r1, $r3
+    successors: %bb.4
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.4.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: strip_proven_addi_header
+# CHECK-NOT: SET_HWLOOP
+# Header leftover Prefer+=-1 is the same countdown as a latch leftover.
+# CHECK-NOT: ADDI32 $r3, -1
+# CHECK-NOT: $r3 = ADDI32
+# CHECK: SUBI32
+# CHECK: BNEZ
+# CHECK: bb.4.exit
+
+...
+---
+name:            keep_sel0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: keep_sel0
+# CHECK: SET_HWLOOP_W{{.*}} 0
+# CHECK-NOT: SUBI32
+# CHECK-NOT: BNEZ_W
+
+...
+---
+name:            demote_sel2
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 2, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: demote_sel2
+# CHECK-NOT: SET_HWLOOP
+# CHECK: SUBI32
+# CHECK: BNEZ
+
+...
+---
+name:            demote_zero_count
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 0, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: demote_zero_count
+# CHECK-NOT: SET_HWLOOP
+# CHECK: SUBI32
+# CHECK: BNEZ

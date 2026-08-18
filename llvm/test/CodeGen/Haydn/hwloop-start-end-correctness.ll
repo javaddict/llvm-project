@@ -85,7 +85,9 @@ exit:
 ; Test 2: multi-BB loop (header + body + latch) — END must be exit, not latch
 define i32 @multi_bb_loop(ptr %p, i32 %n) {
 ; MIR-LABEL: name: multi_bb_loop
-; The SET_HWLOOP_REG start operand is the loop header; the end operand is the
+; MIR: SET_HWLOOP
+; MIR: PseudoLoopEnd
+; The SET_HWLOOP start operand is the loop header; the end operand is the
 ; loop's single exit block — NOT the latch. Before the end operand was
 ; the latch MBB (which for multi-BB loops is a different block from the exit
 ; causing HWLR_END to point to the latch's first instruction, skipping the

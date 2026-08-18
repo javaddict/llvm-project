@@ -3,16 +3,16 @@
 
 # Role: MIR — multi-BB outer soft; single-BB inner Role-A expand only.
 #
-# Multi-BB formation remains KPI-gated greenfield (no post-RA rediscovery).
-# Nested outer SET around multi-BB residual is never formed here.
+# Nested outer is not innermost — declined. Inner single-BB Role A expands.
+# Never late physical rediscovery.
 #
-# Inner: retained Role A (LoopStart + PLE) → expand to SET sel=1.
-# Outer: multi-BB soft residual → must stay soft (no SET sel=0).
+# Inner: retained Role A (LoopStart + PLE) → expand to SET sel=0.
+# Outer: multi-BB soft residual → must stay soft (no second SET).
 #
 # CHECK-LABEL: name: multibb_nested_decline
-# Inner Role A expands to real wide SET (sel=1) before pack; outer stays soft.
-# CHECK: SET_HWLOOP_F2_W 1
-# CHECK-NOT: SET_HWLOOP_F2_W 0
+# Inner Role A expands to real wide SET (sel=0, golden inner seat) before pack; outer stays soft.
+# CHECK: SET_HWLOOP_F2_W 0
+# CHECK-NOT: SET_HWLOOP_F2_W 1
 # Soft outer back-edge retained:
 # CHECK: BEQZ_W {{.*}}%bb.1
 
@@ -56,7 +56,7 @@ body:             |
     liveins: $r1, $r2, $r4, $r15
 
     $r3 = MOVE32 $r2, $r2
-    ; Inner IR ZOL (will expand to SET sel=1).
+    ; Inner IR ZOL (will expand to SET sel=0, golden inner seat).
     LoopStart $r1, 0
     NOP
     NOP

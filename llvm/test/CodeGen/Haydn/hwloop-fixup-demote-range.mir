@@ -2,8 +2,6 @@
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,PRODUCT
 # RUN: llc -haydn-enable-hwloop-demote=true -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,PRODUCT
-# RUN: llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,DEBUGOFF
 
 # Role: MIR — Product demote lock: - Product default (demote ON): out-of-range SET demotes to SUBI32+BNEZ_W.
 
@@ -12,8 +10,8 @@
 # - Soft edge is exact-committed (BUNDLE + member setDesc via
 #   commitLateProductCycle) before second BR — no residual bare MI.
 # - demote=true explicit: same as product (not an experimental opt-in).
-# - demote=false: debug-only force erase-setup — SET gone, NO soft edge
-#   (once-through body risk). NOT a product setting.
+# - demote=false on a live body is fatal (never erase-only); pinned by
+#   hwloop-demote-false-erase-fatal.mir.
 #
 # demote_uimm6: spacer MBB between preheader and header makes StartOff > 252
 # even with only InterveningCycles (=3) NOPs after SET. Shorten cannot pull
@@ -112,13 +110,7 @@ body:             |
 # PRODUCT: BUNDLE 0
 # PRODUCT: SUBI32
 # PRODUCT: BUNDLE 0
-# PRODUCT: BNEZ_W
-# Debug demote OFF: erase-setup only — no soft edge (once-through risk).
-# DEBUGOFF-NOT: SET_HWLOOP_W
-# DEBUGOFF-NOT: LoopDec
-# DEBUGOFF-NOT: LoopJNZ
-# DEBUGOFF-NOT: SUBI32
-# DEBUGOFF-NOT: BNEZ_W
+# PRODUCT: BNEZ{{[^ ]*}}
 # CHECK: bb.3.exit
 
 ...
