@@ -9,8 +9,10 @@
 #include "HaydnBundle.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCAsmInfo.h"
+#include "MCTargetDesc/HaydnMCChecker.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "MCTargetDesc/HaydnRelocLayout.h"
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -689,6 +691,19 @@ bool HaydnAsmParser::parseExprWithSpecifier(const MCExpr *&Res, SMLoc &E) {
   if (getParser().parseParenExpression(SubExpr, E))
     return true;
 
+  // Constant specifier payload uses RelocFieldInfo FieldSize / Trans
+  // (same computeRelocValue as applyFixup). Symbols stay symbolic.
+  int64_t Abs = 0;
+  if (SubExpr->evaluateAsAbsolute(Abs)) {
+    const auto Kind = static_cast<HaydnReloc::RelocKind>(Spec);
+    HaydnReloc::RelocCompute Comp =
+        HaydnReloc::computeRelocValue(Kind, static_cast<uint64_t>(Abs));
+    if (!Comp.OK)
+      return Error(Loc, Comp.Err ? Comp.Err
+                                 : "relocation specifier immediate out of "
+                                   "generated field range");
+  }
+
   Res = MCSpecifierExpr::create(SubExpr, Spec, getContext(), Loc);
   return false;
 }
@@ -822,12 +837,17 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     if (TextSlot > 3)
       return Error(NameLoc, "Format E bundle supports at most three entries");
 
-    // Select product Format E composite by textual entry count (including nop
-    // fillers): 3 text entries → E3, else E2. Single-entry `{ op }` carries
-    // no positional information (encoder/e0 placement). Two or three entries
-    // DO name entries positionally (high-first → reverse into e0..eN dag).
+    // Three text entries (including nop fillers) stay E3. Two entries are
+    // E2 unless a real opcode is generated E3-only — do not pick E2 from
+    // count alone for those logicals.
     const unsigned NumEntries = TextSlot;
-    const bool UseE3 = NumEntries == 3;
+    bool AnyE3Only = false;
+    for (auto [Child, Index] : RealChildren) {
+      (void)Index;
+      if (haydnFormatELogicalIsE3Only(Child->getOpcode()))
+        AnyE3Only = true;
+    }
+    const bool UseE3 = NumEntries == 3 || AnyE3Only;
     const unsigned CompositeOpc =
         UseE3 ? Haydn::BUNDLE_E96_THREE_ENTRY : Haydn::BUNDLE_E96_TWO_ENTRY;
     const unsigned EntryCount = UseE3 ? 3u : 2u;
@@ -849,6 +869,21 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       if (Entries[EntryIdx])
         return Error(Child->getLoc(), "incorrect bundle");
       Entries[EntryIdx] = Child;
+    }
+
+    // Parse-time legality (Hexagon MCChecker): unit injectivity, WAW,
+    // SET_HWLOOP sel, RF-port ceilings. Does not stamp entry identity —
+    // standalone encode still places bare logicals. Compiler composites
+    // never enter this path.
+    {
+      SmallVector<const MCInst *, 3> RealPtrs;
+      for (auto [Child, Index] : RealChildren) {
+        (void)Index;
+        RealPtrs.push_back(Child);
+      }
+      if (auto Err = haydnCheckParsedBundle(
+              RealPtrs, NumEntries, MII, Parser.getContext().getRegisterInfo()))
+        return Error(NameLoc, "incorrect bundle: " + *Err);
     }
 
     MCInst MCB;

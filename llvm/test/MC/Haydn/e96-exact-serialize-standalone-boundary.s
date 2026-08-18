@@ -2,9 +2,10 @@
 # RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
 
-# Role: MC standalone boundary — bare logical assembly still places (DFS/row
-# retry allowed for hand-asm). Committed private wire re-place refuse is owned
-# by CodeGen/Haydn/bundle-corruption-matrix.mir (PRIV-REPLACE).
+# Role: MC standalone boundary — bare logical assembly still places (one-parcel
+# DFS allowed for hand-asm). Residual FieldSlot composites do not ForceMode
+# or swap-retry. Committed private wire re-place refuse is owned by
+# CodeGen/Haydn/bundle-corruption-matrix.mir (PRIV-REPLACE).
 
 .text
 

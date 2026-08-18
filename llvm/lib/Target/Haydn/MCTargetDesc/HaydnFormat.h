@@ -12,9 +12,10 @@
 //    ObjectEncodingProfileID → BundleFormatID → BundleFormatRowID with typed
 //    EncodedBytes / EncodedBits / header / entry / phase schema. The sole
 //    production profile is E96 (family FormatE96, rows E96TwoEntry and
-//    E96ThreeEntry). Non-product multi-length fixtures live only in the
-//    test-support provider (HaydnTestEncodingProfileProvider) and are never
-//    product-selectable or linked into shipping tools.
+//    E96ThreeEntry). Synthetic multi-bundle fixtures stay out of this
+//    shipping descriptor: they live only in the test-support provider
+//    (HaydnTestEncodingProfileProvider) and are never product-selectable
+//    or linked into shipping tools. Not a second format pipeline.
 //
 // 2) AIE-shaped PacketFormats / VLIWFormat tables (CodeGenFormat product
 //    BUNDLE_E96_* composites). FE8 retired the 128-bit composite; product
@@ -139,7 +140,8 @@ private:
 //     -> one exact header predicate, encoded length, entry geometry
 //
 // Production profile is immutable E96. Unknown IDs resolve to nullptr / empty;
-// non-product multi-length fixtures are not declared here.
+// synthetic multi-bundle fixtures are not declared here and must not be
+// added to the shipping enums or tables.
 
 namespace haydn {
 namespace format {
@@ -174,7 +176,7 @@ using BundleCostPolicyID = unsigned;
 using StreamPhaseAutomatonID = unsigned;
 
 /// Object encoding profile identity. Production selection is always E96.
-/// Non-product fixture profile IDs are not declared in the shipping surface.
+/// Synthetic multi-bundle fixture IDs are not declared in the shipping surface.
 enum class ObjectEncodingProfileID : unsigned {
   E96 = 0,
 };
@@ -189,6 +191,21 @@ enum class BundleFormatRowID : unsigned {
   E96TwoEntry = 0,
   E96ThreeEntry = 1,
 };
+
+/// Shipping enumerator cardinalities. Adding a second product family or
+/// profile here is a second format pipeline; synthetic fixtures stay out.
+inline constexpr unsigned NumShippingObjectEncodingProfiles = 1;
+inline constexpr unsigned NumShippingBundleFormats = 1;
+inline constexpr unsigned NumShippingBundleFormatRows = 2;
+static_assert(static_cast<unsigned>(ObjectEncodingProfileID::E96) + 1 ==
+                  NumShippingObjectEncodingProfiles,
+              "shipping object-encoding profile is E96 only");
+static_assert(static_cast<unsigned>(BundleFormatID::FormatE96) + 1 ==
+                  NumShippingBundleFormats,
+              "shipping format family is FormatE96 only");
+static_assert(static_cast<unsigned>(BundleFormatRowID::E96ThreeEntry) + 1 ==
+                  NumShippingBundleFormatRows,
+              "shipping rows are E96TwoEntry and E96ThreeEntry only");
 
 /// One exact encoded row (header, size, entry count, phase transition).
 struct BundleFormatRowDesc {

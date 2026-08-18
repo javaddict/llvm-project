@@ -16,10 +16,18 @@
 
 using namespace llvm;
 
+// Peer of AIEELFObjectWriter.cpp:49-51 (ELF::EM_AIE, no second machine id).
+// Official ELF 259 is Kalray KVX. Stay on EM_HAYDN; distinguisher is
+// EF_HAYDN_E96. Do not invent a replacement e_machine.
+static_assert(ELF::EM_HAYDN == 259,
+              "EM_HAYDN stays 259; do not invent a replacement (KVX collision)");
+
 namespace {
 
 class HaydnELFObjectWriter : public MCELFObjectTargetWriter {
 public:
+  // EM_HAYDN=259 is the in-tree experimental machine id. Official ELF
+  // registry 259 is Kalray KVX — do not invent a replacement number here.
   HaydnELFObjectWriter(uint8_t OSABI = 0)
       : MCELFObjectTargetWriter(false, OSABI, ELF::EM_HAYDN, true){};
   ~HaydnELFObjectWriter() = default;
@@ -118,11 +126,22 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_32_PCREL;
 
   case Haydn::FIXUP_HAYDN_HWLoopOffset:
-    // Hardware-loop body start/end offset: 16-bit signed PC-relative field
-    // word-aligned (encoded value = byteOffset >> 2). Same encoding semantics
-    // as a PC-relative branch, so reuse the BranchSimm16 relocation. Emitted
-    // by SET_HWLOOP_REG (two fixups: loop start + loop end). See.
-    return ELF::R_HAYDN_BranchSImm16;
+    // Legacy 8-byte placeholder kind (MC-only; HaydnFixupKinds.h). No emitter
+    // produces it: product SET_HWLOOP_* symbolic offsets use the typed
+    // HWLoopOff1/Off2 kinds above. W37: this case previously aliased to
+    // R_HAYDN_BranchSImm16, whose shared-layout row has ValueShift=0 while
+    // HWLoopOffset has ValueShift=2 — an unresolved fixup of this kind would
+    // link with the wrong scale (no <<2) and a wrong loop target. Fail
+    // closed instead of aliasing to a differently-shifted row; if a producer
+    // ever reappears it must mint a matching ELF reloc (FixupKinds + here +
+    // RelocLayout row + lld) with ValueShift preserved, never borrow
+    // BranchSImm16. Local (resolved) fixups never reach the writer — the
+    // AsmBackend tag-compensation path owns those.
+    reportError(Fixup.getLoc(),
+                "legacy FIXUP_HAYDN_HWLoopOffset has no ELF relocation (no "
+                "producer; refusing alias to differently-shifted "
+                "R_HAYDN_BranchSImm16)");
+    return ELF::R_HAYDN_NONE;
 
   case Haydn::FIXUP_HAYDN_HWLoopOff1:
     // Format E SET_HWLOOP_F2 uimm6_offset1 @ parcel bits[37:32] (E2 e0 F2).
@@ -166,6 +185,19 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     // Format E LOADSTORE0/LOAD1 RI6: 1:1 to R_HAYDN_LS_IMM (AIE dense
     // fixup→ELF map: AIEELFObjectWriter.cpp:60-63). Never alias SImm16.
     return ELF::R_HAYDN_LS_IMM;
+
+  case Haydn::FIXUP_HAYDN_JALRSImm12:
+    // JALR RI12 symbolic imm12 is MC-only: no R_HAYDN_* kind is minted yet.
+    // Local (same-section) targets resolve in the AsmBackend via the
+    // JALRSImm12 RelocLayout row; a cross-object external target must fail
+    // closed here rather than borrow a differently-identitied row (W37
+    // HWLoopOffset precedent). Minting the ELF kind is an ABI decision
+    // owned by the encoding topic.
+    reportError(Fixup.getLoc(),
+                "symbolic jalr to an external symbol has no Haydn ELF "
+                "relocation (MC-only JALRSImm12); refusing alias to a "
+                "branch/call row");
+    return ELF::R_HAYDN_NONE;
   }
 }
 

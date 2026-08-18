@@ -17,7 +17,7 @@ _start:
 test_beq_mid:
 # CHECK: beq
     beq r1, r2, mid_target1
-    .space 2000, 0
+    .space 2016, 0
 mid_target1:
 # CHECK: nop
     nop
@@ -26,6 +26,6 @@ mid_target1:
 test_bnez_mid:
 # CHECK: bnez
     bnez r5, mid_target3
-    .space 2000, 0
+    .space 2016, 0
 mid_target3:
     nop

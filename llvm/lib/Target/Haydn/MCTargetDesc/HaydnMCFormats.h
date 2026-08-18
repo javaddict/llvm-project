@@ -32,6 +32,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -40,12 +41,28 @@
 #include "llvm/Support/raw_ostream.h"
 #include <cstddef>
 #include <map>
+#include <optional>
 #include <unordered_map>
 
 namespace llvm {
 
 using SlotBits = uint64_t;
 class MCSlotInfo;
+
+// Standalone parse: generated-member Mode, not textual child count.
+bool haydnFormatELogicalIsE3Only(unsigned Opcode);
+bool haydnFormatELogicalIsE2Only(unsigned Opcode);
+
+/// Closed FieldSlot / public-logical → generated member operand keep-map.
+/// Same law for Finalize cutover and MC fill (AIE serializes typed members
+/// as-is; Haydn overlays only these drop rules). Not a register-class
+/// bag-sort. \p KindOk, when set, rejects a candidate whose operands do
+/// not match the member Desc (trailing vs vestigial-first-ins).
+/// Nullopt = fail closed.
+std::optional<SmallVector<unsigned, 4>>
+haydnFormatEKeepOperands(
+    const MCInstrDesc &OldDesc, const MCInstrDesc &NewDesc,
+    function_ref<bool(unsigned OldI, unsigned NewI)> KindOk = nullptr);
 
 //===----------------------------------------------------------------------===//
 // MCSlotKind — wrapper over the tablegen-generated Haydn_SLOT_* enum
@@ -404,8 +421,9 @@ public:
   // (AIE AIEMCFormats.h:376-379 peer), or nullptr if \p Opcode has no
   // alternatives. Rows are sparse size-3: index == residual occupancy class,
   // 0 for a hole. Non-zero entries are Format E members when a generated
-  // member occupies that entry; otherwise the residual FieldSlot (NOP_S0,
-  // CSRW_W_S0, ADD32_MSP). PlacementAlternative FieldSlots = 1<<index;
+  // member occupies that entry; otherwise the residual FieldSlot (WFI_S0,
+  // SIMD *_S1 when no matching 0-def span). PlacementAlternative FieldSlots =
+  // 1<<index;
   // getLegalSlots ORs those indices. Do not derive holes from raw EntryIdx.
   virtual const std::vector<unsigned> *
   getAlternateInstsOpcode(unsigned Opcode) const = 0;
@@ -530,13 +548,20 @@ bool haydnHasCanonicalIdleParcel();
 /// \p EntryNum is 0 (two-entry) or 1 (three-entry). Other values assert.
 uint8_t haydnFormatEHeaderByte(unsigned EntryNum);
 
-/// Append one Format E parcel (production EncodedBytes) from a 96-bit APInt
-/// as little-endian host bytes (bit 0 in byte 0). Asserts width and size.
-void haydnEmitFormatEParcelLE(const APInt &Word96, SmallVectorImpl<char> &CB);
+/// Append one Format E parcel (production EncodedBytes) from an APInt whose
+/// width is the generated EncodedBits, as little-endian host bytes (bit 0
+/// in byte 0). Asserts width and size against the registry row.
+void haydnEmitFormatEParcelLE(const APInt &Word, SmallVectorImpl<char> &CB);
 
 /// If a product idle parcel exists, append one copy into \p Out and return
 /// true. Otherwise leave \p Out unchanged and return false (fail closed).
 bool haydnTryGetCanonicalIdleParcel(SmallVectorImpl<char> &Out);
+
+/// Generated Format E entry window for (\p Mode, \p EntryIdx): width and
+/// absolute parcel LSB from FormatETypeLayouts (EntryHi/EntryLo). False
+/// when no layout row exists. Replaces the hand E2/E3 width/LSB switch.
+bool haydnFormatEEntryWindow(uint8_t Mode, unsigned EntryIdx, unsigned &Width,
+                             unsigned &LSB);
 
 /// Write executable pad of \p CountBytes as whole production-size idle
 /// parcels. Returns false when CountBytes is not a multiple of the production

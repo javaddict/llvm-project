@@ -15,6 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "MCTargetDesc/HaydnFixupKinds.h"
 #include "MCTargetDesc/HaydnRelocLayout.h"
 #include "gtest/gtest.h"
 
@@ -57,7 +58,9 @@ TEST(HaydnRelocLayoutTest, FormatEE2E0FieldLsbParcelOrigin) {
   EXPECT_EQ(getRelocFieldInfo(RelocKind::PC_LO20).FieldLsb, 31u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::LS_IMM).FieldLsb, 28u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::LS_IMM).FieldSize, 6u);
-  EXPECT_EQ(getRelocFieldInfo(RelocKind::LS_IMM).NBytes, 6u);
+  // NBytes=12 (W25): covers the non-e0 LOAD1 windows (E2 e1 @72, E3 e2
+  // @85) via resolveFieldLsb; the table FieldLsb stays E2 e0 @28.
+  EXPECT_EQ(getRelocFieldInfo(RelocKind::LS_IMM).NBytes, 12u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::LS_IMM).ValueShift, 0u);
   EXPECT_TRUE(getRelocFieldInfo(RelocKind::LS_IMM).IsSigned);
   EXPECT_TRUE(isRelocTransformReady(RelocKind::LS_IMM));
@@ -92,6 +95,15 @@ TEST(HaydnRelocLayoutTest, WideBranchBytePositiveNegativeBounds) {
   // Odd byte offset fails closed as misaligned (not as range).
   EXPECT_FALSE(ok(K, +1));
   EXPECT_STREQ(err(K, +1), "mis-aligned relocation target");
+
+  // Direct B/JAL records are EncodedBytes apart. Field is the byte
+  // displacement (no extra scale); 12 and 24 must encode as themselves.
+  EXPECT_TRUE(ok(K, +12));
+  EXPECT_EQ(field(K, +12), 12u);
+  EXPECT_TRUE(ok(K, +24));
+  EXPECT_EQ(field(K, +24), 24u);
+  EXPECT_TRUE(ok(K, -12));
+  EXPECT_EQ(field(K, -12) & 0xFFFu, 0xFF4u);
 }
 
 // BranchSImm16: signed 16-bit byte PC+imm → window [-32768, +32766] even.
@@ -150,6 +162,11 @@ TEST(HaydnRelocLayoutTest, WideCallDiv2PositiveNegativeBounds) {
   EXPECT_FALSE(ok(K, -524289));
   // Byte scale: odd offsets are legal (no halfword align gate).
   EXPECT_TRUE(ok(K, +1));
+  // Parcel-sized JAL displacement is a plain byte field.
+  EXPECT_TRUE(ok(K, +12));
+  EXPECT_EQ(field(K, +12), 12u);
+  EXPECT_TRUE(ok(K, +24));
+  EXPECT_EQ(field(K, +24), 24u);
 }
 
 // HWLoopOff1: unsigned 6-bit after ÷4 → byte window [0, 252].
@@ -319,6 +336,178 @@ TEST(HaydnRelocLayoutTest, ReadAddendUndoesBranchAndHwloopScale) {
   const RelocFieldInfo &H1 = getRelocFieldInfo(RelocKind::HWLoopOff1);
   patchField(HBuf, 60, H1.NBytes, H1.FieldSize, H1.FieldLsb); // field = 60
   EXPECT_EQ(readRelocAddend(RelocKind::HWLoopOff1, HBuf), 240); // ×4
+}
+
+// HI12 FieldLsb is the committed LUI I12 window, not a single E2-e0 constant.
+// E3 e0 ALU2 LUI (map=1, type=4, opc=1) is golden abs[32:21]. Patching the
+// table LSB=32 writes only bit 32 of that field: hi12=1 becomes executed
+// imm 0x800 (plat_extras freopen %hi12 of a VA ≥ 0x80000).
+TEST(HaydnRelocLayoutTest, Hi12FieldLsbFollowsCommittedLuiWindow) {
+  const RelocFieldInfo &HI = getRelocFieldInfo(RelocKind::HI12);
+  EXPECT_EQ(HI.FieldLsb, 32u);
+  EXPECT_EQ(HI.FieldSize, 12u);
+
+  // E2 (entry_num=0): table window.
+  uint8_t E2[12] = {};
+  E2[0] = 0x07; // indicator 111, entry_num=0
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E2), 32u);
+
+  // E3 e0 ALU2 LUI: header 0x4f (indicator 111, entry_num=1, map=1 @ bits[6:7]),
+  // type=4 @ [8:11], opc=1 @ [12].
+  uint8_t E3Alu2[12] = {};
+  E3Alu2[0] = 0x4f;
+  E3Alu2[1] = 0x14;
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3Alu2), 21u);
+  patchField(E3Alu2, 1, HI.NBytes, HI.FieldSize, 21u);
+  EXPECT_EQ(readField(E3Alu2, HI.NBytes, HI.FieldSize, 21u), 1u);
+  // The E2 LSB must stay clear — that was the plat_extras mispatch.
+  EXPECT_EQ(readField(E3Alu2, HI.NBytes, HI.FieldSize, 32u), 0u);
+
+  // E3 e0 ALU0 LUI: map=2, type=0xa, opc=1 @ bits[16:18] → imm abs 23.
+  uint8_t E3Alu0[12] = {};
+  E3Alu0[0] = 0x8f;
+  E3Alu0[1] = 0x0a;
+  E3Alu0[2] = 0x01;
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3Alu0), 23u);
+  patchField(E3Alu0, 1, HI.NBytes, HI.FieldSize, 23u);
+  EXPECT_EQ(readField(E3Alu0, HI.NBytes, HI.FieldSize, 23u), 1u);
+}
+
+// JALRSImm12 (RI12 type-opcode 1): dedicated row for the JALR symbolic
+// imm12. Same golden E2 e0 field numbers as the RI12 branch row (imm12 @
+// bits[43:32], signed byte displacement from parcel origin, Align=2) but a
+// DISTINCT kind so a JALR fixup can never borrow the branch row (W27 —
+// that aliasing was the original two-inconsistent-PCRel-kinds bug).
+// findFixupFromFixupFields must route RI12 opc 1 here and opc 2..7 to the
+// branch row. Pinned byte-displacement semantics: branch-all.s 0x114 →
+// target1@0 = -276 = 0xEEC in the imm12 field.
+TEST(HaydnRelocLayoutTest, JalrSImm12DedicatedRowNotBranchAlias) {
+  const RelocKind K = RelocKind::JALRSImm12;
+  const RelocFieldInfo &FI = getRelocFieldInfo(K);
+  const RelocFieldInfo &Br = getRelocFieldInfo(RelocKind::WIDE_BranchSImm12_RI);
+  EXPECT_NE(K, RelocKind::WIDE_BranchSImm12_RI);
+  EXPECT_EQ(FI.FieldLsb, 32u);
+  EXPECT_EQ(FI.FieldLsb, Br.FieldLsb);
+  EXPECT_EQ(FI.FieldSize, 12u);
+  EXPECT_EQ(FI.NBytes, 12u);
+  EXPECT_EQ(FI.ValueShift, 0u); // GE96-03: byte displacement, no scale
+  EXPECT_EQ(FI.Align, 2u);
+  EXPECT_TRUE(FI.IsSigned);
+  EXPECT_TRUE(FI.IsPCRel);
+  EXPECT_TRUE(isRelocTransformReady(K));
+
+  // Signed 12-bit byte window [-2048, +2046] even — same bounds math as
+  // the branch row, but reachable only through the dedicated kind.
+  EXPECT_TRUE(ok(K, +2046));
+  EXPECT_EQ(field(K, -276) & 0xFFFu, 0xEECu); // branch-all.s 0x114 → 0x0
+  EXPECT_FALSE(ok(K, +2048));
+  EXPECT_TRUE(ok(K, -2048));
+  EXPECT_FALSE(ok(K, -2050));
+  EXPECT_FALSE(ok(K, +1));
+  EXPECT_STREQ(err(K, +1), "mis-aligned relocation target");
+
+  // Generated-schema routing: RI12 opc 1 → JALRSImm12; opc 2..7 → branch.
+  const FixupField Imm12{kUnspecifiedFieldLsb, 12};
+  EXPECT_EQ(findFixupFromFixupFields("RI12", 1, Imm12, 12, false),
+            RelocKind::JALRSImm12);
+  EXPECT_EQ(findFixupFromFixupFields("RI12", 2, Imm12, 12, false),
+            RelocKind::WIDE_BranchSImm12_RI);
+  EXPECT_EQ(findFixupFromFixupFields("RI12", 7, Imm12, 12, false),
+            RelocKind::WIDE_BranchSImm12_RI);
+  EXPECT_EQ(mapRelocKindToFixup(RelocKind::JALRSImm12),
+            Haydn::FIXUP_HAYDN_JALRSImm12);
+  EXPECT_EQ(mapFixupKind(Haydn::FIXUP_HAYDN_JALRSImm12), RelocKind::JALRSImm12);
+
+  // E3 e0 RI12 JALR (map=2, type=0xd): same 23/54 windows as the branch
+  // kinds — identical golden RI12 entry geometry.
+  uint8_t E3[12] = {};
+  E3[0] = 0x8f; // indicator 111, entry_num=1, map=2 at bits[6:7]
+  E3[1] = 0x0d; // type=0xd at bits[8:11]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::JALRSImm12, E3), 23u);
+  patchField(E3, 24, FI.NBytes, FI.FieldSize, 23u);
+  EXPECT_EQ(readRelocAddend(RelocKind::JALRSImm12, E3), 24);
+}
+
+// W25 / encoding F15 residual: LO20/PC_LO20 (ALU RI20, E2-only type) and
+// LS_IMM (LS RI6) FieldLsb must follow the committed Format E entry window.
+// The table FieldLsb (LO20 31, LS_IMM 28) is E2 e0 authority only; a symbolic
+// ADDI32 at E2 e1 ALU1 or S_LW_WITH_IMM at E3 e0/e1/e2 / E2 e1 LOAD1 used to
+// patch the E2-e0 window — writing a neighbor entry's bits and leaving the
+// executed imm zero in BOTH MC applyFixup and lld relocate (shared
+// resolveFieldLsb). Golden absolute parcel bits:
+//   RI20: E2 e0 ALU0 imm[50:31] @31; E2 e1 ALU1 imm[84:65] @65
+//   RI6:  E2 e0 LS0 imm[33:28] @28; E2 e1 LOAD1 imm[77:72] @72;
+//         E3 e0 LS0 imm[30:25] @25; E3 e1 LOAD1 imm[59:54] @54;
+//         E3 e2 LOAD1 imm[90:85] @85
+// Buffer bytes are the live encodes of the bundles named at each site.
+TEST(HaydnRelocLayoutTest, Lo20AndLsImmFieldLsbFollowEntryWindow) {
+  const RelocFieldInfo &LO = getRelocFieldInfo(RelocKind::LO20);
+  EXPECT_EQ(LO.FieldLsb, 31u); // E2 e0 table default
+  EXPECT_EQ(LO.NBytes, 12u);   // must cover e1 imm past bit 63
+
+  // E2 e1 ALU1 RI20: `{ xor32 r0,r0,r0; addi32 r1,r2,imm }`
+  // (e0 = XOR32 ALU0 RR, e1 = ADDI32 ALU1 RI20; map[52:51]=0, type@53=0).
+  uint8_t E2e1RI20[12] = {0x07, 0x4b, 0x81, 0x88, 0x00, 0x00,
+                          0x00, 0x43, 0x00, 0x00, 0x00, 0x00};
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LO20, E2e1RI20), 65u);
+  EXPECT_EQ(resolveFieldLsb(RelocKind::PC_LO20, E2e1RI20), 65u);
+  patchField(E2e1RI20, 12, LO.NBytes, LO.FieldSize, 65u);
+  EXPECT_EQ(readRelocAddend(RelocKind::LO20, E2e1RI20), 12);
+
+  // E2 e0 RI20 (`{ addi32 rt, rs, imm }` solo — live encode; e1 is a NOP
+  // with zero map/type, so the e0 RI20 discriminator must win): table 31.
+  uint8_t E2e0RI20[12] = {0x07, 0x0f, 0x12, 0x82, 0x02, 0x00,
+                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LO20, E2e0RI20), 31u);
+
+  const RelocFieldInfo &LS = getRelocFieldInfo(RelocKind::LS_IMM);
+  EXPECT_EQ(LS.FieldLsb, 28u); // E2 e0 table default
+  EXPECT_EQ(LS.NBytes, 12u);   // must cover E3 e2 imm @85
+
+  // E2 e1 LOAD1 RI6: `{ s_lw_with_imm r5,r6,imm; xor32 r8,r8,r8 }`
+  // (map[52:51]=2, 2-bit type @53=1).
+  uint8_t E2e1RI6[12] = {0x07, 0x4b, 0x81, 0x88, 0x00, 0x00,
+                         0x30, 0xd0, 0x65, 0x00, 0x00, 0x00};
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LS_IMM, E2e1RI6), 72u);
+  patchField(E2e1RI6, 12, LS.NBytes, LS.FieldSize, 72u);
+  EXPECT_EQ(readRelocAddend(RelocKind::LS_IMM, E2e1RI6), 12);
+
+  // E3 e0 LOADSTORE0 RI6: `{ xor32 r8; xor32 r9; s_lw_with_imm r1,r2,imm }`
+  // (map[7:6]=3, 3-bit type @8=3).
+  uint8_t E3e0RI6[12] = {0xcf, 0x6b, 0x42, 0x00, 0xa0, 0x74,
+                         0x64, 0x26, 0x50, 0x3a, 0x00, 0x00};
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LS_IMM, E3e0RI6), 25u);
+  patchField(E3e0RI6, 12, LS.NBytes, LS.FieldSize, 25u);
+  EXPECT_EQ(readRelocAddend(RelocKind::LS_IMM, E3e0RI6), 12);
+
+  // E3 e1 LOAD1 RI6: `{ xor32 r8; s_lw_with_imm r3,r4,12; xor32 r9 }`
+  // (map[38:37]=3, 2-bit type @39=1).
+  uint8_t E3e1RI6[12] = {0x4f, 0xe9, 0xc8, 0x4c, 0xe0, 0xf4,
+                         0x10, 0x00, 0x00, 0x00, 0x00, 0x00};
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LS_IMM, E3e1RI6), 54u);
+  patchField(E3e1RI6, 12, LS.NBytes, LS.FieldSize, 54u);
+  EXPECT_EQ(readRelocAddend(RelocKind::LS_IMM, E3e1RI6), 12);
+
+  // E3 e2 LOAD1 RI6: `{ s_lw_with_imm r1,r2,imm; xor32 r8; xor32 r9 }`
+  // (map[69:68]=3, 2-bit type @70=1).
+  uint8_t E3e2RI6[12] = {0x4f, 0xe9, 0xc8, 0x4c, 0xa0, 0x74,
+                         0x20, 0x22, 0x70, 0x3a, 0x00, 0x00};
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LS_IMM, E3e2RI6), 85u);
+  patchField(E3e2RI6, 12, LS.NBytes, LS.FieldSize, 85u);
+  EXPECT_EQ(readRelocAddend(RelocKind::LS_IMM, E3e2RI6), 12);
+
+  // E2 e0 LOADSTORE0 RI6 (`ld32 rt, rs, imm`, live encode prefix
+  // 87 43 03 01 …): map[7:6]=2 (golden "10"), 3-bit type @8=3 → default 28.
+  uint8_t E2e0RI6[12] = {};
+  E2e0RI6[0] = 0x87;
+  E2e0RI6[1] = 0x43;
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LS_IMM, E2e0RI6), 28u);
+
+  // Fail-closed: RI20 is an E2-only type — an E3 parcel keeps the table
+  // default rather than inventing an E3 window.
+  uint8_t E3RI20[12] = {};
+  E3RI20[0] = 0x8f;
+  EXPECT_EQ(resolveFieldLsb(RelocKind::LO20, E3RI20), 31u);
 }
 
 } // namespace

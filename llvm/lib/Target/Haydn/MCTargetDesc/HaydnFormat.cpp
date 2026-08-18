@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // PacketFormats lookup helpers and the neutral ObjectEncodingProfile /
-// BundleFormatRow registry. Production profile is E96 only. Non-product
-// multi-length fixtures live in HaydnTestEncodingProfileProvider (test
-// support only) and are never product-selectable.
+// BundleFormatRow registry. Production profile is E96 only. Synthetic
+// multi-bundle fixtures live in HaydnTestEncodingProfileProvider (test
+// support only) and are never registered in this shipping descriptor.
 //
 //===----------------------------------------------------------------------===//
 
@@ -67,6 +67,8 @@ unsigned PacketFormats::getNumFormats() const {
 //
 // Parcel sizes live only in these row descriptors. Call sites use
 // encodedBytesOf / encodedBitsOf / maxEncodedBytesInProfile.
+// Shipping tables are production E96 only (AIEFormat.h:29-120 PacketFormats
+// / VLIWFormat peer). Synthetic multi-bundle fixtures are not listed here.
 
 namespace {
 
@@ -114,6 +116,17 @@ const ObjectEncodingProfileDesc ProductionProfile = {
     /*IsProduct=*/true,
 };
 
+static_assert(sizeof(ProductRows) / sizeof(ProductRows[0]) ==
+                  NumShippingBundleFormatRows,
+              "shipping rows are E96TwoEntry and E96ThreeEntry only");
+static_assert(sizeof(ProductFormats) / sizeof(ProductFormats[0]) ==
+                  NumShippingBundleFormats,
+              "shipping family is FormatE96 only");
+static_assert(sizeof(ProductionPermittedFamilies) /
+                      sizeof(ProductionPermittedFamilies[0]) ==
+                  NumShippingBundleFormats,
+              "shipping profile permits FormatE96 only");
+
 const BundleFormatRowDesc *findRow(BundleFormatRowID ID) {
   for (const BundleFormatRowDesc &R : ProductRows)
     if (R.Row == ID)
@@ -151,6 +164,8 @@ const ObjectEncodingProfileDesc &getProductionObjectEncodingProfile() {
 
 const ObjectEncodingProfileDesc *
 getObjectEncodingProfile(ObjectEncodingProfileID ID) {
+  // Shipping lookup is E96 only. Unknown / synthetic fixture IDs stay
+  // unresolved so they cannot become a second product format family.
   if (ID == ObjectEncodingProfileID::E96)
     return &ProductionProfile;
   return nullptr;

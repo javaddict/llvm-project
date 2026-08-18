@@ -36,9 +36,23 @@ public:
   void emitInstruction(const MCInst &Inst,
                        const MCSubtargetInfo &STI) override;
 
+  // Product pack: executable padding is whole Format E parcels only.
+  // Peer: AIETargetELFStreamer::finish emitCodeAlignment(Align(16)).
+  // EncodedBytes is not a power of two, so a 4/8-byte align fragment is
+  // rounded up to idle parcels instead of writeNopData failing or inventing
+  // a short pad. Walk Align/gcd parcels (lcm bound); ignore MaxBytesToEmit.
+  void emitCodeAlignment(Align Alignment, const MCSubtargetInfo *STI,
+                         unsigned MaxBytesToEmit = 0) override;
+
+  // Compiler function labels must sit on an exact Format E record. Align(4)
+  // cannot restore a broken 12-byte grid; refuse rather than invent a short
+  // pad (idle parcels only change the offset by EncodedBytes).
+  void requireTextParcelGrid();
+
 private:
   // Recursively register symbols referenced by Inst (and any isInst children).
   void emitSymbolsInInst(const MCInst &Inst);
+  void emitIdleParcels(unsigned Count);
 };
 
 MCStreamer *createHaydnELFStreamer(const Triple &TT, MCContext &Context,

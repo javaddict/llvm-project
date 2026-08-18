@@ -61,13 +61,16 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
     if (Hwloop && (i == 1 || i == 2) && MO.isMBB()) {
-      MachineBasicBlock *MBB = const_cast<MachineBasicBlock *>(MO.getMBB());
-      MachineBasicBlock *Resolved = MBB;
-      if (MBB->getNumber() < 0)
-        Resolved = const_cast<MachineBasicBlock *>(MI->getParent());
-      else if (i == 1 && MBB == MI->getParent())
-        Resolved = const_cast<MachineBasicBlock *>(MI->getParent());
+      const MachineBasicBlock *MBB = MO.getMBB();
+      // Compiler-origin SET_HWLOOP start/end must name a live MBB. Rewriting
+      // a removed block (number < 0) onto the parent was a silent repair.
+      if (!MBB || MBB->getNumber() < 0)
+        report_fatal_error(
+            "Haydn MCInstLower: SET_HWLOOP start/end MBB is not in the "
+            "function — refuse dangling-block repair",
+            /*GenCrashDiag=*/false);
       auto &HAP = static_cast<HaydnAsmPrinter &>(Printer);
+      MachineBasicBlock *Resolved = const_cast<MachineBasicBlock *>(MBB);
       MCSymbol *Sym = (i == 1) ? HAP.getOrCreateHwloopStartSym(Resolved)
                                : HAP.getOrCreateHwloopEndSym(Resolved);
       OutMI.addOperand(
@@ -96,8 +99,15 @@ MCOperand HaydnMCInstLower::LowerOperand(const MachineOperand &MO) const {
     return MCOperand::createImm(MO.getImm());
 
   case MachineOperand::MO_MachineBasicBlock: {
-    const MCExpr *Expr = MCSymbolRefExpr::create(
-        MO.getMBB()->getSymbol(), Ctx);
+    const MachineBasicBlock *MBB = MO.getMBB();
+    // Branch/call MBB operands must name a live block. Rewriting a
+    // removed block onto the parent was a silent repair.
+    if (!MBB || MBB->getNumber() < 0)
+      report_fatal_error(
+          "Haydn MCInstLower: MachineBasicBlock operand is not in the "
+          "function — refuse dangling-block repair",
+          /*GenCrashDiag=*/false);
+    const MCExpr *Expr = MCSymbolRefExpr::create(MBB->getSymbol(), Ctx);
     return MCOperand::createExpr(Expr);
   }
 

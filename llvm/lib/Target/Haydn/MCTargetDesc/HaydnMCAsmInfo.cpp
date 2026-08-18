@@ -54,11 +54,10 @@ HaydnMCAsmInfo::HaydnMCAsmInfo(const Triple &TargetTriple) {
   MinInstAlignment = haydn::format::MinBundleAddressAlignBytes;
   MaxInstLength = ProductBytes;
 
-  // Do not let AsmPrinter::emitAlignment(MF, &F) promote function alignment
-  // from IR/user attributes (e.g. aligned(256)). Those power-of-two values
-  // larger than the product max (largest 2^k | EncodedBytes) force non-parcel
-  // pads at LLD input-section boundaries. HaydnAsmPrinter emits the product
-  // max explicitly before the entry label instead.
+  // HasFunctionAlignment=false disables generic AsmPrinter header
+  // emitAlignment(MF, &F). HaydnAsmPrinter owns the function-entry
+  // p2align (user aligned(N) is a language guarantee; Min/Pref stay
+  // Align(4) from HaydnISelLowering). This flag is not a clamp.
   HasFunctionAlignment = false;
 }
 

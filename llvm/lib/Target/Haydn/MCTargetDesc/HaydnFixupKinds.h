@@ -102,8 +102,8 @@ enum Fixups {
   // (FieldLsb=8). Distinct from the I12 kind above — sharing FieldLsb=4
   // clobbered rt/rs. Maps to ELF R_HAYDN_WIDE_BranchSImm12_RI.
   FIXUP_HAYDN_WIDE_BranchSImm12_RI,
-  // WIDE call (JAL_W): imm20 at s0 bits[23:4] (FieldLsb=4). Same
-  // fail-closed transform gate as other call kinds.
+  // WIDE call (JAL_W): imm20 at s0 bits[23:4] (FieldLsb=4). Byte PC+imm,
+  // Align=2 — same even-byte law as WIDE branch (MinBundleAddressAlignBytes).
   FIXUP_HAYDN_WIDE_CallSImm20,
 
   // reloc-aware slot-OR: s0 LS scaled-imm fields (FI/spill offsets).
@@ -126,6 +126,18 @@ enum Fixups {
   // generated LS RI6 members (and peeled LD32/ST32/LD64/ST64 → S_LW_WITH_IMM
   // etc.) here. Maps 1:1 to ELF R_HAYDN_LS_IMM — never R_HAYDN_SImm16.
   FIXUP_HAYDN_LS_IMM,
+
+  // Format E JALR RI12 symbolic imm12 (HaydnRelocLayout JALRSImm12): signed
+  // 12-bit byte displacement from the parcel origin — E2 e0 @ parcel
+  // bits[43:32] (FieldLsb=32), E3 e0/e1 via resolveFieldLsb, ValueShift=0,
+  // Align=2 (GE96-03 no-scale). Execution stays golden PC = rs + imm12; the
+  // kind types the *assembler symbol* convention imm = target - parcel,
+  // pinned by MC/Haydn basic.s / branch-all.s / roundtrip-branches.s.
+  // Distinct identity from FIXUP_HAYDN_WIDE_BranchSImm12_RI (same field
+  // numbers) so a JALR fixup can never borrow the branch row (W27).
+  // MC-only: unresolved externals fail closed in the object writer until an
+  // R_HAYDN_* kind is minted (ABI decision owned by the encoding topic).
+  FIXUP_HAYDN_JALRSImm12,
 
   // Marker - must be last
   FIXUP_HAYDN_INVALID,

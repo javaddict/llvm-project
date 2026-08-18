@@ -14,8 +14,11 @@
 .type eflags_probe,@function
 eflags_probe:
   add32 r1, r2, r3
-  jalr r0, lr, 0
+  nop
 
+# Experimental EM_HAYDN=259. Distinguished from a 259-KVX object by Flags 0x1.
+# Do not invent a replacement e_machine.
+# HDR: Machine: 0x103
 # HDR: Flags [ (0x1)
 # HDR-NEXT: 0x1
 

@@ -7,6 +7,7 @@ add_llvm_component_library(LLVMHaydnDesc
   HaydnELFObjectWriter.cpp
   HaydnMCELFStreamer.cpp
   HaydnMCCodeEmitter.cpp
+  HaydnMCChecker.cpp
   HaydnMatInt.cpp
   HaydnFormat.cpp
   HaydnMCFormats.cpp

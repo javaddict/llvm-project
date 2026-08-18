@@ -119,9 +119,9 @@ static DecodeStatus DecodeDR64RegisterClass(MCInst &Inst, uint32_t RegNo,
 //
 // Template parameters:
 // N = encoded field width in bits
-// Shift = left-shift applied after sign/zero-extension (1 for §5.14
-// branch offsets in 2-byte units, 2 for §5.11/5.12 hwloop offsets
-// in 4-byte units, 0 otherwise).
+// Shift = left-shift applied after sign/zero-extension (2 for §5.11/5.12
+// hwloop offsets in 4-byte units, 0 for branch/JAL byte offsets;
+// the legacy Shift=1 form is retired and no live row uses it).
 // IsSigned = 1 => sign-extend the N-bit field; 0 => zero-extend.
 //===----------------------------------------------------------------------===//
 template <unsigned N, unsigned Shift, bool IsSigned>

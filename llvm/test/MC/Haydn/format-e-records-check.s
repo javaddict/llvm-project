@@ -12,8 +12,9 @@
 # edits to the four generated files survived build+unit tests.
 # Fix: --check diffs committed outputs, parses the XLSX (zip/xml, no invented
 # golden), round-trips every ledger entry (null stays null; MALFORMED_DEFINED
-# / ILLUSTRATION_ONLY hex encode→decode), and pack/unpacks every generated
-# member. A one-byte flip of a generated file fails this RUN.
+# / ILLUSTRATION_ONLY hex encode→decode), pack/unpacks every generated
+# member, and checks generated td imm width/signedness against golden
+# instruction annotations. A one-byte flip of a generated file fails this RUN.
 # If this regresses: generated TD/INC silently drift from golden, or XLSX/JSON
 # / canonical-vector mismatch is invisible again.
 #

@@ -25,10 +25,11 @@
 # BNE_W/BGE_W/BGEU_W/BLT_W/BLTU_W_S0_FLEX (HaydnFormatsALU32.td, 79-83)
 // CHECK: {{.*}}54: 07 03 1a 00 20 00 00 00 00 00 00 00 { nop; csrw 32, r1 }
 # BGEZ_W/BLTZ_W_S0_FLEX (HaydnFormatsALU32.td, 84-85)
-// CHECK: {{.*}} { {{.*}}ld32{{.*}}r1, r2, 0{{.*}}ld32{{.*}}r3, r2, 8{{.*}} }
+// CHECK: 60: cf 6b 46 10 e0 74 08 00 00 00 00 00 { ld32 r1, r2, 0; ld32 r3, r2, 8 }
 # CSRW_W_S0_FLEX (HaydnFormatsALU32.td, codepoint 86)
-// CHECK: {{.*}} { {{.*}}ld64{{.*}}d0, r2, 0{{.*}}ld64{{.*}}d1, r2, 8{{.*}} }
-# LD32_S1_FLEX / LD64_S1_FLEX (HaydnFormatsLD.td, codepoints 62-63)
+// CHECK: 6c: cf 4b 42 10 e0 0c 08 00 00 00 00 00 { ld64 d0, r2, 0; ld64 d1, r2, 8 }
+# LD32_S1_FLEX / LD64_S1_FLEX (HaydnFormatsLD.td — file deleted 2026-08-15 as
+# dead surface; the dual-load packs below use the logical ld32/ld64 path)
 // COM: CHECK: %t.o:	file format elf32-unknown
 # Category B (producer retired to legacy name with existing flex):
 # XOR32_M0 -> XOR32 (HaydnAsmPrinter 3 re-zero-R0 sites)

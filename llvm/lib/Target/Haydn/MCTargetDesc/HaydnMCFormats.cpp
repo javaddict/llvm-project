@@ -34,6 +34,7 @@
 #include "HaydnFormat.h"
 #include "HaydnFormatERecords.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -43,6 +44,7 @@
 #include <cstdint>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -108,17 +110,71 @@ bool operandClassesMatch(const MCInstrDesc &A, const MCInstrDesc &B) {
   return true;
 }
 
+/// Pad NOP occupancy: FormatEAltSpans is non-NOP only, so walk generated
+/// NOP members at residual index. Prefer HINT (same class as the retired
+/// FieldSlot pad) then any zero-operand member. E2 before E3; Finalize
+/// rebinds to the committed row.
+unsigned formatENopMemberAtIndex(unsigned Index) {
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  unsigned HintE2 = 0;
+  unsigned HintE3 = 0;
+  unsigned AnyE2 = 0;
+  unsigned AnyE3 = 0;
+  for (unsigned I = 0; I < haydn::format_e::FormatEMemberCount; ++I) {
+    const haydn::format_e::FormatEMemberRec &Mem =
+        haydn::format_e::FormatEMembers[I];
+    if (!Mem.IsNop || Mem.EntryIdx != static_cast<uint8_t>(Index))
+      continue;
+    if (I >= FormatEMemberOpcodeCount)
+      continue;
+    const unsigned Opc = FormatEMemberOpcodes[I];
+    if (Opc == 0 || Opc >= MII.getNumOpcodes())
+      continue;
+    const bool IsE2 = Mem.Mode == 0;
+    if (StringRef(Mem.TypeName).equals_insensitive("HINT")) {
+      if (IsE2 && HintE2 == 0)
+        HintE2 = Opc;
+      else if (!IsE2 && HintE3 == 0)
+        HintE3 = Opc;
+      continue;
+    }
+    if (MII.get(Opc).getNumOperands() != 0)
+      continue;
+    if (IsE2 && AnyE2 == 0)
+      AnyE2 = Opc;
+    else if (!IsE2 && AnyE3 == 0)
+      AnyE3 = Opc;
+  }
+  if (HintE2)
+    return HintE2;
+  if (HintE3)
+    return HintE3;
+  if (AnyE2)
+    return AnyE2;
+  return AnyE3;
+}
+
 /// Format E member at residual occupancy index \p Index whose MCInstrDesc
 /// matches the logical (NumDefs + operands). One logical can have two golden
 /// shapes at the same EntryIdx (SLT64 unary dest+src vs SFR-only 2-src;
 /// X2SLT32 is the SFR-only shape). First-match and "smallest OperandCount"
 /// pick the wrong one. No match → 0 so occupancy keeps the FieldSlot Fallback.
 /// EntryIdx is not a new SLOT bit — occupancy stays the residual mask.
+/// Reloc `_W` logicals share the compact catalog span (ADDI32_W → ADDI32).
 unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
-  const std::string Log = haydn::format_e::peelLogicalOpcodeName(
+  std::string Log = haydn::format_e::peelLogicalOpcodeName(
       occupancyOpcodeName(LogicalOpc), /*StripWide=*/false);
+  if (StringRef(Log).equals_insensitive("NOP"))
+    return formatENopMemberAtIndex(Index);
   const haydn::format_e::FormatEAltSpan *Span =
       haydn::format_e::findAltSpan(Log.c_str());
+  if (!Span || Span->Count == 0) {
+    Log = haydn::format_e::peelLogicalOpcodeName(
+        occupancyOpcodeName(LogicalOpc), /*StripWide=*/true);
+    if (StringRef(Log).equals_insensitive("NOP"))
+      return formatENopMemberAtIndex(Index);
+    Span = haydn::format_e::findAltSpan(Log.c_str());
+  }
   if (!Span || Span->Count == 0)
     return 0;
   const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
@@ -142,10 +198,9 @@ unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
     if (Opc == 0 || Opc >= MII.getNumOpcodes())
       continue;
     const MCInstrDesc &MemDesc = MII.get(Opc);
-    if (MemDesc.getNumDefs() != LogDesc.getNumDefs())
-      continue;
     const bool IsE2 = Mem.Mode == 0;
-    if (MemDesc.getNumOperands() == LogDesc.getNumOperands() &&
+    if (MemDesc.getNumDefs() == LogDesc.getNumDefs() &&
+        MemDesc.getNumOperands() == LogDesc.getNumOperands() &&
         operandClassesMatch(LogDesc, MemDesc)) {
       if (IsE2 && ExactE2 == 0)
         ExactE2 = Opc;
@@ -153,9 +208,33 @@ unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
         ExactE3 = Opc;
       continue;
     }
+    // Closed keep-map (tied-acc, CB writeback, AR-UA POST). Not bag-sort.
+    auto KeepKind = [&](unsigned OldI, unsigned NewI) {
+      if (OldI >= LogDesc.getNumOperands() || NewI >= MemDesc.getNumOperands())
+        return false;
+      const MCOperandInfo &AO = LogDesc.operands()[OldI];
+      const MCOperandInfo &BO = MemDesc.operands()[NewI];
+      const bool AReg =
+          AO.OperandType == MCOI::OPERAND_REGISTER || AO.RegClass >= 0;
+      const bool BReg =
+          BO.OperandType == MCOI::OPERAND_REGISTER || BO.RegClass >= 0;
+      if (AReg != BReg)
+        return false;
+      if (AReg && AO.RegClass != BO.RegClass)
+        return false;
+      return true;
+    };
+    if (haydnFormatEKeepOperands(LogDesc, MemDesc, KeepKind)) {
+      if (IsE2 && DropE2 == 0)
+        DropE2 = Opc;
+      else if (!IsE2 && DropE3 == 0)
+        DropE3 = Opc;
+      continue;
+    }
     // Tied-seed / trailing-use drop (X2MOVT32 3-op logical → 2-op member).
     if (MemDesc.getNumOperands() > 0 &&
-        MemDesc.getNumOperands() < LogDesc.getNumOperands()) {
+        MemDesc.getNumOperands() < LogDesc.getNumOperands() &&
+        MemDesc.getNumDefs() == LogDesc.getNumDefs()) {
       if (IsE2 && DropE2 == 0)
         DropE2 = Opc;
       else if (!IsE2 && DropE3 == 0)
@@ -199,11 +278,225 @@ const std::vector<unsigned> *cachedMemberAlts(unsigned Opcode) {
   return &Cache[static_cast<size_t>(Idx)];
 }
 
+/// Occupancy when LogicalMaterialize no longer lists a FieldSlot: walk the
+/// generated alt span at residual indices 0..2. AIE getAlternateInstsOpcode
+/// is TableGen MultiSlot only (AIEMCFormats.h:376-379); Haydn overlays
+/// Format E members because EncodedBytes is not a slot bit.
+const std::vector<unsigned> *cachedFormatEOnlyAlts(unsigned Opcode) {
+  static std::mutex Mu;
+  static DenseMap<unsigned, std::vector<unsigned>> Extra;
+  std::lock_guard<std::mutex> Lock(Mu);
+  auto It = Extra.find(Opcode);
+  if (It != Extra.end())
+    return It->second.empty() ? nullptr : &It->second;
+  std::vector<unsigned> Alts(3, 0);
+  bool Any = false;
+  for (unsigned Slot = 0; Slot < 3; ++Slot) {
+    if (unsigned Mem = formatEMemberAtResidualIndex(Opcode, Slot)) {
+      Alts[Slot] = Mem;
+      Any = true;
+    }
+  }
+  auto Ins = Extra.try_emplace(Opcode, Any ? std::move(Alts)
+                                           : std::vector<unsigned>{});
+  return Ins.first->second.empty() ? nullptr : &Ins.first->second;
+}
+
+bool formatELogicalIsModeOnly(unsigned Opcode, uint8_t WantMode) {
+  const std::string Log = haydn::format_e::peelLogicalOpcodeName(
+      occupancyOpcodeName(Opcode));
+  const haydn::format_e::FormatEAltSpan *Span =
+      haydn::format_e::findAltSpan(Log.c_str());
+  if (!Span || Span->Count == 0)
+    return false;
+  bool SawWant = false;
+  bool SawOther = false;
+  for (unsigned I = 0; I < Span->Count; ++I) {
+    const uint16_t Mid = haydn::format_e::FormatEAltMemberIds[Span->Begin + I];
+    if (Mid >= haydn::format_e::FormatEMemberCount)
+      continue;
+    const haydn::format_e::FormatEMemberRec &M =
+        haydn::format_e::FormatEMembers[Mid];
+    if (M.IsNop)
+      continue;
+    if (M.Mode == WantMode)
+      SawWant = true;
+    else
+      SawOther = true;
+  }
+  return SawWant && !SawOther;
+}
+
 } // namespace
 
 const std::vector<unsigned> *
 HaydnMCFormats::getAlternateInstsOpcode(unsigned Opcode) const {
-  return cachedMemberAlts(Opcode);
+  if (const std::vector<unsigned> *Cached = cachedMemberAlts(Opcode))
+    return Cached;
+  return cachedFormatEOnlyAlts(Opcode);
+}
+
+bool haydnFormatELogicalIsE3Only(unsigned Opcode) {
+  return formatELogicalIsModeOnly(Opcode, /*WantMode=*/1);
+}
+
+bool haydnFormatELogicalIsE2Only(unsigned Opcode) {
+  return formatELogicalIsModeOnly(Opcode, /*WantMode=*/0);
+}
+
+std::optional<SmallVector<unsigned, 4>>
+haydnFormatEKeepOperands(
+    const MCInstrDesc &OldDesc, const MCInstrDesc &NewDesc,
+    function_ref<bool(unsigned, unsigned)> KindOk) {
+  const unsigned OldN = OldDesc.getNumOperands();
+  const unsigned NewN = NewDesc.getNumOperands();
+  const unsigned OldDefs = OldDesc.getNumDefs();
+  const unsigned NewDefs = NewDesc.getNumDefs();
+
+  if (OldN == 0 && NewN == 0)
+    return SmallVector<unsigned, 4>{};
+  if (OldN == 0 || NewN == 0)
+    return std::nullopt;
+
+  auto accept = [&](ArrayRef<unsigned> Keep) -> bool {
+    if (Keep.size() != NewN)
+      return false;
+    if (!KindOk)
+      return true;
+    for (unsigned NewI = 0; NewI != NewN; ++NewI)
+      if (!KindOk(Keep[NewI], NewI))
+        return false;
+    return true;
+  };
+  auto prefix = [&](unsigned N) {
+    SmallVector<unsigned, 4> K;
+    for (unsigned I = 0; I != N; ++I)
+      K.push_back(I);
+    return K;
+  };
+
+  if (OldN == NewN && OldDefs == NewDefs) {
+    auto K = prefix(NewN);
+    if (accept(K))
+      return K;
+  }
+  // Catalog role `reg` dest-as-ins (CSRR / ZERO_GPR / MOVESFR2GPR).
+  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN) {
+    auto K = prefix(NewN);
+    if (accept(K))
+      return K;
+  }
+
+  if (OldDefs == NewDefs && OldN > NewN) {
+    SmallVector<unsigned, 4> Keep;
+    bool DroppedTied = false;
+    for (unsigned I = 0; I != OldN; ++I) {
+      const int Tie = OldDesc.getOperandConstraint(I, MCOI::TIED_TO);
+      if (Tie >= 0 && static_cast<unsigned>(Tie) < OldDefs) {
+        DroppedTied = true;
+        continue;
+      }
+      Keep.push_back(I);
+    }
+    if (DroppedTied && accept(Keep))
+      return Keep;
+  }
+
+  // AR unaligned POST load: [rtd, wb, rs1, rs2, ar_sel, dir_sel] →
+  // [dest1, ar_sel, dest2]. Golden AR window has dest/ar_sel/rs only.
+  if (OldDefs == 2 && NewDefs == 1 && OldN == 6 && NewN == 3) {
+    SmallVector<unsigned, 4> K{0, 4, 2};
+    if (accept(K))
+      return K;
+  }
+  // AR unaligned POST store: [wb, rtd, rs1, rs2, ar_sel, dir_sel] →
+  // [ar_sel, dest1, dest2].
+  if (OldDefs == 1 && NewDefs == 0 && OldN == 6 && NewN == 3) {
+    SmallVector<unsigned, 4> K{4, 1, 2};
+    if (accept(K))
+      return K;
+  }
+  // WBARWUA: [rs, ar_sel, dir_sel] → [ar_sel, dest2].
+  if (OldDefs == 0 && NewDefs == 0 && OldN == 3 && NewN == 2) {
+    SmallVector<unsigned, 4> K{1, 0};
+    if (accept(K))
+      return K;
+  }
+
+  // CB load extra writeback: [dest, wb, base, sel, imm|rs] →
+  // [dest, sel, base, imm|rs].
+  if (OldDefs == NewDefs + 1 && NewDefs == 1 && OldN == NewN + 1 &&
+      NewN >= 3) {
+    SmallVector<unsigned, 4> Keep{0, 3, 2};
+    for (unsigned I = 4; I < OldN && Keep.size() < NewN; ++I)
+      Keep.push_back(I);
+    if (accept(Keep))
+      return Keep;
+  }
+  // CB store extra writeback: [wb, data, base, sel, imm|rs] →
+  // [sel, data, base, imm|rs].
+  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 && NewN >= 3) {
+    SmallVector<unsigned, 4> Keep{3, 1, 2};
+    for (unsigned I = 4; I < OldN && Keep.size() < NewN; ++I)
+      Keep.push_back(I);
+    if (accept(Keep))
+      return Keep;
+  }
+
+  // dest-as-ins skip first ins (LUI vestigial $rs).
+  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 && NewN >= 1) {
+    SmallVector<unsigned, 4> Keep;
+    Keep.push_back(0);
+    for (unsigned NewI = 1; NewI != NewN; ++NewI)
+      Keep.push_back(NewI + 1);
+    if (accept(Keep))
+      return Keep;
+  }
+
+  if (OldDefs == NewDefs && OldN > NewN) {
+    bool AnyTiedUse = false;
+    for (unsigned I = OldDefs; I != OldN; ++I) {
+      const int Tie = OldDesc.getOperandConstraint(I, MCOI::TIED_TO);
+      if (Tie >= 0 && static_cast<unsigned>(Tie) < OldDefs) {
+        AnyTiedUse = true;
+        break;
+      }
+    }
+    if (!AnyTiedUse) {
+      bool TrailingUses = true;
+      for (unsigned I = NewN; I != OldN; ++I)
+        if (I < OldDefs) {
+          TrailingUses = false;
+          break;
+        }
+      if (TrailingUses) {
+        auto K = prefix(NewN);
+        if (accept(K))
+          return K;
+      }
+    }
+  }
+
+  if (OldDefs == NewDefs && OldN == NewN + 1 && OldDefs >= 1 &&
+      OldDefs < NewN) {
+    SmallVector<unsigned, 4> Keep;
+    for (unsigned I = 0; I != OldDefs; ++I)
+      Keep.push_back(I);
+    for (unsigned NewI = OldDefs; NewI != NewN; ++NewI)
+      Keep.push_back(NewI + 1);
+    if (accept(Keep))
+      return Keep;
+  }
+
+  // CSRW catalog is (uimm8, rs); some generated members list (rs, uimm8).
+  // Closed two-op swap, not a class bag-sort.
+  if (OldDefs == 0 && NewDefs == 0 && OldN == 2 && NewN == 2) {
+    SmallVector<unsigned, 4> K{1, 0};
+    if (accept(K))
+      return K;
+  }
+
+  return std::nullopt;
 }
 
 namespace Haydn {
@@ -470,25 +763,58 @@ uint8_t haydnFormatEHeaderByte(unsigned EntryNum) {
       ((EntryNum & 0x1u) << 3));
 }
 
-void haydnEmitFormatEParcelLE(const APInt &Word96, SmallVectorImpl<char> &CB) {
+void haydnEmitFormatEParcelLE(const APInt &Word, SmallVectorImpl<char> &CB) {
   haydn::format::EncodedBytes Parcel = haydnProductionParcelBytes();
   haydn::format::EncodedBits Bits = haydn::format::encodedBitsOrDie(
       haydn::format::BundleFormatRowID::E96TwoEntry);
-  assert(Parcel.Value == 12u && Bits.Value == 96u &&
-         "FE8: emit only Format E 12-byte / 96-bit parcels");
-  assert(Word96.getBitWidth() == Bits.Value &&
+  assert(Word.getBitWidth() == Bits.Value &&
          "Format E parcel APInt width must match production EncodedBits");
   assert(Parcel.Value * 8u == Bits.Value &&
          "production EncodedBytes must pack EncodedBits");
-  // Little-endian: bit 0 in byte 0 … bit 95 in byte 11.
   const size_t Before = CB.size();
   for (unsigned Byte = 0; Byte < Parcel.Value; ++Byte) {
-    uint64_t Chunk = Word96.extractBitsAsZExtValue(8, Byte * 8);
+    uint64_t Chunk = Word.extractBitsAsZExtValue(8, Byte * 8);
     CB.push_back(static_cast<char>(Chunk & 0xFF));
   }
   assert(CB.size() - Before == Parcel.Value &&
          "Format E emit must append exactly product EncodedBytes");
 }
+
+bool haydnFormatEEntryWindow(uint8_t Mode, unsigned EntryIdx, unsigned &Width,
+                             unsigned &LSB) {
+  using namespace haydn::format_e;
+  for (unsigned I = 0; I < FormatETypeLayoutCount; ++I) {
+    const FormatETypeLayoutRec &L = FormatETypeLayouts[I];
+    if (L.Mode != Mode || L.EntryIdx != static_cast<uint8_t>(EntryIdx))
+      continue;
+    if (L.EntryHi < L.EntryLo)
+      return false;
+    Width = static_cast<unsigned>(L.EntryHi) - L.EntryLo + 1u;
+    LSB = L.EntryLo;
+    return true;
+  }
+  return false;
+}
+
+namespace {
+constexpr bool formatEEntryWindowIs(uint8_t Mode, unsigned EntryIdx,
+                                    unsigned ExpectW, unsigned ExpectL) {
+  using namespace haydn::format_e;
+  for (unsigned I = 0; I < FormatETypeLayoutCount; ++I) {
+    const FormatETypeLayoutRec &L = FormatETypeLayouts[I];
+    if (L.Mode != Mode || L.EntryIdx != static_cast<uint8_t>(EntryIdx))
+      continue;
+    return (static_cast<unsigned>(L.EntryHi) - L.EntryLo + 1u) == ExpectW &&
+           L.EntryLo == ExpectL;
+  }
+  return false;
+}
+static_assert(formatEEntryWindowIs(0, 0, 45, 6), "E2 e0 generated window");
+static_assert(formatEEntryWindowIs(0, 1, 41, 51), "E2 e1 generated window");
+static_assert(formatEEntryWindowIs(1, 0, 31, 6), "E3 e0 generated window");
+static_assert(formatEEntryWindowIs(1, 1, 31, 37), "E3 e1 generated window");
+static_assert(formatEEntryWindowIs(1, 2, 27, 68), "E3 e2 generated window");
+} // namespace
 
 bool haydnTryGetCanonicalIdleParcel(SmallVectorImpl<char> &Out) {
   if (!haydnHasCanonicalIdleParcel())

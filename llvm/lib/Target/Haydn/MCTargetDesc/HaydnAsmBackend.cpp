@@ -139,6 +139,46 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       getContext().reportError(Fixup.getLoc(), "fixup offset exceeds fragment size");
       return;
     }
+    // Control P is the parcel origin (AIE translateFixupsInComposite offset 0;
+    // AIEBaseMCCodeEmitter.cpp:231-232). A mid-parcel r_offset makes lld
+    // compute P = PC+N so linked B/JAL targets miss the record grid.
+    if (Asm && FI.IsPCRel) {
+      switch (R) {
+      case HaydnReloc::RelocKind::BranchSImm16:
+      case HaydnReloc::RelocKind::CallSImm20:
+      case HaydnReloc::RelocKind::WIDE_BranchSImm12:
+      case HaydnReloc::RelocKind::WIDE_BranchSImm12_RI:
+      case HaydnReloc::RelocKind::WIDE_CallSImm20:
+      case HaydnReloc::RelocKind::HWLoopOff1:
+      case HaydnReloc::RelocKind::HWLoopOff2:
+      case HaydnReloc::RelocKind::JALRSImm12: {
+        const unsigned Parcel = haydnProductionParcelBytes().Value;
+        const uint64_t Abs =
+            Asm->getFragmentOffset(F) + Fixup.getOffset();
+        if (Parcel > 1 && (Abs % Parcel) != 0) {
+          getContext().reportError(
+              Fixup.getLoc(),
+              "control relocation offset is not an exact Format E record");
+          return;
+        }
+        // JALR is rs+imm (not PC-relative); odd immediates are legal.
+        // PC-relative B/JAL/HWLOOP displacements must be whole parcels so
+        // the resolved target is an exact code record.
+        if (R != HaydnReloc::RelocKind::JALRSImm12 && FI.IsPCRel &&
+            Parcel > 1 &&
+            (static_cast<int64_t>(Value) % static_cast<int64_t>(Parcel)) !=
+                0) {
+          getContext().reportError(
+              Fixup.getLoc(),
+              "control relocation target is not an exact Format E record");
+          return;
+        }
+        break;
+      }
+      default:
+        break;
+      }
+    }
     // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
     // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI} FieldLsb is mode/entry
     // dependent (E2 e0 table default vs E3 e0/e1/e2).
@@ -182,7 +222,7 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       "FIXUP_HAYDN_WIDE_CallSImm20",
       "FIXUP_HAYDN_S0LSOff4_2",   "FIXUP_HAYDN_S0LSOff4_3",
       "FIXUP_HAYDN_S0LSOff2_0",   "FIXUP_HAYDN_S0LSOff3_0",
-      "FIXUP_HAYDN_LS_IMM",
+      "FIXUP_HAYDN_LS_IMM",       "FIXUP_HAYDN_JALRSImm12",
   };
   static_assert(std::size(Names) == Haydn::NumTargetFixupKinds,
                 "Names[] must list every target fixup kind, in enum order");

@@ -31,6 +31,8 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNRELOCLAYOUT_H
 #define LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNRELOCLAYOUT_H
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 #include <cstdint>
 
 namespace llvm::HaydnReloc {
@@ -80,6 +82,12 @@ enum class RelocKind : uint16_t {
   S0LSOff4_3 = 28, // LD64/ST64 doubleword offset (÷8)
   S0LSOff2_0 = 29, // LD16/LDU16/LD8/LDU8 (unscaled)
   S0LSOff3_0 = 30, // ST16/ST8 (unscaled)
+  // JALR RI12 symbolic imm12: signed byte displacement from parcel origin
+  // (assembler convention; execution stays golden PC = rs + imm12). Same
+  // field numbers as WIDE_BranchSImm12_RI but distinct identity so a JALR
+  // fixup can never borrow the branch row (W27). MC-only — no ELF reloc
+  // minted yet; unresolved externals fail closed in the object writer.
+  JALRSImm12 = 31,
   Invalid = 0xFFFF,
 };
 
@@ -101,11 +109,11 @@ enum class RelocTrans : uint8_t {
 // single source of truth; both the MC writer/reader and the lld writer/reader
 // consult it.
 struct RelocFieldInfo {
-  uint16_t NBytes;     // image width patched (1, 2, 4, or 6 bytes)
+  uint16_t NBytes;     // image width patched (1, 2, 4, 6, 8, or 12 bytes)
   uint8_t FieldSize;   // field bit width
   uint8_t FieldLsb;    // LSB position of the field within the N-byte LE image
   uint8_t ValueShift;  // input value pre-shift: 0 (byte), 2 (word/hwloop)
-  uint8_t Align;       // required input alignment (1, 2, 4)
+  uint8_t Align;       // required input alignment (1, 2, 4; WIDE call is 2)
   bool IsSigned;       // writer: isInt<FieldSize>; reader: sign-extend
   bool IsPCRel;        // informational (PC-relativity is resolved upstream)
   RelocTrans Trans;    // HI/LO transform, shifted-field, or Unresolved gate
@@ -121,6 +129,32 @@ bool isRelocTransformReady(RelocKind R);
 // Map an MC target fixup kind (FIXUP_HAYDN_*) to the neutral relocation.
 // Returns RelocKind::Invalid for non-target (generic FK_Data_*) kinds.
 RelocKind mapFixupKind(unsigned MCFixupKind);
+
+// Inverse of mapFixupKind. Returns FIXUP_HAYDN_INVALID when \p R has no
+// MC target kind (Invalid / unmapped).
+unsigned mapRelocKindToFixup(RelocKind R);
+
+/// One relocatable window (AIE `FixupField` shape): LSB in the Format E
+/// parcel plus bit width. Offset == kUnspecifiedFieldLsb means "size only".
+inline constexpr unsigned kUnspecifiedFieldLsb = ~0u;
+struct FixupField {
+  unsigned Offset = kUnspecifiedFieldLsb;
+  unsigned Size = 0;
+};
+
+/// AIE `findFixupfromFixupFields`: pick the unique published RelocKind whose
+/// RelocFieldInfo matches generated Format E type geometry.
+///
+/// \p TypeName / \p TypeOpcode are Format E catalog fields (I12/RI12/I20/…),
+/// not logical mnemonics. \p Fields[0].Size disambiguates HWLoop Off1 (6) vs
+/// Off2 (12). \p IsLSUnit is required for RI6 (ALU RI6 has no LS_IMM row).
+///
+/// Returns Invalid when zero or >1 product-ready rows match. JALR is RI12
+/// type-opcode 1 and maps to the dedicated JALRSImm12 row (W27: never borrow
+/// the RI12 branch row); golden execution stays PC = rs + imm12 (GE96-03).
+RelocKind findFixupFromFixupFields(StringRef TypeName, unsigned TypeOpcode,
+                                   ArrayRef<FixupField> Fields,
+                                   unsigned FormatBytes, bool IsLSUnit);
 
 // Read an N-byte little-endian image (N in {1,2,4,6}) as a uint64_t.
 uint64_t readImage(const uint8_t *Loc, unsigned NBytes);
@@ -145,6 +179,10 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
 //   HWLoopOff1/Off2 — E2 HWLRIII Off1/Off2 @ [13]/[36]; E3 F2 e0 @ [18]/[24],
 //     e1 @ [49]/[55] (golden absolute parcel bits; table default is E2 F2
 //     Off1@32 / Off2@38).
+//   LO20/PC_LO20 — ALU RI20 (E2-only type): e0 ALU0 @31 (table default);
+//     e1 ALU1 @65 (golden imm bit[84:65]).
+//   LS_IMM — LS RI6: E2 e0 LOADSTORE0 @28 (table default); E2 e1 LOAD1 @72;
+//     E3 e0 LOADSTORE0 @25; E3 e1 LOAD1 @54; E3 e2 LOAD1 @85.
 // Returns the table default when Loc is not a recognizable Format E site.
 unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc);
 
