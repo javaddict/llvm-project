@@ -9,10 +9,10 @@
 
 # MOVE32-class MI-versus-descriptor SMS port / placement differential pin:
 #   MOVE32 is tablegen'd (outs rd), (ins rs1, rs2). copyPhysReg emits
-#   MOVE32 rd, rs, rs. PortModel MI packing (calculateResMIIDFA) dedupes
-#   repeated sources → 1R1W. Descriptor-only MID placement always sees
-#   2R1W and conservatively overcounts. SMS-PORT metrics log the split;
-#   SMS-HOOK does not reject (not an operand-dependent format predicate).
+#   MOVE32 rd, rs, rs. Per-field port law counts both source fields
+#   (2R1W) on the MI path; descriptor shape is the same 2R1W so
+#   desc_overcounts_mi=0. SMS-PORT metrics log the agreement; SMS-HOOK
+#   does not reject (not an operand-dependent format predicate).
 #
 #   Body: three independent MOVE32 (format greedy=exhaustive=1). Write pool
 #   2W forces DFA ResMII ≥ 2 under the MI path (same as port-forced ADD32).
@@ -27,10 +27,10 @@
 # PORT-NOT: SMS-HANDOFF: reject
 # PORT-NOT: Unable to analyzeLoop
 # PORT: SMS-RESMII: body_ops=3 greedy=1 exhaustive=1 overestimate=0
-# PORT: SMS-PORT: move32-class ops=3 desc_shape=2R1W mi_repeated_src=1R1W desc_overcounts_mi=1
+# PORT: SMS-PORT: move32-class ops=3 desc_shape=2R1W mi_repeated_src=2R1W desc_overcounts_mi=0
 # PORT: SMS-HANDOFF: metrics-only freeze
 # PORT: SMS-HANDOFF: qual-kernel body_ops=3 coissue_packable=1 exact_packable=1 exhaustive=1
-# MI-path ResMII ≥ 2 (3 writes under 2W); placement may overcount reads.
+# MI-path ResMII ≥ 2 (3 writes under 2W); per-field reads match the descriptor.
 # PORT: Return Res MII:{{[2-9]|[1-9][0-9]+}}
 
 --- |
@@ -92,7 +92,7 @@ body:             |
     %7:gpr32 = PHI %2, %bb.1, %8, %bb.2
     %9:gpr32 = PHI %3, %bb.1, %10, %bb.2
     ; Three independent MOVE32 with repeated sources (copyPhysReg shape).
-    ; MI path: 1R1W each; descriptor placement shape: 2R1W each.
+    ; Per-field: MI and descriptor are both 2R1W.
     %6:gpr32 = MOVE32 %5, %5
     %8:gpr32 = MOVE32 %7, %7
     %10:gpr32 = MOVE32 %9, %9

@@ -63,11 +63,11 @@ class HaydnPipelinerLoopInfo : public TargetInstrInfo::PipelinerLoopInfo {
   // Optional XORI invert on the latch condition path (see HaydnCountableLoop).
   MachineInstr *InvertMI = nullptr;
   Register TripCountReg;
-  // Cached loop basic block — set in the constructor because setPreheader
-  // may erase EndLoop (when the expander clones the kernel)
-  // making EndLoop->getParent unsafe in later adjustTripCount calls.
-  MachineBasicBlock *LoopBB;
-  DebugLoc DL;
+  // No cached loop-MBB or DebugLoc members: the classic expander erases the
+  // original block (cleanup), the soft adjustTripCount must not insert into
+  // it (F41), and every hook that still emits uses a locally derived DebugLoc
+  // (see createTripCountGreaterCondition).
+
   // ZOL (Zero-Overhead Loop) mode. When true, the loop is already in
   // hardware-loop form (LoopStart in preheader + PseudoLoopEnd in latch).
   // SMS pipelines it directly, editing LoopStart's adj operand for trip-count
@@ -86,16 +86,14 @@ public:
                          Register TripCountReg,
                          MachineInstr *InvertMI = nullptr)
       : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(CmpMI), InvertMI(InvertMI),
-        TripCountReg(TripCountReg), LoopBB(EndLoop->getParent()),
-        DL(EndLoop->getDebugLoc()) {}
+        TripCountReg(TripCountReg) {}
 
   // ZOL constructor — for loops already in hardware-loop form.
   HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
                          MachineInstr *EndLoop, MachineInstr *LoopStart,
                          int64_t MinTripCount)
       : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(nullptr), InvertMI(nullptr),
-        TripCountReg(), LoopBB(EndLoop->getParent()),
-        DL(EndLoop->getDebugLoc()), IsZOL(true), LoopStart(LoopStart),
+        TripCountReg(), IsZOL(true), LoopStart(LoopStart),
         MinTripCount(MinTripCount) {}
 
   bool shouldIgnoreForPipelining(const MachineInstr *MI) const override;
@@ -109,12 +107,22 @@ public:
   // MachinePipeliner success remark — no generic post-expand virtual.
   // Costs hwloop geometry on final parcels (kernel II + MinBodyBundles pad);
   // SetupIssueDistance is preheader→BEGIN, never an II>=Setup floor.
+  // F41: -haydn-sms-containment-max may lift the bound for SOFT loops only
+  // (test/bisect through the classic expander); ZOL multi-stage stays
+  // unconditionally contained (post-RA HaydnMultiStageSMS owns it).
   bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
 
   std::optional<bool>
   createTripCountGreaterCondition(int TC, MachineBasicBlock &MBB,
                                   SmallVectorImpl<MachineOperand> &Cond) override;
 
+  // F41 law: ZOL edits the LoopStart $adj operand (hw counter is not
+  // expander-cloned). Soft counted loops are a STRUCTURAL no-op: the
+  // expander clones the stage-0 control chain into every prolog (delta
+  // realized structurally) and any inserted def either dangles in the
+  // erased original MBB or corrupts the already-inserted original-count
+  // guards via replaceRegWith. Peer law: ARM soft adjustTripCount == {};
+  // AIE soft base == log-only. Never insert MIR here for soft loops.
   void adjustTripCount(int TripCountAdjust) override;
 
   void setPreheader(MachineBasicBlock *NewPreheader) override;

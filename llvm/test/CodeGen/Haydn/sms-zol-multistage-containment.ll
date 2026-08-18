@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -haydn-enable-hwloops \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=+hwloop -haydn-enable-hwloops \
 ; RUN:     -global-isel-abort=1 -verify-machineinstrs -O2 \
 ; RUN:     -debug-only=pipeliner < %s -o %t.s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=SWP

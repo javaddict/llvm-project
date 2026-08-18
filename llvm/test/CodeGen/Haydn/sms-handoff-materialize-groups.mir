@@ -1,15 +1,23 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+# RUN:   -O2 -stop-after=pipeliner -debug-only=pipeliner \
+# RUN:   -verify-machineinstrs %S/sms-f41-containment-product-pin.ll \
+# RUN:   -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=PIPE
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
-# RUN:   -debug-only=pipeliner -verify-machineinstrs \
-# RUN:   %S/sms-format-shoulduse-reject.mir -o - 2>&1 \
-# RUN:   | FileCheck %s --check-prefixes=PIPE,GROUPS
+# RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=GROUPS
 # REQUIRES: asserts
 
 # Role: Option C pre-RA multi-stage containment (no SMS BUNDLE freeze).
-# Multi-stage schedule found then rejected; no multi-member logical BUNDLE.
+# First run: matrix_sum IR finds stages>=2; product containment rejects it.
+# Second run: dual-load MAC MIR stays bare logical (no multi-member BUNDLE).
+# The MAC MIR is format-ResMII-bound stages=1, so it cannot own the
+# StageCount>1 reject pin. SMS-RESMII overestimate on the IR body is
+# metrics-only (analyzeLoop continues).
 
 # PIPE-NOT: SMS-HOOK: reject
-# PIPE-NOT: SMS-RESMII: reject
 # PIPE-NOT: SMS-HANDOFF: reject
+# PIPE-NOT: analyzeLoopForPipelining fail-closed
 # PIPE-DAG: Schedule Found? 1 (II={{[1-9][0-9]*}})
 # PIPE-DAG: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
 # PIPE-DAG: Target rejected schedule

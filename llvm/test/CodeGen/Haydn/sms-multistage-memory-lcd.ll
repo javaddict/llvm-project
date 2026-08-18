@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms -haydn-multistage-sms-analysis-only \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.rmk | FileCheck %s --check-prefix=ASM

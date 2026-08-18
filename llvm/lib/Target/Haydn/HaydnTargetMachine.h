@@ -30,6 +30,7 @@ class HaydnTargetMachine : public CodeGenTargetMachineImpl {
 
   // Immutable production object-encoding profile for the whole target.
   // Selected once; never inferred from parcel byte width or mnemonic.
+  // Shipping HaydnFormat is E96 only — not a multi-bundle fixture selector.
   haydn::format::ObjectEncodingProfileID EncodingProfile =
       haydn::format::ObjectEncodingProfileID::E96;
 
@@ -39,6 +40,12 @@ public:
                     std::optional<Reloc::Model> RM,
                     std::optional<CodeModel::Model> CM, CodeGenOptLevel OL,
                     bool JIT);
+
+  // Product default for the SCEV-proven hardware-loop path. AIE inserts
+  // HardwareLoops unconditionally at O1+ (AIE2TargetMachine.cpp:81-82);
+  // Hexagon defaults ON via DisableHardwareLoops (HexagonTargetMachine.cpp:48-49).
+  // Haydn stays OFF until independent then combined qualification.
+  static constexpr bool hardwareLoopsProductDefaultEnabled() { return false; }
 
   /// Sole production ObjectEncodingProfile (E96). Not a runtime selector flip.
   haydn::format::ObjectEncodingProfileID getObjectEncodingProfileID() const {
@@ -53,6 +60,12 @@ public:
     return *P;
   }
 
+  // Single AIE-aligned pipeline (AIE2TargetMachine.cpp:229-244). Order lives
+  // in HaydnTargetMachine.cpp and contracts/pipeline.md. Late Finalize+Verify
+  // after BranchRelaxation reuses the same Finalize/Verify
+  // (AIEFinalizeBundle.cpp:40-59). Residual hygiene (R15 leftover, P19
+  // Auto.td/CMake) lives in Inputs SOURCE-AUTHORITY / FAULT / CORRUPTION —
+  // inventory pins, not a product registry, and not a second format pipeline.
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
   // provide TTI so the IR unroller + optimizer get Haydn-specific hints.

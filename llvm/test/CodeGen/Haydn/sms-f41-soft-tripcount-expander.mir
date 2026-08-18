@@ -1,0 +1,173 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+# RUN:   -O2 -stop-after=pipeliner \
+# RUN:   -haydn-sms-containment-max=2 -haydn-pipeliner-track-regpressure=false \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs \
+# RUN:   %S/sms-f41-containment-product-pin.ll -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SWP
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+# RUN:   -O2 -stop-after=pipeliner \
+# RUN:   -haydn-sms-containment-max=2 -haydn-pipeliner-track-regpressure=false \
+# RUN:   -verify-machineinstrs %S/sms-f41-containment-product-pin.ll -o - \
+# RUN:   | FileCheck %s --check-prefix=MIR
+# REQUIRES: asserts
+
+# REGRESSION TEST (W34 / F41, CR-H3): soft-path adjustTripCount must not
+# insert a def into the MBB the classic expander erases.
+#
+# Bug: HaydnPipelinerLoopInfo::adjustTripCount (soft counted arm) built
+#   NewTC = ADDI32_W TripCountReg, delta
+# at the head of the ORIGINAL loop MBB and then did
+# MRI.replaceRegWith(TripCountReg, NewTC) function-wide. The classic
+# ModuloScheduleExpander erases the original loop MBB in cleanup()
+# (BB->clear(); BB->eraseFromParent()) while every replaceRegWith-rewritten
+# use survives in the kernel/prologs/epilogs -> dangling vreg; the machine
+# verifier reports "Reading virtual register without a def" (or, without a
+# verifier, the adjustment is silently lost / guard compares read a def that
+# no longer dominates them). The bug was latent only because StageCount==1
+# schedules never reach the expander (generic "No overlapped iterations"
+# skip) and StageCount>1 was containment-rejected before expansion.
+#
+# A second, subtler wrong-code layer: addBranches inserts the prologue guards
+# (createTripCountGreaterCondition, reading the ORIGINAL TripCountReg) BEFORE
+# calling adjustTripCount, so replaceRegWith would also rewrite those guards
+# to read the adjusted count, flipping skip-prologue decisions.
+#
+# Fix (peer law ARM ARMPipelinerLoopInfo::adjustTripCount == {} and AIE soft
+# base == log-only): the soft arm is a structural no-op. The expander clones
+# the stage-0 loop-control chain (shouldIgnoreForPipelining +
+# computeUnpipelineableNodes) into every prolog, so the peel delta is
+# realized structurally; no def is inserted anywhere and TripCountReg is
+# never replaced.
+#
+# Test design: the dual-load MAC MIR in this file is format-ResMII-bound
+# (stages=1) and never reaches the expander ("No overlapped iterations").
+# The StageCount>1 expander contract lives on the matrix_sum IR body
+# (sms-f41-containment-product-pin.ll), which finds stages>=2 at -O2.
+# Lifting -haydn-sms-containment-max=2 (soft loops only; product value
+# stays 1) drives that schedule through the FULL classic expander:
+# prologue guards + setPreheader + adjustTripCount + cleanup().
+# -haydn-pipeliner-track-regpressure=false keeps the pin independent of
+# schedule-shape-fragile organic pressure. If the bug returns, this test
+# fails the machine verifier (dangling vreg) or loses the prologue guard
+# chain. PASS = expander runs, accept log with stages>=2, the SMS-TC no-op
+# line fires, and the verifier stays clean.
+
+# SWP: Schedule Found? 1 (II={{[1-9][0-9]*}})
+# SWP: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[1-9][0-9]*}}
+# SWP: SMS-TC: soft adjustTripCount delta={{-?[0-9]+}} is a structural no-op
+# SWP-NOT: SMS-SHOULDUSE: reject
+# SWP-NOT: Reading virtual register without a def
+
+# The expanded function keeps a kernel and the verifier stays clean.
+# MIR: name: sms_f41_containment_pin
+# MIR-NOT: Reading virtual register without a def
+# MIR: RET
+
+--- |
+  define i64 @sms_f41_soft_tripcount(ptr nocapture readonly %a,
+                                     ptr nocapture readonly %b,
+                                     i32 %n) #0 {
+  entry:
+    br i1 undef, label %loop.preheader, label %exit
+  loop.preheader:
+    br label %loop
+  loop:
+    br i1 undef, label %exit, label %loop
+  exit:
+    ret i64 0
+  }
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+name:            sms_f41_soft_tripcount
+alignment:       16
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          false
+isSSA:           true
+noVRegs:         false
+registers:
+  - { id: 0, class: gpr32 }
+  - { id: 1, class: gpr32 }
+  - { id: 2, class: gpr32 }
+  - { id: 3, class: gpr32 }
+  - { id: 5, class: gpr32 }
+  - { id: 6, class: gpr32 }
+  - { id: 7, class: gpr32 }
+  - { id: 8, class: dr64 }
+  - { id: 9, class: dr64 }
+  - { id: 10, class: dr64 }
+  - { id: 13, class: dr64 }
+  - { id: 14, class: gpr32 }
+  - { id: 15, class: gpr32 }
+  - { id: 17, class: gpr32 }
+  - { id: 18, class: gpr32 }
+  - { id: 20, class: dr64 }
+  - { id: 21, class: dr64 }
+  - { id: 26, class: gpr32 }
+  - { id: 27, class: gpr32 }
+  - { id: 28, class: gpr32 }
+  - { id: 29, class: gpr32 }
+  - { id: 30, class: gpr32 }
+  - { id: 31, class: gpr32 }
+  - { id: 32, class: gpr32 }
+  - { id: 33, class: gpr32 }
+liveins:
+  - { reg: '$r1' }
+  - { reg: '$r2' }
+  - { reg: '$r3' }
+frameInfo:
+  maxAlignment:    1
+machineFunctionInfo: {}
+body:             |
+  bb.0.entry:
+    successors: %bb.1(0x50000000), %bb.3(0x30000000)
+    liveins: $r1, $r2, $r3
+
+    %0:gpr32 = COPY $r1
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = COPY $r3
+    %3:gpr32 = LOADI32 0
+    %21:dr64 = LOADI64 0
+    %34:gpr32 = SLT32 %3, %2
+    %35:gpr32 = XORI32 %34, 1
+    BNEZ_W %35, %bb.3
+    B %bb.1
+
+  bb.1.loop.preheader:
+    successors: %bb.2(0x80000000)
+
+    %14:gpr32 = LOADI32 -1
+
+  bb.2.loop:
+    successors: %bb.3(0x04000000), %bb.2(0x7c000000)
+
+    %5:gpr32 = PHI %0, %bb.1, %18, %bb.2
+    %6:gpr32 = PHI %1, %bb.1, %17, %bb.2
+    %7:gpr32 = PHI %2, %bb.1, %15, %bb.2
+    %8:dr64 = PHI %13, %bb.2, %21, %bb.1
+    %33:gpr32 = ADDI32_W %5, 4
+    %31:gpr32 = LD32 %5, 0 :: (load (s32))
+    %32:gpr32 = LD32 %33, 0 :: (load (s32))
+    %9:dr64 = MOV_GPR_TO_DR64 %31, %32
+    %30:gpr32 = ADDI32_W %6, 4
+    %28:gpr32 = LD32 %6, 0 :: (load (s32))
+    %29:gpr32 = LD32 %30, 0 :: (load (s32))
+    %10:dr64 = MOV_GPR_TO_DR64 %28, %29
+    %17:gpr32 = ADDI32_W %6, 8
+    %13:dr64 = F2MULAA32RS_HHLL %8, %9, %10
+    %15:gpr32 = ADD32 %7, %14
+    %18:gpr32 = ADDI32 %5, 8
+    %26:gpr32 = SEQ32 %15, %3
+    %27:gpr32 = XORI32 %26, 1
+    BNEZ_W %27, %bb.2
+    B %bb.3
+
+  bb.3.exit:
+    %20:dr64 = PHI %21, %bb.0, %13, %bb.2
+    $d0 = COPY %20
+    RET implicit $r15, implicit $d0, implicit $r15
+
+...

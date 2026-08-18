@@ -25,7 +25,7 @@
 #   * Port-forced ResMII ≥ 2: sms-format-resmii-port-forced.mir (format=1,
 #     DFA/ports open a second cycle under GPR 2W).
 #   * MOVE32-class MI-vs-desc port differential: sms-format-resmii-move32-port.mir
-#     (SMS-PORT metrics; placement 2R1W vs MI 1R1W; not SMS-HOOK reject).
+#     (SMS-PORT metrics; MI and descriptor both 2R1W per-field).
 #   * SMS-HANDOFF metrics-only freeze: analyzeLoop logs qual-kernel post-RA
 #     packability (exact_packable=1); recordSuccessfulSMS scalar only.
 #     Default OFF: expansion keeps logical opcodes (HANDOFF-NOT:BUNDLE).

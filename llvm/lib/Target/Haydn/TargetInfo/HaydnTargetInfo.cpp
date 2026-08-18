@@ -7,6 +7,10 @@
 //===----------------------------------------------------------------------===//
 //
 // This file provides the Haydn target implementation.
+// Triple registration is haydn / "Haydn 3-issue VLIW DSP". ELF e_machine
+// EM_HAYDN=259 is experimental and collides with official Kalray KVX —
+// the object writer stays on that number and distinguishes product
+// objects with EF_HAYDN_E96=0x1. Do not invent a replacement here.
 //
 //===----------------------------------------------------------------------===//
 

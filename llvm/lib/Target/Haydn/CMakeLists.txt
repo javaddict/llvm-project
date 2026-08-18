@@ -62,9 +62,12 @@ add_llvm_target(HaydnCodeGen
   HaydnVerifyBundles.cpp
   HaydnBundleVerify.cpp
   HaydnBundleFormatSolver.cpp
+  HaydnBundleMaterialize.cpp
+  HaydnResourceCycle.cpp
   HaydnLatencyStalls.cpp
   HaydnHazardRecognizer.cpp
   HaydnHardwareLoops.cpp
+  HaydnHWLoopDemote.cpp
   HaydnFixupHwLoops.cpp
   HaydnEnsureTerminators.cpp
   HaydnAlternateDescriptors.cpp
@@ -112,29 +115,33 @@ add_subdirectory(TargetInfo)
 # (bundlesim/CMakeLists.txt:82-83 and :538-546). AIE has no golden importer;
 # formats come from TableGen -gen-instr-format (AIE/CMakeLists.txt:18) and
 # AIEMCFormats.h:45-47 generated includes.
+# Golden check targets require an explicit dir. Peer: BundleSim
+# bundlesim/CMakeLists.txt:529-553 (env or -D cache; skip if unset).
+# AIE has no golden importer (AIE/CMakeLists.txt:18 TableGen -gen-instr-format).
+# Never fall back to a host-absolute plans-tree path or a home-directory copy.
 if(Python3_EXECUTABLE)
+  set(_HAYDN_GOLDEN_DIR "")
   if(DEFINED ENV{HAYDN_GOLDEN_DIR} AND NOT "$ENV{HAYDN_GOLDEN_DIR}" STREQUAL "")
     set(_HAYDN_GOLDEN_DIR "$ENV{HAYDN_GOLDEN_DIR}")
+  elseif(DEFINED HAYDN_GOLDEN_DIR AND NOT "${HAYDN_GOLDEN_DIR}" STREQUAL "")
+    set(_HAYDN_GOLDEN_DIR "${HAYDN_GOLDEN_DIR}")
   elseif(DEFINED ENV{BUNDLESIM_GOLDEN_DIR} AND NOT "$ENV{BUNDLESIM_GOLDEN_DIR}" STREQUAL "")
     set(_HAYDN_GOLDEN_DIR "$ENV{BUNDLESIM_GOLDEN_DIR}")
-  else()
-    set(_HAYDN_GOLDEN_DIR "/ssd2/mhyang/haydn-plans/Database/golden")
+  elseif(DEFINED BUNDLESIM_GOLDEN_DIR AND NOT "${BUNDLESIM_GOLDEN_DIR}" STREQUAL "")
+    set(_HAYDN_GOLDEN_DIR "${BUNDLESIM_GOLDEN_DIR}")
   endif()
-  if(EXISTS "${_HAYDN_GOLDEN_DIR}/golden/format_e_bit_layout_v2.json"
-     AND NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json")
-    set(_HAYDN_GOLDEN_DIR "${_HAYDN_GOLDEN_DIR}/golden")
-  endif()
-  # Discovery, not trust (content is hash-pinned): fall back to the user
-  # database copy when the plans tree is not on this machine.
-  if(NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json"
-     AND EXISTS "$ENV{HOME}/haydn/format_e_bit_layout_v2.json")
-    set(_HAYDN_GOLDEN_DIR "$ENV{HOME}/haydn")
+  if(NOT _HAYDN_GOLDEN_DIR STREQUAL "")
+    if(EXISTS "${_HAYDN_GOLDEN_DIR}/golden/format_e_bit_layout_v2.json"
+       AND NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json")
+      set(_HAYDN_GOLDEN_DIR "${_HAYDN_GOLDEN_DIR}/golden")
+    endif()
   endif()
   # The canonical-vector ledger exists only where it was authored (and must
   # be regenerated against the repaired golden before --check passes again).
-  # Without it the checks cannot run — degrade to a loud skip instead of
-  # wedging every build that depends on HaydnTests.
-  if(NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_canonical_vectors_v1.json")
+  # Without it the checks cannot run — skip if unset or ledger missing
+  # instead of wedging every build that depends on HaydnTests.
+  if(_HAYDN_GOLDEN_DIR STREQUAL "" OR
+     NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_canonical_vectors_v1.json")
     set(_HAYDN_CHECK_SKIP TRUE)
   endif()
   if(_HAYDN_CHECK_SKIP)

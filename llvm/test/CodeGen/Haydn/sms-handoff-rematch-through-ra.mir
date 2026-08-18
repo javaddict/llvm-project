@@ -1,21 +1,21 @@
-# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -start-before=machine-scheduler \
 # RUN:   -stop-before=greedy -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=SCHED
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=register-coalescer \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -run-pass=register-coalescer \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COALESCER
-# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -start-before=machine-scheduler \
 # RUN:   -stop-after=greedy -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=GREEDY
-# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -start-before=machine-scheduler \
 # RUN:   -stop-after=virtregrewriter -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=VRW
-# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -start-before=machine-scheduler \
 # RUN:   -stop-after=virtregrewriter -stress-regalloc=4 -verify-machineinstrs \
 # RUN:   %s -o - | FileCheck %s --check-prefix=SPILL
-# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -start-before=machine-scheduler \
 # RUN:   -stop-after=greedy -haydn-ra-compact-hints=true -verify-machineinstrs \
 # RUN:   %s -o - | FileCheck %s --check-prefix=GREEDY
-# RUN: llc -mtriple=haydn-unknown-elf -start-before=machine-scheduler \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -start-before=machine-scheduler \
 # RUN:   -stop-after=virtregrewriter -haydn-ra-compact-hints=true \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=VRW
 # REQUIRES: asserts

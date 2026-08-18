@@ -1,14 +1,28 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -O2 -debug-only=pipeliner < %s 2>&1 \
-; RUN:     | FileCheck %s --check-prefix=SWP
+; RUN:     -verify-machineinstrs -O2 -stop-after=pipeliner -debug-only=pipeliner \
+; RUN:     < %s 2>&1 | FileCheck %s --check-prefix=SWP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -O2 < %s | FileCheck %s --check-prefix=ASM
+; RUN:     -verify-machineinstrs -O2 -stop-after=pipeliner \
+; RUN:     -haydn-enable-multistage-sms=false < %s \
+; RUN:     | FileCheck %s --check-prefix=ASM
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -verify-machineinstrs -O2 \
+; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-analysis-only \
+; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
+; RUN:   2>%t.postra.rmk | FileCheck %s --check-prefix=POSTRA-ASM
+; RUN: FileCheck %s --check-prefix=POSTRA < %t.postra.rmk
 
 ; Role: semantic — NatureDSP bkfir32x32 MAC hot-loop shape: dual coef loads + 4x4
 ; acc-MAC chains + dual circular-buffer sample loads. Positive SMS schedule-found
 ; pin: SMS pipelines this hot MAC loop (no scalar fallback). Requires MAC
 ; acc->acc latency 1, load->acc-MAC latency 2, S2-first pickSlot, ADDI32 (not
 ; ADDI32_W), and MachinePipeliner computeNodeOrder pred_L filtered by NodeSet.
+;
+; Hang containment: generic SMS arms still stop after the pipeliner so
+; "Schedule Found?" stays independent of RA. The POSTRA arm runs through
+; RA + post-RA analysis-only; Latest / LastEarliestPusher caps keep the
+; MAC DAG from hanging. Product multi-stage stays OFF.
 ;
 ; Why this is contract-only (no brittle bundle body): the D999 no-forwarding
 ; fix changes SMS placement to call the operand-aware MI overload of
@@ -29,8 +43,16 @@
 ; SWP: Schedule Found? 1
 ; SWP-NOT: Unable to analyzeLoop, can NOT pipeline Loop
 
-; ASM-LABEL: bkfir_mac_hot:
-; ASM: jalr
+; ASM: name:{{[ 	]+}}bkfir_mac_hot
+; ASM: RET
+;
+; POSTRA-ASM: bkfir_mac_hot:
+; POSTRA-ASM: jalr
+; POSTRA: resource-bias=slot-windows
+; POSTRA: {{accepted II=|exhausted:|rejected:}}
+; POSTRA: qualify-or-cut
+; POSTRA: product-off
+; POSTRA-NOT: sequential (preflight)
 
 define void @bkfir_mac_hot(
     ptr nocapture readonly %C,

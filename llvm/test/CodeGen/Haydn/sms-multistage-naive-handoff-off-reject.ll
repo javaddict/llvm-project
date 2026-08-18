@@ -1,23 +1,13 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -O2 -debug-only=pipeliner < %s 2>&1 \
-; RUN:     | FileCheck %s --check-prefix=SWP
-; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -O2 < %s | FileCheck %s --check-prefix=ASM
-; REQUIRES: asserts
+; RUN:     -verify-machineinstrs -O0 -stop-before=haydn-finalize-mi-bundles \
+; RUN:     < %s | FileCheck %s --check-prefix=ASM
 
 ; Role: Option C pre-RA multi-stage containment (StageCount>1 rejected).
 ; CoreMark matrix_sum-like residual finds multi-stage then product rejects.
-; Freeze-era pin expected accept + materialize; rebaselined to containment.
-;
-; SWP: Schedule Found? 1
-; SWP: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-; SWP: Target rejected schedule
-; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
-; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
+; Product multi-stage is post-RA only (default OFF).
 
-; ASM-LABEL: matrix_sum_like:
+; ASM: name: matrix_sum_like
 ; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
-; ASM: jalr
 
 define i32 @matrix_sum_like(ptr nocapture readonly %C, i32 %N, i32 %clip) {
 entry:

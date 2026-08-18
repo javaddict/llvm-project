@@ -54,7 +54,7 @@ using namespace llvm;
 // `-mllvm -haydn-enable-<name>=0` (llc) / `-mllvm -haydn-enable-<name>=0` (clang).
 // Pipeline-gated (conditional addPass) — the AArch64/AMDGPU/Hexagon idiom.
 // Load-bearing passes (marked *) warn in desc; disabling them yields invalid
-// asm. See ~/haydn-pass-pipeline.md for the full table.
+// asm. See contracts/pipeline.md for the full table.
 //===----------------------------------------------------------------------===//
 static cl::opt<bool> EnableHaydnPreLegalizerCombiner(
     "haydn-enable-prelegalizer-combiner", cl::init(true), cl::Hidden,
@@ -71,41 +71,43 @@ static cl::opt<bool> EnableHaydnPostSelectOptimize(
 // FULL FATE (2026-07-23): invent densify deleted permanently — not default-OFF
 // quarantine. FATED: LoadStoreOpt, CircularBuffer stats, RedundantCopyElim,
 // FormUpdateAddr, PostPipeliner Stage-0, InterBlock Stage-0, formMACs, Role B
-// convert. Sole AGU form = GISel. contracts/pipeline.md §6.
+// convert. Sole AGU form = GISel. contracts/pipeline.md.
 // (2026-07-27): HaydnCFGOptimizer deleted. Post-PEI BranchFolder +
 // MachineBlockPlacement already cover empty-forward / identical-succ /
 // unreachable / tail-merge; ON/OFF asm identity across Haydn lit kernels with
 // no unique VLIW residue. Do not revive a second generic CFG folder.
 // CopyElim/ConditionOptimizer deleted; MCP(UseCopyInstr) replaces them.
-// R7 atomic flip certificate (product prep — default stays OFF):
-// Peer-law preconditions closed on this surface:
-//   * StageCount>1 pre-RA containment (ZOL + soft counted; closes inverted
-//     multi-stage gate — pre-RA multi-member BUNDLE / force-coissue stay gone)
-//   * Proven trip-count residual only (unit step; non-zero init / non-zero
-//     countdown limit reject; no (limit-init)/step invent)
-//   * Final-parcel geometry cost in shouldUseSchedule (MinBodyBundles pad +
-//     SetupIssueDistance as preheader floor, not II>=Setup proxy)
-// Product default OFF until ZOL formation is BundleSim-green under the
-// Format E typed HWLoopOff path (reloc FieldLsb residual is closed; residual
-// functional wrong-answer / MEMORY_FAULT on e2e loops blocks the atomic
-// product flip). SCEV-proven IR + retained-state expansion only; late physical
-// semantic rediscovery is deleted. Peer-law StageCount containment /
-// proven-trip / geometry prep closed. Never revive pre-RA
+// Hardware-loop product default. AIE inserts HardwareLoops unconditionally
+// at O1+ (AIE2TargetMachine.cpp:81-82). Hexagon defaults ON via
+// DisableHardwareLoops (HexagonTargetMachine.cpp:48-49). Haydn stays OFF
+// until independent SMS QUALIFY (hwloops OFF, parcels==II), independent
+// SCEV-proven hwloop QUALIFY (SMS OFF), then the combined
+// trip/CFG/prologue/kernel/epilogue matrix, then a separate policy-only
+// flip of hardwareLoopsProductDefaultEnabled(). This wave does not flip.
+// Force-ON is CLI only. SCEV-proven IR + retained-state expansion only;
+// late physical semantic rediscovery is deleted. Never revive pre-RA
 // multi-member SMS BUNDLE or force-coissue.
+// Multi-stage product default is not this flag; it lives on
+// HaydnMultiStageSMS::productDefaultEnabled() and is not flipped here.
+static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
+              "hardware-loop product default stays OFF until independent "
+              "then combined qualification and a separate policy-only flip");
 static cl::opt<bool> EnableHaydnHardwareLoops(
-    "haydn-enable-hwloops", cl::init(false), cl::Hidden,
+    "haydn-enable-hwloops",
+    cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()),
+    cl::Hidden,
     cl::desc("Enable the SCEV-proven Haydn hardware-loop path; late physical "
-             "semantic rediscovery is deleted. Default OFF until independent "
-             "qualification and a separate policy flip. Multi-stage SMS is "
-             "an active target and its combined interaction qualifies later."));
-// Pack/Finalize/Verify unconditional (PIPE-24/30).
-// ExpandPseudos is unconditional product legalization (PIPE-24 / AR0).
+             "semantic rediscovery is deleted. Product default follows "
+             "HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(); remains "
+             "OFF until independent then combined qualification and a "
+             "separate policy-only flip."));
+// Pack/Finalize/Verify are unconditional (Finalize/Verify never skip).
+// ExpandPseudos is unconditional product legalization.
 // The old -haydn-enable-expand-pseudos product-disable switch is retired:
 // residual executable pseudos must never reach pack/printer as a "bisect"
 // path. Use pass isolation / stop-after for debugging, not a silent skip.
 // HaydnPushPopOpt deleted (default-off zombie with ABI/SP/CFI bugs).
-// Not re-enabled under FrameLowering; PEIPeephole remains for prologue waste.
-// FrameLowering emits FP setup only when hasFP(); no post-PEI FP safety net.
+// HaydnPEIPeephole deleted; FrameLowering emits FP setup only when hasFP().
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   RegisterTargetMachine<HaydnTargetMachine> X(getTheHaydnTarget());
@@ -185,17 +187,17 @@ HaydnTargetMachine::createMachineScheduler(MachineSchedContext *C) const {
   //
   // Pre-RA = pressure / order for RA (HaydnPreRASchedStrategy).
   // Post-RA = sole VLIW pack owner (createPostMachineScheduler).
- // Do not revive VLIWMachineScheduler / ConvergingVLIWScheduler ( UAF).
+  // Do not revive VLIWMachineScheduler / ConvergingVLIWScheduler.
   return createHaydnPreRAScheduler(C);
 }
 
 ScheduleDAGInstrs *
 HaydnTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
-  // Stream B Phase B2: bundle formation in leaveRegion/leaveMBB
+  // Post-RA pack owner: bundle formation in leaveRegion/leaveMBB
   // (HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HaydnHazardRecognizer).
   // Multi-stage SMS (HaydnPostRAMultiStage / HaydnMultiStageSMS) hooks inside
   // HaydnScheduleDAGMI::schedule after ordinary convergence; product default OFF
-  // (-haydn-enable-multistage-sms).
+  // (-haydn-enable-multistage-sms). That default is not flipped here.
   // UAF inapplicable: never instantiates VLIWMachineScheduler.
   return createHaydnPostRAScheduler(C);
 }
@@ -206,7 +208,7 @@ namespace {
 // Haydn codegen pass pipeline (execution order). Every Haydn pass has a
 // DEBUG_TYPE for -debug-only= / -print-after= (assertions build). Full table +
 // opt-level (O0 vs O1) notes + bisection recipe:
-// ~/haydn-pass-pipeline.md.
+// contracts/pipeline.md.
 //
 // IR: AtomicExpand; HardwareLoops(O1) [haydn-tti]
 // GISel: IRTranslator; PreLegalizerCombiner;
@@ -215,24 +217,28 @@ namespace {
 // Pre-RA: MachinePipeliner/SMS(O2); (AGU fuse is GISel-only)
 // DeadMIElim after SMS; MachineScheduler/HaydnPreRASchedStrategy *
 // register allocation (upstream)
-// Post-RA (addPreSched2, AIE2-aligned):
-// EnsureTerminators *;
-// cond/copy peeps (O1); MBP (O1) BEFORE HardwareLoops;
-// (CFGOptimizer deleted — rely on BranchFolder late opt)
-// HardwareLoops (O1); ExpandPseudos *; BitSimplify/PEIPeephole (O1);
+// Post-RA: EnsureTerminators * (addPostRegAlloc, pre-PEI)
+// addPreSched2 (AIE2TargetMachine.cpp:229-244):
+// DeadMI (O1); MBP (O1) BEFORE HardwareLoops;
+// HardwareLoops (O1, product default OFF); ExpandPseudos *;
 // PostMachineScheduler/HaydnPostRA pack * (sole pack, all levels);
-// HaydnFinalizeBundle * (singleton → BUNDLE + FormatID; AIE FinalizeBundle)
-// Layout: addBlockPlacement empty (AIE2: placement already in PreSched2)
-// Pre-emit: BranchRelaxation; FixupHwLoops(O1); BranchRelaxation
-// (Haydn-specific range/hwloop — AIE PreEmit is empty)
+// HaydnLatencyStalls * (Haydn overlay: RAW net; stall NOPs committed next);
+// HaydnFinalizeBundle * + HaydnVerifyBundles * (AIE FinalizeBundle :243)
+// Layout: addBlockPlacement empty (AIE2TargetMachine.cpp:250-253)
+// Pre-emit: BranchRelaxation; FixupHwLoops(O1+hwloops) + second BR;
+// late Finalize+Verify after BR at every opt level (same Finalize/Verify;
+// AIE PreEmit empty :88 — AIE has no BR). insertIndirectBranch emits
+// real LUI+ADDI32_W+JALR_W that must rejoin that late lane.
 // Asm: AsmPrinter
 // (O1) = opt-gated; * = load-bearing / legal encode. Deleted: PushPopOpt
 // CommonGEP deleted. PreRALoadPromote deleted.
+// CopyElim/ConditionOptimizer/BitSimplify/PEIPeephole/CFGOptimizer deleted.
 //
 // Pack ownership follows AIE2 (AIE2TargetMachine::addPreSched2):
 // DeadMI → MBP (O1) → HardwareLoops → PseudoExpand → PostMachineScheduler
-// Suppress generic post-pack MBP via addBlockPlacement override. PreEmit never
-// re-packs.
+// → (Haydn overlay) LatencyStalls → Finalize+Verify. Suppress generic
+// post-pack MBP via addBlockPlacement. PreEmit is BR (+ Fixup/BR when
+// hwloops ON) then the same Finalize+Verify — not a second packer.
 //===----------------------------------------------------------------------===//
 class HaydnPassConfig : public TargetPassConfig {
 public:
@@ -387,8 +393,8 @@ void HaydnPassConfig::addPreRegAlloc() {
   // Runs on the naive countable loop (SEQ32/SLT32 + BNEZ/BEQZ), so the expander
   // never has to round-trip hwloop pseudos -- no expander-compatibility surface.
   // Hardware-loop formation happens POST-RA (addPreSched2 -> HaydnHardwareLoops)
- // after SMS. AIE2 order: MBP (O1) then HardwareLoops (still post-RA). The
-  // pre-RA hwloop pass was removed : forming hwloops pre-RA corrupted
+  // after SMS. AIE2 order: MBP (O1) then HardwareLoops (still post-RA). The
+  // pre-RA hwloop pass was removed: forming hwloops pre-RA corrupted
   // SET_HWLOOP_REG MBB operands (.LBB_-1) because later block-placement
   // renumbering moved or erased referenced blocks. SMS uses virtual registers
   // for renaming across pipeline stages, so it must run before RA.
@@ -409,15 +415,15 @@ void HaydnPassConfig::addPreSched2() {
   if (getOptLevel() != CodeGenOptLevel::None)
     addPass(&DeadMachineInstructionElimID);
 
- // DeadMIElim → MBP (O1) → HardwareLoops → PseudoExpand → PostMachineScheduler
+  // DeadMIElim → MBP (O1) → HardwareLoops → PseudoExpand → PostMachineScheduler
+  // → LatencyStalls → Finalize+Verify (AIE2TargetMachine.cpp:229-244; Haydn
+  // overlay is LatencyStalls between pack and first commit).
   // EnsureTerminators already ran in addPostRegAlloc (pre-PEI).
-  // O1+ peeps, then MBP → HardwareLoops → ExpandPseudos → PostRA pack.
-
-  // Profitability peeps: O1+ only. Not required for legal encode.
+  // CopyElim/ConditionOptimizer/BitSimplify/PEIPeephole stay deleted.
   // CFG simplification: generic BranchFolder (addMachineLateOptimization,
   // post-PEI) already performs empty-block forward, identical-successor fold,
   // dead-block elim, and tail merge. HaydnCFGOptimizer was a pure duplicate
- // ( delete) — no Haydn-only VLIW CFG residue remained.
+  // — no Haydn-only VLIW CFG residue remained.
   if (getOptLevel() != CodeGenOptLevel::None) {
     // MBP BEFORE HardwareLoops (AIE2). Role A expand only (Role B deleted).
     addPass(&MachineBlockPlacementID);
@@ -431,10 +437,13 @@ void HaydnPassConfig::addPreSched2() {
   // Load-bearing: needed for legal encode at all opt levels.
   //
   // Safety: addPreSched2 runs AFTER PEI (post-RA + post-PEI). ExpandPseudos
-  // owns LOAD_ADDR / SETCBR / leftover *_POST_INC / SET_HWLOOP rewrite and
-  // is the named owner of post-call soft-zero R0. ADJCALLSTACK is PEI;
-  // calls are JAL_W from CallLowering; va_arg/libcall are the legalizer.
-  // Always on — residual pseudos are fatal at Verify/AsmPrinter.
+  // owns LOAD_ADDR / SETCBR / leftover *_POST_INC / leftover generic
+  // SET_HWLOOP rewrite. Product SET is SET_HWLOOP_F2_W at HardwareLoops
+  // (HaydnHardwareLoops.cpp:701). Post-call soft-zero R0 is
+  // HaydnPostRAScratch; Expand calls it after leftover expand so real
+  // JAL_W is visible. ADJCALLSTACK is PEI; calls are JAL_W from
+  // CallLowering; va_arg/libcall are the legalizer. Always on — residual
+  // pseudos are fatal at Verify/AsmPrinter.
   addPass(createHaydnExpandPseudosPass());
 
   // Sole Format E pack: leaveRegion/leaveMBB. Packetizer retired.
@@ -445,6 +454,13 @@ void HaydnPassConfig::addPreSched2() {
   // plain O0 without optnone still enters the post-RA pack path first and may
   // form multi-MI full-fill packs for independent ops.
   addPass(&PostMachineSchedulerID);
+  // Exposed-pipeline RAW net between pack and first commit. AIE2 addPreSched2
+  // is PostMachineScheduler then createAIEFinalizeBundle
+  // (AIE2TargetMachine.cpp:242-244; AIE PreEmit empty at :88). Stall NOPs are
+  // committed by the following Finalize+Verify. BranchRelaxation can still
+  // emit bare LUI+ADDI32_W+JALR_W (insertIndirectBranch); addPreEmitPass
+  // re-runs the same Finalize+Verify after BR so those parcels commit.
+  addPass(createHaydnLatencyStallsPass());
   // After scheduling (or after an optnone skip), wrap remaining standalone
   // MIs as singleton BUNDLEs with FormatID imm (AIE2TargetMachine.cpp:242-244
   // createAIEFinalizeBundle; AIEFinalizeBundle.cpp:40-59). Multi-MI already
@@ -468,24 +484,20 @@ void HaydnPassConfig::addBlockPlacement() {
 
 void HaydnPassConfig::addPreEmitPass() {
   // AIE PreEmit is empty (AIE2TargetMachine.cpp:88;
-  // AIEBaseTargetMachine.cpp:388) — setDesc+finalize never need a second
-  // pass. Haydn needs Format E branch range + hwloop Off fixups after pack
-  // (size model). Pattern matches Hexagon: relax then target fixup that can
-  // grow layout, then relax again.
+  // AIEBaseTargetMachine.cpp:388) — AIE has no BranchRelaxation. Haydn
+  // keeps BR after the first commit (Format E simm fields).
+  // insertIndirectBranch emits real LUI+ADDI32_W+JALR_W
+  // (HaydnInstrInfo.cpp); those are one-parcel real MIs. Re-run the same
+  // Finalize+Verify after BR at every opt level so mixed committed+bare
+  // never reaches the printer. Not a second commit implementation:
+  // AIEFinalizeBundle.cpp:40-59 is identity on already-bundled roots.
   //
-  // 0. HaydnLatencyStalls — exposed-pipeline correctness net (Option C L3).
-  //    Data_Latency=2 defs must not be read in the next bundle. Runs at
-  //    EVERY opt level and never calls skipFunction. postmisched may still
-  //    quality-skip optnone; Finalize/Verify always commit/check. FIRST so
-  //    BranchRelaxation + FixupHwLoops absorb size growth / recompute
-  //    offsets. Stall NOPs are bare MIs; late Finalize wraps Format E.
   // 1. BranchRelaxation — Format E simm fields
-  // 2. HaydnFixupHwLoops — SET_HWLOOP Off1/Off2 ÷4; product demote-first
-  //    (LoopDec+LoopJNZ when free counter; fatal if live demote fails).
-  //    demote OFF = debug erase-setup only — not product.
+  // 2. HaydnFixupHwLoops (hwloops ON) — SET_HWLOOP Off1/Off2 ÷4; product
+  //    demote-first (fatal if live demote fails). demote OFF = debug
+  //    erase-setup only — not product.
   // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ_W)
-  // 4. late layout firewall: re-apply AIE commit surfaces after allowed
-  //    late growth (no 2nd packer / no silent reshape / no MCFlags):
+  // 4. Late Finalize+Verify after BR (product default and hwloops ON):
   //      materialize bare MIs via empty-cycle tryAdd → setDesc
   //        (AIEMachineScheduler.cpp:1121-1139; AIEHazardRecognizer.cpp:174-214;
   //         HaydnBundleMaterialize commitLateProductCycle)
@@ -494,15 +506,12 @@ void HaydnPassConfig::addPreEmitPass() {
   //      fail-closed verifyCommittedBundle
   //        (AIEBaseInstrInfo.cpp:1440-1459; haydn-verify-bundles)
   // Do not move BR before pack (sizes wrong). No PostMachineScheduler here.
-  addPass(createHaydnLatencyStallsPass());
   addPass(&BranchRelaxationPassID);
   if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnHardwareLoops) {
     addPass(createHaydnFixupHwLoopsPass());
     addPass(&BranchRelaxationPassID);
   }
-  // Late re-commit after allowed pre-emit growth (same no-skip Finalize/Verify
-  // ownership as addPreSched2; unconditional at every opt level). Leaves only
-  // committed Format-E cycles for product MC; Verify refuses mixed bare encode.
+  // Late Finalize+Verify after BR at every opt level (same Finalize/Verify).
   addPass(createHaydnFinalizeBundlePass());
   addPass(createHaydnVerifyBundlesPass());
 }

@@ -42,8 +42,8 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:    { nop; addi32 r5, r0, 0 }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r6, r1, 0; ld32 r7, r2, 0 }
-; CHECK-NEXT:    { ld32 r12, r3, 0; addi32 r5, r5, 1 }
+; CHECK-NEXT:    { ld32 r7, r2, 0; ld32 r6, r1, 0 }
+; CHECK-NEXT:    { addi32 r5, r5, 1; ld32 r12, r3, 0 }
 ; CHECK-NEXT:    { nop; add32 r8, r6, r7 }
 ; CHECK-NEXT:    { st32 r8, r1, 0; add32 r7, r7, r12 }
 ; CHECK-NEXT:    { add32 r6, r6, r12; addi32 r1, r1, 4 }

@@ -1,11 +1,11 @@
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms -haydn-multistage-sms-analysis-only < %s \
 ; RUN:     | FileCheck %s --check-prefix=SOFT
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=PF-CFG < %s \
 ; RUN:     | FileCheck %s --check-prefix=FORCE
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-TRIP < %s \
 ; RUN:     | FileCheck %s --check-prefix=FORCE

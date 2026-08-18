@@ -1,0 +1,45 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -haydn-postra-waw-edges -haydn-postra-region-end-edges %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs \
+# RUN:   -haydn-postra-interblock -haydn-postra-region-end-edges %s -o - | FileCheck %s
+#
+# P17(a)/(b): MaxLatencyFinder + isSimplifiableReservedReg + the
+# successorsAreScheduled brick on HaydnScheduleDAGMI. RegionEndEdges
+# rebuilds ExitSU; WAWEdges drops dead SFR Output. -haydn-postra-interblock
+# is the IncludeStages first brick only (AIE AIEMaxLatencyFinder.cpp:159).
+# PerSuccEdges remaining-latency replay is residual — this pin is
+# "flags do not crash / do not sequentialize independent ALU".
+# Product defaults stay off.
+
+--- |
+  define i32 @p17_two_block(i32 %a, i32 %b) { ret i32 0 }
+...
+---
+name:            p17_two_block
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+    ; CHECK-LABEL: name: p17_two_block
+    ; CHECK: ADD32
+    ; CHECK: ADD32
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    $r4 = ADD32 $r2, $r1, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1:
+    liveins: $r3, $r4
+    ; CHECK: ADD32
+    ; CHECK: JALR
+    $r0 = ADD32 $r3, $r4, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

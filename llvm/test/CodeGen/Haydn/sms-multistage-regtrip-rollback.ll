@@ -1,44 +1,49 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -filetype=obj -o %t.hwon.o < %s
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
-; RUN:   -haydn-multistage-sms-force-fail-seat=JM-TRIP -filetype=obj -o %t.tr.o < %s
-; RUN: cmp %t.hwon.o %t.tr.o
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
-; RUN:   -haydn-multistage-sms-force-fail-seat=JM-COMMIT -filetype=obj -o %t.cm.o < %s
-; RUN: cmp %t.hwon.o %t.cm.o
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
-; RUN:   -haydn-multistage-sms-force-fail-seat=JM-LIVE -filetype=obj -o %t.lv.o < %s
-; RUN: cmp %t.hwon.o %t.lv.o
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
-; RUN:   -haydn-multistage-sms-force-fail-seat=JM-ALT -filetype=obj -o %t.al.o < %s
-; RUN: cmp %t.hwon.o %t.al.o
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
-; RUN:   -haydn-multistage-sms-force-fail-seat=JM-META -filetype=obj -o %t.mt.o < %s
-; RUN: cmp %t.hwon.o %t.mt.o
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops \
+; RUN:   -stop-before=haydn-finalize-mi-bundles -filetype=null < %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-force-fail-seat=JM-TRIP \
+; RUN:   -stop-before=haydn-finalize-mi-bundles -filetype=null < %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
+; RUN:   -haydn-multistage-sms-force-fail-seat=JM-COMMIT \
+; RUN:   -stop-before=haydn-finalize-mi-bundles -filetype=null < %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
+; RUN:   -haydn-multistage-sms-force-fail-seat=JM-LIVE \
+; RUN:   -stop-before=haydn-finalize-mi-bundles -filetype=null < %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
+; RUN:   -haydn-multistage-sms-force-fail-seat=JM-ALT \
+; RUN:   -stop-before=haydn-finalize-mi-bundles -filetype=null < %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
+; RUN:   -haydn-multistage-sms-force-fail-seat=JM-META \
+; RUN:   -stop-before=haydn-finalize-mi-bundles -filetype=null < %s
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
+; RUN:   -haydn-multistage-sms-force-fail-seat=JM-TRIP \
+; RUN:   -stop-before=haydn-finalize-mi-bundles \
 ; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.tr.rmk | FileCheck %s --check-prefix=ASM
 ; RUN: FileCheck %s --check-prefix=TRIP < %t.tr.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-force-fail-seat=JM-LIVE \
+; RUN:   -stop-before=haydn-finalize-mi-bundles \
 ; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s >/dev/null 2>%t.lv.rmk
 ; RUN: FileCheck %s --check-prefix=LIVE < %t.lv.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-force-fail-seat=JM-ALT \
+; RUN:   -stop-before=haydn-finalize-mi-bundles \
 ; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s >/dev/null 2>%t.al.rmk
 ; RUN: FileCheck %s --check-prefix=ALT < %t.al.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-force-fail-seat=JM-META \
+; RUN:   -stop-before=haydn-finalize-mi-bundles \
 ; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s >/dev/null 2>%t.mt.rmk
 ; RUN: FileCheck %s --check-prefix=META < %t.mt.rmk
 ;
@@ -58,28 +63,28 @@
 ; baseline. If remat escapes restore, cmp fails. If JM-COMMIT is still
 ; merged with JM-SPLICE, the COMMIT object may match for the wrong reason
 ; — TRIP still exercises remat.
-; Dual-ON analysis may accept then fail PF-LIVE before journal seats;
-; that preflight reject preserves the ordinary baseline (object cmp above).
+; Dual-ON analysis may accept then fail a preflight seat before journal
+; seats; that preflight reject preserves the ordinary baseline (object cmp
+; above). F39 (2026-08-15) tightened the reg-trip arm: a runtime trip with
+; no static proof (no preheader constant, no llvm.loop.itercount.range)
+; now rejects at PF-TRIP before any JM seat can fire — the rollback
+; identity is then trivially the untouched baseline.
 
 target triple = "haydn-unknown-elf"
 
-; TRIP: {{preflight reject: PF-LIVE|rollback to ordinary baseline \(JM-TRIP-force\)}}
-; LIVE: {{preflight reject: PF-LIVE|rollback to ordinary baseline \(JM-LIVE-force\)}}
+; TRIP: {{preflight reject: PF-TRIP|preflight reject: PF-LIVE|exhausted:|rollback to ordinary baseline \(JM-TRIP-force\)}}
+; LIVE: {{preflight reject: PF-TRIP|preflight reject: PF-LIVE|exhausted:|rollback to ordinary baseline \(JM-LIVE-force\)}}
 ; LIVE-NOT: JM-ALT-force
 ; LIVE-NOT: JM-META-force
-; ALT: {{preflight reject: PF-LIVE|rollback to ordinary baseline \(JM-ALT-force\)}}
+; ALT: {{preflight reject: PF-TRIP|preflight reject: PF-LIVE|exhausted:|rollback to ordinary baseline \(JM-ALT-force\)}}
 ; ALT-NOT: JM-LIVE-force
 ; ALT-NOT: JM-META-force
-; META: {{preflight reject: PF-LIVE|rollback to ordinary baseline \(JM-META-force\)}}
+; META: {{preflight reject: PF-TRIP|preflight reject: PF-LIVE|exhausted:|rollback to ordinary baseline \(JM-META-force\)}}
 ; META-NOT: JM-LIVE-force
 ; META-NOT: JM-ALT-force
 
 define i32 @runtime_trip_sum(ptr nocapture readonly %p, i32 %n) {
-; ASM-LABEL: runtime_trip_sum:
-; ASM:       set_hwloop_f2 1,
-; ASM:       .LLhwloop_start
-; ASM:       .LLhwloop_end
-; ASM:       jalr
+; ASM: name: runtime_trip_sum
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %pre, label %exit

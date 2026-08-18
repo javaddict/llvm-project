@@ -73,6 +73,21 @@ static cl::opt<bool> ForceSMSPressureReject(
              "shouldUseSchedule as if canAllocateSMS failed (spill-pressure "
              "fail-closed pin). Default OFF — never product policy."));
 
+// F41: pre-RA StageCount containment bound as a test/bisect knob. The
+// PRODUCT value is 1 (pure helper productSMSContainmentMaxStageCount; Option
+// A: pre-RA accepts only soft StageCount==1, multi-stage is post-RA only).
+// Larger values exist solely so lit can drive a found multi-stage soft
+// schedule through the classic ModuloScheduleExpander
+// (createTripCountGreaterCondition guards + setPreheader + adjustTripCount)
+// and pin the F41 soft no-mutation contract under -verify-machineinstrs —
+// never product policy.
+static cl::opt<unsigned> HaydnSMSContainmentMax(
+    "haydn-sms-containment-max", cl::Hidden,
+    cl::init(HaydnPreRASchedStrategy::productSMSContainmentMaxStageCount),
+    cl::desc("F41 test/bisect: max StageCount the pre-RA containment accepts "
+             "(1 = product Option A; larger values exercise the classic "
+             "expander soft trip-count path. Never product policy)."));
+
 
 namespace {
 
@@ -223,6 +238,8 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   // setup gate — Fixup pads preheader separately. Kernel parcel count for a
   // candidate is the scheduled II (one issue cycle per modulo phase); body
   // pad is max(0, MinBodyBundles - KernelParcels) when ZOL form is live.
+  // This is a pre-RA geometry cost, not a parcels-per-iter proof. The
+  // post-RA host independently recounts planned parcels against searched II.
   const unsigned KernelParcels = std::max(II, 1u);
   const unsigned BodyPadParcels =
       IsZOL && KernelParcels < haydn::hwloop::MinBodyBundles
@@ -330,7 +347,15 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   // is rejected above, multi-stage is rejected here, so pre-RA ZOL SMS never
   // expands bare multi-stage. Product multi-stage is post-RA only; freeze must
   // not cross RA.
-  if (StageCount > 1) {
+  // F41 knob scope: -haydn-sms-containment-max may lift the bound ONLY for
+  // soft counted loops (bisect the classic-expander trip-count path). ZOL
+  // multi-stage stays unconditionally contained — its expansion law is owned
+  // by the post-RA HaydnMultiStageSMS host (LoopStart/PseudoLoopEnd
+  // interplay), never by this pre-RA path.
+  const unsigned ContainmentMax =
+      IsZOL ? HaydnPreRASchedStrategy::productSMSContainmentMaxStageCount
+            : HaydnSMSContainmentMax;
+  if (StageCount > ContainmentMax) {
     DEBUG_WITH_TYPE("pipeliner", {
       dbgs() << "SMS-SHOULDUSE: reject multi-stage stages=" << StageCount
              << " II=" << II
@@ -358,8 +383,12 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
 
   // Release-visible polarity pin: pure product StageCount1 helper agrees that
   // this soft StageCount==1 schedule is the only remaining accept path. Flag
-  // specials (prefer-post-pipeliner / force-pressure) already returned above.
-  if (HaydnPreRASchedStrategy::smsProductShouldUseScheduleFailsClosed(
+  // specials (prefer-post-pipeliner / force-pressure / containment-max lift)
+  // already returned above, so at product defaults this accept is exactly the
+  // helper's complement.
+  if (HaydnSMSContainmentMax ==
+          HaydnPreRASchedStrategy::productSMSContainmentMaxStageCount &&
+      HaydnPreRASchedStrategy::smsProductShouldUseScheduleFailsClosed(
           IsZOL, PrologueCount, MinTripCount, /*PressureExcess=*/false,
           HaydnSMSMaxStageCount, HaydnSMSTrackRegPressure))
     report_fatal_error(
@@ -379,13 +408,17 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   }
   ++NumSMSSharedResourceRecordConsumes;
 
-  // Accept remaining StageCount == 1 schedules as bare logical MIs only.
+  // Accept remaining product StageCount == 1 schedules as bare logical MIs
+  // only (legal kernel-only / no-overlap; post-RA host owns NStages>=2).
+  // Under the F41 test knob -haydn-sms-containment-max>1, soft multi-stage
+  // is driven through the classic expander — same bare-logical law;
+  // ZOL can never reach here lifted, its bound is pinned to 1 above.
   // Soft counted residual (proven trip count; AIE DownCountLoop peer) — not
   // approximate (limit-init)/step invent. Metrics-only; no pre-RA cycle groups.
   // Geometry cost is recorded for final parcels (kernel II + body pad); setup
   // floor is never an II proxy.
   DEBUG_WITH_TYPE("pipeliner", {
-    dbgs() << "SMS-SHOULDUSE: accept stages=1 II=" << II
+    dbgs() << "SMS-SHOULDUSE: accept stages=" << StageCount << " II=" << II
            << " (metrics-only; bare logical MIs; proven counted residual; "
               "no pre-RA cycle groups; StageCount1 product containment)\n";
     dbgs() << "SMS-SHOULDUSE: final-parcel cost kernel=" << KernelParcels
@@ -487,50 +520,69 @@ void HaydnPipelinerLoopInfo::adjustTripCount(int TripCountAdjust) {
     return;
   }
 
-  // Runtime trip count: apply the expander's signed delta to TripCountReg.
-  // ModuloScheduleExpander calls adjustTripCount(-(MaxIter+1)) /
-  // PeelingModuloScheduleExpander calls adjustTripCount(-(NumStages-1)), so
-  // TripCountAdjust is already the (negative) amount to add. Peer Hexagon
-  // HexagonInstrInfo.cpp adjustTripCount: `A2_addi New, Old, TripCountAdjust`
-  // with no extra negation. A prior `Adj = -TripCountAdjust` double-negated
-  // the delta (stages=2 → asked for -1, applied +1), so countdown/limit
-  // bounds grew by the prolog peel and SMS kernels over-iterated (CoreMark
-  // matrix_sum OOB / ORACLE_MISMATCH). There is no static path — see
-  // createTripCountGreaterCondition.
+  // F41 (CR-H3): soft counted loops are adjusted STRUCTURALLY by the
+  // expander, so this hook must NOT mutate MIR. Do not insert an adjusted
+  // trip-count def anywhere, and never replaceRegWith(TripCountReg, NewTC):
+  //
+  //   * Block lifetime: the old code inserted the def at the head of the
+  //     ORIGINAL loop MBB. The classic ModuloScheduleExpander erases that
+  //     block (cleanup(): BB->clear(); BB->eraseFromParent(),
+  //     ModuloSchedule.cpp) while every replaceRegWith-rewritten use survives
+  //     in the kernel/prologs/epilogs → dangling vreg (verifier: "Reading
+  //     virtual register without a def"). Latent until now only because
+  //     StageCount==1 schedules never reach the expander (MachinePipeliner
+  //     "No overlapped iterations" skip) and StageCount>1 was containment
+  //     rejected.
+  //   * Guard semantics: the expanders call createTripCountGreaterCondition
+  //     for every prologue BEFORE adjustTripCount (classic addBranches /
+  //     peeling fixupBranches). Those guards read TripCountReg and must test
+  //     the ORIGINAL trip ("original trip > j+1" decides skip-prologue). A
+  //     replaceRegWith here rewrites the already-inserted guards to read the
+  //     adjusted count, flipping skip decisions for every trip in
+  //     (adjusted, original] — silent wrong code on any future accept.
+  //
+  // Why no def is needed at all: shouldIgnoreForPipelining keeps the
+  // loop-control chain (IV bump → CmpMI/InvertMI → EndLoop) out of the
+  // pipelined stages, and computeUnpipelineableNodes forces that closure
+  // into stage 0. The classic expander therefore clones the whole chain
+  // into EVERY prolog (generateProlog) and the kernel control PHI init
+  // chains from the last prolog's clone — the peel delta is realized by
+  // the cloned chain itself (prolog j executes stages 0..j of iteration j
+  // and its own copy of the countdown consumes the (MaxIter+1-j) peel).
+  // Peer law, same shape: ARM ARMPipelinerLoopInfo::adjustTripCount is an
+  // empty no-op (ARMBaseInstrInfo.cpp, soft t2Bcc/t2LoopEnd loops) and AIE's
+  // soft DownCountLoop base adjustTripCount is log-only
+  // (AIEBasePipelinerLoopInfo.cpp:113-117). Only hardware-loop SETUP forms
+  // edit state here (Hexagon A2_addi on the LOOP0r operand; AIE/Haydn ZOL
+  // LoopStart $adj above) because their hw counter is not cloned by the
+  // expander.
+  // The delta sign comment is retained for the post-RA owner: the expander
+  // passes an already-signed delta (classic -(MaxIter+1) / peeling
+  // -(NumStages-1)); the retired code's `Adj = -TripCountAdjust`
+  // double-negation was the CoreMark matrix_sum OOB root cause.
   assert(TripCountReg.isValid() && "pipelined loop must have a runtime TC reg");
-
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  const TargetRegisterClass *RC = &Haydn::GPR32RegClass;
-  Register NewTC = MRI.createVirtualRegister(RC);
-
-  // Use the cached LoopBB (the original loop body).
-  MachineBasicBlock *LoopBB = this->LoopBB;
-  if (isInt<16>(TripCountAdjust)) {
-    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADDI32_W),
-            NewTC)
-        .addReg(TripCountReg)
-        .addImm(TripCountAdjust);
-  } else {
-    Register AdjReg = MRI.createVirtualRegister(RC);
-    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::LOADI32),
-            AdjReg)
-        .addImm(TripCountAdjust);
-    BuildMI(*LoopBB, LoopBB->getFirstNonPHI(), DL, HII->get(Haydn::ADD32),
-            NewTC)
-        .addReg(TripCountReg)
-        .addReg(AdjReg);
-  }
-
-  // Rewrite all subsequent uses of the trip-count register.
-  MRI.replaceRegWith(TripCountReg, NewTC);
+  // -debug-only=pipeliner (same convention as the SMS-SHOULDUSE pins).
+  DEBUG_WITH_TYPE("pipeliner", {
+    dbgs() << "SMS-TC: soft adjustTripCount delta=" << TripCountAdjust
+           << " is a structural no-op (expander clones the stage-0 "
+              "control chain; guards keep the original count)\n";
+  });
 }
 
 void HaydnPipelinerLoopInfo::setPreheader(MachineBasicBlock *NewPreheader) {
-  // No-op. SMS runs PRE-RA on ZOL form : the IR-level
-  // HardwareLoops pass has already emitted LoopStart (preheader) +
-  // PseudoLoopEnd (latch) before the pipeliner runs. The expander clones the
-  // ZOL terminator into its new preheader/prologue/epilogue blocks directly;
-  // adjustTripCount edits the LoopStart $adj operand already present in the
-  // expander's new preheader, so no additional target splice is needed here.
+  // No-op for both forms:
+  //  * ZOL: the IR-level HardwareLoops pass already emitted LoopStart
+  //    (preheader) + PseudoLoopEnd (latch) before the pipeliner runs; the
+  //    expander clones the ZOL terminator into its new
+  //    preheader/prologue/epilogue blocks directly, and adjustTripCount edits
+  //    the LoopStart $adj operand wherever it lives (the operand, not the
+  //    block, is the state).
+  //  * soft counted (F41): there is no loop-setup instruction to splice —
+  //    the trip count is an ordinary SSA value (TripCountReg) consumed by
+  //    the expander-cloned stage-0 control chain; the classic expander
+  //    never erases the original preheader, so the def stays where it is.
+  //    (Peer contrast: Hexagon setPreheader splices its LOOP0 setup into
+  //    the surviving preheader because that setup WOULD otherwise die with
+  //    the original latch MBB. Haydn soft loops have no such instruction.)
 }
 

@@ -1,36 +1,36 @@
 # Option C containment: no pre-RA SMS multi-member BUNDLE through RA.
 # Multi-stage StageCount>1 rejected; post-RA free multi-MI packs may still
 # form Format E BUNDLEs (sole commitment point).
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=machine-scheduler \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-SCHED
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=register-coalescer \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-COALESCER
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=greedy -verify-machineinstrs \
 # RUN:   %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-GREEDY
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=virtregrewriter \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-VRW
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=virtregrewriter -stress-regalloc=8 \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-SPILL
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=virtregrewriter \
 # RUN:   -haydn-ra-compact-hints=true -verify-machineinstrs \
 # RUN:   %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-COMPACT
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=postmisched \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CONT-POST
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -start-before=pipeliner \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -start-before=pipeliner \
 # RUN:   -stop-after=postmisched -stats \
 # RUN:   -verify-machineinstrs %S/sms-format-shoulduse-reject.mir -o /dev/null \
 # RUN:   2>&1 | FileCheck %s --check-prefix=CONT-STATS

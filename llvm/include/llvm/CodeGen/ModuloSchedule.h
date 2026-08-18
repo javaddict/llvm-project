@@ -188,7 +188,6 @@ private:
   /// Instructions to change when emitting the final schedule.
   InstrChangesTy InstrChanges;
 
-
   void generatePipelinedLoop();
   void generateProlog(unsigned LastStage, MachineBasicBlock *KernelBB,
                       ValueMapTy *VRMap, MBBVectorTy &PrologBBs);

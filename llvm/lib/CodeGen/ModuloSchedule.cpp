@@ -182,7 +182,6 @@ void ModuloScheduleExpander::generatePipelinedLoop() {
   // Add branches between prolog and epilog blocks.
   addBranches(*Preheader, PrologBBs, KernelBB, EpilogBBs, VRMap);
 
-
   delete[] VRMap;
   delete[] VRMapPhi;
 }

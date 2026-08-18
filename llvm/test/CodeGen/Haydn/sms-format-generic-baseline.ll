@@ -189,7 +189,7 @@ define i32 @baseline_sms_acc_stream(ptr nocapture readonly %p, i32 %n) {
 ; HANDOFF-NOT: {{(LD32|S_LW|ADD32)}}_S
 ;
 ; POST-LABEL: name: baseline_sms_acc_stream
-; POST: BUNDLE {{[01]}}
+; POST: S_LW_POST_IMM
 ;
 ; ASM-LABEL: baseline_sms_acc_stream:
 ; ASM:        // =>This Inner Loop Header: Depth=1

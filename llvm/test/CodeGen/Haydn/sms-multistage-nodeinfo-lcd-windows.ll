@@ -1,5 +1,6 @@
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms -haydn-multistage-sms-analysis-only \
+; RUN:     -stop-before=haydn-finalize-mi-bundles \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.rmk | FileCheck %s --check-prefix=ASM
 ; RUN: FileCheck %s --check-prefix=WIN < %t.rmk
@@ -17,8 +18,7 @@
 ; Test design: carried accumulator + countdown. If LCDLatest/windows are
 ; dropped, WIN fails to match lcd-as-windows while RecMII/edges stay >0.
 
-; ASM-LABEL: nodeinfo_lcd_windows:
-; ASM: jalr
+; ASM: name: nodeinfo_lcd_windows
 ; WIN: lcd two-iteration RecMII={{[1-9][0-9]*}} edges={{[1-9][0-9]*}}
 ; WIN: lcd-as-windows
 ; WIN-NOT: memory LCD unmodeled

@@ -1,11 +1,39 @@
-; RUN: llc -O0 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
+; RUN: llc -global-isel-abort=1 -O0 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -match-full-lines -strict-whitespace -check-prefixes=O0,O0123 %s
-; RUN: llc -O1 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
+; RUN: llc -global-isel-abort=1 -O1 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -match-full-lines -strict-whitespace -check-prefixes=O1,O123,O0123 %s
-; RUN: llc -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
+; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -match-full-lines -strict-whitespace -check-prefixes=O23,O123,O0123 %s
-; RUN: llc -O3 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
+; RUN: llc -global-isel-abort=1 -O3 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -match-full-lines -strict-whitespace -check-prefixes=O23,O123,O0123 %s
+; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
+; RUN:     -haydn-enable-hwloops < %s -o /dev/null 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=HWON
+; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=PIPE20
+; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=DG0
+; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=M10
+; RUN: FileCheck %s --input-file=%S/Inputs/FAULT-INJECTION-SEATS.txt --check-prefix=FAULT
+; RUN: FileCheck %s --input-file=%S/Inputs/CORRUPTION-MATRIX.txt --check-prefix=CORR
+; RUN: FileCheck %s --input-file=%S/../../../../lldb/source/Plugins/ABI/Haydn/ABISysV_haydn.h --check-prefix=ABI
+; RUN: %python %S/../../../utils/haydn/classify_lldb_step.py --self-test
+; RUN: %python %S/../../../utils/haydn/classify_lldb_step.py --json 0x10000 0x10000 | FileCheck %s --check-prefix=SAMEPC
+; RUN: %python %S/../../../utils/haydn/classify_lldb_step.py --json 0x10000 0x1000C | FileCheck %s --check-prefix=PARCEL
+; RUN: %python %S/../../../utils/haydn/classify_lldb_step.py --return-reg 4 | FileCheck %s --check-prefix=RETR1
+; RUN: %python %S/../../../utils/haydn/classify_lldb_step.py --return-reg 8 | FileCheck %s --check-prefix=RETD0
+; RUN: %python %S/../../../utils/haydn/check_xfail_ledger.py --inventory-pin --llvm-src %S/../../../..
+; RUN: %python %S/../../../utils/haydn/parse_lit_summary.py --self-test
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.h --check-prefix=HWDEF
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=HWFLAG
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRAMultiStage.h --check-prefix=SMSDEF
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSubtarget.h --check-prefix=O0POST
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnEnsureTerminators.cpp --check-prefix=ENSURE
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfoAuto.td --check-prefix=AUTO
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/CMakeLists.txt --check-prefix=CMAKE
+; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=P13PLAN
+; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=MF0
+; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=W51
+; RUN: %python -c "import os,sys; p=sys.argv[1]; assert os.path.islink(p), p+' must remain a symlink to haydn-plans/llvm-claude.md, not a 56K duplicate'" %S/../../../../CLAUDE.md
+; RUN: FileCheck %s --input-file=%S/../../../../CLAUDE.md --check-prefix=ISANEXT
 ; REQUIRES: asserts
 
 ; Role: semantic — Haydn codegen pipeline oracle (AIE2-style full-line strict match on the load-bearing custom sequence).
@@ -18,15 +46,15 @@
 ; HardwareLoops + ExpandPseudos live in addPreSched2 (AFTER PEI).
 ;
 ; Opt0 - EnsureTerminators (pre-PEI) -> PEI ->
-; ExpandPseudos -> PostMachineScheduler -> Finalize/Verify ->
-; BranchRelaxation -> late Finalize/Verify (B4.3)
+; ExpandPseudos -> PostMachineScheduler -> LatencyStalls ->
+; Finalize/Verify -> BranchRelaxation -> late Finalize/Verify
 ; (no MBP / HardwareLoops / FixupHwLoops / DeadMI / MCP)
 ;
 ; Opt1+ - EnsureTerminators (pre-PEI) -> PEI -> late-opt MCP(UseCopyInstr)
 ; -> DeadMI -> MBP BEFORE HardwareLoops ->
-; ExpandPseudos -> PostMachineScheduler -> Finalize/Verify
-; PreEmit - BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->
-; late Finalize/Verify (B4.3 empty-cycle setDesc + wrap; AIE PreEmit empty)
+; ExpandPseudos -> PostMachineScheduler -> LatencyStalls -> Finalize/Verify
+; PreEmit - BranchRelaxation then late Finalize/Verify (hwloops default
+; OFF: no Fixup). AIE PreEmit is empty (no BR).
 ;
 ; Opt2+ - MachinePipeliner -> DeadMIElim (pre-RA); PreRALoadPromote deleted
 ;
@@ -79,16 +107,17 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Haydn PEI Peephole Optimizer
 ; O0-NOT:      Haydn Bundle Finalization
 ; O0:      PostRA Machine Instruction Scheduler
-; Early Finalize/Verify after postmisched: target-local no-reorder commit
-; ownership (never skipFunction). postmisched may quality-skip optnone only.
+; LatencyStalls then first Finalize/Verify (one commit+verify lane;
+; never skipFunction). postmisched may quality-skip optnone only.
 ; No Finalize/Verify before PostRA (no pre-RA bundle identity).
+; O0-NEXT:      Haydn Exposed-Pipeline Latency Stalls
 ; O0-NEXT:      Haydn Bundle Finalization
 ; O0-NEXT:      Haydn Bundle Invariant Verifier
 ; O0-NOT:      Branch Probability Basic Block Placement
-; O0:      Haydn Exposed-Pipeline Latency Stalls
-; O0-NEXT:      Branch relaxation pass
+; O0:      Branch relaxation pass
 ; O0-NOT:      Haydn Hardware Loop Fixup
-; B4.3 late layout firewall after PreEmit growth (AIE PreEmit empty):
+; Product default: late Finalize/Verify after BranchRelaxation
+; (same Finalize/Verify; insertIndirectBranch LUI+ADDI32_W+JALR_W).
 ; O0-NEXT:      Haydn Bundle Finalization
 ; O0-NEXT:      Haydn Bundle Invariant Verifier
 ; Densify/quarantine absent at product defaults (W0.1):
@@ -136,15 +165,16 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123-NOT:      Haydn PEI Peephole Optimizer
 ; O123-NOT:      Haydn Bundle Finalization
 ; O123:      PostRA Machine Instruction Scheduler
-; Early Finalize/Verify after postmisched (no-skip commit ownership).
+; LatencyStalls then first Finalize/Verify (no-skip commit ownership).
 ; No Finalize/Verify before PostRA (no pre-RA bundle identity).
+; O123-NEXT:      Haydn Exposed-Pipeline Latency Stalls
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Sole MBP (addBlockPlacement empty - no second placement after pack):
 ; O123-NOT:      Branch Probability Basic Block Placement
-; PreEmit - LatencyStalls / BR / FixupHwLoops / BR / late Finalize+Verify
-; O123:      Haydn Exposed-Pipeline Latency Stalls
-; O123-NEXT:      Branch relaxation pass
+; PreEmit - BR then late Finalize/Verify at product default
+; (Fixup + second BR still hwloops-ON only)
+; O123:      Branch relaxation pass
 ; O123-NOT:      Haydn Hardware Loop Fixup
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
@@ -156,3 +186,91 @@ define i32 @f(i32 %a, i32 %b) {
 ; IB/PP not separate Structure passes (PostRA-internal, default OFF). Role B is
 ; a residual flag on Hardware Loop Detection above — not a separate pass line.
 ; Flag locks: densify-defaults-off.ll.
+
+; Forced-ON is evidence only: IR insertion + late Fixup/recommit appear;
+; first commit+verify still sits after LatencyStalls. Not a product flip.
+; Peer: AIE2TargetMachine.cpp:242-244 PostMachineScheduler then
+; createAIEFinalizeBundle (AIE PreEmit empty at :88).
+; HWON:      Hardware Loop Insertion
+; HWON:      PostRA Machine Instruction Scheduler
+; HWON-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; HWON-NEXT:      Haydn Bundle Finalization
+; HWON-NEXT:      Haydn Bundle Invariant Verifier
+; HWON:      Haydn Hardware Loop Fixup
+; HWON:      Branch relaxation pass
+; HWON:      Haydn Bundle Finalization
+; HWON-NEXT:      Haydn Bundle Invariant Verifier
+
+; PIPE-20 / DG0 / P19 / R15 inventory (Inputs/ is lit-excluded; this file
+; is the owner-slice seat). DecisionGuard registry stays absent.
+; PIPE20-DAG: Phase-firewall inventory (PIPE-20
+; PIPE20-DAG: no issue-cycle/format identity crosses RA
+; PIPE20-DAG: no pre-RA BUNDLE / private member / setDesc
+; PIPE20-DAG: inventory only
+; PIPE20-DAG: T8-EVID
+; PIPE20-DAG: T8-DEBUG-EVIDENCE
+; PIPE20-DAG: 38bd4059
+; PIPE20-DAG: 28700d57
+; PIPE20-DAG: not an ancestor
+; PIPE20-DAG: G_ANYEXT
+; PIPE20-DAG: adjustsStack
+; PIPE20-DAG: MaxParcels
+; PIPE20-DAG: Late Finalize/Verify after BR
+; PIPE20-DAG: P19 CMake leftover closed
+; DG0-DAG: DecisionGuard product registry remains absent
+; DG0-DAG: no G-DECISION-GUARD revive
+; DG0-DAG: product_coverage_pin
+; DG0-NOT: DecisionGuardRegistry
+; M10-DAG: parcel12 preferred
+; M10-DAG: never qualified
+; M10-DAG: ClassifyStepReport
+; M10-DAG: kStepNeverQualified
+; ABI: kFormatEParcelBytes = 12
+; ABI: kStepNeverQualified = false
+; ABI: SamePCResidual
+; ABI: ClassifyStepDelta
+; ABI: ClassifyStepReport
+; ABI: ReturnRegNameForBytes
+; SAMEPC: "class": "same-pc-residual"
+; SAMEPC: "qualified": false
+; SAMEPC: "semantic_qualify": false
+; PARCEL: "class": "parcel12"
+; PARCEL: "qualified": false
+; PARCEL: "semantic_qualify": false
+; RETR1: r1
+; RETD0: d0
+; FAULT-DAG: AR0 leftovers are inventory, not a product registry
+; FAULT-DAG: DecisionGuard registry stays absent
+; FAULT-DAG: check_xfail_ledger.py
+; FAULT-DAG: product_coverage_pin
+; CORR-DAG: AR0 leftovers are inventory, not a product registry
+; CORR-DAG: DecisionGuard registry stays absent
+; CORR-DAG: no host / no force-fail invent
+; HWDEF: hardwareLoopsProductDefaultEnabled() { return false; }
+; HWFLAG: "haydn-enable-hwloops"
+; HWFLAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
+; SMSDEF: productDefaultEnabled() { return false; }
+; O0POST: enablePostRAMachineScheduler() const override { return true; }
+; ENSURE: never call skipFunction
+; AUTO: hand-maintained hypothesized encodings
+; AUTO: generate_format_e_records.py does not emit this file
+; AUTO-NOT: Auto-generated from spec JSON
+; CMAKE: Never fall back to a host-absolute plans-tree path
+; CMAKE: HAYDN_GOLDEN_DIR
+; CMAKE: BUNDLESIM_GOLDEN_DIR
+; CMAKE: skip if unset
+; CMAKE-NOT: /ssd2/mhyang/haydn-plans/Database/golden
+; CMAKE-NOT: $ENV{HOME}/haydn
+; P13PLAN-DAG: P13 source waves
+; P13PLAN-DAG: gated on R13
+; P13PLAN-DAG: do not start Wave 1/2/3
+; P13PLAN-DAG: leftover `_S*` stay (T4)
+; MF0-DAG: MF0 multi-bundle proof
+; MF0-DAG: INERT
+; MF0-DAG: no second product format family
+; W51-DAG: W51 idle-parcel provenance
+; W51-DAG: OPEN_BLOCKED
+; W51-DAG: no invent
+; R15 leftover: monorepo CLAUDE.md is a symlink; ISA-next is 64.
+; ISANEXT: **ISA-63**
+; ISANEXT: next new file is `ISA-64`

@@ -1,5 +1,6 @@
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms -haydn-multistage-sms-analysis-only \
+; RUN:     -stop-before=haydn-finalize-mi-bundles \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.rmk | FileCheck %s --check-prefix=ASM
 ; RUN: FileCheck %s --check-prefix=LCD < %t.rmk
@@ -15,8 +16,7 @@
 ; lcd-as-windows fails this FileCheck. ASM still emits a legal epilogue
 ; (analysis-only).
 ;
-; ASM-LABEL: lcd_recmii_sum:
-; ASM: jalr
+; ASM: name: lcd_recmii_sum
 ; LCD: lcd two-iteration RecMII={{[1-9][0-9]*}} edges={{[1-9][0-9]*}}
 ; LCD: lcd-as-windows
 

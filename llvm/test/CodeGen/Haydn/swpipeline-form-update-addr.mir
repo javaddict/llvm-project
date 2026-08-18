@@ -1,4 +1,4 @@
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -O2 \
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=-hwloop -O2 \
 # RUN:   -stop-after=pipeliner -debug-only=pipeliner -verify-machineinstrs %s -o - 2>&1 \
 # RUN:   | FileCheck %s
 

@@ -740,6 +740,7 @@ bool MachinePipeliner::useWindowScheduler(bool Changed) {
 }
 
 void SwingSchedulerDAG::setMII(unsigned ResMII, unsigned RecMII) {
+  // D1000: reserved write-only annotation hook (no product reader).
   ComputedResMII = ResMII;
   ComputedRecMII = RecMII;
   if (SwpForceII > 0)
@@ -2374,10 +2375,10 @@ static void computeLiveOuts(MachineFunction &MF, RegPressureTracker &RPTracker,
 /// A heuristic to filter nodes in recurrent node-sets if the register
 /// pressure of a set is too high.
 void SwingSchedulerDAG::registerPressureFilter(NodeSetType &NodeSets) {
-  // Interval-based RegPressureTracker on-demand-computes LiveIntervals for
-  // virtregs. LiveIntervalCalc asserts if any use/def parent is missing from
-  // SlotIndexes (debug/pseudo-probe are intentionally unmapped; targets or
-  // mid-pass inserts can leave other holes). This filter is heuristic-only
+  // D1000: Interval-based RegPressureTracker on-demand-computes LiveIntervals
+  // for virtregs. LiveIntervalCalc asserts if any use/def parent is missing
+  // from SlotIndexes (debug/pseudo-probe are intentionally unmapped; targets
+  // or mid-pass inserts can leave other holes). This filter is heuristic-only
   // (ExceedPressure) — skip the whole pass when maps are incomplete rather
   // than asserting. Stock logic below is unchanged when maps are complete.
   for (const MachineBasicBlock &MBB : MF) {
@@ -2625,7 +2626,7 @@ void SwingSchedulerDAG::computeNodeOrder(NodeSetType &NodeSets) {
     LLVM_DEBUG(dbgs() << "NodeSet size " << Nodes.size() << "\n");
     OrderKind Order;
     SmallSetVector<SUnit *, 8> N;
-    // Seed from predecessors that belong to *this* NodeSet. The unfiltered
+    // D1000: seed from predecessors that belong to *this* NodeSet. The unfiltered
     // pred_L returns every pending pred of already-ordered nodes (including
     // other NodeSets); set_is_subset then fails and we fall through to
     // "Bottom up (default)", which seeds only max-ASAP — often the pointer

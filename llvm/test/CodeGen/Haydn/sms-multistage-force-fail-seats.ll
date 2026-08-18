@@ -1,6 +1,6 @@
-; RUN: llc -mtriple=haydn -O2 -verify-machineinstrs -haydn-enable-multistage-sms -haydn-multistage-sms-force-fail-seat=PF-PHI < %s | FileCheck %s
-; RUN: llc -mtriple=haydn -O2 -verify-machineinstrs -haydn-enable-multistage-sms -haydn-multistage-sms-force-fail-seat=JM-ALLOC < %s | FileCheck %s
-; RUN: llc -mtriple=haydn -O2 -verify-machineinstrs -haydn-enable-multistage-sms -haydn-multistage-sms-force-fail < %s | FileCheck %s
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -O2 -verify-machineinstrs -haydn-enable-multistage-sms -haydn-multistage-sms-force-fail-seat=PF-PHI < %s | FileCheck %s
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -O2 -verify-machineinstrs -haydn-enable-multistage-sms -haydn-multistage-sms-force-fail-seat=JM-ALLOC < %s | FileCheck %s
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -O2 -verify-machineinstrs -haydn-enable-multistage-sms -haydn-multistage-sms-force-fail < %s | FileCheck %s
 ; CHECK-LABEL: force_fail_loop:
 ; CHECK: jalr
 define i32 @force_fail_loop(ptr nocapture readonly %a, i32 %n) {

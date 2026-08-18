@@ -1,0 +1,66 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+#
+# SIN_COS/ARCTAN window (Constraints:140): issue-alone, uimm4+2 occupancy,
+# NOP-on-unit, no dest-writer. The HR scoreboard is the owner. SMS
+# placement sees the same unit lock via emitInScoreboard. Product
+# multi-stage default stays OFF.
+#
+# 1. ARCTAN + independent ADDI32 must not share a BUNDLE.
+# 2. A later writer of the ARCTAN dest must not join the issue cycle.
+
+--- |
+  define void @arctan_issue_alone() { ret void }
+  define void @arctan_no_dest_writer() { ret void }
+...
+---
+name:            arctan_issue_alone
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+body:             |
+  bb.0:
+    liveins: $d0, $r0
+
+    ; CHECK-LABEL: name: arctan_issue_alone
+    ; CHECK: $r5 = ADDI32
+    ; CHECK: $r1 = ARCTAN{{.*}}2
+    ; CHECK-NOT: BUNDLE
+    $r1 = ARCTAN $d0, 2
+    $r5 = ADDI32 $r0, 10, implicit-def dead $sfr
+    $r0 = COPY $r5
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            arctan_no_dest_writer
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+body:             |
+  bb.0:
+    liveins: $d0, $r0
+
+    ; CHECK-LABEL: name: arctan_no_dest_writer
+    ; CHECK: $r1 = ARCTAN{{.*}}0
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: $r1 = ADDI32
+    $r1 = ARCTAN $d0, 0
+    $r1 = ADDI32 $r0, 1, implicit-def dead $sfr
+    $r0 = COPY $r1
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

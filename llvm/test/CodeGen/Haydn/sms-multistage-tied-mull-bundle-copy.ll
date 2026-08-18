@@ -1,11 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -O2 < %s -o - \
-; RUN:     | FileCheck %s --check-prefix=ASM
+; RUN:     -verify-machineinstrs -O2 -stop-before=haydn-finalize-mi-bundles \
+; RUN:     < %s -o - | FileCheck %s --check-prefix=ASM
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 -stop-after=machine-cp < %s -o - \
 ; RUN:     | FileCheck %s --check-prefix=MCP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -O2 -debug-only=pipeliner < %s -o /dev/null 2>&1 \
+; RUN:     -verify-machineinstrs -O2 -stop-before=haydn-finalize-mi-bundles \
+; RUN:     -debug-only=pipeliner < %s -o /dev/null 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=SWP
 ; REQUIRES: asserts
 
@@ -13,17 +14,21 @@
 ; Freeze-era pin expected multi-stage SWPS + BUNDLE+COPY; deleted pre-RA cycle
 ; identity. Product multi-stage is post-RA only.
 ;
+; NStages==1 is a legal kernel-only / pre-RA bare-logical schedule. This body
+; finds stages=1 (no overlap). Pre-RA still rejects StageCount>1 before
+; mutation; StageCount==1 is accepted as bare logical MIs (no durable
+; BUNDLE+COPY). Target-rejected is the old StageCount>1 arm — do not require
+; it here.
+;
 ; SWP: Schedule Found? 1
-; SWP: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-; SWP: Target rejected schedule
+; SWP: SMS-SHOULDUSE: accept stages=1 II={{[0-9]+}}
 ; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
 ; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
 
-; ASM-LABEL: fill_nn:
-; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
-; ASM: mull
-; ASM: seq32
-; ASM: beqz
+; ASM: name: fill_nn
+; ASM: MULL
+; ASM: SEQ32
+; ASM: BEQZ
 
 ; MCP-LABEL: name: fill_nn
 ; MCP: $r{{[0-9]+}} = COPY $r{{[0-9]+}}

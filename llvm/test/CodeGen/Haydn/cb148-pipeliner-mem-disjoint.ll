@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s -o /dev/null
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s -o /dev/null
 ; REQUIRES: haydn-registered-target
 ;
 ; NOTE on this base: the abort described below was measured on the pre-merge

@@ -20,6 +20,11 @@
 #
 # Product multi-stage is ON (WP5); this pin proves the post-RA commit surface
 # for durable groups through leaveMBB.
+#
+# W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
+# operands on ALU members were removed (ALU descs carry no implicit SFR def;
+# under the unified no-dual-write law they mask the intended packing). W39
+# itself is pinned by w39-dead-def-dual-write-waw.mir.
 
 --- |
   define void @two_stage_shaped_hard_roots() { ret void }
@@ -37,30 +42,30 @@ body:             |
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r15
     ; COMMIT-NEXT: {{  $}}
     ; Group A: dual-ALU hard root exact-commits as Format E row 0.
-    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r9, implicit-def dead $sfr, implicit-def $r8, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
-    ; COMMIT-NEXT:   $r9 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3, implicit-def dead $sfr
-    ; COMMIT-NEXT:   $r8 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
-    ; COMMIT-NEXT: }
+    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, {{.*}} {
+    ; COMMIT-DAG:    $r8 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1
+    ; COMMIT-DAG:    $r9 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, killed $r3
+    ; COMMIT:        }
     ; Mid-stage free op stays outside both groups (no cross-stage splice).
-    ; COMMIT-NEXT: $r10 = ADDI32 killed $r8, 1, implicit-def dead $sfr
+    ; COMMIT-NEXT: $r10 = ADDI32 killed $r8, 1
     ; Group B: second hard root exact-commits independently.
-    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r12, implicit-def dead $sfr, implicit-def $r11, implicit killed $r6, implicit killed $r7, implicit killed $r4, implicit killed $r5 {
-    ; COMMIT-NEXT:   $r12 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r6, killed $r7, implicit-def dead $sfr
-    ; COMMIT-NEXT:   $r11 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r4, killed $r5, implicit-def dead $sfr
-    ; COMMIT-NEXT: }
-    ; COMMIT-NEXT: $r13 = XOR32 killed $r11, killed $r12, implicit-def dead $sfr
+    ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, {{.*}} {
+    ; COMMIT-DAG:    $r11 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r4, killed $r5
+    ; COMMIT-DAG:    $r12 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r6, killed $r7
+    ; COMMIT:        }
+    ; COMMIT-NEXT: $r13 = XOR32 killed $r11, killed $r12
     ; COMMIT-NEXT: RET implicit $r15
 
-    BUNDLE implicit-def $r8, implicit-def $r9, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r8 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r9 = ADD32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE implicit-def $r8, implicit-def $r9, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r8 = ADD32 $r0, $r1
+      $r9 = ADD32 $r2, $r3
     }
-    $r10 = ADDI32 $r8, 1, implicit-def dead $sfr
-    BUNDLE implicit-def $r11, implicit-def $r12, implicit-def dead $sfr, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
-      $r11 = ADD32 $r4, $r5, implicit-def dead $sfr
-      $r12 = ADD32 $r6, $r7, implicit-def dead $sfr
+    $r10 = ADDI32 $r8, 1
+    BUNDLE implicit-def $r11, implicit-def $r12, implicit $r4, implicit $r5, implicit $r6, implicit $r7 {
+      $r11 = ADD32 $r4, $r5
+      $r12 = ADD32 $r6, $r7
     }
-    $r13 = XOR32 $r11, $r12, implicit-def dead $sfr
+    $r13 = XOR32 $r11, $r12
     RET implicit $r15
 
 ...
@@ -76,22 +81,22 @@ body:             |
     ; COMMIT: liveins: $r0, $r1, $r2, $r3, $r15
     ; COMMIT-NEXT: {{  $}}
     ; Neighbor before hard root stays outside the group.
-    ; COMMIT-NEXT: $r4 = ADDI32 $r0, 0, implicit-def dead $sfr
+    ; COMMIT-NEXT: $r4 = ADDI32 $r0, 0
     ; Dual-load hard root (SMS handoff shape) exact-commits Format E.
     ; COMMIT-NEXT: BUNDLE {{[01]}}, 0, implicit-def $r5, implicit-def $r6, implicit $r0, implicit killed $r1, implicit killed $r2, implicit killed $r3 :: (load (s32)) {
-    ; COMMIT-NEXT:   $r5 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r0, killed $r1 :: (load (s32))
-    ; COMMIT-NEXT:   $r6 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r2, killed $r3 :: (load (s32))
+    ; COMMIT-NEXT:   $r5 = {{LD32|S_LW}}{{.*}} $r0, killed $r1 :: (load (s32))
+    ; COMMIT-NEXT:   $r6 = {{LD32|S_LW}}{{.*}} killed $r2, killed $r3 :: (load (s32))
     ; COMMIT-NEXT: }
     ; Latency pad may appear; consumer stays outside the hard group.
-    ; COMMIT: $r7 = ADD32 killed $r5, killed $r6, implicit-def dead $sfr
+    ; COMMIT: $r7 = ADD32 killed $r5, killed $r6
     ; COMMIT-NEXT: RET implicit $r15
 
-    $r4 = ADDI32 $r0, 0, implicit-def dead $sfr
-    BUNDLE implicit-def $r5, implicit-def $r6, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+    $r4 = ADDI32 $r0, 0
+    BUNDLE implicit-def $r5, implicit-def $r6, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
       $r5 = LD32 $r0, $r1 :: (load (s32))
       $r6 = LD32 $r2, $r3 :: (load (s32))
     }
-    $r7 = ADD32 $r5, $r6, implicit-def dead $sfr
+    $r7 = ADD32 $r5, $r6
     RET implicit $r15
 
 ...

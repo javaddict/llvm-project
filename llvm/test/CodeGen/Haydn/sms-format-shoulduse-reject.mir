@@ -1,6 +1,7 @@
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
-# RUN:   -haydn-sms-max-stagecount=1 -debug-only=pipeliner \
-# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 \
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+# RUN:   -O2 -stop-after=pipeliner -haydn-sms-max-stagecount=1 \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs \
+# RUN:   %S/sms-f41-containment-product-pin.ll -o /dev/null 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=STAGE
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
 # RUN:   -haydn-sms-force-pressure-reject -debug-only=pipeliner \
@@ -8,7 +9,7 @@
 # RUN:   | FileCheck %s --check-prefix=PRESSURE
 # REQUIRES: asserts
 
-# Role: MIR — Positive shouldUseSchedule fail-closed pins (plan §5.2 exit /
+# Role: Positive shouldUseSchedule fail-closed pins (plan §5.2 exit /
 # spill-pressure rejection + stage-count gate). Product defaults stay ON:
 #   -haydn-sms-max-stagecount=3
 #   -haydn-pipeliner-track-regpressure=true
@@ -16,10 +17,12 @@
 # owns the profitability reject path after a schedule is found (MachinePipeliner
 # "Target rejected schedule"), not analyzeLoop fail-closed.
 #
-# STAGE prefix: multi-stage dual-load MAC body (MaxStageCount>=1 / stages=2)
-# under -haydn-sms-max-stagecount=1 → PPS-3 stage reject. Organic multi-stage,
-# no force flag.
-# PRESSURE prefix: same body under -haydn-sms-force-pressure-reject (default OFF
+# STAGE prefix: matrix_sum IR (same body as sms-f41-containment-product-pin.ll)
+# finds organic stages>=2 at -O2. Under -haydn-sms-max-stagecount=1 that
+# schedule is a PPS-3 stage reject. The dual-load MAC MIR below is
+# format-ResMII-bound (II covers the body, stages=1) so it cannot own this
+# pin; PRESSURE still uses it because the force flag is stage-independent.
+# PRESSURE prefix: MAC MIR under -haydn-sms-force-pressure-reject (default OFF
 # bisect peer of -haydn-sms-hook-force-reject). Product path is canAllocateSMS
 # live-in excess; force keeps the pin schedule-shape stable.
 #

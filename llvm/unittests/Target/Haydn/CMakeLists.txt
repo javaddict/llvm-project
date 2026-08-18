@@ -31,11 +31,14 @@ add_llvm_target_unittest(HaydnTests
   HaydnFormatRegistryTest.cpp
   HaydnHWLoopContractsTest.cpp
   HaydnHazardRecognizerTest.cpp
+  HaydnIntraCycleRAWTest.cpp
+  HaydnIntraCycleWAWTest.cpp
   HaydnLibcallNamesTest.cpp
   HaydnMCFormatsTest.cpp
   HaydnMaterializeMultiOpcodeTest.cpp
   HaydnMemoryCycleTest.cpp
   HaydnPlacementAlternativeTest.cpp
+  HaydnRegisterBankInfoTest.cpp
   HaydnRegisterInfoTest.cpp
   HaydnRelocLayoutTest.cpp
   HaydnResourceRestrictionClassesTest.cpp

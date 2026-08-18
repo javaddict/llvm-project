@@ -1,30 +1,62 @@
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs < %s \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs < %s \
 ; RUN:   > %t.off
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms -haydn-multistage-sms-analysis-only \
 ; RUN:     < %s > %t.an
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-CFG < %s > %t.pfc
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-PHI < %s > %t.pfp
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-TRIP < %s > %t.pft
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-STAGE < %s > %t.pfs
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-LIVE < %s > %t.pfl
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-ALT < %s > %t.pfa
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-BUNDLE < %s > %t.pfb
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-multistage-sms \
+; RUN:     -haydn-multistage-sms-force-fail-seat=PF-LATE < %s > %t.pfe
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-ALLOC < %s > %t.jm
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-SPLICE < %s > %t.sp
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-COMMIT < %s > %t.cm
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-TRIP < %s > %t.tr
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-LIVE < %s > %t.lv
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-ALT < %s > %t.al
-; RUN: llc -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
+; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-force-fail-seat=JM-META < %s > %t.mt
 ; RUN: diff %t.off %t.an
+; RUN: diff %t.off %t.pfc
+; RUN: diff %t.off %t.pfp
+; RUN: diff %t.off %t.pft
+; RUN: diff %t.off %t.pfs
+; RUN: diff %t.off %t.pfl
+; RUN: diff %t.off %t.pfa
+; RUN: diff %t.off %t.pfb
+; RUN: diff %t.off %t.pfe
 ; RUN: diff %t.off %t.jm
 ; RUN: diff %t.off %t.sp
 ; RUN: diff %t.off %t.cm
@@ -35,8 +67,9 @@
 ; RUN: FileCheck %s < %t.off
 ;
 ; Identity-preserving rollback QUALIFY (hardware loops OFF, one artifact):
-; analysis-only and every post-mutation JM-* force-fail must restore the
-; ordinary scheduled baseline byte-for-byte in assembly.
+; analysis-only, every PF-* preflight force-fail, and every post-mutation
+; JM-* force-fail must restore the ordinary scheduled baseline
+; byte-for-byte in assembly. Product default stays OFF.
 ;
 ; CHECK-LABEL: rollback_sum:
 ; CHECK: jalr
