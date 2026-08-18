@@ -2511,7 +2511,8 @@ def load_hand_def_logicals(td_dir: Path) -> set:
 
 
 def emit_logical_defs_td_inc(
-    cat: Catalog, hand_logicals: set, accum_ties: Dict[str, Tuple[str, ...]]
+    cat: Catalog, hand_logicals: set, accum_ties: Dict[str, Tuple[str, ...]],
+    behaviors: Dict[str, str], gpr_ports: Dict[str, Dict[str, list]],
 ) -> str:
     """HaydnInst logical defs for golden logicals with no hand def.
 
@@ -2541,6 +2542,8 @@ def emit_logical_defs_td_inc(
     lines.append("//===----------------------------------------------------------------------===//")
     lines.append("")
     emitted = 0
+    emitted_tied: set = set()
+    emitted_names: set = set()
     for logical in sorted(cat.alternatives):
         if _logical_key(logical) in hand_logicals:
             continue
@@ -2553,12 +2556,33 @@ def emit_logical_defs_td_inc(
         lay = cat.layouts[rec.layout_id]
         ops = _member_print_ops(rec, lay)
         u = logical.upper()
-        # POST semantics: golden Behavior writes the base register back.
-        is_post = "_POST_" in u
+        # Base-writeback semantics from golden GPR ports (the base alias is
+        # both read and written): covers POST/PRE AND BREV (`mem..[..] = ..;
+        # rs1 = rs1 + rs2`), which the name check alone misses. The name
+        # tags stay as a belt-and-suspenders fallback for missing rows.
+        gpr_w = gpr_ports.get(u, {}).get("W", [])
+        gpr_r = set(gpr_ports.get(u, {}).get("R", []))
+        port_wb = bool(set(gpr_w) & gpr_r)
+        is_post = port_wb or "_POST_" in u or "_PRE_" in u
         # LS family: unit LOADSTORE0, mayStore per golden (all new LS are stores).
         is_ls = rec.unit.startswith("LOADSTORE")
-        may_store = 1 if (is_ls and u.startswith(("D_SW", "S_SW", "D_SD", "S_SD"))) else 0
+        beh = behaviors.get(u, "")
+        # A statement `X = mem..[..]` is a load (mem on RHS); `mem..[..] = X`
+        # is a store (mem on LHS). Register reads like r_temp = {rtd..} do
+        # not touch mem even though the text contains "mem"-free equals.
+        # Loads may wrap the mem read in a conversion (ZEXT8->32(mem8[..]),
+        # SEXT16->32(...)); match '=' then any cast prefix then mem[..].
+        may_load = 1 if re.search(r"=\s*[\w>\-]*\s*\(?\s*mem\w*\[", beh) else 0
+        may_store = 1 if re.search(r"mem\w*\[[^]]*\]\s*=", beh) else 0
+        # Def AsmString: user-mnemonic LS aliases (ld32/st32/...) are OWNED
+        # by the canonical defs in HaydnInstrInfo.td (LD32 etc.); emitting
+        # them here would duplicate the mnemonic and fail the match closed.
+        # These logicals parse under their literal golden name
+        # (s_sw_with_imm ...), exactly like the hand defs they replace.
         mnem = assembler_mnemonic(logical, rec.unit)
+        if u in LS_USER_MNEMONIC:
+            mnem = re.sub(r"(?<=[a-z0-9])_(?=[a-z0-9]*$)", "_", logical.lower())
+            mnem = logical.lower()
         # Golden accumulator law (load_accumulator_ties, CB-152c): a logical
         # whose written DR bank alias is also read ties dest to an accumulator
         # input operand on the logical def.
@@ -2581,13 +2605,25 @@ def emit_logical_defs_td_inc(
                     asm_ops.append("$rs")
                     tie = "$rs = $rs_wb"
                     continue
-                in_frags.append(f"GPR32:$rs{gpr_n}")
-                asm_ops.append(f"$rs{gpr_n}")
+                if r == "dest1" and may_load:
+                    # GPR load value dest (S_LW/S_LB: rt = mem..[..]).
+                    # dest2 is the base register, never the value.
+                    out_frags.append("GPR32:$rt")
+                    asm_ops.append("$rt")
+                    continue
+                else:
+                    in_frags.append(f"GPR32:$rs{gpr_n}")
+                    asm_ops.append(f"$rs{gpr_n}")
             elif kind == "REG_DR":
                 dr_n += 1
-                if not is_ls and r.startswith("dest"):
-                    # MAC/ALU dest is a result: outs. LS dest1 is a READ
-                    # (stored data), stays ins.
+                # MAC RR names its dest role `dest`; LS RI6/RR name theirs
+                # `dest1` (dest2 = base). Both are the value dest when the
+                # op produces one (loads, ALU/MAC); store data stays ins.
+                is_value_dest = r in ("dest", "dest1")
+                if is_value_dest and (not is_ls or may_load):
+                    # Result dest: outs for ALU/MAC and for LS LOADS (the
+                    # loaded value). LS STORE dest1 is a READ (stored data)
+                    # and stays ins.
                     out_frags.append(f"DR64:$rd{dr_n}")
                     if is_acc:
                         # tied accumulator input: ins gains $rd_in, asm
@@ -2627,6 +2663,8 @@ def emit_logical_defs_td_inc(
         else:
             itin = "Slot012_ALU"
         props = [f"isCodeGenOnly = 0", "DecoderNamespace = \"HaydnAutoNoDecode\"", "isAsmParserOnly = 0"]
+        if may_load:
+            props.append("mayLoad = 1")
         if may_store:
             props.append("mayStore = 1")
         if tie:
@@ -2639,10 +2677,13 @@ def emit_logical_defs_td_inc(
         lines.append("}")
         lines.append("}")
         lines.append("")
+        if tie:
+            emitted_tied.add(_logical_key(logical))
+        emitted_names.add(_logical_key(logical))
         emitted += 1
     lines.append(f"// generated logical defs: {emitted}")
     lines.append("")
-    return "\n".join(lines)
+    return "\n".join(lines), emitted_tied, emitted_names
 
 
 def emit_composite_scaffold_fragment() -> str:
@@ -3338,7 +3379,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 2
     full_accum_ties = load_accumulator_ties(index_path)
     accum_ties = full_accum_ties
+    # Emit the generated logical defs FIRST: their in-memory tie set is part
+    # of "what the td models" for the divergence pin (a disk-stale .inc must
+    # not fake divergence that this very run is about to fix).
+    hand_logicals = load_hand_def_logicals(out_dir)
+    behaviors = {}
+    gpr_ports: Dict[str, Dict[str, list]] = {}
+    for _rows in json.loads(index_path.read_text(encoding="utf-8")).values():
+        if isinstance(_rows, list):
+            for _r in _rows:
+                if isinstance(_r, dict) and _r.get("Instruction"):
+                    behaviors[_r["Instruction"].strip().upper()] = _r.get("Behavior") or ""
+                    gpr_ports[_r["Instruction"].strip().upper()] = {
+                        "W": _r.get("GPR_Write_Port") or [],
+                        "R": _r.get("GPR_Read_Port") or [],
+                    }
+    logical_defs_td, emitted_tied, emitted_defs_keys = emit_logical_defs_td_inc(
+        cat, hand_logicals, full_accum_ties, behaviors, gpr_ports
+    )
     td_tied = load_td_tied_logicals(Path(__file__).resolve().parent.parent)
+    # names already emitted by this run are governed by emitted_tied, not by
+    # the stale on-disk .inc the scan just read
+    # names emitted this run: their tie verdict comes from emitted_tied
+    td_tied = (td_tied - emitted_defs_keys) | emitted_tied
     divergent = sorted(k for k in accum_ties if k not in td_tied)
     accum_ties = {k: v for k, v in accum_ties.items() if k in td_tied}
     # Golden says these read their destination; the LLVM logical models no
@@ -3364,8 +3427,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     members_td = emit_members_td_inc(cat, accum_ties)
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical)
-    hand_logicals = load_hand_def_logicals(out_dir)
-    logical_defs_td = emit_logical_defs_td_inc(cat, hand_logicals, full_accum_ties)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir)
 

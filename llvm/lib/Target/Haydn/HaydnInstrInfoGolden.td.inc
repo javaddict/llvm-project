@@ -11,6 +11,294 @@
 // them separately.
 //===----------------------------------------------------------------------===//
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def ADD64S_H : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2, DR64:$rd3),
+    "add64s_h	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def ADD64S_L : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2, DR64:$rd3),
+    "add64s_l	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LDW_BREV_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "d_ldw_brev_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LDW_BREV_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs2),
+    "d_ldw_brev_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LDW_POST_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "d_ldw_post_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LDW_POST_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs2),
+    "d_ldw_post_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LDW_PRE_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "d_ldw_pre_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LDW_PRE_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs2),
+    "d_ldw_pre_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def D_LDW_WITH_IMM : HaydnInst<4, (outs DR64:$rd1),
+    (ins GPR32:$rs1, simm6:$scaled_imm),
+    "d_ldw_with_imm	$rd1, $rs1, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def D_LDW_WITH_REG : HaydnInst<4, (outs DR64:$rd1),
+    (ins GPR32:$rs1, GPR32:$rs2),
+    "d_ldw_with_reg	$rd1, $rs1, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LHW_POST_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "d_lhw_post_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LHW_POST_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs2),
+    "d_lhw_post_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LHW_PRE_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "d_lhw_pre_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LHW_PRE_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs2),
+    "d_lhw_pre_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def D_LHW_WITH_IMM : HaydnInst<4, (outs DR64:$rd1),
+    (ins GPR32:$rs1, simm6:$scaled_imm),
+    "d_lhw_with_imm	$rd1, $rs1, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def D_LHW_WITH_REG : HaydnInst<4, (outs DR64:$rd1),
+    (ins GPR32:$rs1, GPR32:$rs2),
+    "d_lhw_with_reg	$rd1, $rs1, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LW_POST_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "d_lw_post_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LW_POST_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs2),
+    "d_lw_post_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LW_PRE_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "d_lw_pre_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LW_PRE_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs2),
+    "d_lw_pre_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def D_LW_WITH_IMM : HaydnInst<4, (outs DR64:$rd1),
+    (ins GPR32:$rs1, simm6:$scaled_imm),
+    "d_lw_with_imm	$rd1, $rs1, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def D_LW_WITH_REG : HaydnInst<4, (outs DR64:$rd1),
+    (ins GPR32:$rs1, GPR32:$rs2),
+    "d_lw_with_reg	$rd1, $rs1, $rs2", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_sdw_brev_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_BREV_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sdw_brev_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_sdw_post_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_POST_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sdw_post_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_sdw_pre_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_PRE_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sdw_pre_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def D_SDW_WITH_IMM : HaydnInst<4, (outs),
+    (ins DR64:$rd1, GPR32:$rs1, simm6:$scaled_imm),
+    "d_sdw_with_imm	$rd1, $rs1, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def D_SDW_WITH_REG : HaydnInst<4, (outs),
+    (ins DR64:$rd1, GPR32:$rs1, GPR32:$rs2),
+    "d_sdw_with_reg	$rd1, $rs1, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_shw_post_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_shw_post_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_shw_pre_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_shw_pre_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def D_SHW_WITH_IMM : HaydnInst<4, (outs),
+    (ins DR64:$rd1, GPR32:$rs1, simm6:$scaled_imm),
+    "d_shw_with_imm	$rd1, $rs1, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def D_SHW_WITH_REG : HaydnInst<4, (outs),
+    (ins DR64:$rd1, GPR32:$rs1, GPR32:$rs2),
+    "d_shw_with_reg	$rd1, $rs1, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
 def D_SW_F64RS_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
@@ -39,6 +327,86 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def D_SW_F64RS_WITH_REG : HaydnInst<4, (outs),
     (ins DR64:$rd1, GPR32:$rs1, GPR32:$rs2),
     "d_sw_f64rs_with_reg	$rd1, $rs1, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_H_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_sw_h_post_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_H_POST_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sw_h_post_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_H_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_sw_h_pre_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_H_PRE_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sw_h_pre_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def D_SW_H_WITH_REG : HaydnInst<4, (outs),
+    (ins DR64:$rd1, GPR32:$rs1, GPR32:$rs2),
+    "d_sw_h_with_reg	$rd1, $rs1, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_L_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_sw_l_post_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_L_POST_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sw_l_post_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_L_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, simm6:$scaled_imm),
+    "d_sw_l_pre_imm	$rd1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SW_L_PRE_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sw_l_pre_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def D_SW_L_WITH_REG : HaydnInst<4, (outs),
+    (ins DR64:$rd1, GPR32:$rs1, GPR32:$rs2),
+    "d_sw_l_with_reg	$rd1, $rs1, $rs2", []> {
   let Itinerary = Slot0_LS;
 }
 }
@@ -396,6 +764,14 @@ def FMULZSS32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def MOVE64 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2),
+    "move64	$rd1, $rd2", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
 def MUL32X16_H0 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2, DR64:$rd3),
     "mul32x16.h0	$rd1, $rd2, $rd3", []> {
@@ -747,10 +1123,10 @@ def MULZSS32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
-def PLDWWUA_POST : HaydnInst<4, (outs),
-    (ins uimm2:$imm_2, GPR32:$rs1),
-    "pldwwua	$imm_2, $rs1", []> {
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def PLDWWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$imm_2, GPR32:$rs),
+    "pldwwua	$imm_2, $rs", []> {
   let Itinerary = Slot01_LD;
 }
 }
@@ -759,6 +1135,398 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def SET_HWLOOP_F2 : HaydnInst<4, (outs),
     (ins uimm1:$imm_1, uimm6:$imm_6, uimm12:$imm_12, GPR32:$rs1),
     "set_hwloop_f2	$imm_1, $imm_6, $imm_12, $rs1", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def SRAI64R : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2, uimm6:$imm_6),
+    "srai64r	$rd1, $rd2, $imm_6", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def SUB64S_H : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2, DR64:$rd3),
+    "sub64s_h	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def SUB64S_L : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2, DR64:$rd3),
+    "sub64s_l	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lbs_post_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lbs_post_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lbs_pre_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lbs_pre_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lbu_post_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lbu_post_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lbu_pre_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LBU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lbu_pre_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWS_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lhws_post_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWS_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lhws_post_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWS_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lhws_pre_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWS_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lhws_pre_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWU_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lhwu_post_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWU_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lhwu_post_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWU_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lhwu_pre_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LHWU_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lhwu_pre_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LW_BREV_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lw_brev_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LW_BREV_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lw_brev_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LW_POST_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lw_post_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LW_POST_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lw_post_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LW_PRE_IMM : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, simm6:$scaled_imm),
+    "s_lw_pre_imm	$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def S_LW_PRE_REG : HaydnInst<4, (outs GPR32:$rt, GPR32:$rs_wb),
+    (ins GPR32:$rs, GPR32:$rs3),
+    "s_lw_pre_reg	$rt, $rs, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def S_LW_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
+    (ins GPR32:$rs2, simm6:$scaled_imm),
+    "s_lw_with_imm	$rt, $rs2, $scaled_imm", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1 in {
+def S_LW_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
+    (ins GPR32:$rs2, GPR32:$rs3),
+    "s_lw_with_reg	$rt, $rs2, $rs3", []> {
+  let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SB_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, simm6:$scaled_imm),
+    "s_sb_post_imm	$rs1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SB_POST_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, GPR32:$rs3),
+    "s_sb_post_reg	$rs1, $rs, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SB_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, simm6:$scaled_imm),
+    "s_sb_pre_imm	$rs1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SB_PRE_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, GPR32:$rs3),
+    "s_sb_pre_reg	$rs1, $rs, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def S_SB_WITH_IMM : HaydnInst<4, (outs),
+    (ins GPR32:$rs1, GPR32:$rs2, simm6:$scaled_imm),
+    "s_sb_with_imm	$rs1, $rs2, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def S_SB_WITH_REG : HaydnInst<4, (outs),
+    (ins GPR32:$rs1, GPR32:$rs2, GPR32:$rs3),
+    "s_sb_with_reg	$rs1, $rs2, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SHW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, simm6:$scaled_imm),
+    "s_shw_post_imm	$rs1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SHW_POST_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, GPR32:$rs3),
+    "s_shw_post_reg	$rs1, $rs, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SHW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, simm6:$scaled_imm),
+    "s_shw_pre_imm	$rs1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SHW_PRE_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, GPR32:$rs3),
+    "s_shw_pre_reg	$rs1, $rs, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def S_SHW_WITH_IMM : HaydnInst<4, (outs),
+    (ins GPR32:$rs1, GPR32:$rs2, simm6:$scaled_imm),
+    "s_shw_with_imm	$rs1, $rs2, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def S_SHW_WITH_REG : HaydnInst<4, (outs),
+    (ins GPR32:$rs1, GPR32:$rs2, GPR32:$rs3),
+    "s_shw_with_reg	$rs1, $rs2, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SW_BREV_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, simm6:$scaled_imm),
+    "s_sw_brev_imm	$rs1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SW_BREV_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, GPR32:$rs3),
+    "s_sw_brev_reg	$rs1, $rs, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SW_POST_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, simm6:$scaled_imm),
+    "s_sw_post_imm	$rs1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SW_POST_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, GPR32:$rs3),
+    "s_sw_post_reg	$rs1, $rs, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SW_PRE_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, simm6:$scaled_imm),
+    "s_sw_pre_imm	$rs1, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def S_SW_PRE_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins GPR32:$rs1, GPR32:$rs, GPR32:$rs3),
+    "s_sw_pre_reg	$rs1, $rs, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def S_SW_WITH_IMM : HaydnInst<4, (outs),
+    (ins GPR32:$rs1, GPR32:$rs2, simm6:$scaled_imm),
+    "s_sw_with_imm	$rs1, $rs2, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
+def S_SW_WITH_REG : HaydnInst<4, (outs),
+    (ins GPR32:$rs1, GPR32:$rs2, GPR32:$rs3),
+    "s_sw_with_reg	$rs1, $rs2, $rs3", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def TRANSF64_H : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2),
+    "transf64_h	$rd1, $rd2", []> {
+  let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def TRANSF64_L : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd2),
+    "transf64_l	$rd1, $rd2", []> {
   let Itinerary = Slot012_ALU;
 }
 }
@@ -1019,4 +1787,4 @@ def X2MULS32X16_L : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
-// generated logical defs: 126
+// generated logical defs: 222
