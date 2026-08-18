@@ -14,7 +14,7 @@
 // TableGen owns the full rule registry (HaydnCombine.td):
 //   haydn_post_generic_combines  — legal-preserving shared generics (no intdiv)
 //   haydn_post_residual_combines — Haydn algebraic residuals
-//   haydn_post_target_combines   — form_agu_inc_mem (G_HAYDN_*INC_*)
+//   haydn_post_target_combines   — form_lane_store + form_agu_inc_mem
 // Dispatched exclusively via tryCombineAllImpl. Pass shell has no free-form
 // opcode switch and no post-legal cast sanitizer.
 //
@@ -36,6 +36,8 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsHaydn.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
@@ -972,6 +974,145 @@ void applyIncMem(MachineInstr &MemI, MachineRegisterInfo &MRI,
   Info.PtrAddI->eraseFromParent();
   Observer.erasingInstr(MemI);
   MemI.eraseFromParent();
+}
+
+// DR64 lane-store: G_STORE of a 32-bit lane extract -> d_sw_{l,h}_with_imm.
+// Peer: AIECombine.td combine_split_intrinsic_for_store (AIECombine.td:80).
+struct HaydnLaneStoreInfo {
+  Register DrSrc;
+  Register Base;
+  int64_t ScaledImm = 0;
+  Intrinsic::ID IntrID = Intrinsic::not_intrinsic;
+};
+
+static bool matchLaneExtract(Register Data, MachineRegisterInfo &MRI,
+                             Register &DrSrc, bool &IsHigh) {
+  if (!Data.isVirtual() || !MRI.hasOneNonDBGUse(Data))
+    return false;
+  MachineInstr *Def = MRI.getVRegDef(Data);
+  if (!Def)
+    return false;
+
+  if (Def->getOpcode() == TargetOpcode::G_TRUNC) {
+    Register Src = Def->getOperand(1).getReg();
+    if (!Src.isVirtual())
+      return false;
+    LLT SrcTy = MRI.getType(Src);
+    if (!SrcTy.isScalar() || SrcTy.getSizeInBits() != 64)
+      return false;
+    if (MachineInstr *Sh = getOpcodeDef(TargetOpcode::G_LSHR, Src, MRI)) {
+      auto ShAmt =
+          getIConstantVRegValWithLookThrough(Sh->getOperand(2).getReg(), MRI);
+      Register ShSrc = Sh->getOperand(1).getReg();
+      if (ShAmt && ShAmt->Value == 32 && ShSrc.isVirtual() &&
+          MRI.getType(ShSrc).isScalar() &&
+          MRI.getType(ShSrc).getSizeInBits() == 64) {
+        DrSrc = ShSrc;
+        IsHigh = true;
+        return true;
+      }
+    }
+    DrSrc = Src;
+    IsHigh = false;
+    return true;
+  }
+
+  if (Def->getOpcode() == TargetOpcode::G_UNMERGE_VALUES) {
+    unsigned NumDefs = Def->getNumExplicitDefs();
+    if (NumDefs < 2)
+      return false;
+    Register Src = Def->getOperand(NumDefs).getReg();
+    if (!Src.isVirtual())
+      return false;
+    LLT SrcTy = MRI.getType(Src);
+    if (!SrcTy.isScalar() || SrcTy.getSizeInBits() != 64)
+      return false;
+    if (Def->getOperand(0).getReg() == Data) {
+      DrSrc = Src;
+      IsHigh = false;
+      return true;
+    }
+    if (Def->getOperand(1).getReg() == Data) {
+      DrSrc = Src;
+      IsHigh = true;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool matchCombineLaneStore(MachineInstr &MI, MachineRegisterInfo &MRI,
+                           HaydnLaneStoreInfo &Info) {
+  if (MI.getOpcode() != TargetOpcode::G_STORE)
+    return false;
+
+  Register Data = MI.getOperand(0).getReg();
+  Register Addr = MI.getOperand(1).getReg();
+  if (!Data.isVirtual() || !Addr.isVirtual())
+    return false;
+  LLT DataTy = MRI.getType(Data);
+  if (!DataTy.isScalar() || DataTy.getSizeInBits() != 32)
+    return false;
+
+  Register DrSrc;
+  bool IsHigh = false;
+  if (!matchLaneExtract(Data, MRI, DrSrc, IsHigh))
+    return false;
+
+  Register Base = Addr;
+  int64_t OffBytes = 0;
+  if (MachineInstr *PtrAdd = getOpcodeDef(TargetOpcode::G_PTR_ADD, Addr, MRI)) {
+    if (!getPtrAddConstBytes(*PtrAdd, MRI, OffBytes))
+      return false;
+    Base = PtrAdd->getOperand(1).getReg();
+  }
+  if (!Base.isVirtual())
+    return false;
+  if ((OffBytes % 4) != 0)
+    return false;
+  int64_t ScaledImm = OffBytes >> 2;
+  if (!isInt<6>(ScaledImm))
+    return false;
+
+  if (MI.memoperands_empty())
+    return false;
+  for (MachineMemOperand *MMO : MI.memoperands()) {
+    if (MMO->isVolatile() || MMO->isAtomic())
+      return false;
+    if (MMO->getAlign() < Align(4))
+      return false;
+    // Value type can be s32 while the MMO is narrower (i40 split stores
+    // an s32-typed high byte as store s8). Only fold real 32-bit stores.
+    if (!MMO->getSize().hasValue() || MMO->getSize() != 4)
+      return false;
+  }
+
+  Info.DrSrc = DrSrc;
+  Info.Base = Base;
+  Info.ScaledImm = ScaledImm;
+  Info.IntrID = IsHigh ? Intrinsic::haydn_d_sw_h_with_imm
+                       : Intrinsic::haydn_d_sw_l_with_imm;
+  return true;
+}
+
+void applyLaneStore(MachineInstr &Store, MachineRegisterInfo &MRI,
+                    MachineIRBuilder &B, GISelChangeObserver &Observer,
+                    HaydnLaneStoreInfo &Info) {
+  B.setInstrAndDebugLoc(Store);
+  MachineInstrBuilder MIB =
+      B.buildInstr(TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS);
+  MIB.addIntrinsicID(Info.IntrID);
+  MIB.addUse(Info.DrSrc);
+  MIB.addUse(Info.Base);
+  MIB.addImm(Info.ScaledImm);
+  for (auto *MMO : Store.memoperands())
+    MIB.addMemOperand(MMO);
+
+  LLVM_DEBUG(dbgs() << "Haydn postleg combine lane-store scaled="
+                    << Info.ScaledImm << "\n  -> " << *MIB);
+
+  Observer.erasingInstr(Store);
+  Store.eraseFromParent();
 }
 
 

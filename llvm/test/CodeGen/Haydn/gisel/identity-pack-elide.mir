@@ -1,0 +1,58 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postselect-opt \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — identity extract+repack becomes the product DR64 copy
+# (OR64 d,s,s). isCopyInstrImpl already treats that as COPY; generic
+# MachineCSE owns same-source MOV_GPR_TO_DR64 (cse-const-dr64-copy.mir).
+# Do not invent a second bank assignment. Lane-store is the combiner.
+
+---
+name: identity_move32_repack
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $d0
+    %0:dr64 = COPY $d0
+    %1:gpr32 = MOVE32_DR_L %0
+    %2:gpr32 = MOVE32_DR_H %0
+    %3:dr64 = MOV_GPR_TO_DR64 %1, %2
+    $d0 = COPY %3
+    RET implicit $r15, implicit $d0
+...
+# CHECK-LABEL: name: identity_move32_repack
+# CHECK: OR64
+# CHECK-NOT: MOV_GPR_TO_DR64
+
+---
+name: identity_unmerge_repack
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $d0
+    %0:dr64 = COPY $d0
+    %1:gpr32, %2:gpr32 = MOV_DR64_TO_GPR %0
+    %3:dr64 = MOV_GPR_TO_DR64 %1, %2
+    $d0 = COPY %3
+    RET implicit $r15, implicit $d0
+...
+# CHECK-LABEL: name: identity_unmerge_repack
+# CHECK: OR64
+# CHECK-NOT: MOV_GPR_TO_DR64
+
+---
+name: non_identity_different_sources
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $d0, $d1
+    %0:dr64 = COPY $d0
+    %1:dr64 = COPY $d1
+    %2:gpr32 = MOVE32_DR_L %0
+    %3:gpr32 = MOVE32_DR_H %1
+    %4:dr64 = MOV_GPR_TO_DR64 %2, %3
+    $d0 = COPY %4
+    RET implicit $r15, implicit $d0
+...
+# CHECK-LABEL: name: non_identity_different_sources
+# CHECK: MOV_GPR_TO_DR64
+# CHECK-NOT: OR64

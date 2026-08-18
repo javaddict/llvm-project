@@ -1,0 +1,542 @@
+# RUN: rm -rf %t && split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/load_addr_fi.mir -o - 2>&1 | FileCheck %s --check-prefix=RESIDUAL
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/setcbr_ok.mir -o - | FileCheck %s --check-prefix=SETCBR
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/setcbr_end_ok.mir -o - | FileCheck %s --check-prefix=SETCBRE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/load_addr_imm.mir -o - | FileCheck %s --check-prefix=ADDR
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/set_hwloop_ok.mir -o - | FileCheck %s --check-prefix=HWLOOP
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/set_hwloop_reg_ok.mir -o - | FileCheck %s --check-prefix=HWLOOPR
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/post_inc_ok.mir -o - | FileCheck %s --check-prefix=POSTINC
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/st_post_inc_ok.mir -o - | FileCheck %s --check-prefix=STPOST
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/vaend_ok.mir -o - | FileCheck %s --check-prefix=VAEND
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/post_inc_mmo.mir -o - | FileCheck %s --check-prefix=MMO
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/ld64_post_inc_ok.mir -o - | FileCheck %s --check-prefix=LD64POST
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/st64_post_inc_ok.mir -o - | FileCheck %s --check-prefix=ST64POST
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/post_inc_split_mmo.mir -o - | FileCheck %s --check-prefix=SPLITMMO
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/bundled_post_inc.mir -o - | FileCheck %s --check-prefix=BUNDLE
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/pseudo_call.mir -o - 2>&1 | FileCheck %s --check-prefix=CALL
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vacopy.mir -o - 2>&1 | FileCheck %s --check-prefix=VACOPY
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vacopy_mmo.mir -o - 2>&1 | FileCheck %s --check-prefix=VACOPY_MMO
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/libcall_sdiv.mir -o - 2>&1 | FileCheck %s --check-prefix=LIBCALL
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/libcall_mul64.mir -o - 2>&1 | FileCheck %s --check-prefix=MUL64
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vastart.mir -o - 2>&1 | FileCheck %s --check-prefix=VASTART
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/adjcallstack.mir -o - 2>&1 | FileCheck %s --check-prefix=ADJ
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vaarg_i32.mir -o - 2>&1 | FileCheck %s --check-prefix=VAARG32
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/vaarg_i64.mir -o - 2>&1 | FileCheck %s --check-prefix=VAARG64
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_set_hwloop.mir -o - 2>&1 | FileCheck %s --check-prefix=BSET
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_setcbr.mir -o - 2>&1 | FileCheck %s --check-prefix=BCBR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_load_addr.mir -o - 2>&1 | FileCheck %s --check-prefix=BADDR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_loopctl.mir -o - 2>&1 | FileCheck %s --check-prefix=BLOOP
+#
+# Role: MIR — ExpandPseudos residual matrix. Surfaces this pass expands
+# (LOAD_ADDR / SETCBR / SET_HWLOOP{,_REG} / leftover *_POST_INC / VAEND)
+# must be gone. Relocated leftovers (PseudoCALL / LIBCALL / VASTART /
+# VACOPY / VAARG / ADJCALLSTACK) fail closed here; owners are
+# CallLowering / legalizer / PEI. Bundled leftover *_POST_INC uses the
+# same expandPostIncPseudo helper (AIE/Hexagon expand in-bundle leftovers
+# rather than a second expand pass). Leftover SET_HWLOOP / SETCBR /
+# LOOPCTL / LOAD_ADDR as BUNDLE children are fatal.
+
+#--- load_addr_fi.mir
+--- |
+  define void @residual_load_addr_fi() { ret void }
+...
+---
+name:            residual_load_addr_fi
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; RESIDUAL: LOAD_ADDR operand kind is not expandable
+    ; RESIDUAL: LOAD_ADDR
+    $r1 = LOAD_ADDR %stack.0
+    RET implicit $r15
+stack:
+  - { id: 0, name: '', type: default, offset: 0, size: 4, alignment: 4 }
+
+#--- setcbr_ok.mir
+--- |
+  define void @expand_setcbr_clears() { ret void }
+...
+---
+name:            expand_setcbr_clears
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SETCBR: CSRW_W
+    ; SETCBR-NOT: SETCBR
+    SETCBR_BEGIN 0, $r1
+    RET implicit $r15
+
+#--- setcbr_end_ok.mir
+--- |
+  define void @expand_setcbr_end() { ret void }
+...
+---
+name:            expand_setcbr_end
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; SETCBRE: CSRW_W
+    ; SETCBRE-NOT: SETCBR
+    SETCBR_END 1, $r1
+    RET implicit $r15
+
+#--- load_addr_imm.mir
+--- |
+  define void @expand_load_addr_imm() { ret void }
+...
+---
+name:            expand_load_addr_imm
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; ADDR-NOT: LOAD_ADDR
+    ; ADDR: ADDI32
+    $r1 = LOAD_ADDR 42
+    RET implicit $r15
+
+#--- set_hwloop_ok.mir
+--- |
+  define void @expand_set_hwloop() { ret void }
+...
+---
+name:            expand_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1, %bb.2
+    ; HWLOOP: SET_HWLOOP_W
+    ; HWLOOP-NOT: SET_HWLOOP{{$}}
+    SET_HWLOOP 0, %bb.1, %bb.2, 16, implicit-def dead $sfr
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+  bb.2:
+    RET implicit $r15
+
+#--- set_hwloop_reg_ok.mir
+--- |
+  define void @expand_set_hwloop_reg() { ret void }
+...
+---
+name:            expand_set_hwloop_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r4, $r15
+    successors: %bb.1, %bb.2
+    ; HWLOOPR: SET_HWLOOP_F2_W
+    ; HWLOOPR-NOT: SET_HWLOOP_REG
+    SET_HWLOOP_REG 0, %bb.1, %bb.2, $r4, implicit-def dead $sfr
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+  bb.2:
+    RET implicit $r15
+
+#--- post_inc_ok.mir
+--- |
+  define void @expand_post_inc() { ret void }
+...
+---
+name:            expand_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; POSTINC: S_LW_POST_IMM
+    ; POSTINC-NOT: LD32_POST_INC
+    $r1 = LD32_POST_INC $r2, 4, 0
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- st_post_inc_ok.mir
+--- |
+  define void @expand_st_post_inc() { ret void }
+...
+---
+name:            expand_st_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; STPOST: = ST32_POST
+    ; STPOST-NOT: ST32_POST_INC
+    ST32_POST_INC $r1, $r2, 4, 0
+    RET implicit $r15, implicit $r2
+
+#--- vaend_ok.mir
+--- |
+  define void @expand_vaend() { ret void }
+...
+---
+name:            expand_vaend
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; VAEND-NOT: VAEND
+    ; VAEND: RET
+    VAEND $r1
+    RET implicit $r15
+
+#--- post_inc_mmo.mir
+--- |
+  define i32 @expand_post_inc_mmo(ptr %p) {
+    %v = load i32, ptr %p, align 4
+    ret i32 %v
+  }
+...
+---
+name:            expand_post_inc_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; MMO: S_LW_POST_IMM{{.*}}load
+    ; MMO-NOT: LD32_POST_INC
+    $r1 = LD32_POST_INC $r2, 4, 0 :: (load (s32) from %ir.p)
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- ld64_post_inc_ok.mir
+--- |
+  define i64 @expand_ld64_post_inc(ptr %p) {
+    %v = load i64, ptr %p, align 8
+    ret i64 %v
+  }
+...
+---
+name:            expand_ld64_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; LD64POST: D_LDW_POST_IMM{{.*}}load
+    ; LD64POST-NOT: LD64_POST_INC
+    $d0 = LD64_POST_INC $r2, 8, 0 :: (load (s64) from %ir.p)
+    RET implicit $r15, implicit $d0, implicit $r2
+
+#--- st64_post_inc_ok.mir
+--- |
+  define void @expand_st64_post_inc(ptr %p, i64 %v) {
+    store i64 %v, ptr %p, align 8
+    ret void
+  }
+...
+---
+name:            expand_st64_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $r2, $r15
+    ; ST64POST: = ST64_POST {{.*}}store
+    ; ST64POST-NOT: ST64_POST_INC
+    ST64_POST_INC $d0, $r2, 8, 0 :: (store (s64) into %ir.p)
+    RET implicit $r15, implicit $r2
+
+#--- post_inc_split_mmo.mir
+--- |
+  define i32 @expand_post_inc_split_mmo(ptr %p) {
+    %v = load i32, ptr %p, align 4
+    ret i32 %v
+  }
+...
+---
+name:            expand_post_inc_split_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; Non-zero offset forces LD32 + ADDI32 split; MMO must land on LD32.
+    ; SPLITMMO: LD32{{.*}}load
+    ; SPLITMMO: ADDI32
+    ; SPLITMMO-NOT: LD32_POST_INC
+    $r1 = LD32_POST_INC $r2, 4, 4 :: (load (s32) from %ir.p)
+    RET implicit $r15, implicit $r1, implicit $r2
+
+#--- bundled_post_inc.mir
+--- |
+  define void @expand_bundled_post_inc() { ret void }
+...
+---
+name:            expand_bundled_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BUNDLE: S_LW_POST_IMM
+    ; BUNDLE-NOT: LD32_POST_INC
+    BUNDLE implicit-def dead $sfr {
+      $r3 = LD32_POST_INC $r1, 4, 0
+    }
+    RET implicit $r15, implicit $r3, implicit $r1
+
+#--- pseudo_call.mir
+--- |
+  declare void @callee()
+  define void @expand_pseudo_call() { ret void }
+...
+---
+name:            expand_pseudo_call
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CALL: residual expand-owned semantic pseudo
+    $r15 = PseudoCALL @callee, csr_haydn
+    RET implicit $r15
+
+#--- vacopy.mir
+--- |
+  define void @expand_vacopy() { ret void }
+...
+---
+name:            expand_vacopy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; VACOPY: residual expand-owned semantic pseudo
+    VACOPY $r1, $r2
+    RET implicit $r15
+
+#--- vacopy_mmo.mir
+--- |
+  define void @expand_vacopy_mmo(ptr %d, ptr %s) {
+    ret void
+  }
+...
+---
+name:            expand_vacopy_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; VACOPY_MMO: residual expand-owned semantic pseudo
+    VACOPY $r1, $r2 :: (load store (s160))
+    RET implicit $r15
+
+#--- libcall_sdiv.mir
+--- |
+  define i32 @expand_libcall_sdiv(i32 %a, i32 %b) {
+    %r = sdiv i32 %a, %b
+    ret i32 %r
+  }
+...
+---
+name:            expand_libcall_sdiv
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r3, $r4, $r15
+    ; LIBCALL: residual expand-owned semantic pseudo
+    $r1 = LIBCALL_SDIV $r3, $r4, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit-def $r15
+    RET implicit $r15, implicit $r1
+
+#--- libcall_mul64.mir
+--- |
+  define i64 @expand_libcall_mul64(i64 %a, i64 %b) {
+    %r = mul i64 %a, %b
+    ret i64 %r
+  }
+...
+---
+name:            expand_libcall_mul64
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d2, $d3, $r15
+    ; MUL64: residual expand-owned semantic pseudo
+    $d0 = LIBCALL_MUL64 $d2, $d3, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit-def $r15
+    RET implicit $r15, implicit $d0
+
+#--- vastart.mir
+--- |
+  define void @expand_vastart_novarargs() { ret void }
+...
+---
+name:            expand_vastart_novarargs
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; VASTART: residual expand-owned semantic pseudo
+    VASTART $r1
+    RET implicit $r15
+
+#--- adjcallstack.mir
+--- |
+  define void @expand_adjcallstack() { ret void }
+...
+---
+name:            expand_adjcallstack
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; ADJ: residual expand-owned semantic pseudo
+    ADJCALLSTACKDOWN 0, 0, implicit-def $r13, implicit $r13
+    ADJCALLSTACKUP 0, 0, implicit-def $r13, implicit $r13
+    RET implicit $r15
+
+#--- vaarg_i32.mir
+--- |
+  define i32 @expand_vaarg_i32(ptr %ap) {
+    %v = va_arg ptr %ap, i32
+    ret i32 %v
+  }
+...
+---
+name:            expand_vaarg_i32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; VAARG32: residual expand-owned semantic pseudo
+    $r1 = VAARG_I32 $r2
+    RET implicit $r15, implicit $r1
+
+#--- vaarg_i64.mir
+--- |
+  define i64 @expand_vaarg_i64(ptr %ap) {
+    %v = va_arg ptr %ap, i64
+    ret i64 %v
+  }
+...
+---
+name:            expand_vaarg_i64
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r15
+    ; VAARG64: residual expand-owned semantic pseudo
+    $d0 = VAARG_I64 $r2
+    RET implicit $r15, implicit $d0
+
+#--- bundled_set_hwloop.mir
+--- |
+  define void @residual_bundled_set_hwloop() { ret void }
+...
+---
+name:            residual_bundled_set_hwloop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1
+    ; BSET: residual cycle-forming bundled child
+    ; BSET: SET_HWLOOP
+    BUNDLE implicit-def dead $sfr {
+      SET_HWLOOP 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    }
+    RET implicit $r15
+  bb.1:
+    RET implicit $r15
+
+#--- bundled_setcbr.mir
+--- |
+  define void @residual_bundled_setcbr() { ret void }
+...
+---
+name:            residual_bundled_setcbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BCBR: residual cycle-forming bundled child
+    ; BCBR: SETCBR
+    BUNDLE {
+      SETCBR_BEGIN 0, $r1
+    }
+    RET implicit $r15
+
+#--- bundled_load_addr.mir
+--- |
+  define void @residual_bundled_load_addr() { ret void }
+...
+---
+name:            residual_bundled_load_addr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; BADDR: residual cycle-forming bundled child
+    ; BADDR: LOAD_ADDR
+    BUNDLE implicit-def $r1 {
+      $r1 = LOAD_ADDR 0
+    }
+    RET implicit $r15
+
+#--- bundled_loopctl.mir
+--- |
+  define void @residual_bundled_loopctl() { ret void }
+...
+---
+name:            residual_bundled_loopctl
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; BLOOP: residual cycle-forming bundled child
+    ; BLOOP: LoopDec
+    BUNDLE implicit-def $r1 {
+      $r1 = LoopDec $r1
+    }
+    RET implicit $r15

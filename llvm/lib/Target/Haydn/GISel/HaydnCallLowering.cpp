@@ -17,6 +17,7 @@
 #include "HaydnRegisterInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/Analysis.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/FunctionLoweringInfo.h"
@@ -26,7 +27,9 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Support/Alignment.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
@@ -355,7 +358,7 @@ static bool isSupportedCallingConv(CallingConv::ID CC) {
 static bool hasUnsupportedABIArgFlags(const CallLowering::ArgInfo &Arg) {
   for (const ISD::ArgFlagsTy &F : Arg.Flags) {
     if (F.isNest() || F.isSwiftError() || F.isSwiftSelf() || F.isSwiftAsync() ||
-        F.isInAlloca() || F.isPreallocated() || F.isByRef())
+        F.isInAlloca() || F.isPreallocated() || F.isByRef() || F.isInReg())
       return true;
   }
   return false;
@@ -377,7 +380,35 @@ static bool hasUnsupportedIRParamAttrs(const Argument &Arg) {
          Arg.hasAttribute(Attribute::SwiftAsync) ||
          Arg.hasAttribute(Attribute::SwiftError) ||
          Arg.hasAttribute(Attribute::InAlloca) ||
-         Arg.hasAttribute(Attribute::Preallocated);
+         Arg.hasAttribute(Attribute::Preallocated) ||
+         Arg.hasAttribute(Attribute::InReg);
+}
+
+// i128 (and wider integers) have no product CC. splitToValueTypes would
+// invent 2×i64 in D0/D1. half / bfloat are storage or libcall types, not
+// CC types (soft-float product CC is float=i32 / double=i64).
+// Peer: AIE/RISCV fail-close unsupported widths at CC preflight rather
+// than silently splitting into the GPR/DR assignment tables.
+static bool isUnsupportedABIType(Type *Ty) {
+  if (!Ty || Ty->isVoidTy())
+    return false;
+  if (IntegerType *IT = dyn_cast<IntegerType>(Ty))
+    return IT->getBitWidth() > 64;
+  // half / bfloat are storage or libcall types, not CC types. fp128 stays
+  // fail-closed at the legalizer (libcall-legalizer-fp-surface.ll) so raw
+  // IR can still reach G_FPEXT/G_FADD diagnostics instead of a CC abort.
+  return Ty->isHalfTy() || Ty->isBFloatTy();
+}
+
+// Interrupt, naked, and stack-protector have no Haydn ABI. AIE rejects
+// interrupt at return lowering (AIE1ISelLowering.cpp:964). Keep musttail
+// and these rows fail-closed until a legal JALR/frame/ISR story exists.
+static bool hasUnsupportedFnABI(const Function &F) {
+  if (F.hasFnAttribute("interrupt") || F.hasFnAttribute(Attribute::Naked))
+    return true;
+  return F.hasFnAttribute(Attribute::StackProtect) ||
+         F.hasFnAttribute(Attribute::StackProtectReq) ||
+         F.hasFnAttribute(Attribute::StackProtectStrong);
 }
 
 } // end anonymous namespace
@@ -457,7 +488,12 @@ bool HaydnCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
                                     FunctionLoweringInfo &FLI) const {
   MachineFunction &MF = MIRBuilder.getMF();
   MachineRegisterInfo &MRI = MF.getRegInfo();
-  if (!isSupportedCallingConv(MF.getFunction().getCallingConv()))
+  const Function &F = MF.getFunction();
+  if (!isSupportedCallingConv(F.getCallingConv()))
+    return false;
+  if (hasUnsupportedFnABI(F))
+    return false;
+  if (isUnsupportedABIType(F.getReturnType()))
     return false;
 
   auto RetMI = MIRBuilder.buildInstrNoInsert(Haydn::RET);
@@ -465,7 +501,6 @@ bool HaydnCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
   if (!FLI.CanLowerReturn) {
     insertSRetStores(MIRBuilder, Val->getType(), VRegs, FLI.DemoteRegister);
   } else if (!VRegs.empty()) {
-    const Function &F = MF.getFunction();
     const DataLayout &DL = F.getDataLayout();
     CallingConv::ID CC = F.getCallingConv();
 
@@ -508,13 +543,21 @@ bool HaydnCallLowering::lowerFormalArguments(
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const DataLayout &DL = F.getDataLayout();
 
-  // Fail closed on non-C CC and nest/swift/byref/inalloca formals before
-  // mutation (IR attrs first so setArgFlags never asserts on unsupported seats).
+  // Fail closed on non-C CC, interrupt/naked/ssp, i128, and nest/swift/
+  // byref/inalloca/inreg formals before mutation (IR attrs first so
+  // setArgFlags never asserts on unsupported seats).
   if (!isSupportedCallingConv(F.getCallingConv()))
     return false;
-  for (const Argument &Arg : F.args())
+  if (hasUnsupportedFnABI(F))
+    return false;
+  if (isUnsupportedABIType(F.getReturnType()))
+    return false;
+  for (const Argument &Arg : F.args()) {
     if (hasUnsupportedIRParamAttrs(Arg))
       return false;
+    if (isUnsupportedABIType(Arg.getType()))
+      return false;
+  }
 
   SmallVector<ArgInfo, 8> SplitArgs;
 
@@ -564,17 +607,80 @@ bool HaydnCallLowering::lowerFormalArguments(
   return true;
 }
 
+// AIE AIECallLowering.cpp:592. Target-independent IsTailCall plus no
+// byval formals. JALR/frame discipline still has to supply a tail opcode
+// (AIE2 PseudoJ_TCO_*; AIE1 getCallOpcode tail is unreachable).
+bool HaydnCallLowering::isEligibleForTailCallOptimization(
+    MachineIRBuilder &MIRBuilder, CallLoweringInfo &Info) const {
+  MachineFunction &MF = MIRBuilder.getMF();
+  const Function &CallerF = MF.getFunction();
+
+  if (!Info.IsTailCall && !Info.IsMustTailCall) {
+    LLVM_DEBUG(dbgs() << "Call is not marked tail/musttail\n");
+    return false;
+  }
+  if (any_of(CallerF.args(),
+             [](const Argument &A) { return A.hasByValAttr(); })) {
+    LLVM_DEBUG(dbgs() << "Cannot tail call from callers with byval\n");
+    return false;
+  }
+  if (CallerF.isVarArg() || Info.IsVarArg) {
+    LLVM_DEBUG(dbgs() << "Cannot tail call varargs\n");
+    return false;
+  }
+  if (!isSupportedCallingConv(Info.CallConv) ||
+      !isSupportedCallingConv(CallerF.getCallingConv()))
+    return false;
+  if (hasUnsupportedFnABI(CallerF) || hasUnsupportedABIArgFlags(Info.OrigArgs))
+    return false;
+  for (const ArgInfo &A : Info.OrigArgs)
+    if (isUnsupportedABIType(A.Ty))
+      return false;
+  return true;
+}
+
+// AIE AIECallLowering.cpp:622 emits TII.getCallOpcode(..., /*isTailCall*/true),
+// which is isReturn+isCall+isTerminator so PEI inserts the epilogue on that
+// block (isReturnBlock = back().isReturn()). Haydn JAL_W is isCall only;
+// JALR_W is isTerminator+isCall+isIndirectBranch but not isReturn. Emitting
+// either as a tail would skip the PEI epilogue. AIE1 has the same hole
+// (getCallOpcode tail is unreachable). Fail closed until a tail opcode
+// exists: no CALLSEQ, no callee mutation, no ordinary-call fallthrough
+// for musttail. Soft `tail` stays JAL_W + RET in lowerCall.
+bool HaydnCallLowering::lowerTailCall(MachineIRBuilder &MIRBuilder,
+                                      CallLoweringInfo &Info) const {
+  Info.LoweredTailCall = false;
+  if (!isEligibleForTailCallOptimization(MIRBuilder, Info))
+    return false;
+  // Eligible IR, but no product tail opcode (AIE2 PseudoJ_TCO analog).
+  LLVM_DEBUG(dbgs() << "Tail eligible but no isReturn tail opcode\n");
+  return false;
+}
+
 bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
                                   CallLoweringInfo &Info) const {
   MachineFunction &MF = MIRBuilder.getMF();
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const DataLayout &DL = MF.getDataLayout();
 
-  // Reject musttail before any MIR mutation (fail closed; no ordinary-call
-  // fallthrough). Soft tail preference is not implemented.
+  // Soft `tail` is an ordinary JAL_W + RET. musttail has no fallthrough —
+  // lowerTailCall is the AIE-shaped seat and stays fail-closed until a
+  // legal tail opcode exists. Interrupt/naked/i128 stay fail-closed below.
   if (Info.IsMustTailCall)
-    return false;
+    return lowerTailCall(MIRBuilder, Info);
   Info.IsTailCall = false;
+  if (hasUnsupportedFnABI(MF.getFunction()))
+    return false;
+  if (Info.CB) {
+    if (const Function *Callee = Info.CB->getCalledFunction())
+      if (hasUnsupportedFnABI(*Callee))
+        return false;
+  }
+  if (isUnsupportedABIType(Info.OrigRet.Ty))
+    return false;
+  for (const ArgInfo &OrigArg : Info.OrigArgs)
+    if (isUnsupportedABIType(OrigArg.Ty))
+      return false;
 
   // Only the default C ABI family is implemented. Unsupported CCs and
   // nest/swift/byref/inalloca/preallocated args or returns fail closed with

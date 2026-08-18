@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 // \file
 // Post-select peepholes (O1). Product elideCrossBankRoundTrips (ON O1):
-// lane-store, DR-constant CSE, identity GPR↔DR pack recombine.
+// identity GPR↔DR pack recombine.
 // Prefer end-to-end DR64; no GPR-pair aliasing of DR64.
 //===----------------------------------------------------------------------===//
 
@@ -36,17 +36,14 @@ public:
   }
 
 private:
-  // Live peeps: lane-store (MOVE32_DR + ST32 → D_SW_*), DR64 const CSE,
-  // identity pack recombine.
+  // Identity pack recombine. Lane-store of G_TRUNC/G_UNMERGE is
+  // HaydnCombine.td form_lane_store; this pass still folds selected
+  // MOVE32_DR + ST32 (underaligned s64 store splits after ISel).
+  // Constant-pack CSE is generic MachineCSE.
   bool elideCrossBankRoundTrips(MachineFunction &MF);
 
-  // MOVE32_DR_L/H + ST32 → D_SW_L/H_WITH_IMM (lane-store).
   bool tryFoldMove32DrToSw(MachineInstr &MovInst, MachineRegisterInfo &MRI,
                            const HaydnInstrInfo &TII);
-
-  // Same-BB CSE of MOV_GPR_TO_DR64 whose GPR32 sources are constants.
-  bool tryCSEConstantDR64(MachineInstr &MovInst, MachineRegisterInfo &MRI,
-                          const HaydnInstrInfo &TII);
 
   // Elide identity cross-bank round-trip:
   //   lo = MOVE32_DR_L src; hi = MOVE32_DR_H src; dst = MOV_GPR_TO_DR64 lo,hi

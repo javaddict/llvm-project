@@ -38,6 +38,16 @@ public:
 
   bool lowerCall(MachineIRBuilder &MIRBuilder,
                  CallLoweringInfo &Info) const override;
+
+private:
+  // AIE AIECallLowering.cpp:592 / :622. Emits a tail only when a
+  // isReturn+isCall+isTerminator opcode exists and the call is eligible.
+  // Haydn JAL_W / JALR_W are not that shape (PEI isReturnBlock).
+  bool isEligibleForTailCallOptimization(
+      MachineIRBuilder &MIRBuilder, CallLoweringInfo &Info) const;
+
+  bool lowerTailCall(MachineIRBuilder &MIRBuilder,
+                     CallLoweringInfo &Info) const;
 };
 
 } // end namespace llvm

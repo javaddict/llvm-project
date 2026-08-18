@@ -1,0 +1,29 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postrapseudos \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — LOADI32 MatInt seeds Cur=R0. A dirty R0 at expansion must
+# be restored (XOR32 r0,r0,r0) before the seed is read. Same local
+# cleanliness rule as withDR64PackBase / LOAD_ADDR.
+#
+# If the restore is dropped, CHECK-NOT loses and MatInt reads a non-zero
+# R0 (wrong immediate).
+
+--- |
+  define i32 @loadi32_dirty_r0() { ret i32 0 }
+...
+---
+name:            loadi32_dirty_r0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    $r0 = ADDI32_W $r1, 1
+    $r2 = LOADI32 42
+    RET implicit $r15
+...
+# CHECK-LABEL: name: loadi32_dirty_r0
+# CHECK: $r0 = ADDI32_W $r1, 1
+# CHECK-NEXT: $r0 = XOR32 $r0, $r0
+# CHECK: ADDI32
+# CHECK-NOT: LOADI32

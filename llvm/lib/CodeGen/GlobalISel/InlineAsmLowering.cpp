@@ -259,10 +259,10 @@ bool InlineAsmLowering::lowerInlineAsm(
         assert(OpTy && "Indirect operand must have elementtype attribute");
       }
 
-      // Match TargetLowering::ParseConstraints: unwrap single-element structs
-      // and tile sized aggregates with an integer of the same bit width when
-      // possible. Larger aggregates (e.g. overaligned structs used with =*m)
-      // keep MVT::Other and are only valid as memory constraints.
+      // D1000: Match TargetLowering::ParseConstraints — unwrap single-element
+      // structs and tile sized aggregates with an integer of the same bit
+      // width when possible. Larger aggregates (e.g. overaligned structs used
+      // with =*m) keep MVT::Other and are only valid as memory constraints.
       if (StructType *STy = dyn_cast<StructType>(OpTy))
         if (STy->getNumElements() == 1)
           OpTy = STy->getElementType(0);

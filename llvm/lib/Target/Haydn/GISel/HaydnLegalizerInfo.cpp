@@ -79,8 +79,10 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
  // registers v4i16/v2i32) — scalarize, do not leave illegal.
       .scalarize(0)
       .minScalar(0, S32)
-      .maxScalar(0, S64)
-      .widenScalarToNextPow2(0);
+      // Widen s72/s96 before max=s64. max-first G_EXTRACTs the illegal
+      // width (AIE1LegalizerInfo.cpp:126-129; AArch64:148-149).
+      .widenScalarToNextPow2(0)
+      .maxScalar(0, S64);
 
   // G_MUL elementwise wrap:
   //   s32   — MULL (golden MAC GRR low-half product)
@@ -96,8 +98,8 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .customFor({S64})
       .scalarizeIf(ScalarizeWideVec(0), 0)
       .minScalar(0, S32)
-      .maxScalar(0, S64)
       .widenScalarToNextPow2(0)
+      .maxScalar(0, S64)
       .scalarize(0);
 
   // Haydn has no native division/remainder - use libcalls.
@@ -107,6 +109,8 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       // pr60960 f3: v4s8 G_UDIV — not a legal SIMD shape; scalarize residual.
       .scalarize(0)
       .minScalar(0, S32)
+      // Widen s72/s96 before max=s64 (same order as G_ADD; AIE1:126-129).
+      .widenScalarToNextPow2(0)
       .maxScalar(0, S64);
 
   // G_UMULH — unsigned multiply high.
@@ -206,8 +210,10 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .scalarizeIf(ScalarizeWideVec(0), 0)
       // Residual: v4i8 + vector-cond G_SELECT from SLP (ssad/usad torture).
       .scalarize(0)
-      .clampScalar(0, S32, S64)
-      .widenScalarToNextPow2(0);
+      // Widen s72/s96 before clamp max=s64 (AIE1LegalizerInfo.cpp:120-123;
+      // AArch64LegalizerInfo.cpp:1009-1012). clamp-first G_EXTRACTs s96.
+      .widenScalarToNextPow2(0)
+      .clampScalar(0, S32, S64);
 
   //===--------------------------------------------------------------------===
   // Control Flow
@@ -221,9 +227,11 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   getActionDefinitionsBuilder(G_PHI)
       .legalFor({S32, S64, P0, V2I32, V4I16, V8I8, V4I8, V2I16})
       .scalarizeIf(ScalarizeWideVec(0), 0)
- .scalarize(0) // residual e.g. odd vectors ( SLP)
-      .clampScalar(0, S32, S64)
-      .widenScalarToNextPow2(0);
+      // residual e.g. odd vectors (SLP)
+      .scalarize(0)
+      // Widen s72/s96 before clamp max=s64 (AIE1LegalizerInfo.cpp:120-123).
+      .widenScalarToNextPow2(0)
+      .clampScalar(0, S32, S64);
 
   //===--------------------------------------------------------------------===
   // Type Conversions
@@ -272,6 +280,17 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                DstTy.getSizeInBits() == 128 && SrcTy.getSizeInBits() < 128 &&
                SrcTy.getSizeInBits() != 64;
       })
+      // zext/sext i32→i96 (gcc-layout bitfield insert). widenScalar of
+      // G_[SZ]EXT grows the SOURCE, not the dest, so dest s72/s96 never
+      // becomes s128 on that path (AIE1LegalizerInfo.cpp:120-123 is the
+      // dest-widen order used for G_SELECT/G_ADD). Custom: ext to s128
+      // then G_TRUNC (legal bit-subset).
+      .customIf([](const LegalityQuery &Query) {
+        const LLT DstTy = Query.Types[0];
+        const LLT SrcTy = Query.Types[1];
+        return DstTy.isScalar() && SrcTy.isScalar() &&
+               DstTy.getSizeInBits() > 64 && DstTy.getSizeInBits() < 128;
+      })
       .scalarize(0)
       // Non-pow2 / residual →s32: rewrite via custom legalize.
       .customIf([](const LegalityQuery &Query) {
@@ -307,6 +326,12 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
         return DstTy.isScalar() && SrcTy.isScalar() &&
                DstTy.getSizeInBits() == 128 && SrcTy.getSizeInBits() < 128 &&
                SrcTy.getSizeInBits() != 64;
+      })
+      .customIf([](const LegalityQuery &Query) {
+        const LLT DstTy = Query.Types[0];
+        const LLT SrcTy = Query.Types[1];
+        return DstTy.isScalar() && SrcTy.isScalar() &&
+               DstTy.getSizeInBits() > 64 && DstTy.getSizeInBits() < 128;
       })
       .scalarize(0)
       .legalIf([](const LegalityQuery &Query) {
@@ -718,8 +743,9 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // Two-bank varargs ABI: i64/f64 -> DR cursor __vr_top/__vr_offs; else
   // GPR cursor __gr_top/__gr_offs; per-bank overflow to __stack.
   // Product ABI advertises only scalar/pointer 32- and 64-bit va_arg forms.
-  // Vectors, i128, and other widths must fail closed. Sub-32 integer
-  // scalars widen to s32 (C default argument promotions).
+  // Pointer dest is the aggregate Indirect path (va-arg-22). Vectors,
+  // i128, and other widths must fail closed. Sub-32 integer scalars widen
+  // to s32 (C default argument promotions).
   getActionDefinitionsBuilder(G_VAARG)
       .customFor({S32, S64, P0})
       .widenScalarIf(
@@ -861,12 +887,17 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       G_ROTL, G_ROTR,
       G_SBFX, G_UBFX,
       G_FPTOSI_SAT, G_FPTOUI_SAT,
-      G_CONSTANT_FOLD_BARRIER,
       G_LROUND, G_LLROUND,
       G_FFREXP, G_FLDEXP,
   }).lowerFor({S16, S32, S64})
     .minScalar(0, S16)
     .maxScalar(0, S64);
+
+  // G_CONSTANT_FOLD_BARRIER (ConstHoist / same-type bitcast of ConstantInt)
+  // must NOT sit in the .lowerFor bucket above: LegalizerHelper has no
+  // lower() for it -> "unable to legalize" at -global-isel-abort=1. Treat it
+  // like G_FREEZE — alwaysLegal; generic InstructionSelect strips the
+  // barrier. Pin: gisel/constant-fold-barrier.ll.
 
   // G_BSWAP / G_BITREVERSE on s64 are custom-lowered in legalizeCustom.
   // The generic LegalizerHelper::lowerBswap computes its byte masks as
@@ -921,6 +952,10 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .clampMaxNumElements(0, S8, 8)
       .alwaysLegal();
 
+  // Same no-op contract for the fold barrier (see comment at the lowered
+  // bucket above for why it cannot live there).
+  getActionDefinitionsBuilder(G_CONSTANT_FOLD_BARRIER).alwaysLegal();
+
   // 1 type idx, 1 imm idx (scale/width)
   getActionDefinitionsBuilder({
       G_SEXT_INREG,
@@ -961,13 +996,19 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // types and can assert in getAction (getReg on imm). Select as nop (erase).
   getActionDefinitionsBuilder(G_PREFETCH).alwaysLegal();
 
-  // Control/misc with type idx (pointers / i32)
+  // Control/misc with type idx (pointers / i32). Cycle counters and
+  // named-register I/O have no golden CSR / register-name product; leaving
+  // them legalFor({S32,P0}) made s32 llvm.read_register selectable-as-legal
+  // then abort in the selector. Fail closed (RISCV custom-lowers only the
+  // rdcycle CSR it owns; Haydn has no analog).
   getActionDefinitionsBuilder({
       G_BLOCK_ADDR, G_JUMP_TABLE, G_BRINDIRECT, G_BRJT,
-      G_READ_REGISTER, G_WRITE_REGISTER,
-      G_READCYCLECOUNTER, G_READSTEADYCOUNTER,
       G_STACKSAVE, G_STACKRESTORE,
   }).legalFor({S32, P0});
+  getActionDefinitionsBuilder({
+      G_READ_REGISTER, G_WRITE_REGISTER,
+      G_READCYCLECOUNTER, G_READSTEADYCOUNTER,
+  }).unsupported();
 
   // T-ABI2: G_DYN_STACKALLOC is custom-lowered (RISCV
   // RISCVLegalizerInfo.cpp:512-513 .lower() + LegalizerHelper
@@ -1439,7 +1480,13 @@ bool HaydnLegalizerInfo::legalizeVAArg(LegalizerHelper &Helper,
       return false;
   }
 
+  // Pointer dest is the aggregate Indirect path (Clang ByVal=false):
+  // va_arg of ptr walks the GPR cursor like i32. Contents never occupy
+  // the 8-byte pointer slots (multi-struct varargs overlap otherwise).
+  const bool IsPtr = DstTy.isPointer();
   const bool IsI64 = DstTy.isScalar() && DstTy.getSizeInBits() == 64;
+  if (IsPtr && IsI64)
+    return false;
   const int TopOff = IsI64 ? kVaVrTopOff : kVaGrTopOff;
   const int OffsOff = IsI64 ? kVaVrOffsOff : kVaGrOffsOff;
   const int64_t RegStep = IsI64 ? 8 : 4;
@@ -1688,6 +1735,20 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     // sN→s64 is legal (selector residual ANDI/MOV or SEXT chain). Do not
     // custom-chain here: post-legalizer redundant-ext combine needs isLegal.
 
+    // Dest s72/s96 (gcc-layout bitfield insert): ext to s128 then trunc.
+    // Generic widenScalar grows the source, not this dest.
+    if (DstTy.isScalar() && DstTy.getSizeInBits() > 64 &&
+        DstTy.getSizeInBits() < 128 && SrcTy.isScalar() &&
+        SrcTy.getSizeInBits() < DstTy.getSizeInBits()) {
+      const LLT S128 = LLT::scalar(128);
+      MIB.setInstrAndDebugLoc(MI);
+      Register Wide =
+          MIB.buildInstr(MI.getOpcode(), {S128}, {SrcReg}).getReg(0);
+      MIB.buildTrunc(DstReg, Wide);
+      MI.eraseFromParent();
+      return true;
+    }
+
     // s64 -> s128 extension. IR-level instcombine / AggressiveInst
     // Combine folds an inline 64x64->128 schoolbook multiply into
     // `zext i64 X to i128; zext i64 Y to i128; mul nuw i128 %x, %y`.
@@ -1711,6 +1772,7 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
       const unsigned SrcBits = SrcTy.getSizeInBits();
       if (SrcBits >= 128)
         return false;
+      MIB.setInstrAndDebugLoc(MI);
 
       // SrcBits in (64, 128): build s128 as merge(lo s64, hi s64).
       // NEVER G_STORE the non-pow2 source — lowerStore(s72) re-emits
@@ -1722,6 +1784,22 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
         Register Hi64 = MRI.createGenericVirtualRegister(S64);
         bool HaveHalves = false;
 
+        // Walk COPY / G_CONSTANT_FOLD_BARRIER so i72 constants (pr79737-2
+        // G_CONSTANT_FOLD_BARRIER) still hit the APInt split.
+        {
+          MachineInstr *Peel = MRI.getVRegDef(Src);
+          while (Peel &&
+                 (Peel->isCopy() ||
+                  Peel->getOpcode() ==
+                      TargetOpcode::G_CONSTANT_FOLD_BARRIER) &&
+                 Peel->getNumOperands() >= 2 && Peel->getOperand(1).isReg() &&
+                 Peel->getOperand(1).getReg().isVirtual()) {
+            Src = Peel->getOperand(1).getReg();
+            SrcTy = MRI.getType(Src);
+            Peel = MRI.getVRegDef(Src);
+          }
+        }
+
         // Constant: split the APInt (store i72 C; lowerStore anyexts C).
         if (auto MaybeCst = getIConstantVRegValWithLookThrough(Src, MRI)) {
           APInt V = MaybeCst->Value.zext(128);
@@ -1729,6 +1807,19 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
           MIB.buildConstant(Hi64, V.lshr(64).trunc(64));
           HaveHalves = true;
         } else if (MachineInstr *Def = MRI.getVRegDef(Src)) {
+          // gcc-layout: G_ANYEXT of a COPY of a G_LOAD/G_TRUNC s96.
+          // Walk COPY so the load/trunc arms below still fire.
+          while (Def &&
+                 (Def->isCopy() ||
+                  Def->getOpcode() == TargetOpcode::G_CONSTANT_FOLD_BARRIER) &&
+                 Def->getNumOperands() >= 2 && Def->getOperand(1).isReg() &&
+                 Def->getOperand(1).getReg().isVirtual()) {
+            Src = Def->getOperand(1).getReg();
+            SrcTy = MRI.getType(Src);
+            Def = MRI.getVRegDef(Src);
+          }
+          if (!Def)
+            return false;
           // Trunc of s128 (typical after lowerLoad): unmerge the wide value.
           if (Def->getOpcode() == G_TRUNC) {
             Register Wide = Def->getOperand(1).getReg();
@@ -1745,6 +1836,55 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
               MIB.buildTrunc(Hi64, HiW);
               HaveHalves = true;
             }
+          } else if ((Def->getOpcode() == G_AND || Def->getOpcode() == G_OR ||
+                      Def->getOpcode() == G_XOR || Def->getOpcode() == G_ADD ||
+                      Def->getOpcode() == G_SUB) &&
+                     MI.getOpcode() != G_SEXT) {
+            // -O2 bitfield RMW / add: ANYEXT(s96 binop). Extending both
+            // operands then doing the op in s128 avoids unmerging s96.
+            Register X = Def->getOperand(1).getReg();
+            Register Y = Def->getOperand(2).getReg();
+            const LLT S128 = LLT::scalar(128);
+            Register Xe = MIB.buildAnyExt(S128, X).getReg(0);
+            Register Ye = MIB.buildAnyExt(S128, Y).getReg(0);
+            Register Wide =
+                MIB.buildInstr(Def->getOpcode(), {S128}, {Xe, Ye}).getReg(0);
+            auto U = MIB.buildUnmerge(S64, Wide);
+            MIB.buildCopy(Lo64, U.getReg(0));
+            MIB.buildCopy(Hi64, U.getReg(1));
+            HaveHalves = true;
+          } else if (Def->getOpcode() == G_SELECT &&
+                     MI.getOpcode() != G_SEXT) {
+            Register C = Def->getOperand(1).getReg();
+            Register T = Def->getOperand(2).getReg();
+            Register F = Def->getOperand(3).getReg();
+            const LLT S128 = LLT::scalar(128);
+            Register Te = MIB.buildAnyExt(S128, T).getReg(0);
+            Register Fe = MIB.buildAnyExt(S128, F).getReg(0);
+            Register Wide = MIB.buildSelect(S128, C, Te, Fe).getReg(0);
+            auto U = MIB.buildUnmerge(S64, Wide);
+            MIB.buildCopy(Lo64, U.getReg(0));
+            MIB.buildCopy(Hi64, U.getReg(1));
+            HaveHalves = true;
+          } else if ((Def->getOpcode() == G_SHL || Def->getOpcode() == G_LSHR ||
+                      Def->getOpcode() == G_ASHR) &&
+                     MI.getOpcode() != G_SEXT) {
+            // Bitfield insert: ANYEXT(shl i96). Shift in s128 then unmerge.
+            // s128 shifts maxScalar to s64; do not G_LSHR the s96 source.
+            Register X = Def->getOperand(1).getReg();
+            Register Amt = Def->getOperand(2).getReg();
+            const LLT S128 = LLT::scalar(128);
+            Register Xe = MIB.buildAnyExt(S128, X).getReg(0);
+            Register Wide =
+                MIB.buildInstr(Def->getOpcode(), {S128}, {Xe, Amt}).getReg(0);
+            auto U = MIB.buildUnmerge(S64, Wide);
+            MIB.buildCopy(Lo64, U.getReg(0));
+            MIB.buildCopy(Hi64, U.getReg(1));
+            HaveHalves = true;
+          } else if (Def->getOpcode() == G_IMPLICIT_DEF) {
+            MIB.buildUndef(Lo64);
+            MIB.buildUndef(Hi64);
+            HaveHalves = true;
           } else if (Def->getOpcode() == G_LOAD ||
                      Def->getOpcode() == G_SEXTLOAD ||
                      Def->getOpcode() == G_ZEXTLOAD) {
@@ -1775,8 +1915,7 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
         }
 
         if (!HaveHalves) {
-          // Last resort: low half only. High bits of the source are lost —
-          // prefer a hard failure over the old non-pow2 stack store loop.
+          // Do not emit G_INSERT/G_ANYEXT of sN (re-enters or is illegal).
           return false;
         }
 

@@ -1,0 +1,86 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COMBINE
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:     -run-pass=haydn-postlegalizer-combiner,regbankselect,instruction-select \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=ISEL
+#
+# Role: MIR — G_STORE of a DR64 lane extract becomes d_sw_{l,h}_with_imm
+# in the post-legalizer combiner (AIECombine.td:80 shape). Volatile and
+# underaligned stores stay scalar.
+
+---
+name:            lane_store_low
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r1
+    ; COMBINE-LABEL: name: lane_store_low
+    ; COMBINE: G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.haydn.d.sw.l.with.imm)
+    ; COMBINE-NOT: G_STORE
+    ; ISEL-LABEL: name: lane_store_low
+    ; ISEL: D_SW_L_WITH_IMM
+    %val:_(s64) = COPY $d0
+    %ptr:_(p0) = COPY $r1
+    %lo:_(s32) = G_TRUNC %val(s64)
+    G_STORE %lo(s32), %ptr(p0) :: (store (s32), align 4)
+    RET implicit $r15
+...
+
+---
+name:            lane_store_high
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r1
+    ; COMBINE-LABEL: name: lane_store_high
+    ; COMBINE: G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.haydn.d.sw.h.with.imm)
+    ; COMBINE-NOT: G_STORE
+    ; ISEL-LABEL: name: lane_store_high
+    ; ISEL: D_SW_H_WITH_IMM
+    %val:_(s64) = COPY $d0
+    %ptr:_(p0) = COPY $r1
+    %c32:_(s32) = G_CONSTANT i32 32
+    %sh:_(s64) = G_LSHR %val, %c32
+    %hi:_(s32) = G_TRUNC %sh(s64)
+    G_STORE %hi(s32), %ptr(p0) :: (store (s32), align 4)
+    RET implicit $r15
+...
+
+---
+name:            lane_store_low_off8
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r1
+    ; COMBINE-LABEL: name: lane_store_low_off8
+    ; COMBINE: G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.haydn.d.sw.l.with.imm), {{.*}}, 2
+    ; ISEL-LABEL: name: lane_store_low_off8
+    ; ISEL: D_SW_L_WITH_IMM
+    %val:_(s64) = COPY $d0
+    %ptr:_(p0) = COPY $r1
+    %c8:_(s32) = G_CONSTANT i32 8
+    %addr:_(p0) = G_PTR_ADD %ptr, %c8
+    %lo:_(s32) = G_TRUNC %val(s64)
+    G_STORE %lo(s32), %addr(p0) :: (store (s32), align 4)
+    RET implicit $r15
+...
+
+---
+name:            lane_store_volatile_no_fold
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $d0, $r1
+    ; COMBINE-LABEL: name: lane_store_volatile_no_fold
+    ; COMBINE: G_STORE
+    ; COMBINE-NOT: d_sw_l_with_imm
+    %val:_(s64) = COPY $d0
+    %ptr:_(p0) = COPY $r1
+    %lo:_(s32) = G_TRUNC %val(s64)
+    G_STORE %lo(s32), %ptr(p0) :: (volatile store (s32), align 4)
+    RET implicit $r15
+...

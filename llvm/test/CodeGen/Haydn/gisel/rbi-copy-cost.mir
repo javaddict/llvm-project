@@ -1,0 +1,59 @@
+# REQUIRES: asserts
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:     -run-pass=regbankselect -debug-only=haydn-regbankinfo,regbankselect \
+# RUN:     -verify-machineinstrs %s -o - 2>&1 | FileCheck %s
+
+# Role: MIR — P16(b) RBI copy-cost table: GPR32↔DR64 ≫ same-bank.
+#
+# REGRESSION TEST: HaydnRegisterBankInfo::copyCost (GOALS P16(b)).
+#
+# Bug: every InstructionMapping used Cost=1 and the target did not override
+# copyCost, so a GPR32↔DR64 repair was priced the same as a same-bank COPY
+# (base default: 0 same-bank, 1 otherwise). PostSelect cross-bank peeps then
+# papered over the cheap-looking round-trips.
+# Fix: AArch64-shaped copyCost (AIE/RISCV have no override). Same-bank stays
+# 0 (coalesced). GPR32↔DR64 is 8 (MOV_* pack/extract or ST32+ST32+LD64).
+# COPY-like getInstrMapping Cost is that table. No alternative mappings (P10).
+# A legal same-size GPR↔DR COPY cannot exist (banks are 32 vs 64), so the
+# cross-bank cells are pinned by the constructor table dump. If those cells
+# regress to 1, the dump prints GPR-DR=1.
+
+# CHECK: HaydnRBI copyCost table: same-GPR=0 same-DR=0 GPR-DR=8 DR-GPR=8
+# CHECK: Evaluating mapping cost for: {{.*}}COPY $r1
+# CHECK-NEXT: With: {{.*}}Cost: 0
+# CHECK: Evaluating mapping cost for: {{.*}}G_ADD
+# CHECK-NEXT: With: {{.*}}Cost: 1
+# CHECK: Evaluating mapping cost for: {{.*}}COPY $d0
+# CHECK-NEXT: With: {{.*}}Cost: 0
+# CHECK: name: same_bank_gpr
+# CHECK: %{{[0-9]+}}:gpr32regbank(s32) = COPY $r1
+# CHECK: name: same_bank_dr
+# CHECK: %{{[0-9]+}}:dr64regbank(s64) = COPY $d0
+
+---
+name:            same_bank_gpr
+legalized:       true
+regBankSelected: false
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2
+    %0:_(s32) = COPY $r1
+    %1:_(s32) = COPY $r2
+    %2:_(s32) = G_ADD %0, %1
+    $r1 = COPY %2(s32)
+    RET implicit $r1, implicit $r15
+...
+
+---
+name:            same_bank_dr
+legalized:       true
+regBankSelected: false
+body:             |
+  bb.0.entry:
+    liveins: $d0, $d1
+    %0:_(s64) = COPY $d0
+    %1:_(s64) = COPY $d1
+    %2:_(s64) = G_ADD %0, %1
+    $d0 = COPY %2(s64)
+    RET implicit $d0, implicit $r15
+...

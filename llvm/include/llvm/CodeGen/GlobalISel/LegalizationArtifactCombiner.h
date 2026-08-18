@@ -346,12 +346,12 @@ public:
       // legal anyway as it must be legal for all outputs of the consumer type
       // set.
       //
-      // Haydn CB-61 / upstream guard: an earlier artifact combine can narrow
-      // the inner trunc's source so TruncSrc is no longer strictly wider than
-      // DstTy.  buildTrunc then hits validateTruncExt ("invalid widening
-      // trunc") and aborts clang at -O0.  Skip the fold when the inner source
-      // is not wider than the outer dest.  (Scoped HC#0 exception: one guard
-      // in this header only; see OPEN-COMPILER-BUGS.md CB-61.)
+      // CB-61 / D1000: an earlier artifact combine can narrow the inner
+      // trunc's source so TruncSrc is no longer strictly wider than DstTy.
+      // buildTrunc then hits validateTruncExt ("invalid widening trunc") and
+      // aborts clang at -O0. Skip the fold when the inner source is not wider
+      // than the outer dest. One guard in this header only; see
+      // OPEN-COMPILER-BUGS.md CB-61.
       if (MRI.getType(TruncSrc).getSizeInBits() <= DstTy.getSizeInBits())
         return false;
 

@@ -1,0 +1,25 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=machine-cse \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — generic MachineCSE owns MOV_GPR_TO_DR64 (selected, no
+# unmodeled side effects). A second same-source pack becomes COPY.
+# PostSelect no longer CSE's this; identity pack elide stays there.
+
+---
+name: cse_const_pack_is_copy
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $r15
+    %lo:gpr32 = LOADI32 1
+    %hi:gpr32 = LOADI32 2
+    %d1:dr64 = MOV_GPR_TO_DR64 %lo, %hi
+    %d2:dr64 = MOV_GPR_TO_DR64 %lo, %hi
+    $d0 = COPY %d2
+    RET implicit $r15, implicit $d0
+...
+# CHECK-LABEL: name: cse_const_pack_is_copy
+# CHECK: %d1:dr64 = MOV_GPR_TO_DR64 %lo, %hi
+# CHECK-NOT: MOV_GPR_TO_DR64
+# CHECK: $d0 = COPY %d1
+# CHECK-NOT: OR64

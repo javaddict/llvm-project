@@ -37,7 +37,8 @@ private:
 
   /// Two-bank va_arg with stack overflow. Peer: AArch64LegalizerInfo.cpp:2158
   /// (straight-line list walk). Haydn selects GPR vs DR cursor and overflows
-  /// onto __stack with G_SELECT (no post-RA CFG).
+  /// onto __stack with G_SELECT (no post-RA CFG). Pointer dest is the
+  /// aggregate Indirect path (GPR cursor, 4-byte step).
   bool legalizeVAArg(LegalizerHelper &Helper, MachineInstr &MI) const;
 };
 

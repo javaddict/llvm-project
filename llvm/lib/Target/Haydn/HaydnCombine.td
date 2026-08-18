@@ -197,8 +197,12 @@ def haydn_post_residual_combines : GICombineGroup<[
 
 //===----------------------------------------------------------------------===//
 // PostLegalizer target fuse registry (Wave T7.2) — AGU pre/post-inc
-// Match/apply live in HaydnPostLegalizerCombiner.cpp. Gated on Subtarget
+// plus DR64 lane-store (G_TRUNC/G_UNMERGE + G_STORE → d_sw_{l,h}_with_imm).
+// Match/apply live in HaydnPostLegalizerCombiner.cpp. AGU gated on Subtarget
 // hasAGU() + -haydn-enable-gisel-update-addr (default ON).
+// Lane-store is the AIE combine_split_intrinsic_for_store shape
+// (AIECombine.td:80-86): store of a lane extract becomes the native
+// lane-store intrinsic so PostSelect does not own that fold.
 //===----------------------------------------------------------------------===//
 
 def agu_inc_mem_matchdata : GIDefMatchData<"HaydnIncMemInfo">;
@@ -209,7 +213,16 @@ def form_agu_inc_mem : GICombineRule<
   (apply [{ applyIncMem(*${root}, MRI, B, Observer, ${matchinfo}); }])
 >;
 
+def lane_store_matchdata : GIDefMatchData<"HaydnLaneStoreInfo">;
+def form_lane_store : GICombineRule<
+  (defs root:$root, lane_store_matchdata:$matchinfo),
+  (match (wip_match_opcode G_STORE):$root,
+         [{ return matchCombineLaneStore(*${root}, MRI, ${matchinfo}); }]),
+  (apply [{ applyLaneStore(*${root}, MRI, B, Observer, ${matchinfo}); }])
+>;
+
 def haydn_post_target_combines : GICombineGroup<[
+  form_lane_store,
   form_agu_inc_mem,
 ]>;
 
@@ -250,6 +263,7 @@ def HaydnPreLegalizerCombiner : GICombiner<
 //
 // PostLegalizer C++ residual after T7:
 //   KEEP (TD-registered match/apply only):
+//   - form_lane_store -> matchCombineLaneStore / applyLaneStore
 //   - form_agu_inc_mem -> matchCombineAGUIncMem / applyIncMem
 //   - haydn_post_residual match/apply free functions
 //     (mul_to_shift_add/sub deleted: 1-slot MULL vs SHL+ADD pessimization)

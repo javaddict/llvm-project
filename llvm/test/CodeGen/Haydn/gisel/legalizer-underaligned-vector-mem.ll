@@ -34,10 +34,10 @@ define void @st_v8i8_align2(ptr %p, <8 x i8> %v) nounwind {
   ret void
 }
 
-; align 4 keeps the existing split-into-halves shape (4-byte ops on 4-byte
-; aligned memory are fine) — regression guard against over-lowering.
+; align 4 keeps 4-byte ops on 4-byte aligned memory — ST32 halves or
+; D_SW_L/H are both guest-safe. Do not require one recipe.
 ; CHECK-LABEL: st_v8i8_align4:
-; CHECK: d_sw_
+; CHECK: {{d_sw_|st32}}
 define void @st_v8i8_align4(ptr %p, <8 x i8> %v) nounwind {
   store <8 x i8> %v, ptr %p, align 4
   ret void

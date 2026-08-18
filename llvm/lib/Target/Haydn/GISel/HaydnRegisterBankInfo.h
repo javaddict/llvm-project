@@ -14,6 +14,10 @@
 
 #include "llvm/CodeGen/RegisterBankInfo.h"
 
+namespace llvm {
+class MachineIRBuilder;
+}
+
 #define GET_REGBANK_DECLARATIONS
 #include "HaydnGenRegisterBank.inc"
 
@@ -42,8 +46,24 @@ class HaydnRegisterBankInfo final : public HaydnGenRegisterBankInfo {
 public:
   HaydnRegisterBankInfo(unsigned HwMode = 0);
 
+  /// Cost of A = COPY B. Same-bank is 0 (coalesced). GPR32↔DR64 is a
+  /// pack/extract or stack round-trip, not a coalescable copy.
+  unsigned copyCost(const RegisterBank &A, const RegisterBank &B,
+                    TypeSize Size) const override;
+
   const InstructionMapping &
   getInstrMapping(const MachineInstr &MI) const override;
+
+  /// Identity G_OR is a Cost=0 same-bank copy. AIE alts are PTR-vs-GPR;
+  /// Haydn has no PTR bank and does not invent one.
+  InstructionMappings
+  getInstrAlternativeMappings(const MachineInstr &MI) const override;
+
+  /// AIE applyMappingImpl (AIEBaseRegisterBankInfo.cpp:183) applies the
+  /// default mapping for every alternative ID it publishes. ID 1 is the
+  /// identity-OR copy-cost mapping.
+  void applyMappingImpl(MachineIRBuilder &Builder,
+                        const OperandsMapper &OpdMapper) const override;
 };
 
 } // end namespace llvm

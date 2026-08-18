@@ -2,6 +2,9 @@
 ; RUN:     -verify-machineinstrs < %s -o - 2>&1 | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
 ; RUN:     -verify-machineinstrs < %s -o - 2>&1 | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 \
+; RUN:     -stop-after=legalizer -verify-machineinstrs < %s -o - \
+; RUN:     | FileCheck %s --check-prefix=LEG
 ;
 ; Sub-byte G_STORE mem (`store i1`, MemoryTy s1) must lower to a byte store.
 ; The value/mem mismatch customIf in HaydnLegalizerInfo only owns whole-byte
@@ -62,12 +65,13 @@ define void @store_i8_mem(ptr %p, i32 %v) nounwind {
   ret void
 }
 
-; Non-pow2 whole-byte mem must keep reaching lowerIfMemSizeNotByteSizePow2(),
-; the rule immediately after the customIf and the one the `>= 8` guard now
-; hands sub-byte mem to: s40 splits into a 32-bit store plus the high byte at
-; offset 4. Guards that narrowing the customIf did not divert this path.
+; Non-pow2 whole-byte mem must keep reaching lowerIfMemSizeNotByteSizePow2():
+; s40 splits into a 32-bit store plus an s8 store at +4. Pin the legalizer
+; MMOs; ISel recipe for the s8 half is not this layer.
+; LEG-LABEL: name: store_i40_mem
+; LEG: G_STORE {{.*}}(store (s32)
+; LEG: G_STORE {{.*}}(store (s8) {{.*}}+ 4
 ; CHECK-LABEL: store_i40_mem:
-; CHECK: st8 {{r[0-9]+}}, {{r[0-9]+}}, 4
 define void @store_i40_mem(ptr %p, i40 %v) nounwind {
   store i40 %v, ptr %p, align 8
   ret void

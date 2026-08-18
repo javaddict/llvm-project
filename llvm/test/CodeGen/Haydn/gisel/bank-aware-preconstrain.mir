@@ -1,0 +1,73 @@
+# RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+# RUN:     -run-pass=instruction-select -verify-machineinstrs %s -o - \
+# RUN:     | FileCheck %s
+
+# Role: MIR — once-per-MF bank-aware pre-constrain of bank-only vregs
+# (GOALS W45, PA2-B5).
+
+# REGRESSION TEST: preConstrainBankOnlyVRegs mapped EVERY 64-bit bank-only
+# vreg to DR64RegClass and ran per-MI (O(N_vregs x N_instrs)).
+#
+# Bug: ARRegBank does not cover DR64RegClass, so the blanket 64-bit->DR64
+# constrain SILENTLY FAILED for an AR-banked 64-bit vreg (the return of
+# constrainGenericRegister was dropped) and left the vreg bank-only. The
+# first COPY touching it then died with "cannot select" (observed:
+# "LLVM ERROR: cannot select: $ar0 = COPY %1:arregbank(s64)"). The COPY
+# early path had the same mis-bank: it tested DR64/size-64 BEFORE the AR
+# bank, so a 64-bit AR-banked operand mis-banked to DR64 there too (W36
+# residual note).
+#
+# Fix: the walk is hoisted to once per MachineFunction (selector setupMF,
+# AArch64/RISCV peer shape) and the class choice is bank-aware in ONE rule
+# (bankAwareRegClass): existing class wins; 64-bit AR-banked -> ARRegClass;
+# else size default (64 -> DR64, else GPR32). ARRegClass is
+# isAllocatable=0, so it is entered via MRI::setRegClassOrRegBank (the one
+# constraint entry without an allocatability check — W36 precedent).
+#
+# Test design: one mixed function carries a GPR32-banked s32, a DR64-banked
+# s64, and an AR-banked s64; each is produced by G_IMPLICIT_DEF (the MIR
+# runs -verify-machineinstrs, and an incoming physreg like $r1 would be
+# "undefined physical register" — there is no live-in/CallLowering here) and
+# each flows to a same-bank physreg COPY. AR banked vregs cannot be produced
+# by the IR pipeline today (AR is pinned as physregs by the AGU intrinsic
+# selectors and MIR rejects class:ar — see ar-unallocatable-class.mir), so
+# MIR with class:arregbank is the one legal entry that drives the latent
+# surface, exactly like HaydnRegisterBankInfoTest.cpp drives getInstrMapping.
+#
+# What breaks if the bug returns: %2 (AR-banked s64) prints class
+# "arregbank" (bank-only, constrain silently dropped) and llc aborts with
+# "cannot select" on the $ar0 COPY before any CHECK matches.
+
+# CHECK-LABEL: name: mixed_dr64_ar_gpr32
+# CHECK: registers:
+# CHECK-NEXT:   - { id: 0, class: gpr32,
+# CHECK: class: dr64,
+# CHECK: class: ar,
+# CHECK: IMPLICIT_DEF
+# CHECK: $d0 = COPY %1
+# CHECK: $ar0 = COPY %2
+# CHECK: $r2 = COPY %0
+# CHECK: RET
+
+--- |
+  define void @mixed_dr64_ar_gpr32() { ret void }
+...
+---
+name: mixed_dr64_ar_gpr32
+legalized: true
+regBankSelected: true
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: gpr32regbank }
+  - { id: 1, class: dr64regbank }
+  - { id: 2, class: arregbank }
+body:             |
+  bb.0:
+    %0:gpr32regbank(s32) = G_IMPLICIT_DEF
+    %1:dr64regbank(s64) = G_IMPLICIT_DEF
+    %2:arregbank(s64) = G_IMPLICIT_DEF
+    $d0 = COPY %1(s64)
+    $ar0 = COPY %2(s64)
+    $r2 = COPY %0(s32)
+    RET implicit $r15
+...
