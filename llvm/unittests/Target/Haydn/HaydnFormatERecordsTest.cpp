@@ -37,17 +37,16 @@ using namespace llvm::haydn::format_e;
 namespace {
 
 TEST(HaydnFormatERecords, GoldenHashPins) {
-  // REPAIRED golden, not the delivery: b0b477e5... is the as-delivered
-  // layout whose mapping rows carry the known generation defect (the 76
-  // src1/src2 rows; sole live-member delta X4SEL16_E3_E1_ALU1_RRR). The
-  // importer pins 8465132c... — the delivery after the two deterministic
-  // repair passes (--fix-operand-mapping / --fix-read-ports), byte-for-byte
-  // reproducible from the delivered files. This pin must move together with
-  // PINNED_JSON_SHA256 in generate_format_e_records.py.
+  // Golden v2_1 (supersedes v2 2026-08-18): +120 MAC RR 32X16 instrs, +4 LS
+  // D_SW_F64RS rows, RRR operand canonicalization; geometry identical. The
+  // JSON is as-delivered (26098770…); the companion forced read-port repair
+  // (6 FMUL*32S rows) landed in instruction_type_index.json (7a13453a…),
+  // not here. This pin must move together with PINNED_JSON_SHA256 in
+  // generate_format_e_records.py.
   EXPECT_STREQ(FormatEJSONSHA256,
-               "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9");
+               "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a");
   EXPECT_STREQ(FormatEXLSXSHA256,
-               "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af");
+               "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f");
   // Canonical-vector SHA-256 is enforced by generate_format_e_records.py
   // --check (PINNED_CANONICAL_SHA256 = 6d403139…b728f9). The ledger is a
   // check input, not an encode table, so it is not emitted into the .inc.
@@ -66,13 +65,13 @@ TEST(HaydnFormatERecords, GeometryPinsFromGeneratedConstants) {
 
 TEST(HaydnFormatERecords, CatalogSnapshotPins) {
   EXPECT_EQ(FormatETypeLayoutCount, 126u);
-  EXPECT_EQ(FormatEUniqueNonNopNames, 683u);
-  EXPECT_EQ(FormatEE2NonNopNames, 677u);
-  EXPECT_EQ(FormatEE3NonNopNames, 673u);
-  EXPECT_EQ(FormatEBothModeNonNopNames, 667u);
+  EXPECT_EQ(FormatEUniqueNonNopNames, 807u);
+  EXPECT_EQ(FormatEE2NonNopNames, 801u);
+  EXPECT_EQ(FormatEE3NonNopNames, 797u);
+  EXPECT_EQ(FormatEBothModeNonNopNames, 791u);
   EXPECT_EQ(FormatEE2OnlyNames, 10u);
   EXPECT_EQ(FormatEE3OnlyNames, 6u);
-  EXPECT_EQ(FormatENonNopLogicalCount, 683u);
+  EXPECT_EQ(FormatENonNopLogicalCount, 807u);
   EXPECT_EQ(FormatEE2UnitPairCount, 9u);
   EXPECT_EQ(FormatEE3LegalTupleCount, 42u);
   EXPECT_EQ(FormatEE3IllegalTupleCount, 22u);
@@ -260,11 +259,13 @@ TEST(HaydnFormatERecords, AlternativeMultiplicityAndInverseIdentity) {
       EXPECT_EQ(Inv, static_cast<int>(Mid)) << S.Logical;
     }
   }
+  // v2_1 restamp 2026-08-18: 32X16 family widens mult-2 (62->66) and
+  // mult-5 (412->532); 1/3/4/7 unchanged.
   EXPECT_EQ(Mult[1], 1u);
-  EXPECT_EQ(Mult[2], 62u);
+  EXPECT_EQ(Mult[2], 66u);
   EXPECT_EQ(Mult[3], 15u);
   EXPECT_EQ(Mult[4], 7u);
-  EXPECT_EQ(Mult[5], 412u);
+  EXPECT_EQ(Mult[5], 532u);
   EXPECT_EQ(Mult[7], 186u);
 
   // SET_HWLOOP has exactly one placement (E2 entry0 ALU0).

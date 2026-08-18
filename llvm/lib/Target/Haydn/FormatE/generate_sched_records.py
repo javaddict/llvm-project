@@ -41,23 +41,23 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 DEFAULT_GOLDEN_DIR = Path("/ssd2/mhyang/haydn-plans/Database/golden")
-DEFAULT_JSON = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2.json"
-DEFAULT_XLSX = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2.xlsx"
+DEFAULT_JSON = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2_1.json"
+DEFAULT_XLSX = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2_1.xlsx"
 DEFAULT_CANONICAL = DEFAULT_GOLDEN_DIR / "format_e_canonical_vectors_v1.json"
 DEFAULT_CONSTRAINTS = DEFAULT_GOLDEN_DIR / "VLIW_Engine_Compiler_Constraints.md"
 
 # Same pins as FormatE/generate_format_e_records.py — do not drift.
 PINNED_XLSX_SHA256 = (
-    "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af"
+    "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f"
 )
-# Repaired golden (see generate_format_e_records.py) — sched outputs derive
-# from Behavior/latency, so the mapping repair changes nothing here, but the
+# Golden v2_1 (see generate_format_e_records.py) — sched outputs derive
+# from Behavior/latency, so the read-port repair changes nothing here, but the
 # two importers must agree on which golden is current.
 PINNED_JSON_SHA256 = (
-    "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9"
+    "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a"
 )
 PINNED_CANONICAL_SHA256 = (
-    "000cd92682adb7b88a727182318fa58bd0989547895ae36585c5cbd00f220c0d"
+    "741f5b4141990dc27dc217d2b0c0d7ab57240e08ef31c34bc036f11bbda1938e"
 )
 
 # Unreferenced 5-cycle AccLat classes of unknown provenance. Must not emit.
@@ -98,17 +98,17 @@ def resolve_golden_dir() -> Path:
         if not raw:
             continue
         p = Path(raw)
-        if (p / "format_e_bit_layout_v2.json").is_file():
+        if (p / "format_e_bit_layout_v2_1.json").is_file():
             return p
         nested = p / "golden"
-        if (nested / "format_e_bit_layout_v2.json").is_file():
+        if (nested / "format_e_bit_layout_v2_1.json").is_file():
             return nested
     if DEFAULT_GOLDEN_DIR.is_dir():
         return DEFAULT_GOLDEN_DIR
     # Discovery, not trust: content is pinned by hash, so falling back to the
     # user database copy cannot change what generation accepts.
     home_db = Path.home() / "haydn"
-    if (home_db / "format_e_bit_layout_v2.json").is_file():
+    if (home_db / "format_e_bit_layout_v2_1.json").is_file():
         return home_db
     return DEFAULT_GOLDEN_DIR
 
@@ -485,8 +485,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     golden = resolve_golden_dir()
-    json_path: Path = args.json or (golden / "format_e_bit_layout_v2.json")
-    xlsx_path: Path = args.xlsx or (golden / "format_e_bit_layout_v2.xlsx")
+    json_path: Path = args.json or (golden / "format_e_bit_layout_v2_1.json")
+    xlsx_path: Path = args.xlsx or (golden / "format_e_bit_layout_v2_1.xlsx")
     canonical_path: Path = args.canonical_vectors or (
         golden / "format_e_canonical_vectors_v1.json"
     )

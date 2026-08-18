@@ -48,7 +48,9 @@ include "HaydnCallingConv.td"
 include "HaydnInstrInfo.td"
 // Hand-maintained hypothesized encodings (filename is historical;
 // generate_format_e_records.py does not emit this file).
-include "HaydnInstrInfoAuto.td"
+include "HaydnInstrInfoManual.td"
+include "HaydnInstrInfoGolden.td.inc"
+
 
 //===----------------------------------------------------------------------===//
 // GlobalISel patterns

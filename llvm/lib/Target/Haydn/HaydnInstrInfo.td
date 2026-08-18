@@ -539,7 +539,7 @@ def MOVF32 : FmtALU32<0x1E, (outs GPR32:$rd), (ins GPR32:$rd_src, GPR32:$rs1, GP
 //===----------------------------------------------------------------------===//
 // Scalar 32-bit multiply — MULL / MULSSH / MULSUH / MULUUH (MAC GRR)
 //
-// Defined in HaydnInstrInfoAuto.td + HaydnFormatsMAC.td (not the retired
+// Defined in HaydnInstrInfoManual.td + HaydnFormatsMAC.td (not the retired
 // phantom MUL32). GISel: G_MUL s32 → MULL; G_SMULH/UMULH s32 → MULSSH/MULUUH
 // (HaydnInstructionSelector::emitScalarMul32 and G_SMULH/G_UMULH cases).
 //===----------------------------------------------------------------------===//
@@ -590,7 +590,7 @@ def ASR32 : FmtALU32<0x0A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 // `llvm-mc` would reject `sext32t64 d0, r8` with "failed to match
 // instruction in bundle" and abort the whole bundle.
 //
-// The sibling `SEXT32T64` auto-gen stub in HaydnInstrInfoAuto.td has WRONG
+// The sibling `SEXT32T64` auto-gen stub in HaydnInstrInfoManual.td has WRONG
 // operand types (`(outs GPR32:$rd)`) and no real encoding; it is kept
 // `isCodeGenOnly = 1` so it never enters the AsmParser matcher and never
 // shadows THIS real instruction on re-parse. With both the real instruction
@@ -1609,11 +1609,11 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 //===----------------------------------------------------------------------===//
 // These instructions execute on the MAC units in slots 1 and 2.
 // 32-bit multiply instructions (MULL, MULSSH, MULSUH, MULUUH) are defined in
-// HaydnInstrInfoAuto.td (hand-maintained hypothesized encodings).
-// 64-bit multiply instructions (MUL64_*) are defined in HaydnInstrInfoAuto.td.
-// Multiply-Accumulate instructions (MULA64_*) are defined in HaydnInstrInfoAuto.td.
+// HaydnInstrInfoManual.td (hand-maintained hypothesized encodings).
+// 64-bit multiply instructions (MUL64_*) are defined in HaydnInstrInfoManual.td.
+// Multiply-Accumulate instructions (MULA64_*) are defined in HaydnInstrInfoManual.td.
 
-// SIMD MAC instructions (X2MULA32, X2MULAPL32) are defined in HaydnInstrInfoAuto.td
+// SIMD MAC instructions (X2MULA32, X2MULAPL32) are defined in HaydnInstrInfoManual.td
 
 // no durable MIR opcodes LD32_S1/LD64_S1. Logical loads are LD32/LD64
 // only. (The former S1 encode-only peers and their HaydnFormatsLD.td home
@@ -1681,7 +1681,7 @@ def LD32_POST : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
 // Post path in HaydnMCCodeEmitter handles both. Opcodes 0x4/0x5 in the 4-bit
 // s1 LD opcode space (loads use 0x2/0x3).
 //
-// The DB-named S_SW_POST_IMM / D_SDW_POST_IMM in HaydnInstrInfoAuto.td model
+// The DB-named S_SW_POST_IMM / D_SDW_POST_IMM in HaydnInstrInfoManual.td model
 // these as Slot0_LS; the encoding hypothesis here (matching the load post-inc
 // pair) places them in the s1 FU=LD space. Both describe the same operation;
 // ST32_POST / ST64_POST are the codegen-selected forms.
@@ -1732,7 +1732,7 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // Class 011 DRX: MAXI64, MINI64 + the Fmt48_WideDRX class.
 // Class 100 CTRL: CSRR_W, ZERO_GPR_W + the Fmt48_WideZeroGPR class.
 // Class 101 WIDE-LS: all 14 _WL + the Fmt48_WideLS class.
-// MOVEI_H, MOVEI_L + the Fmt48_MOVEI class (HaydnInstrInfoAuto.td).
+// MOVEI_H, MOVEI_L + the Fmt48_MOVEI class (HaydnInstrInfoManual.td).
 // The 21 KEPT defs below (ADDI32_W, ORI32_W, JAL_W, JALR_W, BEQ/BNE/BGE
 // BGEU/BLT/BLTU_W, BEQZ/BNEZ/BGEZ/BLTZ_W, CSRW_W, SET_HWLOOP_W
 // F2_W/REG_W, SLLI64/SRLI64/SRAI64) retain live hand-written C++ consumers

@@ -184,7 +184,7 @@ this code track. Owned Haydn TUs do not revive suffix `_S*` discovery.
 P19: query live `_S*` with `rg '^def \w+_S[012]' llvm/lib/Target/Haydn/*.td`
 instead of transcribed CLAUDE.md / GOALS R13 counts.
 
-P19 leftover closed (T7-ALIGN residual hygiene): HaydnInstrInfoAuto.td header is hand-maintained
+P19 leftover closed (T7-ALIGN residual hygiene): HaydnInstrInfoManual.td header is hand-maintained
 (generate_format_e_records.py does not emit it). CMake golden-dir is
 env/-D only; banned plans-tree path gone; no home-directory discovery.
 

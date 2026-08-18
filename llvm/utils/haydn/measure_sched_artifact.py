@@ -56,8 +56,8 @@ RE_STAT_LINE = re.compile(
 
 
 GOLDEN_FILES = (
-    "format_e_bit_layout_v2.xlsx",
-    "format_e_bit_layout_v2.json",
+    "format_e_bit_layout_v2_1.xlsx",
+    "format_e_bit_layout_v2_1.json",
     "format_e_canonical_vectors_v1.json",
     "VLIW_Engine_Compiler_Constraints.md",
     "VLIW_Engine_Reference_Manual.docx",

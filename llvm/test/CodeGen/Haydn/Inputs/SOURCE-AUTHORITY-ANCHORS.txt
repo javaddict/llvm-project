@@ -266,7 +266,7 @@ Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN /
 | libm.a required on sysroot install/restamp | install_haydn_sysroot.sh | check_haydn_artifact_set required components |
 | LLDB pointer return = r1; volatile unwind undefined | lldb ABISysV_haydn | GetPointerReturnRegister / GetFallbackRegisterLocation |
 | DG0 DecisionGuard product registry | absent by design | Inputs/* + ledger/parser + product_coverage_pin only; no G-DECISION-GUARD revive |
-| P19 Auto.td leftover | HaydnInstrInfoAuto.td header is hand-maintained; generate_format_e_records.py does not emit it | llc-pipeline-haydn.ll AUTO |
+| P19 Auto.td leftover | HaydnInstrInfoManual.td header is hand-maintained; generate_format_e_records.py does not emit it | llc-pipeline-haydn.ll AUTO |
 | P19 CMake leftover closed | Haydn/CMakeLists.txt golden-dir is env/-D only; banned plans-tree path gone; no home-directory discovery; skip if unset | llc-pipeline-haydn.ll CMAKE |
 | R15 leftover (orphan docs) | gaps/pass-deep-review-2026-08-14 archived 2026-08-15; monorepo CLAUDE.md is a symlink; ISA-next is ISA-64 | llc-pipeline-haydn.ll ISANEXT |
 | MF0 multi-bundle proof | INERT; production E96-only; no second product format family | llc-pipeline-haydn.ll MF0; HaydnFormat shipping E96-only |

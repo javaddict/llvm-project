@@ -3235,7 +3235,7 @@ def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
 // FmtI (ISA-02 note above) is accepted: assembly + AsmPrinter emission
 // work, disassembly is excluded until the encoding space is partitioned.
 // `let isPseudo = 0` is required because these defs are still inside
-// the surrounding `let isPseudo = 1 in { … }` scope (HaydnInstrInfoAuto.td:2205).
+// the surrounding `let isPseudo = 1 in { … }` scope (HaydnInstrInfoManual.td:2205).
 //===---------------------------------------------------------------===//
 // Fused post-increment / pre-increment / offset DR64 loads.
 // DB (haydn_instruction_db.json) is authoritative: every D_L*_POST/PRE/WITH

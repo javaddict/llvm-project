@@ -3,7 +3,7 @@
 
 Extracts unique non-NOP logical names from HaydnGenFormatERecords.inc
 FormatEAltSpans (PIN_UNIQUE_NON_NOP = 683) and fails if any name is absent
-from llvm/test/MC/Haydn/. Hypothesized HaydnInstrInfoAuto.td encodings are
+from llvm/test/MC/Haydn/. Hypothesized HaydnInstrInfoManual.td encodings are
 isCodeGenOnly and are not this pin.
 
 Usage:
@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-PIN_UNIQUE_NON_NOP = 683
+PIN_UNIQUE_NON_NOP = 807
 RECORDS_REL = "llvm/lib/Target/Haydn/HaydnGenFormatERecords.inc"
 MC_REL = "llvm/test/MC/Haydn"
 SCAN_SUFFIXES = {".s"}

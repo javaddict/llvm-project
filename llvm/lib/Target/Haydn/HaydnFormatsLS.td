@@ -471,7 +471,7 @@ class HaydnFU_LS_S2_AR_UA<bits<7> opc, dag outs, dag ins, string asmstr,
 
 // #48 S_LBU_PRE_REG FieldSlots retired (R13). Occupancy Mask 0x7 stays.
 // #49 D_SDW_POST_IMM (RI6) — S0 retired (R13). Occupancy Mask 0x7 stays.
-// Batch 3: aligned to legacy tied-def shape (HaydnInstrInfoAuto.td):
+// Batch 3: aligned to legacy tied-def shape (HaydnInstrInfoManual.td):
 // (outs GPR32:$rs_wb), (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm) with
 // Constraints = "$rs = $rs_wb". The input $rs is the base being updated;
 // $rs_wb is the writeback output. Format class bits field `rs` binds to the
@@ -575,7 +575,7 @@ class HaydnFU_LS_S2_AR_UA<bits<7> opc, dag outs, dag ins, string asmstr,
 // so PostRA pack cannot co-issue two CB ops that write the same base (B6
 // WRITE_CONFLICT: three d_ldw_cb_imm same r5 in one bundle).
 //
-// Operand list MUST match public logical D_*_CB_* (HaydnInstrInfoAuto.td) and
+// Operand list MUST match public logical D_*_CB_* (HaydnInstrInfoManual.td) and
 // GISel: MC encode after setDesc is Desc-as-is (no operand rewrite).
 // Bit layout binds by name (cbr_sel, imm8, rtd, rs) — $rs is the encoded base.
 //

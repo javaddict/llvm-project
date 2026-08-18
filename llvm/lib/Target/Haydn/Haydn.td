@@ -24,7 +24,7 @@
 //===----------------------------------------------------------------------===//
 
 include "HaydnGeneric.td"
-// HaydnInstrInfoAuto.td is included from HaydnGeneric.td. The filename is
+// HaydnInstrInfoManual.td is included from HaydnGeneric.td. The filename is
 // historical; generate_format_e_records.py does not emit it. Treat that
 // file as hand-maintained hypothesized encodings (isCodeGenOnly quarantine).
 

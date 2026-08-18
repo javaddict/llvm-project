@@ -12,7 +12,7 @@
 # Role: object — assemble each product mnemonic, require a 12-byte
 # non-all-zero parcel, and require objdump to print the logical name.
 # Peer: llvm/test/MC/Hexagon/v67_all.s (mnemonic × assemble+objdump).
-# ENC-COUNT-682: encoding: [
+# ENC-COUNT-806: encoding: [
 # ENC-NOT: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 
 .text
@@ -454,6 +454,30 @@ rt_d_stwua_post:
 { d_stwua_post d0, 0, r1, r2, 0; nop; nop }
 # DIS-LABEL: <rt_d_stwua_post>:
 # DIS: {{[ \t]}}d_stwua_post{{[ \t,;}]}}
+
+# MNEM: d_sw_f64rs_post_imm
+rt_d_sw_f64rs_post_imm:
+{ d_sw_f64rs_post_imm d0, r1, 1; nop; nop }
+# DIS-LABEL: <rt_d_sw_f64rs_post_imm>:
+# DIS: {{[ \t]}}d_sw_f64rs_post_imm{{[ \t,;}]}}
+
+# MNEM: d_sw_f64rs_post_reg
+rt_d_sw_f64rs_post_reg:
+{ d_sw_f64rs_post_reg d0, r1, r2; nop; nop }
+# DIS-LABEL: <rt_d_sw_f64rs_post_reg>:
+# DIS: {{[ \t]}}d_sw_f64rs_post_reg{{[ \t,;}]}}
+
+# MNEM: d_sw_f64rs_with_imm
+rt_d_sw_f64rs_with_imm:
+{ d_sw_f64rs_with_imm d0, r1, 1; nop; nop }
+# DIS-LABEL: <rt_d_sw_f64rs_with_imm>:
+# DIS: {{[ \t]}}d_sw_f64rs_with_imm{{[ \t,;}]}}
+
+# MNEM: d_sw_f64rs_with_reg
+rt_d_sw_f64rs_with_reg:
+{ d_sw_f64rs_with_reg d0, r1, r2; nop; nop }
+# DIS-LABEL: <rt_d_sw_f64rs_with_reg>:
+# DIS: {{[ \t]}}d_sw_f64rs_with_reg{{[ \t,;}]}}
 
 # MNEM: d_sw_h_post_imm
 rt_d_sw_h_post_imm:
@@ -977,6 +1001,54 @@ rt_fmul32s_ll:
 # DIS-LABEL: <rt_fmul32s_ll>:
 # DIS: {{[ \t]}}fmul32s.ll{{[ \t,;}]}}
 
+# MNEM: fmul32x16_h0
+rt_fmul32x16_h0:
+{ fmul32x16.h0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_h0>:
+# DIS: {{[ \t]}}fmul32x16.h0{{[ \t,;}]}}
+
+# MNEM: fmul32x16_h1
+rt_fmul32x16_h1:
+{ fmul32x16.h1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_h1>:
+# DIS: {{[ \t]}}fmul32x16.h1{{[ \t,;}]}}
+
+# MNEM: fmul32x16_h2
+rt_fmul32x16_h2:
+{ fmul32x16.h2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_h2>:
+# DIS: {{[ \t]}}fmul32x16.h2{{[ \t,;}]}}
+
+# MNEM: fmul32x16_h3
+rt_fmul32x16_h3:
+{ fmul32x16.h3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_h3>:
+# DIS: {{[ \t]}}fmul32x16.h3{{[ \t,;}]}}
+
+# MNEM: fmul32x16_l0
+rt_fmul32x16_l0:
+{ fmul32x16.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_l0>:
+# DIS: {{[ \t]}}fmul32x16.l0{{[ \t,;}]}}
+
+# MNEM: fmul32x16_l1
+rt_fmul32x16_l1:
+{ fmul32x16.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_l1>:
+# DIS: {{[ \t]}}fmul32x16.l1{{[ \t,;}]}}
+
+# MNEM: fmul32x16_l2
+rt_fmul32x16_l2:
+{ fmul32x16.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_l2>:
+# DIS: {{[ \t]}}fmul32x16.l2{{[ \t,;}]}}
+
+# MNEM: fmul32x16_l3
+rt_fmul32x16_l3:
+{ fmul32x16.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmul32x16_l3>:
+# DIS: {{[ \t]}}fmul32x16.l3{{[ \t,;}]}}
+
 # MNEM: fmula16_hs00
 rt_fmula16_hs00:
 { fmula16.hs00 d0, d1, d2; nop; nop }
@@ -1115,6 +1187,54 @@ rt_fmula32s_ll:
 # DIS-LABEL: <rt_fmula32s_ll>:
 # DIS: {{[ \t]}}fmula32s.ll{{[ \t,;}]}}
 
+# MNEM: fmula32x16_h0
+rt_fmula32x16_h0:
+{ fmula32x16.h0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_h0>:
+# DIS: {{[ \t]}}fmula32x16.h0{{[ \t,;}]}}
+
+# MNEM: fmula32x16_h1
+rt_fmula32x16_h1:
+{ fmula32x16.h1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_h1>:
+# DIS: {{[ \t]}}fmula32x16.h1{{[ \t,;}]}}
+
+# MNEM: fmula32x16_h2
+rt_fmula32x16_h2:
+{ fmula32x16.h2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_h2>:
+# DIS: {{[ \t]}}fmula32x16.h2{{[ \t,;}]}}
+
+# MNEM: fmula32x16_h3
+rt_fmula32x16_h3:
+{ fmula32x16.h3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_h3>:
+# DIS: {{[ \t]}}fmula32x16.h3{{[ \t,;}]}}
+
+# MNEM: fmula32x16_l0
+rt_fmula32x16_l0:
+{ fmula32x16.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_l0>:
+# DIS: {{[ \t]}}fmula32x16.l0{{[ \t,;}]}}
+
+# MNEM: fmula32x16_l1
+rt_fmula32x16_l1:
+{ fmula32x16.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_l1>:
+# DIS: {{[ \t]}}fmula32x16.l1{{[ \t,;}]}}
+
+# MNEM: fmula32x16_l2
+rt_fmula32x16_l2:
+{ fmula32x16.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_l2>:
+# DIS: {{[ \t]}}fmula32x16.l2{{[ \t,;}]}}
+
+# MNEM: fmula32x16_l3
+rt_fmula32x16_l3:
+{ fmula32x16.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmula32x16_l3>:
+# DIS: {{[ \t]}}fmula32x16.l3{{[ \t,;}]}}
+
 # MNEM: fmulaa16_hs_11_00
 rt_fmulaa16_hs_11_00:
 { fmulaa16.hs.11.00 d0, d1, d2; nop; nop }
@@ -1163,6 +1283,30 @@ rt_fmulaa32s_hllh:
 # DIS-LABEL: <rt_fmulaa32s_hllh>:
 # DIS: {{[ \t]}}fmulaa32s.hllh{{[ \t,;}]}}
 
+# MNEM: fmulaa32x16_h0_l1
+rt_fmulaa32x16_h0_l1:
+{ fmulaa32x16.h0.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulaa32x16_h0_l1>:
+# DIS: {{[ \t]}}fmulaa32x16.h0.l1{{[ \t,;}]}}
+
+# MNEM: fmulaa32x16_h1_l0
+rt_fmulaa32x16_h1_l0:
+{ fmulaa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulaa32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulaa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulaa32x16_h2_l3
+rt_fmulaa32x16_h2_l3:
+{ fmulaa32x16.h2.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulaa32x16_h2_l3>:
+# DIS: {{[ \t]}}fmulaa32x16.h2.l3{{[ \t,;}]}}
+
+# MNEM: fmulaa32x16_h3_l2
+rt_fmulaa32x16_h3_l2:
+{ fmulaa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulaa32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulaa32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: fmulas32s_hhll
 rt_fmulas32s_hhll:
 { fmulas32s.hhll d0, d1, d2; nop; nop }
@@ -1174,6 +1318,18 @@ rt_fmulas32s_hllh:
 { fmulas32s.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_fmulas32s_hllh>:
 # DIS: {{[ \t]}}fmulas32s.hllh{{[ \t,;}]}}
+
+# MNEM: fmulas32x16_h1_l0
+rt_fmulas32x16_h1_l0:
+{ fmulas32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulas32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulas32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulas32x16_h3_l2
+rt_fmulas32x16_h3_l2:
+{ fmulas32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulas32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulas32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: fmuls16_hs00
 rt_fmuls16_hs00:
@@ -1313,6 +1469,54 @@ rt_fmuls32s_ll:
 # DIS-LABEL: <rt_fmuls32s_ll>:
 # DIS: {{[ \t]}}fmuls32s.ll{{[ \t,;}]}}
 
+# MNEM: fmuls32x16_h0
+rt_fmuls32x16_h0:
+{ fmuls32x16.h0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_h0>:
+# DIS: {{[ \t]}}fmuls32x16.h0{{[ \t,;}]}}
+
+# MNEM: fmuls32x16_h1
+rt_fmuls32x16_h1:
+{ fmuls32x16.h1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_h1>:
+# DIS: {{[ \t]}}fmuls32x16.h1{{[ \t,;}]}}
+
+# MNEM: fmuls32x16_h2
+rt_fmuls32x16_h2:
+{ fmuls32x16.h2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_h2>:
+# DIS: {{[ \t]}}fmuls32x16.h2{{[ \t,;}]}}
+
+# MNEM: fmuls32x16_h3
+rt_fmuls32x16_h3:
+{ fmuls32x16.h3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_h3>:
+# DIS: {{[ \t]}}fmuls32x16.h3{{[ \t,;}]}}
+
+# MNEM: fmuls32x16_l0
+rt_fmuls32x16_l0:
+{ fmuls32x16.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_l0>:
+# DIS: {{[ \t]}}fmuls32x16.l0{{[ \t,;}]}}
+
+# MNEM: fmuls32x16_l1
+rt_fmuls32x16_l1:
+{ fmuls32x16.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_l1>:
+# DIS: {{[ \t]}}fmuls32x16.l1{{[ \t,;}]}}
+
+# MNEM: fmuls32x16_l2
+rt_fmuls32x16_l2:
+{ fmuls32x16.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_l2>:
+# DIS: {{[ \t]}}fmuls32x16.l2{{[ \t,;}]}}
+
+# MNEM: fmuls32x16_l3
+rt_fmuls32x16_l3:
+{ fmuls32x16.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmuls32x16_l3>:
+# DIS: {{[ \t]}}fmuls32x16.l3{{[ \t,;}]}}
+
 # MNEM: fmulsa32s_hhll
 rt_fmulsa32s_hhll:
 { fmulsa32s.hhll d0, d1, d2; nop; nop }
@@ -1324,6 +1528,18 @@ rt_fmulsa32s_hllh:
 { fmulsa32s.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_fmulsa32s_hllh>:
 # DIS: {{[ \t]}}fmulsa32s.hllh{{[ \t,;}]}}
+
+# MNEM: fmulsa32x16_h1_l0
+rt_fmulsa32x16_h1_l0:
+{ fmulsa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulsa32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulsa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulsa32x16_h3_l2
+rt_fmulsa32x16_h3_l2:
+{ fmulsa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulsa32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulsa32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: fmulss16_hs_11_00
 rt_fmulss16_hs_11_00:
@@ -1373,6 +1589,18 @@ rt_fmulss32s_hllh:
 # DIS-LABEL: <rt_fmulss32s_hllh>:
 # DIS: {{[ \t]}}fmulss32s.hllh{{[ \t,;}]}}
 
+# MNEM: fmulss32x16_h1_l0
+rt_fmulss32x16_h1_l0:
+{ fmulss32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulss32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulss32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulss32x16_h3_l2
+rt_fmulss32x16_h3_l2:
+{ fmulss32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulss32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulss32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: fmulzaa16_hs_11_00
 rt_fmulzaa16_hs_11_00:
 { fmulzaa16.hs.11.00 d0, d1, d2; nop; nop }
@@ -1421,6 +1649,30 @@ rt_fmulzaa32s_hllh:
 # DIS-LABEL: <rt_fmulzaa32s_hllh>:
 # DIS: {{[ \t]}}fmulzaa32s.hllh{{[ \t,;}]}}
 
+# MNEM: fmulzaa32x16_h0_l1
+rt_fmulzaa32x16_h0_l1:
+{ fmulzaa32x16.h0.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzaa32x16_h0_l1>:
+# DIS: {{[ \t]}}fmulzaa32x16.h0.l1{{[ \t,;}]}}
+
+# MNEM: fmulzaa32x16_h1_l0
+rt_fmulzaa32x16_h1_l0:
+{ fmulzaa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzaa32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulzaa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulzaa32x16_h2_l3
+rt_fmulzaa32x16_h2_l3:
+{ fmulzaa32x16.h2.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzaa32x16_h2_l3>:
+# DIS: {{[ \t]}}fmulzaa32x16.h2.l3{{[ \t,;}]}}
+
+# MNEM: fmulzaa32x16_h3_l2
+rt_fmulzaa32x16_h3_l2:
+{ fmulzaa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzaa32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulzaa32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: fmulzas32s_hhll
 rt_fmulzas32s_hhll:
 { fmulzas32s.hhll d0, d1, d2; nop; nop }
@@ -1433,6 +1685,18 @@ rt_fmulzas32s_hllh:
 # DIS-LABEL: <rt_fmulzas32s_hllh>:
 # DIS: {{[ \t]}}fmulzas32s.hllh{{[ \t,;}]}}
 
+# MNEM: fmulzas32x16_h1_l0
+rt_fmulzas32x16_h1_l0:
+{ fmulzas32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzas32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulzas32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulzas32x16_h3_l2
+rt_fmulzas32x16_h3_l2:
+{ fmulzas32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzas32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulzas32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: fmulzsa32s_hhll
 rt_fmulzsa32s_hhll:
 { fmulzsa32s.hhll d0, d1, d2; nop; nop }
@@ -1444,6 +1708,18 @@ rt_fmulzsa32s_hllh:
 { fmulzsa32s.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_fmulzsa32s_hllh>:
 # DIS: {{[ \t]}}fmulzsa32s.hllh{{[ \t,;}]}}
+
+# MNEM: fmulzsa32x16_h1_l0
+rt_fmulzsa32x16_h1_l0:
+{ fmulzsa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzsa32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulzsa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulzsa32x16_h3_l2
+rt_fmulzsa32x16_h3_l2:
+{ fmulzsa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzsa32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulzsa32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: fmulzss16_hs_11_00
 rt_fmulzss16_hs_11_00:
@@ -1492,6 +1768,18 @@ rt_fmulzss32s_hllh:
 { fmulzss32s.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_fmulzss32s_hllh>:
 # DIS: {{[ \t]}}fmulzss32s.hllh{{[ \t,;}]}}
+
+# MNEM: fmulzss32x16_h1_l0
+rt_fmulzss32x16_h1_l0:
+{ fmulzss32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzss32x16_h1_l0>:
+# DIS: {{[ \t]}}fmulzss32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: fmulzss32x16_h3_l2
+rt_fmulzss32x16_h3_l2:
+{ fmulzss32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_fmulzss32x16_h3_l2>:
+# DIS: {{[ \t]}}fmulzss32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: jal
 rt_jal:
@@ -1637,6 +1925,54 @@ rt_mul16zaq:
 # DIS-LABEL: <rt_mul16zaq>:
 # DIS: {{[ \t]}}mul16zaq{{[ \t,;}]}}
 
+# MNEM: mul32x16_h0
+rt_mul32x16_h0:
+{ mul32x16.h0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_h0>:
+# DIS: {{[ \t]}}mul32x16.h0{{[ \t,;}]}}
+
+# MNEM: mul32x16_h1
+rt_mul32x16_h1:
+{ mul32x16.h1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_h1>:
+# DIS: {{[ \t]}}mul32x16.h1{{[ \t,;}]}}
+
+# MNEM: mul32x16_h2
+rt_mul32x16_h2:
+{ mul32x16.h2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_h2>:
+# DIS: {{[ \t]}}mul32x16.h2{{[ \t,;}]}}
+
+# MNEM: mul32x16_h3
+rt_mul32x16_h3:
+{ mul32x16.h3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_h3>:
+# DIS: {{[ \t]}}mul32x16.h3{{[ \t,;}]}}
+
+# MNEM: mul32x16_l0
+rt_mul32x16_l0:
+{ mul32x16.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_l0>:
+# DIS: {{[ \t]}}mul32x16.l0{{[ \t,;}]}}
+
+# MNEM: mul32x16_l1
+rt_mul32x16_l1:
+{ mul32x16.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_l1>:
+# DIS: {{[ \t]}}mul32x16.l1{{[ \t,;}]}}
+
+# MNEM: mul32x16_l2
+rt_mul32x16_l2:
+{ mul32x16.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_l2>:
+# DIS: {{[ \t]}}mul32x16.l2{{[ \t,;}]}}
+
+# MNEM: mul32x16_l3
+rt_mul32x16_l3:
+{ mul32x16.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mul32x16_l3>:
+# DIS: {{[ \t]}}mul32x16.l3{{[ \t,;}]}}
+
 # MNEM: mul64_hh
 rt_mul64_hh:
 { mul64.hh d0, d1, d2; nop; nop }
@@ -1732,6 +2068,54 @@ rt_mul64_ulul:
 { mul64.ulul d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_mul64_ulul>:
 # DIS: {{[ \t]}}mul64.ulul{{[ \t,;}]}}
+
+# MNEM: mula32x16_h0
+rt_mula32x16_h0:
+{ mula32x16.h0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_h0>:
+# DIS: {{[ \t]}}mula32x16.h0{{[ \t,;}]}}
+
+# MNEM: mula32x16_h1
+rt_mula32x16_h1:
+{ mula32x16.h1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_h1>:
+# DIS: {{[ \t]}}mula32x16.h1{{[ \t,;}]}}
+
+# MNEM: mula32x16_h2
+rt_mula32x16_h2:
+{ mula32x16.h2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_h2>:
+# DIS: {{[ \t]}}mula32x16.h2{{[ \t,;}]}}
+
+# MNEM: mula32x16_h3
+rt_mula32x16_h3:
+{ mula32x16.h3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_h3>:
+# DIS: {{[ \t]}}mula32x16.h3{{[ \t,;}]}}
+
+# MNEM: mula32x16_l0
+rt_mula32x16_l0:
+{ mula32x16.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_l0>:
+# DIS: {{[ \t]}}mula32x16.l0{{[ \t,;}]}}
+
+# MNEM: mula32x16_l1
+rt_mula32x16_l1:
+{ mula32x16.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_l1>:
+# DIS: {{[ \t]}}mula32x16.l1{{[ \t,;}]}}
+
+# MNEM: mula32x16_l2
+rt_mula32x16_l2:
+{ mula32x16.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_l2>:
+# DIS: {{[ \t]}}mula32x16.l2{{[ \t,;}]}}
+
+# MNEM: mula32x16_l3
+rt_mula32x16_l3:
+{ mula32x16.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mula32x16_l3>:
+# DIS: {{[ \t]}}mula32x16.l3{{[ \t,;}]}}
 
 # MNEM: mula64_hh
 rt_mula64_hh:
@@ -1829,6 +2213,30 @@ rt_mula64_ulul:
 # DIS-LABEL: <rt_mula64_ulul>:
 # DIS: {{[ \t]}}mula64.ulul{{[ \t,;}]}}
 
+# MNEM: mulaa32x16_h0_l1
+rt_mulaa32x16_h0_l1:
+{ mulaa32x16.h0.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulaa32x16_h0_l1>:
+# DIS: {{[ \t]}}mulaa32x16.h0.l1{{[ \t,;}]}}
+
+# MNEM: mulaa32x16_h1_l0
+rt_mulaa32x16_h1_l0:
+{ mulaa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulaa32x16_h1_l0>:
+# DIS: {{[ \t]}}mulaa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulaa32x16_h2_l3
+rt_mulaa32x16_h2_l3:
+{ mulaa32x16.h2.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulaa32x16_h2_l3>:
+# DIS: {{[ \t]}}mulaa32x16.h2.l3{{[ \t,;}]}}
+
+# MNEM: mulaa32x16_h3_l2
+rt_mulaa32x16_h3_l2:
+{ mulaa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulaa32x16_h3_l2>:
+# DIS: {{[ \t]}}mulaa32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: mulaa32_hhll
 rt_mulaa32_hhll:
 { mulaa32.hhll d0, d1, d2; nop; nop }
@@ -1840,6 +2248,18 @@ rt_mulaa32_hllh:
 { mulaa32.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_mulaa32_hllh>:
 # DIS: {{[ \t]}}mulaa32.hllh{{[ \t,;}]}}
+
+# MNEM: mulas32x16_h1_l0
+rt_mulas32x16_h1_l0:
+{ mulas32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulas32x16_h1_l0>:
+# DIS: {{[ \t]}}mulas32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulas32x16_h3_l2
+rt_mulas32x16_h3_l2:
+{ mulas32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulas32x16_h3_l2>:
+# DIS: {{[ \t]}}mulas32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: mulas32_hhll
 rt_mulas32_hhll:
@@ -1955,6 +2375,54 @@ rt_mull:
 # DIS-LABEL: <rt_mull>:
 # DIS: {{[ \t]}}mull{{[ \t,;}]}}
 
+# MNEM: muls32x16_h0
+rt_muls32x16_h0:
+{ muls32x16.h0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_h0>:
+# DIS: {{[ \t]}}muls32x16.h0{{[ \t,;}]}}
+
+# MNEM: muls32x16_h1
+rt_muls32x16_h1:
+{ muls32x16.h1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_h1>:
+# DIS: {{[ \t]}}muls32x16.h1{{[ \t,;}]}}
+
+# MNEM: muls32x16_h2
+rt_muls32x16_h2:
+{ muls32x16.h2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_h2>:
+# DIS: {{[ \t]}}muls32x16.h2{{[ \t,;}]}}
+
+# MNEM: muls32x16_h3
+rt_muls32x16_h3:
+{ muls32x16.h3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_h3>:
+# DIS: {{[ \t]}}muls32x16.h3{{[ \t,;}]}}
+
+# MNEM: muls32x16_l0
+rt_muls32x16_l0:
+{ muls32x16.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_l0>:
+# DIS: {{[ \t]}}muls32x16.l0{{[ \t,;}]}}
+
+# MNEM: muls32x16_l1
+rt_muls32x16_l1:
+{ muls32x16.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_l1>:
+# DIS: {{[ \t]}}muls32x16.l1{{[ \t,;}]}}
+
+# MNEM: muls32x16_l2
+rt_muls32x16_l2:
+{ muls32x16.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_l2>:
+# DIS: {{[ \t]}}muls32x16.l2{{[ \t,;}]}}
+
+# MNEM: muls32x16_l3
+rt_muls32x16_l3:
+{ muls32x16.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_muls32x16_l3>:
+# DIS: {{[ \t]}}muls32x16.l3{{[ \t,;}]}}
+
 # MNEM: muls64_hh
 rt_muls64_hh:
 { muls64.hh d0, d1, d2; nop; nop }
@@ -2051,6 +2519,18 @@ rt_muls64_ulul:
 # DIS-LABEL: <rt_muls64_ulul>:
 # DIS: {{[ \t]}}muls64.ulul{{[ \t,;}]}}
 
+# MNEM: mulsa32x16_h1_l0
+rt_mulsa32x16_h1_l0:
+{ mulsa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulsa32x16_h1_l0>:
+# DIS: {{[ \t]}}mulsa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulsa32x16_h3_l2
+rt_mulsa32x16_h3_l2:
+{ mulsa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulsa32x16_h3_l2>:
+# DIS: {{[ \t]}}mulsa32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: mulsa32_hhll
 rt_mulsa32_hhll:
 { mulsa32.hhll d0, d1, d2; nop; nop }
@@ -2062,6 +2542,18 @@ rt_mulsa32_hllh:
 { mulsa32.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_mulsa32_hllh>:
 # DIS: {{[ \t]}}mulsa32.hllh{{[ \t,;}]}}
+
+# MNEM: mulss32x16_h1_l0
+rt_mulss32x16_h1_l0:
+{ mulss32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulss32x16_h1_l0>:
+# DIS: {{[ \t]}}mulss32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulss32x16_h3_l2
+rt_mulss32x16_h3_l2:
+{ mulss32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulss32x16_h3_l2>:
+# DIS: {{[ \t]}}mulss32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: mulss32_hhll
 rt_mulss32_hhll:
@@ -2189,6 +2681,30 @@ rt_muluuh:
 # DIS-LABEL: <rt_muluuh>:
 # DIS: {{[ \t]}}muluuh{{[ \t,;}]}}
 
+# MNEM: mulzaa32x16_h0_l1
+rt_mulzaa32x16_h0_l1:
+{ mulzaa32x16.h0.l1 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzaa32x16_h0_l1>:
+# DIS: {{[ \t]}}mulzaa32x16.h0.l1{{[ \t,;}]}}
+
+# MNEM: mulzaa32x16_h1_l0
+rt_mulzaa32x16_h1_l0:
+{ mulzaa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzaa32x16_h1_l0>:
+# DIS: {{[ \t]}}mulzaa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulzaa32x16_h2_l3
+rt_mulzaa32x16_h2_l3:
+{ mulzaa32x16.h2.l3 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzaa32x16_h2_l3>:
+# DIS: {{[ \t]}}mulzaa32x16.h2.l3{{[ \t,;}]}}
+
+# MNEM: mulzaa32x16_h3_l2
+rt_mulzaa32x16_h3_l2:
+{ mulzaa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzaa32x16_h3_l2>:
+# DIS: {{[ \t]}}mulzaa32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: mulzaa32_hhll
 rt_mulzaa32_hhll:
 { mulzaa32.hhll d0, d1, d2; nop; nop }
@@ -2200,6 +2716,18 @@ rt_mulzaa32_hllh:
 { mulzaa32.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_mulzaa32_hllh>:
 # DIS: {{[ \t]}}mulzaa32.hllh{{[ \t,;}]}}
+
+# MNEM: mulzas32x16_h1_l0
+rt_mulzas32x16_h1_l0:
+{ mulzas32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzas32x16_h1_l0>:
+# DIS: {{[ \t]}}mulzas32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulzas32x16_h3_l2
+rt_mulzas32x16_h3_l2:
+{ mulzas32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzas32x16_h3_l2>:
+# DIS: {{[ \t]}}mulzas32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: mulzas32_hhll
 rt_mulzas32_hhll:
@@ -2213,6 +2741,18 @@ rt_mulzas32_hllh:
 # DIS-LABEL: <rt_mulzas32_hllh>:
 # DIS: {{[ \t]}}mulzas32.hllh{{[ \t,;}]}}
 
+# MNEM: mulzsa32x16_h1_l0
+rt_mulzsa32x16_h1_l0:
+{ mulzsa32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzsa32x16_h1_l0>:
+# DIS: {{[ \t]}}mulzsa32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulzsa32x16_h3_l2
+rt_mulzsa32x16_h3_l2:
+{ mulzsa32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzsa32x16_h3_l2>:
+# DIS: {{[ \t]}}mulzsa32x16.h3.l2{{[ \t,;}]}}
+
 # MNEM: mulzsa32_hhll
 rt_mulzsa32_hhll:
 { mulzsa32.hhll d0, d1, d2; nop; nop }
@@ -2224,6 +2764,18 @@ rt_mulzsa32_hllh:
 { mulzsa32.hllh d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_mulzsa32_hllh>:
 # DIS: {{[ \t]}}mulzsa32.hllh{{[ \t,;}]}}
+
+# MNEM: mulzss32x16_h1_l0
+rt_mulzss32x16_h1_l0:
+{ mulzss32x16.h1.l0 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzss32x16_h1_l0>:
+# DIS: {{[ \t]}}mulzss32x16.h1.l0{{[ \t,;}]}}
+
+# MNEM: mulzss32x16_h3_l2
+rt_mulzss32x16_h3_l2:
+{ mulzss32x16.h3.l2 d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_mulzss32x16_h3_l2>:
+# DIS: {{[ \t]}}mulzss32x16.h3.l2{{[ \t,;}]}}
 
 # MNEM: mulzss32_hhll
 rt_mulzss32_hhll:
@@ -3266,11 +3818,35 @@ rt_x2cmul32s_f2:
 # DIS-LABEL: <rt_x2cmul32s_f2>:
 # DIS: {{[ \t]}}x2cmul32s.f2{{[ \t,;}]}}
 
+# MNEM: x2cmul32x16_h
+rt_x2cmul32x16_h:
+{ x2cmul32x16.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2cmul32x16_h>:
+# DIS: {{[ \t]}}x2cmul32x16.h{{[ \t,;}]}}
+
+# MNEM: x2cmul32x16_l
+rt_x2cmul32x16_l:
+{ x2cmul32x16.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2cmul32x16_l>:
+# DIS: {{[ \t]}}x2cmul32x16.l{{[ \t,;}]}}
+
 # MNEM: x2cmul32_f2
 rt_x2cmul32_f2:
 { x2cmul32.f2 d0, d1, d2, d3; nop; nop }
 # DIS-LABEL: <rt_x2cmul32_f2>:
 # DIS: {{[ \t]}}x2cmul32.f2{{[ \t,;}]}}
+
+# MNEM: x2cmula32x16_h
+rt_x2cmula32x16_h:
+{ x2cmula32x16.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2cmula32x16_h>:
+# DIS: {{[ \t]}}x2cmula32x16.h{{[ \t,;}]}}
+
+# MNEM: x2cmula32x16_l
+rt_x2cmula32x16_l:
+{ x2cmula32x16.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2cmula32x16_l>:
+# DIS: {{[ \t]}}x2cmula32x16.l{{[ \t,;}]}}
 
 # MNEM: x2dot32
 rt_x2dot32:
@@ -3290,6 +3866,18 @@ rt_x2fcmul32rss:
 # DIS-LABEL: <rt_x2fcmul32rss>:
 # DIS: {{[ \t]}}x2fcmul32rss{{[ \t,;}]}}
 
+# MNEM: x2fcmul32x16rs_h
+rt_x2fcmul32x16rs_h:
+{ x2fcmul32x16rs.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fcmul32x16rs_h>:
+# DIS: {{[ \t]}}x2fcmul32x16rs.h{{[ \t,;}]}}
+
+# MNEM: x2fcmul32x16rs_l
+rt_x2fcmul32x16rs_l:
+{ x2fcmul32x16rs.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fcmul32x16rs_l>:
+# DIS: {{[ \t]}}x2fcmul32x16rs.l{{[ \t,;}]}}
+
 # MNEM: x2fcmula32rs
 rt_x2fcmula32rs:
 { x2fcmula32rs d0, d1, d2; nop; nop }
@@ -3301,6 +3889,18 @@ rt_x2fcmula32rss:
 { x2fcmula32rss d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_x2fcmula32rss>:
 # DIS: {{[ \t]}}x2fcmula32rss{{[ \t,;}]}}
+
+# MNEM: x2fcmula32x16rs_h
+rt_x2fcmula32x16rs_h:
+{ x2fcmula32x16rs.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fcmula32x16rs_h>:
+# DIS: {{[ \t]}}x2fcmula32x16rs.h{{[ \t,;}]}}
+
+# MNEM: x2fcmula32x16rs_l
+rt_x2fcmula32x16rs_l:
+{ x2fcmula32x16rs.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fcmula32x16rs_l>:
+# DIS: {{[ \t]}}x2fcmula32x16rs.l{{[ \t,;}]}}
 
 # MNEM: x2ff2rsst32
 rt_x2ff2rsst32:
@@ -3332,6 +3932,42 @@ rt_x2fmul32ts:
 # DIS-LABEL: <rt_x2fmul32ts>:
 # DIS: {{[ \t]}}x2fmul32ts{{[ \t,;}]}}
 
+# MNEM: x2fmul32x16rss_h
+rt_x2fmul32x16rss_h:
+{ x2fmul32x16rss.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmul32x16rss_h>:
+# DIS: {{[ \t]}}x2fmul32x16rss.h{{[ \t,;}]}}
+
+# MNEM: x2fmul32x16rss_l
+rt_x2fmul32x16rss_l:
+{ x2fmul32x16rss.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmul32x16rss_l>:
+# DIS: {{[ \t]}}x2fmul32x16rss.l{{[ \t,;}]}}
+
+# MNEM: x2fmul32x16rs_h
+rt_x2fmul32x16rs_h:
+{ x2fmul32x16rs.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmul32x16rs_h>:
+# DIS: {{[ \t]}}x2fmul32x16rs.h{{[ \t,;}]}}
+
+# MNEM: x2fmul32x16rs_l
+rt_x2fmul32x16rs_l:
+{ x2fmul32x16rs.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmul32x16rs_l>:
+# DIS: {{[ \t]}}x2fmul32x16rs.l{{[ \t,;}]}}
+
+# MNEM: x2fmul32x16ts_h
+rt_x2fmul32x16ts_h:
+{ x2fmul32x16ts.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmul32x16ts_h>:
+# DIS: {{[ \t]}}x2fmul32x16ts.h{{[ \t,;}]}}
+
+# MNEM: x2fmul32x16ts_l
+rt_x2fmul32x16ts_l:
+{ x2fmul32x16ts.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmul32x16ts_l>:
+# DIS: {{[ \t]}}x2fmul32x16ts.l{{[ \t,;}]}}
+
 # MNEM: x2fmula32rs
 rt_x2fmula32rs:
 { x2fmula32rs d0, d1, d2; nop; nop }
@@ -3350,6 +3986,42 @@ rt_x2fmula32ts:
 # DIS-LABEL: <rt_x2fmula32ts>:
 # DIS: {{[ \t]}}x2fmula32ts{{[ \t,;}]}}
 
+# MNEM: x2fmula32x16rss_h
+rt_x2fmula32x16rss_h:
+{ x2fmula32x16rss.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmula32x16rss_h>:
+# DIS: {{[ \t]}}x2fmula32x16rss.h{{[ \t,;}]}}
+
+# MNEM: x2fmula32x16rss_l
+rt_x2fmula32x16rss_l:
+{ x2fmula32x16rss.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmula32x16rss_l>:
+# DIS: {{[ \t]}}x2fmula32x16rss.l{{[ \t,;}]}}
+
+# MNEM: x2fmula32x16rs_h
+rt_x2fmula32x16rs_h:
+{ x2fmula32x16rs.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmula32x16rs_h>:
+# DIS: {{[ \t]}}x2fmula32x16rs.h{{[ \t,;}]}}
+
+# MNEM: x2fmula32x16rs_l
+rt_x2fmula32x16rs_l:
+{ x2fmula32x16rs.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmula32x16rs_l>:
+# DIS: {{[ \t]}}x2fmula32x16rs.l{{[ \t,;}]}}
+
+# MNEM: x2fmula32x16ts_h
+rt_x2fmula32x16ts_h:
+{ x2fmula32x16ts.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmula32x16ts_h>:
+# DIS: {{[ \t]}}x2fmula32x16ts.h{{[ \t,;}]}}
+
+# MNEM: x2fmula32x16ts_l
+rt_x2fmula32x16ts_l:
+{ x2fmula32x16ts.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmula32x16ts_l>:
+# DIS: {{[ \t]}}x2fmula32x16ts.l{{[ \t,;}]}}
+
 # MNEM: x2fmuls32rs
 rt_x2fmuls32rs:
 { x2fmuls32rs d0, d1, d2; nop; nop }
@@ -3367,6 +4039,42 @@ rt_x2fmuls32ts:
 { x2fmuls32ts d0, d1, d2; nop; nop }
 # DIS-LABEL: <rt_x2fmuls32ts>:
 # DIS: {{[ \t]}}x2fmuls32ts{{[ \t,;}]}}
+
+# MNEM: x2fmuls32x16rss_h
+rt_x2fmuls32x16rss_h:
+{ x2fmuls32x16rss.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmuls32x16rss_h>:
+# DIS: {{[ \t]}}x2fmuls32x16rss.h{{[ \t,;}]}}
+
+# MNEM: x2fmuls32x16rss_l
+rt_x2fmuls32x16rss_l:
+{ x2fmuls32x16rss.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmuls32x16rss_l>:
+# DIS: {{[ \t]}}x2fmuls32x16rss.l{{[ \t,;}]}}
+
+# MNEM: x2fmuls32x16rs_h
+rt_x2fmuls32x16rs_h:
+{ x2fmuls32x16rs.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmuls32x16rs_h>:
+# DIS: {{[ \t]}}x2fmuls32x16rs.h{{[ \t,;}]}}
+
+# MNEM: x2fmuls32x16rs_l
+rt_x2fmuls32x16rs_l:
+{ x2fmuls32x16rs.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmuls32x16rs_l>:
+# DIS: {{[ \t]}}x2fmuls32x16rs.l{{[ \t,;}]}}
+
+# MNEM: x2fmuls32x16ts_h
+rt_x2fmuls32x16ts_h:
+{ x2fmuls32x16ts.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmuls32x16ts_h>:
+# DIS: {{[ \t]}}x2fmuls32x16ts.h{{[ \t,;}]}}
+
+# MNEM: x2fmuls32x16ts_l
+rt_x2fmuls32x16ts_l:
+{ x2fmuls32x16ts.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2fmuls32x16ts_l>:
+# DIS: {{[ \t]}}x2fmuls32x16ts.l{{[ \t,;}]}}
 
 # MNEM: x2frsst32
 rt_x2frsst32:
@@ -3458,11 +4166,35 @@ rt_x2mul32:
 # DIS-LABEL: <rt_x2mul32>:
 # DIS: {{[ \t]}}x2mul32{{[ \t,;}]}}
 
+# MNEM: x2mul32x16_h
+rt_x2mul32x16_h:
+{ x2mul32x16.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2mul32x16_h>:
+# DIS: {{[ \t]}}x2mul32x16.h{{[ \t,;}]}}
+
+# MNEM: x2mul32x16_l
+rt_x2mul32x16_l:
+{ x2mul32x16.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2mul32x16_l>:
+# DIS: {{[ \t]}}x2mul32x16.l{{[ \t,;}]}}
+
 # MNEM: x2mula32
 rt_x2mula32:
 { x2mula32 d0, d1, d2, d3; nop; nop }
 # DIS-LABEL: <rt_x2mula32>:
 # DIS: {{[ \t]}}x2mula32{{[ \t,;}]}}
+
+# MNEM: x2mula32x16_h
+rt_x2mula32x16_h:
+{ x2mula32x16.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2mula32x16_h>:
+# DIS: {{[ \t]}}x2mula32x16.h{{[ \t,;}]}}
+
+# MNEM: x2mula32x16_l
+rt_x2mula32x16_l:
+{ x2mula32x16.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2mula32x16_l>:
+# DIS: {{[ \t]}}x2mula32x16.l{{[ \t,;}]}}
 
 # MNEM: x2mulaph32
 rt_x2mulaph32:
@@ -3493,6 +4225,18 @@ rt_x2muls32:
 { x2muls32 d0, d1, d2, d3; nop; nop }
 # DIS-LABEL: <rt_x2muls32>:
 # DIS: {{[ \t]}}x2muls32{{[ \t,;}]}}
+
+# MNEM: x2muls32x16_h
+rt_x2muls32x16_h:
+{ x2muls32x16.h d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2muls32x16_h>:
+# DIS: {{[ \t]}}x2muls32x16.h{{[ \t,;}]}}
+
+# MNEM: x2muls32x16_l
+rt_x2muls32x16_l:
+{ x2muls32x16.l d0, d1, d2; nop; nop }
+# DIS-LABEL: <rt_x2muls32x16_l>:
+# DIS: {{[ \t]}}x2muls32x16.l{{[ \t,;}]}}
 
 # MNEM: x2mulsph32
 rt_x2mulsph32:

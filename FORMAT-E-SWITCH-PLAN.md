@@ -300,7 +300,7 @@ python3 .../haydn_encoding.py --database ~/haydn --emit report --target-dir llvm
 Scheduling has **already** moved to the unit model and is in the build:
 `HaydnGeneric.td:33` includes `HaydnFormatESchedule.td`; 7 `U_*` FuncUnits, 25
 `Unit_*_L*` itinerary classes, 114 `let Itinerary = Unit_*` in
-`HaydnInstrInfoAuto.td`. Encoding, packing and execution are all still
+`HaydnInstrInfoManual.td`. Encoding, packing and execution are all still
 Bundle128. 15 `Slot*` itinerary classes and `SLOT0/1/2` FuncUnits remain,
 referenced by 195 member definitions; they retire with the member files.
 
@@ -1525,7 +1525,7 @@ Grep for anything else that strips `_S` by hand.
 
 The last 52 failures. `SEXT_GPR32_TO_DR64` (`HaydnInstrInfo.td:601`,
 `FmtALU64Unary<0x67,0x197>`, asm `sext32t64`) is what CodeGen emitted and has
-**no** format E member; `SEXT32T64` (`HaydnInstrInfoAuto.td`, `isCodeGenOnly`
+**no** format E member; `SEXT32T64` (`HaydnInstrInfoManual.td`, `isCodeGenOnly`
 stub) is the database name and has seven. The stub was declared
 `(outs GPR32:$rd)`, which is wrong against the database (`rtd =
 SEXT32->64(rs)`) **and against its own generated members**
@@ -2678,7 +2678,7 @@ now, not 12 — functions align to 4, so not every advance is a whole parcel and
 
 #### 4. 48 real instructions were still `isPseudo` — `48c963aa7901`
 
-`let isPseudo = 1 in {` at `HaydnInstrInfoAuto.td:2925` covers everything after
+`let isPseudo = 1 in {` at `HaydnInstrInfoManual.td:2925` covers everything after
 it that does not opt out. Format E generates members for 48 of those logicals,
 so they are real instructions and the flag is the last thing saying otherwise.
 

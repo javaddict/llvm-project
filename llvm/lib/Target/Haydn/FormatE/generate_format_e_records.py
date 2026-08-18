@@ -39,35 +39,34 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 # Default golden location (plans tree). Overridable via --json / HAYDN_GOLDEN_DIR.
 DEFAULT_GOLDEN_DIR = Path("/ssd2/mhyang/haydn-plans/Database/golden")
-DEFAULT_JSON = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2.json"
-DEFAULT_XLSX = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2.xlsx"
+DEFAULT_JSON = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2_1.json"
+DEFAULT_XLSX = DEFAULT_GOLDEN_DIR / "format_e_bit_layout_v2_1.xlsx"
 DEFAULT_CANONICAL = DEFAULT_GOLDEN_DIR / "format_e_canonical_vectors_v1.json"
 # Manifest pin for the companion XLSX (geometry authority pair).
 PINNED_XLSX_SHA256 = (
-    "9b3c06612cec47fa026bd79cff5632cb970abdfe1e161075444f7d02432574af"
+    "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f"
 )
-# Repaired golden: delivery b0b477e5… + haydn_encoding.py --fix-operand-mapping
-# (76 mapping rows re-derived from instruction_type_index.json Syntax; bit
-# geometry untouched). The delivery pin is retired — regenerating from it
-# reintroduces the operand-mapping defect. The canonical-vector ledger embeds
-# this hash in its oracle block, so it must be regenerated against the
-# repaired golden on the plans machine before --check can pass again.
+# Golden v2_1 (supersedes v2 2026-08-18): +120 MAC RR 32X16 instrs, +4 LS
+# D_SW_F64RS rows, RRR operand-field canonicalization; zero removals, zero
+# opcode changes, bit geometry identical to v2. Read-port repair applied
+# 2026-08-18 (haydn_encoding.py --fix-read-ports --write: 6 FMUL*32S rows in
+# instruction_type_index.json gained rtd; layout JSON untouched).
 PINNED_JSON_SHA256 = (
-    "8465132c2fb91e44a335d8a63577c637428d93106ed7a4d657d80ac70fdfa7f9"
+    "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a"
 )
 PINNED_INDEX_SHA256 = (
-    "e77908e9f09a6d649491389f8dabe06a896db22b230bedfe915d553e8801103b"
+    "7a13453ad934d6be9a303b51fcaeb6e908d97015b3e75db7d76fa13cb7a6dede"
 )
 PINNED_CANONICAL_SHA256 = (
-    "000cd92682adb7b88a727182318fa58bd0989547895ae36585c5cbd00f220c0d"
+    "741f5b4141990dc27dc217d2b0c0d7ab57240e08ef31c34bc036f11bbda1938e"
 )
 SSML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 # Catalog snapshot pins from the current JSON hash (manifest §5).
-PIN_UNIQUE_NON_NOP = 683
-PIN_E2_NON_NOP = 677
-PIN_E3_NON_NOP = 673
-PIN_BOTH_NON_NOP = 667
+PIN_UNIQUE_NON_NOP = 807
+PIN_E2_NON_NOP = 801
+PIN_E3_NON_NOP = 797
+PIN_BOTH_NON_NOP = 791
 PIN_E2_ONLY = 10
 PIN_E3_ONLY = 6
 PIN_TYPE_LAYOUTS = 126
@@ -484,7 +483,7 @@ def validate_catalog(cat: Catalog) -> None:
 
     # Alt multiplicity pin (manifest §5).
     mult = Counter(len(v) for v in cat.alternatives.values())
-    expected_mult = {1: 1, 2: 62, 3: 15, 4: 7, 5: 412, 7: 186}
+    expected_mult = {1: 1, 2: 66, 3: 15, 4: 7, 5: 532, 7: 186}
     if dict(mult) != expected_mult:
         raise SystemExit(f"alt multiplicity {dict(mult)} != {expected_mult}")
 
@@ -1354,7 +1353,7 @@ def load_td_tied_logicals(td_dir: Path) -> set:
     Comments are skipped; a Constraints match is attributed to the nearest
     preceding `def NAME`."""
     tied = set()
-    for fn in ("HaydnInstrInfo.td", "HaydnInstrInfoAuto.td"):
+    for fn in ("HaydnInstrInfo.td", "HaydnInstrInfoManual.td"):
         path = td_dir / fn
         if not path.is_file():
             raise SystemExit(f"error: TD file for tie scan missing: {path}")
@@ -2008,10 +2007,15 @@ def emit_members_td_inc(
     # Fail-closed pin: the canonicalized set is measured, not assumed. A DB
     # regen that changes it must be re-audited against the encode bag binding
     # before this pin moves.
-    if canonicalized != ["X4SEL16_E3_E1_ALU1_RRR"]:
+    # 2026-08-18 v2_1: golden RRR operand_fields carry one canonical token
+    # per position (dest(rtd), src3(rs), ...), so member alias sequences now
+    # match canon_alias_order directly and the same-class permutation branch
+    # no longer fires (X4SEL16_E3_E1_ALU1_RRR re-audited: row present at
+    # opcode 0x01, operands bind by name, bit placement unchanged).
+    if canonicalized != []:
         raise SystemExit(
             "error: canonicalized member set changed: "
-            f"{canonicalized} != ['X4SEL16_E3_E1_ALU1_RRR'] — re-audit "
+            f"{canonicalized} != [] — re-audit "
             "the encode bag binding before repinning"
         )
     # Accumulator-tie pins: measured, not assumed. The tie set derives from
@@ -2230,7 +2234,7 @@ def emit_member_opcodes_inc(cat: Catalog, member_to_logical: Dict[str, str]) -> 
 # MC mnemonic round-trip harness (one vector per product logical)
 # Peer: llvm/test/MC/Hexagon/v67_all.s (one mnemonic × assemble+objdump).
 # Operand print order matches emit_members_td_inc AsmString, not hypothesized
-# HaydnInstrInfoAuto.td (those stay isCodeGenOnly / auto-hypothesized-unencodable.s).
+# HaydnInstrInfoManual.td (those stay isCodeGenOnly / auto-hypothesized-unencodable.s).
 # ---------------------------------------------------------------------------
 
 BRANCH_TARGET_LOGICALS = frozenset({
@@ -2494,6 +2498,120 @@ def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
     return "\n".join(lines) + "\n"
 
 
+def load_hand_def_logicals(td_dir: Path) -> set:
+    """Names with a hand def anywhere in the target .td set (all *.td,
+    excluding generated *.td.inc) — collision-safe superset."""
+    names = set()
+    for path in sorted(td_dir.glob("*.td")):
+        text = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"^def\s+([A-Za-z0-9_]+)", text, re.M):
+            names.add(_logical_key(m.group(1)))
+    return names
+
+
+def emit_logical_defs_td_inc(cat: Catalog, hand_logicals: set) -> str:
+    """HaydnInst logical defs for golden logicals with no hand def.
+
+    2026-08-18 (v2_1): the golden catalog grew past the hand-maintained
+    logical layer (+120 MAC RR 32X16, +4 LS D_SW_F64RS). The MC matcher
+    parses LOGICAL defs (members are e96member-variant, never in the public
+    matcher), so a golden logical without a def is un-assemblable. This
+    emitter closes that gap from golden truth only: operand classes from
+    member alias classification, writeback ties from golden POST semantics
+    (rs writeback), itinerary from the primary unit. Everything lands in a
+    generated include; hand td stays authoritative for what it already
+    defines (hand wins on name collision by construction — we only emit
+    names the hand files lack).
+    """
+    lines: List[str] = []
+    lines.append("//===-- HaydnInstrInfoGolden.td.inc - generated logicals -*- C++ -*-===//")
+    lines.append("//")
+    lines.append("// Auto-generated by FormatE/generate_format_e_records.py from golden")
+    lines.append("// format_e_bit_layout_v2_1.json. DO NOT EDIT.")
+    lines.append("//")
+    lines.append("// Logical (matcher-facing) defs for golden catalog names that have NO")
+    lines.append("// hand def in HaydnInstrInfo.td / HaydnInstrInfoManual.td. Encoding")
+    lines.append("// lives in the Format E members (HaydnFormatsE96Members.td.inc); these")
+    lines.append("// defs exist so the public AsmMatcher can parse the mnemonic. Scalar")
+    lines.append("// codegen selection is NOT claimed (no Patterns); intrinsics/ISel wire")
+    lines.append("// them separately.")
+    lines.append("//===----------------------------------------------------------------------===//")
+    lines.append("")
+    emitted = 0
+    for logical in sorted(cat.alternatives):
+        if _logical_key(logical) in hand_logicals:
+            continue
+        # Golden placeholder rows (e.g. WFI<TBD>) are not td identifiers;
+        # their mnemonics parse via hand FieldSlot defs (ALU32 WFI).
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", logical):
+            continue
+        mids = cat.alternatives[logical]
+        rec = cat.members[mids[0]]
+        lay = cat.layouts[rec.layout_id]
+        ops = _member_print_ops(rec, lay)
+        u = logical.upper()
+        # POST semantics: golden Behavior writes the base register back.
+        is_post = "_POST_" in u
+        # LS family: unit LOADSTORE0, mayStore per golden (all new LS are stores).
+        is_ls = rec.unit.startswith("LOADSTORE")
+        may_store = 1 if (is_ls and u.startswith(("D_SW", "S_SW", "D_SD", "S_SD"))) else 0
+        mnem = assembler_mnemonic(logical, rec.unit)
+        out_frags: List[str] = []
+        in_frags: List[str] = []
+        asm_ops: List[str] = []
+        tie = ""
+        gpr_n = 0
+        dr_n = 0
+        for role, kind, width in ops:
+            r = role.lower()
+            if kind == "REG_GPR":
+                gpr_n += 1
+                if is_post and r in ("dest2", "src1") and "wb" not in r:
+                    # base writeback operand: out wb + tied in
+                    out_frags.append("GPR32:$rs_wb")
+                    in_frags.append("GPR32:$rs")
+                    asm_ops.append("$rs")
+                    tie = "$rs = $rs_wb"
+                    continue
+                in_frags.append(f"GPR32:$rs{gpr_n}")
+                asm_ops.append(f"$rs{gpr_n}")
+            elif kind == "REG_DR":
+                dr_n += 1
+                in_frags.append(f"DR64:$rd{dr_n}")
+                asm_ops.append(f"$rd{dr_n}")
+            elif kind == "REG_AR":
+                in_frags.append("AR64:$ar_sel")
+                asm_ops.append("$ar_sel")
+            else:  # IMM
+                if is_ls_ri6_scaled_imm(logical) and width == 6:
+                    in_frags.append("simm6:$scaled_imm")
+                    asm_ops.append("$scaled_imm")
+                else:
+                    in_frags.append(f"uimm{width}:$imm_{width}")
+                    asm_ops.append(f"$imm_{width}")
+        outs = "(outs " + ", ".join(out_frags) + ")" if out_frags else "(outs)"
+        ins = "(ins " + ", ".join(in_frags) + ")"
+        asm = mnem + ("\t" + ", ".join(asm_ops) if asm_ops else "")
+        itin = "Slot0_LS" if is_ls else ("Slot1_MAC" if rec.unit.startswith("MAC") else "Slot012_ALU")
+        props = [f"isCodeGenOnly = 0", "DecoderNamespace = \"HaydnAutoNoDecode\"", "isAsmParserOnly = 0"]
+        if may_store:
+            props.append("mayStore = 1")
+        if tie:
+            props.append(f'Constraints = "{tie}"')
+        lines.append(f"let {', '.join(props)} in {{")
+        lines.append(f"def {logical} : HaydnInst<4, {outs},")
+        lines.append(f"    {ins},")
+        lines.append(f'    "{asm}", []> {{')
+        lines.append(f"  let Itinerary = {itin};")
+        lines.append("}")
+        lines.append("}")
+        lines.append("")
+        emitted += 1
+    lines.append(f"// generated logical defs: {emitted}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def emit_composite_scaffold_fragment() -> str:
     """Text block merged into HaydnCompositeFormats.td (manual section)."""
     return ""  # CompositeFormats is updated separately as a stable hand edit.
@@ -2519,17 +2637,17 @@ def resolve_golden_dir() -> Path:
         if not raw:
             continue
         p = Path(raw)
-        if (p / "format_e_bit_layout_v2.json").is_file():
+        if (p / "format_e_bit_layout_v2_1.json").is_file():
             return p
         nested = p / "golden"
-        if (nested / "format_e_bit_layout_v2.json").is_file():
+        if (nested / "format_e_bit_layout_v2_1.json").is_file():
             return nested
     if DEFAULT_GOLDEN_DIR.is_dir():
         return DEFAULT_GOLDEN_DIR
     # Discovery, not trust: content is pinned by hash, so falling back to the
     # user database copy cannot change what generation accepts.
     home_db = Path.home() / "haydn"
-    if (home_db / "format_e_bit_layout_v2.json").is_file():
+    if (home_db / "format_e_bit_layout_v2_1.json").is_file():
         return home_db
     return DEFAULT_GOLDEN_DIR
 
@@ -2847,9 +2965,9 @@ def check_canonical_vectors(path: Path, cat: Catalog) -> None:
         raise SystemExit(f"unexpected canonical byte-order convention {byte_order!r}")
 
     oracle = ((data.get("authority") or {}).get("oracle_sha256")) or {}
-    if oracle.get("format_e_bit_layout_v2.json") != PINNED_JSON_SHA256:
+    if oracle.get("format_e_bit_layout_v2_1.json") != PINNED_JSON_SHA256:
         raise SystemExit("canonical oracle JSON hash != pinned JSON")
-    if oracle.get("format_e_bit_layout_v2.xlsx") != PINNED_XLSX_SHA256:
+    if oracle.get("format_e_bit_layout_v2_1.xlsx") != PINNED_XLSX_SHA256:
         raise SystemExit("canonical oracle XLSX hash != pinned XLSX")
 
     n = 0
@@ -3128,8 +3246,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     golden = resolve_golden_dir()
-    json_path: Path = args.json or (golden / "format_e_bit_layout_v2.json")
-    xlsx_path: Path = args.xlsx or (golden / "format_e_bit_layout_v2.xlsx")
+    json_path: Path = args.json or (golden / "format_e_bit_layout_v2_1.json")
+    xlsx_path: Path = args.xlsx or (golden / "format_e_bit_layout_v2_1.xlsx")
     canonical_path: Path = args.canonical_vectors or (
         golden / "format_e_canonical_vectors_v1.json"
     )
@@ -3193,11 +3311,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # tie, so members stay at logical arity and the gap is a ledger item
     # (conditional moves / partial-word inserts with unmodeled dest reads).
     # Measured, pinned: a regen that changes this set must be re-audited.
+    # 2026-08-18 v2_1 re-audit: 87 -> 159. Growth = (a) the new 32X16
+    # accumulator family (MULA*/FMULA*/MULS* read rtd per Behavior), (b) the
+    # re-delivered index carries complete DR_Read_Port rows for older
+    # logicals (SMULA16_*, FMULS16_HS*, MOVEI_H/L, MOVF64/MOVT64, CLAMP,
+    # MULSA/MULSS32_*), (c) 6 FMUL*32S rows from the forced read-port repair.
+    # Spot-audit 2026-08-18: Behavior text confirms the dest read in all
+    # sampled classes; same ledger class as before, no new mechanism.
     divergent_non_ls = [
         k for k in divergent
         if not k.startswith(("D_", "S_", "PLD", "WBAR"))
     ]
-    if len(divergent_non_ls) != 87:
+    if len(divergent_non_ls) != 159:
         raise SystemExit(
             "error: golden-tied-but-TD-untied set changed "
             f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "
@@ -3205,6 +3330,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     members_td = emit_members_td_inc(cat, accum_ties)
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical)
+    hand_logicals = load_hand_def_logicals(out_dir)
+    logical_defs_td = emit_logical_defs_td_inc(cat, hand_logicals)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir)
 
@@ -3212,6 +3339,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         out_dir / "HaydnGenFormatERecords.inc": records,
         out_dir / "HaydnGenFormatESetDescLedger.inc": ledger,
         out_dir / "HaydnFormatsE96Members.td.inc": members_td,
+        out_dir / "HaydnInstrInfoGolden.td.inc": logical_defs_td,
         out_dir / "HaydnGenFormatEMemberOpcodes.inc": member_opcodes,
         mnemonic_rt_path: mnemonic_rt,
     }

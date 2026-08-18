@@ -10,7 +10,7 @@
 // These patterns are used by the tablegen-generated GlobalISel match table.
 //
 // IMPORTANT: The operand order in each Pat must match the instruction definition
-// in HaydnInstrInfo.td / HaydnInstrInfoAuto.td exactly.
+// in HaydnInstrInfo.td / HaydnInstrInfoManual.td exactly.
 //
 //===----------------------------------------------------------------------===//
 
@@ -117,7 +117,7 @@ def : Pat<(int_haydn_fmuls32s_hh DR64:$acc, DR64:$a, DR64:$b),
 
 //===----------------------------------------------------------------------===//
 // FF2 Fractional Multiply with Symmetric Rounding (F2MUL32RS)
-// Maps to F2MUL* instructions in HaydnInstrInfoAuto.td.
+// Maps to F2MUL* instructions in HaydnInstrInfoManual.td.
 // Naming: FF2 intrinsic -> F2MUL* instruction (the "F" prefix is dropped in
 // the ISA; "FF2" = "Fractional Format-2" in the LLVM intrinsic namespace).
 //

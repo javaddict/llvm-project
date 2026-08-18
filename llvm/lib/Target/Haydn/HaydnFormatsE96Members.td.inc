@@ -8076,6 +8076,1806 @@ def SMULS16S_11_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$s
 }
 
 let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f4;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f5;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f6;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f7;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f0;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f1;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f2;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f3;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1fc;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1fd;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1fe;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1ff;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f8;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f9;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1fa;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1fb;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H0_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x18a;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x187;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H2_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x189;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x188;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x18b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x18c;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x108;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x109;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x10a;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x10b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x104;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x105;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x106;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x107;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x18d;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x18e;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x18f;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xba;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H0_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xdd;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xda;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H2_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xdc;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xdb;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xde;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xdf;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xaa;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xab;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xac;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xad;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe6;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe7;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe8;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe9;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe2;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe3;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe4;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe5;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xee;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xef;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf0;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf1;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xea;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xeb;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xec;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xed;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H0_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x19b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x198;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H2_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x19a;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x199;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x19c;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x19d;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf6;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf7;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf8;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf9;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf2;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf3;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf4;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf5;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x19e;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x19f;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xae;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xaf;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H0_L1_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xcb;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xc8;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H2_L3_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xca;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xc9;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xcc;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xcd;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xce;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xcf;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H1_L0_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xd8;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H3_L2_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xd9;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x50;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x4f;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x5c;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x5b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x4c;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x4b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x4e;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x4d;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1c;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x2c;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x2b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x3c;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x3b;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1e;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1d;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x2e;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x2d;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x3e;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x3d;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x20;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x1f;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x30;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x2f;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x40;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x3f;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xc;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xb;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xe;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xd;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_H_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0x10;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_L_E2_E0_MAC0_RR : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<19> c0 = 0x0;
+  bits<9> c1 = 0xf;
+  bits<1> c2 = 0x0;
+  bits<2> c3 = 0x1;
+  bits<2> c4 = 0x1;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
 def X2MUL32_E2_E0_MAC0_RRR : HaydnEntryE2E0<(outs DR64:$dest1_0, DR64:$dest2_3), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
   bits<4> src1_1;
@@ -8944,6 +10744,21 @@ def S_SW_PRE_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<(outs GPR32:$dest2_wb), (
 }
 
 let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
+def D_SW_F64RS_POST_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, simm6:$imm_2), "d_sw_f64rs_post_imm\t$dest1_0, $dest2_1, $imm_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<6> imm_2;
+  bits<17> c0 = 0x0;
+  bits<6> c1 = 0x3d;
+  bits<3> c2 = 0x0;
+  bits<3> c3 = 0x3;
+  bits<2> c4 = 0x2;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, imm_2, dest2_1, dest1_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
 def D_SW_L_POST_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, simm6:$imm_2), "d_sw_l_post_imm\t$dest1_0, $dest2_1, $imm_2", []> {
   bits<4> dest1_0;
   bits<4> dest2_1;
@@ -9025,6 +10840,21 @@ def D_SW_H_PRE_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<(outs GPR32:$dest2_wb),
   bits<6> imm_2;
   bits<17> c0 = 0x0;
   bits<6> c1 = 0x27;
+  bits<3> c2 = 0x0;
+  bits<3> c3 = 0x3;
+  bits<2> c4 = 0x2;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, imm_2, dest2_1, dest1_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def D_SW_F64RS_WITH_IMM_E2_E0_LOADSTORE0_RI6 : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, GPR32:$dest2_1, simm6:$imm_2), "d_sw_f64rs_with_imm\t$dest1_0, $dest2_1, $imm_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<6> imm_2;
+  bits<17> c0 = 0x0;
+  bits<6> c1 = 0x3c;
   bits<3> c2 = 0x0;
   bits<3> c3 = 0x3;
   bits<2> c4 = 0x2;
@@ -9829,6 +11659,21 @@ def S_SW_PRE_REG_E2_E0_LOADSTORE0_RR : HaydnEntryE2E0<(outs GPR32:$dest2_wb), (i
 }
 
 let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
+def D_SW_F64RS_POST_REG_E2_E0_LOADSTORE0_RR : HaydnEntryE2E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, GPR32:$src_2), "d_sw_f64rs_post_reg\t$dest1_0, $dest2_1, $src_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<4> src_2;
+  bits<19> c0 = 0x0;
+  bits<6> c1 = 0x38;
+  bits<3> c2 = 0x0;
+  bits<3> c3 = 0x4;
+  bits<2> c4 = 0x2;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src_2, dest2_1, dest1_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
 def D_SW_H_POST_REG_E2_E0_LOADSTORE0_RR : HaydnEntryE2E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, GPR32:$src_2), "d_sw_h_post_reg\t$dest1_0, $dest2_1, $src_2", []> {
   bits<4> dest1_0;
   bits<4> dest2_1;
@@ -9865,6 +11710,21 @@ def D_SW_H_PRE_REG_E2_E0_LOADSTORE0_RR : HaydnEntryE2E0<(outs GPR32:$dest2_wb), 
   bits<4> src_2;
   bits<19> c0 = 0x0;
   bits<6> c1 = 0x33;
+  bits<3> c2 = 0x0;
+  bits<3> c3 = 0x4;
+  bits<2> c4 = 0x2;
+  // e0 entry window 45b (MSB-first concat)
+  let e0 = {c0, src_2, dest2_1, dest1_0, c1, c2, c3, c4};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def D_SW_F64RS_WITH_REG_E2_E0_LOADSTORE0_RR : HaydnEntryE2E0<(outs), (ins DR64:$dest1_0, GPR32:$dest2_1, GPR32:$src_2), "d_sw_f64rs_with_reg\t$dest1_0, $dest2_1, $src_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<4> src_2;
+  bits<19> c0 = 0x0;
+  bits<6> c1 = 0x3c;
   bits<3> c2 = 0x0;
   bits<3> c3 = 0x4;
   bits<2> c4 = 0x2;
@@ -14866,6 +16726,1686 @@ def SMULS16S_11_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$s
   bits<4> src2_2;
   bits<16> c0 = 0x0;
   bits<9> c1 = 0xb1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1fc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1fd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1fe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1ff;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1fa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1fb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H0_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x18a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x187;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H2_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x189;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x188;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x18b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x18c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x108;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x109;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x10a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x10b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x104;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x105;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x106;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x107;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x18d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x18e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x18f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xba;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H0_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xdd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xda;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H2_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xdc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xdb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xde;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xdf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xaa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xab;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xac;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xad;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xee;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xef;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xea;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xeb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xec;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xed;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H0_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x19b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x198;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H2_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x19a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x199;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x19c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x19d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x19e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x19f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xae;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xaf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H0_L1_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xcb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xc8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H2_L3_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xca;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xc9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xcc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xcd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xce;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xcf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H1_L0_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xd8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H3_L2_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xd9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x50;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x4f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x5c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x5b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x4c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x4b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x4e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x4d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x2c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x2b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x3c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x3b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x2e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x2d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x3e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x3d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x20;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x1f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x30;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x2f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x40;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x3f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_H_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0x10;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x1;
+  // e1 entry window 41b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_L_E2_E1_MAC1_RR : HaydnEntryE2E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<16> c0 = 0x0;
+  bits<9> c1 = 0xf;
   bits<2> c2 = 0x1;
   bits<2> c3 = 0x1;
   // e1 entry window 41b (MSB-first concat)
@@ -20738,6 +24278,1686 @@ def SMULS16S_11_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$s
   bits<4> src2_2;
   bits<6> c0 = 0x0;
   bits<9> c1 = 0xb1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1ff;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H0_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x187;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H2_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x189;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x188;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x108;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x109;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x10a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x10b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x104;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x105;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x106;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x107;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xba;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H0_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xda;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H2_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xde;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xaa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xab;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xac;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xad;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xee;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xef;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xea;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xeb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xec;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xed;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H0_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x198;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H2_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x199;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xae;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xaf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H0_L1_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xc8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H2_L3_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xca;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xc9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xce;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H1_L0_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xd8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H3_L2_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xd9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x50;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x5c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x5b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x20;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x30;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x40;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_H_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x10;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_L_E3_E0_MAC0_RR : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf;
   bits<2> c2 = 0x1;
   bits<2> c3 = 0x0;
   // e0 entry window 31b (MSB-first concat)
@@ -27082,6 +32302,20 @@ def S_SW_PRE_IMM_E3_E0_LOADSTORE0_RI6 : HaydnEntryE3E0<(outs GPR32:$dest2_wb), (
 }
 
 let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
+def D_SW_F64RS_POST_IMM_E3_E0_LOADSTORE0_RI6 : HaydnEntryE3E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, simm6:$imm_2), "d_sw_f64rs_post_imm\t$dest1_0, $dest2_1, $imm_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<6> imm_2;
+  bits<6> c0 = 0x0;
+  bits<6> c1 = 0x3d;
+  bits<3> c2 = 0x3;
+  bits<2> c3 = 0x3;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, imm_2, dest2_1, dest1_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
 def D_SW_L_POST_IMM_E3_E0_LOADSTORE0_RI6 : HaydnEntryE3E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, simm6:$imm_2), "d_sw_l_post_imm\t$dest1_0, $dest2_1, $imm_2", []> {
   bits<4> dest1_0;
   bits<4> dest2_1;
@@ -27158,6 +32392,20 @@ def D_SW_H_PRE_IMM_E3_E0_LOADSTORE0_RI6 : HaydnEntryE3E0<(outs GPR32:$dest2_wb),
   bits<6> imm_2;
   bits<6> c0 = 0x0;
   bits<6> c1 = 0x27;
+  bits<3> c2 = 0x3;
+  bits<2> c3 = 0x3;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, imm_2, dest2_1, dest1_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def D_SW_F64RS_WITH_IMM_E3_E0_LOADSTORE0_RI6 : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, GPR32:$dest2_1, simm6:$imm_2), "d_sw_f64rs_with_imm\t$dest1_0, $dest2_1, $imm_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<6> imm_2;
+  bits<6> c0 = 0x0;
+  bits<6> c1 = 0x3c;
   bits<3> c2 = 0x3;
   bits<2> c3 = 0x3;
   // e0 entry window 31b (MSB-first concat)
@@ -27908,6 +33156,20 @@ def S_SW_PRE_REG_E3_E0_LOADSTORE0_RR : HaydnEntryE3E0<(outs GPR32:$dest2_wb), (i
 }
 
 let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
+def D_SW_F64RS_POST_REG_E3_E0_LOADSTORE0_RR : HaydnEntryE3E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, GPR32:$src_2), "d_sw_f64rs_post_reg\t$dest1_0, $dest2_1, $src_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<4> src_2;
+  bits<8> c0 = 0x0;
+  bits<6> c1 = 0x38;
+  bits<3> c2 = 0x4;
+  bits<2> c3 = 0x3;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src_2, dest2_1, dest1_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Constraints = "$dest2_1 = $dest2_wb" in {
 def D_SW_H_POST_REG_E3_E0_LOADSTORE0_RR : HaydnEntryE3E0<(outs GPR32:$dest2_wb), (ins DR64:$dest1_0, GPR32:$dest2_1, GPR32:$src_2), "d_sw_h_post_reg\t$dest1_0, $dest2_1, $src_2", []> {
   bits<4> dest1_0;
   bits<4> dest2_1;
@@ -27942,6 +33204,20 @@ def D_SW_H_PRE_REG_E3_E0_LOADSTORE0_RR : HaydnEntryE3E0<(outs GPR32:$dest2_wb), 
   bits<4> src_2;
   bits<8> c0 = 0x0;
   bits<6> c1 = 0x33;
+  bits<3> c2 = 0x4;
+  bits<2> c3 = 0x3;
+  // e0 entry window 31b (MSB-first concat)
+  let e0 = {c0, src_2, dest2_1, dest1_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot0_LS, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def D_SW_F64RS_WITH_REG_E3_E0_LOADSTORE0_RR : HaydnEntryE3E0<(outs), (ins DR64:$dest1_0, GPR32:$dest2_1, GPR32:$src_2), "d_sw_f64rs_with_reg\t$dest1_0, $dest2_1, $src_2", []> {
+  bits<4> dest1_0;
+  bits<4> dest2_1;
+  bits<4> src_2;
+  bits<8> c0 = 0x0;
+  bits<6> c1 = 0x3c;
   bits<3> c2 = 0x4;
   bits<2> c3 = 0x3;
   // e0 entry window 31b (MSB-first concat)
@@ -32822,6 +38098,1686 @@ def SMULS16S_11_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$s
 }
 
 let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1ff;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1fb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H0_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x187;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H2_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x189;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x188;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x108;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x109;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x10a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x10b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x104;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x105;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x106;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x107;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x18f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xba;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H0_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xda;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H2_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xde;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xdf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xaa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xab;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xac;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xad;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xee;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xef;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xea;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xeb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xec;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xed;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H0_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x198;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H2_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x199;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x19f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xae;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xaf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H0_L1_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xc8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H2_L3_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xca;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xc9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xce;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xcf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H1_L0_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xd8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H3_L2_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xd9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x50;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x5c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x5b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x4d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x20;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x1f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x30;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x2f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x40;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x3f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_H_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0x10;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_L_E3_E1_MAC0_RR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<6> c0 = 0x0;
+  bits<9> c1 = 0xf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e1 entry window 31b (MSB-first concat)
+  let e1 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot1_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
 def X2MUL32_E3_E1_MAC0_RRR : HaydnEntryE3E1<(outs DR64:$dest1_0, DR64:$dest2_3), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
   bits<4> src1_1;
@@ -34460,7 +41416,7 @@ def X4SELI16_E3_E1_ALU1_RRI4 : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$sr
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def X4SEL16_E3_E1_ALU1_RRR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src3_3, DR64:$src1_1, GPR32:$src2_2), "x4sel16\t$dest_0, $src3_3, $src1_1, $src2_2", []> {
+def X4SEL16_E3_E1_ALU1_RRR : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2, GPR32:$src3_3), "x4sel16\t$dest_0, $src1_1, $src2_2, $src3_3", []> {
   bits<4> dest_0;
   bits<4> src1_1;
   bits<4> src2_2;
@@ -44086,6 +51042,1686 @@ def SMULS16S_11_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$s
 }
 
 let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_H3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMUL32X16_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1fc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1fd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1fe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_H3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1ff;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1fa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULA32X16_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1fb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H0_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x18a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x187;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H2_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x189;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x188;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x18b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULAS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x18c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x108;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x109;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x10a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_H3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x10b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x104;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x105;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x106;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULS32X16_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmuls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x107;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x18d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x18e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x18f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULSS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xba;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H0_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xdd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xda;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H2_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xdc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xdb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xde;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZAS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xdf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xaa;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xab;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xac;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def FMULZSS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "fmulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xad;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_H3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MUL32X16_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mul32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xee;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xef;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf0;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_H3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf1;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xea;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xeb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xec;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULA32X16_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mula32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xed;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H0_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x19b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x198;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H2_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x19a;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x199;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x19c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULAS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x19d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf6;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf7;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_H3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.h3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf2;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf3;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf4;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULS32X16_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "muls32x16.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf5;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x19e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x19f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xae;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULSS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xaf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H0_L1_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h0.l1\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xcb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xc8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H2_L3_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h2.l3\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xca;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzaa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xc9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xcc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZAS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzas32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xcd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xce;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSA32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzsa32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xcf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H1_L0_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h1.l0\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xd8;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def MULZSS32X16_H3_L2_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "mulzss32x16.h3.l2\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xd9;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x50;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMUL32X16_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x4f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x5c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2CMULA32X16_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2cmula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x5b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x4c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMUL32X16RS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x4b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x4e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FCMULA32X16RS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fcmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x4d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x2c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16RSS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x2b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x3c;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMUL32X16TS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmul32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x3b;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x2e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16RSS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x2d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x3e;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULA32X16TS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmula32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x3d;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x20;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rs.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x1f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x30;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16RSS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16rss.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x2f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x40;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2FMULS32X16TS_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2fmuls32x16ts.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x3f;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xc;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MUL32X16_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xb;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xe;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULA32X16_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2mula32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xd;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_H_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.h\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0x10;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+def X2MULS32X16_L_E3_E2_MAC1_RR : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src1_1, DR64:$src2_2), "x2muls32x16.l\t$dest_0, $src1_1, $src2_2", []> {
+  bits<4> dest_0;
+  bits<4> src1_1;
+  bits<4> src2_2;
+  bits<2> c0 = 0x0;
+  bits<9> c1 = 0xf;
+  bits<2> c2 = 0x1;
+  bits<2> c3 = 0x0;
+  // e2 entry window 27b (MSB-first concat)
+  let e2 = {c0, src2_2, src1_1, dest_0, c1, c2, c3};
+}
+}
+
+let Itinerary = Slot2_MAC, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
 def X2MUL32_E3_E2_MAC1_RRR : HaydnEntryE3E2<(outs DR64:$dest1_0, DR64:$dest2_3), (ins DR64:$src1_1, DR64:$src2_2), "x2mul32\t$dest1_0, $dest2_3, $src1_1, $src2_2", []> {
   bits<4> dest1_0;
   bits<4> src1_1;
@@ -50409,6 +59045,6 @@ def S_LW_BREV_REG_E3_E2_LOAD1_RR : HaydnEntryE3E2<(outs GPR32:$dest1_0, GPR32:$d
 }
 }
 
-// Members emitted in canonical alias order (same-class permutation vs majority signature): 1
-// Live non-NOP Format E members: 3560
+// Members emitted in canonical alias order (same-class permutation vs majority signature): 0
+// Live non-NOP Format E members: 4168
 
