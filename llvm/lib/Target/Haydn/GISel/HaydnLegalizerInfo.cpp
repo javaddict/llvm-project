@@ -155,12 +155,20 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
   // Shifts
   //===--------------------------------------------------------------------===
   // 32-bit and 64-bit shifts are legal (selector handles s64 decomposition).
-  // SIMD: v2i32 shifts use X2SLL32/X2SRL32/X2SRA32.
-  // SIMD: v4i16 shifts use X4SLL16/X4SRL16/X4SRA16.
-  // Both use the full vector type for data and amount; the selector extracts
-  // the scalar shift amount from element 0 and passes it as GPR32.
+  // Hardware X2S*32 / X4S*16 take one GPR32 amount for every lane
+  // (selector extractVecLane0AsGPR32). Generic IR is per-lane, so a
+  // non-splat constant amount (SLP `<i32 10, i32 3>` in sha256 σ0/σ1)
+  // must scalarize. Splat / variable amounts stay SIMD (lane 0).
   getActionDefinitionsBuilder({G_SHL, G_LSHR, G_ASHR})
-      .legalFor({{S32, S32}, {S64, S32}, {V2I32, V2I32}, {V4I16, V4I16}})
+      .legalFor({{S32, S32}, {S64, S32}})
+      .customIf([](const LegalityQuery &Query) {
+        const LLT Ty = Query.Types[0];
+        if (!Ty.isVector() || Query.Types.size() < 2 || Query.Types[1] != Ty)
+          return false;
+        const unsigned Elt = Ty.getElementType().getSizeInBits();
+        const unsigned N = Ty.getNumElements();
+        return (Elt == 32 && N == 2) || (Elt == 16 && N == 4);
+      })
       .scalarizeIf(ScalarizeWideVec(0), 0)
       // pr60960: v4s8 (32-bit) is under the 64-bit wide-vector gate but not a
       // legal SIMD shift shape — scalarize residual vectors (not just >64b).
@@ -1556,6 +1564,43 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
   if (MI.getOpcode() == G_VAARG)
     return legalizeVAArg(Helper, MI);
 
+  // X2/X4 SIMD shifts are splat-amount only. Non-splat constant vectors
+  // (SLP pairing two different SHA-256 σ shifts) scalarize to per-lane
+  // s32/s16 shifts. Variable / splat amounts stay on the SIMD op.
+  if (MI.getOpcode() == G_SHL || MI.getOpcode() == G_LSHR ||
+      MI.getOpcode() == G_ASHR) {
+    Register Amt = MI.getOperand(2).getReg();
+    MachineInstr *AmtDef = MRI.getVRegDef(Amt);
+    bool NonSplatConst = false;
+    if (AmtDef && (AmtDef->getOpcode() == G_BUILD_VECTOR ||
+                   AmtDef->getOpcode() == G_BUILD_VECTOR_TRUNC)) {
+      std::optional<int64_t> First;
+      bool AllConst = AmtDef->getNumOperands() > 1;
+      for (unsigned I = 1, E = AmtDef->getNumOperands(); I < E && AllConst;
+           ++I) {
+        auto C =
+            getIConstantVRegValWithLookThrough(AmtDef->getOperand(I).getReg(),
+                                               MRI);
+        if (!C) {
+          AllConst = false;
+          break;
+        }
+        const int64_t V = C->Value.getSExtValue();
+        if (!First)
+          First = V;
+        else if (*First != V)
+          NonSplatConst = true;
+      }
+      NonSplatConst = AllConst && NonSplatConst;
+    }
+    if (NonSplatConst) {
+      LLT EltTy = MRI.getType(MI.getOperand(0).getReg()).getElementType();
+      return Helper.fewerElementsVector(MI, 0, EltTy) ==
+             LegalizerHelper::Legalized;
+    }
+    return true;
+  }
+
   //===--------------------------------------------------------------------===
   // G_MERGE_VALUES → non-power-of-2 result (pr79737-1: 9×s8 → s72).
   // Build next-pow2 accumulator with zext+shl+or, then trunc.
@@ -2314,14 +2359,14 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     const LLT S32 = LLT::scalar(32);
     const LLT V2S32 = LLT::fixed_vector(2, 32);
 
-    // Residual <N x s1> builds from G_ICMP vector scalarize. Every remaining
-    // use must be G_UNMERGE_VALUES of the same width; forward element regs and
-    // drop the build. Avoids clampMaxNumElements(S1,1) → fewerElements assert.
-    // Use Observer when rewriting so CSE maps stay consistent for the
-    // post-legalizer combiner.
+    // Residual <N x s1> builds from G_ICMP vector scalarize.
+    // Users are either G_UNMERGE (forward the lanes) or the -O2 memcmp
+    // idiom G_FREEZE + G_BITCAST to sN (pack lanes into bits). Returning
+    // false for the latter retried custom forever (nettle-sha256
+    // verify_benchmark hung the legalizer).
     if (DstTy.isVector() && DstTy.getElementType().getSizeInBits() == 1) {
       const unsigned NumElts = DstTy.getNumElements();
-      if (MI.getNumOperands() != NumElts + 1)
+      if (MI.getNumOperands() != NumElts + 1 || NumElts == 0 || NumElts > 32)
         return false;
       SmallVector<Register, 8> Elts;
       Elts.reserve(NumElts);
@@ -2329,26 +2374,77 @@ bool HaydnLegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
         Elts.push_back(MI.getOperand(I + 1).getReg());
 
       SmallVector<MachineInstr *, 4> Unmerges;
-      for (MachineInstr &Use : MRI.use_instructions(Dst)) {
-        if (Use.getOpcode() != TargetOpcode::G_UNMERGE_VALUES ||
-            Use.getNumOperands() != NumElts + 1)
-          return false;
-        Unmerges.push_back(&Use);
-      }
-      GISelChangeObserver &Observer = Helper.Observer;
-      for (MachineInstr *U : Unmerges) {
-        for (unsigned I = 0; I < NumElts; ++I) {
-          Register From = U->getOperand(I).getReg();
-          Register To = Elts[I];
-          Observer.changingAllUsesOfReg(MRI, From);
-          if (MRI.constrainRegAttrs(To, From))
-            MRI.replaceRegWith(From, To);
-          else
-            MIB.buildCopy(From, To);
-          Observer.finishedChangingAllUsesOfReg();
+      SmallVector<MachineInstr *, 4> Bitcasts;
+      SmallVector<MachineInstr *, 4> Freezes;
+      SmallVector<MachineInstr *, 8> Work;
+      for (MachineInstr &Use : MRI.use_instructions(Dst))
+        Work.push_back(&Use);
+      while (!Work.empty()) {
+        MachineInstr *Use = Work.pop_back_val();
+        const unsigned Opc = Use->getOpcode();
+        if (Opc == TargetOpcode::G_UNMERGE_VALUES &&
+            Use->getNumOperands() == NumElts + 1) {
+          Unmerges.push_back(Use);
+          continue;
         }
+        if (Opc == TargetOpcode::G_FREEZE) {
+          Freezes.push_back(Use);
+          Register FDst = Use->getOperand(0).getReg();
+          for (MachineInstr &FUse : MRI.use_instructions(FDst))
+            Work.push_back(&FUse);
+          continue;
+        }
+        if (Opc == TargetOpcode::G_BITCAST) {
+          LLT CastTy = MRI.getType(Use->getOperand(0).getReg());
+          if (CastTy.isScalar() && CastTy.getSizeInBits() == NumElts) {
+            Bitcasts.push_back(Use);
+            continue;
+          }
+        }
+        return false;
+      }
+
+      GISelChangeObserver &Observer = Helper.Observer;
+      MIB.setInstrAndDebugLoc(MI);
+
+      auto replaceReg = [&](Register From, Register To) {
+        Observer.changingAllUsesOfReg(MRI, From);
+        if (MRI.constrainRegAttrs(To, From))
+          MRI.replaceRegWith(From, To);
+        else
+          MIB.buildCopy(From, To);
+        Observer.finishedChangingAllUsesOfReg();
+      };
+
+      if (!Bitcasts.empty()) {
+        const LLT PackTy = LLT::scalar(NumElts);
+        Register Acc = MIB.buildConstant(S32, 0).getReg(0);
+        for (unsigned I = 0; I < NumElts; ++I) {
+          Register Wide = MIB.buildZExt(S32, Elts[I]).getReg(0);
+          if (I != 0) {
+            auto Sh = MIB.buildConstant(S32, I);
+            Wide = MIB.buildShl(S32, Wide, Sh).getReg(0);
+          }
+          Acc = MIB.buildOr(S32, Acc, Wide).getReg(0);
+        }
+        Register Packed =
+            NumElts == 32 ? Acc : MIB.buildTrunc(PackTy, Acc).getReg(0);
+        for (MachineInstr *BC : Bitcasts) {
+          replaceReg(BC->getOperand(0).getReg(), Packed);
+          Observer.erasingInstr(*BC);
+          BC->eraseFromParent();
+        }
+      }
+
+      for (MachineInstr *U : Unmerges) {
+        for (unsigned I = 0; I < NumElts; ++I)
+          replaceReg(U->getOperand(I).getReg(), Elts[I]);
         Observer.erasingInstr(*U);
         U->eraseFromParent();
+      }
+      for (MachineInstr *F : Freezes) {
+        Observer.erasingInstr(*F);
+        F->eraseFromParent();
       }
       Observer.erasingInstr(MI);
       MI.eraseFromParent();
