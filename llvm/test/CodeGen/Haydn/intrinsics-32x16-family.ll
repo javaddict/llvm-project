@@ -28,6 +28,12 @@ declare i64 @llvm.haydn.x2mul32x16.h(i64, i64)
 declare i64 @llvm.haydn.x2mula32x16.l(i64, i64, i64)
 declare i64 @llvm.haydn.x2cmul32x16.h(i64, i64)
 declare i64 @llvm.haydn.x2fcmula32x16rs.h(i64, i64, i64)
+; Z-ops (zero-acc): golden DR_Read_Port=[rsd1,rsd2] only — NO accumulator
+; input (BundleSim 0203eec found the corpus 32X16 Z-bodies wrongly reading
+; rtd; index is authoritative). BINARY intrinsic + untied def; if either
+; regresses to acc-reading, this select changes shape or fails.
+declare i64 @llvm.haydn.mulzaa32x16.h0.l1(i64, i64)
+declare i64 @llvm.haydn.fmulzss32x16.h1.l0(i64, i64)
 
 define i64 @pure_mul(i64 %a, i64 %b) {
 ; CHECK-LABEL: pure_mul:
@@ -96,5 +102,19 @@ define i64 @x2_fcmla(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-LABEL: x2_fcmla:
 ; CHECK: x2fcmula32x16rs.h
   %r = call i64 @llvm.haydn.x2fcmula32x16rs.h(i64 %acc, i64 %a, i64 %b)
+  ret i64 %r
+}
+
+define i64 @z_mulaa(i64 %a, i64 %b) {
+; CHECK-LABEL: z_mulaa:
+; CHECK: mulzaa32x16.h0.l1
+  %r = call i64 @llvm.haydn.mulzaa32x16.h0.l1(i64 %a, i64 %b)
+  ret i64 %r
+}
+
+define i64 @z_fmulss(i64 %a, i64 %b) {
+; CHECK-LABEL: z_fmulss:
+; CHECK: fmulzss32x16.h1.l0
+  %r = call i64 @llvm.haydn.fmulzss32x16.h1.l0(i64 %a, i64 %b)
   ret i64 %r
 }
