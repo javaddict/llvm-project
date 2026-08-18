@@ -1,0 +1,35 @@
+Haydn soft-float contract pin (compiler frontend + sysroot helpers)
+====================================================================
+Stamp: 2026-08-18 T6-RT
+Authority: clang/lib/Basic/Targets/Haydn.cpp (no FPU keys; HasFloat16=false)
+Peer: ARM.cpp:811 __SOFTFP__ when SoftFloat / no FPU; RISC-V HasFloat16 only
+      with F/D (RISCV.h:50). Haydn overlays no hardware FP CC.
+
+Product ABI is soft-float. long double equals f64. _Float16 and bf16 are
+unavailable (Sema-reject). This file is inventory, not IEEE QUALIFY and
+not a second library matrix.
+
+| Op / type              | Symbol / path              | Status                    |
+|------------------------|----------------------------|---------------------------|
+| add/sub/mul/div f32    | __addsf3 family            | legalized                 |
+| add/sub/mul/div f64    | __adddf3 family            | legalized                 |
+| conversions            | __extendsfdf2 / __fix*     | legalized                 |
+| frem/sqrt/fma/libm     | RTLIB + libm               | compile closed; value open|
+| fmod / powf            | llvm-libc                  | residual (disabled)       |
+| _Float16 / bf16        | unavailable                | Sema-reject               |
+| __fp16                 | storage only               | not param/return          |
+| long double            | equals f64                 | stated                    |
+| fp128                  | fail-closed                | language matrix           |
+| NaN/denormal/rounding  | default IEEE-754           | IEEE vector residual      |
+| gcc-torture float/dbl  | skip regex (classified)    | do not unskip             |
+
+Frontend identity macros: __SOFTFP__ and __HAYDN_SOFT_FLOAT__.
+T-SF4 in-gate: compiler-rt builtins on the matching sysroot define
+__addsf3 / __adddf3 / __mulsf3 / __muldf3 / __extendsfdf2 / __truncdfsf2.
+That is helper presence, not IEEE QUALIFY. gcc-torture float/double stay
+skipped-classified. Do not invent TestFloat vectors.
+
+T-SF10 leftover (owned hygiene, not a fuzz gate):
+  install_product_ld refuses sysroot lib/*.bak and lib/*.broken*.
+  yarpgen stays the frozen-28 informational corpus (not a fuzz gate).
+  Post-wave identity rebind refuses git_commit=28700d57; pin 38bd4059.

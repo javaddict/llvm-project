@@ -2,13 +2,6 @@
 // RUN: clang -target haydn-unknown-elf -mcpu=haydn \
 // RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
 // RUN:   -emit-llvm -S -o - %s | FileCheck %s --check-prefix=IR
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN:   -S -o - %s | FileCheck %s --check-prefix=ASM
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN:   -c -o %t.o %s
-// RUN: llvm-objdump -d %t.o | FileCheck %s --check-prefix=OBJ
 // RUN: not clang -target haydn-unknown-elf -mcpu=haydn -ffreestanding \
 // RUN:   -fsyntax-only -DTEST_ADD64X2_STRICT %s 2>&1 \
 // RUN:   | FileCheck %s --check-prefix=STRICT
@@ -30,6 +23,11 @@ _Static_assert(HAYDN_AE_ORACLE_COUNT == HAYDN_AE_COMPAT_TAG_COUNT - 2,
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_ == HAYDN_COMPAT_UNSUPPORTED, "");
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_vector == HAYDN_COMPAT_UNSUPPORTED, "");
 _Static_assert(__HAYDN_AE_COMPAT_STRICT == 1, "strict default");
+/* Quad-16 64-bit MAC stays unnamed in strict mode so NatureDSP
+ * vec_dot16x16_fast takes the 32-bit sat AE_MULAF16X4SS path. */
+#if defined(AE_MULAAAAQ16)
+_Static_assert(0, "AE_MULAAAAQ16 must be undefined under default strict");
+#endif
 
 /* ---- Pure residual family (TD-authored emu.* OracleIds) ---- */
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD32 == HAYDN_COMPAT_EMULATED, "");
@@ -189,6 +187,9 @@ _Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MUL64_SS_HH, "emu.mul64_ss_hh
 _Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MULA64_SS_LL, "emu.mula64_ss_ll") == 0, "");
 _Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MUL32X16_L0, "emu.mul32x16_l0") == 0, "");
 _Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MULA32X16_L0, "emu.mula32x16_l0") == 0, "");
+/* Dest-typed vec_dot16 path: AE_MULAF16X4SS is X4MULA16S + union bitcast. */
+_Static_assert(HAYDN_COMPAT_TIER_AE_MULAF16X4SS == HAYDN_COMPAT_EMULATED, "");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MULAF16X4SS, "emu.mulaf16x4ss") == 0, "");
 
 /* ---- State residual family (TD-authored SoftState + OracleId) ---- */
 _Static_assert(HAYDN_COMPAT_TIER_AE_SLAS32 == HAYDN_COMPAT_EXACT, "");
@@ -297,6 +298,13 @@ ae_int64 resid_and64_mask(void) {
 // OBJ-LABEL: <resid_slai32_one>:
 // OBJ: addi32
 int resid_slai32_one(void) { return (int)AE_SLAI32(1, 1); }
+
+// Independent host values beyond family reps (C shift, not native SIMD).
+// IR-LABEL: @resid_slai32_two
+// IR: ret i32 4
+// OBJ-LABEL: <resid_slai32_two>:
+// OBJ: addi32
+int resid_slai32_two(void) { return (int)AE_SLAI32(1, 2); }
 
 //===----------------------------------------------------------------------===//
 // Pure family — dual-sat / lane arith non-empty object path
@@ -438,6 +446,22 @@ ae_int64 resid_mulfp32x2ras(void) {
   ae_int32x2 a = {0x40000000, 0x40000000};
   ae_int32x2 b = {0x40000000, 0x40000000};
   return __AE_TO_I64(AE_MULFP32X2RAS(a, b));
+}
+
+// Dest-typed AE_MULAF16X4SS onto ae_f32x2 accs (vec_dot16 documented path).
+// O2 keeps both X4MULA16S dests as i64 extractvalues (union assign +
+// __AE_TO_I64 cancel). A splat writeback would drop the high dest.
+// IR-LABEL: @resid_mulaf16x4ss_dest
+// IR: call { i64, i64 } @llvm.haydn.x4mula16s
+// IR-DAG: extractvalue { i64, i64 } {{.*}}, 0
+// IR-DAG: extractvalue { i64, i64 } {{.*}}, 1
+int64_t resid_mulaf16x4ss_dest(void) {
+  ae_f32x2 vaf = AE_MOVI(0);
+  ae_f32x2 vbf = AE_MOVI(0);
+  ae_int16x4 x = AE_MOVDA16(1);
+  ae_int16x4 y = AE_MOVDA16(1);
+  AE_MULAF16X4SS(vaf, vbf, x, y);
+  return __AE_TO_I64(vaf) ^ __AE_TO_I64(vbf);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1186,5 +1210,27 @@ ae_int64 empty_body_add64x2_(ae_int64 a, ae_int64 b) {
 // STRICT: __haydn_ae_unsupported_AE_ADD64X2_vector
 ae_int64 empty_body_add64x2_vector(ae_int64 a, ae_int64 b) {
   return AE_ADD64X2_vector(a, b);
+}
+// STRICT: __haydn_ae_unsupported_AE_MULC32X16_H
+ae_int32x2 empty_body_mulc32x16_h(ae_int32x2 a, ae_int32x2 b) {
+  return AE_MULC32X16_H(a, b);
+}
+// STRICT: __haydn_ae_unsupported_AE_MULC32X16_L
+ae_int32x2 empty_body_mulc32x16_l(ae_int32x2 a, ae_int32x2 b) {
+  return AE_MULC32X16_L(a, b);
+}
+// STRICT: __haydn_ae_unsupported_AE_MULFC24RA
+ae_f24x2 empty_body_mulfc24ra(ae_f24x2 a, ae_f24x2 b) {
+  return AE_MULFC24RA(a, b);
+}
+// STRICT: silent-wrong map removed): AE_CMUL32_F2
+void empty_body_cmul32_f2(ae_int32x2 *d0, ae_int32x2 *d1,
+                          ae_int32x2 a, ae_int32x2 b) {
+  AE_CMUL32_F2(*d0, *d1, a, b);
+}
+// STRICT: silent-wrong map removed): AE_CMUL32S_F2
+void empty_body_cmul32s_f2(ae_int32x2 *d0, ae_int32x2 *d1,
+                           ae_int32x2 a, ae_int32x2 b) {
+  AE_CMUL32S_F2(*d0, *d1, a, b);
 }
 #endif

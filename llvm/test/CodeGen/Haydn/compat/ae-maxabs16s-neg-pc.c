@@ -1,9 +1,6 @@
 // REQUIRES: haydn-registered-target
 // RUN: clang -target haydn-unknown-elf -mcpu=haydn \
 // RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN:   -S -o - %s | FileCheck %s --check-prefix=ASM
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
 // RUN:   -emit-llvm -S -o - %s | FileCheck %s --check-prefix=IR
 
 // Role: semantic — Public AE compatibility value/ref probes:

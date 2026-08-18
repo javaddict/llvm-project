@@ -35,6 +35,11 @@ from typing import Any, Dict, List, Mapping, Optional
 SCHEMA_NAME = "haydn-ci-verdict-v1"
 OVERALL_PASS = "PASS"
 OVERALL_FAIL = "FAIL"
+STALE_FULL_GATE_COMMIT = "28700d57"
+REBIND_ANCESTOR = "38bd4059"
+# CI overall is a phase-gate label. It is never semantic QUALIFY.
+# CoreMark/Dhrystone TARGET_BUILD_FAILED (status -15) is a consumer-C
+# residual, not a QUALIFY bit.
 
 BOOL_FIELDS = (
     "build_ok",
@@ -118,6 +123,8 @@ def build_verdict(
         "haydn_lit_failed": int(haydn_lit_failed),
         "haydn_lit_xpass": int(haydn_lit_xpass),
         "haydn_lit_ok": bool(haydn_lit_ok),
+        "semantic_qualify": False,
+        "rebind_ancestor": REBIND_ANCESTOR,
         "log_paths": dict(log_paths),
     }
     for name in BOOL_FIELDS:
@@ -144,6 +151,11 @@ def validate_verdict(doc: Any) -> List[str]:
         errors.append("timestamp must be a non-empty string")
     if not isinstance(doc.get("head_sha"), str) or not doc["head_sha"]:
         errors.append("head_sha must be a non-empty string")
+    elif str(doc.get("head_sha") or "").lower().startswith(STALE_FULL_GATE_COMMIT):
+        errors.append(
+            f"head_sha {STALE_FULL_GATE_COMMIT} is not an ancestor; "
+            f"rebind to {REBIND_ANCESTOR}"
+        )
     for name in BOOL_FIELDS:
         if not isinstance(doc.get(name), bool):
             errors.append(f"{name} must be a JSON boolean")
@@ -154,6 +166,10 @@ def validate_verdict(doc: Any) -> List[str]:
     overall = doc.get("overall")
     if overall not in (OVERALL_PASS, OVERALL_FAIL):
         errors.append(f"overall must be {OVERALL_PASS!r} or {OVERALL_FAIL!r}")
+    if overall == "QUALIFY":
+        errors.append("overall QUALIFY is forbidden (CI verdict is not semantic QUALIFY)")
+    if "semantic_qualify" in doc and doc.get("semantic_qualify") is not False:
+        errors.append("semantic_qualify must be false (compile/CI is not QUALIFY)")
     log_paths = doc.get("log_paths")
     if not isinstance(log_paths, dict):
         errors.append("log_paths must be an object")
@@ -217,8 +233,15 @@ def _self_test() -> int:
     assert gdoc["haydn_lit_failed"] == 0 and gdoc["haydn_lit_xpass"] == 0
     assert gdoc["haydn_lit_ok"] is True
     assert gdoc["overall"] == OVERALL_PASS
+    assert gdoc["semantic_qualify"] is False
     # Expectedly Failed in the green log must not become haydn_lit_failed.
     assert gdoc["haydn_lit_failed"] == 0
+    lie_q = dict(gdoc)
+    lie_q["semantic_qualify"] = True
+    assert validate_verdict(lie_q)
+    lie_label = dict(gdoc)
+    lie_label["overall"] = "QUALIFY"
+    assert validate_verdict(lie_label)
 
     fdoc = fixture_verdict(fail, "deadbeef", "2026-08-13T00:00:00Z")
     ferr = validate_verdict(fdoc)
@@ -231,6 +254,17 @@ def _self_test() -> int:
     lie = dict(gdoc)
     lie["haydn_lit_failed"] = 1
     assert validate_verdict(lie)
+
+    stale = fixture_verdict(
+        green, "28700d57366a35a7d04e8adfbdf782743ec847e0", "2026-08-13T00:00:00Z"
+    )
+    assert validate_verdict(stale)
+    rebound = fixture_verdict(
+        green, "38bd4059fbb4e489425becc4ded431235ae2c1ff", "2026-08-13T00:00:00Z"
+    )
+    rerr = validate_verdict(rebound)
+    assert not rerr, rerr
+    assert rebound["rebind_ancestor"] == REBIND_ANCESTOR
 
     print("write_ci_verdict self-test OK")
     return 0

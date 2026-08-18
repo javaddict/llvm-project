@@ -1,0 +1,32 @@
+Haydn NatureDSP executed-canary compile pin
+===========================================
+Stamp: 2026-08-17 T8-INTRIN-DSP
+Authority: naturedsp-haydn/tools/executed_canary_pin.sh
+Library matrix: product_library_pin only (no second matrix).
+
+M1 compile pin is past add16/add32. Required compile canaries:
+
+  vec_add16x16_fast_hifi3     compile PASS
+  vec_add32x32_fast_hifi3     compile PASS
+  vec_scale32x32_fast_hifi3   compile PASS   (past add16/add32)
+  vec_shift32x32_fast_hifi3   compile PASS   (past add16/add32)
+  vec_dot16x16_fast_hifi3     compile PASS; execution residual (exactness)
+
+G-LIBRARY-COVERAGE is product_library_pin (approved_expand=35) plus these
+executed canaries. Live hifi3 census: total=491 beyond_approved=456.
+The 456 are inventory, not QUALIFY and not a second matrix.
+
+T-DSP3: default strict leaves AE_MULAAAAQ16 undefined so vec_dot16 takes
+dest-typed AE_MULAF16X4SS. Host 1190 stays. Execution residual remains.
+T-DSP5: sat/round matrix is header + host oracles (SRA*R bias, SAT32,
+sat-left). Guard-bit extra headroom is an explicit miss.
+T-DSP12 residual: do not silently default -mcpu=haydn. This pin and the
+product library pin pass explicit -mcpu=haydn.
+T-DSP13 residual: declared-vs-tested inventory only; no 746-name harness.
+X2CMUL public wrappers stay fail-closed (SOURCE-REVALIDATE).
+
+M19/M21/M22 wait on M2 KPI (M22 also on M3 sat/round CSR). No Stage-0.
+
+vec_dot16 execution stays residual. Do not invent a host oracle here.
+Do not rebuild libc. Product_library_pin remains the only library matrix.
+O2 compile-timeout kernels stay classified in residual-beyond-approved.txt.

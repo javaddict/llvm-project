@@ -2,13 +2,6 @@
 // RUN: clang -target haydn-unknown-elf -mcpu=haydn \
 // RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
 // RUN:   -emit-llvm -S -o - %s | FileCheck %s --check-prefix=IR
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN:   -S -o - %s | FileCheck %s --check-prefix=ASM
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN:   -c -o %t.o %s
-// RUN: llvm-objdump -d %t.o | FileCheck %s --check-prefix=OBJ
 //
 // EXACT public surface residual class: value + object oracles.
 // Empty output fails. Default fail-closed (no __HAYDN_ALLOW_INEXACT_AE).

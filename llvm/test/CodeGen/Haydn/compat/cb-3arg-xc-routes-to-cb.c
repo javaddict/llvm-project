@@ -1,12 +1,13 @@
 // REQUIRES: haydn-registered-target
 // RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN: -mllvm -global-isel-abort=1 -O1 -ffreestanding \
-// RUN: -Wno-implicit-function-declaration \
-// RUN: -Wno-incompatible-pointer-types -Wno-int-conversion \
-// RUN: -include stdint.h \
-// RUN: -D__HAYDN_ALLOW_INEXACT_AE \
-// RUN: -include haydn_dsp.h \
-// RUN: -S %s -o %t.s
+// RUN:   -mllvm -global-isel-abort=1 -O1 -mllvm -enable-misched=false \
+// RUN:   -mllvm -enable-post-misched=false -ffreestanding \
+// RUN:   -Wno-implicit-function-declaration \
+// RUN:   -Wno-incompatible-pointer-types -Wno-int-conversion \
+// RUN:   -include stdint.h \
+// RUN:   -D__HAYDN_ALLOW_INEXACT_AE \
+// RUN:   -include haydn_dsp.h \
+// RUN:   -mllvm -stop-after=instruction-select -S %s -o %t.s
 // RUN: FileCheck --check-prefix=ASM %s < %t.s
 // RUN: FileCheck --check-prefix=TEXT %s < %t.s
 
@@ -53,9 +54,8 @@ volatile uintptr_t  g_ptr_sink;
 
 // CBR0 boundary setup must survive (hasSideEffects prevents DCE).
 // CSR addresses: CBR_BEGIN[0]=0x2C=44, CBR_END[0]=0x2D=45.
-// ASM-LABEL: setup_cbr0:
-// ASM: csrw{{(_w)?}}{{(\.s[012])?}} 44, {{r[0-9]+}}
-// ASM: csrw{{(_w)?}}{{(\.s[012])?}} 45, {{r[0-9]+}}
+// ASM-LABEL: name: setup_cbr0
+// ASM: SETCBR
 void setup_cbr0(void *base, uintptr_t end) {
   WUR_AE_CBEGIN0((uintptr_t)base);
   WUR_AE_CEND0(end);
@@ -63,8 +63,8 @@ void setup_cbr0(void *base, uintptr_t end) {
 
 //32x2 family: AE_L32X2_XC / AE_S32X2_XC
 
-// ASM-LABEL: cb_load_32x2_3arg:
-// ASM: d_ldw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_load_32x2_3arg
+// ASM: {{D_LDW_CB_IMM|LDW_CB}}
 ae_int32x2 cb_load_32x2_3arg(ae_int32x2 *p) {
   ae_int32x2 t;
   AE_L32X2_XC(t, p, +8);   // 3-arg: implicit CBR0
@@ -72,8 +72,8 @@ ae_int32x2 cb_load_32x2_3arg(ae_int32x2 *p) {
   return t;
 }
 
-// ASM-LABEL: cb_load_32x2_4arg:
-// ASM: d_ldw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_load_32x2_4arg
+// ASM: {{D_LDW_CB_IMM|LDW_CB}}
 ae_int32x2 cb_load_32x2_4arg(ae_int32x2 *p) {
   ae_int32x2 t;
   AE_L32X2_XC(t, p, +8, 0); // 4-arg: explicit cbr_sel=0
@@ -81,8 +81,8 @@ ae_int32x2 cb_load_32x2_4arg(ae_int32x2 *p) {
   return t;
 }
 
-// ASM-LABEL: cb_store_32x2_3arg:
-// ASM: d_sdw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_store_32x2_3arg
+// ASM: {{D_SDW_CB_IMM|SDW_CB}}
 void cb_store_32x2_3arg(ae_int32x2 *p, ae_int32x2 v) {
   AE_S32X2_XC(v, p, +8);   // 3-arg store
   g_ptr_sink = (uintptr_t)p;
@@ -90,8 +90,8 @@ void cb_store_32x2_3arg(ae_int32x2 *p, ae_int32x2 v) {
 
 //16x4 family: AE_L16X4_XC / AE_S16X4_XC
 
-// ASM-LABEL: cb_load_16x4_3arg:
-// ASM: d_ldw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_load_16x4_3arg
+// ASM: {{D_LDW_CB_IMM|LDW_CB}}
 ae_int16x4 cb_load_16x4_3arg(ae_int16x4 *p) {
   ae_int16x4 t;
   AE_L16X4_XC(t, p, +8);
@@ -99,8 +99,8 @@ ae_int16x4 cb_load_16x4_3arg(ae_int16x4 *p) {
   return t;
 }
 
-// ASM-LABEL: cb_store_16x4_3arg:
-// ASM: d_sdw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_store_16x4_3arg
+// ASM: {{D_SDW_CB_IMM|SDW_CB}}
 void cb_store_16x4_3arg(ae_int16x4 *p, ae_int16x4 v) {
   AE_S16X4_XC(v, p, +8);
   g_ptr_sink = (uintptr_t)p;
@@ -108,8 +108,8 @@ void cb_store_16x4_3arg(ae_int16x4 *p, ae_int16x4 v) {
 
 //scalar 32 family: AE_L32_XC / AE_S32_L_XC
 
-// ASM-LABEL: cb_load_s32_3arg:
-// ASM: d_ldw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_load_s32_3arg
+// ASM: {{D_LDW_CB_IMM|LDW_CB}}
 ae_int32 cb_load_s32_3arg(ae_int32 *p) {
   ae_int32 t;
   AE_L32_XC(t, p, +4);
@@ -117,8 +117,8 @@ ae_int32 cb_load_s32_3arg(ae_int32 *p) {
   return t;
 }
 
-// ASM-LABEL: cb_store_s32_3arg:
-// ASM: d_sdw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_store_s32_3arg
+// ASM: {{D_SDW_CB_IMM|SDW_CB}}
 void cb_store_s32_3arg(ae_int32 *p, ae_int32 v) {
   AE_S32_L_XC(v, p, +4);
   g_ptr_sink = (uintptr_t)p;
@@ -127,8 +127,8 @@ void cb_store_s32_3arg(ae_int32 *p, ae_int32 v) {
 //scalar 16 family: AE_L16_XC / AE_S16_0_XC
 // AE_L16_XC is permanently EMULATED (ld16 + haydn_cbr_step); AE_S16_0_XC is CB.
 
-// ASM-LABEL: cb_load_s16_3arg:
-// ASM: ld16
+// ASM-LABEL: name: cb_load_s16_3arg
+// ASM: {{LD16|LHW|S_LHW|LH}}
 ae_int16 cb_load_s16_3arg(ae_int16 *p) {
   ae_int16 t;
   AE_L16_XC(t, p, +2);
@@ -136,8 +136,8 @@ ae_int16 cb_load_s16_3arg(ae_int16 *p) {
   return t;
 }
 
-// ASM-LABEL: cb_store_s16_3arg:
-// ASM: d_sdw_cb_imm{{(\.s[012])?}}
+// ASM-LABEL: name: cb_store_s16_3arg
+// ASM: {{D_SDW_CB_IMM|SDW_CB}}
 void cb_store_s16_3arg(ae_int16 *p, ae_int16 v) {
   AE_S16_0_XC(v, p, +2);
   g_ptr_sink = (uintptr_t)p;

@@ -4,7 +4,8 @@
 #
 # Aggregates product evidence surfaces under G-TEST-EVIDENCE /
 # G-RUNTIME-TOOLCHAIN / G-LIBRARY-COVERAGE / G-DEBUG-OBSERVABILITY /
-# G-ECOSYSTEM-CONSUMERS without inventing qualification labels:
+# G-ECOSYSTEM-CONSUMERS without inventing qualification labels
+# (T8-DEBUG-EVIDENCE: M10 step-inst never qualified; DG0 inventory only):
 #   * XFAIL ledger parity (Inputs/XFAIL-OWNER-LEDGER.txt)
 #   * freestanding sysroot libc/libm + ARTIFACT.json 64-hex stamp
 #   * five-file catalog provenance (GOLDEN_INPUTS + generate_catalog --check
@@ -14,6 +15,22 @@
 #   * focused lit seats (language matrix, hostile-byte, nested unwind, eflags,
 #     plus owned runtime/debug: c-e2e, debug-info, cfi, baremetal-startup)
 #   * parse_lit_summary self-test (Failed vs Expectedly Failed hygiene)
+#   * ARTIFACT.debug.step_inst + decode/consumer identity + decode live bind
+#   * T-SF4 FP-in-gate compiler-rt helpers + yarpgen 28-seed
+#   * gcc-torture FP skip classified (not silent) + T-ABI9 compile/link matrix
+#   * write_ci_verdict schema (PASS/FAIL only; never semantic QUALIFY)
+#   * NatureDSP executed-canary compile pin (vec_dot16 T-DSP3 residual)
+#   * NatureDSP 456-beyond / 35-approved / 491-total hifi3 census
+#   * T-DSP12 default-CPU + T-DSP13 declared-vs-tested residual inventory
+#   * tdsp13_declared_vs_tested_pin.py (inventory only; no 746-name harness)
+#   * ARTIFACT.library libc+libm identity (product_library_pin residual)
+#   * ARTIFACT.product_ld + ld.lld live bind (same-artifact linker seat)
+#   * T-SF9 op×type×symbol contract inventory (no TestFloat invent)
+#   * T-SF10 hygiene + frozen-28 yarpgen (not a fuzz gate)
+#   * M2 KPI re-sweep measured-miss (CompleteModel=0; no competitive II)
+#   * HDR-SPLIT measured miss (one file; no Stage-0 split/densify)
+#   * library-coverage residual selfcheck (no second matrix)
+#   * haydn-rt M1 scale32/shift32 + T-SF9 contract + product identity
 #
 # DG0 DecisionGuard product registry stays absent by design — ownership is
 # Inputs/* inventories + this pin + check_xfail_ledger / parse_lit_summary.
@@ -30,6 +47,12 @@ if [[ -x "$SCRIPT_DIR/check_xfail_ledger.py" ]]; then
   if python3 "$SCRIPT_DIR/check_xfail_ledger.py" --llvm-src "$LLVM_SRC"; then
     echo "  PASS: xfail ledger parity"
   else echo "  FAIL: xfail ledger parity" >&2; fail=1; fi
+  if python3 "$SCRIPT_DIR/check_xfail_ledger.py" --inventory-pin --llvm-src "$LLVM_SRC"; then
+    echo "  PASS: PIPE-20/DG0/M16 inventory-only pin"
+  else echo "  FAIL: PIPE-20/DG0/M16 inventory-only pin" >&2; fail=1; fi
+  if python3 "$SCRIPT_DIR/check_xfail_ledger.py" --runtime-pin --llvm-src "$LLVM_SRC"; then
+    echo "  PASS: haydn-rt M1/M10/M13/M15 contract pin"
+  else echo "  FAIL: haydn-rt M1/M10/M13/M15 contract pin" >&2; fail=1; fi
 else echo "  FAIL: check_xfail_ledger.py missing" >&2; fail=1; fi
 
 if [[ -x "$SCRIPT_DIR/parse_lit_summary.py" ]]; then
@@ -40,6 +63,26 @@ if [[ -x "$SCRIPT_DIR/parse_lit_summary.py" ]]; then
     tail -20 /tmp/haydn-parse-lit-self.log >&2 || true
     fail=1
   fi
+  # Historical 08-17 full-gate manifest is not an ancestor.
+  if printf '%s\n' 'Passed           :   1' 'git_commit: 28700d57366a35a7d04e8adfbdf782743ec847e0' \
+       | python3 "$SCRIPT_DIR/parse_lit_summary.py" --refuse-stale-commit \
+            --require-ancestor --llvm-src "$LLVM_SRC" - \
+            >/tmp/haydn-parse-lit-stale.log 2>&1; then
+    echo "  FAIL: parse_lit_summary must refuse 28700d57" >&2
+    fail=1
+  else
+    echo "  PASS: parse_lit_summary refuses 28700d57 (not an ancestor)"
+  fi
+  if printf '%s\n' 'Passed           :   1' 'git_commit: 38bd4059fbb4e489425becc4ded431235ae2c1ff' \
+       | python3 "$SCRIPT_DIR/parse_lit_summary.py" --require-ancestor \
+            --llvm-src "$LLVM_SRC" - \
+            >/tmp/haydn-parse-lit-rebind.log 2>&1; then
+    echo "  PASS: parse_lit_summary accepts repo-resident 38bd4059"
+  else
+    echo "  FAIL: parse_lit_summary must accept in-repo 38bd4059" >&2
+    tail -10 /tmp/haydn-parse-lit-rebind.log >&2 || true
+    fail=1
+  fi
 else echo "  FAIL: parse_lit_summary.py missing" >&2; fail=1; fi
 
 # T-MC10 / M12: in-tree product linker script ident + sysroot body match.
@@ -48,6 +91,42 @@ if [[ -x "$SCRIPT_DIR/check_product_ld.py" || -f "$SCRIPT_DIR/check_product_ld.p
     echo "  PASS: product linker script pin (T-MC10)"
   else echo "  FAIL: product linker script pin (T-MC10)" >&2; fail=1; fi
 else echo "  FAIL: check_product_ld.py missing" >&2; fail=1; fi
+
+# Same-artifact recorder: product-ld bind + install script (not BSP-only).
+if [[ -f "$SCRIPT_DIR/record_haydn_artifact_set.py" ]]; then
+  if python3 "$SCRIPT_DIR/record_haydn_artifact_set.py" --self-test \
+       >/tmp/haydn-product-coverage-recorder-self.log 2>&1; then
+    echo "  PASS: record_haydn_artifact_set self-test"
+  else
+    echo "  FAIL: record_haydn_artifact_set self-test" >&2
+    tail -20 /tmp/haydn-product-coverage-recorder-self.log >&2 || true
+    fail=1
+  fi
+  if python3 "$SCRIPT_DIR/record_haydn_artifact_set.py" --check-product-ld \
+       --llvm-src "$LLVM_SRC" --require-sysroot --require-consumer-install \
+       >/tmp/haydn-product-coverage-recorder-ld.log 2>&1; then
+    echo "  PASS: product-ld same-artifact bind (haydn-rt/haydn.ld)"
+    if grep -q 'T7-RT residual' /tmp/haydn-product-coverage-recorder-ld.log; then
+      echo "  INFO: T7-RT committed consumer install still OPEN"
+    fi
+  else
+    echo "  FAIL: product-ld same-artifact bind" >&2
+    tail -20 /tmp/haydn-product-coverage-recorder-ld.log >&2 || true
+    fail=1
+  fi
+  if python3 "$SCRIPT_DIR/record_haydn_artifact_set.py" --check-library \
+       --llvm-src "$LLVM_SRC" --require-sysroot \
+       >/tmp/haydn-product-coverage-recorder-lib.log 2>&1; then
+    echo "  PASS: library same-artifact identity (libc+libm / product_library_pin)"
+  else
+    echo "  FAIL: library same-artifact identity" >&2
+    tail -20 /tmp/haydn-product-coverage-recorder-lib.log >&2 || true
+    fail=1
+  fi
+else
+  echo "  FAIL: record_haydn_artifact_set.py missing" >&2
+  fail=1
+fi
 
 # F21 hygiene: inventory residual/transitional/legacy prose and RESIDUAL(goal-N).
 # Print only — do not fail the pin on a high count this wave.
@@ -88,7 +167,36 @@ else
     if [[ -n "$_aid" && ${#_aid} -eq 64 ]]; then
       echo "  PASS: artifact_id=${_aid}"
       if [[ -n "$_llvm" ]]; then echo "  INFO: ARTIFACT llvm_src.git_commit=${_llvm}"; fi
+      # Rebound: 08-17 full-gate manifest git_commit=28700d57 is not an
+      # ancestor. ARTIFACT must name an in-repo commit (38bd4059 at this stamp).
+      if [[ "${_llvm}" == 28700d57* ]]; then
+        echo "  FAIL: ARTIFACT rebound required (28700d57 is not an ancestor)" >&2
+        fail=1
+      elif [[ -n "$_llvm" ]]; then
+        if git -C "$LLVM_SRC" merge-base --is-ancestor "$_llvm" HEAD 2>/dev/null; then
+          echo "  PASS: ARTIFACT git_commit=${_llvm} is in-repo ancestor"
+        else
+          echo "  FAIL: ARTIFACT git_commit=${_llvm} is not an ancestor of HEAD" >&2
+          fail=1
+        fi
+      else
+        echo "  FAIL: ARTIFACT llvm_src.git_commit missing (cannot rebound)" >&2
+        fail=1
+      fi
     else echo "  FAIL: ARTIFACT.json incomplete" >&2; fail=1; fi
+    # Consumer restamp can drop monorepo-owned library/product_ld. Re-bind
+    # haydn-rt/haydn.ld, refuse .bak/.broken debris, and re-attach stamps.
+    if [[ -f "$SCRIPT_DIR/record_haydn_artifact_set.py" ]]; then
+      if python3 "$SCRIPT_DIR/record_haydn_artifact_set.py" --install-product-ld \
+           --llvm-src "$LLVM_SRC" --sysroot "$_sysroot" \
+           >/tmp/haydn-product-coverage-recorder-attach.log 2>&1; then
+        echo "  PASS: product-ld install + ARTIFACT attach-owned"
+      else
+        echo "  FAIL: product-ld install / attach-owned" >&2
+        tail -20 /tmp/haydn-product-coverage-recorder-attach.log >&2 || true
+        fail=1
+      fi
+    fi
     # Catalog block must be five-file complete and must not claim retired inputs.
     if ! python3 - "$_sysroot/ARTIFACT.json" >/tmp/haydn-product-coverage-artifact-cat.log 2>&1 <<'PY'
 import json, sys
@@ -213,6 +321,90 @@ else
   fail=1
 fi
 
+# Same-artifact residual seats (step/hygiene/yarpgen/FP-skip/NatureDSP/freeze).
+if [[ -f "$SCRIPT_DIR/check_runtime_artifact_seats.py" ]]; then
+  if python3 "$SCRIPT_DIR/check_runtime_artifact_seats.py" --llvm-src "$LLVM_SRC" \
+       --require-sysroot --require-consumer-install \
+       >/tmp/haydn-product-coverage-runtime-seats.log 2>&1; then
+    echo "  PASS: runtime artifact residual seats"
+  else
+    echo "  FAIL: runtime artifact residual seats" >&2
+    tail -20 /tmp/haydn-product-coverage-runtime-seats.log >&2 || true
+    fail=1
+  fi
+else
+  echo "  FAIL: check_runtime_artifact_seats.py missing" >&2
+  fail=1
+fi
+if [[ -f "$SCRIPT_DIR/tdsp13_declared_vs_tested_pin.py" ]]; then
+  if python3 "$SCRIPT_DIR/tdsp13_declared_vs_tested_pin.py" --llvm-src "$LLVM_SRC" \
+       >/tmp/haydn-product-coverage-tdsp13.log 2>&1; then
+    echo "  PASS: T-DSP13 declared-vs-tested inventory pin"
+  else
+    echo "  FAIL: T-DSP13 declared-vs-tested inventory pin" >&2
+    tail -20 /tmp/haydn-product-coverage-tdsp13.log >&2 || true
+    fail=1
+  fi
+else
+  echo "  FAIL: tdsp13_declared_vs_tested_pin.py missing" >&2
+  fail=1
+fi
+if [[ -f "$SCRIPT_DIR/classify_lldb_step.py" ]]; then
+  if python3 "$SCRIPT_DIR/classify_lldb_step.py" --self-test \
+       >/tmp/haydn-product-coverage-step-class.log 2>&1; then
+    echo "  PASS: LLDB step-inst classifier self-test"
+  else
+    echo "  FAIL: LLDB step-inst classifier self-test" >&2
+    fail=1
+  fi
+else
+  echo "  FAIL: classify_lldb_step.py missing" >&2
+  fail=1
+fi
+if [[ -f "$SCRIPT_DIR/measure_sched_artifact.py" ]]; then
+  if python3 "$SCRIPT_DIR/measure_sched_artifact.py" self-test \
+       >/tmp/haydn-product-coverage-m2-kpi.log 2>&1; then
+    echo "  PASS: M2 KPI measure_sched self-test (measured-miss; not QUALIFY)"
+  else
+    echo "  FAIL: M2 KPI measure_sched self-test" >&2
+    tail -20 /tmp/haydn-product-coverage-m2-kpi.log >&2 || true
+    fail=1
+  fi
+else
+  echo "  FAIL: measure_sched_artifact.py missing" >&2
+  fail=1
+fi
+
+if [[ -f "$SCRIPT_DIR/write_ci_verdict.py" ]]; then
+  if python3 "$SCRIPT_DIR/write_ci_verdict.py" --self-test \
+       >/tmp/haydn-product-coverage-ci-verdict.log 2>&1; then
+    echo "  PASS: CI verdict schema self-test (not semantic QUALIFY)"
+  else
+    echo "  FAIL: CI verdict schema self-test" >&2
+    tail -20 /tmp/haydn-product-coverage-ci-verdict.log >&2 || true
+    fail=1
+  fi
+else
+  echo "  FAIL: write_ci_verdict.py missing" >&2
+  fail=1
+fi
+
+# T-ABI9 monorepo compile/link matrix. Executed ctest label remains residual.
+if [[ -x "$SCRIPT_DIR/run_abi_conformance_matrix.sh" || -f "$SCRIPT_DIR/run_abi_conformance_matrix.sh" ]]; then
+  if bash "$SCRIPT_DIR/run_abi_conformance_matrix.sh" \
+       "${ABI_MATRIX_OUT:-/tmp/haydn-product-coverage-abi}" \
+       >/tmp/haydn-product-coverage-abi.log 2>&1; then
+    echo "  PASS: ABI conformance compile/link matrix (T-ABI9 monorepo)"
+  else
+    echo "  FAIL: ABI conformance compile/link matrix" >&2
+    tail -20 /tmp/haydn-product-coverage-abi.log >&2 || true
+    fail=1
+  fi
+else
+  echo "  FAIL: run_abi_conformance_matrix.sh missing" >&2
+  fail=1
+fi
+
 _pin="${PRODUCT_LIBRARY_PIN:-/ssd2/mhyang/haydn-plans/naturedsp-haydn/tools/product_library_pin.sh}"
 _src="${NATUREDSP_SRC:-/ssd2/mhyang/haydn-plans/hifi_naturedsp_reports/src}"
 # When NatureDSP sources are present, library evidence is mandatory (matches
@@ -222,6 +414,38 @@ if [[ -f "$_pin" && -d "$_src/library" ]]; then
      SRC="$_src" bash "$_pin" "${PRODUCT_LIBRARY_OUT:-/tmp/haydn-product-coverage-libpin}"; then
     echo "  PASS: NatureDSP product library pin (expand=${PRODUCT_LIBRARY_EXPAND:-1})"
   else echo "  FAIL: NatureDSP product library pin" >&2; fail=1; fi
+  _exec_pin="${EXECUTED_CANARY_PIN:-/ssd2/mhyang/haydn-plans/naturedsp-haydn/tools/executed_canary_pin.sh}"
+  if [[ -f "$_exec_pin" ]]; then
+    if SRC="$_src" bash "$_exec_pin" "${EXECUTED_CANARY_OUT:-/tmp/haydn-product-coverage-exec-canary}"; then
+      echo "  PASS: NatureDSP executed-canary compile pin (M1/M3)"
+    else echo "  FAIL: NatureDSP executed-canary compile pin" >&2; fail=1; fi
+  else
+    echo "  FAIL: executed_canary_pin.sh missing" >&2; fail=1
+  fi
+  _lib_self="${LIBRARY_COVERAGE_SELFCHECK:-/ssd2/mhyang/haydn-plans/naturedsp-haydn/tools/library_coverage_selfcheck.sh}"
+  if [[ -f "$_lib_self" ]]; then
+    if bash "$_lib_self" >/tmp/haydn-product-coverage-lib-self.log 2>&1; then
+      echo "  PASS: NatureDSP library-coverage residual selfcheck"
+    else
+      echo "  FAIL: NatureDSP library-coverage residual selfcheck" >&2
+      tail -20 /tmp/haydn-product-coverage-lib-self.log >&2 || true
+      fail=1
+    fi
+  else
+    echo "  FAIL: library_coverage_selfcheck.sh missing" >&2; fail=1
+  fi
+  _hdr_pin="${HDR_SPLIT_MEASURE:-/ssd2/mhyang/haydn-plans/naturedsp-haydn/tools/hdr_split_measure.sh}"
+  if [[ -f "$_hdr_pin" ]]; then
+    if bash "$_hdr_pin" >/tmp/haydn-product-coverage-hdr-split.log 2>&1; then
+      echo "  PASS: HDR-SPLIT measured miss (one file; no Stage-0)"
+    else
+      echo "  FAIL: HDR-SPLIT measure" >&2
+      tail -10 /tmp/haydn-product-coverage-hdr-split.log >&2 || true
+      fail=1
+    fi
+  else
+    echo "  FAIL: hdr_split_measure.sh missing" >&2; fail=1
+  fi
 elif [[ "${REQUIRE_PRODUCT_LIBRARY:-0}" == "1" || -d "$_src/library" ]]; then
   echo "  FAIL: NatureDSP product library required but pin/sources incomplete" >&2
   fail=1
@@ -239,6 +463,12 @@ if [[ -n "$LIT" ]]; then
     "llvm/test/CodeGen/Haydn/eflags-e96-product-profile.ll"
     "llvm/test/CodeGen/Haydn/xfail-owner-ledger-selfcheck.ll"
     "llvm/test/CodeGen/Haydn/parse-lit-summary-selfcheck.ll"
+    "llvm/test/CodeGen/Haydn/Inputs/t6-artifact-selfcheck.ll"
+    "llvm/test/CodeGen/Haydn/llc-pipeline-haydn.ll"
+    "llvm/test/CodeGen/Haydn/phase-firewall-inventory-pins.ll"
+    "llvm/test/CodeGen/Haydn/phase-firewall-s96-anyext.ll"
+    "llvm/test/CodeGen/Haydn/phase-firewall-hasfp-adjusts-stack.ll"
+    "llvm/test/CodeGen/Haydn/phase-firewall-align-maxparcels.ll"
     "llvm/test/CodeGen/Haydn/c-e2e-runtime.ll"
     "llvm/test/CodeGen/Haydn/c-e2e-bundle-dump.ll"
     "llvm/test/CodeGen/Haydn/debug-info.ll"
@@ -247,6 +477,12 @@ if [[ -n "$LIT" ]]; then
     "llvm/test/CodeGen/Haydn/cfi-fixup-enabled.ll"
     "llvm/test/CodeGen/Haydn/baremetal-startup.ll"
     "llvm/test/CodeGen/Haydn/product-ld-selfcheck.ll"
+    "lld/test/ELF/haydn/product-ld-bind.s"
+    "llvm/test/CodeGen/Haydn/product-runtime-artifact-seats.ll"
+    "llvm/test/CodeGen/Haydn/runtime-toolchain-owner-pins.ll"
+    "llvm/test/CodeGen/Haydn/product-abi-conformance.ll"
+    "llvm/test/CodeGen/Haydn/runtime-artifact-seats-selfcheck.ll"
+    "llvm/test/CodeGen/Haydn/ci-verdict-artifact-selfcheck.ll"
     "llvm/test/MC/Haydn/hostile-byte-surface.s"
     "llvm/test/MC/Haydn/eflags-e96-product-profile.s"
   )

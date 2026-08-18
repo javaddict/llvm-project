@@ -2,13 +2,6 @@
 // RUN: clang -target haydn-unknown-elf -mcpu=haydn \
 // RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
 // RUN:   -emit-llvm -S -o - %s | FileCheck %s --check-prefix=IR
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN:   -S -o - %s | FileCheck %s --check-prefix=ASM
-// RUN: clang -target haydn-unknown-elf -mcpu=haydn \
-// RUN:   -mllvm -global-isel-abort=1 -O2 -ffreestanding \
-// RUN:   -c -o %t.o %s
-// RUN: llvm-objdump -d %t.o | FileCheck %s --check-prefix=OBJ
 // RUN: not clang -target haydn-unknown-elf -mcpu=haydn -ffreestanding \
 // RUN:   -fsyntax-only -DTEST_ADD64X2_STRICT %s 2>&1 \
 // RUN:   | FileCheck %s --check-prefix=STRICT

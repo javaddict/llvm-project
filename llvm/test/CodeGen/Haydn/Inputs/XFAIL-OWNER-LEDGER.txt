@@ -1,14 +1,59 @@
 Haydn lit XFAIL owner / failure ledger
 Durable map for live XFAIL directives under CodeGen/Haydn + MC/Haydn.
 Re-query live files before citing counts.
-Stamp: 2026-08-14 M7 GE96-03 closed (branch/call field = byte PC+imm).
-  Remaining live XFAIL is GE96-09 ar_sel only. GE96-03 tests are product
-  PASS (cb89/cb94/reloc-range-branch). Mechanical parity:
-  llvm/utils/haydn/check_xfail_ledger.py (+ lit pin
+Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (live=5: GE96-09 + four dual-ON combined).
+  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Auto.td/CMake closed; W54/W55 stay LANDED.
+  Rebound: 38bd4059 is the in-repo ancestor; 28700d57 is not an ancestor.
+  GE96-03 tests remain product PASS (cb89/cb94/reloc-range-branch).
+  Combined dual-ON files stay expected-fail:
+    hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll
+  Goal 8 folds G-HWLOOP-POLICY + G-MULTISTAGE-HWLOOP +
+  G-MULTISTAGE-POLICY this wave with no PRODUCT_ON. Flip sites stay
+  HaydnTargetMachine::hardwareLoopsProductDefaultEnabled() and
+  HaydnMultiStageSMS::productDefaultEnabled() == false (owned TUs
+  elsewhere). Product-default pin:
+  post-pipeliner-default-equals-off.ll + densify-defaults-off.ll
+  (constexpr + cl::init + default Structure/asm/remarks + independent
+  CLI knobs). Blocked until T3 independent SMS QUALIFY (hwloops OFF,
+  parcels==II), then T6 independent hwloop QUALIFY (SMS OFF), then the
+  combined trip/CFG/prologue/kernel/epilogue/oracle matrix. Two
+  separate policy-only patches after that evidence. KPI is not a
+  gate on enablement.
+  Mechanical parity: llvm/utils/haydn/check_xfail_ledger.py (+ lit pin
   xfail-owner-ledger-selfcheck.ll). Update this ledger in the same change as
   any add/remove of a live XFAIL directive.
 
-TOTAL: 1
+TOTAL: 5
+
+PATH: llvm/test/CodeGen/Haydn/hwloop-multistage-combined-matrix.ll
+  OWNER:   G-MULTISTAGE-POLICY (fold G-HWLOOP-POLICY + G-MULTISTAGE-HWLOOP)
+  FAILURE: blocked on T3 then T6 independent QUALIFY then dual-ON
+           trip/CFG/prologue/kernel/epilogue/oracle accept; no PRODUCT_ON
+  STATUS:  expected-fail / policy fold waiting QUALIFY
+  LIVE_GOAL: G-MULTISTAGE-POLICY / G-HWLOOP-POLICY / G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE
+
+PATH: llvm/test/CodeGen/Haydn/hwloop-multistage-combined-transaction.ll
+  OWNER:   G-MULTISTAGE-POLICY (fold G-HWLOOP-POLICY + G-MULTISTAGE-HWLOOP)
+  FAILURE: blocked on T3 then T6 then dual-ON PF/JM restore; force-fail
+           remarks exhaust II instead of the named PF-CFG seat; no PRODUCT_ON
+  STATUS:  expected-fail / policy fold waiting QUALIFY
+  LIVE_GOAL: G-MULTISTAGE-POLICY / G-HWLOOP-POLICY / G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE
+
+PATH: llvm/test/CodeGen/Haydn/hwloop-multistage-combined-cfg.ll
+  OWNER:   G-MULTISTAGE-POLICY (fold G-HWLOOP-POLICY + G-MULTISTAGE-HWLOOP)
+  FAILURE: blocked on T3 then T6 then dual-ON preheader/BEGIN/END /
+           latch-only overlay accept; analysis-only exhausts II;
+           no PRODUCT_ON
+  STATUS:  expected-fail / policy fold waiting QUALIFY
+  LIVE_GOAL: G-MULTISTAGE-POLICY / G-HWLOOP-POLICY / G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE
+
+PATH: llvm/test/CodeGen/Haydn/hwloop-multistage-combined-trip.ll
+  OWNER:   G-MULTISTAGE-POLICY (fold G-HWLOOP-POLICY + G-MULTISTAGE-HWLOOP)
+  FAILURE: blocked on T3 then T6 then dual-ON retained-trip / COUNT /
+           selector accept; analysis-only exhausts II; PF-TRIP
+           force-fail is not a product default flip
+  STATUS:  expected-fail / policy fold waiting QUALIFY
+  LIVE_GOAL: G-MULTISTAGE-POLICY / G-HWLOOP-POLICY / G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE
 
 PATH: llvm/test/MC/Haydn/ar-unaligned-roundtrip.s
   OWNER:   GE96-09 (ar_sel=2/3 classification)

@@ -1,8 +1,33 @@
-Haydn inverse corruption matrix scaffolding (G-TEST-EVIDENCE / open-goals-w4 INTEGRATE)
+Haydn inverse corruption matrix scaffolding (policy + QUALIFY seats / T8-HYGIENE)
 ====================================================================================
-Stamp: 2026-08-12 open-goals-w4 INTEGRATE
-  (dual residual Mode/swap MC residual + T7 inventory restamp + SCEV wording)
-Audited backend baseline: 7b1c4fc3309134104dfc21bd0792ec7876dd41a3
+Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual is docs/hygiene only;
+  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 38bd4059;
+  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Auto.td/CMake closed;
+  W54 D1000 and W55 nine-file stay LANDED; P13 waves stay gated on R13;
+  Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
+  flip sites stay false until independent T2+T4 QUALIFY then combined matrix;
+  T8-EVID leftover retained)
+  (AR0 leftovers are inventory, not a product registry: PIPE-20 phase-firewall
+   inventory closed — no pre-RA BUNDLE / member / setDesc / row;
+   CORRUPTION seats stay inventory, not a product registry;
+   DecisionGuard registry stays absent; DecisionGuard product registry stays absent; M10 never qualified;
+   PIPE-30 skipFunction closed; schema surface closed; callback-local repair is T4/T3;
+   MF0 INERT; R15 leftover docs stay outside this code track; product flags stay OFF;
+   P20(a) LatencyStalls in addPreSched2; late Finalize/Verify after BR at every
+   opt level; containment + PF/JM force-fail
+   inventories pinned; combined dual-ON QUALIFY waits for T2+T4; no PRODUCT_ON;
+   hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are live XFAIL;
+   no DecisionGuard revive; no second format pipeline)
+Audited backend baseline: 38bd4059fbb4e489425becc4ded431235ae2c1ff
+  (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
+
+R15 provenance: the previous inventory baseline ff42d9ad (`working`) and the eight
+historical "audited backend" hashes (1139639c5574, 1851c7541ab1,
+2a82c904c023, 59b03784ebc7, 5dd3468a05f7, ceb04d7e2986, 1e01adff5714,
+701793272e7b) plus 11b1d70b4111 exist in the object store but are NOT
+ancestors of this HEAD. They are provenance-only — not executable
+re-verify targets on this branch. Ancestor-of-HEAD examples at this stamp:
+3e74100b5f72, e4916d79d177. Future restamps replace the stamp line.
 
 Purpose: independent final-boundary negatives. Each seat injects one defect;
 verifier/MC/consumer must reject without planner/fallback repair.
@@ -10,6 +35,9 @@ Owning live goal: G-TEST-EVIDENCE (with G-E96-END-TO-END for inverse seats).
 Physical multistage lifetime/post-mutation/rollback rows are executable and
 are implemented with the active host; they are keyed to
 PF-*/JM-* IDs from FAULT-INJECTION-SEATS.txt — no host / no force-fail invent.
+Product defaults stay OFF (EnableHaydnHardwareLoops cl::init(false);
+HaydnMultiStageSMS::productDefaultEnabled() == false;
+productSMSContainmentMaxStageCount == 1). PRODUCT_ON is forbidden here.
 DG0 DecisionGuard product registry remains absent by design.
 
 | Seat              | Defect                          | Live pin                                      | Status    |
@@ -21,13 +49,22 @@ DG0 DecisionGuard product registry remains absent by design.
 | completion match  | wrong CompletionStateID vs count| bundle-corruption-matrix.mir (BAD-COMP)       | landed    |
 | issue width       | memberCount > ISSUE_SLOT_COUNT  | bundle-corruption-matrix.mir (OVER-ISSUE)     | landed    |
 | residual phase    | bare LOADI32 past commit        | vf5-residual-cycle-pseudo-ban.mir             | landed    |
+| residual SETCBR   | leftover SETCBR past Verify     | vf5-residual-setcbr-ban.mir + vf5-residual-setcbr-end-ban.mir | landed |
+| residual LOOPCTL  | leftover LoopDec/LoopJNZ/LoopStart | vf5-residual-loopctl-ban.mir + vf5-residual-loopstart-ban.mir | landed |
+| residual LOAD_ADDR| leftover LOAD_ADDR past Verify  | vf5-residual-load-addr-ban.mir                | landed    |
+| residual bundled  | cycle-forming child in BUNDLE   | vf5-residual-bundled-child-ban.mir + expand-owned-residual-matrix.mir | landed |
 | entry count       | >3 co-issue entries             | MC/Haydn/bundle-canadd-reject.s               | landed    |
 | residual printer  | SETCBR / loopctl / LOADI32 etc. | late-mc-residual-printer-matrix.mir           | landed    |
 | O0 vs optnone     | both leave Format-E BUNDLE; full-slot NOP pad (not underfill invent) | authority-o0-vs-optnone-commit.ll | landed |
-| hwloop residual   | residual SET_HWLOOP past ban    | vf5-residual-set-hwloop-ban.mir               | landed    |
+| hwloop residual   | residual SET_HWLOOP past ban    | vf5-residual-set-hwloop-ban.mir + vf5-residual-set-hwloop-reg-ban.mir | landed |
 | hwloop demote     | live body demote without soft edge | hwloop-demote-fatal-live.mir               | landed    |
 | Retained-loop incomplete | fatal pre-mutation reject | hwloop-rolea-preflight-reject.mir             | landed    |
-| XFAIL ledger drift| live XFAIL without owned row    | check_xfail_ledger.py / selfcheck.ll          | landed    |
+| XFAIL ledger drift| live XFAIL without owned row    | check_xfail_ledger.py / selfcheck.ll (TOTAL=5) | landed    |
+| s96 G_ANYEXT hang | unmerge/lshr/store re-enters ANYEXT | phase-firewall-s96-anyext.ll              | landed    |
+| hasFP adjustsStack | force FP on every ADJCALLSTACK caller | phase-firewall-hasfp-adjusts-stack.ll   | landed    |
+| MaxParcels short pad | align 256 stops at 16 parcels / 288 | phase-firewall-align-maxparcels.ll        | landed    |
+| 28700d57 rebound  | full-gate manifest not an ancestor | product_coverage_pin ancestor check       | landed    |
+| combined dual-ON  | dual-ON QUALIFY claimed closed  | hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll XFAIL | expected-fail |
 | inverse accept    | stamped E2/E3 product identity  | e96-bundle-inverse-verify.mir                 | landed    |
 | completion/idle   | wrong completion/pad payload    | outside current GE96-01/02 scope — no invent  | unsupported / alignment-open |
 | member wire opc   | re-place / wrong private member | bundle-corruption-matrix.mir (PRIV-REPLACE)  | landed    |
@@ -39,33 +76,99 @@ DG0 DecisionGuard product registry remains absent by design.
 | hostile debug     | OOB printer / short residual 1..11 / Case H misalign / bad headers | hostile-byte-surface.s + d432/printer-oob | landed |
 | nested unwind     | multi-FDE CIE + 3-level SP/FP + mixed SP↔FP | unwind-frame-chain.ll                   | landed    |
 | dual-namespace    | RSP ar0/dr0 names missing       | lldb_feature_matrix.sh register read ar0/dr0  | landed    |
-| parcel step       | step-inst without PC±12         | lldb_feature_matrix.sh (preferred; residual)  | partial   |
+| parcel step       | step-inst without PC±12         | classify_lldb_step + ClassifyStepReport (parcel12 preferred; never qualified) | residual  |
 | library empty/obj | DSP kernel empty/stub .text/no E96 | product_library_pin MIN_TEXT + e_flags     | landed    |
+| beyond-approved invent | treat 456 leftover kernels as QUALIFY | residual-beyond-approved CENSUS 35/456/491 | residual |
+| T-DSP12 silent -mcpu | generic CPU silently becomes haydn | product pin keeps explicit -mcpu=haydn     | residual |
+| T-DSP13 746 harness | invent declared-vs-tested QUALIFY | tdsp13 pin is inventory only               | residual |
 | freestanding libm  | sysroot libm.a missing from artifact | check_haydn_artifact_set required libm.a    | landed    |
 | ARTIFACT drift    | tool/git hash vs stamp mismatch | check_haydn_artifact_set + full-gate restamp  | landed    |
+| libc string exactness | strcpy/strncmp vs host oracle | host_freestanding_strcpy.c classified residual | residual |
+| consumer C compile    | CoreMark/Dhrystone TARGET_BUILD_FAILED status -15 | check_runtime_artifact_seats.py classified residual | residual |
+| ARTIFACT unbound      | live clang/llc/ld.lld/lldb/loader hash != stamp | check_runtime_artifact_seats.py toolchain bind | landed    |
+| LLDB 2-byte step      | software step uses MinInstAlignment not parcel | EmulateInstructionHaydn kFormatEParcelBytes=12 | landed    |
+| decode hash drift     | Functional_Model/model sha256 != live file | check_runtime_artifact_seats.py decode live bind | landed    |
+| FP-in-gate missing    | compiler-rt builtins drop __addsf3/__adddf3 | check_runtime_artifact_seats.py T-SF4 nm pin | landed    |
+| ARTIFACT.library missing | libc/libm present but library stamp absent | record_haydn_artifact_set.py --attach-owned | landed    |
+| ARTIFACT.product_ld missing | sysroot ld body unstamped / mismatch | check_runtime_artifact_seats.py product_ld | landed    |
+| T7-RT committed install | HEAD install_haydn_sysroot.sh unbound | record_haydn_artifact_set committed check | residual OPEN |
+| T-ABI4 R0 ISR invent | treat R0 borrow windows as interrupt-safe | topics/runtime T-ABI4 residual; no restore emitter | residual |
+| T-ABI6 i128 invent | treat IR i128 split as C ABI | Sema-reject; IR residual; no product i128 CC | residual |
+| T-ABI10 screening invent | treat naked/interrupt/stack-protector/byval-inreg as product | fail-closed / unscreened residual | residual |
+| T-ABI11 builtin invent | treat unselectable C builtins as product | remaining declared-legal residual | residual |
+| T-ABI12 inline-asm invent | treat 'd'/imm/mem as product constraint | Clang 'r' only; 'd' Sema-reject | residual |
+| T-ABI9 executed QUALIFY | treat monorepo compile/link as executed matrix | run_abi_conformance_matrix.sh compile/link only | residual |
+| T-SF9 contract invent | TestFloat / unskip gcc-torture FP as QUALIFY | Inputs T-SF9 + T-SF5 residual; no invent | residual |
+| T-SF10 yarpgen fuzz gate | treat frozen-28 as a fuzz QUALIFY | YARPGEN_MANIFEST count-only; T-TI6 frozen | residual |
+| M16 T-TI3 coverage invent | treat per-pass coverage as QUALIFY | PATTERN_GATE.md leftover; no coverage-fuzzer | residual |
+| M16 T-TI4 fuzzer invent | treat hostile/mnemonic RT as a fuzzer | hostile-byte-surface.s is not a fuzzer | residual |
+| M16 T-TI5 baseline invent | treat leftover II/fill as QUALIFY | pattern_gate.sh leftover table | residual |
+| M16 T-TI6 randomized invent | treat frozen-28 yarpgen as a fuzz gate | YARPGEN_MANIFEST informational | residual |
+| return-value write    | silent SetReturnValueObject   | ABISysV_haydn R1/D0 write (RISC-V port)       | landed    |
+| product hwloop ON | default EnableHaydnHardwareLoops true | sms-f41-containment-product-pin.ll POLICY-NOT set_hwloop | product OFF |
+| product SMS ON    | default productDefaultEnabled true | sms-f41-containment-product-pin.ll POLICY-NOT swps multi-stage | product OFF |
+| F41 knob as policy | containment-max lift becomes product | sms-f41-containment-product-pin.ll PRODUCT reject | test-only |
+| F41 ZOL knob follow | ZOL bound follows containment-max | sms-f41-zol-containment-knobrefuse.ll ZOL reject | refuse |
+| dual-ON PRODUCT_ON | combined matrix claimed closed  | FAULT-INJECTION-SEATS combined table WAITING  | forbidden |
 
 Physical multistage lifetime / post-mutation / rollback seats (host present)
 -------------------------------------------------------------------------------
 Keyed to closed PF-* preflight and JM-* journal IDs. Product lit injectors and
 force-fail flags are live on HaydnMultiStageSMS; default remains OFF.
+Independent QUALIFY is T2/T4. Combined dual-ON QUALIFY waits.
 
 | Seat ID  | Defect class                          | Owning goal            | Status                                              |
 |----------|---------------------------------------|------------------------|-----------------------------------------------------|
-| PF-CFG   | CFG blocks/edges preflight miss       | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| PF-PHI   | PHI / live-in preflight miss          | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| PF-TRIP  | Trip/setup preflight miss             | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| PF-STAGE | Stage MI plan / LCD / occupancy miss  | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| PF-LIVE  | Physical lifetime/spill/subreg miss   | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| PF-ALT   | Transient alternate preflight miss    | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| PF-BUNDLE| Bundle root/member/order preflight    | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| PF-LATE  | Late layout/reloc preflight miss      | G-MULTISTAGE-DESIGN    | executable force-fail + ordinary baseline retained          |
-| JM-ALLOC | Post-mutation alloc/clone rollback miss | G-MULTISTAGE-QUALIFY | executable force-fail + ordinary baseline retained          |
-| JM-SPLICE| Cross-MBB splice rollback miss        | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
-| JM-COMMIT| Partial E96 commit without rollback   | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
-| JM-TRIP  | Trip/setup update without restore     | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
-| JM-LIVE  | Post-mutation lifetime break          | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
-| JM-ALT   | Transient alternate escape            | G-MULTISTAGE-QUALIFY   | executable force-fail + ordinary baseline retained          |
-| JM-META  | Metadata/order/completion rollback miss | G-MULTISTAGE-QUALIFY | executable force-fail + ordinary baseline retained          |
+| PF-CFG   | CFG blocks/edges preflight miss       | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| PF-PHI   | PHI / live-in preflight miss          | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| PF-TRIP  | Trip/setup preflight miss             | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| PF-STAGE | Stage MI plan / LCD / occupancy miss  | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| PF-LIVE  | Physical lifetime/spill/subreg miss   | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| PF-ALT   | Transient alternate preflight miss    | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| PF-BUNDLE| Bundle root/member/order preflight    | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| PF-LATE  | Late layout/reloc preflight miss      | G-MULTISTAGE-DESIGN    | executable force-fail; ordinary baseline; default OFF |
+| JM-ALLOC | Post-mutation alloc/clone rollback miss | G-MULTISTAGE-QUALIFY | executable force-fail; ordinary baseline; default OFF |
+| JM-SPLICE| Cross-MBB splice rollback miss        | G-MULTISTAGE-QUALIFY   | executable force-fail; ordinary baseline; default OFF |
+| JM-COMMIT| Partial E96 commit without rollback   | G-MULTISTAGE-QUALIFY   | executable force-fail; ordinary baseline; default OFF |
+| JM-TRIP  | Trip/setup update without restore     | G-MULTISTAGE-QUALIFY   | executable force-fail; ordinary baseline; default OFF |
+| JM-LIVE  | Post-mutation lifetime break          | G-MULTISTAGE-QUALIFY   | executable force-fail; ordinary baseline; default OFF |
+| JM-ALT   | Transient alternate escape            | G-MULTISTAGE-QUALIFY   | executable force-fail; ordinary baseline; default OFF |
+| JM-META  | Metadata/order/completion rollback miss | G-MULTISTAGE-QUALIFY | executable force-fail; ordinary baseline; default OFF |
 
-Exit: focused reject pin per landed seat; implement the inventory with the active
-host; no golden invent, fake host evidence, or premature policy default.
+Combined-interaction QUALIFY matrix (G-MULTISTAGE-HWLOOP)
+---------------------------------------------------------
+Both features may be forced ON only under a single compiler/sysroot/BundleSim
+artifact after independent T2 and T4 arms pass. Required evidence stays
+OPEN / WAITING on this track. No PRODUCT_ON.
+
+| Seat         | Defect if dual-ON is claimed closed early                          | Status                |
+|--------------|--------------------------------------------------------------------|-----------------------|
+| Trip         | Soft/SCEV trip/setup adjust by rediscovery; COUNT < 1 after peels  | WAITING — T2+T4 first |
+| CFG          | Missing dedicated preheader / stage MBBs / successor edges         | WAITING — T2+T4 first |
+| Prologue     | Layout-only same-MBB peel; setup after BEGIN t-3                   | WAITING — T2+T4 first |
+| Kernel       | Sequential emission inside an accepted multi-stage kernel          | WAITING — T2+T4 first |
+| Epilogue     | Unproven live-outs; END not final body parcel                      | WAITING — T2+T4 first |
+| Transaction  | Dual-ON PF-CFG..PF-LATE / JM-ALLOC..JM-META not byte-identical     | WAITING — T2+T4 first |
+| Final oracle | OFF vs dual-ON object/value/memory mismatch on one artifact        | WAITING — T2+T4 first |
+
+Goal-9 docs/inventory on this track (P13 / P18 / P19 / P20 / R15)
+-----------------------------------------------------------------
+P13 Wave 1 on owned TU landed (pipeline.md pointer; deleted peepholes not
+listed live). Wave 2/3 `_S*` deletion stays GATED on R13. KEEP SMS/hwloop
+product default OFF. P18 leftover and P19: query live `_S*` rather than
+transcribed counts. P19 leftover closed (T7-ALIGN residual hygiene): Auto.td is hand-maintained;
+CMake golden-dir is env/-D only (banned plans-tree path gone;
+no home-directory discovery). P20(a) LANDED
+(addPreSched2 LatencyStalls; late Finalize/Verify after BR at every
+opt level; phase-firewall-latencystalls-presched2.ll +
+phase-firewall-late-finalize-after-br.ll). P20(c)(e-h) inventory;
+P20(b)=T3; P20(i)=T2.
+R15 leftover: live baseline is the stamp hash above; non-ancestor plan
+hashes are provenance-only. Orphan pass-deep-review stays outside this
+code track; CLAUDE.md is a symlink, not a 56K duplicate. ISA-next is ISA-64.
+MF0 multi-bundle proof stays INERT: no second product format family.
+W51 idle-parcel provenance is golden-blocked (OPEN_BLOCKED); no invent.
+
+Exit: focused reject pin per landed seat; implement the inventory with the
+active host; no golden invent, fake host evidence, or premature policy
+default. Combined hwloop+SMS matrix waits for T2+T4 independent QUALIFY.

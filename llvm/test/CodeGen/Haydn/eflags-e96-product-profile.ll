@@ -3,10 +3,13 @@
 ; RUN: llvm-readobj -h %t.o | FileCheck %s --check-prefix=HDR
 ; RUN: llvm-readobj -S %t.o | FileCheck %s --check-prefix=SEC
 ;
-; Role: object — product ELF e_flags identity on the CodeGen path.
-; Pins EF_HAYDN_E96 (0x1) on every llc object and .text parcel geometry
-; (EncodedBytes=12). Companion MC pin: MC/Haydn/eflags-e96-product-profile.s.
-; Consumer fail-closed for wrong/zero flags: BundleSim test_elf.
+; Role: object — product ELF identity on the CodeGen path.
+; Pins EF_HAYDN_E96 (0x1) and EM_HAYDN=259 (Machine 0x103) on every llc
+; object plus .text parcel geometry (EncodedBytes=12). Official ELF
+; registry 259 is Kalray KVX — stay fail-closed; do not invent a
+; replacement e_machine. Distinguisher is EF_HAYDN_E96=0x1. Companion
+; MC pin: MC/Haydn/eflags-e96-product-profile.s. Consumer fail-closed
+; for wrong/zero flags: BundleSim test_elf.
 
 target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
 target triple = "haydn-unknown-elf"
@@ -17,6 +20,7 @@ entry:
   ret i32 %s
 }
 
+; HDR: Machine: 0x103
 ; HDR: Flags [ (0x1)
 ; HDR-NEXT: 0x1
 

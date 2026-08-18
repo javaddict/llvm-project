@@ -1,0 +1,80 @@
+Haydn compiler-to-consumer artifact identity (owned residual)
+=============================================================
+Stamp: 2026-08-18 T-RT
+Same-artifact tuple: compiler + linker + sysroot + loader + debugger.
+Decode live bind: ARTIFACT.decode shim/model sha256 must match live files.
+Post-wave rebind: llvm_src.git_commit must be an in-repo ancestor
+  (38bd4059). Historical full-gate git_commit=28700d57 is refused.
+Folded residual IDs (same-artifact inventory under G-RUNTIME-TOOLCHAIN;
+  not separate QUALIFY tracks): G-ECOSYSTEM-CONSUMERS (loader / catalog /
+  e_flags), G-LIBRARY-COVERAGE (product_library_pin + torture seats),
+  G-DEBUG-OBSERVABILITY (M10 parcel12 / same-PC), G-TEST-EVIDENCE
+  (Inputs ledger + product_coverage_pin).
+
+Identity stamp: $sysroot/ARTIFACT.json (schema haydn-artifact-set-v1)
+Product linker script authority: repo-root haydn-rt/haydn.ld
+  (this directory does not ship a second linker script)
+  Install path: llvm/utils/haydn/record_haydn_artifact_set.py
+  install_product_ld writes $sysroot/lib/{haydn.ld,bundlesim.ld}
+  and refuses lib/*.bak / lib/*.broken*. ARTIFACT.product_ld is
+  attached on --install-product-ld / --attach-owned / --restamp
+  (null is fail-closed). Matching $sysroot/ARTIFACT.json after a
+  toolchain rebuild is --restamp (identity only; no libc rebuild).
+  Consumer install: BundleSim scripts/install_haydn_sysroot.sh must
+  bind the same haydn-rt/haydn.ld (BSP ld must not win) and restamp
+  via the monorepo recorder. Working-tree bind is the impl-track land
+  (--require-consumer-install fail-closes on that script). T7-RT stays
+  OPEN until the committed checkout identity matches. Repair a null
+  ARTIFACT.product_ld with
+  record_haydn_artifact_set.py --install-product-ld.
+Library authority: product_library_pin (libc.a + libm.a)
+  coverage: approved_expand=35 beyond_approved=456 total_hifi3=491
+  Runtime/library seats (classified; not QUALIFY; no torture run):
+    user-printf.c        stdio BSP+lit (vfprintf / freopen)
+    memset-2.c           libc memset alignment/length
+    builtin-bitops-1.c   libc/compiler-rt integer bitops
+    strlen-5.c           libc strlen (CB-153 compile-time closed)
+    va-arg-1.c           ABI varargs (CB-131 core)
+    va-arg-2.c           ABI varargs cluster
+  Torture image/loader CODE_IMAGE_REJECT is a classified residual
+  (non-12B / malformed exec image). Discover-only; not QUALIFY.
+  Exact loader reject: "direct control target is not an exact code record"
+  (target 0 = missing plat abort; otherwise a mid-parcel / trap-fill
+  label). Control-target exact-record is compiler/MC object bytes plus
+  LLD ISA-inert 4-byte trap fill; not a second linker invent and not
+  QUALIFY. A loader reject is never QUALIFY.
+Idle pad: full-slot architectural NOP, EncodedBytes=12
+EM_HAYDN=259 is experimental and collides with Kalray KVX.
+  Do not invent a replacement e_machine. Distinguisher is EF_HAYDN_E96=0x1.
+  LLD refuses a 259 object without that flag.
+
+Residuals (inventory only; not QUALIFY labels)
+----------------------------------------------
+M4 T-DSP12 default-CPU: do not silently -mcpu=haydn.
+M4 T-DSP13 declared-vs-tested: inventory only; no 746-name harness.
+    Owner pin: llvm/utils/haydn/tdsp13_declared_vs_tested_pin.py
+M5 T-ABI4 R0 invariant: borrow windows are not interrupt-safe;
+    no single restore emitter. Do not invent an ISR-safe R0 ABI.
+M5 T-ABI6 i128: C __int128 Sema-rejects; IR i128 split is not a
+    product C ABI. Do not invent a documented i128 calling convention.
+M5 T-ABI10 screening: naked / interrupt / stack-protector / byval-inreg
+    stay fail-closed or unscreened residual; not a product ABI.
+M5 T-ABI11 remaining declared-legal / unselectable C builtins
+    (__builtin_frame_address, readcyclecounter, …) stay residual.
+M5 T-ABI12 inline-asm: Clang 'r' only; 'd' / imm / mem stay residual.
+    Do not invent a product 'd' constraint.
+M6 T-ABI9 monorepo compile/link matrix is the seat; executed
+    ctest -L abi-conformance stays residual.
+M10 LLDB step-inst: preferred class parcel12; Instruction plugin
+    advances PC by EncodedBytes=12 only when PC is unchanged and
+    does not decode members. same-PC and non-12 remain residual.
+M13 FP gate: gcc-torture float/double skip classified; IEEE vector residual.
+M14 e_machine: external allocation; no invent.
+M15 T-SF9 contract + T-SF10 sysroot hygiene (.bak/.broken fail-closed)
+    and frozen-28 yarpgen informational seat (not a fuzz gate).
+M16 T-TI3..6: per-pass coverage / MC fuzzer / perf baselines frozen
+    until SF1-SF3. Do not invent a fuzz gate.
+
+DG0 DecisionGuard product registry is absent by design.
+Ownership is Inputs/* + check_xfail_ledger / parse_lit_summary /
+product_coverage_pin only. No test-contract revive.

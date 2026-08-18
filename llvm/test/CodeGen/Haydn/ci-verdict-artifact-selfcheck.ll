@@ -9,4 +9,5 @@
 ;
 ; Green fixture has Expectedly Failed and no Failed line; overall must be PASS.
 ; Fail fixture has Failed: 1; overall must be FAIL. Schema is checked via
-; --dry-run. Does not run CodeGen/MC Haydn lit, ninja, libc, or BundleSim.
+; --dry-run. overall QUALIFY and semantic_qualify=true are forbidden.
+; Does not run CodeGen/MC Haydn lit, ninja, libc, or BundleSim.

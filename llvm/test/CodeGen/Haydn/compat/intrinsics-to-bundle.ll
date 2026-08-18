@@ -1,5 +1,6 @@
 ; REQUIRES: haydn-registered-target
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
+; RUN:   -enable-misched=false -enable-post-misched=false < %s | FileCheck %s
 
 ; Role: semantic — FILED : MULSSH_S0 (and similar MAC-S0 instructions) have a tied-def operand-flag bug that aborts the.
 

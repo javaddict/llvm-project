@@ -167,6 +167,29 @@ SEMANTIC_DRIVERS: dict[str, str] = {
 PRODUCT_SMS_CONTAINMENT_MAX_STAGE_COUNT = 1
 PER_OP_RESOURCE_RECORDS_ADMITTED = False
 COMPETITIVE_II_DENSITY_CLAIMS = False
+M18_UNCLAIMABLE = True
+NAT_IPC_MEASURED_MISS = True
+SWPS_ASM_MEASURED_MISS = True
+SF1_SF3_GATES_CLOSED = False
+STAGE0_IB_PP_REVIVE = False
+THREE_ARM = "ordinary,stagecount1,multistage"
+# M2 / M17 / M18 / M19–M22 stay observation seats. No competitive
+# II / density / NAT-IPC / SWPS-asm claim until admission.
+M_EVAL_ONLY = {
+    "M2": True,
+    "M17": True,
+    "M18": True,
+    "M19": True,
+    "M20": True,
+    "M21": True,
+    "M22": True,
+}
+IPC_PROXY_MEASURED_MISS = {
+    "measured_miss": True,
+    "competitive_claim": False,
+    "same_artifact": True,
+    "reason": "ipc_proxy is same-artifact observation only; CompleteModel=0",
+}
 
 # Golden-admitted aggregate surface (constraints port table + SchedModel).
 # Mirrors HaydnPortModel / HaydnSchedule.td; not a competitive per-op invent.
@@ -504,6 +527,15 @@ def product_summary_polarity() -> dict[str, Any]:
         "resource_surface": resource_surface_evidence(),
         "sequentialization_is_not_legality": True,
         "product_coissue_probe_is_legality": True,
+        "m18_unclaimable": M18_UNCLAIMABLE,
+        "nat_ipc_measured_miss": NAT_IPC_MEASURED_MISS,
+        "swps_asm_measured_miss": SWPS_ASM_MEASURED_MISS,
+        "m_eval_only": dict(M_EVAL_ONLY),
+        "sf1_sf3_gates_closed": SF1_SF3_GATES_CLOSED,
+        "stage0_ib_pp_revive": STAGE0_IB_PP_REVIVE,
+        "three_arm": THREE_ARM,
+        "object_mc_identity_only": True,
+        "ipc_proxy": dict(IPC_PROXY_MEASURED_MISS),
     }
 
 
@@ -787,9 +819,25 @@ def cmd_self_test(_args: Any = None) -> int:
         ("semantic_host_execution_required_when_available", True),
         ("sequentialization_is_not_legality", True),
         ("product_coissue_probe_is_legality", True),
+        ("m18_unclaimable", True),
+        ("nat_ipc_measured_miss", True),
+        ("swps_asm_measured_miss", True),
+        ("sf1_sf3_gates_closed", False),
+        ("stage0_ib_pp_revive", False),
+        ("three_arm", THREE_ARM),
+        ("object_mc_identity_only", True),
     ):
         if pol[k] != v:
             errs.append(f"{k} must be {v}")
+    ipc = pol.get("ipc_proxy") or {}
+    if ipc.get("measured_miss") is not True or ipc.get("competitive_claim"):
+        errs.append(f"ipc_proxy must stay a measured miss: {ipc}")
+    if ipc.get("same_artifact") is not True:
+        errs.append(f"ipc_proxy must be same-artifact: {ipc}")
+    mev = pol.get("m_eval_only") or {}
+    for mid in ("M2", "M17", "M18", "M19", "M20", "M21", "M22"):
+        if mev.get(mid) is not True:
+            errs.append(f"{mid} must stay eval-only: {mev}")
     surf = pol.get("resource_surface") or {}
     agg = surf.get("aggregate") or {}
     if agg.get("gpr_write_ports") != 2 or agg.get("issue_width") != 3:
@@ -875,6 +923,10 @@ def cmd_self_test(_args: Any = None) -> int:
         "ordinary_baseline_required=true p8_object_required=true "
         "resource_surface=bound sequentialize_not_legality=true "
         "golden_hash_binding_required=true semantic_host_required_when_available=true "
+        f"three_arm={THREE_ARM} m18_unclaimable=true nat_ipc_measured_miss=true "
+        "swps_asm_measured_miss=true m_eval_only=M2,M17-M22 "
+        "sf1_sf3_closed=false object_mc_identity_only=true "
+        "ipc_proxy_measured_miss=true "
         f"semantic_drivers={len(SEMANTIC_DRIVERS)}"
     )
     return 0
@@ -1047,7 +1099,7 @@ def cmd_collect(args: argparse.Namespace) -> int:
     semantic_ok_n = sum(1 for k in kernels if k.get("semantic_ok"))
 
     summary: dict[str, Any] = {
-        "schema": "haydn-sched-artifact-measure-v2",
+        "schema": "haydn-sched-artifact-measure-v3",
         "source": "llvm/utils/haydn/measure_sched_artifact.py",
         "toolchain": str(hb),
         "compiler_identity": compiler_identity(hb),

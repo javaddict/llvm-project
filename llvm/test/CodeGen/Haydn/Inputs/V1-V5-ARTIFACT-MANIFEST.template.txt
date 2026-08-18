@@ -1,10 +1,13 @@
-Haydn exact V1-V5 artifact manifest template (G-TEST-EVIDENCE / T7-ARTIFACT)
+Haydn exact V1-V5 artifact manifest template (G-TEST-EVIDENCE / T8-DEBUG-EVIDENCE)
 ====================================================================
-Stamp: 2026-08-13 T7-ARTIFACT (five-file catalog + decode/FM + debugger/loader)
+Stamp: 2026-08-18 T7-ARTIFACT (nine-file golden + five-file catalog + decode/FM + debugger/loader + M10 never-qualified + product_ld bind)
+  Rebound llvm_git_sha must be an in-repo ancestor (38bd4059). Historical
+  full-gate manifest git_commit=28700d57 is not an ancestor — do not re-bind.
 
 Fill one immutable record per qualification attempt. Broad gate greens without
 this tuple do not advance product-default policy flips
-(G-HWLOOP-POLICY / G-MULTISTAGE-POLICY).
+(G-HWLOOP-POLICY / G-MULTISTAGE-POLICY). Flip sites stay false until
+independent T2+T4 QUALIFY then the combined matrix.
 
 Identity
 --------
@@ -16,8 +19,10 @@ policy_default_cl_init: true|false
 
 Exact artifact tuple (must be hashed, not "latest")
 ---------------------------------------------------
-llvm_git_sha:
+llvm_git_sha:                 # in-repo ancestor only; refuse 28700d57
 llvm_git_describe:
+prior_full_gate_manifest_commit:  # 28700d57 is not an ancestor; provenance only
+haydn_lit_ok:                 # 08-17 seat was n/a; wave-close owns the re-run
 haydn_build_path:
 clang_path:
 llc_path:
@@ -30,13 +35,18 @@ libm_hash:                    # required freestanding product surface
 bundlesim_git_sha:
 bundlesim_build_path:
 host_uname:
-# STATUS.md five-file golden authority (only these five may supply hardware facts)
+# STATUS.md nine-file golden authority (hardware/encoding facts; hashes only there)
 golden_xlsx_sha256:           # format_e_bit_layout_v2.xlsx
 golden_json_sha256:           # format_e_bit_layout_v2.json
 golden_vectors_sha256:        # format_e_canonical_vectors_v1.json
+golden_type_index_sha256:     # instruction_type_index.json
+golden_type_operands_sha256:  # instruction_type_operands.json
+golden_to_entry_sha256:       # instruction_to_entry.xlsx
+golden_operands_info_sha256:  # operands_info.md
 golden_constraints_sha256:    # VLIW_Engine_Compiler_Constraints.md
 golden_manual_sha256:         # VLIW_Engine_Reference_Manual.docx
 # Consumer catalog provenance (retired 7-slot JSON + 17-file ledger forbidden)
+# Catalog still consumes the five layout/constraints/manual files only.
 catalog_authority: five-file
 catalog_golden_inputs_pin_sha256:   # BundleSim .../generated/GOLDEN_INPUTS.sha256
 catalog_generated_inc_sha256:       # .../instruction_catalog_generated.inc
@@ -48,6 +58,38 @@ bundlesim_loader_path:
 bundlesim_loader_sha256:
 decode_functional_model_complete: true|false
 decode_shim_discipline_ok: true|false
+decode_live_bind: true|false
+# Same-artifact debug / library / randomized-codegen seats (not QUALIFY labels)
+lldb_step_preferred_class: parcel12
+lldb_step_same_pc_class: residual
+lldb_step_non12_class: residual
+lldb_step_qualified: false
+product_ld_authority: haydn-rt/haydn.ld
+library_authority: product_library_pin
+library_vec_dot16: residual
+yarpgen_corpus: frozen-28
+yarpgen_role: informational-seat
+t_sf9_contract: inventoried
+t_sf9_addsf3: __addsf3
+t_sf9_adddf3: __adddf3
+t_sf9_long_double: f64
+t_sf9_float16: unavailable
+t_sf10_hygiene: fail-closed
+gcc_torture_fp: skipped-classified
+abi_matrix_monorepo: compile-link
+naturedsp_executed_canaries: add16/add32/scale32/shift32-compile; vec_dot16-T-DSP3
+naturedsp_o2_compile_timeout: bkfir32x32/add16/dot16-classified; cbr_wrap_csr/e2e_atoi_own-residual
+hdr_split: one-file-measured-miss
+libc_string_exactness: residual-strcpy-strncmp
+m16_m19_m22_freeze: until-SF1-SF3
+m16_t_ti3_coverage: frozen-no-coverage-fuzzer
+m16_t_ti4_mc_fuzzer: frozen-hostile-not-a-fuzzer
+m16_t_ti5_perf_baselines: leftover-not-qualify
+m16_t_ti6_randomized: frozen-28-informational
+em_haydn: 259-experimental-no-invent
+eflags: EF_HAYDN_E96=0x1-provisional
+idle_pad: full-slot-nop-12
+code_image_reject_owner: object-profile-or-T4-compiler-bytes
 
 Ladder results (each step names commands + exit + log path)
 -----------------------------------------------------------
@@ -62,4 +104,10 @@ Source-authority cross-check
 Consult Inputs/SOURCE-AUTHORITY-ANCHORS.txt and Inputs/XFAIL-OWNER-LEDGER.txt.
 No golden invent (GE96-01/02/03/04/07/08/09).
 EF_HAYDN_E96 is provisional consumer agreement, not external allocation.
-DG0 DecisionGuard product registry remains absent by design.
+DG0 DecisionGuard product registry remains absent by design
+(Inputs/* + product_coverage_pin only; no G-DECISION-GUARD revive).
+P19 leftover: Auto.td hand-maintained; CMake banned plans-tree path gone; $HOME/haydn leftover.
+R15 leftover: orphan pass-deep-review archived; CLAUDE.md is a symlink.
+PIPE-30 skipFunction closed. Schema surface closed. MF0 INERT. No second format pipeline.
+38bd405 G_ANYEXT / hasFP adjustsStack / MaxParcels pins: phase-firewall-*.ll.
+Post-wave rebound: 38bd4059; 28700d57 is not an ancestor.

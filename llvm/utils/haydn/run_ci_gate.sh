@@ -28,6 +28,8 @@
 #   /ssd2/mhyang/BundleSim/scripts/install_haydn_sysroot.sh
 #   llvm/utils/haydn/parse_lit_summary.py
 #   llvm/utils/haydn/check_xfail_ledger.py
+#   llvm/utils/haydn/check_runtime_artifact_seats.py
+#   llvm/utils/haydn/run_abi_conformance_matrix.sh
 #   llvm/utils/haydn/write_ci_verdict.py
 #
 # Crontab example (do NOT install automatically):
@@ -68,6 +70,8 @@ LLVM_BUILD="${LLVM_BUILD:-${BUILD:-/ssd2/mhyang/haydn-build}}"
 HAYDN_BIN="${HAYDN_BIN:-${BUNDLESIM_HAYDN_TOOLCHAIN_BIN:-$LLVM_BUILD/bin}}"
 WRITER="$SCRIPT_DIR/write_ci_verdict.py"
 LEDGER="$SCRIPT_DIR/check_xfail_ledger.py"
+SEATS="$SCRIPT_DIR/check_runtime_artifact_seats.py"
+ABI_MATRIX="$SCRIPT_DIR/run_abi_conformance_matrix.sh"
 PARSE_LIT="$SCRIPT_DIR/parse_lit_summary.py"
 
 usage() {
@@ -104,8 +108,8 @@ RUN_FULL_GATE="$BUNDLESIM_ROOT/scripts/run_full_gate.sh"
 BUILD_LIBC="$BUNDLESIM_ROOT/scripts/build_haydn_llvm_libc.sh"
 INSTALL_SYSROOT="$BUNDLESIM_ROOT/scripts/install_haydn_sysroot.sh"
 
-for p in "$WRITER" "$LEDGER" "$PARSE_LIT" "$RUN_LIT_GATE" "$RUN_FULL_GATE" \
-         "$BUILD_LIBC" "$INSTALL_SYSROOT"; do
+for p in "$WRITER" "$LEDGER" "$SEATS" "$ABI_MATRIX" "$PARSE_LIT" \
+         "$RUN_LIT_GATE" "$RUN_FULL_GATE" "$BUILD_LIBC" "$INSTALL_SYSROOT"; do
   if [[ ! -f "$p" ]]; then
     echo "run_ci_gate: missing peer $p" >&2
     exit 2
@@ -132,6 +136,21 @@ VERDICT="$OUT_DIR/verdict.json"
 NINJA_LOCK="$LLVM_BUILD/.ninja_lock"
 
 head_sha="$(git -C "$LLVM_SRC" rev-parse HEAD 2>/dev/null || echo unknown)"
+# Rebound: 08-17 full-gate manifest 28700d57 is not an ancestor. Bind the
+# verdict to an in-repo commit (38bd4059 is the current GOALS stamp).
+REBIND_ANCESTOR="${HAYDN_REBIND_ANCESTOR:-38bd4059fbb4e489425becc4ded431235ae2c1ff}"
+STALE_FULL_GATE_COMMIT="${HAYDN_STALE_FULL_GATE_COMMIT:-28700d57366a35a7d04e8adfbdf782743ec847e0}"
+if ! git -C "$LLVM_SRC" merge-base --is-ancestor "$REBIND_ANCESTOR" HEAD 2>/dev/null; then
+  echo "run_ci_gate: $REBIND_ANCESTOR is not an ancestor of HEAD (cannot rebind)" >&2
+  exit 2
+fi
+if git -C "$LLVM_SRC" merge-base --is-ancestor "$STALE_FULL_GATE_COMMIT" HEAD 2>/dev/null; then
+  : # unexpected; keep going and let parse_lit_summary refuse the stamp
+fi
+if [[ "$head_sha" == 28700d57* ]]; then
+  echo "run_ci_gate: refuse stale full-gate commit 28700d57 (not an ancestor)" >&2
+  exit 2
+fi
 
 log() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 
@@ -242,8 +261,17 @@ python3 "$LEDGER" --llvm-src "$LLVM_SRC" >"$OUT_DIR/xfail-ledger.log" 2>&1
 xfail_rc=$?
 set -e
 if [[ "$xfail_rc" -eq 0 ]]; then
-  xfail_ledger_ok=true
-  log "XFAIL_LEDGER: PASS"
+  set +e
+  python3 "$LEDGER" --inventory-pin --llvm-src "$LLVM_SRC" \
+    >>"$OUT_DIR/xfail-ledger.log" 2>&1
+  inv_rc=$?
+  set -e
+  if [[ "$inv_rc" -eq 0 ]]; then
+    xfail_ledger_ok=true
+    log "XFAIL_LEDGER: PASS (PIPE-20/DG0 inventory-only)"
+  else
+    log "XFAIL_LEDGER: FAIL inventory-pin rc=$inv_rc (see $OUT_DIR/xfail-ledger.log)"
+  fi
 else
   log "XFAIL_LEDGER: FAIL rc=$xfail_rc (see $OUT_DIR/xfail-ledger.log)"
 fi
@@ -258,6 +286,7 @@ if [[ "$build_ok" == true ]]; then
   sys_rc=$?
   if [[ "$sys_rc" -eq 0 ]]; then
     HAYDN_BIN="$HAYDN_BIN" BUILD_DIR="$HAYDN_LIBC_BUILD" \
+      LLVM_SRC="$LLVM_SRC" HAYDN_LLVM_SRC="$LLVM_SRC" \
       bash "$INSTALL_SYSROOT" >>"$OUT_DIR/sysroot.log" 2>&1
     sys_rc=$?
   fi
@@ -265,11 +294,43 @@ if [[ "$build_ok" == true ]]; then
   if [[ "$sys_rc" -eq 0 ]]; then
     sysroot_ok=true
     log "SYSROOT: PASS"
+    set +e
+    python3 "$SCRIPT_DIR/record_haydn_artifact_set.py" --attach-owned \
+      --llvm-src "$LLVM_SRC" --haydn-bin "$HAYDN_BIN" \
+      >>"$OUT_DIR/sysroot.log" 2>&1
+    attach_rc=$?
+    set -e
+    if [[ "$attach_rc" -ne 0 ]]; then
+      sysroot_ok=false
+      log "SYSROOT: FAIL attach-owned rc=$attach_rc"
+    fi
   else
     log "SYSROOT: FAIL rc=$sys_rc (see $OUT_DIR/sysroot.log)"
   fi
 else
   log "SYSROOT: SKIP (ninja failed)"
+fi
+log ""
+
+# --- 5b) same-artifact seats + T-ABI9 matrix (no CoreMark / no full gate) ---
+log "======== ARTIFACT SEATS / ABI MATRIX ========"
+if [[ "$sysroot_ok" == true ]]; then
+  set +e
+  python3 "$SEATS" --require-sysroot --require-consumer-install \
+    --llvm-src "$LLVM_SRC" --haydn-bin "$HAYDN_BIN" \
+    >"$OUT_DIR/artifact-seats.log" 2>&1
+  seats_rc=$?
+  bash "$ABI_MATRIX" "$OUT_DIR/abi-matrix" >"$OUT_DIR/abi-matrix.log" 2>&1
+  abi_rc=$?
+  set -e
+  if [[ "$seats_rc" -ne 0 || "$abi_rc" -ne 0 ]]; then
+    sysroot_ok=false
+    log "ARTIFACT_SEATS: rc=$seats_rc ABI_MATRIX: rc=$abi_rc (identity unbound / matrix red)"
+  else
+    log "ARTIFACT_SEATS: PASS ABI_MATRIX: PASS"
+  fi
+else
+  log "ARTIFACT_SEATS: SKIP (sysroot failed)"
 fi
 log ""
 

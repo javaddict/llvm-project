@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
+from pathlib import Path
 from typing import Optional, Tuple
 
 
@@ -43,6 +45,50 @@ _RE_UNSUPPORTED = re.compile(
 _RE_PASSED = re.compile(
     r"(?m)^[ \t]*Passed[ \t]*:[ \t]*(\d+)\b"
 )
+# Full-gate / ARTIFACT identity. Historical 28700d57 is not an ancestor.
+_RE_GIT_COMMIT = re.compile(
+    r"""(?m)["']?git_commit["']?\s*[:=]\s*["']?([0-9a-fA-F]{7,40})"""
+)
+STALE_FULL_GATE_COMMIT = "28700d57"
+
+
+def parse_git_commit(text: str) -> Optional[str]:
+    """Return the first git_commit hex from a gate manifest / ARTIFACT log."""
+    m = _RE_GIT_COMMIT.search(text)
+    return m.group(1) if m else None
+
+
+def is_stale_full_gate_commit(commit: Optional[str]) -> bool:
+    """True when the commit is the 08-17 manifest that is not an ancestor."""
+    if not commit:
+        return False
+    return commit.lower().startswith(STALE_FULL_GATE_COMMIT)
+
+
+def git_commit_is_repo_resident(repo: Path, commit: Optional[str]) -> bool:
+    """True when commit exists and is an ancestor of HEAD (not 28700d57)."""
+    if not commit or is_stale_full_gate_commit(commit):
+        return False
+    try:
+        inside = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "--is-inside-work-tree"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        if inside != "true":
+            return False
+        subprocess.check_output(
+            ["git", "-C", str(repo), "cat-file", "-t", commit],
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.check_call(
+            ["git", "-C", str(repo), "merge-base", "--is-ancestor", commit, "HEAD"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return True
 
 
 def parse_lit_summary(text: str) -> Tuple[int, int, Optional[int], Optional[int], Optional[int]]:
@@ -122,6 +168,41 @@ note: earlier Failed attempt was fixed
     assert f == 0 and x == 0 and p == 3, (f, x, xf, u, p)
     assert ok(f, x)
 
+    # Coverage-pin style log: only Passed, no Failed line.
+    coverage = """
+-- Testing: 4 tests, 1 workers --
+Testing Time: 0.40s
+Total Discovered Tests: 4
+  Passed           :   4
+"""
+    f, x, xf, u, p = parse_lit_summary(coverage)
+    assert f == 0 and x == 0 and p == 4, (f, x, xf, u, p)
+    assert ok(f, x)
+
+    # Full-gate manifest rebound: 28700d57 is not an ancestor.
+    stale_manifest = """
+{
+  "status": "PASS",
+  "git_commit": "28700d57366a35a7d04e8adfbdf782743ec847e0",
+  "haydn_lit_ok": "n/a"
+}
+  Passed           :   3
+"""
+    f, x, xf, u, p = parse_lit_summary(stale_manifest)
+    assert f == 0 and x == 0 and p == 3, (f, x, xf, u, p)
+    stale = parse_git_commit(stale_manifest)
+    assert stale and stale.startswith(STALE_FULL_GATE_COMMIT), stale
+    assert is_stale_full_gate_commit(stale)
+    rebound = parse_git_commit('llvm_src.git_commit=38bd4059fbb4e489425becc4ded431235ae2c1ff')
+    assert rebound and rebound.startswith("38bd4059"), rebound
+    assert not is_stale_full_gate_commit(rebound)
+    live_repo = Path("/ssd/mhyang/llvm/llvm-head")
+    if (live_repo / ".git").exists() or git_commit_is_repo_resident(
+        live_repo, rebound
+    ):
+        assert git_commit_is_repo_resident(live_repo, rebound)
+        assert not git_commit_is_repo_resident(live_repo, stale)
+
     print("parse_lit_summary self-test OK")
     return 0
 
@@ -145,6 +226,22 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="emit one JSON object on stdout",
     )
+    ap.add_argument(
+        "--refuse-stale-commit",
+        action="store_true",
+        help="exit 1 when the log/manifest git_commit is 28700d57 (not an ancestor)",
+    )
+    ap.add_argument(
+        "--require-ancestor",
+        action="store_true",
+        help="exit 1 when git_commit is missing from --llvm-src or is not an ancestor of HEAD",
+    )
+    ap.add_argument(
+        "--llvm-src",
+        type=Path,
+        default=None,
+        help="monorepo used by --require-ancestor (default: /ssd/mhyang/llvm/llvm-head)",
+    )
     args = ap.parse_args(argv)
 
     if args.self_test:
@@ -165,7 +262,17 @@ def main(argv: list[str]) -> int:
         print(f"parse_lit_summary: {exc}", file=sys.stderr)
         return 2
 
+    git_commit = parse_git_commit(text)
+    stale = is_stale_full_gate_commit(git_commit)
+    repo = args.llvm_src or Path("/ssd/mhyang/llvm/llvm-head")
+    resident = (
+        git_commit_is_repo_resident(repo, git_commit) if git_commit else False
+    )
     lit_ok = ok(failed, xpass)
+    if args.refuse_stale_commit and stale:
+        lit_ok = False
+    if args.require_ancestor and git_commit and not resident:
+        lit_ok = False
     if args.json:
         import json
 
@@ -177,6 +284,9 @@ def main(argv: list[str]) -> int:
                     "xfail": xfail,
                     "unsupported": unsup,
                     "passed": passed,
+                    "git_commit": git_commit,
+                    "stale_full_gate_commit": stale,
+                    "repo_resident": resident,
                     "ok": lit_ok,
                 },
                 sort_keys=True,
@@ -190,9 +300,24 @@ def main(argv: list[str]) -> int:
             parts.append(f"Unsupported={unsup}")
         if passed is not None:
             parts.append(f"Passed={passed}")
+        if git_commit:
+            parts.append(f"git_commit={git_commit}")
+            parts.append(f"stale={str(stale).lower()}")
+            parts.append(f"resident={str(resident).lower()}")
         parts.append(f"ok={'true' if lit_ok else 'false'}")
         print(" ".join(parts))
 
+    if args.refuse_stale_commit and stale:
+        print(
+            "parse_lit_summary: refuse 28700d57 (not an ancestor); rebound to an in-repo commit",
+            file=sys.stderr,
+        )
+    if args.require_ancestor and git_commit and not resident:
+        print(
+            f"parse_lit_summary: refuse {git_commit} (not repo-resident); "
+            "rebind to an in-repo ancestor",
+            file=sys.stderr,
+        )
     return 0 if lit_ok else 1
 
 
