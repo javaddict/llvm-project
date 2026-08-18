@@ -13,13 +13,18 @@
 
 #include "HaydnBundleVerify.h"
 #include "Haydn.h"
+#include "HaydnBundlePortBudget.h"
+// HaydnBundleFormatSolver.h is included ONLY for haydnOpcodeName (the pure
+// generated MC name-table accessor). The independent verifier never calls
+// the forward planner (Bundle canAdd / hasValidFormat / exactTryAddProduct /
+// PacketFormats planner) — independence per the topics/encoding P7 row.
+#include "HaydnBundleFormatSolver.h"
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/MC/MCInst.h"
 #include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
@@ -95,22 +100,91 @@ bool bundleHasPadNop(const MachineInstr &BundleRoot) {
   return false;
 }
 
+/// Inverse + unit injectivity for one opcode at a known encode-dag entry.
+/// Private members use MemberId entry (child order may not match after
+/// residual rebind). Logicals use EntryIdx (membership / parse position).
+static std::optional<std::string>
+verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
+                           uint8_t EntryIdx, unsigned RowEntries,
+                           uint32_t &SeenUnits, uint32_t &SeenEntryBits) {
+  if (const format_e::FormatEMemberRec *Priv = lookupPrivateFormatEMember(Opc)) {
+    // Private members carry entry in the MemberId. Cutover may rebind a
+    // store onto e0 while leaving it as a later child, so membership
+    // index is not the encode-dag entry here. Parse-time uses the
+    // positional EntryIdx path below for logicals / encode-dag holes.
+    if (Priv->Mode != ExpectMode)
+      return std::string(
+          Priv->Mode == 0
+              ? "structural inverse: E2 member under E96ThreeEntry row"
+              : "structural inverse: E3 member under E96TwoEntry row");
+    if (static_cast<unsigned>(Priv->EntryIdx) >= RowEntries)
+      return std::string(
+          "structural inverse: entry index exceeds stamped row capacity");
+    if (SeenEntryBits & (1u << Priv->EntryIdx))
+      return std::string(
+          "structural inverse: duplicate entry index among members");
+    if (!format_e::inverseCoversMember(*Priv))
+      return std::string(
+          "structural inverse: FormatEInverse misses exact MemberId for "
+          "private member");
+    if (Priv->Unit < 32) {
+      if (SeenUnits & (1u << Priv->Unit))
+        return std::string(
+            "structural inverse: chosen Format E members are not "
+            "unit-injective");
+      SeenUnits |= 1u << Priv->Unit;
+    }
+    SeenEntryBits |= 1u << Priv->EntryIdx;
+    return std::nullopt;
+  }
+
+  const std::string Log =
+      format_e::peelLogicalOpcodeName(haydnOpcodeName(Opc));
+  const format_e::FormatEMemberRec *Exact = format_e::findFormatEMember(
+      Log, ExpectMode, EntryIdx, SeenUnits);
+  if (!Exact)
+    return std::string(
+               "structural inverse: committed logical has no generated "
+               "member at its stamped entry (unknown or misplaced): ") +
+           Log + " @mode" + std::to_string(ExpectMode) + " entry " +
+           std::to_string(EntryIdx);
+  if (Exact->EntryIdx != EntryIdx)
+    return std::string(
+        "structural inverse: member entry mismatch vs membership order");
+  if (Exact->Unit < 32) {
+    if (SeenUnits & (1u << Exact->Unit))
+      return std::string(
+          "structural inverse: chosen Format E members are not "
+          "unit-injective");
+    SeenUnits |= 1u << Exact->Unit;
+  }
+  SeenEntryBits |= 1u << EntryIdx;
+  return std::nullopt;
+}
+
 /// Pure fail-closed check for one committed cycle by row + members.
 ///
-/// Independent structural inverse (product geometry):
+/// INDEPENDENT INVERSE ONLY (topics/encoding P7 row; hard constraints #7/#8):
+/// this function NEVER consults the forward solver — no Haydn::Bundle
+/// canAdd/add, no hasValidFormat, no PacketFormats planner, no DFS, no
+/// permutation search. The committed state is decoded and checked against
+/// the separately generated Format E member/inverse tables:
+///
 ///   * known product BundleFormatRowID
 ///   * memberCount <= ISSUE_SLOT_COUNT and stamped row entry capacity
-///   * registry product EncodedBytes agree with product parcel
-///   * typed private members: exact MemberId inverse + unit injectivity
-///   * fixed-slot member kinds match the stamped row mode (E2 vs E3) and
-///     do not collide on the same single-slot identity
-///   * OutPlan rebuilt from makeProductPlan only (no PacketFormats planner)
-///
-/// Residual encode-oracle (transitional PacketFormats canAdd):
-///   * used only when at least one member is still a bare multi-slot logical
-///     or unknown (not private MemberId and not residual fixed-slot)
-///   * Haydn::Bundle canAdd/add is not product geometry authority; skipped for
-///     all-private cycles and residual fixed-slot cycles
+///   * registry product EncodedBytes agree with the product parcel
+///   * private member opcodes: exact MemberId inverse, Mode equal to the
+///     stamped row mode, entry index inside row capacity, entry- and
+///     unit-injective
+///   * bare logical opcodes: peel to a golden catalog logical that has an
+///     exact generated member at the child's MEMBERSHIP ENTRY under the
+///     stamped mode with a unit unused by earlier members (Finalize
+///     leading-order law — committed child order IS the entry order; verify
+///     checks it, it never re-plans it)
+///   * anything else (unknown logical, no member at the stamped entry)
+///     fails closed — the verifier must never ask the forward solver which
+///     format fits
+///   * OutPlan rebuilt from makeProductPlan only (registry identity)
 ///
 /// \returns nullopt on success; human-readable reason on failure.
 std::optional<std::string>
@@ -122,9 +196,11 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
 
-  // Format E unit injectivity (units ≠ encoded entry identity). Residual
-  // FieldSlots can look like a legal 3-entry E3 pack while two stores both
-  // require LOADSTORE0 e0. Refuse here so MC never sees the illegal BUNDLE.
+  // Format E unit injectivity pre-check (units ≠ encoded entry identity):
+  // pure generated-records derivation (logicalsHaveUnitCoverForMode), NOT a
+  // forward-solver call. Residual FieldSlots can look like a legal 3-entry
+  // E3 pack while two stores both require LOADSTORE0 e0. Refuse here so MC
+  // never sees the illegal BUNDLE.
   if (!opcodesHaveFormatEUnitCover(MemberOpcodes))
     return std::string(
         "structural inverse: Format E unit injectivity failed "
@@ -133,8 +209,7 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   // One-to-one serialize: stamped row must have enough entries for every
   // real member. E96TwoEntry with 3 reals used to pass verify and then drop
   // a child at AsmPrinter (NumEntries from row imm only).
-  const unsigned RowEntries =
-      (Row == BundleFormatRowID::E96ThreeEntry) ? 3u : 2u;
+  const unsigned RowEntries = bundleRowEntryCount(Row);
   if (MemberOpcodes.size() > RowEntries)
     return std::string(
         "BUNDLE membership exceeds stamped row entry count (E2 holds 2; "
@@ -155,7 +230,8 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   if (MemberOpcodes.empty()) {
     BundlePlan Stall = makeProductPlan(/*Occupied=*/0, /*Members=*/{});
     Stall.Row = Row;
-    Stall.Completion = selectCompletionFor(Row, 0);
+    Stall.Completion = expectedGoldenRowCompletion(/*RealMembers=*/0,
+                                                   /*HasPadNop=*/false);
     Stall.Bytes = productParcelBytes();
     if (!Stall.isProductLegal())
       return std::string("empty cycle BundlePlan not product-legal");
@@ -164,8 +240,7 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     return std::nullopt;
   }
 
-  // Structural inverse from generated Format E surface + fixed single-slot
-  // member kinds (independent of residual PacketFormats planner).
+  // Independent inverse member matrix (no forward planner / DFS).
   static_assert(format_e::FormatEMemberCount > 0,
                 "structural inverse requires generated Format E members");
   static_assert(format_e::FormatESetDescLedgerCount > 0,
@@ -173,239 +248,49 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   (void)format_e::FormatEInverse[0];
   (void)format_e::FormatESetDescLedger[0];
 
-  const bool ExpectE3 = Row == BundleFormatRowID::E96ThreeEntry;
-  const uint8_t ExpectMode = ExpectE3 ? 1 : 0;
-  // RowEntries already computed above for membership capacity.
-  uint32_t SeenSlotBits = 0;
+  const uint8_t ExpectMode =
+      Row == BundleFormatRowID::E96ThreeEntry ? 1 : 0;
   uint32_t SeenEntryBits = 0;
-  uint32_t SeenPrivateUnits = 0;
-  unsigned FormatEEntryMembers = 0;
-  unsigned PrivateExactMembers = 0;
-  unsigned ResidualFixedSlotMembers = 0;
-  unsigned BareOrUnknownMembers = 0;
+  uint32_t SeenUnits = 0;
 
-  // Independent inverse member matrix (no forward planner / DFS):
-  //   * typed private members: exact MemberId inverse + concrete unit injectivity
-  //   * residual fixed-slot kinds are injective
-  //   * E2/E3 kinds match stamped row mode
-  //   * E2/E3 kinds map to injective entry indices within row capacity
-  //   * generated inverse table covers each occupied (Mode, Entry)
   for (unsigned I = 0, E = MemberOpcodes.size(); I != E; ++I) {
     const unsigned Opc = MemberOpcodes[I];
 
-    if (const format_e::FormatEMemberRec *Priv =
-            lookupPrivateFormatEMember(Opc)) {
-      if (Priv->Mode != ExpectMode)
+    // Representation-expand pseudos (B / RET / BR_JT / PseudoCALLIndirect)
+    // expand to a real Format E member at AsmPrinter emission. They are
+    // legal committed SOLO cycles only: the expansion target occupies an
+    // entry the committed members must not already hold. Co-issue with a
+    // representation expand is a corruption — fail closed.
+    if (isRepresentationExpandPseudo(Opc)) {
+      if (MemberOpcodes.size() != 1)
         return std::string(
-            Priv->Mode == 0
-                ? "structural inverse: E2 fixed-slot member under E96ThreeEntry row"
-                : "structural inverse: E3 fixed-slot member under E96TwoEntry row");
-      if (static_cast<unsigned>(Priv->EntryIdx) >= RowEntries)
-        return std::string(
-            "structural inverse: entry index exceeds stamped row capacity");
-      if (SeenEntryBits & (1u << Priv->EntryIdx))
-        return std::string(
-            "structural inverse: duplicate entry index among members");
-      SeenEntryBits |= (1u << Priv->EntryIdx);
-      ++FormatEEntryMembers;
-      ++PrivateExactMembers;
-      if (Priv->Unit < 32) {
-        if (SeenPrivateUnits & (1u << Priv->Unit))
-          return std::string(
-              "structural inverse: private-entry unit collides across members");
-        SeenPrivateUnits |= (1u << Priv->Unit);
-      }
-      if (!format_e::inverseCoversMember(*Priv))
-        return std::string(
-            "structural inverse: FormatEInverse misses exact MemberId for "
-            "private member");
-      MCSlotKind Kind = Fmts.getSlotKind(Opc);
-      if (Kind != MCSlotKind()) {
-        const unsigned KindVal = static_cast<unsigned>(Kind);
-        if (KindVal < 32u) {
-          if (SeenSlotBits & (1u << KindVal))
-            return std::string(
-                "structural inverse: duplicate fixed-slot kind among members");
-          SeenSlotBits |= (1u << KindVal);
-        }
-      }
+            "structural inverse: representation-expand pseudo must be a "
+            "solo committed cycle (printer expands one-to-one)");
       continue;
     }
 
-    MCSlotKind Kind = Fmts.getSlotKind(Opc);
-    if (Kind == MCSlotKind()) {
-      ++BareOrUnknownMembers; // multi-slot logical / unknown — residual oracle
-      continue;
-    }
-    const unsigned KindVal = static_cast<unsigned>(Kind);
-    if (KindVal < 32u) {
-      if (SeenSlotBits & (1u << KindVal))
-        return std::string(
-            "structural inverse: duplicate fixed-slot kind among members");
-      SeenSlotBits |= (1u << KindVal);
-    }
-    const bool IsE2Slot =
-        Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_0) ||
-        Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_1);
-    const bool IsE3Slot =
-        Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0) ||
-        Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1) ||
-        Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2);
-    if (IsE2Slot && ExpectE3)
-      return std::string(
-          "structural inverse: E2 fixed-slot member under E96ThreeEntry row");
-    if (IsE3Slot && !ExpectE3)
-      return std::string(
-          "structural inverse: E3 fixed-slot member under E96TwoEntry row");
-
-    int EntryIdx = -1;
-    if (Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_0) ||
-        Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0))
-      EntryIdx = 0;
-    else if (Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_1) ||
-             Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1))
-      EntryIdx = 1;
-    else if (Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2))
-      EntryIdx = 2;
-    if (EntryIdx < 0) {
-      // Residual S0/S1/S2 FieldSlot — issue-slot injectivity via SeenSlotBits.
-      // Format-E entry is membership position among reals (not the suffix).
-      // Require generated inverse cover for (Mode, Entry) without forward
-      // Haydn::Bundle planning.
-      if (static_cast<unsigned>(I) >= RowEntries)
-        return std::string(
-            "structural inverse: residual membership exceeds stamped row "
-            "entry capacity");
-      if (SeenEntryBits & (1u << I))
-        return std::string(
-            "structural inverse: duplicate residual entry index among "
-            "members");
-      SeenEntryBits |= (1u << I);
-      bool ResidualInverseCovers = false;
-      for (unsigned J = 0; J < format_e::FormatEMemberCount; ++J) {
-        const format_e::FormatEInverseRec &R = format_e::FormatEInverse[J];
-        if (R.Mode == ExpectMode && R.EntryIdx == static_cast<uint8_t>(I) &&
-            R.Logical && R.Logical[0] != '\0' &&
-            !StringRef(R.Logical).equals_insensitive("NOP")) {
-          ResidualInverseCovers = true;
-          break;
-        }
-      }
-      if (!ResidualInverseCovers)
-        return std::string(
-            "structural inverse: FormatEInverse has no non-NOP cover for "
-            "residual mode/entry");
-      ++ResidualFixedSlotMembers;
-      ++FormatEEntryMembers;
-      continue;
-    }
-
-    if (static_cast<unsigned>(EntryIdx) >= RowEntries)
-      return std::string(
-          "structural inverse: entry index exceeds stamped row capacity");
-    if (SeenEntryBits & (1u << EntryIdx))
-      return std::string(
-          "structural inverse: duplicate entry index among members");
-    SeenEntryBits |= (1u << EntryIdx);
-    ++FormatEEntryMembers;
-
-    // Generated inverse surface must admit this (Mode, Entry) placement.
-    bool InverseCovers = false;
-    for (unsigned J = 0; J < format_e::FormatEMemberCount; ++J) {
-      const format_e::FormatEInverseRec &R = format_e::FormatEInverse[J];
-      if (R.Mode == ExpectMode && R.EntryIdx == static_cast<uint8_t>(EntryIdx) &&
-          R.Logical && R.Logical[0] != '\0' &&
-          !StringRef(R.Logical).equals_insensitive("NOP")) {
-        InverseCovers = true;
-        break;
-      }
-    }
-    if (!InverseCovers)
-      return std::string(
-          "structural inverse: FormatEInverse has no non-NOP cover for "
-          "mode/entry");
-
-    // Private fixed-slot members: claim a unit when this entry admits only one
-    // unit identity in the generated member table. Multi-unit entries cannot
-    // pin unit without the concrete private opcode, so they skip this check.
-    uint32_t EntryUnitMask = 0;
-    unsigned DistinctUnits = 0;
-    for (unsigned J = 0; J < format_e::FormatEMemberCount; ++J) {
-      const format_e::FormatEMemberRec &M = format_e::FormatEMembers[J];
-      if (M.IsNop || M.Mode != ExpectMode ||
-          M.EntryIdx != static_cast<uint8_t>(EntryIdx) || M.Unit >= 32)
-        continue;
-      if (!(EntryUnitMask & (1u << M.Unit))) {
-        EntryUnitMask |= (1u << M.Unit);
-        ++DistinctUnits;
-      }
-    }
-    if (DistinctUnits == 1) {
-      if (SeenPrivateUnits & EntryUnitMask)
-        return std::string(
-            "structural inverse: private-entry unit collides across members");
-      SeenPrivateUnits |= EntryUnitMask;
-    }
-  }
-  (void)FormatEEntryMembers;
-  (void)SeenPrivateUnits;
-
-  // All-private and residual fixed-slot cycles: independent inverse already
-  // certified entry/unit or residual membership-position injectivity above.
-  // Skip the forward Haydn::Bundle encode-oracle. Bare multi-slot logicals
-  // still use canAdd (transitional residual only).
-  const bool AllPrivateExact =
-      !MemberOpcodes.empty() &&
-      PrivateExactMembers == MemberOpcodes.size();
-  const bool ResidualStructuralExact =
-      !MemberOpcodes.empty() && BareOrUnknownMembers == 0 &&
-      (PrivateExactMembers + ResidualFixedSlotMembers) == MemberOpcodes.size();
-  const bool SkipEncodeOracle = AllPrivateExact || ResidualStructuralExact;
-
-  SlotBits Occupied = 0;
-  if (!SkipEncodeOracle) {
-    SmallVector<MCInst, 3> Storage;
-    Storage.reserve(MemberOpcodes.size());
-    for (unsigned Opc : MemberOpcodes) {
-      Storage.emplace_back();
-      Storage.back().setOpcode(Opc);
-    }
-
-    Haydn::Bundle<MCInst> B(&Fmts);
-    for (unsigned I = 0, E = MemberOpcodes.size(); I != E; ++I) {
-      MCInst *MI = &Storage[I];
-      if (!B.canAdd(MI->getOpcode()))
-        return std::string("encode-oracle canAdd failed at member ") +
-               std::to_string(I) + " opcode=" +
-               std::to_string(MI->getOpcode());
-      B.add(MI);
-    }
-
-    if (!B.isStandalone()) {
-      if (!B.hasValidFormat())
-        return std::string(
-            "encode-oracle hasValidFormat failed (no covering packet format)");
-    }
-    Occupied = B.getOccupiedSlots();
-  } else {
-    // Private and residual fixed-slot cycles share entry-bit occupancy from
-    // the independent inverse matrix (no PacketFormats planner).
-    Occupied = static_cast<SlotBits>(SeenEntryBits);
+    // Shared inverse: membership index is the encode-dag entry (leading
+    // order; suffix digits never pin entries). Parse-time uses the same
+    // helper at the textual entry, including NOP holes.
+    if (auto MemErr = verifyMemberAtStampedEntry(
+            Opc, ExpectMode, static_cast<uint8_t>(I), RowEntries, SeenUnits,
+            SeenEntryBits))
+      return MemErr;
   }
 
-  // Structural inverse product plan: registry row/completion/bytes only.
+  // Structural inverse product plan: registry row/completion/bytes only
+  // (entry occupancy from the inverse matrix, never the PacketFormats
+  // planner).
+  SlotBits Occupied = static_cast<SlotBits>(SeenEntryBits);
   BundlePlan Plan = makeProductPlan(Occupied, MemberOpcodes);
   Plan.Row = Row;
-  Plan.Completion = selectCompletionFor(Row, MemberOpcodes.size());
+  Plan.Completion =
+      expectedGoldenRowCompletion(MemberOpcodes.size(), /*HasPadNop=*/false);
   Plan.Bytes = productParcelBytes();
   if (Plan.Bytes != *GenBytes)
     return std::string("rebuilt plan Bytes != product EncodedBytes");
   if (!Plan.isProductLegal())
     return std::string("rebuilt BundlePlan fails isProductLegal");
-
-  static_assert(format_e::FormatEMemberCount > 0,
-                "structural inverse requires generated Format E members");
-  (void)format_e::FormatEInverse[0];
 
   if (OutPlan)
     *OutPlan = Plan;
@@ -430,18 +315,44 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &
   if (Err)
     return Err;
 
-  // Completion imm, when present, must be a known ID and match row+member
-  // count exactly — no stub/product reselection at verify or MC. Missing
-  // completion remains allowed on residual row-only stamps (BUNDLE 0);
-  // multi-member hard-root verify requires it separately.
+  // Shared port-budget re-check (one mechanism with commit P4:
+  // canCoissueProductCycle / instrsFormOneLegalCycle). The named hook is
+  // haydnVerifyCommittedBundlePortBudget — same arithmetic as commit.
+  // Port demand is an operand fact, so
+  // this check lives on the MI overload — the opcode-only view cannot see
+  // it (same split as ResourceCycle MID-vs-MI port counting). Three GPR
+  // writes (3xADD32) need >= 2 cycles under 2W even when E3 unit geometry
+  // admits the entries.
+  if (const MachineBasicBlock *MBB = BundleRoot.getParent()) {
+    SmallVector<MachineInstr *, 3> Kids;
+    for (MachineBasicBlock::const_instr_iterator I =
+             std::next(BundleRoot.getIterator());
+         I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
+      if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
+        continue;
+      if (isPadNopOpcode(I->getOpcode()))
+        continue;
+      Kids.push_back(const_cast<MachineInstr *>(&*I));
+    }
+    if (haydnVerifyCommittedBundlePortBudget(Kids))
+      return std::string(
+          "structural inverse: cycle RF port demand exceeds one issue "
+          "cycle (shared haydnVerifyCommittedBundlePortBudget hook)");
+  }
+
+  // Completion, when present, is checked against golden product-row fill
+  // independently of the stamper helper: unused entry windows are
+  // architectural NOP (AllEntriesReal). Empty membership with no pad is
+  // residual idle stub. Missing completion stays allowed on row-only
+  // stamps; multi-member hard-root verify requires it separately.
   if (auto Comp = getBundleCompletionID(BundleRoot)) {
     if (!isStubCompletion(*Comp) && !isProductLegalCompletion(*Comp))
       return std::string("BUNDLE root has unknown CompletionStateID");
-    CompletionStateID Expected = selectCompletionForMembersAndPads(
-        *Row, Members.size(), bundleHasPadNop(BundleRoot));
+    const CompletionStateID Expected = expectedGoldenRowCompletion(
+        static_cast<unsigned>(Members.size()), bundleHasPadNop(BundleRoot));
     if (*Comp != Expected)
       return std::string(
-          "BUNDLE root CompletionStateID does not match row and member count");
+          "BUNDLE root CompletionStateID does not match golden row fill");
     if (OutPlan)
       OutPlan->Completion = *Comp;
   }
@@ -481,8 +392,7 @@ verifyExactHardRootCommit(const MachineInstr &BundleRoot,
   // when Format E unit cover needs three-entry geometry (e.g. two ADD32).
   auto Row = getBundleRowID(BundleRoot);
   assert(Row.has_value() && "verifyCommittedBundle requires a product row");
-  const unsigned RowEntries =
-      (*Row == BundleFormatRowID::E96ThreeEntry) ? 3u : 2u;
+  const unsigned RowEntries = bundleRowEntryCount(*Row);
   if (Members.size() > RowEntries)
     return std::string(
         "hard-root verify: BundleFormatRowID entry capacity below membership");

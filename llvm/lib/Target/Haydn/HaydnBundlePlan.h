@@ -9,7 +9,7 @@
 // Format E product cycle plan (sole active product):
 //
 //   * BundleFormatRowID — durable product layout identity
-//       (E96TwoEntry / E96ThreeEntry from the P01 registry)
+//       (E96TwoEntry / E96ThreeEntry from the format registry)
 //   * CompletionStateID — exact omitted-entry / idle completion identity
 //   * EncodedBytes / EncodedBits / CycleCount — typed quantities
 //   * BundlePlan — one architectural cycle's committed placement summary
@@ -92,9 +92,17 @@ using BundleFormatRowID = format::BundleFormatRowID;
 using BundleFormatID = format::BundleFormatID;
 
 /// Exact completion state for omitted entries / idle parcels.
-/// Stub IDs mirror golden completion_table_stubs (product_use forbidden until
-/// idle/underfill/pad closes). AllEntriesReal is the only product-legal full
-/// fill when every encoded entry holds a real member.
+/// Stub IDs stay fail-closed: idle-parcel bytes are not invented here.
+/// AllEntriesReal is the only product-legal full fill when every encoded
+/// entry holds a real member (architectural NOP in an unused window is
+/// ordinary full-slot fill, not an idle-parcel invent).
+///
+/// Idle-parcel provenance: golden POS_IDLE_CANONICAL is OPEN_BLOCKED
+/// (no invent). Flip only with an admitted golden idle row.
+inline constexpr bool haydnPosIdleCanonicalAdmitted() { return false; }
+static_assert(!haydnPosIdleCanonicalAdmitted(),
+              "POS_IDLE_CANONICAL stays golden-blocked");
+
 enum class CompletionStateID : unsigned {
   AllEntriesReal = 0,
   StubIdle = 1,
@@ -205,29 +213,27 @@ inline bool isProductBundleRow(BundleFormatRowID Row) {
 
 /// Representative product VLIWFormat row from PacketFormats (Format E).
 /// Empty-cover first-match (table order is E2 then E3). EncodedBytes authority
-/// is always the registry, not VLIWFormat::Size. Callers that need a selected
-/// product row after a transitional occupancy miss must use
-/// productVLIWFormatForRow — never treat this empty-cover pointer as a
-/// PacketFormats miss fallback for arbitrary OccupiedSlots.
+/// is always the registry, not VLIWFormat::Size. This pointer is table
+/// presence only — never a format for transitional occupancy. Callers that
+/// need a selected product row must use productVLIWFormatForRow.
 inline const VLIWFormat *productVLIWFormat(const PacketFormats &Packets) {
   return Packets.getFormat(/*Occupied=*/0);
 }
 
 /// Exact product composite for \p Row via full entry-slot cover.
 /// Generated FormatSlotData: E2 kinds bits 0|1 = 0x3; E3 kinds bits 2|3|4 =
-/// 0x1c. Full cover selects the matching BUNDLE_E96_* row uniquely — not the
-/// empty-cover representative.
+/// 0x1c. Full cover selects the matching BUNDLE_E96_* row uniquely.
+/// AIE peer AIEBundle.h:150-156 returns only PacketFormats cover. Miss is
+/// nullptr — no empty-cover first-match and no E2↔E3 cross-row fallback.
 inline const VLIWFormat *productVLIWFormatForRow(const PacketFormats &Packets,
                                                 BundleFormatRowID Row) {
   constexpr SlotBits E2Full = SlotBits(0x3);
   constexpr SlotBits E3Full = SlotBits(0x1c);
-  if (Row == BundleFormatRowID::E96ThreeEntry) {
-    if (const VLIWFormat *F = Packets.getFormat(E3Full))
-      return F;
-  }
-  if (const VLIWFormat *F = Packets.getFormat(E2Full))
-    return F;
-  return Packets.getFormat(/*Occupied=*/0);
+  if (Row == BundleFormatRowID::E96ThreeEntry)
+    return Packets.getFormat(E3Full);
+  if (Row == BundleFormatRowID::E96TwoEntry)
+    return Packets.getFormat(E2Full);
+  return nullptr;
 }
 
 /// True when \p Occupied is admissible under product Format E packing.
@@ -374,6 +380,17 @@ selectCompletionForMembersAndPads(BundleFormatRowID Row, unsigned RealMembers,
   if (RealMembers == 0 && HasPadNop)
     return CompletionStateID::AllEntriesReal;
   return selectCompletionFor(Row, RealMembers);
+}
+
+/// Inverse/product-emission expected completion from golden-row fill.
+/// Unused windows are architectural NOP (AllEntriesReal). Empty membership
+/// with no pad is residual idle stub. Independent of the stamper helper:
+/// derived from row semantics (real members or pad-only idle), not a
+/// re-run of selectCompletionForMembersAndPads.
+inline constexpr CompletionStateID
+expectedGoldenRowCompletion(unsigned RealMembers, bool HasPadNop) {
+  return (RealMembers != 0 || HasPadNop) ? CompletionStateID::AllEntriesReal
+                                         : CompletionStateID::StubIdle;
 }
 
 //===----------------------------------------------------------------------===//

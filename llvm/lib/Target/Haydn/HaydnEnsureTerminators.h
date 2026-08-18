@@ -36,7 +36,7 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 
   MachineFunctionProperties getRequiredProperties() const override {
-    // Runs post-RA / post-PEI; no vregs required, but tolerate either.
+    // addPostRegAlloc (post-RA, pre-PEI) so invented RET can take epilogue.
     return MachineFunctionProperties();
   }
 

@@ -6,26 +6,36 @@
 # without PacketFormats planner / fabricated plan fallbacks. Row + members
 # certificate EncodedBytes from generated inverse records; BundlePlan rebuild
 # uses makeProductPlan registry identity only (no forward planner).
+#
+# REGRESSION TEST (P7 independence): the verifier must never consult the
+# forward solver. Two ALU32 logicals are golden E3-only in a pair (each is
+# e0-only under E2), so a two-ALU32 cycle commits as the E3 restamp
+# Finalize produces (ADD32_E3_E0_ALU2 + XOR32_E3_E1_ALU1) — exactly the
+# shape hard_root_two_member_alu in vf5-late-mc-hard-root-object-identity
+# pins. The OLD verifier accepted an E2 row over {ADD32, XOR32} by asking
+# the forward canAdd oracle (residual FieldSlots covered S0|S1) — the
+# oracle validating its own defect. Hand E2 {ADD32,XOR32} now fails
+# closed; that seat lives in this file as inverse_e2_two_alu_rejects.
 
 --- |
-  define void @inverse_e2_two_real() { ret void }
+  define void @inverse_e3_two_real() { ret void }
   define void @inverse_e3_three_real() { ret void }
   define void @inverse_e2_private_members() { ret void }
   define void @inverse_e2_private_exact() { ret void }
-  define void @inverse_e2_residual_slots() { ret void }
 ...
 ---
-name:            inverse_e2_two_real
+name:            inverse_e3_two_real
 tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
     liveins: $r0, $r1, $r2, $r3, $r15
-    ; CHECK-LABEL: name: inverse_e2_two_real
-    ; CHECK: BUNDLE 0, 0
+    ; Two logical ALU32s commit as the E3 restamp (both e0-only under E2).
+    ; CHECK-LABEL: name: inverse_e3_two_real
+    ; CHECK: BUNDLE 1, 0
     ; CHECK: ADD32
     ; CHECK: XOR32
-    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+    BUNDLE 1, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
       $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
       $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
     }
@@ -38,16 +48,22 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
-    liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
+    liveins: $r0, $r1, $r2, $r3, $r4, $r15
+    ; Port-legal three-real E3 cycle: LD32@e0/LOADSTORE0 + LD64@e1/LOAD1 +
+    ; ADD32@e2/ALU0. GPR traffic = 4 reads (r0..r3) + 2 writes (LD32's r5,
+    ; ADD32's r6; LD64 writes DR64, not GPR). Three GPR-writing members
+    ; (ADD32+XOR32+OR32) exceed the golden GPR 2W budget even though E3
+    ; entry/unit geometry admits them — that over-budget seat is pinned in
+    ; p7-inverse-independence-corruption.mir (PORT-BUDGET).
     ; CHECK-LABEL: name: inverse_e3_three_real
     ; CHECK: BUNDLE 1, 0
+    ; CHECK: LD32
+    ; CHECK: LD64
     ; CHECK: ADD32
-    ; CHECK: XOR32
-    ; CHECK: OR32
-    BUNDLE 1, 0, implicit-def $r6, implicit-def $r7, implicit-def $r8, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5 {
-      $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r7 = XOR32 $r2, $r3, implicit-def dead $sfr
-      $r8 = OR32 $r4, $r5, implicit-def dead $sfr
+    BUNDLE 1, 0, implicit-def $r5, implicit-def $d0, implicit-def $r6, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4 {
+      $r5 = LD32 $r0, 0, implicit-def dead $sfr
+      $d0 = LD64 $r1, 0, implicit-def dead $sfr
+      $r6 = ADD32 $r2, $r3, implicit-def dead $sfr
     }
     RET implicit $r15
 
@@ -84,24 +100,5 @@ body:             |
     BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
       $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
-    }
-    RET implicit $r15
-
-...
----
-name:            inverse_e2_residual_slots
-tracksRegLiveness: true
-noVRegs:         true
-body:             |
-  bb.0:
-    liveins: $r0, $r1, $r2, $r3, $r15
-    ; Two logical ALU32s — E2 e0-only, so inverse accepts E3 restamp.
-    ; CHECK-LABEL: name: inverse_e2_residual_slots
-    ; CHECK: BUNDLE {{[01]}}, 0
-    ; CHECK: ADD32
-    ; CHECK: XOR32
-    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
     }
     RET implicit $r15

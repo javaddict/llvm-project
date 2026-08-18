@@ -45,7 +45,13 @@
 //     Residual SET_HWLOOP (peel-identity) stays for the verifier ban. Reloc CSRW_W
 //     stays FieldSlot (no typed CSR fixup). Pad NOP/NOP_S0 is
 //     CompletionState, not membership — skip without consuming an entry and
-//     erase co-issued pads after a successful rewrite. Product print is the
+//     erase co-issued pads after a successful rewrite. Pad-NOP census law
+//     (W28/CR-B3, encoding F11): every completion/count decision below is
+//     derived from the SAME shared census the verifier replays
+//     (haydn::bundle::collectBundleMemberOpcodes / bundleHasPadNop /
+//     selectCompletionForMembersAndPads) — no second counting walk, so a
+//     hand `BUNDLE { NOP }` or previously finalized root always verifies
+//     under the rule this stamper applied. Product print is the
 //     golden mnemonic (`jal`/`jalr`/`addi32`/`set_hwloop_f2`/`s_lw_post_imm`/
 //     `csrw`), matching objdump.
 //
@@ -71,6 +77,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -99,8 +107,10 @@ namespace {
 bool isBundleCandidate(MachineBasicBlock::instr_iterator MII) {
   MachineInstr *MI = &*MII;
   // Meta / debug / CFI / lifetime / KILL / ImplicitDef — not encode cycles.
-  // Already-bundled MIs (BUNDLE roots with BundledSucc, or children).
-  if (MI->isMetaInstruction() || MII->isBundled())
+  // Already-bundled MIs (BUNDLE roots, or children). A BUNDLE header without
+  // BundledSucc (hand MIR) is still a committed root — do not wrap it as a
+  // late singleton (that would stamp a missing-row E2 default).
+  if (MI->isMetaInstruction() || MI->isBundle() || MII->isBundled())
     return false;
   // Inline asm is a TargetOpcode pseudo lowered by AsmPrinter::emitInlineAsm
   // on the top-level MI. Wrapping it as a BUNDLE child drops the APP block
@@ -109,9 +119,6 @@ bool isBundleCandidate(MachineBasicBlock::instr_iterator MII) {
     return false;
   return true;
 }
-
-bool isWideResidualName(StringRef Name);
-bool isWideCutoverLogical(StringRef Log);
 
 /// Keep-list from FieldSlot explicit operands onto generated member Desc.
 /// Closed drop rules (no bag-sort by register class):
@@ -123,7 +130,8 @@ bool isWideCutoverLogical(StringRef Log);
 ///  * skip first ins when NumDefs match and trailing drop fails
 ///    (LUI vestigial $rs between dest and imm)
 /// LUI/ZERO_GPR cutover requires generated dest as SSA out (catalog role
-/// `reg`). Skip-Finalize / hand-asm FieldSlot still bag-sorts.
+/// `reg`). Skip-Finalize / hand-asm FieldSlot uses the same keep-map;
+/// class-bag rebuild is not a fill path.
 std::optional<SmallVector<unsigned, 4>>
 fieldSlotKeepOperands(const MachineInstr &MI, const MCInstrDesc &NewDesc) {
   const MCInstrDesc &OldDesc = MI.getDesc();
@@ -165,103 +173,12 @@ fieldSlotKeepOperands(const MachineInstr &MI, const MCInstrDesc &NewDesc) {
     return true;
   };
 
-  if (OldN == NewN && OldDesc.getNumDefs() == NewDesc.getNumDefs()) {
-    SmallVector<unsigned, 4> Keep;
-    for (unsigned I = 0; I != NewN; ++I) {
-      if (!kindOk(I, I))
-        return std::nullopt;
-      Keep.push_back(I);
-    }
-    if (!tiesOk(Keep))
-      return std::nullopt;
-    return Keep;
-  }
-
-  // Drop ins that are TIED_TO a def (MAC/MOVT seed-copy accumulators).
-  // Remaining explicit operands must match the member. Do this before
-  // trailing-use drop so dual-dest MAC (rtd1,rtd2,rta1,rta2,rsd1,rsd2)
-  // keeps sources, not the tied acc pair.
-  if (OldDesc.getNumDefs() == NewDesc.getNumDefs() && OldN > NewN) {
-    SmallVector<unsigned, 4> Keep;
-    bool DroppedTied = false;
-    for (unsigned I = 0; I != OldN; ++I) {
-      const int Tie = OldDesc.getOperandConstraint(I, MCOI::TIED_TO);
-      if (Tie >= 0 && static_cast<unsigned>(Tie) < OldDesc.getNumDefs()) {
-        DroppedTied = true;
-        continue;
-      }
-      Keep.push_back(I);
-    }
-    if (DroppedTied && Keep.size() == NewN) {
-      bool Ok = true;
-      for (unsigned NewI = 0; Ok && NewI != NewN; ++NewI)
-        Ok = kindOk(Keep[NewI], NewI);
-      if (Ok && tiesOk(Keep))
-        return Keep;
-    }
-  }
-
-  // Trailing extra uses: prefix matches member; extras are not defs
-  // (MOVE32/ABS32 vestigial rs2). Skip when any ins is tied to a def —
-  // that is the seed-copy case above.
-  if (OldDesc.getNumDefs() == NewDesc.getNumDefs() && OldN > NewN) {
-    bool AnyTiedUse = false;
-    for (unsigned I = OldDesc.getNumDefs(); I != OldN; ++I) {
-      const int Tie = OldDesc.getOperandConstraint(I, MCOI::TIED_TO);
-      if (Tie >= 0 && static_cast<unsigned>(Tie) < OldDesc.getNumDefs()) {
-        AnyTiedUse = true;
-        break;
-      }
-    }
-    if (!AnyTiedUse) {
-      SmallVector<unsigned, 4> Keep;
-      bool PrefixOk = true;
-      for (unsigned I = 0; I != NewN; ++I) {
-        if (!kindOk(I, I)) {
-          PrefixOk = false;
-          break;
-        }
-        Keep.push_back(I);
-      }
-      bool TrailingUses = true;
-      for (unsigned I = NewN; I != OldN; ++I) {
-        if (I < OldDesc.getNumDefs()) {
-          TrailingUses = false;
-          break;
-        }
-      }
-      if (PrefixOk && TrailingUses && tiesOk(Keep))
-        return Keep;
-    }
-  }
-
-  // Vestigial first ins (LUI $rs): NumDefs match, one extra use that is
-  // not trailing (dest, rs, imm) → (dest, imm). Only after trailing-drop
-  // fails so MOVE32 (dest, rs, rs2) keeps the prefix, not rs2.
-  if (OldDesc.getNumDefs() == NewDesc.getNumDefs() && OldN == NewN + 1) {
-    const unsigned Defs = OldDesc.getNumDefs();
-    if (Defs >= 1 && Defs < NewN) {
-      SmallVector<unsigned, 4> Keep;
-      bool Ok = true;
-      for (unsigned I = 0; Ok && I != Defs; ++I) {
-        Ok = kindOk(I, I);
-        Keep.push_back(I);
-      }
-      for (unsigned NewI = Defs; Ok && NewI != NewN; ++NewI) {
-        const unsigned OldI = NewI + 1;
-        if (OldI >= OldN) {
-          Ok = false;
-          break;
-        }
-        Ok = kindOk(OldI, NewI);
-        Keep.push_back(OldI);
-      }
-      if (Ok && Keep.size() == NewN && tiesOk(Keep))
-        return Keep;
-    }
-  }
-
-  return std::nullopt;
+  auto Keep = haydnFormatEKeepOperands(OldDesc, NewDesc, kindOk);
+  if (!Keep)
+    return std::nullopt;
+  if (!tiesOk(*Keep))
+    return std::nullopt;
+  return Keep;
 }
 
 } // namespace
@@ -275,34 +192,55 @@ bool llvm::memberDescCompatible(const MachineInstr &MI, unsigned MemberOpc,
   return fieldSlotKeepOperands(MI, NewDesc).has_value();
 }
 
-/// setDesc to \p MemberOpc and drop FieldSlot operands the member does not
-/// keep. Caller already proved memberDescCompatible.
+/// setDesc to \p MemberOpc and rewrite explicit operands to the member
+/// Desc order from the keep map. Drop-only is not enough: CSRW catalog
+/// (uimm8, rs) vs a member that lists (rs, uimm8) must swap, not leave
+/// an imm in a register slot.
 void llvm::rewriteFieldSlotToMember(MachineInstr &MI, unsigned MemberOpc,
                                     const TargetInstrInfo &TII) {
   const MCInstrDesc &OldDesc = MI.getDesc();
   const MCInstrDesc &NewDesc = TII.get(MemberOpc);
   auto Keep = fieldSlotKeepOperands(MI, NewDesc);
   assert(Keep && "rewriteFieldSlotToMember requires memberDescCompatible");
+  MachineFunction *MF = MI.getMF();
+  assert(MF && "rewriteFieldSlotToMember requires a parent function");
+
+  const unsigned OldN = OldDesc.getNumOperands();
+  const unsigned NewN = NewDesc.getNumOperands();
+  assert(Keep->size() == NewN && "keep map must cover every member operand");
+
+  SmallVector<MachineOperand, 4> Kept;
+  Kept.reserve(NewN);
+  for (unsigned NewI = 0; NewI != NewN; ++NewI)
+    Kept.push_back(MI.getOperand((*Keep)[NewI]));
+
+  SmallVector<MachineOperand, 4> ImplicitTail;
+  for (unsigned I = MI.getNumOperands(); I > OldN; --I)
+    ImplicitTail.push_back(MI.getOperand(I - 1));
+
   SmallVector<unsigned, 4> DropTies;
-  for (unsigned NewI = 0, NewE = NewDesc.getNumOperands(); NewI != NewE;
-       ++NewI) {
+  for (unsigned NewI = 0; NewI != NewN; ++NewI) {
     const unsigned OldI = (*Keep)[NewI];
     if (OldDesc.getOperandConstraint(OldI, MCOI::TIED_TO) != -1 &&
         NewDesc.getOperandConstraint(NewI, MCOI::TIED_TO) == -1)
       DropTies.push_back(NewI);
   }
-  const unsigned OldN = OldDesc.getNumOperands();
-  for (unsigned I = OldN; I > 0; --I) {
-    const unsigned OpI = I - 1;
-    if (!is_contained(*Keep, OpI))
-      MI.removeOperand(OpI);
-  }
+
+  while (MI.getNumOperands())
+    MI.removeOperand(MI.getNumOperands() - 1);
   MI.setDesc(NewDesc);
+  for (const MachineOperand &MO : Kept)
+    MI.addOperand(*MF, MO);
+  for (unsigned I = ImplicitTail.size(); I > 0; --I)
+    MI.addOperand(*MF, ImplicitTail[I - 1]);
   for (unsigned OpI : DropTies)
     MI.untieRegOperand(OpI);
 }
 
 namespace {
+
+bool isWideResidualName(StringRef Name);
+bool isWideCutoverLogical(StringRef Log);
 
 /// setDesc bare multi-slot logical to empty-cycle tryAdd member before
 /// finalizeBundle. Port of AIE materializeMultiOpcodeInstrs setDesc
@@ -357,6 +295,11 @@ bool materializeLateBareIfNeeded(MachineInstr &MI, const TargetInstrInfo &TII,
       }
     }
   }
+  // Residual cycle-forming SET_HWLOOP / LOADI32 / Loop* stay for the
+  // late-firewall ban. Do not setDesc them onto a Format E member.
+  if (haydn::bundle::isResidualCycleFormingPseudo(MI.getOpcode()))
+    return false;
+
   auto Cycle = haydn::bundle::commitLateProductCycle(MI.getOpcode(), Fmts);
   if (!Cycle || !Cycle->NeedsSetDesc)
     return false;
@@ -556,7 +499,8 @@ bool fieldSlotCompatibleWithMember(
 /// stay uimm6/uimm12 and getExprFixupKind maps HWLoopOff by OpNo.
 /// POST/PRE/BREV cutover when the member TIED_TO map matches FieldSlot.
 /// Unsuffixed catalog logicals (`CSRW_W`, `ST32_POST`) use the same path.
-/// Reloc CSRW_W is not a WIDE-cutover logical (no typed CSR fixup).
+/// Reloc CSRW_W is not a WIDE-cutover logical (no typed CSR fixup —
+/// fail closed; do not invent a CSR reloc kind).
 /// Nullptr = fail closed.
 const haydn::format_e::FormatEMemberRec *
 resolveFieldSlotMember(const MachineInstr &MI, uint8_t Mode, uint8_t EntryIdx,
@@ -579,35 +523,49 @@ resolveFieldSlotMember(const MachineInstr &MI, uint8_t Mode, uint8_t EntryIdx,
 /// is CompletionState (unused-entry zero NOP), not a unit and not
 /// membership — skip without consuming EntryIdx. After a successful
 /// rewrite, erase co-issued pads so AsmPrinter never mixes MemberId with
-/// leftover FieldSlot NOP (Bundle.canAdd is the packetizer oracle and must
-/// still treat pre-finalize NOP_S0 as occupancy). Singleton `{ NOP_S0 }`
+/// leftover FieldSlot NOP (pre-finalize NOP_S0 is occupancy, not a
+/// member). Singleton `{ NOP_S0 }`
 /// stays; that is the idle parcel, not pad beside real work.
 bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
-  if (!Root.isBundle() || Root.getNumOperands() < 2 ||
-      !Root.getOperand(0).isImm() || !Root.getOperand(1).isImm())
+  if (!Root.isBundle())
     return false;
-  auto Row = haydn::bundle::formatRowFromImm(
-      static_cast<unsigned>(Root.getOperand(0).getImm()));
+  auto Row = haydn::bundle::getBundleRowID(Root);
   if (!Row)
     return false;
   const uint8_t Mode =
       *Row == haydn::bundle::BundleFormatRowID::E96ThreeEntry ? 1 : 0;
-  const unsigned EntryCap = Mode ? 3u : 2u;
+  const unsigned EntryCap = haydn::bundle::bundleRowEntryCount(*Row);
 
   SmallVector<MachineInstr *, 4> Kids;
   SmallVector<MachineInstr *, 4> PadNops;
   MachineBasicBlock::instr_iterator I = std::next(Root.getIterator());
   MachineBasicBlock::instr_iterator E = getBundleEnd(Root.getIterator());
   for (; I != E; ++I) {
-    if (I->isMetaInstruction())
+    // Same non-member skip as the shared census: meta/debug/position
+    // children are not encode membership (collectBundleMemberOpcodes skips
+    // exactly this triple; ANNOTATION_LABEL is isPosition but not isMeta,
+    // so a meta-only skip here would fork the count).
+    if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
       continue;
-    if (isPadNopOpcode(I->getOpcode())) {
+    // Same pad law as the shared census (isPadNopOpcode): pad NOP children
+    // are CompletionState, never membership. The census itself lives in
+    // HaydnBundleVerify.cpp; this partition must not fork it, so the
+    // predicate is the shared one, and counts derived below cross-check it.
+    if (haydn::bundle::isPadNopOpcode(I->getOpcode())) {
       PadNops.push_back(&*I);
       continue;
     }
     Kids.push_back(&*I);
   }
   const unsigned NonPadKids = Kids.size();
+  // W28/CR-B3 one-census cross-check: the cutover partition and the shared
+  // verifier census must agree on (member count, pad presence) for this
+  // root. Divergence means someone re-introduced a second membership law —
+  // fail closed rather than stamping an unverifiable completion.
+  assert((NonPadKids ==
+              haydn::bundle::collectBundleMemberOpcodes(Root).size() &&
+          PadNops.empty() == !haydn::bundle::bundleHasPadNop(Root)) &&
+         "cutover pad/membership partition forked the shared census law");
 
   auto applyPlan =
       [&](ArrayRef<std::pair<MachineInstr *,
@@ -632,6 +590,26 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
   using PlanItem =
       std::pair<MachineInstr *, const haydn::format_e::FormatEMemberRec *>;
   SmallVector<PlanItem, 4> Plan;
+
+  // AIEFinalizeBundle.cpp:49-56 is identity on already-bundled roots.
+  // Haydn overlay: when every real child is already a generated member and
+  // the independent inverse accepts the stamp, late Finalize must not
+  // rewrite members or E2/E3 restamp. Pad NOP beside real work is still
+  // CompletionState and is erased (shared census). Residual FieldSlot
+  // children and inverse-rejected stale stamps fall through to bind below.
+  bool AllPrivateMembers = !Kids.empty();
+  for (MachineInstr *Kid : Kids) {
+    if (!isGeneratedFormatEMemberName(TII.getName(Kid->getOpcode()))) {
+      AllPrivateMembers = false;
+      break;
+    }
+  }
+  if (AllPrivateMembers) {
+    HaydnMCFormats Fmts;
+    if (!haydn::bundle::verifyCommittedBundle(Root, Fmts))
+      return applyPlan(Plan);
+  }
+
   uint32_t UsedUnits = 0;
   unsigned EntryIdx = 0;
   bool LeadingFailed = false;
@@ -644,6 +622,21 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
       if (EntryIdx >= EntryCap) {
         LeadingFailed = true;
         break;
+      }
+      if (const haydn::format_e::FormatEMemberRec *Priv =
+              haydn::bundle::lookupPrivateFormatEMember(KidOpc)) {
+        if (Priv->Mode == Mode &&
+            Priv->EntryIdx == static_cast<uint8_t>(EntryIdx)) {
+          if (Priv->Unit < 32) {
+            if (UsedUnits & (1u << Priv->Unit)) {
+              LeadingFailed = true;
+              break;
+            }
+            UsedUnits |= (1u << Priv->Unit);
+          }
+          ++EntryIdx;
+          continue;
+        }
       }
       const haydn::format_e::FormatEMemberRec *Mem = resolveFieldSlotMember(
           *Kid, Mode, static_cast<uint8_t>(EntryIdx), UsedUnits, TII);
@@ -703,10 +696,20 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
   if (!LeadingFailed)
     return applyPlan(Plan);
 
-  // Membership order could not bind every child. Rebind via the generated
-  // ledger (same DFS as standalone hand-asm), including already-members so
-  // a stale E2 stamp can restamp E3 when two ALU32s only cover E3.
-  // Placement owns row+entry; MC does not Mode-retry.
+  // Inverse already accepts this stamp: identity. Do not E2/E3 restamp a
+  // verified root (late PreEmit re-entry). Still apply any FieldSlot
+  // rewrites collected before the sequential failure, and drop pad beside
+  // real work. Residual FieldSlot-only packs and inverse-rejected stale
+  // stamps (E2 child-count over E3-only two-ALU32) Mode-retry below.
+  if (AnyMember) {
+    HaydnMCFormats Fmts;
+    if (!haydn::bundle::verifyCommittedBundle(Root, Fmts))
+      return applyPlan(Plan);
+  }
+
+  // Membership order could not bind every child. Residual FieldSlot-only
+  // or stale-stamp packs rebind via the generated ledger. Placement owns
+  // row+entry; MC does not Mode-retry.
   if (!AnyMustResolve && !AnyMember)
     return false;
   SmallVector<std::string, 3> Logs;
@@ -717,7 +720,9 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
 
   auto planFromAssign =
       [&](uint8_t TryMode) -> std::optional<SmallVector<PlanItem, 4>> {
-    if (Kids.size() > (TryMode ? 3u : 2u))
+    if (Kids.size() > haydn::bundle::bundleRowEntryCount(
+            TryMode ? haydn::bundle::BundleFormatRowID::E96ThreeEntry
+                    : haydn::bundle::BundleFormatRowID::E96TwoEntry))
       return std::nullopt;
     auto Assign =
         haydn::format_e::assignFormatEMemberEntries(Logs, TryMode);
@@ -742,9 +747,22 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
     return P;
   };
 
-  uint8_t UseMode = Mode;
+  // Stamped row is identity when it can bind. Child-count E2↔E3 override
+  // of a stamped root is a silent repair — refuse it (printer/verify fatal
+  // "exceeds stamped row"). An illegal same-count stamp (XOR32/BEQZ at E2
+  // entry 1 — both e0-only under E2) is not verified: rematch onto the
+  // other product row from the generated ledger, then restamp that row.
+  const unsigned StampedCap = haydn::bundle::bundleRowEntryCount(
+      Mode ? haydn::bundle::BundleFormatRowID::E96ThreeEntry
+           : haydn::bundle::BundleFormatRowID::E96TwoEntry);
+  if (Kids.size() > StampedCap)
+    return false;
   auto P = planFromAssign(Mode);
+  uint8_t UseMode = Mode;
   if (!P) {
+    HaydnMCFormats Fmts;
+    if (!haydn::bundle::verifyCommittedBundle(Root, Fmts))
+      return false;
     const uint8_t Other = Mode ? 0 : 1;
     P = planFromAssign(Other);
     if (!P)
@@ -755,8 +773,8 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
     const auto NewRow =
         UseMode ? haydn::bundle::BundleFormatRowID::E96ThreeEntry
                 : haydn::bundle::BundleFormatRowID::E96TwoEntry;
-    const auto Comp =
-        haydn::bundle::selectCompletionFor(NewRow, Kids.size());
+    const auto Comp = haydn::bundle::selectCompletionForMembersAndPads(
+        NewRow, Kids.size(), !PadNops.empty());
     assert(haydn::bundle::isProductLegalCompletion(Comp) &&
            "Mode restamp must keep full-slot product completion");
     haydn::bundle::stampBundleCommit(Root, NewRow, Comp);
@@ -765,6 +783,71 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
 }
 
 } // namespace
+
+bool llvm::haydnRecommitLateMixedBare(MachineFunction &MF) {
+  // Wrap leftover bare MIs only. Do not restamp already-bundled roots —
+  // a missing BundleFormatRowID must still fatal at the printer.
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  HaydnMCFormats Fmts;
+
+  bool Changed = false;
+  for (MachineBasicBlock &MBB : MF) {
+    MachineBasicBlock::instr_iterator MII = MBB.instr_begin();
+    MachineBasicBlock::instr_iterator MIE = MBB.instr_end();
+    if (MII == MIE)
+      continue;
+    assert(!MII->isInsideBundle() && "First instr cannot be inside bundle!");
+
+    // Wrap leftover bare *real* encode MIs only (LUI/ADDI32_W/JALR_W after
+    // BranchRelaxation). Do not wrap BUNDLE roots (missing-row stays fatal)
+    // or representation-expand pseudos (B/RET/BR_JT stay printer-owned).
+    while (MII != MIE) {
+      if (!MII->isInsideBundle() && isBundleCandidate(MII)) {
+        if (materializeLateBareIfNeeded(*MII, TII, Fmts))
+          Changed = true;
+        finalizeBundle(MBB, MII, std::next(MII));
+        // MII still points at the original MI (now a BUNDLE child).
+        MachineInstr &Root = *getBundleStart(MII);
+        assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
+        // Durable Format E row + completion. Late solve supplies residual
+        // setDesc member identity; completion is always forced to full-slot
+        // architectural NOP pad (AllEntriesReal) for the single real member
+        // — refuse to stamp unqualified singleton-stub underfill invent.
+        // W28/CR-B3 (encoding F11): the completion value comes from the SAME
+        // shared pad census the verifier replays (collectBundleMemberOpcodes
+        // + bundleHasPadNop + selectCompletionForMembersAndPads), computed on
+        // the just-wrapped root. A wrapped bare NOP/NOP_S0 is a pad-only
+        // idle cycle (0 reals + pad), not a 1-real member cycle — both
+        // select AllEntriesReal today, but one route means the stamp can
+        // never diverge from the verify expectation.
+        SmallVector<unsigned, 3> WrappedMembers =
+            haydn::bundle::collectBundleMemberOpcodes(Root);
+        const bool WrappedHasPad = haydn::bundle::bundleHasPadNop(Root);
+        if (auto Late =
+                haydn::bundle::commitLateProductCycle(MII->getOpcode(), Fmts)) {
+          Late->Plan.Completion = haydn::bundle::selectCompletionForMembersAndPads(
+              Late->Plan.Row, WrappedMembers.size(), WrappedHasPad);
+          assert(haydn::bundle::isProductLegalCompletion(Late->Plan.Completion) &&
+                 "late singleton commit must be full-slot product completion");
+          haydn::bundle::stampBundleCommit(Root, Late->Plan);
+        } else {
+          haydn::bundle::BundlePlan Plan = haydn::bundle::makeProductPlan(
+              /*Occupied=*/0, {MII->getOpcode()});
+          Plan.Completion = haydn::bundle::selectCompletionForMembersAndPads(
+              Plan.Row, WrappedMembers.size(), WrappedHasPad);
+          assert(haydn::bundle::isProductLegalCompletion(Plan.Completion) &&
+                 "singleton product plan must be full-slot completion");
+          haydn::bundle::stampBundleCommit(Root, Plan);
+        }
+        if (cutoverBundleFieldSlots(Root, TII))
+          Changed = true;
+        Changed = true;
+      }
+      ++MII;
+    }
+  }
+  return Changed;
+}
 
 bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
   // Commit ownership is not quality: never call skipFunction. Generic
@@ -780,84 +863,51 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
   // underfilled stub completion into MC.
 
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-  HaydnMCFormats Fmts;
-
-  bool Changed = false;
-  for (MachineBasicBlock &MBB : MF) {
-    MachineBasicBlock::instr_iterator MII = MBB.instr_begin();
-    MachineBasicBlock::instr_iterator MIE = MBB.instr_end();
-    if (MII == MIE)
-      continue;
-    assert(!MII->isInsideBundle() && "First instr cannot be inside bundle!");
-
-    // Port of AIEFinalizeBundle.cpp:49-56: wrap each standalone candidate.
-    // setDesc first when empty-cycle tryAdd selects a format member
-    // (late bare NOP/BR/demote inserts after PreEmit growth).
-    while (MII != MIE) {
-      if (!MII->isInsideBundle() && isBundleCandidate(MII)) {
-        if (materializeLateBareIfNeeded(*MII, TII, Fmts))
-          Changed = true;
-        finalizeBundle(MBB, MII, std::next(MII));
-        // MII still points at the original MI (now a BUNDLE child).
-        MachineInstr &Root = *getBundleStart(MII);
-        assert(Root.isBundle() && "finalizeBundle must produce a BUNDLE root");
-        // Durable Format E row + completion. Late solve supplies residual
-        // setDesc member identity; completion is always forced to full-slot
-        // architectural NOP pad (AllEntriesReal) for the single real member
-        // — refuse to stamp unqualified singleton-stub underfill invent.
-        if (auto Late =
-                haydn::bundle::commitLateProductCycle(MII->getOpcode(), Fmts)) {
-          Late->Plan.Completion = haydn::bundle::selectCompletionFor(
-              Late->Plan.Row, /*MemberCount=*/1);
-          assert(haydn::bundle::isProductLegalCompletion(Late->Plan.Completion) &&
-                 "late singleton commit must be full-slot product completion");
-          haydn::bundle::stampBundleCommit(Root, Late->Plan);
-        } else {
-          haydn::bundle::BundlePlan Plan = haydn::bundle::makeProductPlan(
-              /*Occupied=*/0, {MII->getOpcode()});
-          Plan.Completion = haydn::bundle::selectCompletionFor(
-              Plan.Row, /*MemberCount=*/1);
-          assert(haydn::bundle::isProductLegalCompletion(Plan.Completion) &&
-                 "singleton product plan must be full-slot completion");
-          haydn::bundle::stampBundleCommit(Root, Plan);
-        }
-        Changed = true;
-      }
-      ++MII;
-    }
-  }
+  bool Changed = haydnRecommitLateMixedBare(MF);
 
   // Already-bundled residual roots (hand MIR / exact-commit) may have only
-  // a row imm or no completion. Child count picks E2/E3; cutover then
-  // Mode-retries. Without this stamp, cutover skips and verify canAdd of
-  // FieldSlot+logical fails.
+  // a row imm or no completion. Unstamped roots get a product row from
+  // member count so cutover can bind FieldSlots; already-stamped roots
+  // are left to the inverse. Without this stamp, cutover skips residual
+  // FieldSlot+logical children.
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
       if (!MI.isBundle())
         continue;
-      if (MI.getNumOperands() >= 2 && MI.getOperand(0).isImm() &&
-          MI.getOperand(1).isImm() &&
-          haydn::bundle::formatRowFromImm(
-              static_cast<unsigned>(MI.getOperand(0).getImm())))
+      SmallVector<unsigned, 3> Members =
+          haydn::bundle::collectBundleMemberOpcodes(MI);
+      const bool HasPadNop = haydn::bundle::bundleHasPadNop(MI);
+      auto Row = haydn::bundle::getBundleRowID(MI);
+      const bool HasCompletion = haydn::bundle::getBundleCompletionID(MI).has_value();
+      if (Row && HasCompletion)
         continue;
-      unsigned N = 0;
-      bool HasPadNop = false;
-      MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-      MachineBasicBlock::instr_iterator E = getBundleEnd(MI.getIterator());
-      for (; I != E; ++I) {
-        if (I->isMetaInstruction())
-          continue;
-        if (isPadNopOpcode(I->getOpcode())) {
-          HasPadNop = true;
-          continue;
+      if (!Row) {
+        // Missing-row: FieldSlot children need a row so cutover can bind.
+        // Pad-only idle is a legal full-bundle NOP parcel (printer !Row→E2
+        // is fatal). Do not invent an E2 default from child count for
+        // mixed logicals — cutover rematches those from the ledger.
+        bool SawFieldSlot = false;
+        if (const MachineBasicBlock *P = MI.getParent()) {
+          for (MachineBasicBlock::const_instr_iterator I =
+                   std::next(MI.getIterator());
+               I != P->instr_end() && I->isBundledWithPred(); ++I) {
+            if (isResidualFieldSlotOpcode(I->getOpcode(), TII)) {
+              SawFieldSlot = true;
+              break;
+            }
+          }
         }
-        ++N;
+        const bool PadOnlyIdle = Members.empty() && HasPadNop;
+        if (!SawFieldSlot && !PadOnlyIdle)
+          continue;
+        Row = haydn::bundle::selectProductRowForOpcodes(Members);
       }
-      const auto Row = N >= 3 ? haydn::bundle::BundleFormatRowID::E96ThreeEntry
-                              : haydn::bundle::BundleFormatRowID::E96TwoEntry;
+      // Row-only roots get the missing completion from the shared census.
+      // W28/CR-B3: one law with verify (collect + pad + select).
       haydn::bundle::stampBundleCommit(
-          MI, Row,
-          haydn::bundle::selectCompletionForMembersAndPads(Row, N, HasPadNop));
+          MI, *Row,
+          haydn::bundle::selectCompletionForMembersAndPads(
+              *Row, Members.size(), HasPadNop));
       Changed = true;
     }
   }

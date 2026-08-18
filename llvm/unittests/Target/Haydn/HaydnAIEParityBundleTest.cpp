@@ -30,8 +30,8 @@
 #include <algorithm>
 #include <iterator>
 
-#define GET_INSTRINFO_ENUM
-#include "HaydnGenInstrInfo.inc"
+// Opcode enums come via HaydnPortModel → HaydnMCTargetDesc (GET_INSTRINFO_ENUM).
+// Do not re-include the enum; a second include conflicts.
 
 using namespace llvm;
 using namespace llvm::Haydn;

@@ -16,7 +16,8 @@
 //     [--json PATH --xlsx PATH --canonical-vectors PATH]
 //   ninja HaydnFormatERecordsCheck
 // --check fail-closes on generated-file drift, XLSX↔JSON type-layout parity,
-// and canonical-vector ledger round-trip. It does not drive llvm-mc.
+// td-vs-golden imm width/signedness, and canonical-vector ledger round-trip.
+// It does not drive llvm-mc.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,9 +26,12 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -62,12 +66,19 @@ namespace format_e {
 #define GET_FORMAT_E_SETDESC_LEDGER
 #include "HaydnGenFormatESetDescLedger.inc"
 
-/// Linear search for a logical's alternative span (inert tables; not hot path).
+/// Alternative span for a golden logical name. The generated FormatEAltSpans
+/// table is sorted by `strcmp` key order — binary search, never a linear walk
+/// (enumeratePlacementAlternatives consults this per probe on the post-RA
+/// auction / HR / solver hot path).
 inline const FormatEAltSpan *findAltSpan(const char *Logical) {
-  for (unsigned I = 0; I < FormatENonNopLogicalCount; ++I) {
-    if (std::strcmp(FormatEAltSpans[I].Logical, Logical) == 0)
-      return &FormatEAltSpans[I];
-  }
+  const auto *Begin = FormatEAltSpans;
+  const auto *End = Begin + FormatENonNopLogicalCount;
+  const auto *It = std::lower_bound(
+      Begin, End, Logical, [](const FormatEAltSpan &Row, const char *Key) {
+        return std::strcmp(Row.Logical, Key) < 0;
+      });
+  if (It != End && std::strcmp(It->Logical, Logical) == 0)
+    return It;
   return nullptr;
 }
 
@@ -94,8 +105,11 @@ inline bool inverseCoversMember(const FormatEMemberRec &M) {
 /// Peel residual `_S*` / Format E member / public mnemonic names to the golden
 /// catalog logical used by FormatEMembers. Shared by MC encode, Bundle canAdd,
 /// HR/solver tryAdd, and commitExact unit cover — one map, not a second table.
-/// \p StripWide drops reloc `_W` / `_F2_W`. Placement enumerate keeps those
-/// identities so CSRW_W / ADDI32_W stay on residual FieldSlots.
+/// This is occupancy-name recovery, not a product alternate source: suffix
+/// `_S*` name discovery does not emit typed alternates.
+/// \p StripWide drops reloc `_W` / `_F2_W`. Occupancy tries the compact
+/// catalog span when the unsuffixed `_W` name has no alt row (ADDI32_W →
+/// ADDI32). CSRW_W has no typed CSR reloc and stays FieldSlot Fallback.
 inline std::string peelLogicalOpcodeName(StringRef Name,
                                          bool StripWide = true) {
   StringRef Base = Name;
@@ -197,6 +211,11 @@ inline std::string peelLogicalOpcodeName(StringRef Name,
     return "SEXT32T64";
   if (Base.equals_insensitive("RET"))
     return "JALR";
+  // Catalog token is WFI<TBD>; TableGen member symbol is WFITBDTBDTBD_*
+  // (angle brackets are not ident). Same span as the generated HINT members.
+  if (Base.equals_insensitive("WFI") ||
+      Base.equals_insensitive("WFITBDTBDTBD"))
+    return "WFI<TBD>";
   return Base.str();
 }
 
@@ -304,17 +323,29 @@ assignFormatEMemberEntries(ArrayRef<std::string> Logs, uint8_t Mode) {
 
 /// Golden Format E unit bit-mask for \p Logical under \p Mode (0=E2, 1=E3).
 /// Stores such as D_SW_L_WITH_IMM / S_SB_WITH_IMM are LOADSTORE0-only (e0).
+/// Backing store is one process-wide StringMap per Mode built from the
+/// immutable generated FormatEMembers table (exact-case keys — generated
+/// names are uppercase; the old linear scan's equals_insensitive tolerated
+/// only case variants that never occur). Probing the map is O(1) instead of
+/// a 3686-row string scan; solver tryApplyAlt calls this per (candidate ×
+/// alt) member on the post-RA auction path.
 inline uint32_t unitMaskForLogical(StringRef Logical, uint8_t Mode) {
-  uint32_t Mask = 0;
-  for (unsigned I = 0; I < FormatEMemberCount; ++I) {
-    const FormatEMemberRec &M = FormatEMembers[I];
-    if (M.Mode != Mode || M.IsNop != 0 || M.Unit >= 32)
-      continue;
-    if (!StringRef(M.Logical).equals_insensitive(Logical))
-      continue;
-    Mask |= (1u << M.Unit);
-  }
-  return Mask;
+  static StringMap<uint32_t> Maps[2] = {
+      StringMap<uint32_t>(),
+      StringMap<uint32_t>(),
+  };
+  static std::once_flag Once;
+  std::call_once(Once, [] {
+    for (unsigned I = 0; I < FormatEMemberCount; ++I) {
+      const FormatEMemberRec &M = FormatEMembers[I];
+      if (M.IsNop != 0 || M.Unit >= 32)
+        continue;
+      uint32_t &Mask = Maps[M.Mode][M.Logical];
+      Mask |= (1u << M.Unit);
+    }
+  });
+  const auto It = Maps[Mode].find(Logical);
+  return It == Maps[Mode].end() ? 0 : It->second;
 }
 
 /// True when \p Logs can be assigned injective Format E units under \p Mode.
@@ -384,6 +415,43 @@ inline bool logicalsHaveUnitCover(ArrayRef<std::string> Logs) {
     return true;
   return logicalsHaveUnitCoverForMode(Logs, /*Mode=*/0) ||
          logicalsHaveUnitCoverForMode(Logs, /*Mode=*/1);
+}
+
+/// Golden unit for a generated member symbol (`ADD32_E3_E0_ALU2_RR`).
+/// \returns nullopt when \p Symbol is not a catalog member (logical leftover).
+/// Same memoized-lookup contract as unitMaskForLogical: exact-case keys over
+/// the immutable generated table; memberSymbolsHaveInjectiveUnits calls this
+/// per member inside every solver tryApplyAlt probe.
+inline std::optional<uint8_t> unitForMemberSymbol(StringRef Symbol) {
+  static StringMap<uint8_t> Map;
+  static std::once_flag Once;
+  std::call_once(Once, [] {
+    for (unsigned I = 0; I < FormatEMemberCount; ++I)
+      Map.try_emplace(FormatEMembers[I].MemberSymbol,
+                      FormatEMembers[I].Unit);
+  });
+  const auto It = Map.find(Symbol);
+  if (It == Map.end())
+    return std::nullopt;
+  return It->second;
+}
+
+/// True when chosen member symbols have injective Format E units.
+/// Logical cover (`logicalsHaveUnitCover`) is existence-only — three ADD32
+/// logicals can sit on ALU0/ALU1/ALU2, but first-at-entry members at e0 and
+/// e2 can both be ALU2. Unknown symbols stay unconstrained.
+inline bool memberSymbolsHaveInjectiveUnits(ArrayRef<StringRef> Symbols) {
+  uint32_t Used = 0;
+  for (StringRef Symbol : Symbols) {
+    const std::optional<uint8_t> Unit = unitForMemberSymbol(Symbol);
+    if (!Unit)
+      continue;
+    const uint32_t Bit = 1u << *Unit;
+    if ((Used & Bit) != 0)
+      return false;
+    Used |= Bit;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------

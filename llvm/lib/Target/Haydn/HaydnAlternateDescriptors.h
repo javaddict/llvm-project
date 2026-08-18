@@ -7,7 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // AIE-shaped opcode-alt map for post-RA multi-slot placement
-// ( B3.exit.3; peer AIEAlternateDescriptors.h:27-75).
+// (peer AIEAlternateDescriptors.h:27-75). Suffix name discovery is not
+// a product alternate source.
 //
 //   AlternateDescs  — MI → selected format-member MCInstrDesc*.
 //                     HR commitPlacementForEmit writes setAlternateDescriptor
@@ -28,9 +29,10 @@
 // unstamped multi-member shells use the same ordinary multi-MI commit or
 // sequentialize. AltDescs remains region-only.
 //
-// No slot side-map (AIE has none). Post-commit placement is opcode identity
-// via getSlotKind (AIEBaseMCFormats.cpp:66-75) + Bundle SlotMap
-// (AIEBundle.h:92-104). Product: Format E composites only (FE8). Selected
+// Transient only — never a durable side-map and never a format identity
+// that crosses RA. No slot side-map (AIE has none). Post-commit placement
+// is opcode identity via getSlotKind (AIEBaseMCFormats.cpp:66-75) + Bundle
+// SlotMap (AIEBundle.h:92-104). Product: Format E composites only (FE8). Selected
 // MemberOpcode must be a real placement member (declarative MultiSlot /
 // LogicalMaterialize alternate) — never re-stamp a bare logical. Multi-MI
 // commit re-solves setDesc as a fail-closed second line so residual logical

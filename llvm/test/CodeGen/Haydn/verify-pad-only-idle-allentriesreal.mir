@@ -30,9 +30,9 @@ body:             |
     liveins: $r15
     ; CHECK-LABEL: name: pad_only_idle
     ; CHECK: BUNDLE 0, 0
-    ; CHECK: NOP_S0
+    ; CHECK: NOP
     BUNDLE 0, 0 {
-      NOP_S0
+      NOP
     }
     RET implicit $r15
 ...
@@ -45,11 +45,11 @@ body:             |
     liveins: $r15
     ; CHECK-LABEL: name: e2_idle_nop_nop
     ; CHECK: BUNDLE 0, 0
-    ; CHECK: NOP_S0
-    ; CHECK: NOP_S0
+    ; CHECK: NOP
+    ; CHECK: NOP
     BUNDLE 0, 0 {
-      NOP_S0
-      NOP_S0
+      NOP
+      NOP
     }
     RET implicit $r15
 ...

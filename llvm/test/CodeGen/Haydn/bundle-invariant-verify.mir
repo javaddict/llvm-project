@@ -60,7 +60,9 @@ body:             |
 
 ...
 ---
-# Pre-stamped multi-MI BUNDLE (B1.1 shape) — FormatID + encode-oracle pack.
+# Pre-stamped multi-MI BUNDLE (B1.1 shape) — FormatID + inverse-table pack.
+# Member order IS entry order: ADD32@e0/ALU0 then ADDI32@e1/ALU1 (both
+# catalog placements under E2; two ALU32s would need the E3 restamp).
 name:            legal_multi
 alignment:       1
 legalized:       true
@@ -87,14 +89,14 @@ body:             |
     liveins: $r0, $r3, $r4
 
     ; CHECK-LABEL: name: legal_multi
-    ; CHECK: BUNDLE 0
-    ; CHECK: ADDI32
+    ; CHECK: BUNDLE {{[01]}}
     ; CHECK: ADD32
-    ; CHECK: BUNDLE 0
+    ; CHECK: ADDI32
+    ; CHECK: BUNDLE {{[01]}}
     ; CHECK: JALR
     BUNDLE 0 {
-      $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
       $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+      $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     }
     BUNDLE 0 {
       $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -129,14 +131,13 @@ body:             |
     liveins: $r0, $r3, $r4
 
     ; FIN-LABEL: name: finalize_then_verify
-    ; FIN: BUNDLE 0
-    ; FIN: ADDI32
-    ; FIN: BUNDLE 0
+    ; FIN: BUNDLE {{[01]}}
     ; FIN: ADD32
-    ; FIN: BUNDLE 0
+    ; FIN: ADDI32
+    ; FIN: BUNDLE {{[01]}}
     ; FIN: JALR
-    $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
+    $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 
 ...

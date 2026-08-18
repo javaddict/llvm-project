@@ -1,0 +1,131 @@
+# RUN: split-file %s %t
+# Fatal seats abort; use not --crash so the diagnostic still reaches FileCheck.
+#
+# REGRESSION TEST SUITE (P7 verifier independence, topics/encoding P7 row /
+# hard constraint #8 / durable rules #6-#12):
+#
+# Bug: the independent bundle verifier consulted the FORWARD Bundle oracle
+# (Haydn::Bundle canAdd / hasValidFormat / PacketFormats planner) for any
+# cycle that was not all-private members. A forward-solver defect could
+# therefore validate itself: the same wrong tables that produced an illegal
+# pack also certified it at verify. Canonical case: E96TwoEntry row over
+# {ADD32, XOR32} — both ALU32 logicals are e0-only under E2 in the golden
+# generated member table, so the shape is illegal, yet residual FieldSlot
+# coverage (S0|S1) let canAdd accept it.
+#
+# Fix: verify = decode committed state only. Each member is checked against
+# the separately generated Format E member/inverse tables (exact MemberId
+# inverse for private members; exact (logical, mode, membership-entry)
+# member for bare logicals), plus entry/unit injectivity and the shared RF
+# port-budget predicate (HaydnBundlePortBudget.h — one predicate with the
+# commit side canCoissueProductCycle). No forward-solver call exists in the
+# verify path; unknown/misplaced committed state fails closed.
+#
+# Test design: every seat is a hand-corrupted committed BUNDLE. If the
+# verifier ever consults the forward planner again, DUP-UNIT and PORT-BUDGET
+# may still reject (the planner shares the unit law) but E2-NO-MEMBER
+# accepts — that seat is the independence canary. PORT-BUDGET pins the
+# shared predicate: three GPR-writing members need >= 2 cycles under 2W
+# even though E3 entry/unit geometry admits them (entry-injective,
+# unit-injective, mode-correct — every OTHER invariant holds).
+
+# E2-NO-MEMBER: structural inverse: committed logical has no generated member
+# DUP-UNIT: structural inverse: chosen Format E members are not unit-injective
+# PORT-BUDGET: structural inverse: cycle RF port demand exceeds one issue
+
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/e2-two-alu-no-member.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=E2-NO-MEMBER
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/dup-unit.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=DUP-UNIT
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/port-budget.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=PORT-BUDGET
+# Positive control: the same three GPR writers as PORT-BUDGET minus one —
+# two members fit 2W, so verify accepts (FileCheck sees the bundle).
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %t/positive-two-writers.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=OK-TWO-WRITERS
+
+#--- e2-two-alu-no-member.mir
+--- |
+  define void @e2_two_alu_no_member() { ret void }
+...
+---
+name:            e2_two_alu_no_member
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    }
+    RET implicit $r15
+...
+#--- dup-unit.mir
+--- |
+  define void @dup_unit() { ret void }
+...
+---
+# Two private E3 members pinned to the SAME execution unit (ALU0) at
+# different entries — entry-injective but NOT unit-injective. Golden: no
+# bundle may select a unit twice (units ≠ encoded entry identity).
+name:            dup_unit
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    BUNDLE 1, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32_E3_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32_E3_E1_ALU0_RR $r2, $r3, implicit-def dead $sfr
+    }
+    RET implicit $r15
+...
+#--- port-budget.mir
+--- |
+  define void @port_budget() { ret void }
+...
+---
+# Three GPR-writing members under E3: entries e0/e1/e2 distinct, units
+# ALU2/ALU1/ALU0 distinct, modes correct — every placement invariant holds.
+# Pooled demand is 3 GPR writes against a 2W budget: the shared
+# haydnCycleMembersExceedPortBudget predicate (same one the commit side
+# uses) must reject — unit geometry alone cannot certify this cycle.
+name:            port_budget
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r4, $r5, $r15
+    BUNDLE 1, 0, implicit-def $r6, implicit-def $r7, implicit-def $r8, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4, implicit $r5 {
+      $r6 = ADD32_E3_E0_ALU2_RR $r0, $r1, implicit-def dead $sfr
+      $r7 = XOR32_E3_E1_ALU1_RR $r2, $r3, implicit-def dead $sfr
+      $r8 = OR32_E3_E2_ALU0_RR $r4, $r5, implicit-def dead $sfr
+    }
+    RET implicit $r15
+...
+#--- positive-two-writers.mir
+--- |
+  define void @positive_two_writers() { ret void }
+...
+---
+# OK-TWO-WRITERS-LABEL: name: positive_two_writers
+# OK-TWO-WRITERS: BUNDLE 1, 0
+# OK-TWO-WRITERS: ADD32_E3_E0_ALU2_RR
+# OK-TWO-WRITERS: XOR32_E3_E1_ALU1_RR
+name:            positive_two_writers
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    BUNDLE 1, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32_E3_E0_ALU2_RR $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32_E3_E1_ALU1_RR $r2, $r3, implicit-def dead $sfr
+    }
+    RET implicit $r15
+...

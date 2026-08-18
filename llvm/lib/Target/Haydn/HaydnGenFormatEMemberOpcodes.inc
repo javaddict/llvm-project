@@ -3696,7 +3696,7 @@ static_assert(sizeof(FormatEMemberOpcodes)/sizeof(FormatEMemberOpcodes[0]) == Fo
 
 #ifdef GET_FORMAT_E_MEMBER_TO_LOGICAL
 #undef GET_FORMAT_E_MEMBER_TO_LOGICAL
-static constexpr unsigned FormatEMemberToLogicalCount = 3700u;
+static constexpr unsigned FormatEMemberToLogicalCount = 3556u;
 static_assert(FormatEMemberToLogicalCount > 0u, "member to logical pin");
 unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) {
   switch (Opcode) {
@@ -3804,8 +3804,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::ADDI32S_E2_E0_ALU0_RI20:
   case Haydn::ADDI32S_E2_E1_ALU1_RI20:
     return Haydn::ADDI32S;
-  case Haydn::ADDI32_W_S0:
-    return Haydn::ADDI32_W;
   case Haydn::AND32_E2_E0_ALU0_RR:
   case Haydn::AND32_E3_E0_ALU0_RR:
   case Haydn::AND32_E3_E0_ALU2_RR:
@@ -3838,10 +3836,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::BEQZ_E3_E1_ALU0_I12:
   case Haydn::BEQZ_E3_E2_ALU0_I12:
     return Haydn::BEQZ;
-  case Haydn::BEQZ_W_S0:
-    return Haydn::BEQZ_W;
-  case Haydn::BEQ_W_S0:
-    return Haydn::BEQ_W;
   case Haydn::BGE_E2_E0_ALU0_RI12:
   case Haydn::BGE_E3_E0_ALU0_RI12:
   case Haydn::BGE_E3_E1_ALU0_RI12:
@@ -3850,17 +3844,11 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::BGEU_E3_E0_ALU0_RI12:
   case Haydn::BGEU_E3_E1_ALU0_RI12:
     return Haydn::BGEU;
-  case Haydn::BGEU_W_S0:
-    return Haydn::BGEU_W;
   case Haydn::BGEZ_E2_E0_ALU0_I12:
   case Haydn::BGEZ_E3_E0_ALU0_I12:
   case Haydn::BGEZ_E3_E1_ALU0_I12:
   case Haydn::BGEZ_E3_E2_ALU0_I12:
     return Haydn::BGEZ;
-  case Haydn::BGEZ_W_S0:
-    return Haydn::BGEZ_W;
-  case Haydn::BGE_W_S0:
-    return Haydn::BGE_W;
   case Haydn::BLT_E2_E0_ALU0_RI12:
   case Haydn::BLT_E3_E0_ALU0_RI12:
   case Haydn::BLT_E3_E1_ALU0_RI12:
@@ -3869,17 +3857,11 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::BLTU_E3_E0_ALU0_RI12:
   case Haydn::BLTU_E3_E1_ALU0_RI12:
     return Haydn::BLTU;
-  case Haydn::BLTU_W_S0:
-    return Haydn::BLTU_W;
   case Haydn::BLTZ_E2_E0_ALU0_I12:
   case Haydn::BLTZ_E3_E0_ALU0_I12:
   case Haydn::BLTZ_E3_E1_ALU0_I12:
   case Haydn::BLTZ_E3_E2_ALU0_I12:
     return Haydn::BLTZ;
-  case Haydn::BLTZ_W_S0:
-    return Haydn::BLTZ_W;
-  case Haydn::BLT_W_S0:
-    return Haydn::BLT_W;
   case Haydn::BNE_E2_E0_ALU0_RI12:
   case Haydn::BNE_E3_E0_ALU0_RI12:
   case Haydn::BNE_E3_E1_ALU0_RI12:
@@ -3889,10 +3871,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::BNEZ_E3_E1_ALU0_I12:
   case Haydn::BNEZ_E3_E2_ALU0_I12:
     return Haydn::BNEZ;
-  case Haydn::BNEZ_W_S0:
-    return Haydn::BNEZ_W;
-  case Haydn::BNE_W_S0:
-    return Haydn::BNE_W;
   case Haydn::BREV32_E2_E0_ALU0_RR:
   case Haydn::BREV32_E3_E0_ALU0_RR:
   case Haydn::BREV32_E3_E0_ALU2_RR:
@@ -3917,8 +3895,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::CSRW_E3_E2_ALU0_I8:
   case Haydn::CSRW_E3_E2_ALU2_I8:
     return Haydn::CSRW;
-  case Haydn::CSRW_W_S0:
-    return Haydn::CSRW_W;
   case Haydn::D_LDW_BREV_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_LDW_BREV_IMM_E2_E1_LOAD1_RI6:
   case Haydn::D_LDW_BREV_IMM_E3_E0_LOADSTORE0_RI6:
@@ -3933,15 +3909,9 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
     return Haydn::D_LDW_BREV_REG;
   case Haydn::D_LDW_CB_IMM_E2_E0_LOADSTORE0_CBRI:
   case Haydn::D_LDW_CB_IMM_E3_E0_LOADSTORE0_CBRI:
-  case Haydn::D_LDW_CB_IMM_S0:
-  case Haydn::D_LDW_CB_IMM_S1:
-  case Haydn::D_LDW_CB_IMM_S2:
     return Haydn::D_LDW_CB_IMM;
   case Haydn::D_LDW_CB_REG_E2_E0_LOADSTORE0_CBRR:
   case Haydn::D_LDW_CB_REG_E3_E0_LOADSTORE0_CBRR:
-  case Haydn::D_LDW_CB_REG_S0:
-  case Haydn::D_LDW_CB_REG_S1:
-  case Haydn::D_LDW_CB_REG_S2:
     return Haydn::D_LDW_CB_REG;
   case Haydn::D_LDW_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_LDW_POST_IMM_E2_E1_LOAD1_RI6:
@@ -3953,7 +3923,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::D_LDW_POST_REG_E2_E1_LOAD1_RR:
   case Haydn::D_LDW_POST_REG_E3_E0_LOADSTORE0_RR:
   case Haydn::D_LDW_POST_REG_E3_E1_LOAD1_RR:
-  case Haydn::D_LDW_POST_REG_S2:
     return Haydn::D_LDW_POST_REG;
   case Haydn::D_LDW_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_LDW_PRE_IMM_E2_E1_LOAD1_RI6:
@@ -4020,8 +3989,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::D_LQHWUA_POST_E3_E0_LOADSTORE0_AR:
   case Haydn::D_LQHWUA_POST_E3_E1_LOAD1_AR:
   case Haydn::D_LQHWUA_POST_E3_E2_LOAD1_AR:
-  case Haydn::D_LQHWUA_POST_S0:
-  case Haydn::D_LQHWUA_POST_S1:
   case Haydn::D_LQHWUA_POST_S2:
     return Haydn::D_LQHWUA_POST;
   case Haydn::D_LTWUA_POST_E2_E0_LOADSTORE0_AR:
@@ -4029,9 +3996,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::D_LTWUA_POST_E3_E0_LOADSTORE0_AR:
   case Haydn::D_LTWUA_POST_E3_E1_LOAD1_AR:
   case Haydn::D_LTWUA_POST_E3_E2_LOAD1_AR:
-  case Haydn::D_LTWUA_POST_S0:
-  case Haydn::D_LTWUA_POST_S1:
-  case Haydn::D_LTWUA_POST_S2:
     return Haydn::D_LTWUA_POST;
   case Haydn::D_LW_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_LW_POST_IMM_E2_E1_LOAD1_RI6:
@@ -4071,157 +4035,93 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
     return Haydn::D_LW_WITH_REG;
   case Haydn::D_SDW_BREV_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SDW_BREV_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SDW_BREV_IMM_S1:
-  case Haydn::D_SDW_BREV_IMM_S2:
     return Haydn::D_SDW_BREV_IMM;
   case Haydn::D_SDW_BREV_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SDW_BREV_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SDW_BREV_REG_S1:
-  case Haydn::D_SDW_BREV_REG_S2:
     return Haydn::D_SDW_BREV_REG;
   case Haydn::D_SDW_CB_IMM_E2_E0_LOADSTORE0_CBRI:
   case Haydn::D_SDW_CB_IMM_E3_E0_LOADSTORE0_CBRI:
-  case Haydn::D_SDW_CB_IMM_S0:
-  case Haydn::D_SDW_CB_IMM_S1:
-  case Haydn::D_SDW_CB_IMM_S2:
     return Haydn::D_SDW_CB_IMM;
   case Haydn::D_SDW_CB_REG_E2_E0_LOADSTORE0_CBRR:
   case Haydn::D_SDW_CB_REG_E3_E0_LOADSTORE0_CBRR:
-  case Haydn::D_SDW_CB_REG_S0:
-  case Haydn::D_SDW_CB_REG_S1:
-  case Haydn::D_SDW_CB_REG_S2:
     return Haydn::D_SDW_CB_REG;
   case Haydn::D_SDW_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SDW_POST_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SDW_POST_IMM_S1:
-  case Haydn::D_SDW_POST_IMM_S2:
     return Haydn::D_SDW_POST_IMM;
   case Haydn::D_SDW_POST_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SDW_POST_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SDW_POST_REG_S1:
-  case Haydn::D_SDW_POST_REG_S2:
     return Haydn::D_SDW_POST_REG;
   case Haydn::D_SDW_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SDW_PRE_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SDW_PRE_IMM_S1:
-  case Haydn::D_SDW_PRE_IMM_S2:
     return Haydn::D_SDW_PRE_IMM;
   case Haydn::D_SDW_PRE_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SDW_PRE_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SDW_PRE_REG_S1:
-  case Haydn::D_SDW_PRE_REG_S2:
     return Haydn::D_SDW_PRE_REG;
   case Haydn::D_SDW_WITH_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SDW_WITH_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SDW_WITH_IMM_S1:
-  case Haydn::D_SDW_WITH_IMM_S2:
     return Haydn::D_SDW_WITH_IMM;
   case Haydn::D_SDW_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SDW_WITH_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SDW_WITH_REG_S1:
-  case Haydn::D_SDW_WITH_REG_S2:
     return Haydn::D_SDW_WITH_REG;
   case Haydn::D_SHW_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SHW_POST_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SHW_POST_IMM_S1:
-  case Haydn::D_SHW_POST_IMM_S2:
     return Haydn::D_SHW_POST_IMM;
   case Haydn::D_SHW_POST_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SHW_POST_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SHW_POST_REG_S1:
-  case Haydn::D_SHW_POST_REG_S2:
     return Haydn::D_SHW_POST_REG;
   case Haydn::D_SHW_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SHW_PRE_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SHW_PRE_IMM_S1:
-  case Haydn::D_SHW_PRE_IMM_S2:
     return Haydn::D_SHW_PRE_IMM;
   case Haydn::D_SHW_PRE_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SHW_PRE_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SHW_PRE_REG_S1:
-  case Haydn::D_SHW_PRE_REG_S2:
     return Haydn::D_SHW_PRE_REG;
   case Haydn::D_SHW_WITH_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SHW_WITH_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SHW_WITH_IMM_S1:
-  case Haydn::D_SHW_WITH_IMM_S2:
     return Haydn::D_SHW_WITH_IMM;
   case Haydn::D_SHW_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SHW_WITH_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SHW_WITH_REG_S1:
-  case Haydn::D_SHW_WITH_REG_S2:
     return Haydn::D_SHW_WITH_REG;
   case Haydn::D_SQHWUA_POST_E2_E0_LOADSTORE0_AR:
   case Haydn::D_SQHWUA_POST_E3_E0_LOADSTORE0_AR:
-  case Haydn::D_SQHWUA_POST_S0:
-  case Haydn::D_SQHWUA_POST_S1:
-  case Haydn::D_SQHWUA_POST_S2:
     return Haydn::D_SQHWUA_POST;
   case Haydn::D_STWUA_POST_E2_E0_LOADSTORE0_AR:
   case Haydn::D_STWUA_POST_E3_E0_LOADSTORE0_AR:
-  case Haydn::D_STWUA_POST_S0:
-  case Haydn::D_STWUA_POST_S1:
-  case Haydn::D_STWUA_POST_S2:
     return Haydn::D_STWUA_POST;
   case Haydn::D_SW_H_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SW_H_POST_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SW_H_POST_IMM_S1:
-  case Haydn::D_SW_H_POST_IMM_S2:
     return Haydn::D_SW_H_POST_IMM;
   case Haydn::D_SW_H_POST_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SW_H_POST_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SW_H_POST_REG_S1:
-  case Haydn::D_SW_H_POST_REG_S2:
     return Haydn::D_SW_H_POST_REG;
   case Haydn::D_SW_H_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SW_H_PRE_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SW_H_PRE_IMM_S1:
-  case Haydn::D_SW_H_PRE_IMM_S2:
     return Haydn::D_SW_H_PRE_IMM;
   case Haydn::D_SW_H_PRE_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SW_H_PRE_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SW_H_PRE_REG_S1:
-  case Haydn::D_SW_H_PRE_REG_S2:
     return Haydn::D_SW_H_PRE_REG;
   case Haydn::D_SW_H_WITH_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SW_H_WITH_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SW_H_WITH_IMM_S1:
-  case Haydn::D_SW_H_WITH_IMM_S2:
     return Haydn::D_SW_H_WITH_IMM;
   case Haydn::D_SW_H_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SW_H_WITH_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SW_H_WITH_REG_S1:
-  case Haydn::D_SW_H_WITH_REG_S2:
     return Haydn::D_SW_H_WITH_REG;
   case Haydn::D_SW_L_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SW_L_POST_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SW_L_POST_IMM_S1:
-  case Haydn::D_SW_L_POST_IMM_S2:
     return Haydn::D_SW_L_POST_IMM;
   case Haydn::D_SW_L_POST_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SW_L_POST_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SW_L_POST_REG_S1:
-  case Haydn::D_SW_L_POST_REG_S2:
     return Haydn::D_SW_L_POST_REG;
   case Haydn::D_SW_L_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SW_L_PRE_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SW_L_PRE_IMM_S1:
-  case Haydn::D_SW_L_PRE_IMM_S2:
     return Haydn::D_SW_L_PRE_IMM;
   case Haydn::D_SW_L_PRE_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SW_L_PRE_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SW_L_PRE_REG_S1:
-  case Haydn::D_SW_L_PRE_REG_S2:
     return Haydn::D_SW_L_PRE_REG;
   case Haydn::D_SW_L_WITH_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::D_SW_L_WITH_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::D_SW_L_WITH_IMM_S1:
-  case Haydn::D_SW_L_WITH_IMM_S2:
     return Haydn::D_SW_L_WITH_IMM;
   case Haydn::D_SW_L_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SW_L_WITH_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::D_SW_L_WITH_REG_S1:
-  case Haydn::D_SW_L_WITH_REG_S2:
     return Haydn::D_SW_L_WITH_REG;
   case Haydn::EXP2_E3_E0_ALU2_R:
   case Haydn::EXP2_E3_E1_ALU1_R:
@@ -5195,10 +5095,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::JALR_E3_E0_ALU0_RI12:
   case Haydn::JALR_E3_E1_ALU0_RI12:
     return Haydn::JALR;
-  case Haydn::JALR_W_S0:
-    return Haydn::JALR_W;
-  case Haydn::JAL_W_S0:
-    return Haydn::JAL_W;
   case Haydn::LOG2_E3_E0_ALU2_R:
   case Haydn::LOG2_E3_E1_ALU1_R:
   case Haydn::LOG2_E3_E2_ALU2_R:
@@ -5989,8 +5885,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::NEG64S_E3_E2_ALU0_R:
   case Haydn::NEG64S_E3_E2_ALU2_R:
     return Haydn::NEG64S;
-  case Haydn::NOP_S0:
-    return Haydn::NOP;
   case Haydn::NOT32_E2_E0_ALU0_R:
   case Haydn::NOT32_E3_E0_ALU0_R:
   case Haydn::NOT32_E3_E0_ALU2_R:
@@ -6090,12 +5984,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::ORI32_E2_E0_ALU0_RI20:
   case Haydn::ORI32_E2_E1_ALU1_RI20:
     return Haydn::ORI32;
-  case Haydn::ORI32_W_S0:
-    return Haydn::ORI32_W;
-  case Haydn::PLDWWUA_S0:
-  case Haydn::PLDWWUA_S1:
-  case Haydn::PLDWWUA_S2:
-    return Haydn::PLDWWUA;
   case Haydn::POPCOUNT32_E2_E0_ALU0_R:
   case Haydn::POPCOUNT32_E3_E0_ALU0_R:
   case Haydn::POPCOUNT32_E3_E0_ALU2_R:
@@ -6137,15 +6025,12 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR:
   case Haydn::SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR:
   case Haydn::SET_HWLOOP_F2_E3_E1_ALU0_HWLRIIR:
-  case Haydn::SET_HWLOOP_F2_W_S0:
     return Haydn::SET_HWLOOP_F2_W;
   case Haydn::SET_HWLOOP_REG_E2_E0_ALU0_HWLRRRR:
   case Haydn::SET_HWLOOP_REG_E3_E0_ALU0_HWLRRRR:
   case Haydn::SET_HWLOOP_REG_E3_E1_ALU0_HWLRRRR:
   case Haydn::SET_HWLOOP_REG_E3_E2_ALU0_HWLRRRR:
     return Haydn::SET_HWLOOP_REG;
-  case Haydn::SET_HWLOOP_W_S0:
-    return Haydn::SET_HWLOOP_W;
   case Haydn::SEXT32T64_E2_E0_ALU0_R:
   case Haydn::SEXT32T64_E3_E0_ALU0_R:
   case Haydn::SEXT32T64_E3_E0_ALU2_R:
@@ -6570,10 +6455,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::SRLI64_E3_E2_ALU0_RI6:
   case Haydn::SRLI64_E3_E2_ALU2_RI6:
     return Haydn::SRLI64;
-  case Haydn::ST32_POST_S1:
-    return Haydn::ST32_POST;
-  case Haydn::ST64_POST_S1:
-    return Haydn::ST64_POST;
   case Haydn::SUB32_E2_E0_ALU0_RR:
   case Haydn::SUB32_E3_E0_ALU0_RR:
   case Haydn::SUB32_E3_E0_ALU2_RR:
@@ -6838,103 +6719,63 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
     return Haydn::S_LW_WITH_REG;
   case Haydn::S_SB_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SB_POST_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SB_POST_IMM_S1:
-  case Haydn::S_SB_POST_IMM_S2:
     return Haydn::S_SB_POST_IMM;
   case Haydn::S_SB_POST_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SB_POST_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SB_POST_REG_S1:
-  case Haydn::S_SB_POST_REG_S2:
     return Haydn::S_SB_POST_REG;
   case Haydn::S_SB_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SB_PRE_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SB_PRE_IMM_S1:
-  case Haydn::S_SB_PRE_IMM_S2:
     return Haydn::S_SB_PRE_IMM;
   case Haydn::S_SB_PRE_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SB_PRE_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SB_PRE_REG_S1:
-  case Haydn::S_SB_PRE_REG_S2:
     return Haydn::S_SB_PRE_REG;
   case Haydn::S_SB_WITH_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SB_WITH_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SB_WITH_IMM_S1:
-  case Haydn::S_SB_WITH_IMM_S2:
     return Haydn::S_SB_WITH_IMM;
   case Haydn::S_SB_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SB_WITH_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SB_WITH_REG_S1:
-  case Haydn::S_SB_WITH_REG_S2:
     return Haydn::S_SB_WITH_REG;
   case Haydn::S_SHW_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SHW_POST_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SHW_POST_IMM_S1:
-  case Haydn::S_SHW_POST_IMM_S2:
     return Haydn::S_SHW_POST_IMM;
   case Haydn::S_SHW_POST_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SHW_POST_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SHW_POST_REG_S1:
-  case Haydn::S_SHW_POST_REG_S2:
     return Haydn::S_SHW_POST_REG;
   case Haydn::S_SHW_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SHW_PRE_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SHW_PRE_IMM_S1:
-  case Haydn::S_SHW_PRE_IMM_S2:
     return Haydn::S_SHW_PRE_IMM;
   case Haydn::S_SHW_PRE_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SHW_PRE_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SHW_PRE_REG_S1:
-  case Haydn::S_SHW_PRE_REG_S2:
     return Haydn::S_SHW_PRE_REG;
   case Haydn::S_SHW_WITH_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SHW_WITH_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SHW_WITH_IMM_S1:
-  case Haydn::S_SHW_WITH_IMM_S2:
     return Haydn::S_SHW_WITH_IMM;
   case Haydn::S_SHW_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SHW_WITH_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SHW_WITH_REG_S1:
-  case Haydn::S_SHW_WITH_REG_S2:
     return Haydn::S_SHW_WITH_REG;
   case Haydn::S_SW_BREV_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SW_BREV_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SW_BREV_IMM_S1:
-  case Haydn::S_SW_BREV_IMM_S2:
     return Haydn::S_SW_BREV_IMM;
   case Haydn::S_SW_BREV_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SW_BREV_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SW_BREV_REG_S1:
-  case Haydn::S_SW_BREV_REG_S2:
     return Haydn::S_SW_BREV_REG;
   case Haydn::S_SW_POST_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SW_POST_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SW_POST_IMM_S1:
-  case Haydn::S_SW_POST_IMM_S2:
     return Haydn::S_SW_POST_IMM;
   case Haydn::S_SW_POST_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SW_POST_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SW_POST_REG_S1:
-  case Haydn::S_SW_POST_REG_S2:
     return Haydn::S_SW_POST_REG;
   case Haydn::S_SW_PRE_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SW_PRE_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SW_PRE_IMM_S1:
-  case Haydn::S_SW_PRE_IMM_S2:
     return Haydn::S_SW_PRE_IMM;
   case Haydn::S_SW_PRE_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SW_PRE_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SW_PRE_REG_S1:
-  case Haydn::S_SW_PRE_REG_S2:
     return Haydn::S_SW_PRE_REG;
   case Haydn::S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6:
   case Haydn::S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6:
-  case Haydn::S_SW_WITH_IMM_S1:
-  case Haydn::S_SW_WITH_IMM_S2:
     return Haydn::S_SW_WITH_IMM;
   case Haydn::S_SW_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::S_SW_WITH_REG_E3_E0_LOADSTORE0_RR:
-  case Haydn::S_SW_WITH_REG_S1:
-  case Haydn::S_SW_WITH_REG_S2:
     return Haydn::S_SW_WITH_REG;
   case Haydn::TRANSF64_E2_E0_ALU0_R:
   case Haydn::TRANSF64_E3_E0_ALU0_R:
@@ -6970,10 +6811,11 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
     return Haydn::TRANSF64_L;
   case Haydn::WBARWUA_E2_E0_LOADSTORE0_AR:
   case Haydn::WBARWUA_E3_E0_LOADSTORE0_AR:
-  case Haydn::WBARWUA_S1:
-  case Haydn::WBARWUA_S2:
     return Haydn::WBARWUA;
-  case Haydn::WFI_S0:
+  case Haydn::WFITBDTBDTBD_E2_E0_ALU0_HINT:
+  case Haydn::WFITBDTBDTBD_E3_E0_ALU0_HINT:
+  case Haydn::WFITBDTBDTBD_E3_E1_ALU0_HINT:
+  case Haydn::WFITBDTBDTBD_E3_E2_ALU0_HINT:
     return Haydn::WFI;
   case Haydn::X2ABS32_E2_E0_ALU0_R:
   case Haydn::X2ABS32_E3_E0_ALU0_R:
@@ -7424,7 +7266,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::X2SEQ32_E3_E1_ALU1_R:
   case Haydn::X2SEQ32_E3_E2_ALU0_R:
   case Haydn::X2SEQ32_E3_E2_ALU2_R:
-  case Haydn::X2SEQ32_S1:
     return Haydn::X2SEQ32;
   case Haydn::X2SLE32_E2_E0_ALU0_R:
   case Haydn::X2SLE32_E3_E0_ALU0_R:
@@ -7433,7 +7274,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::X2SLE32_E3_E1_ALU1_R:
   case Haydn::X2SLE32_E3_E2_ALU0_R:
   case Haydn::X2SLE32_E3_E2_ALU2_R:
-  case Haydn::X2SLE32_S1:
     return Haydn::X2SLE32;
   case Haydn::X2SLL32_E2_E0_ALU0_RR:
   case Haydn::X2SLL32_E3_E0_ALU0_RR:
@@ -7458,7 +7298,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::X2SLT32_E3_E1_ALU1_R:
   case Haydn::X2SLT32_E3_E2_ALU0_R:
   case Haydn::X2SLT32_E3_E2_ALU2_R:
-  case Haydn::X2SLT32_S1:
     return Haydn::X2SLT32;
   case Haydn::X2SRA32_E2_E0_ALU0_RR:
   case Haydn::X2SRA32_E3_E0_ALU0_RR:
@@ -7953,7 +7792,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::X4SEQ16_E3_E1_ALU1_R:
   case Haydn::X4SEQ16_E3_E2_ALU0_R:
   case Haydn::X4SEQ16_E3_E2_ALU2_R:
-  case Haydn::X4SEQ16_S1:
     return Haydn::X4SEQ16;
   case Haydn::X4SLE16_E2_E0_ALU0_R:
   case Haydn::X4SLE16_E3_E0_ALU0_R:
@@ -7962,7 +7800,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::X4SLE16_E3_E1_ALU1_R:
   case Haydn::X4SLE16_E3_E2_ALU0_R:
   case Haydn::X4SLE16_E3_E2_ALU2_R:
-  case Haydn::X4SLE16_S1:
     return Haydn::X4SLE16;
   case Haydn::X4SLL16_E2_E0_ALU0_RR:
   case Haydn::X4SLL16_E3_E0_ALU0_RR:
@@ -7987,7 +7824,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::X4SLT16_E3_E1_ALU1_R:
   case Haydn::X4SLT16_E3_E2_ALU0_R:
   case Haydn::X4SLT16_E3_E2_ALU2_R:
-  case Haydn::X4SLT16_S1:
     return Haydn::X4SLT16;
   case Haydn::X4SRA16_E2_E0_ALU0_RR:
   case Haydn::X4SRA16_E3_E0_ALU0_RR:

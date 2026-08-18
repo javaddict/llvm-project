@@ -32,6 +32,32 @@ static constexpr unsigned FormatEIndicator = 0x7u; // bits[2:0]
 static constexpr unsigned FormatEHeaderReserved = 0x0u; // bits[5:4]
 #endif // GET_FORMAT_E_GOLDEN_PINS
 
+#ifdef GET_FORMAT_E_MODE_ONLY_NAMES
+#undef GET_FORMAT_E_MODE_ONLY_NAMES
+static constexpr const char *const FormatEE2OnlyNameSet[] = {
+  "ADDI32",
+  "ADDI32S",
+  "ANDI32",
+  "MOVEI_H",
+  "MOVEI_L",
+  "ORI32",
+  "SET_HWLOOP",
+  "SUBI32",
+  "SUBI32S",
+  "XORI32",
+};
+static constexpr const char *const FormatEE3OnlyNameSet[] = {
+  "ARCTAN",
+  "EXP2",
+  "LOG2",
+  "RECIP",
+  "SIN_COS",
+  "SQRT",
+};
+static_assert(sizeof(FormatEE2OnlyNameSet) / sizeof(FormatEE2OnlyNameSet[0]) == 10u, "E2-only set pin");
+static_assert(sizeof(FormatEE3OnlyNameSet) / sizeof(FormatEE3OnlyNameSet[0]) == 6u, "E3-only set pin");
+#endif // GET_FORMAT_E_MODE_ONLY_NAMES
+
 #ifdef GET_FORMAT_E_ENUMS
 #undef GET_FORMAT_E_ENUMS
 enum class FormatEMode : uint8_t { E2 = 0, E3 = 1 };

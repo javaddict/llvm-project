@@ -11,8 +11,9 @@
 // MemberOpcode (mode → row mask). FieldSlots stay residual AlternateInsts
 // occupancy (index == SLOT bit) so Bundle.canAdd does not change.
 // Residual FieldSlot opcodes remain only when no Format E span exists
-// (CSRW_W, NOP). Product identity after post-RA commit is Format E
-// BundleFormatRowID.
+// (CSRW_W, NOP). Suffix `_S*` spelling is occupancy recovery, not a
+// product alternate source. Product identity after post-RA commit is
+// Format E BundleFormatRowID.
 //
 // CompatibleFormatMask is the Format E row frontier this residual member may
 // occupy. Most residual alts stamp ProductFormatMask (E2|E3). Logicals that
@@ -47,7 +48,8 @@ namespace llvm {
 /// (vector index == field; generated AlternateInsts order).
 struct PlacementAlternative {
   /// Post-setDesc Format E member opcode (e.g. ADD32_E2_E0_ALU0_RR).
-  /// Residual FieldSlots (CSRW_W_S0, NOP_S0) appear only when no span exists.
+  /// Residual FieldSlots (WFI_S0 occupancy Fallback) appear only when no
+  /// Format E span exists.
   unsigned MemberOpcode = 0;
 
 /// Bitmask of BundleFormatRowIDs this member may occupy.

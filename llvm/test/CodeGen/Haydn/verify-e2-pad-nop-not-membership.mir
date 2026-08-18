@@ -5,10 +5,10 @@
 # REGRESSION TEST: pad NOP is CompletionState, not a membership entry.
 #
 # Bug: collectBundleMemberOpcodes counted isPadNopOpcode children.
-# E2 (2 entries) + 2 reals + NOP_S0 was "membership exceeds stamped row".
+# E2 (2 entries) + 2 reals + NOP was "membership exceeds stamped row".
 # Finalize already skips pads. One counter law: verify skips them too.
 #
-# Test design: stamped E2 BUNDLE with two Format E members and NOP_S0.
+# Test design: stamped E2 BUNDLE with two Format E members and NOP.
 # If pads count as members, verify fatals. CHECK keeps the two reals.
 
 --- |
@@ -27,7 +27,7 @@ body:             |
     ; CHECK: ADDI32_E2_E1_ALU1_RI20
     BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
-      NOP_S0
+      NOP
       $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
     }
     RET implicit $r15

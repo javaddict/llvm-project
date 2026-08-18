@@ -351,13 +351,14 @@ TEST(HaydnPlacementAlternativeTest, DefaultCtorStampsProductMask) {
   EXPECT_TRUE(A.isCompatibleWith(BundleFormatRowID::E96ThreeEntry));
 }
 
-TEST(HaydnPlacementAlternativeTest, CSRW_WStaysResidualFieldSlot) {
-  // No Format E CSRW_W members; reloc keeps CSRW_W_S0.
+TEST(HaydnPlacementAlternativeTest, CSRW_WPeelsToFormatEMember) {
+  // CSRW_W occupancy peels to CSRW Format E e0. Reloc CSRW_W without a
+  // typed CSR fixup stays fail-closed at encode, not a FieldSlot.
   HaydnMCFormats Fmts;
   SmallVector<PlacementAlternative, 4> Alts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::CSRW_W, Alts));
-  ASSERT_EQ(Alts.size(), 1u);
-  EXPECT_EQ(Alts[0].MemberOpcode, Haydn::CSRW_W_S0);
+  ASSERT_FALSE(Alts.empty());
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Alts[0].MemberOpcode, 0));
 }
 
 } // namespace

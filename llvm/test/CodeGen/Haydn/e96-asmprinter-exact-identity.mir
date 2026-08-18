@@ -1,13 +1,18 @@
 # RUN: rm -rf %t && split-file %s %t
-# RUN: llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
-# RUN:   %t/missing_row.mir -o - | FileCheck %s --check-prefix=COUNT-ROW
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -start-after=haydn-verify-bundles \
+# RUN:   %t/missing_row.mir -o - 2>&1 | FileCheck %s --check-prefix=NO-ROW
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -start-after=haydn-verify-bundles \
+# RUN:   %t/child_count_override.mir -o - 2>&1 | FileCheck %s --check-prefix=NO-E3
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -start-after=haydn-verify-bundles \
 # RUN:   %t/completion_mismatch.mir -o - 2>&1 | FileCheck %s --check-prefix=COMP-MISMATCH
+# RUN: llc -mtriple=haydn-unknown-elf -start-after=haydn-verify-bundles \
+# RUN:   %t/idle_fullslot.mir -o - | FileCheck %s --check-prefix=IDLE
 # REQUIRES: haydn-registered-target
 
-# Role: verifier — E2 vs E3 is a bundle-level fact (stamp or child count).
-# A 1-child BUNDLE with no row stamp encodes as E2. Present
-# CompletionStateID must still match row + real membership.
+# Role: printer — compiler-origin BUNDLE roots must carry a product row.
+# Missing-row E2 default and child-count E3 override are silent repairs.
+# Present CompletionStateID must still match golden-row fill: unused
+# windows and pad-only idle are AllEntriesReal (architectural NOP).
 
 #--- missing_row.mir
 --- |
@@ -20,10 +25,28 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r0, $r1, $r15
-    ; COUNT-ROW: add32
-    ; COUNT-ROW: jalr
+    ; NO-ROW: missing{{( or unknown)?}} BundleFormatRowID
     BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+#--- child_count_override.mir
+--- |
+  define void @child_count_override() { ret void }
+...
+---
+name:            child_count_override
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $d0, $d1, $d2, $d3, $r15
+    ; NO-E3: {{exceeds stamped row|entry capacity below membership|three real members require}}
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $d4, implicit-def $d5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $d0, implicit $d1, implicit $d2, implicit $d3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $d4 = ADD64 $d0, $d1, implicit-def dead $sfr
+      $d5 = ADD64 $d2, $d3, implicit-def dead $sfr
     }
     RET implicit $r15
 
@@ -37,11 +60,27 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
-    liveins: $r0, $r1, $r2, $r3, $r15
+    liveins: $r0, $r1, $d0, $d1, $r15
     ; COMP-MISMATCH: CompletionStateID does not match
-    ; COMP-MISMATCH: refuse filler reselection
-    BUNDLE 0, 2, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE 0, 1, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+#--- idle_fullslot.mir
+--- |
+  define void @idle_fullslot() { ret void }
+...
+---
+name:            idle_fullslot
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; IDLE: nop
+    ; IDLE: jalr
+    BUNDLE 0, 0 {
+      NOP
     }
     RET implicit $r15

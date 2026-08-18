@@ -12,11 +12,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnBundleFormatSolver.h"
+#include "HaydnBundlePortBudget.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/ADT/bit.h"
 #include <algorithm>
@@ -422,7 +424,10 @@ llvm::haydn::bundle::assignMemberOpcodesForSettledRow(
 
   SmallVector<unsigned, 3> Empty;
   const unsigned N = LogicalOpcodes.size();
-  if (N == 0 || N > (Mode ? 3u : 2u))
+  const unsigned Cap = bundleRowEntryCount(
+      Mode ? haydn::format::BundleFormatRowID::E96ThreeEntry
+           : haydn::format::BundleFormatRowID::E96TwoEntry);
+  if (N == 0 || N > Cap)
     return Empty;
 
   SmallVector<std::string, 3> Logs;
@@ -464,6 +469,35 @@ llvm::haydn::bundle::assignMemberOpcodesForSettledRow(
   return Out;
 }
 
+unsigned llvm::haydn::bundle::productSolveLogicalOpcode(
+    unsigned Opc, const HaydnMCFormats &Fmts) {
+  const unsigned MemberLog = format_e::logicalOpcodeOrSelf(Opc);
+  if (hasPlacementAlternatives(Fmts, MemberLog))
+    return MemberLog;
+  if (hasPlacementAlternatives(Fmts, Opc))
+    return Opc;
+
+  // Residual codegen aliases (ST32_POST, LD32, …) peel to the catalog
+  // logical that owns the AlternateInsts / Format E member span. Haydn
+  // has one FormatInterface (haydnDefaultMCFormats); AIE has no alias
+  // layer (AIEBaseMCFormats getAlternateInstsOpcode only).
+  static StringMap<unsigned> AltsByName;
+  static std::once_flag Once;
+  std::call_once(Once, [] {
+    const HaydnMCFormats &DefaultFmts = haydnDefaultMCFormats();
+    const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+    for (unsigned O = 0, E = MII.getNumOpcodes(); O != E; ++O)
+      if (DefaultFmts.getAlternateInstsOpcode(O))
+        AltsByName[haydnOpcodeName(O)] = O;
+  });
+  const std::string Peeled = format_e::peelLogicalOpcodeName(
+      haydnOpcodeName(Opc), /*StripWide=*/false);
+  auto It = AltsByName.find(Peeled);
+  if (It != AltsByName.end() && hasPlacementAlternatives(Fmts, It->second))
+    return It->second;
+  return MemberLog;
+}
+
 bool llvm::haydn::bundle::cycleMembersRespectPortBudgets(
     ArrayRef<MachineInstr *> Instrs) {
   unsigned GR = 0, GW = 0, DRr = 0, DRw = 0, ARr = 0, ARw = 0, SR = 0,
@@ -501,4 +535,13 @@ bool llvm::haydn::bundle::cycleMembersRespectPortBudgets(
          DRr <= HAYDN_DR_READ_PORTS && DRw <= HAYDN_DR_WRITE_PORTS &&
          ARr <= HAYDN_AR_READ_PORTS && ARw <= HAYDN_AR_WRITE_PORTS &&
          SR <= HAYDN_SFR_READ_PORTS && SW <= HAYDN_SFR_WRITE_PORTS;
+}
+
+bool llvm::haydn::bundle::cycleMembersExceedPortBudget(
+    ArrayRef<MachineInstr *> Instrs) {
+  // P7: commit-side wrapper over the shared port-budget predicate. Kept
+  // beside cycleMembersRespectPortBudgets (CB-153b; live-SFR-aware caps)
+  // so later working callers can share haydnCycleMembersExceedPortBudget
+  // with verifyCommittedBundle.
+  return haydnCycleMembersExceedPortBudget(Instrs);
 }

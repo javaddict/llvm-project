@@ -13,7 +13,8 @@ Usage:
                                [--emit-mnemonic-roundtrip]
 
 --check regenerates into memory and diffs against the committed files, then
-fail-closes on XLSX↔JSON layout parity and canonical-vector ledger round-trip.
+fail-closes on XLSX↔JSON layout parity, td-vs-golden imm width/signedness,
+and canonical-vector ledger round-trip.
 It does not write, and it does not drive llvm-mc (ledger may_drive_llvm_mc_encode
 is false). Peer: BundleSim generate_catalog.py --check
 (bundlesim/isa/database/generate_catalog.py:483-485).
@@ -58,7 +59,7 @@ PINNED_INDEX_SHA256 = (
     "e77908e9f09a6d649491389f8dabe06a896db22b230bedfe915d553e8801103b"
 )
 PINNED_CANONICAL_SHA256 = (
-    "6d403139d2530efbcee741456be330ce63843482d7fd372a18eab94cdfb728f9"
+    "000cd92682adb7b88a727182318fa58bd0989547895ae36585c5cbd00f220c0d"
 )
 SSML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
@@ -543,11 +544,32 @@ def e3_unit_tuples(cat: Catalog) -> Tuple[List[Tuple[str, str, str]], List[Tuple
 # ---------------------------------------------------------------------------
 
 
+def mode_only_name_sets(cat: Catalog) -> Tuple[List[str], List[str]]:
+    """Golden E2-only / E3-only logical-name SETS, sorted (W44 / P18(c)).
+
+    The count pins (PIN_E2_ONLY / PIN_E3_ONLY) remain the catalog-shape
+    invariant; these sets are the admission truth consumers derive from —
+    generators emit SETS, not COUNTS (AIE pipeline study, ch4 port table:
+    counts cannot catch identity drift, only cardinality drift).
+    """
+    e2 = {m.logical for m in cat.members if not m.is_nop and m.mode == "E2"}
+    e3 = {m.logical for m in cat.members if not m.is_nop and m.mode == "E3"}
+    e2_only = sorted(e2 - e3)
+    e3_only = sorted(e3 - e2)
+    if len(e2_only) != PIN_E2_ONLY or len(e3_only) != PIN_E3_ONLY:
+        raise SystemExit(
+            f"E2/E3-only sets {len(e2_only)}/{len(e3_only)} != pins "
+            f"{PIN_E2_ONLY}/{PIN_E3_ONLY}"
+        )
+    return e2_only, e3_only
+
+
 def emit_records_inc(
     cat: Catalog, json_sha: str, xlsx_sha: str
 ) -> str:
     e2_pairs = e2_unit_pairs(cat)
     e3_legal, e3_illegal = e3_unit_tuples(cat)
+    e2_only, e3_only = mode_only_name_sets(cat)
     lines: List[str] = []
     lines.append("//===-- HaydnGenFormatERecords.inc - inert Format E records -*- C++ -*-===//")
     lines.append("//")
@@ -593,6 +615,34 @@ def emit_records_inc(
     lines.append("static constexpr unsigned FormatEIndicator = 0x7u; // bits[2:0]")
     lines.append("static constexpr unsigned FormatEHeaderReserved = 0x0u; // bits[5:4]")
     lines.append("#endif // GET_FORMAT_E_GOLDEN_PINS")
+    lines.append("")
+
+    # Mode-only admission SETS (W44 / P18(c)): sorted logical names whose
+    # golden catalog rows exist in exactly one Mode. Admission consumers
+    # (residualAltCompatibleFormatMask, isFormatEE2Only/E3OnlyOpcodeName)
+    # binary-search these sets — never a hand-transcribed name switch that
+    # silently falls back to ProductFormatMask on drift.
+    lines.append("#ifdef GET_FORMAT_E_MODE_ONLY_NAMES")
+    lines.append("#undef GET_FORMAT_E_MODE_ONLY_NAMES")
+    lines.append(f"static constexpr const char *const FormatEE2OnlyNameSet[] = {{")
+    for n in e2_only:
+        lines.append(f'  "{c_escape(n)}",')
+    lines.append("};")
+    lines.append(f"static constexpr const char *const FormatEE3OnlyNameSet[] = {{")
+    for n in e3_only:
+        lines.append(f'  "{c_escape(n)}",')
+    lines.append("};")
+    lines.append(
+        "static_assert(sizeof(FormatEE2OnlyNameSet) /"
+        f" sizeof(FormatEE2OnlyNameSet[0]) == {PIN_E2_ONLY}u,"
+        ' "E2-only set pin");'
+    )
+    lines.append(
+        "static_assert(sizeof(FormatEE3OnlyNameSet) /"
+        f" sizeof(FormatEE3OnlyNameSet[0]) == {PIN_E3_ONLY}u,"
+        ' "E3-only set pin");'
+    )
+    lines.append("#endif // GET_FORMAT_E_MODE_ONLY_NAMES")
     lines.append("")
 
     # Enumerations
@@ -1008,6 +1058,12 @@ def is_ls_ri6_scaled_imm(logical: str) -> bool:
     )
 
 
+# Golden `uimmN`/`simmN` annotations overlay td operand class only when the
+# generated field width already matches. Width-only `immN` and unmatched
+# widths stay as generated (open annotation residual).
+_GOLDEN_IMM_ANN: Dict[str, Tuple[str, int]] = {}
+
+
 def field_operand_td(
     of: "OperandField",
     idx: int,
@@ -1019,6 +1075,9 @@ def field_operand_td(
     w = of.bits.width
     name = sanitize_ident(f"{of.role}_{idx}")
     logu = (logical or "").strip().upper()
+    gold = _GOLDEN_IMM_ANN.get(logu)
+    if kind == "IMM" and gold and gold[1] == w and gold[0] in ("uimm", "simm"):
+        return name, f"{gold[0]}{gold[1]}:${name}", str(w)
     if kind == "REG_DR":
         return name, f"DR64:${name}", str(w)
     if kind == "REG_AR":
@@ -2032,8 +2091,8 @@ def parse_logical_materialize(path: Path) -> List[Tuple[str, str]]:
             if member == logical:
                 continue
             pairs.append((member, logical))
-    if not pairs:
-        raise SystemExit(f"no LogicalMaterialize pairs in {path}")
+    # Empty is the R13 end state: every residual FieldSlot retired, so
+    # member→logical comes only from generated Format E members.
     return pairs
 
 
@@ -2066,6 +2125,9 @@ def collect_member_to_logical(cat: Catalog, td_path: Path) -> Dict[str, str]:
             return
         if not IDENT_RE.fullmatch(member) or not IDENT_RE.fullmatch(logical):
             raise SystemExit(f"non-ident member→logical {member!r} → {logical!r}")
+        # Retired FieldSlots must not emit Haydn:: cases.
+        if member not in known:
+            return
         prev = mapping.get(member)
         if prev is not None and prev != logical:
             raise SystemExit(
@@ -2084,6 +2146,7 @@ def collect_member_to_logical(cat: Catalog, td_path: Path) -> Dict[str, str]:
     # the TableGen-real logical TII already switches on (no string peel).
     td_logical_aliases = {
         "SET_HWLOOP_F2": "SET_HWLOOP_F2_W",
+        "WFITBDTBDTBD": "WFI",
     }
     skipped = 0
     for rec in cat.members:
@@ -2889,6 +2952,130 @@ def diff_generated_targets(
     return failed
 
 
+IMM_ANN_RE = re.compile(r"^(uimm|simm|imm)(\d+)", re.IGNORECASE)
+
+# Explicit golden uimm/simm whose generated member field width differs.
+# Query-live via --check (empty = no unmatched uimm/simm). Golden `immN`
+# is a width pin only — do not invent a td rewrite for those rows.
+TD_GOLDEN_IMM_WIDTH_RESIDUAL: frozenset[str] = frozenset()
+
+
+def collect_golden_imm_annotations(data: Any) -> Dict[str, Tuple[str, int]]:
+    """Map golden instruction name → (kind, width) from catalog `imm` fields."""
+    out: Dict[str, Tuple[str, int]] = {}
+    def walk(obj: Any) -> None:
+        if isinstance(obj, dict):
+            inst = obj.get("instruction")
+            imm = obj.get("imm")
+            if isinstance(inst, str) and isinstance(imm, str):
+                m = IMM_ANN_RE.match(imm.strip())
+                if m:
+                    key = inst.strip().upper()
+                    parsed = (m.group(1).lower(), int(m.group(2)))
+                    prev = out.get(key)
+                    if prev and prev[1] != parsed[1]:
+                        raise SystemExit(
+                            f"golden imm width drift {key}: {prev} vs {parsed}"
+                        )
+                    if prev and prev[0] != parsed[0] and "imm" not in (
+                        prev[0],
+                        parsed[0],
+                    ):
+                        raise SystemExit(
+                            f"golden imm signedness drift {key}: {prev} vs {parsed}"
+                        )
+                    out[key] = parsed
+            for val in obj.values():
+                walk(val)
+        elif isinstance(obj, list):
+            for val in obj:
+                walk(val)
+    walk(data)
+    return out
+
+
+def check_td_golden_imm_parity(cat: Catalog, data: Any) -> None:
+    """Fail closed when generated member imm width/signedness drifts from golden.
+
+    Golden `imm20` is a width pin (signedness lives in catalog semantics);
+    explicit `uimm*`/`simm*` must match the generated td operand class.
+    """
+    golden = collect_golden_imm_annotations(data)
+    layouts = {lay.layout_id: lay for lay in cat.layouts}
+    compared = 0
+    compared_keys: set[str] = set()
+    for rec in cat.members:
+        if rec.is_nop:
+            continue
+        key = rec.logical.strip().upper()
+        if key not in golden:
+            continue
+        gkind, gwidth = golden[key]
+        lay = layouts[rec.layout_id]
+        active = {role: (alias or "").strip() for role, alias in rec.operand_active}
+        for i, of in enumerate(lay.operand_fields):
+            alias = active.get(of.role, "")
+            if not alias:
+                continue
+            # cbr_sel / hwlr_sel are IMM class but not the golden `imm` field.
+            if of.bits.width != gwidth:
+                continue
+            _name, frag, _bw = field_operand_td(of, i, alias, rec.logical)
+            ty = frag.split(":", 1)[0]
+            tm = IMM_ANN_RE.match(ty)
+            if not tm:
+                continue
+            tkind, twidth = tm.group(1).lower(), int(tm.group(2))
+            if twidth != gwidth:
+                raise SystemExit(
+                    f"td-vs-golden imm width {key} {rec.member_symbol}: "
+                    f"td {ty} vs golden {gkind}{gwidth}"
+                )
+            if gkind in ("uimm", "simm") and tkind != gkind:
+                raise SystemExit(
+                    f"td-vs-golden imm signedness {key} {rec.member_symbol}: "
+                    f"td {ty} vs golden {gkind}{gwidth}"
+                )
+            compared += 1
+            compared_keys.add(key)
+        # Width-only golden `immN` is not a signedness fact (catalog ZEXT/
+        # signed_mask owns ANDI/ORI/XORI). Unmatched explicit uimm/simm
+        # widths stay on the residual ledger — do not invent a td rewrite.
+    if compared == 0:
+        raise SystemExit("td-vs-golden imm parity compared zero fields")
+    unmatched: Dict[str, Tuple[str, int]] = {}
+    for rec in cat.members:
+        if rec.is_nop:
+            continue
+        key = rec.logical.strip().upper()
+        if key not in golden or key in compared_keys:
+            continue
+        gkind, gwidth = golden[key]
+        if gkind not in ("uimm", "simm"):
+            continue
+        unmatched[key] = (gkind, gwidth)
+    unexpected = sorted(set(unmatched) - TD_GOLDEN_IMM_WIDTH_RESIDUAL)
+    vanished = sorted(TD_GOLDEN_IMM_WIDTH_RESIDUAL - set(unmatched))
+    if unexpected:
+        raise SystemExit(
+            "td-vs-golden imm width residual grew: "
+            + ", ".join(
+                f"{k} golden {unmatched[k][0]}{unmatched[k][1]}"
+                for k in unexpected
+            )
+        )
+    if vanished:
+        raise SystemExit(
+            "td-vs-golden imm width residual closed (drop from ledger): "
+            + ", ".join(vanished)
+        )
+    print(
+        f"OK td-vs-golden imm parity compared={compared} "
+        f"golden_logicals={len(golden)} "
+        f"width_residual={len(unmatched)}"
+    )
+
+
 def prove_flipped_byte_fails(targets: Dict[Path, str]) -> None:
     """Acceptance: one flipped byte in a generated file is visible to --check."""
     first = next(iter(targets))
@@ -2977,6 +3164,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     data = json.loads(json_path.read_text(encoding="utf-8"))
     cat = build_catalog(data)
+    global _GOLDEN_IMM_ANN
+    _GOLDEN_IMM_ANN = collect_golden_imm_annotations(data)
 
     out_dir: Path = args.out_dir
     member_to_logical = collect_member_to_logical(
@@ -3034,6 +3223,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             prove_flipped_byte_fails(targets)
             check_xlsx_json_parity(xlsx_path, data)
+            check_td_golden_imm_parity(cat, data)
             roundtrip_members(cat)
             print(
                 f"OK member encode→decode round-trip members={len(cat.members)}"

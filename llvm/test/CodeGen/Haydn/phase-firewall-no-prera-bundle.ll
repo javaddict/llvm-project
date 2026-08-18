@@ -24,9 +24,11 @@
 ; REQUIRES: asserts
 
 ; Role: structural phase-firewall for ordinary pre-RA + post-RA list-schedule.
-; Pins: no pre-RA BUNDLE / placement identity; post-RA emitted-cycle audit;
-; release-visible pre-RA invent counter; fail-closed per-op resource admission;
-; product StageCount1 SMS containment pin; post-RA AltDesc clear counter.
+; Pins: no pre-RA BUNDLE / private member / setDesc / placement identity;
+; post-RA emitted-cycle audit; release-visible pre-RA invent counter;
+; fail-closed per-op resource admission; product StageCount1 SMS containment
+; pin; post-RA AltDesc clear counter. AR0 phase-firewall inventory closed
+; at 38bd4059: Inputs/SOURCE-AUTHORITY-ANCHORS.txt (not a product registry).
 ; COMMON-NOT: BUNDLE{{.*}}:: (load{{.*}}{
 ; COMMON-NOT: BUNDLE_E96
 ; COMMON-NOT: {{ADD32|ADDI32|OR32|XOR32|LD32|ST32}}_S{{[0-9]}}
@@ -50,10 +52,12 @@
 ; POST-DAG: ADD32
 ; POST-DAG: ADD32
 ; STATS-DAG: haydn-post-ra-sched{{.*}}architectural cycles reconstructed by post-RA leaveMBB
-; STATS-DAG: haydn-post-ra-sched{{.*}}multi-MI cycles finalized as BUNDLE
+; Sequential same-unit setDesc is not a multi-MI pack requirement; the
+; firewall is absence of pre-RA identity plus the cycle/admission audit.
 ; STATS-DAG: haydn-post-ra-sched{{.*}}cleared transient alternate descriptors after setDesc
 ; STATS-DAG: haydn-post-ra-sched{{.*}}fail-closed per-op resource admission
 ; STATS-DAG: haydn-prera-sched{{.*}}pre-RA regions phase-firewall-checked for BUNDLE invent
+; STATS-DAG: haydn-latency-stalls{{.*}}fail-closed per-op resource admission
 ; STATS-NOT: haydn-prera-sched{{.*}}invented new BUNDLE roots
 ; STATS-NOT: haydn-prera-sched{{.*}}invented bundled private members
 ; STATS-NOT: haydn-prera-sched{{.*}}invented private placement opcodes

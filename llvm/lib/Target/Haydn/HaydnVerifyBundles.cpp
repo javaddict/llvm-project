@@ -237,11 +237,12 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
         }
       }
 
-      // Product emission ownership (T-TII5): recount members against the
-      // stamped row and selectCompletionFor. Error text names the actual
-      // check — do not claim "row and member count" for a stub-class test
-      // that never compared Expected. Capacity > ISSUE_SLOT_COUNT is left
-      // to verifyCommittedBundle so OVER-ISSUE FileCheck still matches.
+      // Product emission ownership (T-TII5): empty roots fail here; row
+      // capacity stays in verifyCommittedBundle so OVER-ISSUE FileCheck
+      // still matches. Completion is golden-row fill (unused windows are
+      // architectural NOP → AllEntriesReal), not the stamper helper.
+      // Census is still collectBundleMemberOpcodes / bundleHasPadNop so a
+      // hand `BUNDLE { NOP }` is product idle on both sides.
       {
         SmallVector<unsigned, 3> Members =
             haydn::bundle::collectBundleMemberOpcodes(MI);
@@ -261,8 +262,8 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
         if (auto Comp = haydn::bundle::getBundleCompletionID(MI)) {
           if (Row) {
             haydn::bundle::CompletionStateID Expected =
-                haydn::bundle::selectCompletionForMembersAndPads(
-                    *Row, Members.size(), HasPadNop);
+                haydn::bundle::expectedGoldenRowCompletion(
+                    static_cast<unsigned>(Members.size()), HasPadNop);
             if (*Comp != Expected) {
               std::string Msg;
               raw_string_ostream OS(Msg);

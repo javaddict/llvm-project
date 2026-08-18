@@ -110,7 +110,7 @@ def X4SLLI16_E2_E0_ALU0_RI4 : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def CSRR_E2_E0_ALU0_I8 : HaydnEntryE2E0<(outs GPR32:$reg_0), (ins simm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
+def CSRR_E2_E0_ALU0_I8 : HaydnEntryE2E0<(outs GPR32:$reg_0), (ins uimm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
   bits<4> reg_0;
   bits<8> imm_1;
   bits<11> c0 = 0x0;
@@ -21014,7 +21014,7 @@ def MOVEGPR2SFR_E3_E0_ALU2_SFR : HaydnEntryE3E0<(outs), (ins GPR32:$src_1), "mov
 }
 
 let Itinerary = Slot2_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def CSRR_E3_E0_ALU2_I8 : HaydnEntryE3E0<(outs GPR32:$dest_0), (ins simm8:$imm_1), "csrr\t$dest_0, $imm_1", []> {
+def CSRR_E3_E0_ALU2_I8 : HaydnEntryE3E0<(outs GPR32:$dest_0), (ins uimm8:$imm_1), "csrr\t$dest_0, $imm_1", []> {
   bits<4> dest_0;
   bits<8> imm_1;
   bits<2> c0 = 0x0;
@@ -23822,7 +23822,7 @@ def X4SLLI16_E3_E0_ALU0_RI4 : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def CSRR_E3_E0_ALU0_I8 : HaydnEntryE3E0<(outs GPR32:$reg_0), (ins simm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
+def CSRR_E3_E0_ALU0_I8 : HaydnEntryE3E0<(outs GPR32:$reg_0), (ins uimm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
   bits<4> reg_0;
   bits<8> imm_1;
   bits<6> c0 = 0x0;
@@ -33088,7 +33088,7 @@ def MOVEGPR2SFR_E3_E1_ALU1_SFR : HaydnEntryE3E1<(outs), (ins GPR32:$reg_0), "mov
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def CSRR_E3_E1_ALU1_I8 : HaydnEntryE3E1<(outs GPR32:$reg_0), (ins simm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
+def CSRR_E3_E1_ALU1_I8 : HaydnEntryE3E1<(outs GPR32:$reg_0), (ins uimm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
   bits<4> reg_0;
   bits<8> imm_1;
   bits<6> c0 = 0x0;
@@ -35815,7 +35815,7 @@ def X4SLLI16_E3_E1_ALU0_RI4 : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def CSRR_E3_E1_ALU0_I8 : HaydnEntryE3E1<(outs GPR32:$reg_0), (ins simm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
+def CSRR_E3_E1_ALU0_I8 : HaydnEntryE3E1<(outs GPR32:$reg_0), (ins uimm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
   bits<4> reg_0;
   bits<8> imm_1;
   bits<6> c0 = 0x0;
@@ -44339,7 +44339,7 @@ def MOVEGPR2SFR_E3_E2_ALU2_SFR : HaydnEntryE3E2<(outs), (ins GPR32:$src_1), "mov
 }
 
 let Itinerary = Slot2_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def CSRR_E3_E2_ALU2_I8 : HaydnEntryE3E2<(outs GPR32:$dest_0), (ins simm8:$imm_1), "csrr\t$dest_0, $imm_1", []> {
+def CSRR_E3_E2_ALU2_I8 : HaydnEntryE3E2<(outs GPR32:$dest_0), (ins uimm8:$imm_1), "csrr\t$dest_0, $imm_1", []> {
   bits<4> dest_0;
   bits<8> imm_1;
   bits<2> c0 = 0x0;
@@ -47115,7 +47115,7 @@ def X4SLLI16_E3_E2_ALU0_RI4 : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
-def CSRR_E3_E2_ALU0_I8 : HaydnEntryE3E2<(outs GPR32:$reg_0), (ins simm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
+def CSRR_E3_E2_ALU0_I8 : HaydnEntryE3E2<(outs GPR32:$reg_0), (ins uimm8:$imm_1), "csrr\t$reg_0, $imm_1", []> {
   bits<4> reg_0;
   bits<8> imm_1;
   bits<2> c0 = 0x0;

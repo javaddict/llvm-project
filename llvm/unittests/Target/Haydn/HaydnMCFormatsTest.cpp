@@ -17,6 +17,7 @@
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
 #include "gtest/gtest.h"
@@ -381,20 +382,15 @@ TEST(HaydnMCFormatsTest, SetHwloopLegalOnS0) {
   EXPECT_EQ(Fmts.getLegalSlots(Haydn::SET_HWLOOP_REG), 0u);
   EXPECT_EQ(Fmts.getAlternateInstsOpcode(Haydn::SET_HWLOOP_REG), nullptr);
 
-  // ExpandPseudos SETCBR→CSRW_W form: s0-only AlternateInsts row so
-  // leaveRegion setDesc bakes CSRW_W_S0 before exact multi-MI commit.
+  // ExpandPseudos SETCBR→CSRW_W form: occupancy peels to CSRW Format E e0.
   EXPECT_NE(Fmts.getLegalSlots(Haydn::CSRW_W) & Haydn::SLOT0, 0u);
-  EXPECT_EQ(Fmts.getLegalSlots(Haydn::CSRW_W) & ~SlotBits(Haydn::SLOT0), 0u);
   {
     const std::vector<unsigned> *Alts =
         Fmts.getAlternateInstsOpcode(Haydn::CSRW_W);
     ASSERT_NE(Alts, nullptr);
     ASSERT_EQ(Alts->size(), 3u);
-    EXPECT_EQ((*Alts)[0], static_cast<unsigned>(Haydn::CSRW_W_S0));
-    EXPECT_EQ((*Alts)[1], 0u);
-    EXPECT_EQ((*Alts)[2], 0u);
-    EXPECT_EQ(Fmts.getSlotKind(Haydn::CSRW_W_S0),
-              MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+    EXPECT_NE((*Alts)[0], 0u);
+    EXPECT_TRUE(formatEMemberOccupiesEntry((*Alts)[0], 0));
   }
   // Residual SETCBR is not a pack form (no AlternateInsts).
   EXPECT_EQ(Fmts.getAlternateInstsOpcode(Haydn::SETCBR_BEGIN), nullptr);
@@ -582,6 +578,53 @@ TEST(HaydnMCFormatsTest, SparseAltsDistinctPerSlotWhenLegal) {
   expectAltOccupiesResidualSlot(Fmts, V0, 0);
   expectAltOccupiesResidualSlot(Fmts, V1, 1);
   expectAltOccupiesResidualSlot(Fmts, V2, 2);
+}
+
+TEST(HaydnMCFormatsTest, FormatEEntryWindowFromGeneratedLayouts) {
+  unsigned Width = 0, LSB = 0;
+  ASSERT_TRUE(haydnFormatEEntryWindow(/*Mode=*/0, /*EntryIdx=*/0, Width, LSB));
+  EXPECT_EQ(Width, 45u);
+  EXPECT_EQ(LSB, 6u);
+  ASSERT_TRUE(haydnFormatEEntryWindow(/*Mode=*/0, /*EntryIdx=*/1, Width, LSB));
+  EXPECT_EQ(Width, 41u);
+  EXPECT_EQ(LSB, 51u);
+  ASSERT_TRUE(haydnFormatEEntryWindow(/*Mode=*/1, /*EntryIdx=*/0, Width, LSB));
+  EXPECT_EQ(Width, 31u);
+  EXPECT_EQ(LSB, 6u);
+  ASSERT_TRUE(haydnFormatEEntryWindow(/*Mode=*/1, /*EntryIdx=*/1, Width, LSB));
+  EXPECT_EQ(Width, 31u);
+  EXPECT_EQ(LSB, 37u);
+  ASSERT_TRUE(haydnFormatEEntryWindow(/*Mode=*/1, /*EntryIdx=*/2, Width, LSB));
+  EXPECT_EQ(Width, 27u);
+  EXPECT_EQ(LSB, 68u);
+  EXPECT_FALSE(haydnFormatEEntryWindow(/*Mode=*/0, /*EntryIdx=*/2, Width, LSB));
+  EXPECT_FALSE(haydnFormatEEntryWindow(/*Mode=*/1, /*EntryIdx=*/3, Width, LSB));
+}
+
+TEST(HaydnMCFormatsTest, IdleParcelIsOneProductRecord) {
+  // Executable pad / LLD nopInstrs consume one EncodedBytes idle. A
+  // shorter fill would place later B/JAL labels off the parcel grid.
+  SmallVector<char, 16> Idle;
+  ASSERT_TRUE(haydnTryGetCanonicalIdleParcel(Idle));
+  EXPECT_EQ(Idle.size(), haydnProductionParcelBytes().Value);
+  EXPECT_EQ(Idle.size() % 12u, 0u);
+
+  // Byte pin (not just size pin): the canonical idle parcel must be the exact
+  // golden-derived E96TwoEntry header — byte 0 = indicator bits (0b111 = 0x7)
+  // OR (entryNum << 3) with entryNum = FormatEEntryNumTwo = 0, so byte 0 = 0x07
+  // and bytes 1..11 are zero. A size-only assertion would let a corrupted
+  // indicator/entry bit (e.g. entryNum flipped to 1 -> 0x08, or indicator
+  // truncated -> 0x00, which is never a valid Format E bundle) slip through
+  // while the 12-byte size check still passes. Pinned against the producer:
+  // HaydnFormat.cpp canonicalFullSlotIdleParcel() builds
+  // { (FormatEIndicatorBits & 0x7) | ((FormatEEntryNumTwo & 0x1) << 3), 0..0 }.
+  static const uint8_t ExpectedIdle[12] = {
+      0x07, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  ASSERT_EQ(Idle.size(), sizeof(ExpectedIdle));
+  for (unsigned I = 0; I < sizeof(ExpectedIdle); ++I)
+    EXPECT_EQ(static_cast<uint8_t>(Idle[I]), ExpectedIdle[I]) << "idle byte "
+                                                             << I;
 }
 
 } // end anonymous namespace

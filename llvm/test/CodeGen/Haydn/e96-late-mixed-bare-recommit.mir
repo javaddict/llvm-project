@@ -1,0 +1,37 @@
+# RUN: llc -mtriple=haydn-unknown-elf -start-after=haydn-verify-bundles \
+# RUN:   -filetype=obj %s -o %t.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# RUN: llvm-readobj -S %t.o | FileCheck %s --check-prefix=SEC
+# REQUIRES: haydn-registered-target
+
+# Role: object — leftover bare encode after first Finalize (insertIndirectBranch
+# LUI+ADDI32_W+JALR_W class) must recommit at the printer to one Format E
+# parcel each. A committed BUNDLE beside a bare real must not emit a
+# non-record or a mid-parcel label. Peer: AIEFinalizeBundle.cpp:40-59;
+# AIE PreEmit is empty, so Haydn overlays the wrap at the printer.
+
+--- |
+  define void @late_mixed_bare() {
+    ret void
+  }
+...
+---
+name:            late_mixed_bare
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    $r3 = XOR32 $r0, $r1, implicit-def dead $sfr
+    RET implicit $r15
+
+# CHECK-LABEL: <late_mixed_bare>:
+# CHECK:        0: {{.*}}add32
+# CHECK:        c: {{.*}}xor32
+# CHECK-NOT: <unknown>
+
+# SEC: Name: .text
+# SEC: Size: 36

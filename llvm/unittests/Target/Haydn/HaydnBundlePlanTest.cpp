@@ -279,6 +279,16 @@ TEST(HaydnBundlePlanTest, SelectCompletionForRow) {
                                               /*RealMembers=*/0,
                                               /*HasPadNop=*/false),
             CompletionStateID::StubIdle);
+  // Inverse expected fill: same answer, independently derived (pad-only
+  // idle and any real membership are AllEntriesReal; empty is StubIdle).
+  EXPECT_EQ(expectedGoldenRowCompletion(/*RealMembers=*/1, /*HasPadNop=*/false),
+            CompletionStateID::AllEntriesReal);
+  EXPECT_EQ(expectedGoldenRowCompletion(/*RealMembers=*/0, /*HasPadNop=*/true),
+            CompletionStateID::AllEntriesReal);
+  EXPECT_EQ(expectedGoldenRowCompletion(/*RealMembers=*/2, /*HasPadNop=*/true),
+            CompletionStateID::AllEntriesReal);
+  EXPECT_EQ(expectedGoldenRowCompletion(/*RealMembers=*/0, /*HasPadNop=*/false),
+            CompletionStateID::StubIdle);
   EXPECT_TRUE(isProductLegalCompletion(CompletionStateID::AllEntriesReal));
   EXPECT_TRUE(isStubCompletion(CompletionStateID::StubIdle));
 }

@@ -32,12 +32,13 @@
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/MC/MCInst.h"
 #include "gtest/gtest.h"
 #include <algorithm>
 
-#define GET_INSTRINFO_ENUM
-#include "HaydnGenInstrInfo.inc"
+// Opcode enums come via HaydnPortModel → HaydnMCTargetDesc (GET_INSTRINFO_ENUM).
+// Do not re-include the enum; a second include conflicts.
 
 using namespace llvm;
 using namespace llvm::haydn::bundle;
@@ -1084,3 +1085,204 @@ TEST(HaydnBundleFormatSolver, VF24_ClosestLegalIllegalAndPreferredOrder) {
 }
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// SF1 — ModuloCyclePlacementOracle (Band 2S format-aware SMS placement)
+//===----------------------------------------------------------------------===//
+//
+// REGRESSION TEST SUITE (SF1, topics/scheduling TOPIC.md "SF1 spec closure"
+// 2026-08-15 gap 1):
+//
+// Bug: SMS placement probes ended at HR checkConflict (ports/itinerary only);
+// Format E row/entry coverage first appeared at commit, so an infeasible
+// modulo cycle was silently sequentialized while the annotation still
+// reported the assumed II.
+// Fix: ModuloCyclePlacementOracle — one CycleCandidateSet per modulo cycle,
+// probe = canExactTryAddProduct, mutate = exactTryAddProduct on the accept
+// path (the same mutate/probe pair as post-RA HR). If the oracle is dropped
+// or replaced by an occupancy-count check, these tests fail: three E2-only
+// ops at II=1 would look legal to a pure count check (3 slots) but are
+// illegal Format E (an E2-only member caps its parcel at two entries).
+TEST(HaydnBundleFormatSolver, SF1_ModuloOracleE2OnlyTripleRejectsAtII1) {
+  HaydnMCFormats Fmts;
+  ModuloCyclePlacementOracle Oracle;
+  Oracle.init(1, Fmts);
+  // ADDI32/SUBI32 are E2-only logicals: a parcel carrying one holds ≤2
+  // entries, so a third member cannot join — even though ISSUE_SLOT_COUNT=3.
+  ASSERT_TRUE(Oracle.canPlace(Haydn::ADDI32, 0));
+  ASSERT_TRUE(Oracle.place(Haydn::ADDI32, 0));
+  ASSERT_TRUE(Oracle.canPlace(Haydn::SUBI32, 0));
+  ASSERT_TRUE(Oracle.place(Haydn::SUBI32, 0));
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADDI32, 0));
+  EXPECT_FALSE(Oracle.place(Haydn::ADDI32, 0));
+}
+
+TEST(HaydnBundleFormatSolver, SF1_ModuloOracleCyclesAreIndependent) {
+  HaydnMCFormats Fmts;
+  ModuloCyclePlacementOracle Oracle;
+  Oracle.init(3, Fmts);
+  // Fill cycle 0 to its E2-only cap; cycles 1/2 must stay unaffected.
+  ASSERT_TRUE(Oracle.place(Haydn::ADDI32, 0));
+  ASSERT_TRUE(Oracle.place(Haydn::SUBI32, 0));
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADDI32, 0));
+  EXPECT_TRUE(Oracle.isCycleEmpty(1));
+  EXPECT_TRUE(Oracle.canPlace(Haydn::ADDI32, 1));
+  EXPECT_TRUE(Oracle.canPlace(Haydn::ADDI32, 2));
+  ASSERT_TRUE(Oracle.place(Haydn::ADDI32, 2));
+  EXPECT_FALSE(Oracle.isCycleEmpty(2));
+}
+
+TEST(HaydnBundleFormatSolver, SF1_ModuloOracleProbeDoesNotMutate) {
+  HaydnMCFormats Fmts;
+  ModuloCyclePlacementOracle Oracle;
+  Oracle.init(2, Fmts);
+  ASSERT_TRUE(Oracle.place(Haydn::ADDI32, 0));
+  ASSERT_TRUE(Oracle.place(Haydn::SUBI32, 0));
+  // Probe-refused op must leave the set unchanged: the same probe refuses
+  // again and the accepted pair still packs (state not consumed).
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADDI32, 0));
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADDI32, 0));
+  const CycleCandidateSet &C = Oracle.getCandidates(0);
+  EXPECT_EQ(selectPreferredCandidate(C).memberCount(), 2u);
+}
+
+TEST(HaydnBundleFormatSolver, SF1_ModuloOracleReseedOnRetry) {
+  HaydnMCFormats Fmts;
+  ModuloCyclePlacementOracle Oracle;
+  Oracle.init(1, Fmts);
+  ASSERT_TRUE(Oracle.place(Haydn::ADDI32, 0));
+  ASSERT_TRUE(Oracle.place(Haydn::SUBI32, 0));
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADDI32, 0));
+  // II retry reseeds wholesale: every cycle returns to the empty seed.
+  Oracle.init(2, Fmts);
+  EXPECT_EQ(Oracle.getII(), 2u);
+  EXPECT_TRUE(Oracle.isCycleEmpty(0));
+  EXPECT_TRUE(Oracle.isCycleEmpty(1));
+  EXPECT_TRUE(Oracle.canPlace(Haydn::ADDI32, 0));
+}
+
+TEST(HaydnBundleFormatSolver, SF1_ModuloOracleUntrackedOpcodePasses) {
+  HaydnMCFormats Fmts;
+  ModuloCyclePlacementOracle Oracle;
+  Oracle.init(1, Fmts);
+  // No-alts opcodes never consult the solver (HR alts-only skip peer);
+  // canPlace/place are pass-through true and consume no cycle state.
+  const unsigned Untracked = TargetOpcode::COPY;
+  EXPECT_FALSE(hasPlacementAlternatives(Fmts, Untracked));
+  EXPECT_TRUE(Oracle.canPlace(Untracked, 0));
+  EXPECT_TRUE(Oracle.place(Untracked, 0));
+  EXPECT_TRUE(Oracle.isCycleEmpty(0));
+}
+
+TEST(HaydnBundleFormatSolver, SF1_ModuloOracleOutOfRangeCycleFailsClosed) {
+  HaydnMCFormats Fmts;
+  ModuloCyclePlacementOracle Oracle;
+  Oracle.init(2, Fmts);
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADDI32, -1));
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADDI32, 2));
+  EXPECT_FALSE(Oracle.place(Haydn::ADDI32, 7));
+}
+
+TEST(HaydnBundleFormatSolver, SF1_ModuloOracleThreeADD32AtII1) {
+  // Three dual-mode ADD32s pack on one E3 row (ALU0/ALU1/ALU2) — the oracle
+  // must NOT reject a legal 3-wide cycle (no over-conservative count model).
+  HaydnMCFormats Fmts;
+  ModuloCyclePlacementOracle Oracle;
+  Oracle.init(1, Fmts);
+  ASSERT_TRUE(Oracle.place(Haydn::ADD32, 0));
+  ASSERT_TRUE(Oracle.place(Haydn::ADD32, 0));
+  ASSERT_TRUE(Oracle.place(Haydn::ADD32, 0));
+  EXPECT_FALSE(Oracle.canPlace(Haydn::ADD32, 0)); // E3 full at 3 entries
+}
+
+//===----------------------------------------------------------------------===//
+// SF6 — moduloRowCapacityII row-capacity ResMII term
+//===----------------------------------------------------------------------===//
+//
+// REGRESSION TEST SUITE (SF6 term, spec closure gap 3): the flat
+// ceil(NBody/3) term underestimates when E2-only ops force ≤2-entry parcels.
+// RowCapII = max(1, ceil((NBody + ceil(N_E2only/2)) / 3)). If the formula
+// regresses to the flat term, the E2-only cases below return 1 instead of 2.
+TEST(HaydnBundleFormatSolver, SF6_RowCapacityIIDegeneratesFlatAtZeroE2Only) {
+  EXPECT_EQ(moduloRowCapacityII(0, 0), 1u);
+  EXPECT_EQ(moduloRowCapacityII(3, 0), 1u);
+  EXPECT_EQ(moduloRowCapacityII(4, 0), 2u);
+  EXPECT_EQ(moduloRowCapacityII(6, 0), 2u);
+  EXPECT_EQ(moduloRowCapacityII(7, 0), 3u);
+}
+
+TEST(HaydnBundleFormatSolver, SF6_RowCapacityIIE2OnlyRaisesBound) {
+  // 2 E2-only + 1 dual op: NBody=3, but a parcel carrying an E2-only member
+  // holds ≤2 entries → 2 parcels minimum.
+  EXPECT_EQ(moduloRowCapacityII(3, 2), 2u);
+  // 3 E2-only: ceil(3/2)=2 → ceil(5/3)=2.
+  EXPECT_EQ(moduloRowCapacityII(3, 3), 2u);
+  // 4 E2-only: NBody=4, ceil(4/2)=2 → ceil(6/3)=2 (two 2-entry parcels).
+  EXPECT_EQ(moduloRowCapacityII(4, 4), 2u);
+  // 5 E2-only: ceil(5/2)=3 → ceil(8/3)=3.
+  EXPECT_EQ(moduloRowCapacityII(5, 5), 3u);
+}
+
+TEST(HaydnBundleFormatSolver, SF6_CountE2OnlyBodyOps) {
+  // REGRESSION (found by the SF2/SF3 wave agent's HaydnTests run): the
+  // first version classified via memberOpcodeCompatibleFormatMask, which
+  // is name-based on generated MEMBER names and returns ProductFormatMask
+  // for logical names (no _E2_/_E3_ marker) — the count came back 0.
+  // countE2OnlyBodyOps classifies by the logical's alt-table frontier:
+  // union of enumeratePlacementAlternatives CompatibleFormatMask. Verified
+  // against HaydnGenFormatERecords.inc: ADDI32/SUBI32/ANDI32 spans hold
+  // Mode-0 members only (E2-only); ADD32/ADD64/MOVE32 are dual-mode; LOG2/
+  // ARCTAN are Mode-1 only. If the classification regresses to the member
+  // name marker or a substring match, this returns 0 (or leaks dual-mode
+  // ops) and this test fails.
+  const unsigned Ops[] = {Haydn::ADDI32, Haydn::ADD32, Haydn::SUBI32,
+                          Haydn::ADD64, Haydn::ADDI32};
+  EXPECT_EQ(countE2OnlyBodyOps(Ops), 3u);
+  EXPECT_EQ(countE2OnlyBodyOps(ArrayRef<unsigned>{}), 0u);
+  // E3-only logicals must NOT count (their frontier is the E3 bit, not E2).
+  const unsigned E3Ops[] = {Haydn::LOG2, Haydn::ADDI32};
+  EXPECT_EQ(countE2OnlyBodyOps(E3Ops), 1u);
+}
+
+//===----------------------------------------------------------------------===//
+// SF2 — preferredMemberOpcode transient pin
+//===----------------------------------------------------------------------===//
+
+TEST(HaydnBundleFormatSolver, SF2_PreferredMemberIsGeneratedAlt) {
+  // Pin must be a real PlacementAlternative member, not the logical itself,
+  // so the format oracle sees unit/entry geometry.
+  const unsigned Mem = preferredMemberOpcode(Haydn::ADD32);
+  EXPECT_NE(Mem, Haydn::ADD32);
+  EXPECT_NE(Mem, 0u);
+  SmallVector<PlacementAlternative, 8> Alts;
+  ASSERT_TRUE(enumeratePlacementAlternatives(haydnDefaultMCFormats(),
+                                             Haydn::ADD32, Alts));
+  bool Found = false;
+  for (const PlacementAlternative &A : Alts)
+    if (A.MemberOpcode == Mem)
+      Found = true;
+  EXPECT_TRUE(Found);
+}
+
+TEST(HaydnBundleFormatSolver, SF2_PreferredMemberUntrackedIsIdentity) {
+  EXPECT_EQ(preferredMemberOpcode(TargetOpcode::COPY),
+            static_cast<unsigned>(TargetOpcode::COPY));
+}
+
+//===----------------------------------------------------------------------===//
+// SF6 — per-unit primary-slot ResMII
+//===----------------------------------------------------------------------===//
+
+TEST(HaydnBundleFormatSolver, SF6_PrimarySlotIIAtLeastOne) {
+  EXPECT_EQ(moduloPrimarySlotII(ArrayRef<unsigned>{}), 1u);
+  const unsigned One[] = {Haydn::ADD32};
+  EXPECT_GE(moduloPrimarySlotII(One), 1u);
+}
+
+TEST(HaydnBundleFormatSolver, SF6_PrimarySlotIISameSlotRaises) {
+  // Four E2-only ADDI32s least-loaded onto two slots → slot ResMII == 2,
+  // not 4 (a same-member pin would inflate to NBody).
+  const unsigned Ops[] = {Haydn::ADDI32, Haydn::ADDI32, Haydn::ADDI32,
+                          Haydn::ADDI32};
+  EXPECT_EQ(moduloPrimarySlotII(Ops), 2u);
+}

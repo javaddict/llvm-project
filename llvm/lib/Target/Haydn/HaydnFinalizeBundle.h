@@ -17,8 +17,10 @@
 // Never calls skipFunction: this is target-local no-reorder commit ownership
 // for remaining bare MIs (including when PostMachineScheduler quality-skips
 // optnone). Plain O0 without optnone still runs postmisched first and may
-// already hold multi-MI full-fill packs; already-bundled roots are left alone.
-// Both paths leave only committed Format-E cycles for product emission.
+// already hold multi-MI full-fill packs; already-bundled roots are left alone
+// by the wrap loop. Cutover is identity on roots the independent inverse
+// already accepts; residual FieldSlots still bind. Both paths leave only
+// committed Format-E cycles for product emission.
 // Singleton completion is full-slot architectural NOP pad (AllEntriesReal),
 // not unqualified underfill/singleton stub invent.
 //
@@ -42,6 +44,7 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNFINALIZEBUNDLE_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNFINALIZEBUNDLE_H
 
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 
 namespace llvm {
@@ -67,6 +70,12 @@ public:
 };
 
 FunctionPass *createHaydnFinalizeBundlePass();
+
+/// Wrap remaining bare MIs as Format E singleton cycles. Does not restamp
+/// already-bundled roots (missing-row E2 default stays fatal at the
+/// printer). Shared first loop of Finalize; late PreEmit Finalize reuses
+/// it after BranchRelaxation insertIndirectBranch (AIEFinalizeBundle.cpp:40-59).
+bool haydnRecommitLateMixedBare(MachineFunction &MF);
 
 } // namespace llvm
 

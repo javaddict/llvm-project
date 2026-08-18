@@ -24,6 +24,13 @@
 #define GET_INSTRINFO_ENUM
 #include "HaydnGenInstrInfo.inc"
 
+namespace {
+namespace mode_only_detail {
+#define GET_FORMAT_E_MODE_ONLY_NAMES
+#include "HaydnGenFormatERecords.inc"
+} // namespace mode_only_detail
+} // namespace
+
 using namespace llvm;
 using namespace llvm::haydn::format_e;
 
@@ -69,6 +76,108 @@ TEST(HaydnFormatERecords, CatalogSnapshotPins) {
   EXPECT_EQ(FormatEE2UnitPairCount, 9u);
   EXPECT_EQ(FormatEE3LegalTupleCount, 42u);
   EXPECT_EQ(FormatEE3IllegalTupleCount, 22u);
+}
+
+// REGRESSION TEST (W44 / P18(c), 2026-08-15):
+//
+// Bug: residualAltCompatibleFormatMask and isFormatEE2Only/E3OnlyOpcodeName
+// used hand-transcribed E2-only/E3-only name arrays with count-only pins
+// ("keep in sync with FormatEE2OnlyNames = 10"). If a golden catalog update
+// renamed or moved a logical between Modes, the counts could stay 10/6 while
+// the *identities* drifted, and the hand copies silently disagreed with the
+// generated rows — the mask then fell through a silent ProductFormatMask
+// default and wrongly admitted E3 placement for an E2-only logical.
+//
+// Fix: generate_format_e_records.py emits the exact SETS
+// (GET_FORMAT_E_MODE_ONLY_NAMES, FormatEE2Only/E3OnlyNameSet) and every
+// consumer derives admission from them. This test proves set↔row equality in
+// BOTH directions against the FormatEMembers table itself, so any golden
+// drift that changes a Mode-only membership breaks here (and in importer
+// --check) instead of at a placement decision.
+//
+// What breaks if the bug returns: if a consumer re-hardcodes a name list, a
+// later golden rename keeps this test green (it checks the generated tables)
+// but the consumer's list goes stale — which is why the same file also pins
+// the peel spellings that feed the classifier (ModeOnlyLogicalPeelSpellings).
+TEST(HaydnFormatERecords, ModeOnlyNameSetsCoverExactlyGeneratedRows) {
+  using mode_only_detail::FormatEE2OnlyNameSet;
+  using mode_only_detail::FormatEE3OnlyNameSet;
+  const unsigned E2Count =
+      sizeof(FormatEE2OnlyNameSet) / sizeof(FormatEE2OnlyNameSet[0]);
+  const unsigned E3Count =
+      sizeof(FormatEE3OnlyNameSet) / sizeof(FormatEE3OnlyNameSet[0]);
+  EXPECT_EQ(E2Count, FormatEE2OnlyNames);
+  EXPECT_EQ(E3Count, FormatEE3OnlyNames);
+
+  // Rebuild the Mode frontier from the generated member rows.
+  std::unordered_set<std::string> NonNop, E2, E3;
+  for (unsigned I = 0; I < FormatEMemberCount; ++I) {
+    const FormatEMemberRec &M = FormatEMembers[I];
+    if (M.IsNop)
+      continue;
+    NonNop.insert(M.Logical);
+    if (M.Mode == 0)
+      E2.insert(M.Logical);
+    else
+      E3.insert(M.Logical);
+  }
+  const auto *E2Begin = FormatEE2OnlyNameSet;
+  const auto *E3Begin = FormatEE3OnlyNameSet;
+  std::unordered_set<std::string> E2Set(E2Begin, E2Begin + E2Count);
+  std::unordered_set<std::string> E3Set(E3Begin, E3Begin + E3Count);
+
+  // Direction 1: every generated set member is non-NOP and truly Mode-only.
+  for (const std::string &N : E2Set) {
+    EXPECT_TRUE(NonNop.count(N)) << N;
+    EXPECT_TRUE(E2.count(N)) << N;
+    EXPECT_FALSE(E3.count(N)) << N;
+  }
+  for (const std::string &N : E3Set) {
+    EXPECT_TRUE(NonNop.count(N)) << N;
+    EXPECT_TRUE(E3.count(N)) << N;
+    EXPECT_FALSE(E2.count(N)) << N;
+  }
+
+  // Direction 2: set equality with the Mode frontier rebuilt from rows —
+  // a rename or Mode move that the count pins absorb still breaks here.
+  std::unordered_set<std::string> ExpectedE2Only, ExpectedE3Only;
+  for (const std::string &N : E2)
+    if (!E3.count(N))
+      ExpectedE2Only.insert(N);
+  for (const std::string &N : E3)
+    if (!E2.count(N))
+      ExpectedE3Only.insert(N);
+  EXPECT_EQ(E2Set, ExpectedE2Only);
+  EXPECT_EQ(E3Set, ExpectedE3Only);
+}
+
+TEST(HaydnFormatERecords, ModeOnlyLogicalPeelSpellings) {
+  // The admission surface sees peeled names, exactly like the placement
+  // enumerate path (enumerateFormatEMemberAlts peels with StripWide=false).
+  // Residual/member spellings of an E2-only logical peel to that logical;
+  // E3-bearing hwloop forms (SET_HWLOOP_F2 / SET_HWLOOP_REG are dual-mode
+  // golden logicals) peel to themselves, not to bare SET_HWLOOP.
+  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_E2_E1_ALU1_RI20", false), "ADDI32");
+  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W", false), "ADDI32_W");
+  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W_S0", false), "ADDI32_W");
+  EXPECT_EQ(peelLogicalOpcodeName("SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR", false),
+            "SET_HWLOOP_F2");
+  EXPECT_EQ(peelLogicalOpcodeName("SET_HWLOOP_F2_W_S0", false),
+            "SET_HWLOOP_F2_W");
+  EXPECT_EQ(peelLogicalOpcodeName("ARCTAN_E3_E0_ALU2_RI4", false), "ARCTAN");
+  // The generated sets are keyed by exact golden logicals; `_W` reloc forms
+  // are not members (they are residual FieldSlot rows, not catalog logicals)
+  // — their admission derives from the base logical at the consumer.
+  using mode_only_detail::FormatEE2OnlyNameSet;
+  const std::unordered_set<std::string> E2Only(
+      FormatEE2OnlyNameSet,
+      FormatEE2OnlyNameSet + sizeof(FormatEE2OnlyNameSet) /
+                                 sizeof(FormatEE2OnlyNameSet[0]));
+  EXPECT_TRUE(E2Only.count("ADDI32"));
+  EXPECT_FALSE(E2Only.count("ADDI32_W"));
+  EXPECT_TRUE(E2Only.count("SET_HWLOOP"));
+  EXPECT_FALSE(E2Only.count("SET_HWLOOP_F2"));
+  EXPECT_FALSE(E2Only.count("SET_HWLOOP_REG"));
 }
 
 TEST(HaydnFormatERecords, LayoutAndMemberCoverage) {
@@ -302,10 +411,10 @@ TEST(HaydnFormatERecords, MemberToLogicalGeneratedInverse) {
   using llvm::haydn::format_e::lookupGeneratedMemberToLogical;
   using llvm::haydn::format_e::logicalOpcodeOrSelf;
 
-  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BEQ_W_S0), Haydn::BEQ_W);
-  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BNEZ_W_S0), Haydn::BNEZ_W);
   EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BEQ_E2_E0_ALU0_RI12),
             Haydn::BEQ);
+  EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::BNEZ_E2_E0_ALU0_I12),
+            Haydn::BNEZ);
 
   EXPECT_EQ(lookupGeneratedMemberToLogical(Haydn::ADD32_E2_E0_ALU0_RR),
             Haydn::ADD32);

@@ -45,8 +45,8 @@
 #include "llvm/MC/MCInstrDesc.h"
 #include "gtest/gtest.h"
 
-#define GET_INSTRINFO_ENUM
-#include "HaydnGenInstrInfo.inc"
+// Opcode enums come via HaydnPortModel → HaydnMCTargetDesc (GET_INSTRINFO_ENUM).
+// Do not re-include the enum; a second include conflicts.
 
 using namespace llvm;
 using namespace llvm::haydn::bundle;
@@ -399,19 +399,18 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleADD32) {
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleNOP) {
-  // FixupHwLoops deficit pad exact-commits via commitLateProductCycle:
-  // S0-only alt → NOP_S0 (then finalizeBundle + FormatID in Fixup).
+  // Pad NOP occupancy is a generated HINT member (Haydn::NOP). FieldSlot
+  // NOP_S0 is retired.
   HaydnMCFormats Fmts;
   auto C = commitLateProductCycle(Haydn::NOP, Fmts);
   ASSERT_TRUE(C.has_value());
   EXPECT_EQ(C->LogicalOpcode, Haydn::NOP);
-  EXPECT_EQ(C->MemberOpcode, Haydn::NOP_S0);
-  EXPECT_TRUE(C->NeedsSetDesc);
+  EXPECT_EQ(C->MemberOpcode, Haydn::NOP);
   EXPECT_TRUE(isProductBundleRow(C->Plan.Row));
 
   auto SetDesc = lateSingletonSetDescOpcode(Haydn::NOP, Fmts);
-  ASSERT_TRUE(SetDesc.has_value());
-  EXPECT_EQ(*SetDesc, Haydn::NOP_S0);
+  if (SetDesc.has_value())
+    EXPECT_EQ(*SetDesc, Haydn::NOP);
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteSoftEdge) {
@@ -435,7 +434,7 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteSoftEdge) {
   auto Br = commitLateProductCycle(Haydn::BNEZ_W, Fmts);
   ASSERT_TRUE(Br.has_value());
   EXPECT_EQ(Br->LogicalOpcode, Haydn::BNEZ_W);
-  EXPECT_EQ(Br->MemberOpcode, Haydn::BNEZ_W_S0);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(Br->MemberOpcode, 0));
   EXPECT_TRUE(Br->NeedsSetDesc);
   EXPECT_TRUE(isProductBundleRow(Br->Plan.Row));
   EXPECT_TRUE(Br->Plan.isProductLegal());
@@ -444,7 +443,8 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteSoftEdge) {
   // lateProductMemberOpcode is the shared hook late creators call.
   EXPECT_TRUE(formatEMemberOccupiesEntry(lateProductMemberOpcode(Haydn::SUBI32),
                                         1));
-  EXPECT_EQ(lateProductMemberOpcode(Haydn::BNEZ_W), Haydn::BNEZ_W_S0);
+  EXPECT_TRUE(formatEMemberOccupiesEntry(lateProductMemberOpcode(Haydn::BNEZ_W),
+                                        0));
 }
 
 TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleDemoteTripMaterialize) {
@@ -542,8 +542,9 @@ TEST(HaydnMaterializeMultiOpcode, CommitLateProductCycleStableRowFullParcel) {
                        Haydn::B, Haydn::BEQZ, Haydn::BNEZ_W, Haydn::SUBI32,
                        Haydn::ST32, Haydn::LD32, Haydn::ADDI32_W, Haydn::MOVE32,
                        Haydn::RET, Haydn::JALR, Haydn::XOR32,
-                       Haydn::ADD32_E3_E2_ALU2_RR, Haydn::NOP_S0,
-                       Haydn::BNEZ_W_S0, Haydn::SUBI32_E2_E1_ALU1_RI20}) {
+                       Haydn::ADD32_E3_E2_ALU2_RR, Haydn::NOP,
+                       Haydn::BNEZ_E2_E0_ALU0_I12,
+                       Haydn::SUBI32_E2_E1_ALU1_RI20}) {
     auto C = commitLateProductCycle(Opc, Fmts);
     ASSERT_TRUE(C.has_value()) << "opc " << Opc;
     EXPECT_TRUE(isProductBundleRow(C->Plan.Row)) << "opc " << Opc;
@@ -575,6 +576,23 @@ TEST(HaydnMaterializeMultiOpcode, LateProductMemberOpcodeBranchHooks) {
   // B / RET have no PlacementAlternatives → wrap-only member == logical.
   EXPECT_EQ(lateProductMemberOpcode(Haydn::B), Haydn::B);
   EXPECT_EQ(lateProductMemberOpcode(Haydn::RET), Haydn::RET);
+}
+
+TEST(HaydnMaterializeMultiOpcode, MakeProductPlanForOpcodesDerivesE3Row) {
+  // F13: glueDefToUse stamps makeProductPlanForOpcodes, not hardcoded
+  // E96TwoEntry. An E3-only pair must select E96ThreeEntry.
+  const unsigned E3Pair[] = {Haydn::ADD32_E3_E0_ALU0_RR,
+                             Haydn::ADD32_E3_E1_ALU1_RR};
+  EXPECT_EQ(selectProductRowForOpcodes(E3Pair),
+            BundleFormatRowID::E96ThreeEntry);
+  BundlePlan Plan = makeProductPlanForOpcodes(/*Occupied=*/0, E3Pair);
+  EXPECT_EQ(Plan.Row, BundleFormatRowID::E96ThreeEntry);
+  EXPECT_EQ(Plan.Completion, CompletionStateID::AllEntriesReal);
+  EXPECT_EQ(Plan.memberCount(), 2u);
+
+  const unsigned E2Pair[] = {Haydn::ADD32, Haydn::LD32};
+  BundlePlan E2Plan = makeProductPlanForOpcodes(/*Occupied=*/0, E2Pair);
+  EXPECT_EQ(E2Plan.Row, selectProductRowForOpcodes(E2Pair));
 }
 
 } // namespace

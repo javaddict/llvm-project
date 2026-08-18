@@ -21,10 +21,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnAlternateDescriptors.h"
+#include "HaydnBundleFormatSolver.h"
+#include "HaydnPlacementAlternative.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
+using namespace llvm::haydn::bundle;
 
 namespace {
 
@@ -141,6 +145,119 @@ TEST(HaydnAlternateDescriptorsTest, GetOpcodeHelper) {
   MCInstrDesc D = makeDesc(/*Opcode=*/555);
   Alts.setAlternateDescriptor(A, &D);
   EXPECT_EQ(Alts.getOpcode(A), 555u);
+}
+
+//===----------------------------------------------------------------------===//
+// residualAltCompatibleFormatMask / mode-only predicates (W44 / P18(c))
+//===----------------------------------------------------------------------===//
+
+// REGRESSION TEST (W44 / P18(c), 2026-08-15):
+//
+// Bug: residualAltCompatibleFormatMask hand-transcribed the E2-only/E3-only
+// opcode name sets as two C++ switches with count-only pins
+// ("FormatEE2OnlyNames = 10") and a silent `default: return
+// ProductFormatMask`. If a golden catalog update changed the SET membership
+// while the count stayed 10/6 (rename, Mode move), the hand copies drifted,
+// the switch fell through to the product mask, and an E2-only logical was
+// wrongly admitted to a 3-wide E3 row (or an E3-only logical allowed to
+// collapse FeasibleFormatMask to E2, which then finds no member and drops
+// the cycle).
+//
+// Fix: the mask and both predicates derive from the generated
+// FormatEE2OnlyNameSet / FormatEE3OnlyNameSet
+// (HaydnGenFormatERecords.inc GET_FORMAT_E_MODE_ONLY_NAMES) via
+// the generated mode-only name sets in HaydnAlternateDescriptors.cpp.
+// HaydnFormatERecordsTest.ModeOnlyNameSetsCoverExactlyGeneratedRows proves
+// set↔row equality in both directions.
+//
+// What breaks if the bug returns: re-introducing a name switch decouples
+// admission from the generated sets; these pins fail as soon as the switch's
+// first family drifts (or, for the E2Only-at-S2 pins, immediately if the S2
+// drop is lost to the silent product-mask default).
+TEST(HaydnAlternateDescriptorsTest, ResidualAltCompatibleFormatMaskPins) {
+  const uint64_t E2Bit = formatRowBit(BundleFormatRowID::E96TwoEntry);
+  const uint64_t E3Bit = formatRowBit(BundleFormatRowID::E96ThreeEntry);
+
+  // E2-only family: entries below the E2 row width keep only the E2 row bit;
+  // the third residual index (S2 / E3 entry 2) has no member and returns 0.
+  const unsigned E2OnlyOps[] = {
+      Haydn::ADDI32,  Haydn::ADDI32S, Haydn::ANDI32,  Haydn::MOVEI_H,
+      Haydn::MOVEI_L, Haydn::ORI32,   Haydn::SET_HWLOOP, Haydn::SUBI32,
+      Haydn::SUBI32S, Haydn::XORI32,
+  };
+  for (unsigned Opc : E2OnlyOps) {
+    EXPECT_EQ(residualAltCompatibleFormatMask(Opc, 0), E2Bit)
+        << haydnOpcodeName(Opc);
+    EXPECT_EQ(residualAltCompatibleFormatMask(Opc, 1), E2Bit)
+        << haydnOpcodeName(Opc);
+    EXPECT_EQ(residualAltCompatibleFormatMask(Opc, 2), 0u)
+        << haydnOpcodeName(Opc);
+  }
+
+  // E3-only family: every residual index stamps the E3 row bit only.
+  const unsigned E3OnlyOps[] = {
+      Haydn::ARCTAN, Haydn::EXP2,   Haydn::LOG2,
+      Haydn::RECIP,  Haydn::SIN_COS, Haydn::SQRT,
+  };
+  for (unsigned Opc : E3OnlyOps) {
+    for (unsigned Idx = 0; Idx < 3; ++Idx)
+      EXPECT_EQ(residualAltCompatibleFormatMask(Opc, Idx), E3Bit)
+          << haydnOpcodeName(Opc) << " idx=" << Idx;
+  }
+
+  // Dual-mode and residual-reloc logicals keep the product frontier. `_W`
+  // reloc identities are residual FieldSlot rows with no Format E span
+  // (enumerateFormatEMemberAlts peels with StripWide=false; span lookup
+  // misses and the residual path keeps ProductFormatMask — matching the
+  // pre-W44 switch default). The coissue predicates below carry the E2-only
+  // law for these forms instead, via the base logical.
+  EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::ADD32, 0),
+            ProductFormatMask);
+  EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::ADDI32_W, 0),
+            ProductFormatMask);
+  EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::SET_HWLOOP_F2_W, 0),
+            ProductFormatMask);
+  EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::CSRW_W, 0),
+            ProductFormatMask);
+
+  // SET_HWLOOP_F2 / SET_HWLOOP_REG are dual-mode golden logicals (E3 rows
+  // exist) — the bare SET_HWLOOP entry must not swallow them. They have no
+  // bare logical enum; probe through a generated member of each.
+  EXPECT_EQ(residualAltCompatibleFormatMask(
+                Haydn::SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR, 2),
+            ProductFormatMask);
+  EXPECT_EQ(residualAltCompatibleFormatMask(
+                Haydn::SET_HWLOOP_REG_E3_E0_ALU0_HWLRRRR, 2),
+            ProductFormatMask);
+}
+
+TEST(HaydnAlternateDescriptorsTest, ModeOnlyOpcodeNamePredicates) {
+  // E2-only: bare logical, member spelling, and reloc `_W`/`_W_S0` forms.
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32"));
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32_E2_E1_ALU1_RI20"));
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32S"));
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("MOVEI_H"));
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("SET_HWLOOP"));
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32_W"));
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32_W_S0"));
+  EXPECT_FALSE(isFormatEE2OnlyOpcodeName("SET_HWLOOP_F2"));
+  EXPECT_FALSE(isFormatEE2OnlyOpcodeName("SET_HWLOOP_F2_W"));
+  EXPECT_FALSE(isFormatEE2OnlyOpcodeName("SET_HWLOOP_REG"));
+  EXPECT_FALSE(isFormatEE2OnlyOpcodeName("ADD32"));
+  EXPECT_FALSE(isFormatEE2OnlyOpcodeName("ADD32_E3_E2_ALU2_RR"));
+
+  // E3-only: bare logical and member spellings.
+  EXPECT_TRUE(isFormatEE3OnlyOpcodeName("ARCTAN"));
+  EXPECT_TRUE(isFormatEE3OnlyOpcodeName("ARCTAN_E3_E0_ALU2_RI4"));
+  EXPECT_TRUE(isFormatEE3OnlyOpcodeName("LOG2"));
+  EXPECT_TRUE(isFormatEE3OnlyOpcodeName("SIN_COS"));
+  EXPECT_FALSE(isFormatEE3OnlyOpcodeName("ADD32"));
+  EXPECT_FALSE(isFormatEE3OnlyOpcodeName("ADDI32"));
+
+  // Product code classifies MC-name-table spellings (enums in C++; the
+  // string surface is haydnOpcodeName, never a magic opcode number).
+  EXPECT_TRUE(isFormatEE2OnlyOpcodeName(haydnOpcodeName(Haydn::XORI32)));
+  EXPECT_FALSE(isFormatEE3OnlyOpcodeName(haydnOpcodeName(Haydn::XORI32)));
 }
 
 } // namespace

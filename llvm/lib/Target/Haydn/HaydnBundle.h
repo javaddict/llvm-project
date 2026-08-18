@@ -26,7 +26,7 @@
 //
 // Bundle is a **solver adapter**. For logicals that have PlacementAlternatives,
 // canAdd/add/reserveByOpcode route through pure exactTryAddProduct on a private
-// nondominated CycleCandidateSet (HaydnBundleFormatSolver.h ) — the AIE
+// nondominated CycleCandidateSet (HaydnBundleFormatSolver.h) — the AIE
 // alt-try shape (AIEHazardRecognizer.cpp:174-214 getAlternateInstsOpcode +
 // Bundle.canAdd AltOpcode) strengthened so first-fit freeze cannot dead-end a
 // legal pack. OccupiedSlots / SlotMap report the preferred candidate
@@ -36,14 +36,15 @@
 // pickSlot (nullopt) unless standalone empty-escape accepts them.
 //
 // getFeasibleFormatMask exposes the pre-commit FormatID frontier from
-// generated PacketFormats coverage of OccupiedSlots ( productFeasible
-// FormatMask). AIE peer getFormatOrNull (AIEBundle.h:150-156) returns one
-// format; Haydn keeps a mask until post-RA freeze. Logical ops only — no
-// setDesc / no FormatID commit here.
+// generated PacketFormats coverage of OccupiedSlots
+// (productFeasibleFormatMask). AIE peer getFormatOrNull (AIEBundle.h:150-156)
+// returns one format; Haydn keeps a mask until post-RA freeze. Logical ops
+// only — no setDesc / no FormatID commit here.
 //
 // Haydn adaptation vs AIE: AIE ops have a SINGLE slot (`getSlotKind`); Haydn
 // multi-slot logicals enumerate PlacementAlternative FieldSlots with exact
-// nondominated rematching (plan §3.2).
+// nondominated rematching. Bundle is a post-RA solver adapter — no
+// BUNDLE / member / row / completion / issue-cycle identity crosses RA.
 //
 //===----------------------------------------------------------------------===//
 
@@ -65,17 +66,26 @@ namespace Haydn {
 // \a I must provide getOpcode.
 template <class I> class Bundle {
 public:
+  // AIE peer AIEBundle.h:43-45 stores the same FormatInterface. Seed the
+  // candidate set from that interface — not haydnDefaultMCFormats().
+  // Null interface is the AIE standalone-escape ctor shape; seed the
+  // product PacketFormats table only so the candidate set is never a
+  // second format family.
   Bundle(const HaydnBaseMCFormats *FormatInterface)
-      : FormatInterface(FormatInterface) {}
+      : FormatInterface(FormatInterface),
+        PackingCandidates(haydn::bundle::makeProductCandidateSet(
+            FormatInterface
+                ? FormatInterface->getPacketFormats()
+                : haydnDefaultMCFormats().getPacketFormats())) {}
 
   // Whether adding \p Instr (by opcode) leaves the bundle valid.
   // Committed format-members (post-setDesc): fixed getSlotKind (AIE shape).
- // Alts-bearing logicals: exact product candidate expand.
+  // Alts-bearing logicals: exact product candidate expand.
   // Else: no getLegalSlots fallback — pickSlot nullopt outside empty escape.
   // A truly empty bundle (no instructions AND no reserved slots) always
   // accepts (standalone escape, mirrors AIE AIEBundle.h:71-73); a standalone
   // bundle (one unsupported op) accepts nothing more.
-  // Contract : canAdd and reserveByOpcode/add MUST agree on slot
+  // Contract: canAdd and reserveByOpcode/add MUST agree on slot
   // availability. The empty-bundle early-out is the ONE exception
   // (AIE-faithful standalone escape): on a bundle with neither Instrs nor
   // OccupiedSlots any op is accepted as a future standalone parcel, and
@@ -233,7 +243,7 @@ public:
     auto Slot = pickSlot(Opcode);
     if (!Slot)
       return;
- // Exact expand PackingCandidates + preferred OccupiedSlots.
+    // Exact expand PackingCandidates + preferred OccupiedSlots.
     commitOpcodePlacement(Opcode);
   }
 
@@ -275,16 +285,24 @@ public:
                  .FeasibleFormatMask;
     const haydn::bundle::BundleFormatRowID Row =
         haydn::bundle::selectProductRow(Mask, size());
-    return haydn::bundle::productVLIWFormatForRow(PF, Row);
+    const VLIWFormat *Resolved =
+        haydn::bundle::productVLIWFormatForRow(PF, Row);
+    // productVLIWFormatForRow is PacketFormats full-cover only
+    // (AIEBundle.h:150-156). Refuse the empty-cover representative if a
+    // helper still returns it — never a format for transitional occupancy.
+    if (Resolved && OccupiedSlots != 0 &&
+        Resolved == PF.getFormat(/*Occupied=*/0))
+      return nullptr;
+    return Resolved;
   }
 
   // Feasible FormatID frontier for current OccupiedSlots (logical only).
   // AIE peer: getFormatOrNull returns one covering VLIWFormat*
   // (AIEBundle.h:150-156; AIEFormat.cpp:18-27 first-covering). Haydn keeps a
-  // FormatID *mask* so Pre-RA/SMS can reason about multi-format readiness
- // without freezing FormatID or setDesc (plan §7.1). : generated
-  // PacketFormats coverage → ProductFormatMask (E2|E3) when composite
-  // still covers OccupiedSlots (not hand productFormatTable).
+  // FormatID mask so Pre-RA/SMS can reason about multi-format readiness
+  // without freezing FormatID or setDesc. Generated PacketFormats coverage
+  // yields ProductFormatMask (E2|E3) while the composite still covers
+  // OccupiedSlots (not a hand productFormatTable).
   uint64_t getFeasibleFormatMask() const {
     return haydn::bundle::productFeasibleFormatMask(
         FormatInterface->getPacketFormats(), OccupiedSlots);
@@ -297,7 +315,8 @@ public:
     SlotMap.clear();
     BundleRoot = nullptr;
     PackingCandidates = haydn::bundle::makeProductCandidateSet(
-        FormatInterface->getPacketFormats());
+        FormatInterface ? FormatInterface->getPacketFormats()
+                        : haydnDefaultMCFormats().getPacketFormats());
   }
 
   bool empty() const { return Instrs.empty(); }
@@ -386,7 +405,7 @@ private:
 
   // Probe a legal field for \p Opcode under the live candidate set (or fixed
   // getSlotKind for post-setDesc members). Does not commit PackingCandidates.
- // Alts-bearing: canExactTryAddProduct. Else nullopt (no getLegalSlots).
+  // Alts-bearing: canExactTryAddProduct. Else nullopt (no getLegalSlots).
   std::optional<MCSlotKind> pickSlot(unsigned Opcode) const {
     // Already-materialized format-member opcodes (MI.setDesc after
     // leaveRegion) have a single fixed slot — AIE AIEBundle.h:92-104
@@ -396,20 +415,21 @@ private:
       const MCSlotInfo *SI = FormatInterface->getSlotInfo(Fixed);
       if (!SI)
         return std::nullopt;
-      // Slot already taken. Prefer SlotSet occupancy over the full conflict
-      // mask: residual S0/S1/S2 conflict sets currently include Format E
-      // entry-slot bits after E2/E3 kinds were inserted, which would false-
-      // reject legal multi-issue of committed members.
-      if (OccupiedSlots & SI->getSlotSet())
+      // Issue-slot occupancy (SLOT0/1/2). PacketFormats entry bits on the
+      // Format E kind are not the rematching FieldSlots identity.
+      SlotBits Field = haydn::bundle::issueFieldSlotsForCommittedKind(Fixed);
+      if (!Field)
+        Field = SI->getSlotSet();
+      if (OccupiedSlots & Field)
         return std::nullopt;
-      const SlotBits NewSlots = OccupiedSlots | SI->getSlotSet();
+      const SlotBits NewSlots = OccupiedSlots | Field;
       if (!haydn::bundle::productCovers(FormatInterface->getPacketFormats(),
                                         NewSlots))
         return std::nullopt;
       return Fixed;
     }
 
- // PlacementAlternative + exact product expand (; AIE alt try
+    // PlacementAlternative + exact product expand (AIE alt try
     // strengthened). Alts-only — no getLegalSlots no-alt fallback.
     const HaydnMCFormats &SolverFmts =
         static_cast<const HaydnMCFormats &>(*FormatInterface);
@@ -432,7 +452,7 @@ private:
   // Commit \p Instr into SlotMap and expand PackingCandidates when alts-bearing.
   // \p Slot is the provisional preferred field (hint or pickSlot); after exact
   // expand, SlotMap is re-synced from selectPreferredCandidate so rematching
- // earlier members stays encode-consistent.
+  // earlier members stays encode-consistent.
   // When \p ForceSlot, only successors that placed the new member on \p Slot
   // are retained (explicit `.sN` / encode hint).
   void reserveSlot(I *Instr, MCSlotKind Slot, bool ForceSlot) {
@@ -443,21 +463,32 @@ private:
     const unsigned Opcode = Instr->getOpcode();
     MCSlotKind Fixed = FormatInterface->getSlotKind(Opcode);
     if (Fixed != MCSlotKind()) {
-      // Post-setDesc member: occupancy is the fixed slot; rebuild a singleton
-      // candidate from the new occupancy (member history not required for
-      // further fixed-slot checks).
-      OccupiedSlots |= SI->getSlotSet();
-      PackingCandidates.clear();
-      PackingCandidates.push_back(
-          haydn::bundle::makeProductCycleStateFromOccupied(
-              FormatInterface->getPacketFormats(), OccupiedSlots));
+      // Post-setDesc member: append a CycleMember on the issue field so
+      // SlotMap and member history stay one sequence. Occupancy-only
+      // rebuild drops earlier members; the next alts-bearing add then
+      // trips SlotMap longer than CycleMember (hwloop-ON mixed commit).
+      SlotBits Field = haydn::bundle::issueFieldSlotsForCommittedKind(Slot);
+      if (!Field)
+        Field = haydn::bundle::issueFieldSlotsForCommittedKind(Fixed);
+      if (!Field)
+        Field = SI->getSlotSet();
+      bool Ok = haydn::bundle::appendCommittedMember(
+          PackingCandidates, FormatInterface->getPacketFormats(), Opcode,
+          Field);
+      assert(Ok && "fixed-slot add without CycleMember");
+      (void)Ok;
+      OccupiedSlots =
+          haydn::bundle::selectPreferredCandidate(PackingCandidates)
+              .OccupiedSlots;
+      if (MCSlotKind Issue = haydnSlotMaskToKind(Field); Issue != MCSlotKind())
+        SlotMap.back().first = Issue;
       return;
     }
 
     const HaydnMCFormats &SolverFmts =
         static_cast<const HaydnMCFormats &>(*FormatInterface);
     if (hasPlacementAlternatives(SolverFmts, Opcode)) {
- // Exact commit: expand all nondominated successors.
+      // Exact commit: expand all nondominated successors.
       bool Ok =
           haydn::bundle::exactTryAddProduct(PackingCandidates, SolverFmts, Opcode);
       assert(Ok && "reserveSlot after canAdd/pickSlot without exact expand");
@@ -466,7 +497,9 @@ private:
         // FieldSlots are Haydn::SLOT*; residual S* kinds map via helper.
         // SI->getSlotSet() is the residual kind's own SlotSet bit (32/64/128)
         // and must not be compared to FieldSlots.
-        SlotBits Want = residualSlotKindToFieldSlots(Slot);
+        SlotBits Want = haydn::bundle::issueFieldSlotsForCommittedKind(Slot);
+        if (!Want)
+          Want = residualSlotKindToFieldSlots(Slot);
         if (!Want)
           Want = SI->getSlotSet();
         haydn::bundle::CycleCandidateSet HintKept;
@@ -486,9 +519,10 @@ private:
   }
 
   /// Rewrite SlotMap + OccupiedSlots from the preferred surviving matching so
- /// encode SlotMap tracks rematches of earlier members.
-  /// SlotMap only records `add` placements; `reserveByOpcode` may have added
-  /// earlier CycleMembers without SlotMap rows — sync the SlotMap suffix.
+  /// encode SlotMap tracks rematches of earlier members.
+  /// SlotMap records `add` placements as a suffix of CycleMember history;
+  /// `reserveByOpcode` may have appended earlier members without SlotMap
+  /// rows. Fixed-slot adds append members too — never occupancy-only.
   void syncSlotMapFromPreferred() {
     assert(!PackingCandidates.empty());
     const haydn::bundle::CycleState &Pref =
@@ -509,13 +543,19 @@ private:
   void commitOpcodePlacement(unsigned Opcode) {
     MCSlotKind Fixed = FormatInterface->getSlotKind(Opcode);
     if (Fixed != MCSlotKind()) {
-      const MCSlotInfo *SI = FormatInterface->getSlotInfo(Fixed);
-      assert(SI);
-      OccupiedSlots |= SI->getSlotSet();
-      PackingCandidates.clear();
-      PackingCandidates.push_back(
-          haydn::bundle::makeProductCycleStateFromOccupied(
-              FormatInterface->getPacketFormats(), OccupiedSlots));
+      SlotBits Field = haydn::bundle::issueFieldSlotsForCommittedKind(Fixed);
+      if (!Field) {
+        const MCSlotInfo *SI = FormatInterface->getSlotInfo(Fixed);
+        Field = SI ? SI->getSlotSet() : 0;
+      }
+      if (haydn::bundle::appendCommittedMember(
+              PackingCandidates, FormatInterface->getPacketFormats(), Opcode,
+              Field))
+        OccupiedSlots =
+            haydn::bundle::selectPreferredCandidate(PackingCandidates)
+                .OccupiedSlots;
+      else
+        OccupiedSlots |= Field;
       return;
     }
     const HaydnMCFormats &SolverFmts =
@@ -534,9 +574,8 @@ private:
   /// Preferred occupancy (selectPreferredCandidate) for getOccupiedSlots /
   /// format coverage. Live rematching state is PackingCandidates.
   SlotBits OccupiedSlots = 0;
- /// : private nondominated CycleState set (plan §3.2). Not MIR-durable.
-  haydn::bundle::CycleCandidateSet PackingCandidates =
-      haydn::bundle::makeProductCandidateSet();
+  /// Private nondominated CycleState set. Not MIR-durable.
+  haydn::bundle::CycleCandidateSet PackingCandidates;
   std::vector<I *> Instrs;
   SmallVector<std::pair<MCSlotKind, I *>, 3> SlotMap;
   std::vector<I *> MetaInstrs;

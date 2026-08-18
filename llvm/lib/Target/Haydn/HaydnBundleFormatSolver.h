@@ -30,7 +30,7 @@
 // Product PacketFormats are Format E rows (BUNDLE_E96_*). EncodedBytes and
 // durable MIR identity come from the registry via commitProduct / BundlePlan.
 //
-// : first-fit freeze (single S2→S1→S0 alt commit) is incomplete — a legal
+// First-fit freeze (single S2→S1→S0 alt commit) is incomplete — a legal
 // pack can dead-end when an early multi-slot op claims a scarce field. Bundle /
 // HR / SMS / asm / verifier wire through exactTryAddProduct on a private
 // nondominated CycleCandidateSet (plan §3.2). tryAddProduct remains the
@@ -124,6 +124,138 @@ inline bool formatEMemberOccupiesEntry(unsigned Opc, unsigned EntryIdx) {
   default:
     return false;
   }
+}
+
+/// Encoded entry count of a generated Format E row (2 for E2, 3 for E3),
+/// from the registry row descriptor — no geometry literals.
+inline unsigned
+bundleRowEntryCount(haydn::format::BundleFormatRowID Row) {
+  const haydn::format::BundleFormatRowDesc *Desc =
+      haydnDefaultMCFormats().getBundleFormatRow(Row);
+  assert(Desc && "generated Format E row missing from registry");
+  return Desc->EntryCount;
+}
+
+/// Opcode exactTryAdd / exactSolve should see. leaveRegion
+/// materializeMultiOpcodeInstrs may already have setDesc'd a Format E
+/// member (AIE AIEMachineScheduler.cpp:1121-1139); exactTryAdd only
+/// accepts alts-bearing logicals (AIE getAlternateInstsOpcode). Peel
+/// generated members via logicalOpcodeOrSelf and residual codegen
+/// aliases (ST32_POST → S_SW_POST_IMM) via peelLogicalOpcodeName so a
+/// baked ADDI32_E2_* next to a residual store still solves as the
+/// logical pair. AIE has no alias layer (single architectural opcode).
+unsigned productSolveLogicalOpcode(unsigned Opc, const HaydnMCFormats &Fmts);
+
+/// SF6 ResMII row-capacity term: sound lower bound on issue cycles from
+/// Format E row geometry alone. Each parcel is exactly one row (E2 holds 2
+/// entries, E3 holds 3); a parcel containing any E2-only member holds ≤ 2
+/// entries (commit-side law: no mixed E2/E3 entry bits in one parcel). With
+/// k parcels carrying E2-only members: NBody ≤ 3·II − k and k ≥ ceil(N2/2),
+/// giving II ≥ ceil((NBody + ceil(N2/2)) / 3). N_E2only counts body ops
+/// whose placement frontier is exactly the E96TwoEntry bit
+/// (logical/flexible ops do not count). Degenerates to the flat
+/// ceil(NBody / ISSUE_SLOT_COUNT) term at N_E2only = 0.
+inline unsigned moduloRowCapacityII(unsigned NBody, unsigned NE2Only) {
+  using haydn::format::BundleFormatRowID;
+  const unsigned E3Entries = bundleRowEntryCount(BundleFormatRowID::E96ThreeEntry);
+  const unsigned E2Entries = bundleRowEntryCount(BundleFormatRowID::E96TwoEntry);
+  const unsigned E2Deficit = E3Entries - E2Entries; // entries lost per E2 row
+  const unsigned Pairs = (NE2Only + E2Entries - 1) / E2Entries; // ceil(N2/2)
+  const unsigned Total = NBody + Pairs * E2Deficit;
+  if (Total == 0)
+    return 1;
+  return std::max(1u, (Total + E3Entries - 1) / E3Entries);
+}
+
+/// Count of body opcodes whose only compatible Format E row is E96TwoEntry
+/// (the E2-only term of moduloRowCapacityII). Classification is by the
+/// logical's own row frontier — the union of every PlacementAlternative's
+/// CompatibleFormatMask — NOT memberOpcodeCompatibleFormatMask (that helper
+/// classifies generated member names and returns ProductFormatMask for
+/// logical names, which carry no _E2_/_E3_ marker).
+inline unsigned countE2OnlyBodyOps(ArrayRef<unsigned> Opcodes) {
+  const uint64_t E2Bit = formatRowBit(haydn::format::BundleFormatRowID::E96TwoEntry);
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  unsigned N = 0;
+  for (unsigned Opc : Opcodes) {
+    if (!hasPlacementAlternatives(Fmts, Opc))
+      continue; // untracked ops never constrain the row frontier
+    SmallVector<PlacementAlternative, 8> Alts;
+    if (!enumeratePlacementAlternatives(Fmts, Opc, Alts))
+      continue;
+    uint64_t Frontier = 0;
+    for (const PlacementAlternative &A : Alts)
+      Frontier |= A.CompatibleFormatMask;
+    if (Frontier == E2Bit)
+      ++N;
+  }
+  return N;
+}
+
+/// Preferred generated member for a MultiSlot logical (AIE
+/// MultiSlotInstrMaterializer first-unused-slot analog). Lowest FieldSlots
+/// bit wins (S0 before S1 before S2). Logicals with no alts return themselves.
+inline unsigned preferredMemberOpcode(unsigned LogicalOpc) {
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  SmallVector<PlacementAlternative, 8> Alts;
+  if (!enumeratePlacementAlternatives(Fmts, LogicalOpc, Alts) || Alts.empty())
+    return LogicalOpc;
+  const PlacementAlternative *Best = &Alts.front();
+  for (const PlacementAlternative &A : Alts) {
+    if (A.MemberOpcode == 0)
+      continue;
+    if (Best->MemberOpcode == 0 ||
+        (A.FieldSlots != 0 &&
+         (Best->FieldSlots == 0 || A.FieldSlots < Best->FieldSlots)))
+      Best = &A;
+  }
+  return Best->MemberOpcode ? Best->MemberOpcode : LogicalOpc;
+}
+
+/// SF6 per-unit ResMII term: greedy least-loaded assignment of each body
+/// opcode onto a compatible FieldSlots bit (AIE getSlotCounts / Counts.max()
+/// peer at AIEPostPipeliner.cpp:216-228, instance-aware like
+/// MultiSlotInstrMaterializer unused-slot assignment). Pinning every
+/// instance of a logical to the same preferred member would count them
+/// all on one slot and inflate ResMII to NBody. Untracked opcodes do not
+/// increment any slot. Degenerates to 1 on an empty or untracked body.
+inline unsigned moduloPrimarySlotII(ArrayRef<unsigned> Opcodes) {
+  unsigned SlotOcc[Haydn::ISSUE_SLOT_COUNT] = {};
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  for (unsigned Opc : Opcodes) {
+    if (!hasPlacementAlternatives(Fmts, Opc))
+      continue;
+    SmallVector<PlacementAlternative, 8> Alts;
+    if (!enumeratePlacementAlternatives(Fmts, Opc, Alts) || Alts.empty())
+      continue;
+    unsigned BestS = Haydn::ISSUE_SLOT_COUNT;
+    unsigned BestLoad = ~0u;
+    SlotBits BestBits = 0;
+    for (const PlacementAlternative &A : Alts) {
+      if (!A.FieldSlots)
+        continue;
+      for (unsigned S = 0; S < Haydn::ISSUE_SLOT_COUNT; ++S) {
+        if (!(A.FieldSlots & (SlotBits(1) << S)))
+          continue;
+        if (SlotOcc[S] < BestLoad ||
+            (SlotOcc[S] == BestLoad && S < BestS)) {
+          BestLoad = SlotOcc[S];
+          BestS = S;
+          BestBits = A.FieldSlots;
+        }
+      }
+    }
+    if (BestS >= Haydn::ISSUE_SLOT_COUNT)
+      continue;
+    // Charge the chosen primary bit only (AIE primary slot set, not the
+    // full conflict mask).
+    ++SlotOcc[BestS];
+    (void)BestBits;
+  }
+  unsigned Max = 0;
+  for (unsigned C : SlotOcc)
+    Max = std::max(Max, C);
+  return std::max(1u, Max);
 }
 
 /// True when \p Opcodes can be assigned injective Format E units under \p Mode
@@ -358,6 +490,57 @@ inline CycleCandidateSet makeProductCandidateSet() {
   return makeProductCandidateSet(haydnDefaultMCFormats().getPacketFormats());
 }
 
+/// Map a committed-member MCSlotKind (Format E E2/E3 entry or residual S*)
+/// onto the SLOT0/1/2 FieldSlots PackingCandidates use. AIE getSlotKind is
+/// the occupancy key (AIEBundle.h:92-104); Haydn overlays three entry-kind
+/// families onto the same three issue bits so SlotMap and CycleMember stay
+/// one history. PacketFormats entry bits (E3_0=bit2) are not SLOT* identity.
+inline SlotBits issueFieldSlotsForCommittedKind(MCSlotKind Kind) {
+  if (SlotBits Residual = residualSlotKindToFieldSlots(Kind))
+    return Residual;
+  if (Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_0) ||
+      Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0))
+    return Haydn::SLOT0;
+  if (Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E2_1) ||
+      Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1))
+    return Haydn::SLOT1;
+  if (Kind == MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2))
+    return Haydn::SLOT2;
+  return 0;
+}
+
+/// Append a committed (fixed-slot) member onto every candidate that still
+/// has that issue field free. Live Bundle / HR / commit must not rebuild
+/// from occupancy-only: that drops CycleMember history and leaves SlotMap
+/// longer than Members on the next alts-bearing add.
+inline bool appendCommittedMember(CycleCandidateSet &Cands,
+                                  const PacketFormats &Packets,
+                                  unsigned Opcode, SlotBits Field) {
+  if (!Field)
+    return false;
+  if (Cands.empty())
+    Cands = makeProductCandidateSet(Packets);
+  CycleCandidateSet Next;
+  for (const CycleState &S : Cands) {
+    if (S.OccupiedSlots & Field)
+      continue;
+    CycleState N = S;
+    CycleMember M;
+    M.LogicalOpcode = Opcode;
+    M.MemberOpcode = Opcode;
+    M.FieldSlots = Field;
+    N.Members.push_back(M);
+    N.OccupiedSlots |= Field;
+    N.FeasibleFormatMask = productFeasibleFormatMask(Packets, N.OccupiedSlots);
+    if (N.FeasibleFormatMask)
+      insertNondominatedCandidate(Next, std::move(N));
+  }
+  if (Next.empty())
+    return false;
+  Cands = std::move(Next);
+  return true;
+}
+
 /// Member opcodes (parallel to \p LogicalOpcodes) bound onto ONE settled row
 /// (\p Mode: 0 = E2, 1 = E3) with entry/unit injectivity — the shared
 /// assignFormatEMemberEntries DFS on the golden member records. Empty on
@@ -371,6 +554,10 @@ assignMemberOpcodesForSettledRow(ArrayRef<unsigned> LogicalOpcodes,
 /// 7R3W DR, 2R2W AR, 2R1W SFR; HaydnPortModel counters). Out-of-line so the
 /// header consumers do not inherit the port model's enum includes.
 bool cycleMembersRespectPortBudgets(ArrayRef<class MachineInstr *> Instrs);
+
+/// Shared GPR/DR/AR issue-cycle ceiling (P7). True when pooled demand needs
+/// more than one cycle. Delegates to haydnCycleMembersExceedPortBudget.
+bool cycleMembersExceedPortBudget(ArrayRef<class MachineInstr *> Instrs);
 
 /// Preferred representative among \p Cands (non-empty). Deterministic
 /// S2→S1→S0 materialize / SlotMap / AltDesc selection.
@@ -646,6 +833,104 @@ int preferredProductResMIIOverestimate(ArrayRef<unsigned> Opcodes);
 /// inexact oracle). Pure predicate; no MIR mutation. SMS analyzeLoop (sibling)
 /// may call this; pre-RA exposes the same surface via PreRASchedStrategy.
 bool productResMIIFailsQualification(ArrayRef<unsigned> Opcodes);
+
+//===----------------------------------------------------------------------===//
+// SF1 — ModuloCyclePlacementOracle (format-aware SMS placement, plan § SF1)
+//===----------------------------------------------------------------------===//
+//
+// AIE peer shape (AIEHazardRecognizer.cpp:133-151 FuncUnitWrapper::conflict):
+// the placement oracle ends with a cheap per-cycle accumulated mask test
+// (isFormatAvailable(Slots | OtherSlots)) — never the packet solver. The
+// Haydn peer of that accumulated per-cycle state is one CycleCandidateSet
+// per modulo cycle holding OccupiedSlots + FeasibleFormatMask; the probe is
+// the existing probe-only canExactTryAddProduct and the mutating twin
+// exactTryAddProduct — the same mutate/probe pair the post-RA HR uses at
+// HaydnHazardRecognizer.cpp:808/:964. checkConflict stays ports/itinerary
+// oracle; same-cycle row/entry coverage is asked exclusively through this
+// oracle (one mechanism, many instances — hard constraint #7).
+//
+// Ownership: the SMS host (HaydnMultiStageSMS) owns one oracle per tryII
+// attempt and reseeds it wholesale on II retry (init(II) is O(1) per cycle:
+// every cycle is the makeProductCandidateSet() seed). The commit tail
+// (canCoissueProductCycle + commitExactMultiMIProductCycle) keeps full
+// fidelity and is never called per-probe; a commit-time miss on a cycle this
+// oracle searched is a verifier-grade error, never silent re-selection.
+
+/// Format-aware placement oracle for one modulo schedule attempt: II
+/// per-modulo-cycle CycleCandidateSets, probed by canExactTryAddProduct and
+/// mutated only by exactTryAddProduct on the SMS accept path.
+class ModuloCyclePlacementOracle {
+public:
+  /// Seed every modulo cycle with the empty product candidate set
+  /// (O(1) per cycle — one makeProductCandidateSet() each). Called once per
+  /// tryII attempt; a rejected II discards the state wholesale.
+  void init(unsigned InitiationInterval,
+            const HaydnMCFormats &Formats) {
+    II = InitiationInterval;
+    Fmts = &Formats;
+    Cycles.clear();
+    Cycles.resize(II);
+    for (CycleCandidateSet &C : Cycles)
+      C = makeProductCandidateSet(Formats.getPacketFormats());
+  }
+
+  /// Probe: can \p LogicalOpc legally join modulo cycle \p Cycle?
+  /// Non-mutating, fail-closed (no PlacementAlternative → false). Ports /
+  /// itinerary / RAW-WAW checks stay in their owning predicates — this is
+  /// the Format E row/entry coverage oracle only.
+  bool canPlace(unsigned Opcode, int Cycle) const {
+    if (!isTracked(Opcode))
+      return true;
+    if (!inRange(Cycle))
+      return false;
+    return canExactTryAddProduct(Cycles[modulo(Cycle)], *Fmts, Opcode);
+  }
+
+  /// Mutating twin of canPlace — the SMS accept path only. On reject the
+  /// cycle state is left unchanged (exactTryAddProduct contract).
+  /// \returns false when the probe would have refused (caller must not
+  /// commit the placement — fail closed, never force).
+  bool place(unsigned Opcode, int Cycle) {
+    if (!isTracked(Opcode))
+      return true;
+    if (!inRange(Cycle))
+      return false;
+    return exactTryAddProduct(Cycles[modulo(Cycle)], *Fmts, Opcode);
+  }
+
+  /// True when \p Cycle carries no accepted member yet (diagnostics /
+  /// unit tests; a fresh seed is exactly one empty CycleState).
+  bool isCycleEmpty(int Cycle) const {
+    assert(inRange(Cycle) && "modulo cycle out of range");
+    const CycleCandidateSet &C = Cycles[modulo(Cycle)];
+    return C.size() == 1 && C.front().empty();
+  }
+
+  unsigned getII() const { return II; }
+
+  /// Live candidate set of one modulo cycle (unit tests / diagnostics).
+  const CycleCandidateSet &getCandidates(int Cycle) const {
+    assert(inRange(Cycle) && "modulo cycle out of range");
+    return Cycles[modulo(Cycle)];
+  }
+
+private:
+  /// Untracked (no PlacementAlternatives) opcodes never consult the solver —
+  /// same alts-only skip as HR getHazardType DeltaCycles==0 gate.
+  bool isTracked(unsigned Opcode) const {
+    return hasPlacementAlternatives(*Fmts, Opcode);
+  }
+
+  bool inRange(int Cycle) const { return Cycle >= 0 && Cycle < int(II); }
+
+  unsigned modulo(int Cycle) const {
+    return static_cast<unsigned>(Cycle % int(II));
+  }
+
+  unsigned II = 0;
+  const HaydnMCFormats *Fmts = &haydnDefaultMCFormats();
+  SmallVector<CycleCandidateSet, 16> Cycles;
+};
 
 
 } // namespace bundle
