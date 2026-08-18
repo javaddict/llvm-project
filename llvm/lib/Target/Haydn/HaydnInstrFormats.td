@@ -224,15 +224,14 @@ def brtarget_wide_i12 : Operand<OtherVT> {
 }
 
 // 48-bit WIDE JALR_W target. TableGen size-6 shell; product encode is Format E member. bits[47:36].
-// rs-relative offset; the immediate form goes in raw (no ÷2 shift). The
-// symbolic form emits FIXUP_HAYDN_WIDE_BranchSImm12 — this is pre-existing
-// GAP-3 (the only available kind is PC-relative, but JALR semantics are
-// rs-relative). Replicated AS-IS so bytes/fixups match encode48BitBR_RI12's
-// JALR path; a dedicated rs-relative kind is a later-stage coordinator
-// decision (see).
+// One-reg address (rs+imm). Bind WIDE_BranchSImm12, not the two-reg _RI
+// kind used by BEQ/BNE. Not PC-relative: even-byte Align is a branch/JAL
+// law (MinBundleAddressAlignBytes), not an rs-relative byte offset.
+// Symbolic JALR still goes through findFixupFromFixupFields; RI12
+// type-opcode 1 has no product reloc row and stays fail-closed.
 def calltarget_wide_ri12 : Operand<OtherVT> {
   let EncoderMethod =
-      "getSImmOpValueXStepWide<12,/*Shift*/0,/*IsSigned*/1,/*IsPCRel*/1,"
+      "getSImmOpValueXStepWide<12,/*Shift*/0,/*IsSigned*/1,/*IsPCRel*/0,"
       "Haydn::FIXUP_HAYDN_WIDE_BranchSImm12>";
   let DecoderMethod = "decodeSImmOperandXStepWide<12,0,/*IsSigned*/1>";
 }

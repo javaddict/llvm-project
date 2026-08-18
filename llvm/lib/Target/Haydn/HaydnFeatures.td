@@ -40,6 +40,8 @@ def HasBitReversed : Predicate<"Subtarget->hasBitReversed()">,
                      AssemblerPredicate<(all_of FeatureBitReversed),
                      "Enable bit-reversed addressing">;
 
+// ISA capability only. Does not enable HardwareLoops formation;
+// product default is HaydnTargetMachine::hardwareLoopsProductDefaultEnabled().
 def FeatureHWLoop
     : SubtargetFeature<"hwloop", "HasHWLoop", "true",
                        "Enable hardware loop support">;

@@ -16,6 +16,7 @@
 #include "HaydnRegisterInfo.h"
 #include "llvm/CodeGen/DFAPacketizer.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/Support/CommandLine.h"
 #include <optional>
 
 #define GET_INSTRINFO_HEADER
@@ -26,6 +27,11 @@ namespace llvm {
 class HaydnSubtarget;
 class ScheduleDAGMI;
 class HaydnInstrInfo;
+
+// AIE aie-loop-min-tripcount peer: floor MinTripCount for SMS candidates
+// (-1 = disabled). Defined in HaydnInstrInfo.cpp; the post-RA multi-stage
+// host honors the same single option (F39 static-trip proof floor).
+extern cl::opt<int> HaydnLoopMinTripCount;
 
 // Result of recognizing a countable single-BB loop in PHI-form MIR (the shape
 // the MachinePipeliner sees, pre-PHIElimination).
@@ -131,6 +137,13 @@ public:
   // Expand pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
+  // Format E CB members list dest2 as an input only (HaydnFormatsE96Members
+  // D_LDW_CB_IMM_E2). rewriteFieldSlotToMember drops the logical AGU
+  // writeback dest and keeps the implicit tail (HaydnFinalizeBundle.cpp).
+  // After RA, add implicit-def of that physreg so chained CB uses stay
+  // defined. AIE keeps the tied dest on the member (AIETiedRegOperands).
+  void preserveCircularBufferWritebackDefs(MachineFunction &MF) const;
+
   // Scheduling boundary: call/branch/return, every standard BUNDLE root
   // (hard-bundle atomic membership through RA, including mixed GPR32/DR64),
   // frame-setup/destroy, CFI/debug, and unmodeled side effects. SET/LoopStart
@@ -220,19 +233,30 @@ public:
 
   // Memory→memory edge latency for post-RA MemoryEdges mutation (AIE peer).
   // Product default: max(1, LastSrc-FirstDst+1) from memory-only sched classes
-  // (Slot0_LS / Slot1_LD / Slot01_LD); nullopt when either cycle is unknown
-  // (MemoryEdges falls back to latency 1). Soft soak-off
-  // (-haydn-accurate-memory-latency=false) returns class-agnostic 1. Unit
-  // tables + lit packing pins (product full-NOP bubble; soft adjacent
-  // st32→ld32).
+  // (Slot0_LS / Slot1_LD / Slot01_LD / Slot2_LS); nullopt when either cycle is
+  // unknown. Product MemoryEdges fatals on a Slot*_LS / Slot*_LD class whose
+  // cycles are missing (W21 ExactLatencies law) instead of silently falling
+  // back to 1. Soft soak-off (-haydn-accurate-memory-latency=false) returns
+  // class-agnostic 1. Unit tables + lit packing pins (product full-NOP
+  // bubble; soft adjacent st32→ld32).
   std::optional<int> getMemoryLatency(unsigned SrcSchedClass,
                                       unsigned DstSchedClass) const;
 
+  // True if SchedClass belongs to the published load/store itinerary family
+  // (Slot*_LS / Slot*_LD) — the classes whose MemoryCycle rows are product
+  // latency truth. Used by MemoryEdges to separate "non-memory class" (fine,
+  // latency stays 1) from "memory class with no published First/Last row"
+  // (a generator hole; must abort, not invent latency on a no-interlock
+  // machine). Names, not enums: the family is exactly the MEMORY_ITIN_NAMES
+  // set of generate_sched_records.py.
+  static bool isPublishedMemoryItinerary(unsigned SchedClass);
+
   // Memory access cycle relative to issue (AIE getFirst/LastMemoryCycle peer).
   // Bodies are generated (HaydnGenMemoryCycles.inc) from the published
-  // Slot0_LS / Slot1_LD / Slot01_LD latency-2 scaffold — AIE MemInstrItinData
-  // + AIEMemoryCyclesEmitter.cpp:123-157. nullopt = non-memory / unknown
-  // class. Product getMemoryLatency reads these by default.
+  // Slot0_LS / Slot1_LD / Slot01_LD / Slot2_LS latency-2 scaffold — AIE
+  // MemInstrItinData + AIEMemoryCyclesEmitter.cpp:123-157. nullopt =
+  // non-memory / unknown class. Product getMemoryLatency reads these by
+  // default.
   std::optional<int> getFirstMemoryCycle(unsigned SchedClass) const;
   std::optional<int> getLastMemoryCycle(unsigned SchedClass) const;
   int getMinFirstMemoryCycle() const;

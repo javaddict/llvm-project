@@ -24,6 +24,9 @@
 //===----------------------------------------------------------------------===//
 
 include "HaydnGeneric.td"
+// HaydnInstrInfoAuto.td is included from HaydnGeneric.td. The filename is
+// historical; generate_format_e_records.py does not emit it. Treat that
+// file as hand-maintained hypothesized encodings (isCodeGenOnly quarantine).
 
 //===----------------------------------------------------------------------===//
 // CodeGenFormat backend : product Format E entry model only (FE8).
@@ -32,6 +35,8 @@ include "HaydnGeneric.td"
 // (BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY). Retired 128-bit composite
 // opcode deleted. Backend filters to InstFormat-derived instructions; legacy
 // HaydnInst defs are skipped.
+// Residual `_S*` families are occupancy / setDesc placement tables, not a
+// product alternate source (suffix name discovery fails closed at TableGen).
 //===----------------------------------------------------------------------===//
 include "llvm/Target/CodeGenFormat.td"
 include "HaydnSlots.td"
@@ -39,7 +44,6 @@ include "HaydnSlots.td"
 include "HaydnFormatsALU32.td"
 include "HaydnFormatsALU64.td"
 include "HaydnFormatsLS.td"
-include "HaydnFormatsLD.td"
 include "HaydnFormatsMAC.td"
 // Format E entry bases (product placement scaffolding).
 include "HaydnFormatsE96.td"

@@ -41,7 +41,13 @@ def CSR_Haydn : CalleeSavedRegs<(add
 // For getNoPreservedMask
 def CSR_NoRegs : CalleeSavedRegs<(add)>;
 
-// Haydn calling convention: independent cursors for GPR and DR
+// Haydn calling convention: independent cursors for GPR and DR.
+// i128 and wider integers are not CC types (fail-closed before
+// splitToValueTypes invents 2×i64). inreg / nest / swift* / byref have
+// no Haydn seat (fail-closed at CallLowering / PEI). Formal byval is the
+// defined stack-indirect path. half / bfloat are storage or libcall
+// types, not CC types. No CC_ISR: interrupt stays fail-closed until a
+// legal vector story exists (RISCV CC_ISR analog).
 def CC_Haydn : CallingConv<[
   // Promote small integers to i32
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,

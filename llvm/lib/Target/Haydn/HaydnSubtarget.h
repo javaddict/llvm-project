@@ -119,6 +119,8 @@ public:
   // AIE2 dual-scheduler gates.
   // Both pre-RA MachineScheduler and post-RA PostMachineScheduler are ON.
   // createMachineScheduler returns HaydnPreRASchedStrategy (never nullptr).
+  // Pre-RA is pressure/order only — no BUNDLE, private member, row,
+  // completion, or issue-cycle identity.
   bool enableMachineScheduler() const override { return true; }
 
   // Explicit override (AIE2Subtarget pattern) so post-RA does not depend solely
@@ -184,7 +186,8 @@ public:
   InstructionSelector *getInstructionSelector() const override {
     return InstSelector.get();
   }
-  // PostLegalizerCombiner not implemented for M0 - uses base class default
+  // PostLegalizerCombiner is a pipeline pass (addPreRegBankSelect), not a
+  // subtarget member.
 
   static constexpr unsigned XLen = 32;
 

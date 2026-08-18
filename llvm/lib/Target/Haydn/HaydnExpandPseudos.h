@@ -7,8 +7,12 @@
 //===----------------------------------------------------------------------===//
 //
 // Post-RA expansion of Haydn pseudos that still need physical registers or
-// a late operand rewrite: LOAD_ADDR, SETCBR, leftover *_POST_INC, SET_HWLOOP
-// descriptor rewrite, VAEND no-op, and soft-zero R0 maintenance.
+// a late operand rewrite: LOAD_ADDR, SETCBR, leftover *_POST_INC, leftover
+// generic SET_HWLOOP{,_REG} rewrite, and VAEND no-op. Soft-zero R0 restore
+// lives in HaydnPostRAScratch; this pass only calls it after leftover
+// expand so real JAL_W is visible. Product SET is SET_HWLOOP_F2_W at
+// HardwareLoops (HaydnHardwareLoops.cpp:701). Leftover expand-owned
+// semantic pseudos and leftover cycle-forming BUNDLE children are fatal.
 //
 // Relocated owners (not this pass):
 //   VASTART / VACOPY / G_VAARG  — HaydnLegalizerInfo
@@ -53,11 +57,6 @@ private:
 
   bool expandMBB(MachineBasicBlock &MBB);
   bool expandMI(MachineBasicBlock &MBB, MachineInstr &MI);
-
-  /// Single named owner of architectural soft-zero R0 restore in MIR
-  /// (xor32 r0, r0, r0) after calls and at indirect-jump targets. Must run
-  /// before PostRA pack so size models see the bytes. Do not scavenge R0.
-  bool insertSoftZeroR0Maintenance(MachineFunction &MF);
 
   bool expandLOAD_ADDR(MachineBasicBlock &MBB, MachineInstr &MI);
 };

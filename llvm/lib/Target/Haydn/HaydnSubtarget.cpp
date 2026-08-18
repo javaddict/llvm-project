@@ -42,8 +42,9 @@ HaydnSubtarget &HaydnSubtarget::initializeSubtargetDependencies(
     const Triple &TT, StringRef CPUName, StringRef TuneCPUName, StringRef FS) {
 
   // Default to the "generic" CPU. The generic model carries FeatureHWLoop
-  // + FeatureAGU (product baseline: post/pre-inc fuse is the sole update-addr
-  // path). Full "haydn" CPU adds CircularBuffer / BitReversed / SIMD via
+  // + FeatureAGU as ISA baseline (post/pre-inc fuse is the sole update-addr
+  // path). FeatureHWLoop does not enable HardwareLoops formation.
+  // Full "haydn" CPU adds CircularBuffer / BitReversed / SIMD via
   // -mcpu=haydn. Disable AGU densify with -mattr=-agu.
   if (CPUName.empty())
     CPUName = "generic";
@@ -84,7 +85,9 @@ HaydnSubtarget::HaydnSubtarget(const Triple &TT, StringRef CPU, StringRef TuneCP
       MCSubtargetInfo::getSchedModel(), HaydnStages,
       HaydnOperandCycles, HaydnForwardingPaths);
 
-  // Initialize GlobalISel objects
+  // Initialize GlobalISel objects. Combiners are pipeline passes, not
+  // subtarget members (HaydnTargetMachine addPreLegalizeMachineIR /
+  // addPreRegBankSelect).
   CallLoweringInfo = std::make_unique<HaydnCallLowering>(TLInfo);
   InlineAsmLoweringInfo =
       std::make_unique<InlineAsmLowering>(getTargetLowering());
@@ -92,7 +95,6 @@ HaydnSubtarget::HaydnSubtarget(const Triple &TT, StringRef CPU, StringRef TuneCP
   RegBankInfo = std::make_unique<HaydnRegisterBankInfo>();
   InstSelector.reset(createHaydnInstructionSelector(
       *this, *static_cast<const HaydnRegisterBankInfo *>(RegBankInfo.get())));
-  // PostLegalizerCombiner not implemented for M0
 }
 
 HaydnSubtarget::~HaydnSubtarget() = default;
@@ -166,7 +168,7 @@ void HaydnSubtarget::adjustSchedDependency(
   // Architectural Data_Latency is left intact for every Data edge, including
   // load→use (itinerary 2). Schedulers must see the true ISA latency so II
   // and density are measurable; empty-cycle materialization and the
-  // HaydnLatencyStalls pre-emit auditor insert any remaining stalls. There is
+  // HaydnLatencyStalls addPreSched2 net insert any remaining stalls. There is
   // no load→use soften: a non-architectural heuristic would make every
   // initiation-interval figure fiction until stalls were patched in later.
 

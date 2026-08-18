@@ -8,7 +8,16 @@
 //
 // Post-RA expansion of Haydn pseudos that require physical registers:
 // LOAD_ADDR, SETCBR, leftover *_POST_INC (MIR-injected; product form is ISel),
-// SET_HWLOOP descriptor rewrite, VAEND no-op, and soft-zero R0 maintenance.
+// leftover generic SET_HWLOOP{,_REG} rewrite, and VAEND no-op.
+// Soft-zero R0 restore after calls is
+// HaydnPostRAScratch::insertSoftZeroR0AfterCalls (this pass is the
+// post-leftover call site). Product SET is SET_HWLOOP_F2_W at
+// HardwareLoops (HaydnHardwareLoops.cpp:701; AIE createAIEBaseHardwareLoopsPass
+// at AIE2TargetMachine.cpp:235). Leftover expand-owned semantic
+// pseudos, and leftover cycle-forming SET_HWLOOP / SETCBR / LOOPCTL /
+// LOAD_ADDR / LOADI32 as BUNDLE children, are fatal after this pass
+// (AIE AIEPseudoBranchExpansion.cpp:43-57 expands named branch desc only;
+// Haydn in-bundle expand is leftover *_POST_INC).
 //
 // Pseudos already handled by HaydnInstrInfo::expandPostRAPseudo (RET, B,
 // LOADI32, MOV_GPR_TO_DR64, MOV_DR64_TO_GPR) are NOT duplicated here.
@@ -19,11 +28,11 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnExpandPseudos.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMatInt.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -65,7 +74,11 @@ static bool expandPostIncPseudo(MachineBasicBlock &MBB,
       setMemRefs(MIB, MMOs);
       return true;
     }
-    assert(Offset % 4 == 0 && "LD32_POST_INC displacement must be word-aligned");
+    // NDEBUG must not silently truncate the scaled displacement (W43).
+    if (Offset % 4 != 0)
+      report_fatal_error(Twine("HaydnExpandPseudos: LD32_POST_INC displacement ") +
+                             Twine(Offset) + " is not word-aligned",
+                         /*GenCrashDiag=*/false);
     {
       auto MIB = BuildMI(MBB, InsertBefore, DL, TII.get(Haydn::LD32), DataOrDst)
                      .addReg(Base)
@@ -87,7 +100,11 @@ static bool expandPostIncPseudo(MachineBasicBlock &MBB,
       setMemRefs(MIB, MMOs);
       return true;
     }
-    assert(Offset % 4 == 0 && "ST32_POST_INC displacement must be word-aligned");
+    // NDEBUG must not silently truncate the scaled displacement (W43).
+    if (Offset % 4 != 0)
+      report_fatal_error(Twine("HaydnExpandPseudos: ST32_POST_INC displacement ") +
+                             Twine(Offset) + " is not word-aligned",
+                         /*GenCrashDiag=*/false);
     {
       auto MIB = BuildMI(MBB, InsertBefore, DL, TII.get(Haydn::ST32))
                      .addReg(DataOrDst)
@@ -110,8 +127,11 @@ static bool expandPostIncPseudo(MachineBasicBlock &MBB,
       setMemRefs(MIB, MMOs);
       return true;
     }
-    assert(Offset % 8 == 0 &&
-           "LD64_POST_INC displacement must be dword-aligned");
+    // NDEBUG must not silently truncate the scaled displacement (W43).
+    if (Offset % 8 != 0)
+      report_fatal_error(Twine("HaydnExpandPseudos: LD64_POST_INC displacement ") +
+                             Twine(Offset) + " is not dword-aligned",
+                         /*GenCrashDiag=*/false);
     {
       auto MIB = BuildMI(MBB, InsertBefore, DL, TII.get(Haydn::LD64), DataOrDst)
                      .addReg(Base)
@@ -133,8 +153,11 @@ static bool expandPostIncPseudo(MachineBasicBlock &MBB,
       setMemRefs(MIB, MMOs);
       return true;
     }
-    assert(Offset % 8 == 0 &&
-           "ST64_POST_INC displacement must be dword-aligned");
+    // NDEBUG must not silently truncate the scaled displacement (W43).
+    if (Offset % 8 != 0)
+      report_fatal_error(Twine("HaydnExpandPseudos: ST64_POST_INC displacement ") +
+                             Twine(Offset) + " is not dword-aligned",
+                         /*GenCrashDiag=*/false);
     {
       auto MIB = BuildMI(MBB, InsertBefore, DL, TII.get(Haydn::ST64))
                      .addReg(DataOrDst)
@@ -223,99 +246,11 @@ FunctionPass *llvm::createHaydnExpandPseudosPass() {
   return new HaydnExpandPseudos();
 }
 
-static bool isSoftZeroR0(const MachineInstr &MI) {
-  if (MI.getOpcode() != Haydn::XOR32 || MI.getNumExplicitOperands() < 3)
-    return false;
-  if (!MI.getOperand(0).isReg() || !MI.getOperand(1).isReg() ||
-      !MI.getOperand(2).isReg())
-    return false;
-  return MI.getOperand(0).getReg() == Haydn::R0 &&
-         MI.getOperand(1).getReg() == Haydn::R0 &&
-         MI.getOperand(2).getReg() == Haydn::R0;
-}
-
-static MachineInstrBuilder buildSoftZeroR0(MachineBasicBlock &MBB,
-                                           MachineBasicBlock::iterator InsertPt,
-                                           const DebugLoc &DL,
-                                           const HaydnInstrInfo *TII) {
-  return BuildMI(MBB, InsertPt, DL, TII->get(Haydn::XOR32), Haydn::R0)
-      .addReg(Haydn::R0)
-      .addReg(Haydn::R0);
-}
-
-bool HaydnExpandPseudos::insertSoftZeroR0Maintenance(MachineFunction &MF) {
-  bool Modified = false;
-
-  // Indirect transfers that write the link into soft-zero R0 clobber the
-  // architectural zero invariant. Re-zero at the head of every successor so
-  // PostRA pack and size models see the bytes (not AsmPrinter injection):
-  //   * BR_JT → expands to JALR_W r0, addr (printer)
-  //   * JALR_W / JALR with rd=R0 (G_BRINDIRECT pure jump; not a call)
-  // RET is also JALR_W r0,lr but has no executable successors that need zero.
-  DenseSet<MachineBasicBlock *> SoftZeroTargets;
-  for (MachineBasicBlock &MBB : MF) {
-    for (MachineInstr &MI : MBB) {
-      unsigned Opc = MI.getOpcode();
-      bool NeedsSuccRezero = false;
-      if (Opc == Haydn::BR_JT) {
-        NeedsSuccRezero = true;
-      } else if ((Opc == Haydn::JALR_W || Opc == Haydn::JALR) &&
-                 MI.getNumExplicitOperands() >= 1 && MI.getOperand(0).isReg() &&
-                 MI.getOperand(0).getReg() == Haydn::R0) {
-        NeedsSuccRezero = true;
-      }
-      if (!NeedsSuccRezero)
-        continue;
-      for (MachineBasicBlock *Succ : MBB.successors())
-        SoftZeroTargets.insert(Succ);
-    }
-  }
-  for (MachineBasicBlock *MBB : SoftZeroTargets) {
-    MachineBasicBlock::iterator InsertPt = MBB->begin();
-    while (InsertPt != MBB->end() &&
-           (InsertPt->isMetaInstruction() || InsertPt->isDebugInstr() ||
-            InsertPt->isCFIInstruction()))
-      ++InsertPt;
-    if (InsertPt != MBB->end() && isSoftZeroR0(*InsertPt))
-      continue;
-    DebugLoc DL = InsertPt != MBB->end() ? InsertPt->getDebugLoc() : DebugLoc();
-    buildSoftZeroR0(*MBB, InsertPt, DL, TII);
-    Modified = true;
-    LLVM_DEBUG(dbgs() << "HaydnExpandPseudos: soft-zero R0 at indirect-target "
-                         "bb."
-                      << MBB->getNumber() << '\n');
-  }
-
-  // After calls: JAL/JAL_W and PseudoCALLIndirect. Callee RET is
-  // JALR_W r0,lr which clobbers R0. Direct calls are JAL_W from CallLowering.
-  for (MachineBasicBlock &MBB : MF) {
-    for (MachineBasicBlock::iterator MII = MBB.begin(), E = MBB.end();
-         MII != E;) {
-      MachineInstr &MI = *MII;
-      ++MII;
-      unsigned Opc = MI.getOpcode();
-      bool NeedsPostCallZero =
-          Opc == Haydn::JAL || Opc == Haydn::JAL_W ||
-          Opc == Haydn::PseudoCALLIndirect;
-      if (!NeedsPostCallZero)
-        continue;
-      MachineBasicBlock::iterator Next = MII;
-      while (Next != MBB.end() &&
-             (Next->isMetaInstruction() || Next->isDebugInstr()))
-        ++Next;
-      if (Next != MBB.end() && isSoftZeroR0(*Next))
-        continue;
-      buildSoftZeroR0(MBB, MII, MI.getDebugLoc(), TII);
-      Modified = true;
-      LLVM_DEBUG(dbgs() << "HaydnExpandPseudos: soft-zero R0 after call in bb."
-                        << MBB.getNumber() << '\n');
-    }
-  }
-
-  return Modified;
-}
-
 bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
+  // Never call skipFunction. AIE AIEPseudoBranchExpansion.cpp:43-57
+  // walks every function before PostMachineScheduler
+  // (AIE2TargetMachine.cpp:237). Leftover expand-owned and bundled
+  // cycle-forming residuals are a product emission gate, not quality.
   TII = MF.getSubtarget<HaydnSubtarget>().getInstrInfo();
 
   bool Modified = false;
@@ -327,25 +262,46 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
   for (MachineBasicBlock &MBB : MF)
     Modified |= expandBundledPostIncLeftovers(MBB, *TII);
 
-  // Runs after expand so real JAL_W is visible. Single named owner of
-  // architectural R0 restore (HaydnPostRAScratch owns borrow/restore at
-  // scavenge sites; this pass owns post-call / indirect-target insertion).
-  Modified |= insertSoftZeroR0Maintenance(MF);
+  // After leftover expand so real JAL_W is visible. Restore emitter and
+  // post-call / indirect-target insertion live in HaydnPostRAScratch.
+  Modified |= insertSoftZeroR0AfterCalls(MF, *TII);
 
   // Residual matrix: anything this pass is responsible for expanding must be
   // gone. Relocated surfaces (VASTART/VAARG/LIBCALL/PseudoCALL/ADJCALLSTACK)
   // remain expand-owned at the late firewall so leftovers still fail closed.
+  //
+  // AIE AIEPseudoBranchExpansion.cpp:43-57 walks top-level MIs and
+  // setDesc-expands named branch pseudos (AIE2TargetMachine.cpp:237, before
+  // PostMachineScheduler). Haydn overlay: leftover cycle-forming residuals
+  // (SET_HWLOOP / SETCBR / LoopDec/JNZ/LoopStart / LOAD_ADDR / LOADI32)
+  // inside a BUNDLE are fail-closed here. Pack has not run, so a BUNDLE
+  // child is leftover injection; in-bundle expand is only leftover
+  // *_POST_INC (expandBundledPostIncLeftovers). Bare LoopDec/LoopJNZ/
+  // LoopStart stay legal until Fixup / late Verify.
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.instrs()) {
       if (MI.isBundle())
         continue;
-      if (!haydn::bundle::isExpandOwnedSemanticPseudo(MI.getOpcode()))
+      const unsigned Opc = MI.getOpcode();
+      const bool ExpandOwned =
+          haydn::bundle::isExpandOwnedSemanticPseudo(Opc);
+      const bool BundledCycle = MI.isInsideBundle() &&
+                                haydn::bundle::isResidualCycleFormingPseudo(Opc);
+      if (!ExpandOwned && !BundledCycle)
         continue;
       std::string Msg;
       raw_string_ostream OS(Msg);
-      OS << "HaydnExpandPseudos: residual expand-owned semantic pseudo in "
-         << MF.getName() << " BB#" << MBB.getNumber()
-         << " (must expand before pack):\n  MI: " << MI;
+      if (BundledCycle) {
+        OS << "HaydnExpandPseudos: residual cycle-forming bundled child in "
+           << MF.getName() << " BB#" << MBB.getNumber()
+           << " (SET_HWLOOP/SETCBR/LOOPCTL/LOAD_ADDR must not survive "
+              "Expand as a BUNDLE child):\n  MI: "
+           << MI;
+      } else {
+        OS << "HaydnExpandPseudos: residual expand-owned semantic pseudo in "
+           << MF.getName() << " BB#" << MBB.getNumber()
+           << " (must expand before pack):\n  MI: " << MI;
+      }
       report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
     }
   }
@@ -391,18 +347,35 @@ bool HaydnExpandPseudos::expandMI(MachineBasicBlock &MBB, MachineInstr &MI) {
     MI.eraseFromParent();
     return true;
 
+  // Leftover bare MIR generic SET (AIE AIEPseudoBranchExpansion.cpp:71
+  // setDesc). Product HardwareLoops already emits SET_HWLOOP_F2_W at
+  // the creator (HaydnHardwareLoops.cpp:701). Bundled leftover SET is
+  // fatal in the residual scan — this arm is last-chance for injected
+  // top-level MIR only. NDEBUG must not rewrite a wrong-shape leftover.
   case Haydn::SET_HWLOOP_REG:
-    assert(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
-           MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
-           MI.getOperand(3).isReg() &&
-           "SET_HWLOOP_REG shape: sel, start, end, rs");
+    if (!(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
+          MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
+          MI.getOperand(3).isReg())) {
+      std::string Msg;
+      raw_string_ostream OS(Msg);
+      OS << "HaydnExpandPseudos: leftover SET_HWLOOP_REG shape is not "
+            "sel/start/end/rs:\n  MI: "
+         << MI;
+      report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+    }
     MI.setDesc(TII->get(Haydn::SET_HWLOOP_F2_W));
     return true;
   case Haydn::SET_HWLOOP:
-    assert(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
-           MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
-           MI.getOperand(3).isImm() &&
-           "SET_HWLOOP shape: sel, start, end, cnt");
+    if (!(MI.getNumOperands() >= 4 && MI.getOperand(0).isImm() &&
+          MI.getOperand(1).isMBB() && MI.getOperand(2).isMBB() &&
+          MI.getOperand(3).isImm())) {
+      std::string Msg;
+      raw_string_ostream OS(Msg);
+      OS << "HaydnExpandPseudos: leftover SET_HWLOOP shape is not "
+            "sel/start/end/cnt:\n  MI: "
+         << MI;
+      report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+    }
     MI.setDesc(TII->get(Haydn::SET_HWLOOP_W));
     return true;
 
@@ -435,6 +408,13 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
   DebugLoc DL = MI.getDebugLoc();
   Register DstReg = MI.getOperand(0).getReg();
   const MachineOperand &AddrOp = MI.getOperand(1);
+
+  // LOAD_ADDR MatInt and LUI seed Cur=R0. Restore only on a proven dirty
+  // def (ADDI/JALR into R0). Unknown fallthrough is not a second XOR —
+  // ExpandPseudos already restores after JALR r0, and withDR64PackBase
+  // keeps the conservative borrow check.
+  MachineBasicBlock::iterator InsertPt(&MI);
+  ensureSoftZeroR0IfKnownDirty(MBB, InsertPt, DL, *TII);
 
   if (AddrOp.isImm()) {
     HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(AddrOp.getImm());

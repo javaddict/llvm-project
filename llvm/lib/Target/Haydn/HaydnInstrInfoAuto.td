@@ -1,5 +1,8 @@
 //===----------------------------------------------------------------------===//
-// Haydn Instruction Definitions - Auto-generated from spec JSON
+// Haydn Instruction Definitions — hand-maintained hypothesized encodings
+//
+// generate_format_e_records.py does not emit this file. The filename is
+// historical; treat contents as hand-maintained, not generated output.
 //
 // Hypothesized Inst{} encodings (FmtALU64 / FmtMAC / FmtALU32Ext and hand
 // Inst{} on HaydnInst stubs). Quarantined isCodeGenOnly=1 so they are
@@ -3300,8 +3303,11 @@ def D_LDW_POST_IMM : FmtLSPostInc<0x47, (outs DR64:$rt, GPR32:$rs_wb),
   let Itinerary = Slot01_LD;
 }
 
-let isCodeGenOnly = 1, isAsmParserOnly = 1, mayLoad = 1,
-    Constraints = "$rs = $rs_wb" in
+// (Dead outer `let isCodeGenOnly = 1, isAsmParserOnly = 1, mayLoad = 1,
+// Constraints = ...` removed 2026-08-15: it was immediately shadowed by the
+// inner `let isCodeGenOnly = 0` — isCodeGenOnly=1 in the outer let was dead
+// and misleading. mayLoad/Constraints are preserved.)
+let isAsmParserOnly = 1, mayLoad = 1, Constraints = "$rs = $rs_wb" in
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def D_LW_POST_IMM : FmtLSPostInc<0x48, (outs DR64:$rt, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),

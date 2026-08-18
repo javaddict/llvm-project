@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnISelLowering.h"
+#include "Haydn.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/bit.h"
@@ -130,7 +131,18 @@ bool HaydnTargetLowering::allowsMisalignedMemoryAccesses(
 
   // Other widths: full-size natural alignment (halfword≥2, word≥4, …).
   // Rejects LV/SLP `load <4 x i16> align 2` (coremark matrix_add_const).
-  return Alignment >= Align(SizeBits / 8);
+  //
+  // Natural alignment is representable as Align only for power-of-two byte
+  // widths. Non-power-of-two store sizes (i96/v6i16=12B, i80=10B, i48=6B)
+  // are served by tiling into power-of-two pieces; the strictest alignment
+  // that tiling imposes is the largest power of two dividing the byte width
+  // (12B→3×LD32 needs ≥4; 10B→5×LD16 needs ≥2). Never construct Align from
+  // a raw byte count — Align(12) asserts isPowerOf2_64 (yarpgen seed14:
+  // ConstantHoisting → getIntImmCostInst(Store) → this hook on an i96
+  // constant store at align 1 aborted clang, exit 134). For every
+  // power-of-two width the shift below reproduces the byte count exactly.
+  const uint64_t StoreBytes = SizeBits / 8;
+  return Alignment >= Align(uint64_t(1) << llvm::countr_zero(StoreBytes));
 }
 
 bool HaydnTargetLowering::areJTsAllowed(const Function *Fn) const {
@@ -161,6 +173,15 @@ HaydnTargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *RMW) const {
   return AtomicExpansionKind::None;
 }
 
+TargetLowering::ConstraintType
+HaydnTargetLowering::getConstraintType(StringRef Constraint) const {
+  // Peer: RISCVISelLowering.cpp:24570 ('f' → C_RegisterClass). Without this,
+  // InlineAsmLowering treats 'd' as C_Unknown and asserts.
+  if (Constraint.size() == 1 && Constraint[0] == 'd')
+    return C_RegisterClass;
+  return TargetLowering::getConstraintType(Constraint);
+}
+
 std::pair<unsigned, const TargetRegisterClass *>
 HaydnTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                                   StringRef Constraint,
@@ -177,11 +198,34 @@ HaydnTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
           VT == MVT::f32 || (VT.isInteger() && VT.getSizeInBits() <= 32))
         return std::make_pair(0U, &Haydn::GPR32RegClass);
       break;
+    case 'd':
+      // DR64 data register. Peer: RISCV 'f' / AArch64 'w' typed-file
+      // constraint. 64-bit values and 64-bit SIMD packs live here.
+      if (VT == MVT::i64 || VT == MVT::f64 ||
+          (VT.isVector() && VT.getSizeInBits() == 64))
+        return std::make_pair(0U, &Haydn::DR64RegClass);
+      break;
     default:
       break;
     }
   }
-  return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
+  // getRegAsmName is the TableGen def name (R13/R14/R15), not the asm
+  // spelling (sp/fp/lr). Map both so `~{lr}` / `~{r15}` resolve; an empty
+  // RC silently drops the clobber and PEI never sees the def.
+  StringRef PhysConstraint = Constraint;
+  if (Constraint.size() >= 3 && Constraint.front() == '{' &&
+      Constraint.back() == '}') {
+    const StringRef Inner = Constraint.drop_front().drop_back();
+    if (Inner.equals_insensitive("lr") || Inner.equals_insensitive("r15"))
+      PhysConstraint = "{R15}";
+    else if (Inner.equals_insensitive("sp") || Inner.equals_insensitive("r13"))
+      PhysConstraint = "{R13}";
+    else if (Inner.equals_insensitive("fp") || Inner.equals_insensitive("r14"))
+      PhysConstraint = "{R14}";
+    else if (Inner.equals_insensitive("r0"))
+      PhysConstraint = "{R0}";
+  }
+  return TargetLowering::getRegForInlineAsmConstraint(TRI, PhysConstraint, VT);
 }
 
 /// Fill IntrinsicInfo for a Haydn public memory intrinsic.

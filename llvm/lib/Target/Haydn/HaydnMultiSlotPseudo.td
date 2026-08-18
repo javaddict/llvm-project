@@ -93,24 +93,26 @@ class LogicalMaterialize<Instruction logical,
   list<Instruction> materializableInto = insts;
 }
 
-def : LogicalMaterialize<ADDI32_W, [ADDI32_W_S0]>;
-def : LogicalMaterialize<BEQZ_W, [BEQZ_W_S0]>;
-def : LogicalMaterialize<BEQ_W, [BEQ_W_S0]>;
-def : LogicalMaterialize<BGEU_W, [BGEU_W_S0]>;
-def : LogicalMaterialize<BGEZ_W, [BGEZ_W_S0]>;
-def : LogicalMaterialize<BGE_W, [BGE_W_S0]>;
-def : LogicalMaterialize<BLTU_W, [BLTU_W_S0]>;
-def : LogicalMaterialize<BLTZ_W, [BLTZ_W_S0]>;
-def : LogicalMaterialize<BLT_W, [BLT_W_S0]>;
-def : LogicalMaterialize<BNEZ_W, [BNEZ_W_S0]>;
-def : LogicalMaterialize<BNE_W, [BNE_W_S0]>;
-def : LogicalMaterialize<CSRW_W, [CSRW_W_S0]>;
+// ADDI32_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BEQZ_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BEQ_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BGEU_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BGEZ_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BGE_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BLTU_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BLTZ_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BLT_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BNEZ_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// BNE_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// CSRW_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
 // D_LDW_BREV_* FieldSlots retired. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<D_LDW_CB_IMM, [D_LDW_CB_IMM_S0, D_LDW_CB_IMM_S1, D_LDW_CB_IMM_S2]>;
-def : LogicalMaterialize<D_LDW_CB_REG, [D_LDW_CB_REG_S0, D_LDW_CB_REG_S1, D_LDW_CB_REG_S2]>;
+// CB S1/S2 FieldSlots retired (R13). No Format E e1/e2 member —
+// reject-not-migrate. S0 occupancy Fallback stays; e0 members fill index 0.
+// D_LDW_CB_IMM FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// D_LDW_CB_REG FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
 // D_LDW_POST_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
-// D_LDW_POST_REG S0/S1 retired. Format E fills e0/e1. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<D_LDW_POST_REG, [D_LDW_POST_REG_S2]>;
+// D_LDW_POST_REG FieldSlots retired (R13). Format E fills e0/e1; no e2
+// member — S2 is reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
 // D_LDW_PRE_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LDW_PRE_REG FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LDW_WITH_* FieldSlots retired. Occupancy Mask 0x7 stays.
@@ -119,49 +121,56 @@ def : LogicalMaterialize<D_LDW_POST_REG, [D_LDW_POST_REG_S2]>;
 // D_LHW_PRE_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LHW_PRE_REG FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LHW_WITH_* FieldSlots retired. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<D_LQHWUA_POST, [D_LQHWUA_POST_S0, D_LQHWUA_POST_S1, D_LQHWUA_POST_S2]>;
-def : LogicalMaterialize<D_LTWUA_POST, [D_LTWUA_POST_S0, D_LTWUA_POST_S1, D_LTWUA_POST_S2]>;
+// D_LQHWUA_POST S0/S1 retired. S2 keeps Slot2_LS published; Format E fills e0/e1/e2.
+def : LogicalMaterialize<D_LQHWUA_POST, [D_LQHWUA_POST_S2]>;
+// D_LTWUA_POST FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
 // D_LW_POST_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LW_POST_REG FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LW_PRE_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LW_PRE_REG FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LW_WITH_* FieldSlots retired. Occupancy Mask 0x7 stays.
 // BREV-store S0 retired. Format E e0 fills index 0. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<D_SDW_BREV_IMM, [D_SDW_BREV_IMM_S1, D_SDW_BREV_IMM_S2]>;
-def : LogicalMaterialize<D_SDW_BREV_REG, [D_SDW_BREV_REG_S1, D_SDW_BREV_REG_S2]>;
-def : LogicalMaterialize<D_SDW_CB_IMM, [D_SDW_CB_IMM_S0, D_SDW_CB_IMM_S1, D_SDW_CB_IMM_S2]>;
-def : LogicalMaterialize<D_SDW_CB_REG, [D_SDW_CB_REG_S0, D_SDW_CB_REG_S1, D_SDW_CB_REG_S2]>;
+// D_SDW_BREV_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SDW_BREV_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SDW_CB S1/S2 FieldSlots retired (R13). No Format E e1/e2 member —
+// reject-not-migrate. S0 occupancy Fallback stays.
+// D_SDW_CB_IMM FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// D_SDW_CB_REG FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
 // Store POST/PRE S0 retired. Format E e0 fills index 0. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<D_SDW_POST_IMM, [D_SDW_POST_IMM_S1, D_SDW_POST_IMM_S2]>;
-def : LogicalMaterialize<D_SDW_POST_REG, [D_SDW_POST_REG_S1, D_SDW_POST_REG_S2]>;
-def : LogicalMaterialize<D_SDW_PRE_IMM, [D_SDW_PRE_IMM_S1, D_SDW_PRE_IMM_S2]>;
-def : LogicalMaterialize<D_SDW_PRE_REG, [D_SDW_PRE_REG_S1, D_SDW_PRE_REG_S2]>;
+// D_SDW_POST_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SDW_POST_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SDW_PRE_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SDW_PRE_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
 // Store WITH S0 retired. Format E e0 fills index 0. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<D_SDW_WITH_IMM, [D_SDW_WITH_IMM_S1, D_SDW_WITH_IMM_S2]>;
-def : LogicalMaterialize<D_SDW_WITH_REG, [D_SDW_WITH_REG_S1, D_SDW_WITH_REG_S2]>;
-def : LogicalMaterialize<D_SHW_POST_IMM, [D_SHW_POST_IMM_S1, D_SHW_POST_IMM_S2]>;
-def : LogicalMaterialize<D_SHW_POST_REG, [D_SHW_POST_REG_S1, D_SHW_POST_REG_S2]>;
-def : LogicalMaterialize<D_SHW_PRE_IMM, [D_SHW_PRE_IMM_S1, D_SHW_PRE_IMM_S2]>;
-def : LogicalMaterialize<D_SHW_PRE_REG, [D_SHW_PRE_REG_S1, D_SHW_PRE_REG_S2]>;
-def : LogicalMaterialize<D_SHW_WITH_IMM, [D_SHW_WITH_IMM_S1, D_SHW_WITH_IMM_S2]>;
-def : LogicalMaterialize<D_SHW_WITH_REG, [D_SHW_WITH_REG_S1, D_SHW_WITH_REG_S2]>;
-def : LogicalMaterialize<D_SQHWUA_POST, [D_SQHWUA_POST_S0, D_SQHWUA_POST_S1, D_SQHWUA_POST_S2]>;
-def : LogicalMaterialize<D_STWUA_POST, [D_STWUA_POST_S0, D_STWUA_POST_S1, D_STWUA_POST_S2]>;
-def : LogicalMaterialize<D_SW_H_POST_IMM, [D_SW_H_POST_IMM_S1, D_SW_H_POST_IMM_S2]>;
-def : LogicalMaterialize<D_SW_H_POST_REG, [D_SW_H_POST_REG_S1, D_SW_H_POST_REG_S2]>;
-def : LogicalMaterialize<D_SW_H_PRE_IMM, [D_SW_H_PRE_IMM_S1, D_SW_H_PRE_IMM_S2]>;
-def : LogicalMaterialize<D_SW_H_PRE_REG, [D_SW_H_PRE_REG_S1, D_SW_H_PRE_REG_S2]>;
-def : LogicalMaterialize<D_SW_H_WITH_IMM, [D_SW_H_WITH_IMM_S1, D_SW_H_WITH_IMM_S2]>;
-def : LogicalMaterialize<D_SW_H_WITH_REG, [D_SW_H_WITH_REG_S1, D_SW_H_WITH_REG_S2]>;
-def : LogicalMaterialize<D_SW_L_POST_IMM, [D_SW_L_POST_IMM_S1, D_SW_L_POST_IMM_S2]>;
-def : LogicalMaterialize<D_SW_L_POST_REG, [D_SW_L_POST_REG_S1, D_SW_L_POST_REG_S2]>;
-def : LogicalMaterialize<D_SW_L_PRE_IMM, [D_SW_L_PRE_IMM_S1, D_SW_L_PRE_IMM_S2]>;
-def : LogicalMaterialize<D_SW_L_PRE_REG, [D_SW_L_PRE_REG_S1, D_SW_L_PRE_REG_S2]>;
-def : LogicalMaterialize<D_SW_L_WITH_IMM, [D_SW_L_WITH_IMM_S1, D_SW_L_WITH_IMM_S2]>;
-def : LogicalMaterialize<D_SW_L_WITH_REG, [D_SW_L_WITH_REG_S1, D_SW_L_WITH_REG_S2]>;
+// D_SDW_WITH_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SDW_WITH_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SHW_POST_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SHW_POST_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SHW_PRE_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SHW_PRE_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SHW_WITH_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SHW_WITH_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SQHWUA_POST S1/S2 FieldSlots retired (R13). No Format E e1/e2 member —
+// reject-not-migrate. S0 occupancy Fallback stays; e0 members fill index 0.
+// D_SQHWUA_POST FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// D_STWUA_POST S1/S2 FieldSlots retired. No Format E e1/e2 member —
+// reject-not-migrate. e0 members fill index 0. Occupancy Mask 0x7; Fallback S0.
+// D_STWUA_POST FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// D_SW_H_POST_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_H_POST_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_H_PRE_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_H_PRE_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_H_WITH_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_H_WITH_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_L_POST_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_L_POST_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_L_PRE_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_L_PRE_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_L_WITH_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// D_SW_L_WITH_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
 // FLAR FieldSlots retired. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<JALR_W, [JALR_W_S0]>;
-def : LogicalMaterialize<JAL_W, [JAL_W_S0]>;
+// JALR_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// JAL_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
 // LD16 FieldSlot retired. Occupancy Mask 0x1 stays.
 // LD32 FieldSlots retired. Occupancy Mask 0x3 stays.
 // LD32_REG_M0S0LS FieldSlot retired. Occupancy Mask 0x1 stays.
@@ -170,19 +179,23 @@ def : LogicalMaterialize<JAL_W, [JAL_W_S0]>;
 // LD8 / LDU16 / LDU8 FieldSlots retired. Occupancy Mask 0x1 stays.
 // MOVEI_H / MOVEI_L FieldSlots retired. Occupancy Mask 0x1 stays;
 // formatEMemberAtResidualIndex binds MOVEI_*_E2_E0_ALU0_I32.
-def : LogicalMaterialize<NOP, [NOP_S0]>;
-def : LogicalMaterialize<ORI32_W, [ORI32_W_S0]>;
-def : LogicalMaterialize<PLDWWUA, [PLDWWUA_S0, PLDWWUA_S1, PLDWWUA_S2]>;
-def : LogicalMaterialize<SET_HWLOOP_F2_W, [SET_HWLOOP_F2_W_S0]>;
-def : LogicalMaterialize<SET_HWLOOP_W, [SET_HWLOOP_W_S0]>;
+// NOP FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// ORI32_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// PLDWWUA FieldSlots retired (R13). Logical dag is the golden wire order
+// (ar_sel, rs), so occupancy binds PLDWWUA_POST members at e0/e1/e2.
+// Occupancy Mask 0x7 stays; Fallback is 0.
+// SET_HWLOOP_F2_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
+// SET_HWLOOP_W FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
 // SEXT_GPR32_TO_DR64 FieldSlot retired. Occupancy Mask 0x2 stays;
 // formatEMemberAtResidualIndex peels to SEXT32T64 e1 members.
 // ST16 FieldSlot retired. Occupancy Mask 0x1 stays.
 // ST32 FieldSlot retired. Occupancy Mask 0x1 stays.
-def : LogicalMaterialize<ST32_POST, [ST32_POST_S1]>;
+// ST32_POST S1 FieldSlot retired (R13). No Format E e1 member —
+// reject-not-migrate. Occupancy peels to S_SW_POST_IMM e0. Mask 0x1.
 // ST32_REG_M0S0LS FieldSlot retired. Occupancy Mask 0x1 stays.
 // ST64 FieldSlot retired. Occupancy Mask 0x1 stays.
-def : LogicalMaterialize<ST64_POST, [ST64_POST_S1]>;
+// ST64_POST S1 FieldSlot retired (R13). No Format E e1 member —
+// reject-not-migrate. Occupancy peels to D_SDW_POST_IMM e0. Mask 0x1.
 // ST64_REG_M0S0LS FieldSlot retired. Occupancy Mask 0x1 stays.
 // ST8 FieldSlot retired. Occupancy Mask 0x1 stays.
 // S_LBS_POST_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
@@ -211,32 +224,28 @@ def : LogicalMaterialize<ST64_POST, [ST64_POST_S1]>;
 // S_LW_PRE_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
 // S_LW_PRE_REG FieldSlots retired. Occupancy Mask 0x7 stays.
 // S_LW_WITH_* FieldSlots retired. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<S_SB_POST_IMM, [S_SB_POST_IMM_S1, S_SB_POST_IMM_S2]>;
-def : LogicalMaterialize<S_SB_POST_REG, [S_SB_POST_REG_S1, S_SB_POST_REG_S2]>;
-def : LogicalMaterialize<S_SB_PRE_IMM, [S_SB_PRE_IMM_S1, S_SB_PRE_IMM_S2]>;
-def : LogicalMaterialize<S_SB_PRE_REG, [S_SB_PRE_REG_S1, S_SB_PRE_REG_S2]>;
-def : LogicalMaterialize<S_SB_WITH_IMM, [S_SB_WITH_IMM_S1, S_SB_WITH_IMM_S2]>;
-def : LogicalMaterialize<S_SB_WITH_REG, [S_SB_WITH_REG_S1, S_SB_WITH_REG_S2]>;
-def : LogicalMaterialize<S_SHW_POST_IMM, [S_SHW_POST_IMM_S1, S_SHW_POST_IMM_S2]>;
-def : LogicalMaterialize<S_SHW_POST_REG, [S_SHW_POST_REG_S1, S_SHW_POST_REG_S2]>;
-def : LogicalMaterialize<S_SHW_PRE_IMM, [S_SHW_PRE_IMM_S1, S_SHW_PRE_IMM_S2]>;
-def : LogicalMaterialize<S_SHW_PRE_REG, [S_SHW_PRE_REG_S1, S_SHW_PRE_REG_S2]>;
-def : LogicalMaterialize<S_SHW_WITH_IMM, [S_SHW_WITH_IMM_S1, S_SHW_WITH_IMM_S2]>;
-def : LogicalMaterialize<S_SHW_WITH_REG, [S_SHW_WITH_REG_S1, S_SHW_WITH_REG_S2]>;
-def : LogicalMaterialize<S_SW_BREV_IMM, [S_SW_BREV_IMM_S1, S_SW_BREV_IMM_S2]>;
-def : LogicalMaterialize<S_SW_BREV_REG, [S_SW_BREV_REG_S1, S_SW_BREV_REG_S2]>;
-def : LogicalMaterialize<S_SW_POST_IMM, [S_SW_POST_IMM_S1, S_SW_POST_IMM_S2]>;
-def : LogicalMaterialize<S_SW_POST_REG, [S_SW_POST_REG_S1, S_SW_POST_REG_S2]>;
-def : LogicalMaterialize<S_SW_PRE_IMM, [S_SW_PRE_IMM_S1, S_SW_PRE_IMM_S2]>;
-def : LogicalMaterialize<S_SW_PRE_REG, [S_SW_PRE_REG_S1, S_SW_PRE_REG_S2]>;
-def : LogicalMaterialize<S_SW_WITH_IMM, [S_SW_WITH_IMM_S1, S_SW_WITH_IMM_S2]>;
-def : LogicalMaterialize<S_SW_WITH_REG, [S_SW_WITH_REG_S1, S_SW_WITH_REG_S2]>;
-// WBARWUA S0 retired. Format E e0 Drop-fills index 0. Occupancy Mask 0x7 stays.
-def : LogicalMaterialize<WBARWUA, [WBARWUA_S1, WBARWUA_S2]>;
-def : LogicalMaterialize<WFI, [WFI_S0]>;
-def : LogicalMaterialize<X2SEQ32, [X2SEQ32_S1]>;
-def : LogicalMaterialize<X2SLE32, [X2SLE32_S1]>;
-def : LogicalMaterialize<X2SLT32, [X2SLT32_S1]>;
-def : LogicalMaterialize<X4SEQ16, [X4SEQ16_S1]>;
-def : LogicalMaterialize<X4SLE16, [X4SLE16_S1]>;
-def : LogicalMaterialize<X4SLT16, [X4SLT16_S1]>;
+// S_SB_POST_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SB_POST_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SB_PRE_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SB_PRE_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SB_WITH_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SB_WITH_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SHW_POST_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SHW_POST_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SHW_PRE_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SHW_PRE_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SHW_WITH_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SHW_WITH_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_BREV_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_BREV_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_POST_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_POST_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_PRE_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_PRE_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_WITH_IMM S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// S_SW_WITH_REG S1/S2 FieldSlots retired (R13). No Format E e1/e2 member — reject-not-migrate. Occupancy Mask 0x7 stays; Fallback 0.
+// WBARWUA S1/S2 FieldSlots retired (R13). No Format E e1/e2 member —
+// reject-not-migrate. e0 Drop-fills index 0. Occupancy Mask 0x7; Fallback 0.
+// WFI FieldSlot occupancy retired. Format E HINT members fill residual indices; no LogicalMaterialize Fallback.
+// X2/X4 SFR-only S1 FieldSlots retired. Occupancy Mask 0x6 stays;
+// Fallback is 0. Format E 0-def members fill e0/e2.

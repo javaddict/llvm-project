@@ -126,6 +126,21 @@ BitVector HaydnRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
+bool HaydnRegisterInfo::isAsmClobberable(const MachineFunction &MF,
+                                         MCRegister PhysReg) const {
+  return !isInlineAsmReadOnlyReg(MF, PhysReg);
+}
+
+bool HaydnRegisterInfo::isInlineAsmReadOnlyReg(const MachineFunction &MF,
+                                               MCRegister PhysReg) const {
+  if (PhysReg == Haydn::R0 || PhysReg == Haydn::R13)
+    return true;
+  const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
+  if (PhysReg == Haydn::R14 && ST.getFrameLowering()->hasFP(MF))
+    return true;
+  return false;
+}
+
 const MCPhysReg *
 HaydnRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   (void)MF;
@@ -151,14 +166,18 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // Get the frame index operand
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
 
-  // Get the frame index reference
+  // PEI replaceFrameIndices tracks ADJCALLSTACK as SPAdj (AIE/RISCV
+  // eliminateFrameIndex). After PEI, ADJCALLSTACK is SUBI32/ADDI32_W and
+  // late FI users (branch-relax scavenger) pass SPAdj=0 — reconstruct
+  // the live call-frame delta from those expanded adjusts.
   Register FrameReg;
   StackOffset Offset =
       TFI->getFrameIndexReference(MF, FrameIndex, FrameReg);
-
-  // Adjust offset by SPAdj (stack pointer adjustment due to calls)
   if (SPAdj)
     Offset += StackOffset::getFixed(SPAdj);
+  else if (FrameReg == Haydn::R13)
+    if (int64_t Adj = TFI->getCallFrameSPAdj(MBB, II))
+      Offset += StackOffset::getFixed(Adj);
 
   int64_t OffsetVal = Offset.getFixed();
 

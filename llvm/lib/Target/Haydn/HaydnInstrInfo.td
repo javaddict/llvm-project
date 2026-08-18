@@ -758,42 +758,10 @@ def BR_JT : HaydnPseudo<(outs), (ins GPR32:$addr, i32imm:$jt),
                           []>;
 }
 
-//===----------------------------------------------------------------------===//
-// MC-level long branch pseudos (assembler relaxation)
-//===----------------------------------------------------------------------===//
-//
-// Produced by HaydnAsmBackend::relaxInstruction when a conditional branch
-// target exceeds the 16-bit signed offset range. Expanded by
-// HaydnMCCodeEmitter to: inverted-branch + JAL (8 bytes total).
-//
-// Operands match the source conditional branch layout plus the target
-// symbol from the original branch. The JAL component provides a 20-bit
-// signed offset (±1MB range), far exceeding the conditional ±32KB limit.
-
-// Two-register conditional branches: rs1, rs2, target
-// HaydnLongBranchPseudo: branch pseudo relaxed by AsmBackend into inverted-cond + JAL.
-// Defined here as alias of HaydnPseudo (codegen-only, not encoded directly).
-class HaydnLongBranchPseudo<dag outs, dag ins, string asmstr, list<dag> pattern = []>
-    : HaydnPseudo<outs, ins, asmstr, pattern> {
-  let isBranch = 1;
-  let isTerminator = 1;
-}
-
-def PseudoLongBEQ  : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset), "long_beq\t$rs1, $rs2, $offset">;
-def PseudoLongBNE  : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset), "long_bne\t$rs1, $rs2, $offset">;
-def PseudoLongBGE  : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset), "long_bge\t$rs1, $rs2, $offset">;
-def PseudoLongBGEU : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset), "long_bgeu\t$rs1, $rs2, $offset">;
-def PseudoLongBLT  : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset), "long_blt\t$rs1, $rs2, $offset">;
-def PseudoLongBLTU : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs1, GPR32:$rs2, brtarget:$offset), "long_bltu\t$rs1, $rs2, $offset">;
-
-// Single-register conditional branches: rs, target
-def PseudoLongBEQZ : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs, brtarget:$offset), "long_beqz\t$rs, $offset">;
-def PseudoLongBNEZ : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs, brtarget:$offset), "long_bnez\t$rs, $offset">;
-def PseudoLongBGEZ : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs, brtarget:$offset), "long_bgez\t$rs, $offset">;
-def PseudoLongBLTZ : HaydnLongBranchPseudo<(outs), (ins GPR32:$rs, brtarget:$offset), "long_bltz\t$rs, $offset">;
-
-// Unconditional branch (B pseudo → long B)
-def PseudoLongB    : HaydnLongBranchPseudo<(outs), (ins brtarget:$offset), "long_b\t$offset">;
+// Long-branch expansion is CodeGen BranchRelaxation only (insertBranch /
+// insertIndirectBranch / isBranchOffsetInRange). MC has no PseudoLongB* and
+// no expandLongBranch: AsmBackend mayNeedRelaxation is always false. Do not
+// reintroduce an MC-layer second long-branch mechanism (F17).
 
 //===----------------------------------------------------------------------===//
 // Hardware Loop Instructions
@@ -802,17 +770,23 @@ def PseudoLongB    : HaydnLongBranchPseudo<(outs), (ins brtarget:$offset), "long
 // Hardware loop configuration pseudos.
 // The asm printer expands these to SET_HWLOOP/SET_HWLOOP_F2 instructions
 // with PC-relative offsets computed from the MBB symbols.
-// Operands: sel (0=outer, 1=inner), loop_start MBB, loop_end MBB, trip count.
+// Operands: sel (0=inner, 1=outer — golden manual: HWLR_*[0] is the inner
+// loop seat), loop_start MBB, loop_end MBB, trip count.
 // hasSideEffects=1 matches LoopStart: programs HWLR; must not be DCE'd or
 // freely reordered relative to the remat count producer (post-RA free-reg
 // remat → SET dep chain).
-let hasSideEffects = 1, isNotDuplicable = 1 in {
+// Defs=[SFR] mirrors the real _W forms: every SET variant writes the HWLR
+// CSRs (an SFR-space def), so the golden Constraints same-sel
+// two-SETs-per-bundle ban rides the ONE HR same-bundle WAW predicate — the
+// SFR write-port / WAW law — instead of depending on the fragile
+// hasSideEffects=1 DAG Ord-barrier topology alone (audit G-2 / GOALS W47).
+let hasSideEffects = 1, isNotDuplicable = 1, Defs = [SFR] in {
 def SET_HWLOOP : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, uimm16:$cnt),
                                "set_hwloop\t$sel, $loop_start, $loop_end, $cnt", []>;
 
 def SET_HWLOOP_REG : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, GPR32:$rs),
                                   "set_hwloop_f2\t$sel, $loop_start, $loop_end, $rs", []>;
-} // hasSideEffects = 1, isNotDuplicable = 1
+} // hasSideEffects = 1, isNotDuplicable = 1, Defs = [SFR]
 
 //===----------------------------------------------------------------------===//
 // SMS-safe hardware-loop pseudos (AIE design).
@@ -1635,15 +1609,15 @@ def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
 //===----------------------------------------------------------------------===//
 // These instructions execute on the MAC units in slots 1 and 2.
 // 32-bit multiply instructions (MULL, MULSSH, MULSUH, MULUUH) are defined in
-// HaydnInstrInfoAuto.td from the ISA spec JSON.
+// HaydnInstrInfoAuto.td (hand-maintained hypothesized encodings).
 // 64-bit multiply instructions (MUL64_*) are defined in HaydnInstrInfoAuto.td.
 // Multiply-Accumulate instructions (MULA64_*) are defined in HaydnInstrInfoAuto.td.
 
 // SIMD MAC instructions (X2MULA32, X2MULAPL32) are defined in HaydnInstrInfoAuto.td
 
 // no durable MIR opcodes LD32_S1/LD64_S1. Logical loads are LD32/LD64
-// only; S1 encode forms live in HaydnFormatsLD.td as encode-only
-// peers (`LD32_S1` / `LD64_S1` under DecoderNamespace FlexEmitterOnly).
+// only. (The former S1 encode-only peers and their HaydnFormatsLD.td home
+// were deleted 2026-08-15 — dead surface, zero instantiations.)
 
 //===----------------------------------------------------------------------===//
 // Fused post-increment loads (AGU writeback, spec D_LDW_POST_IMM
@@ -1762,8 +1736,8 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // The 21 KEPT defs below (ADDI32_W, ORI32_W, JAL_W, JALR_W, BEQ/BNE/BGE
 // BGEU/BLT/BLTU_W, BEQZ/BNEZ/BGEZ/BLTZ_W, CSRW_W, SET_HWLOOP_W
 // F2_W/REG_W, SLLI64/SRLI64/SRAI64) retain live hand-written C++ consumers
-// (Haydn:: enum refs in AsmPrinter, InstrInfo, ConditionOptimizer
-// HazardRecognizer, HardwareLoops, ExpandPseudos, MatInt).
+// (Haydn:: enum refs in AsmPrinter, InstrInfo, HazardRecognizer,
+// HardwareLoops, ExpandPseudos, MatInt).
 //
 // Spec-aligned §5 opcodes. The Class 000 GPR WIDE variants (ADDI32_W
 // ORI32_W) are re-encoded onto the §5 opcode map; the previous obsolete

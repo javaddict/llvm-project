@@ -70,13 +70,9 @@ def D14 : HaydnReg<14, "d14">, DwarfRegNum<[30]>;
 def D15 : HaydnReg<15, "d15">, DwarfRegNum<[31]>;
 
 //===----------------------------------------------------------------------===//
-// AR: Aligned Registers (AR0–AR3) — 4×64-bit AGU residual streams
-// Restored to the full 2-bit ar_sel domain (CB-149): the golden field is
-// 2 bits, BundleSim's semantic model executes int64_t ar[4], the NatureDSP
-// compat surface documents ar&=3, and this line's own pre-retirement Sema
-// tests expected [0, 3]. The interim AR0/AR1-only retirement was fail-closed
-// pending a golden classification of codes 2..3 that never arrived; the
-// execution oracle is the classification we have.
+// AR: AGU stream selectors. The encoding field is 2 bits; AR2/AR3 exist as
+// decode placeholders only. Product ISel admits AR0/AR1. Encodings 2/3 stay
+// unmapped (no product identity).
 //===----------------------------------------------------------------------===//
 
 class HaydnARReg<bits<2> Enc, string n> : Register<n> {
@@ -150,9 +146,9 @@ def DR64 : RegisterClass<"Haydn",
   >;
 }
 
-// Architectural AR0/AR1 only. Not allocatable: copyPhysReg is GPR/DR only and
-// there is no AR spill. ISel pins AR0/AR1 as physregs (implicit defs). Peer:
-// AIE unspillable sparse classes, Hexagon CtrRegs, RISCV VCSR.
+// Not allocatable: copyPhysReg is GPR/DR only and there is no AR spill.
+// ISel pins AR0/AR1 as physregs (implicit defs). AR2/AR3 remain decode-only.
+// Peer: AIE unspillable sparse classes, Hexagon CtrRegs, RISCV VCSR.
 def AR : RegisterClass<"Haydn",
   [i64], 64, (add AR0, AR1, AR2, AR3)
 > {

@@ -38,6 +38,5 @@ include "HaydnSlots.td"
 include "HaydnFormatsALU32.td"  // remaining WFI/NOP/*_W FieldSlots
 include "HaydnFormatsALU64.td"  // residual MOVEI_H/L + SEXT32T64 FieldSlots
 include "HaydnFormatsLS.td"     // LD32_S0 (LS s0, imm6)
-include "HaydnFormatsLD.td"     // LD-unit format classes; FieldSlots retired
 include "HaydnFormatsMAC.td"    // residual MAC FU classes (FieldSlots retired)
 def HaydnCodeGenFormat : CodeGenFormat {}

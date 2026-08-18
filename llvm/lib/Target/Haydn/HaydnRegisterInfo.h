@@ -28,6 +28,15 @@ struct HaydnRegisterInfo : public HaydnGenRegisterInfo {
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
+  /// R15 (LR) may be listed as an inline-asm clobber — PEI force-saves it.
+  /// R0 / R13 / R14-when-FP are architectural roles and are not clobberable.
+  bool isAsmClobberable(const MachineFunction &MF,
+                        MCRegister PhysReg) const override;
+
+  /// Soft-zero, SP, and the live frame pointer cannot be written in asm.
+  bool isInlineAsmReadOnlyReg(const MachineFunction &MF,
+                              MCRegister PhysReg) const override;
+
   /// SP (R13) when !hasFP; architectural FP R14 ("fp") when hasFP.
   /// Dyn-alloca fixed-frame base is the same FP (BP folded into FP).
   Register getFrameRegister(const MachineFunction &MF) const override;

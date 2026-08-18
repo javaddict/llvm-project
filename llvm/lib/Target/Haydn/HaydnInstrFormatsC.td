@@ -47,15 +47,11 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 // (Verified: `grep -nE '^def [A-Z0-9_]+ +: Fmt48_' HaydnInstrInfo.td` — 21
 // live defs total.) 's "retire Fmt48_*" Cycle-B item cannot complete until
 // those 21 defs are migrated to s0/s1/s2 format classes owned by
-// HaydnFormats*.td (the / _W_S0 defs are the s0 projections for
-// ADDI32_W/ORI32_W + far branches + CSR; s1/s2 projections for SLLI64 etc.
-// are forward work). The legacy defs persist as selector-emitted opcodes that
-// leaveRegion setDesc commits to their _S0 member twins (alts-derived).
-// ADDI32_W/ORI32_W are NOT re-based onto HaydnFU_ALU32_S0_RI20 here
-// doing so would duplicate the isCodeGenOnly=1 DISTINCT-codepoint
-// ADDI32_W_S0/ORI32_W_S0 defs (HaydnFormatsALU32.td:1185-1196) and
-// break the logical→member alt pairing; the legacy def's role is to carry
-// the operand shape (rd, rs, imm20) for post-RA setDesc(member).
+// HaydnFormats*.td no longer carries *_W_S0 projections. Occupancy peels
+// ADDI32_W/ORI32_W / far-branch `_W` to compact Format E members.
+// The legacy `_W` defs persist as selector-emitted opcodes; leaveRegion
+// setDesc commits the generated member. The logical's role is the
+// operand shape (rd, rs, imm20) for post-RA setDesc(member).
 //
 // Fixed Bundle Bit Map (§5.1):
 // bits[15:12] = rd/rt (4b destination register — GPR32 or DR64 per Class)

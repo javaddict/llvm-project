@@ -487,8 +487,8 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   }
   // Handle VLIW bundles. AIE: children are already composite operand order;
   // the bundle format TD picks the row. Haydn analogue: membership order is
-  // e0, e1, (e2). E2 vs E3 is the BUNDLE-root row stamp, else child count
-  // (3 reals → E96ThreeEntry, else E96TwoEntry). Do not re-run canAdd /
+  // e0, e1, (e2). E2 vs E3 is the stamped BUNDLE-root row only — never a
+  // child-count override or missing-row E2 default. Do not re-run canAdd /
   // PacketFormats on an already-formed BUNDLE and do not peel _S*.
   // one-to-one: only representation expands (B/RET/BR_JT/PseudoCALLIndirect).
   // Residual LOADI32/LOAD_ADDR/SETCBR/Loop* fail closed — no multi-cycle repair.
@@ -589,6 +589,11 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         ChildInst->addOperand(MCOperand::createReg(Haydn::R15));
         ChildInst->addOperand(MCOperand::createReg(Rs));
         ChildInst->addOperand(MCOperand::createImm(0));
+      } else if (isPadNop(ChildOpc)) {
+        // Architectural NOP (logical / FieldSlot / generated member) is the
+        // idle/pad opcode. TableGen may mark the logical as isPseudo; still
+        // lower it. Unused windows and pad-only idle encode as zero-entry NOP.
+        MCInstLowering.Lower(&*I, *ChildInst);
       } else if (I->isPseudo()) {
         // Residual cycle-forming already failed above. Presentation expands
         // (B/RET/BR_JT/PseudoCALLIndirect) are handled in the cases above.
@@ -604,23 +609,29 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         MCInstLowering.Lower(&*I, *ChildInst);
       }
 
-      // Membership order is the composite operand order. E2/E3 is a
-      // bundle-level fact (stamp or child count), not a canAdd replan.
+      // Membership order is the composite operand order. E2/E3 is the
+      // stamped bundle-root row, not a canAdd replan or child-count guess.
       TypedKids.push_back(ChildInst);
     }
 
-    // Product composite: 3 reals are E3 at the bundle root. Otherwise
-    // keep the stamped row or default E2.
+    // Product composite: E2 vs E3 is the stamped bundle-root row only.
     unsigned CompositeOpc = 0;
     unsigned NumEntries = 2;
     std::optional<haydn::bundle::BundleFormatRowID> Row =
         haydn::bundle::getBundleRowID(*MI);
-    // Three reals cannot be E2. Child count at the bundle root wins over a
-    // stale E2 stamp; otherwise keep the stamp or default E2.
-    if (TypedKids.size() >= 3)
-      Row = haydn::bundle::BundleFormatRowID::E96ThreeEntry;
-    else if (!Row)
-      Row = haydn::bundle::BundleFormatRowID::E96TwoEntry;
+    // Compiler-origin BUNDLE roots must already carry a product row stamp.
+    // Refuse silent child-count E3 override and missing-row E2 default.
+    if (!Row)
+      report_fatal_error(
+          "HaydnAsmPrinter: BUNDLE missing BundleFormatRowID — refuse E2 "
+          "default",
+          /*GenCrashDiag=*/false);
+    if (TypedKids.size() >= 3 &&
+        *Row != haydn::bundle::BundleFormatRowID::E96ThreeEntry)
+      report_fatal_error(
+          "HaydnAsmPrinter: BUNDLE child count exceeds stamped row — refuse "
+          "E3 override",
+          /*GenCrashDiag=*/false);
     if (TypedKids.size() > 3)
       report_fatal_error(
           "HaydnAsmPrinter: BUNDLE has more than 3 real children",
@@ -643,8 +654,18 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // completion remains allowed on residual row-only MIR fixtures; product
     // Finalize always stamps full-slot completion before this point.
     if (auto Comp = haydn::bundle::getBundleCompletionID(*MI)) {
-      const unsigned RealMembers = static_cast<unsigned>(TypedKids.size());
-      if (RealMembers > 0 && haydn::bundle::isStubCompletion(*Comp))
+      // One census with Finalize/Verify: pad NOP is CompletionState, not a
+      // membership entry. TypedKids keeps pad-only idle children so MC can
+      // encode the architectural NOP parcel; do not use that vector as the
+      // real-member count.
+      const unsigned RealMembers = static_cast<unsigned>(
+          haydn::bundle::collectBundleMemberOpcodes(*MI).size());
+      const bool HasPadNop = haydn::bundle::bundleHasPadNop(*MI);
+      // Logical children are still real encode work (hand MIR / pre-cutover).
+      // collectBundleMemberOpcodes only sees generated members — do not
+      // let a stub completion ride a non-empty TypedKids pack.
+      if ((RealMembers > 0 || HasNonNop) &&
+          haydn::bundle::isStubCompletion(*Comp))
         report_fatal_error(
             "HaydnAsmPrinter: unqualified stub CompletionStateID on "
             "non-empty BUNDLE — CompletionStateID does not match row and "
@@ -657,8 +678,12 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         report_fatal_error(
             "HaydnAsmPrinter: unknown CompletionStateID on BUNDLE root",
             /*GenCrashDiag=*/false);
-      if (*Comp != haydn::bundle::selectCompletionForMembersAndPads(
-                       *Row, HasNonNop ? RealMembers : 0, !HasNonNop))
+      // Golden-row fill, not the stamper helper: unused windows and
+      // pad-only idle are architectural NOP (AllEntriesReal). Empty
+      // membership with no pad is residual idle stub.
+      const haydn::bundle::CompletionStateID Expected =
+          haydn::bundle::expectedGoldenRowCompletion(RealMembers, HasPadNop);
+      if (*Comp != Expected)
         report_fatal_error(
             "HaydnAsmPrinter: BUNDLE CompletionStateID does not match "
             "row and real member count — refuse filler reselection",
@@ -672,7 +697,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
     MCB.setOpcode(CompositeOpc);
 
     // Format E entry dag e0..eN is BUNDLE child order. Pad unused entries
-    // with architectural NOP. MC serializes the stamped/count-selected row.
+    // with architectural NOP. MC serializes the stamped row only.
     for (unsigned K = 0; K < NumEntries; ++K) {
       MCInst *Instr = nullptr;
       if (K < TypedKids.size())

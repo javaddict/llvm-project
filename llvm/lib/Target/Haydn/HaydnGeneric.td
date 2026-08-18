@@ -46,10 +46,12 @@ include "HaydnCallingConv.td"
 // downstream.td adds them as needed)
 //===----------------------------------------------------------------------===//
 include "HaydnInstrInfo.td"
+// Hand-maintained hypothesized encodings (filename is historical;
+// generate_format_e_records.py does not emit this file).
 include "HaydnInstrInfoAuto.td"
 
 //===----------------------------------------------------------------------===//
-// GlobalISel patterns (populated in Stream D0)
+// GlobalISel patterns
 //===----------------------------------------------------------------------===//
 include "HaydnGISel.td"
 
@@ -60,7 +62,7 @@ include "HaydnGISel.td"
 include "HaydnInstrGISel.td"
 
 //===----------------------------------------------------------------------===//
-// GlobalISel combiner rules (populated in Stream D0)
+// GlobalISel combiner rules
 //===----------------------------------------------------------------------===//
 include "HaydnCombine.td"
 
@@ -73,11 +75,13 @@ include "HaydnIntrinsics.td"
 // Processor models
 //===----------------------------------------------------------------------===//
 
-// Generic processor - the default. HWLoop + AGU are product baseline:
-// post/pre-inc fuse (G_HAYDN_*INC_*) is the sole update-addr path and is
-// tested with the default triple. CircularBuffer / BitReversed / SIMD stay
-// opt-in. Disable AGU densify with -mattr=-agu (T7.3 feature contract).
-// AIE model: R12 is a normal allocatable GPR (no dedicated free MatInt AT).
+// Generic processor - the default. FeatureHWLoop + FeatureAGU are ISA
+// baseline: post/pre-inc fuse (G_HAYDN_*INC_*) is the sole update-addr
+// path and is tested with the default triple. FeatureHWLoop does not
+// enable HardwareLoops formation; that product default stays OFF.
+// CircularBuffer / BitReversed / SIMD stay opt-in. Disable AGU densify
+// with -mattr=-agu. AIE model: R12 is a normal allocatable GPR (no
+// dedicated free MatInt AT).
 def : ProcessorModel<"generic", HaydnSchedModel, [FeatureHWLoop, FeatureAGU]>;
 
 // Full Haydn processor with optional ISA features.

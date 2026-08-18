@@ -59,6 +59,11 @@ public:
   // Map GCC-style inline asm constraints to Haydn register classes.
   // Required by GlobalISel InlineAsmLowering for `"r"(ptr)` barriers
   // (e.g. libc memset_explicit); without this, IRTranslator fatals on call.
+  // `'r'` is GPR32. IR i64/f64 still bind DR64 (ILP32 file width); C Sema
+  // reject `'r'` on 64-bit and require `'d'`. `'d'` is the explicit DR64
+  // file. `{lr}`/`{sp}`/`{fp}` map onto TableGen names `{R15}`/`{R13}`/`{R14}`
+  // so reserved-reg clobbers are not silently dropped.
+  ConstraintType getConstraintType(StringRef Constraint) const override;
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;

@@ -44,6 +44,9 @@ public:
   // Prefer partial/runtime densify UF = 64/eltBits (DR=64: i32×2, i16×4,
   // i8×8) for short dual-stream MAC and 1-ld/1-st memcopy loops. Spill gate
   // is the unroller cost model (Force stays off), not a local heuristic.
+  // Constant trips at/above -haydn-prefer-swp-over-unroll (AIE
+  // AIEBaseTargetTransformInfo.cpp:72-73 / :204-208, default 9) stay
+  // rolled so software pipelining can measure the original loop.
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP,
                                OptimizationRemarkEmitter *ORE) const override;
@@ -56,6 +59,10 @@ public:
   bool isIndexedLoadLegal(TTI::MemIndexedMode Mode, Type *Ty) const override;
   bool isIndexedStoreLegal(TTI::MemIndexedMode Mode, Type *Ty) const override;
 
+  /// Hexagon HexagonTargetTransformInfo.cpp:100-103: bias LSR toward
+  /// post-increment (Haydn D_LDW_POST_* / D_SDW_POST_*).
+  TTI::AddressingModeKind
+  getPreferredAddressingMode(const Loop *L, ScalarEvolution *SE) const override;
 
   // IR-level hardware-loop recognition. Delegates trip-count
   // derivation to ScalarEvolution (which resolves runtime inits, runtime
@@ -63,10 +70,13 @@ public:
   // post-RA recognizer cannot recover from physical registers after spills).
   // Mirrors AIE's AIETTICommon::isHardwareLoopProfitable
   // (AIEBaseTargetTransformInfo.cpp:292-367) and ARM's hook
-  // (ARMTargetTransformInfo.cpp:2380-2472). The upstream HardwareLoops pass
-  // (llvm/lib/CodeGen/HardwareLoops.cpp) inserts llvm.set.loop.iterations
-  // llvm.loop.decrement intrinsics, which GlobalISel then selects to
-  // LoopStart / PseudoLoopEnd pseudos (Phase 3).
+  // (ARMTargetTransformInfo.cpp:2380-2472). Role A is SCEV-proven
+  // innermost single-latch/single-exit (single-BB, or the measured
+  // multi-BB latch-only overlay of AIE's all-multi-BB decline at
+  // AIEBaseTargetTransformInfo.cpp:317-320). The upstream
+  // HardwareLoops pass (llvm/lib/CodeGen/HardwareLoops.cpp) inserts
+  // llvm.set.loop.iterations / llvm.loop.decrement, which GlobalISel
+  // selects to LoopStart / PseudoLoopEnd.
   bool isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,
                                 AssumptionCache &AC, TargetLibraryInfo *LibInfo,
                                 HardwareLoopInfo &HWLoopInfo) const override;
@@ -100,6 +110,19 @@ public:
       return 16; // D0–D15
     return 16;   // R0–R15 (soft-zero / SP / LR reserved at RA)
   }
+
+  /// Materialization cost for a standalone integer immediate (LOADI32 /
+  /// HaydnMatInt). Used by ConstantHoisting when the opcode-specific hook
+  /// does not keep the immediate attached.
+  InstructionCost getIntImmCost(const APInt &Imm, Type *Ty,
+                                TTI::TargetCostKind CostKind) const override;
+  InstructionCost getIntImmCostInst(unsigned Opcode, unsigned Idx,
+                                    const APInt &Imm, Type *Ty,
+                                    TTI::TargetCostKind CostKind,
+                                    Instruction *Inst = nullptr) const override;
+  InstructionCost
+  getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx, const APInt &Imm,
+                      Type *Ty, TTI::TargetCostKind CostKind) const override;
 };
 
 } // namespace llvm

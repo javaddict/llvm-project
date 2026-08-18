@@ -460,6 +460,7 @@ def int_haydn_x2mula32  : haydn_simd_maca_2dest_intrinsic<"haydn_x2mula32">;
 def int_haydn_x2muls32  : haydn_simd_maca_2dest_intrinsic<"haydn_x2muls32">;
 def int_haydn_x4mula16  : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4mula16">;
 def int_haydn_x4muls16  : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4muls16">;
+// Four-lane sat 16x16->32 into two dest DRs (not the two-lane FMULAA16 body).
 def int_haydn_x4mula16s : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4mula16s">;
 def int_haydn_x4muls16s : haydn_simd_maca_2dest_v4i16_intrinsic<"haydn_x4muls16s">;
 
@@ -567,6 +568,7 @@ def int_haydn_f2mulss32rs_hhll : haydn_i64_from_v2i32_mac<"haydn_f2mulss32rs_hhl
 // SRAI64R — 64-bit shift-right with rounding, immediate shift amount
 // (i64 accum, i32 shift_imm) -> i64
 // Note: The hardware instruction uses simm16 for the shift amount.
+// Admitted *r law: shift>0 adds 1<<(shift-1) then ASR; shift 0 is identity.
 def int_haydn_srai64r : Haydn_Intrinsic<"haydn_srai64r",
     [llvm_i64_ty], [llvm_i64_ty, llvm_i32_ty],
     [ImmArg<ArgIndex<1>>, IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
@@ -1067,6 +1069,7 @@ def int_haydn_fmulsa32s_hllh : haydn_ternary_intrinsic<"haydn_fmulsa32s_hllh", l
 // Wave 4 Tier 3: SRA64R — 64-bit arithmetic right shift with rounding
 // Golden: rtd,rsd (DR64), rs (GPR32) -> full i64. Imm twin: srai64r.
 // Pack-to-i32 uses trunc/cast at the call site (haydn_packsr32 in haydn_dsp.h).
+// Admitted *r law: shift>0 adds 1<<(shift-1) then ASR; shift 0 is identity.
 //===----------------------------------------------------------------------===//
 
 def int_haydn_sra64r : Haydn_Intrinsic<"haydn_sra64r",
@@ -1466,6 +1469,7 @@ def int_haydn_x4srli16 : Haydn_Intrinsic<"haydn_x4srli16",
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD shift with rounding (binary DR64)
+// Same admitted *r law as SRA64R: shift>0 adds 1<<(shift-1) then ASR.
 //===----------------------------------------------------------------------===//
 
 def int_haydn_x2sra32r : Haydn_Intrinsic<"haydn_x2sra32r",

@@ -13,6 +13,7 @@
 #include "HaydnInstrInfo.h"
 #include "HaydnPipelinerLoopInfo.h"
 #include "Haydn.h"
+#include "HaydnFrameLowering.h"
 #include "HaydnBundleMaterialize.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnHWLoopContracts.h"
@@ -33,6 +34,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachinePipeliner.h"
@@ -181,10 +183,14 @@ cl::opt<bool> EnableZOLPipelining(
 
 // AIE aie-loop-min-tripcount peer: force a floor MinTripCount for all SMS
 // candidates. -1 = disabled (default). Used for soak / when MD is missing.
-static cl::opt<int> HaydnLoopMinTripCount(
+// Non-static since F39: the post-RA multi-stage host honors the same floor
+// in its static-trip proof (extern in HaydnInstrInfo.h).
+namespace llvm {
+cl::opt<int> HaydnLoopMinTripCount(
     "haydn-loop-min-tripcount", cl::Hidden, cl::init(-1),
     cl::desc("AIE aie-loop-min-tripcount peer: floor MinTripCount for ZOL SMS "
              "(-1 = disabled). Warning: applies to all ZOL SMS candidates."));
+} // namespace llvm
 
 // Pre-RA SMS containment: StageCount > 1 is rejected in shouldUseSchedule.
 // Product multi-stage SWP and exact E96 commit live only in the post-RA engine.
@@ -240,8 +246,8 @@ static cl::opt<uint32_t> BranchRelaxSafetyBuffer(
              "getInstSizeInBytes."));
 
 // Product MemoryEdges latency is architectural: First/LastMemoryCycle tables
-// (Last-First+1, floored at 1) for Slot0_LS / Slot1_LD / Slot01_LD. Class-
-// agnostic latency-1 was a historical densify soften that made II/density
+// (Last-First+1, floored at 1) for Slot0_LS / Slot1_LD / Slot01_LD / Slot2_LS.
+// Class-agnostic latency-1 was a historical densify soften that made II/density
 // fiction; -haydn-accurate-memory-latency=false remains a soak-off only.
 // Densify invents stay FATED. Unit/lit pin product Latency=2 vs soft Latency=1.
 static cl::opt<bool> AccurateMemoryLatency(
@@ -297,14 +303,12 @@ void HaydnInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   // G_UNMERGE_VALUES), so no generic cross-bank COPY should survive to here.
   if (Haydn::GPR32RegClass.contains(DestReg, SrcReg)) {
     // GPR32 → GPR32: MOVE32 rd, rs, rs (register move).
-    // The.td models MOVE32 with two source operands ($rs1, $rs2) because the
+    // The .td models MOVE32 with two source operands ($rs1, $rs2) because the
     // R-type encoding (FmtALU32) has separate rs1/rs2 bit fields, and both
     // must be populated for a deterministic encoding. copyPhysReg therefore
-    // passes SrcReg twice. Semantically MOVE32 reads only one register
-    // (1R/1W, RI-like — see), and the VLIW packetizer's countGPRPorts
-    // dedupes repeated source operands so this counts as a single GPR read.
-    // Using OR32 rd, rs, rs instead would also work but OR32 is two-source
-    // in the.td (no duplicate), so MOVE32 is the canonical single-read move.
+    // passes SrcReg twice. Each explicit field reserves one GPR read port
+    // (2R1W). OR32 rd, rs, rs is a true two-source op; MOVE32 remains the
+    // canonical copy form.
     BuildMI(MBB, MI, DL, get(Haydn::MOVE32), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addReg(SrcReg, getKillRegState(KillSrc));
@@ -1043,17 +1047,17 @@ unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
         MachineInstr *MI = Keep[0];
         unsigned Member = haydn::bundle::lateProductMemberOpcode(MI->getOpcode());
         if (Member != MI->getOpcode())
-          MI->setDesc(get(Member));
+          bakeFormatEMemberDesc(*MI, Member, *this);
         haydn::bundle::finalizeExactLateSingleton(*MI);
       } else if (Keep.size() > 1) {
-        if (!haydn::bundle::commitExactMultiMIProductCycle(Keep)) {
+        if (!haydn::bundle::commitOneProductCycle(Keep)) {
           for (MachineInstr *MI : Keep) {
             if (!MI || !MI->getParent())
               continue;
             unsigned Member =
                 haydn::bundle::lateProductMemberOpcode(MI->getOpcode());
             if (Member != MI->getOpcode())
-              MI->setDesc(get(Member));
+              bakeFormatEMemberDesc(*MI, Member, *this);
             haydn::bundle::finalizeExactLateSingleton(*MI);
           }
         }
@@ -1120,8 +1124,9 @@ namespace {
 /// DR64PackSlotRef — resolved addressing for the per-function DR64 pack slot
 /// (DR64PackFI). PEI's eliminateFrameIndex has ALREADY run by the time
 /// expandPostRAPseudo executes (PEI precedes ExpandPostRAPseudos in the
-/// pipeline), so the slot is resolved here via getFrameIndexReference to a
-/// stable FP/SP base. No dynamic SP adjust is permitted for pack temporaries.
+/// pipeline), so the slot is resolved here via getFrameIndexReferenceAt to a
+/// stable FP/SP base plus any live call-frame SP delta. No dynamic SP adjust
+/// is permitted for pack temporaries.
 struct DR64PackSlotRef {
   Register FrameReg;
   int64_t Off = 0;      ///< Raw byte offset of the slot base from FrameReg.
@@ -1147,8 +1152,10 @@ struct DR64PackSlotRef {
 /// width-aligned. Never emits a dynamic SP adjust — the fallback materialises
 /// a plain GPR base (FrameReg + Off) and addresses the slot at element 0/1/0,
 /// which is always short-form-legal.
-DR64PackSlotRef resolveDR64PackSlot(MachineFunction &MF,
+DR64PackSlotRef resolveDR64PackSlot(MachineBasicBlock &MBB,
+                                    MachineBasicBlock::iterator I,
                                     const HaydnFrameLowering &TFL) {
+  MachineFunction &MF = *MBB.getParent();
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
   int FI = FuncInfo->getDR64PackFI();
   if (FI < 0) {
@@ -1158,7 +1165,7 @@ DR64PackSlotRef resolveDR64PackSlot(MachineFunction &MF,
   }
   DR64PackSlotRef R;
   R.FI = FI;
-  R.Off = TFL.getFrameIndexReference(MF, FI, R.FrameReg).getFixed();
+  R.Off = TFL.getFrameIndexReferenceAt(MF, FI, R.FrameReg, MBB, I).getFixed();
   // Closed rule: short-form iff every scaled element fits isInt<6>. Else the
   // caller opens a scavenged-base window (withDR64PackBase) — never a fatal,
   // never an SP motion.
@@ -1214,7 +1221,8 @@ static void emitDR64PackBaseSpill(MachineBasicBlock &MBB,
   }
   const HaydnFrameLowering *TFL = ST.getFrameLowering();
   Register SpillFrameReg;
-  int64_t Off = TFL->getFrameIndexReference(MF, FI, SpillFrameReg).getFixed();
+  int64_t Off =
+      TFL->getFrameIndexReferenceAt(MF, FI, SpillFrameReg, MBB, I).getFixed();
   emitFrameRelativeMemOp(MBB, I, DL, TII, Reg, SpillFrameReg, Off, IsStore,
                          /*StoreFlags=*/0);
 }
@@ -1242,6 +1250,16 @@ static void withDR64PackBase(MachineBasicBlock &MBB,
   Register Base = findPostRAScratchGPR(MBB, I, /*PreferNotR12=*/true,
                                        NeedsSpill, Exclude);
   assert(Base != Haydn::R0 && "scavenger must not return soft-zero R0");
+  // Soft-zero cleanliness at the insertion point: the base MatInt below
+  // seeds Cur=R0, the spill-bracket tiers 2/3 borrow R0, and Fn itself
+  // (emitConst32) chains MatInt from R0. The prologue zero is NOT
+  // sufficient — any mid-function write can leave R0 dirty here (JALR
+  // link-discard, an explicit ADDI32_W into R0). One local restore
+  // emitter plus assert; never a function-wide epilogue xor; never
+  // silently read a dirty seed.
+  ensureSoftZeroR0Clean(MBB, I, DL, TII);
+  assert(isSoftZeroR0Clean(MBB, I) &&
+         "withDR64PackBase: soft-zero R0 must be clean before pack-base MatInt");
   if (NeedsSpill)
     emitDR64PackBaseSpill(MBB, I, DL, TII, ST, Base, /*IsStore=*/true);
   // Materialise Base = R.FrameReg + R.Off (full byte offset). Mirrors the
@@ -1305,6 +1323,41 @@ void loadDR64Pack(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
 
 } // namespace
 
+void HaydnInstrInfo::preserveCircularBufferWritebackDefs(
+    MachineFunction &MF) const {
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB) {
+      switch (MI.getOpcode()) {
+      case Haydn::D_LDW_CB_IMM:
+      case Haydn::D_LDW_CB_REG:
+      case Haydn::D_SDW_CB_IMM:
+      case Haydn::D_SDW_CB_REG:
+        break;
+      default:
+        continue;
+      }
+      Register Wb;
+      for (const MachineOperand &MO : MI.explicit_operands()) {
+        if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical())
+          Wb = MO.getReg();
+      }
+      if (!Wb)
+        continue;
+      bool HasImpDef = false;
+      for (const MachineOperand &MO : MI.implicit_operands()) {
+        if (MO.isReg() && MO.isDef() && MO.getReg() == Wb) {
+          HasImpDef = true;
+          break;
+        }
+      }
+      if (HasImpDef)
+        continue;
+      MI.addOperand(MF, MachineOperand::CreateReg(Wb, /*isDef=*/true,
+                                                  /*isImp=*/true));
+    }
+  }
+}
+
 bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   MachineBasicBlock &MBB = *MI.getParent();
   MachineBasicBlock::iterator MBBI = MI.getIterator();
@@ -1314,19 +1367,45 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   default:
     return false;
 
-  case Haydn::RET:
-    // RET → logical JALR_W R0, R15, 0 (jump to LR, discard link address).
-    // Format E encode after post-RA placement.
+  case Haydn::RET: {
+    // Rebuild JALR_W r0, r15, 0 so Finalize can setDesc the Format E
+    // member (prints jalr). setDesc+append left RET implicits in
+    // explicit slots. Do not BuildMI: JALR_W Defs include D0 and would
+    // clobber the i64 return. RISCV expandPseudo_RET rebuilds JALR
+    // x0, x1, 0 (RISCVInstrInfo.cpp).
+    MachineFunction &MF = *MBB.getParent();
+    SmallVector<MachineOperand, 4> LiveOuts;
+    for (const MachineOperand &MO : MI.operands()) {
+      if (!MO.isReg() || !MO.isUse())
+        continue;
+      Register R = MO.getReg();
+      if (!R || R == Haydn::R0 || R == Haydn::R15)
+        continue;
+      LiveOuts.push_back(MO);
+    }
+    while (MI.getNumOperands())
+      MI.removeOperand(MI.getNumOperands() - 1);
     MI.setDesc(get(Haydn::JALR_W));
-    MI.addOperand(MachineOperand::CreateReg(Haydn::R0, /*isDef*/ true));
-    MI.addOperand(MachineOperand::CreateReg(Haydn::R15, /*isDef*/ false));
-    MI.addOperand(MachineOperand::CreateImm(0));
+    MI.addOperand(MF, MachineOperand::CreateReg(Haydn::R0, /*isDef=*/true));
+    MI.addOperand(MF, MachineOperand::CreateReg(Haydn::R15, /*isDef=*/false));
+    MI.addOperand(MF, MachineOperand::CreateImm(0));
+    for (const MachineOperand &MO : LiveOuts)
+      MI.addOperand(MF, MachineOperand::CreateReg(
+                            MO.getReg(), /*isDef=*/false, /*isImp=*/true,
+                            /*isKill=*/MO.isKill()));
     return true;
+  }
 
   case Haydn::B:
-    // B pseudo must survive through all post-RA passes including
-    // MachineBlockPlacement so analyzeBranch correctly identifies it.
-    // Expanded to BEQZ R0 in the AsmPrinter (HaydnAsmPrinter.cpp).
+    // B must survive MachineBlockPlacement (ExpandPostRAPseudos runs
+    // before addPreSched2 MBP). Printer expands B to BEQZ_W R0.
+    return false;
+
+  case Haydn::BR_JT:
+    // JALR_W is isCall. Expanding a computed goto to a call before
+    // MBP/pack would treat the jump as a call (same reason
+    // PseudoCALLIndirect stays a printer expand). Printer emits
+    // JALR_W r0, addr, 0. ExpandPseudos still re-zeros successors.
     return false;
 
   case Haydn::LOADI32: {
@@ -1350,6 +1429,10 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     Register DstReg = MI.getOperand(0).getReg();
     int64_t Imm = MI.getOperand(1).getImm();
     HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Imm);
+
+    // MatInt seeds Cur=R0. Restore only on a proven dirty def. Unknown
+    // fallthrough is not a second XOR (withDR64PackBase stays conservative).
+    ensureSoftZeroR0IfKnownDirty(MBB, MBBI, DL, *this);
 
     // Post-RA: chain every MatInt step through the same phys dst (R0 → Dst → …).
     Register CurrentReg = Haydn::R0;
@@ -1414,6 +1497,11 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     const HaydnSubtarget &ST =
         MBB.getParent()->getSubtarget<HaydnSubtarget>();
 
+    // emitConst32 seeds Cur=R0. Restore only on a proven dirty def so a
+    // fallthrough from a clean predecessor does not grow a second XOR.
+    // withDR64PackBase still uses the conservative borrow check.
+    ensureSoftZeroR0IfKnownDirty(MBB, MBBI, DL, *this);
+
     auto emitConst32 = [&](int32_t V, Register Target) {
       assert(Target != Haydn::R0 &&
              "LOADI64 MatInt dest must not be soft-zero R0");
@@ -1460,7 +1548,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // scaled simm6 — never a fatal, never an SP motion.
     {
       DR64PackSlotRef R =
-          resolveDR64PackSlot(*MBB.getParent(), *ST.getFrameLowering());
+          resolveDR64PackSlot(MBB, MBBI, *ST.getFrameLowering());
       withDR64PackBase(
           MBB, MBBI, DL, *this, ST, R,
           [&](Register Base) {
@@ -1562,7 +1650,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     const HaydnSubtarget &STGen =
         MBB.getParent()->getSubtarget<HaydnSubtarget>();
     DR64PackSlotRef R =
-        resolveDR64PackSlot(*MBB.getParent(), *STGen.getFrameLowering());
+        resolveDR64PackSlot(MBB, MBBI, *STGen.getFrameLowering());
     withDR64PackBase(
         MBB, MBBI, DL, *this, STGen, R,
         [&](Register Base) {
@@ -1706,6 +1794,17 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
   // override shadows the base, so re-assert it via the explicit frame flags.
   if (MI.getFlag(MachineInstr::FrameSetup) ||
       MI.getFlag(MachineInstr::FrameDestroy))
+    return true;
+
+  // Do not packetize SP adjusts with later SP-relative spills.
+  // After PEI, ADJCALLSTACK is SUBI32/ADDI32_W of SP; the pseudo names
+  // alone would miss the expanded form.
+  if (MI.getOpcode() == Haydn::ADJCALLSTACKDOWN ||
+      MI.getOpcode() == Haydn::ADJCALLSTACKUP)
+    return true;
+  if ((MI.getOpcode() == Haydn::SUBI32 || MI.getOpcode() == Haydn::ADDI32_W) &&
+      MI.getNumOperands() >= 1 && MI.getOperand(0).isReg() &&
+      MI.getOperand(0).getReg() == Haydn::R13)
     return true;
 
   // Debug values and labels
@@ -2196,9 +2295,9 @@ ScheduleHazardRecognizer *HaydnInstrInfo::CreateTargetMIHazardRecognizer(
   // setAlternateDescriptor / setDesc / member opcodes / FormatID freeze.
   // Port demand is MRI-correct via HaydnPortModel (vreg regclass → GPR/DR/AR
   // bank), so three independent GPR writes cannot share one cycle under 2W
-  // even when Full has three slots. MOVE32-class MI path dedupes same-reg
-  // sources (rd,rs,rs → 1R1W); descriptor-only estimates used by SMS MID
-  // placement overcount (2R1W) — pre-RA list-sched never takes that path.
+  // even when Full has three slots. MOVE32-class MI path charges each
+  // explicit field (rd,rs,rs → 2R1W), matching descriptor-only estimates
+  // used by SMS MID placement. Pre-RA list-sched uses the MI path only.
   // Matching-frontier / packability oracles on PreRASchedStrategy are
   // metrics-only: they never materialize durable BUNDLE roots. Post-RA alone
   // stamps AltDescs for leaveRegion materializeMultiOpcodeInstrs. Lits:
@@ -2232,6 +2331,23 @@ ScheduleHazardRecognizer *HaydnInstrInfo::CreateTargetMIHazardRecognizer(
 // (HaydnGenMemoryCycles.inc, included above). AIE peer:
 // AIEMemoryCyclesEmitter.cpp:123-157 and AIE2InstrInfo.cpp:53.
 
+bool HaydnInstrInfo::isPublishedMemoryItinerary(unsigned SchedClass) {
+  // Exact published MEMORY_ITIN_NAMES set (generate_sched_records.py).
+  // One mechanism: the generator publishes a MemoryCycle row for every
+  // class in this set; a memory-class miss against getFirst/LastMemoryCycle
+  // is therefore a generator hole, not an unmodeled op (W21 / AIE
+  // ExactLatencies fatality).
+  switch (SchedClass) {
+  case Haydn::Sched::Slot0_LS:
+  case Haydn::Sched::Slot1_LD:
+  case Haydn::Sched::Slot01_LD:
+  case Haydn::Sched::Slot2_LS:
+    return true;
+  default:
+    return false;
+  }
+}
+
 std::optional<int>
 HaydnInstrInfo::getMemoryLatency(unsigned SrcSchedClass,
                                  unsigned DstSchedClass) const {
@@ -2242,7 +2358,10 @@ HaydnInstrInfo::getMemoryLatency(unsigned SrcSchedClass,
 
   std::optional<int> LastSrc = getLastMemoryCycle(SrcSchedClass);
   std::optional<int> FirstDst = getFirstMemoryCycle(DstSchedClass);
-  // Unknown cycle → nullopt; MemoryEdges keeps its local default (1).
+  // Unknown cycle → nullopt. MemoryEdges separates the two miss causes:
+  // a published Slot*_LS / Slot*_LD class with no row is a generator hole
+  // (fatal there, W21); any other class is simply not table-driven and
+  // keeps the local default latency 1.
   if (!LastSrc || !FirstDst)
     return std::nullopt;
   // Last cycle of producer memory → first cycle of consumer memory.
@@ -3048,12 +3167,11 @@ static bool haydnCheckSMSResMIIOracle(const MachineBasicBlock &LoopBB) {
   return true;
 }
 
-/// SMS-PORT metrics (MOVE32-class MI-versus-descriptor differential):
+/// SMS-PORT metrics (MOVE32-class MI-versus-descriptor):
 /// Log when the body contains MOVE32 (or slot members) so qualification can
-/// pin that MID placement charges descriptor-shape 2R1W while ResMII MI
-/// packing charges 1R1W for rd,rs,rs. Does **not** fail-close — descriptor
-/// overcount is intentional conservative placement, not an operand-dependent
-/// format predicate / SMS-HOOK reject class.
+/// pin that MI and descriptor paths are both 2R1W per-field. Does **not**
+/// fail-close — the retired overcount pin stays as a zero metric, not an
+/// operand-dependent format predicate / SMS-HOOK reject class.
 static void haydnLogSMSPortMiVsDescDifferential(const MachineBasicBlock &LoopBB) {
   unsigned Move32Ops = 0;
   for (const MachineInstr &MI : LoopBB) {

@@ -25,6 +25,7 @@
 #include "HaydnSubtarget.h"
 #include "HaydnTargetMachine.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -355,6 +356,39 @@ TEST_F(HaydnRegisterInfoTest, CompactOnOffMembershipIndependence) {
   EXPECT_EQ(hintIndex(Off, Haydn::R9), -1);
   EXPECT_EQ(hintIndex(On, Haydn::R8), -1);
   EXPECT_EQ(hintIndex(On, Haydn::R9), -1);
+}
+
+// Soft-zero / stack / link reserved; R12 stays allocatable. DWARF numbers
+// are the compiler manifest consumed by LLDB ABISysV_haydn.
+TEST_F(HaydnRegisterInfoTest, ReservedSoftZeroAndDwarfManifest) {
+  const HaydnRegisterInfo &RI = TRI();
+  const BitVector Reserved = RI.getReservedRegs(*MF);
+
+  EXPECT_TRUE(Reserved.test(Haydn::R0));
+  EXPECT_FALSE(Reserved.test(Haydn::R1));
+  EXPECT_FALSE(Reserved.test(Haydn::R12));
+  EXPECT_TRUE(Reserved.test(Haydn::R13));
+  EXPECT_FALSE(Reserved.test(Haydn::R14));
+  EXPECT_TRUE(Reserved.test(Haydn::R15));
+  EXPECT_TRUE(Reserved.test(Haydn::SFR));
+  EXPECT_TRUE(Reserved.test(Haydn::CBR0));
+  EXPECT_TRUE(Reserved.test(Haydn::CBR1));
+
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::R0, /*isEH=*/false), 0);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::R1, /*isEH=*/false), 1);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::R15, /*isEH=*/false), 15);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::D0, /*isEH=*/false), 16);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::D15, /*isEH=*/false), 31);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::AR0, /*isEH=*/false), 32);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::AR1, /*isEH=*/false), 33);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::SFR, /*isEH=*/false), 36);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::CSR, /*isEH=*/false), 37);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::CBR0, /*isEH=*/false), 38);
+  EXPECT_EQ(RI.getDwarfRegNum(Haydn::CBR1, /*isEH=*/false), 39);
+
+  EXPECT_TRUE(RI.isInlineAsmReadOnlyReg(*MF, Haydn::R0));
+  EXPECT_TRUE(RI.isInlineAsmReadOnlyReg(*MF, Haydn::R13));
+  EXPECT_FALSE(RI.isInlineAsmReadOnlyReg(*MF, Haydn::R12));
 }
 
 } // namespace

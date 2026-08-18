@@ -74,6 +74,9 @@ def : Pat<(int_haydn_mul64_uu_ulh DR64:$a, DR64:$b),  (MUL64_ULH DR64:$a, DR64:$
 
 //===----------------------------------------------------------------------===//
 // Saturating Arithmetic
+// Header composites satsr64 / packsr32 are not Pats (not golden encodings).
+// *r/*rs rounding bias is 1<<(shift-1) then ASR; *s sat-left is header-soft.
+// X4MULA16S is four-lane sat 16x16->32 (vec_dot16 dest-typed AE_MULAF16X4SS).
 //===----------------------------------------------------------------------===//
 
 def : Pat<(int_haydn_add32s GPR32:$a, GPR32:$b), (ADD32S GPR32:$a, GPR32:$b)>;
@@ -97,9 +100,20 @@ def : Pat<(int_haydn_fmul32s_ll DR64:$a, DR64:$b), (FMUL32S_LL DR64:$a, DR64:$b)
 def : Pat<(int_haydn_fmul32s_lh DR64:$a, DR64:$b), (FMUL32S_LH DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmul32s_hh DR64:$a, DR64:$b), (FMUL32S_HH DR64:$a, DR64:$b)>;
 
-
+// FmtALU64Acc tied-def: acc is $rd_in. GISel selectAccMAC is the live path;
+// SDAG/GISel Pats kept for the full LL/LH/HH matrix (was only FMULS32S_LH).
+def : Pat<(int_haydn_fmula32s_ll DR64:$acc, DR64:$a, DR64:$b),
+          (FMULA32S_LL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmula32s_lh DR64:$acc, DR64:$a, DR64:$b),
+          (FMULA32S_LH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmula32s_hh DR64:$acc, DR64:$a, DR64:$b),
+          (FMULA32S_HH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls32s_ll DR64:$acc, DR64:$a, DR64:$b),
+          (FMULS32S_LL DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmuls32s_lh DR64:$acc, DR64:$a, DR64:$b),
           (FMULS32S_LH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls32s_hh DR64:$acc, DR64:$a, DR64:$b),
+          (FMULS32S_HH DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // FF2 Fractional Multiply with Symmetric Rounding (F2MUL32RS)
@@ -649,60 +663,47 @@ def : Pat<(int_haydn_x2sub32s_hllh DR64:$a, DR64:$b), (X2SUB32S_HLLH DR64:$a, DR
 // Wave 5: X2/X4 SIMD register shifts (binary DR64)
 //===----------------------------------------------------------------------===//
 
-// TODO: X2SLL32, X2SRA32, X2SRL32 instructions not yet defined in.td
-// def : Pat<(int_haydn_x2sll32 DR64:$a, DR64:$b), (X2SLL32 DR64:$a, DR64:$b)>;
-// def : Pat<(int_haydn_x2sra32 DR64:$a, DR64:$b), (X2SRA32 DR64:$a, DR64:$b)>;
-// def : Pat<(int_haydn_x2srl32 DR64:$a, DR64:$b), (X2SRL32 DR64:$a, DR64:$b)>;
-// X4SLL16/X4SRA16/X4SRL16 take GPR32 operands but intrinsics use DR64 — type mismatch
-// def : Pat<(int_haydn_x4sll16 DR64:$a, DR64:$b), (X4SLL16 DR64:$a, DR64:$b)>;
-// def : Pat<(int_haydn_x4sra16 DR64:$a, DR64:$b), (X4SRA16 DR64:$a, DR64:$b)>;
-// def : Pat<(int_haydn_x4srl16 DR64:$a, DR64:$b), (X4SRL16 DR64:$a, DR64:$b)>;
+// Shift amount is GPR32 (HaydnInstrInfo.td X2SLL32 / Auto X4SLL16).
+// Intrinsics take a vector second operand; GISel selectDR64ShiftGPR32 is
+// the live path. No DR64/DR64 Pat — that would be a type lie.
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD shift with rounding (binary DR64)
 //===----------------------------------------------------------------------===//
 
-// X2SRA32R/X4SRA16R take GPR32 operands but intrinsics use DR64 — type mismatch
-// def : Pat<(int_haydn_x2sra32r DR64:$a, DR64:$b), (X2SRA32R DR64:$a, DR64:$b)>;
-// def : Pat<(int_haydn_x4sra16r DR64:$a, DR64:$b), (X4SRA16R DR64:$a, DR64:$b)>;
+// X2SRA32R / X4SRA16R also take GPR32 shift amount. Same C++ selector.
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD horizontal reductions (unary DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x2hadd32_h DR64:$a), (X2HADD32_H DR64:$a)>;
-//def : Pat<(int_haydn_x2hadd32s_h DR64:$a), (X2HADD32S_H DR64:$a)>;
-//def : Pat<(int_haydn_x2hadd32_l DR64:$a), (X2HADD32_L DR64:$a)>;
-//def : Pat<(int_haydn_x2hadd32s_l DR64:$a), (X2HADD32S_L DR64:$a)>;
-//def : Pat<(int_haydn_x4hadd16_h DR64:$a), (X4HADD16_H DR64:$a)>;
-//def : Pat<(int_haydn_x4hadd16_l DR64:$a), (X4HADD16_L DR64:$a)>;
-// R_GD: GPR32 dest is implicit from logical; source is DR64/vector bank.
-// GISel selects via selectUnaryR_GD; keep SDAG pats aligned if enabled.
-//def : Pat<(int_haydn_x2hmax32 DR64:$a), (X2HMAX32 DR64:$a)>;
-//def : Pat<(int_haydn_x2hmin32 DR64:$a), (X2HMIN32 DR64:$a)>;
-//def : Pat<(int_haydn_x4hmax16 DR64:$a), (X4HMAX16 DR64:$a)>;
-//def : Pat<(int_haydn_x4hmin16 DR64:$a), (X4HMIN16 DR64:$a)>;
+def : Pat<(int_haydn_x2hadd32_h DR64:$a), (X2HADD32_H DR64:$a)>;
+def : Pat<(int_haydn_x2hadd32s_h DR64:$a), (X2HADD32S_H DR64:$a)>;
+def : Pat<(int_haydn_x2hadd32_l DR64:$a), (X2HADD32_L DR64:$a)>;
+def : Pat<(int_haydn_x2hadd32s_l DR64:$a), (X2HADD32S_L DR64:$a)>;
+def : Pat<(int_haydn_x4hadd16_h DR64:$a), (X4HADD16_H DR64:$a)>;
+def : Pat<(int_haydn_x4hadd16_l DR64:$a), (X4HADD16_L DR64:$a)>;
+// R_GD: GPR32 dest / DR64 source. GISel selectUnaryR_GD; no DR64-dest Pat.
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2/X4 SIMD dot product (binary DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x2dot32 DR64:$a, DR64:$b), (X2DOT32 DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x4dot16 DR64:$a, DR64:$b), (X4DOT16 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2dot32 DR64:$a, DR64:$b), (X2DOT32 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x4dot16 DR64:$a, DR64:$b), (X4DOT16 DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
-// Wave 5: X2/X4 SIMD multiply (ternary DR64)
+// Wave 5: X2/X4 SIMD multiply (2-dest DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x2mul32 DR64:$a, DR64:$b, DR64:$c), (X2MUL32 DR64:$a, DR64:$b, DR64:$c)>;
-//def : Pat<(int_haydn_x4mul16 DR64:$a, DR64:$b, DR64:$c), (X4MUL16 DR64:$a, DR64:$b, DR64:$c)>;
+// X2MUL32 / X4MUL16 are FmtALU64_2Dest. GISel selectSimdMac2Dest only.
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2 SIMD multiply-pair variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x2mulph32 DR64:$a, DR64:$b), (X2MULPH32 DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x2mulpl32 DR64:$a, DR64:$b), (X2MULPL32 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2mulph32 DR64:$a, DR64:$b), (X2MULPH32 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2mulpl32 DR64:$a, DR64:$b), (X2MULPL32 DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x2mulaph32 DR64:$acc, DR64:$a, DR64:$b), (X2MULAPH32 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x2mulapl32 DR64:$acc, DR64:$a, DR64:$b), (X2MULAPL32 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x2mulsph32 DR64:$acc, DR64:$a, DR64:$b), (X2MULSPH32 DR64:$acc, DR64:$a, DR64:$b)>;
@@ -712,35 +713,38 @@ def : Pat<(int_haydn_x2mulspl32 DR64:$acc, DR64:$a, DR64:$b), (X2MULSPL32 DR64:$
 // Wave 5: X2 32-bit complex fractional multiply (binary DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x2fcmul32rs DR64:$a, DR64:$b), (X2FCMUL32RS DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x2fcmul32rss DR64:$a, DR64:$b), (X2FCMUL32RSS DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fcmul32rs DR64:$a, DR64:$b), (X2FCMUL32RS DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fcmul32rss DR64:$a, DR64:$b), (X2FCMUL32RSS DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fcmula32rs DR64:$acc, DR64:$a, DR64:$b),
+          (X2FCMULA32RS DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2fcmula32rss DR64:$acc, DR64:$a, DR64:$b),
+          (X2FCMULA32RSS DR64:$acc, DR64:$a, DR64:$b)>;
+
 //===----------------------------------------------------------------------===//
-// Wave 5: X2 CMUL F2 variants (ternary DR64)
+// Wave 5: X2 CMUL F2 variants (2-dest DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x2cmul32_f2 DR64:$a, DR64:$b, DR64:$c), (X2CMUL32_F2 DR64:$a, DR64:$b, DR64:$c)>;
-//def : Pat<(int_haydn_x2cmul32s_f2 DR64:$a, DR64:$b, DR64:$c), (X2CMUL32S_F2 DR64:$a, DR64:$b, DR64:$c)>;
+// X2CMUL32_F2 / X2CMUL32S_F2 are FmtMAC2Dest. Public AE wrappers stay
+// fail-closed in haydn_dsp.h. GISel selectSimdMac2Dest only.
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X2 FF2 shift variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x2ff2rsst32 DR64:$a, DR64:$b), (X2FF2RSST32 DR64:$a, DR64:$b)>;
-//def : Pat<(int_haydn_x2ff2rst32 DR64:$a, DR64:$b), (X2FF2RST32 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2ff2rsst32 DR64:$a, DR64:$b), (X2FF2RSST32 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2ff2rst32 DR64:$a, DR64:$b), (X2FF2RST32 DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
-// Wave 5: X4 FF2MUL variants (ternary DR64)
+// Wave 5: X4 FF2MUL variants (2-dest DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x4ff2mul16s DR64:$a, DR64:$b, DR64:$c), (X4FF2MUL16S DR64:$a, DR64:$b, DR64:$c)>;
-//def : Pat<(int_haydn_x4ff2mula16s DR64:$a, DR64:$b, DR64:$c), (X4FF2MULA16S DR64:$a, DR64:$b, DR64:$c)>;
-//def : Pat<(int_haydn_x4ff2muls16s DR64:$a, DR64:$b, DR64:$c), (X4FF2MULS16S DR64:$a, DR64:$b, DR64:$c)>;
+// X4FF2MUL16S / MULA / MULS are 2-dest. GISel only.
 
 //===----------------------------------------------------------------------===//
 // Wave 5: X4 pack/sat (binary DR64)
 //===----------------------------------------------------------------------===//
 
-//def : Pat<(int_haydn_x4sat32t16 DR64:$a, DR64:$b), (X4SAT32T16 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x4sat32t16 DR64:$a, DR64:$b), (X4SAT32T16 DR64:$a, DR64:$b)>;
 
 // Immediate shift and SELI16 intrinsics use custom C++ selection
 // (constant extraction from i32 immediate operand).
