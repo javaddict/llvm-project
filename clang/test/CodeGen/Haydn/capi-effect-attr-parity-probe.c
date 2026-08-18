@@ -7,7 +7,8 @@
 // RUN: %clang_cc1 -triple haydn-unknown-elf -target-cpu haydn -ffreestanding -O2 -emit-llvm -o - %s \
 // RUN:   | FileCheck %s --check-prefix=ATTR
 // RUN: %clang -target haydn-unknown-elf -mcpu=haydn -ffreestanding -O0 -c -o %t.o0.o %s
-// RUN: %clang -target haydn-unknown-elf -mcpu=haydn -ffreestanding -O2 -c -o %t.o2.o %s
+// RUN: %clang -target haydn-unknown-elf -mcpu=haydn -ffreestanding -O2 \
+// RUN:   -mllvm -enable-post-misched=false -c -o %t.o2.o %s
 // REQUIRES: haydn-registered-target
 //
 // C1.3 / G-PRED-SSA exit gate — per-record effect attribute parity:

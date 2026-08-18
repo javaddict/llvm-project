@@ -41,6 +41,12 @@ HaydnTargetInfo::HaydnTargetInfo(const llvm::Triple &Triple,
   DoubleAlign = 32; // double is 64-bit but aligned to 32-bit boundary
   LongDoubleWidth = 64;
   LongDoubleAlign = 32;
+  // Soft-float product: _Float16 / bf16 stay Sema-unavailable. RISC-V
+  // TargetInfo sets HasFloat16 when F/D is present (RISCV.h:50); Haydn has
+  // no FPU feature, so the default false is restated as a contract.
+  HasFloat16 = false;
+  HasBFloat16 = false;
+  HalfArgsAndReturns = false;
 
   // Type sizes
   SizeType = UnsignedInt;
@@ -173,6 +179,12 @@ void HaydnTargetInfo::getTargetDefines(const LangOptions &Opts,
   Builder.defineMacro("__haydn_LE__");
   Builder.defineMacro("__HAYDN_LE__");
 
+  // Soft-float product ABI (no FPU). ARM peer: __SOFTFP__ (ARM.cpp:841).
+  // gcc-torture float/double remains a classified skip; this is frontend
+  // identity of that leftover, not IEEE vector QUALIFY.
+  Builder.defineMacro("__SOFTFP__");
+  Builder.defineMacro("__HAYDN_SOFT_FLOAT__");
+
   // 32-bit target
   Builder.defineMacro("__haydn_32__");
   Builder.defineMacro("__HAYDN_32__");
@@ -200,6 +212,8 @@ void HaydnTargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__HAYDN_FEATURE_BIT_REVERSED__");
   if (HasHWLoop)
     Builder.defineMacro("__HAYDN_FEATURE_HWLOOP__");
+  // SIMD is opt-in on -mcpu=haydn. Do not define this on generic
+  // (agu+hwloop) and do not silently rewrite the driver CPU.
   if (HasSIMD)
     Builder.defineMacro("__HAYDN_FEATURE_SIMD__");
 }
@@ -227,15 +241,48 @@ ArrayRef<TargetInfo::GCCRegAlias> HaydnTargetInfo::getGCCRegAliases() const {
 
 bool HaydnTargetInfo::validateAsmConstraint(
     const char *&Name, TargetInfo::ConstraintInfo &Info) const {
-  // Basic register constraints. 'd' (DR64) rejected until backend implements
-  // a real DR constraint path (A.4 — was silently accepted with weak lower).
+  // AIE validateAsmConstraint returns false for every letter
+  // (llvm-aie clang/lib/Basic/Targets/AIE.h:134). Haydn cannot follow
+  // that: the two-bank CC has a typed DR64 file. Peer is RISCV 'f'
+  // (RISCV.cpp:91) — one letter, setAllowsRegister, no memory/imm.
   switch (*Name) {
-  case 'r': // General purpose register (GPR)
+  case 'r':
+  case 'd':
     Info.setAllowsRegister();
     return true;
   default:
     return false;
   }
+}
+
+static bool validateHaydnAsmOperandSize(StringRef Constraint, unsigned Size) {
+  // X86.cpp:1730 strips "=+&" then checks the letter. Haydn also
+  // strips '%' (early-clobber twin). 'r' is GPR32; i64/f64 must use 'd'.
+  Constraint = Constraint.ltrim("=+&%");
+  if (Constraint.empty())
+    return true;
+  switch (Constraint[0]) {
+  case 'r':
+    return Size <= 32;
+  case 'd':
+    return Size == 64;
+  default:
+    return true;
+  }
+}
+
+bool HaydnTargetInfo::validateOutputSize(const llvm::StringMap<bool> &FeatureMap,
+                                         StringRef Constraint,
+                                         unsigned Size) const {
+  (void)FeatureMap;
+  return validateHaydnAsmOperandSize(Constraint, Size);
+}
+
+bool HaydnTargetInfo::validateInputSize(const llvm::StringMap<bool> &FeatureMap,
+                                        StringRef Constraint,
+                                        unsigned Size) const {
+  (void)FeatureMap;
+  return validateHaydnAsmOperandSize(Constraint, Size);
 }
 
 static constexpr unsigned NumBuiltins =

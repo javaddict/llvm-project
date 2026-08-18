@@ -28,7 +28,8 @@ namespace {
 /// Key facts:
 ///   * GPR32 arguments: R1-R7 (R0 is hard-reserved as soft-zero).
 ///   * DR64 arguments (i64/f64/SIMD): D0-D3.
-///   * Scalar i32 returns go in R1-R2; i64/SIMD returns go in D0-D3.
+///   * Scalar i32 / pointer / f32 returns go in R1. i64 / f64 / 64-bit
+///     SIMD returns go in D0 only (R2 is IR-pair only; no D1 return bank).
 ///   * Product contract: stack alignment is 8 bytes.
 ///   * Aggregates are passed Indirect as a plain pointer (no byval).
 ///
@@ -61,9 +62,18 @@ public:
     return getContext().getTypeSize(Ty) == 32;
   }
 
+  ABIArgInfo classifyIndirectNoByVal(QualType Ty) const {
+    return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
+                                   /*ByVal=*/false);
+  }
+
   /// Classify an argument. Aggregates → Indirect, ByVal=false (pointer in
   /// R1–R7 / stack). 64b SIMD → Direct (DR); 32b residual SIMD → Direct
-  /// (GPR). Scalars follow DefaultABIInfo.
+  /// (GPR). Overaligned scalars stay Direct: bits travel in a register or
+  /// an 8-byte CC slot and are copied into an aligned local (AArch64
+  /// EmitAAPCSVAArg copies, it does not invent a second CC). Aggregates
+  /// with align > 8 keep that align on the Indirect object; FrameLowering
+  /// realigns static MaxAlign (RISCVFrameLowering.cpp:1142-1153).
   ABIArgInfo classifyHaydnArgumentType(QualType Ty) const {
     Ty = useFirstFieldIfTransparentUnion(Ty);
 
@@ -76,8 +86,7 @@ public:
       if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(Ty, getCXXABI()))
         return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
                                        RAA == CGCXXABI::RAA_DirectInMemory);
-      return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
-                                     /*ByVal=*/false);
+      return classifyIndirectNoByVal(Ty);
     }
 
     return classifyArgumentType(Ty);
@@ -91,13 +100,11 @@ public:
   ///     pointer in R1 (Indirect). Haydn has no multi-GPR aggregate return
   ///     bank beyond R1–R2 for scalar i32; large/struct returns always use
   ///     caller-allocated memory via sret (DefaultABIInfo policy).
-  ///   * Scalars (i32/i64/f64/…) → DefaultABIInfo (R1–R2 / D0).
+  ///   * Scalars follow DefaultABIInfo width (i32 in GPR / R1; i64/f64 in D0).
   ABIArgInfo classifyHaydnReturnType(QualType RetTy) const {
     if (isHaydnDR64Vector(RetTy) || isHaydnGPR32Vector(RetTy))
       return ABIArgInfo::getDirect();
 
-    // Explicit aggregate → sret (Indirect). Equivalent to DefaultABIInfo but
-    // documented here so the Haydn no-byval / sret contract is local.
     if (isAggregateTypeForABI(RetTy))
       return getNaturalAlignIndirect(RetTy,
                                      getDataLayout().getAllocaAddrSpace());
@@ -114,12 +121,14 @@ public:
   RValue EmitVAArg(CodeGenFunction &CGF, Address VAListAddr, QualType Ty,
                    AggValueSlot Slot) const override {
     // Structured AArch64-style va_list is handled in the backend (VASTART /
-    // VAARG). For aggregates this loads a pointer (Indirect, ByVal=false).
+    // G_VAARG). Classify first so aggregates and overaligned values become
+    // Indirect: EmitVAArgInstr then emits `va_arg` of pointer type (P0),
+    // which the legalizer walks on the GPR cursor. Direct i32/i64 stay
+    // G_VAARG of the value type (GPR / DR cursor). Never emit byval —
+    // contents in 8-byte pointer slots overlap (va-arg-22).
+    const ABIArgInfo AI = classifyHaydnArgumentType(Ty);
     return CGF.EmitLoadOfAnyValue(
-        CGF.MakeAddrLValue(
-            EmitVAArgInstr(CGF, VAListAddr, Ty, classifyHaydnArgumentType(Ty)),
-            Ty),
-        Slot);
+        CGF.MakeAddrLValue(EmitVAArgInstr(CGF, VAListAddr, Ty, AI), Ty), Slot);
   }
 };
 

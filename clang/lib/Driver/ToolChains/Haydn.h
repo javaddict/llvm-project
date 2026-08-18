@@ -10,8 +10,10 @@
 // minimal `Triple::haydn` dispatch that forwards here.
 //
 //   1. `getDefaultHaydnLinker()` — always ld.lld (no system ld).
-//   2. `addHaydnLinkArgs(...)` — reserved hook; currently a no-op. Haydn
-//      uses the normal baremetal link set (compiler-rt / llvm-libc).
+//   2. `addHaydnLinkArgs(...)` — `--nmagic` (AIE AIE.cpp:36; 12-byte
+//      parcel vs 4 KiB page) and matching-sysroot `-lm` when
+//      `$sysroot/lib/libm.a` exists (AIE AIE.cpp:42-43). No private
+//      libhaydn.a / haydn.ld auto-injection (product ld is install-owned).
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,8 +30,9 @@ namespace toolchains {
 // Returns the default linker executable for Haydn baremetal targets.
 const char *getDefaultHaydnLinker();
 
-// Optional Haydn-specific linker args. Currently empty — runtime comes from
-// the configured sysroot (llvm-libc), not a private libhaydn archive.
+// Optional Haydn-specific linker args. `--nmagic` keeps the exec pack on
+// EncodedBytes. Soft-float `-lm` comes from the matching sysroot `libm.a`
+// when present. Product `haydn.ld` is not auto-injected.
 void addHaydnLinkArgs(const ToolChain &TC, const llvm::Triple &Triple,
                       const llvm::opt::ArgList &Args,
                       llvm::opt::ArgStringList &CmdArgs);

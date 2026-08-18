@@ -22,7 +22,9 @@
 // GENERIC-DAG: #define __HAYDN_FEATURE_AGU__ 1
 // GENERIC-DAG: #define __HAYDN_FEATURE_HWLOOP__ 1
 // GENERIC-DAG: #define __HAYDN_LE__ 1
+// GENERIC-DAG: #define __HAYDN_SOFT_FLOAT__ 1
 // GENERIC-DAG: #define __HAYDN__ 1
+// GENERIC-DAG: #define __SOFTFP__ 1
 // GENERIC-DAG: #define __haydn_32__ 1
 // GENERIC-DAG: #define __haydn_LE__ 1
 // GENERIC-DAG: #define __haydn__ 1

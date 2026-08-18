@@ -1,8 +1,7 @@
 // RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %s | FileCheck %s
 //
-// Inline asm constraints for Haydn. Constraint 'd' (DR64) is rejected at Sema
-// until the backend implements a real DR constraint path (A.4) — covered by
-// Sema/haydn-feature-gates.c, not here.
+// Inline asm: 'r' is GPR32, 'd' is DR64. Size mismatches and 'm'/'i' stay
+// Sema-reject (Sema/haydn-feature-gates.c).
 
 // Basic register constraint 'r' for GPR (R0-R15)
 int test_gpr_constraint(int a, int b) {
@@ -50,4 +49,15 @@ void test_lr_register(void) {
     // CHECK: call void asm sideeffect
     // CHECK-SAME: "{lr}"
     asm volatile("" : : "r"(lr));
+}
+
+// DR64 file constraint. Backend getRegForInlineAsmConstraint maps 'd' to
+// DR64RegClass; C Sema now accepts the same constraint on 64-bit values.
+long long test_dr_constraint(long long a) {
+    long long result;
+    // CHECK: define dso_local i64 @test_dr_constraint(i64 noundef %a)
+    // CHECK: call i64 asm
+    // CHECK-SAME: "=d,d"
+    asm("" : "=d"(result) : "d"(a));
+    return result;
 }

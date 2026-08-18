@@ -12,14 +12,11 @@
 // buffer / bit-reversed stay opt-in on -mcpu=haydn. Silently defaulting
 // the driver to -mcpu=haydn would contradict that policy.
 //
-// haydn_dsp.h includes generated haydn.h, whose always_inline SIMD
-// wrappers call gated builtins. Plain triple therefore fails with the
-// existing Sema feature diagnostic (not a silent empty header). This
-// test pins that the diagnostic exists. Feature-gating wrapper bodies
-// in haydn_dsp.h is a single-owner residual (do not edit that header
-// here). Residual: -fsyntax-only -include haydn_dsp.h at the plain
-// triple still emits many feature errors, not one wrapper diagnostic.
+// haydn_dsp.h fail-closes on generic (agu+hwloop) with one #error before
+// including generated haydn.h (peer: xmmintrin.h:13-15). Do not silently
+// default -mcpu=haydn. -target-cpu haydn still compiles.
 //
-// GENERIC: needs target feature simd
+// GENERIC: haydn_dsp.h needs target feature simd
+// GENERIC-NOT: always_inline
 
 #include <haydn_dsp.h>

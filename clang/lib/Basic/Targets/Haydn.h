@@ -35,7 +35,8 @@ namespace targets {
 /// Builtin availability is gated via BuiltinsHaydn.td Features= strings
 /// against this map.
 /// getTargetDefines emits __HAYDN_ARCH__ + per-ISA capability macros
-/// (agu / circular-buffer / bit-reversed / hwloop / simd). Never exposes
+/// (agu / circular-buffer / bit-reversed / hwloop / simd) plus the
+/// soft-float identity (__SOFTFP__ / __HAYDN_SOFT_FLOAT__). Never exposes
 /// bundle FormatID, slot suffixes, or AltDesc.
 class LLVM_LIBRARY_VISIBILITY HaydnTargetInfo : public TargetInfo {
   // Mirror of subtarget feature flags (handleTargetFeatures).
@@ -94,6 +95,10 @@ public:
 
   bool validateAsmConstraint(const char *&Name,
                              TargetInfo::ConstraintInfo &Info) const override;
+  bool validateOutputSize(const llvm::StringMap<bool> &FeatureMap,
+                          StringRef Constraint, unsigned Size) const override;
+  bool validateInputSize(const llvm::StringMap<bool> &FeatureMap,
+                         StringRef Constraint, unsigned Size) const override;
 
   std::string_view getClobbers() const override { return ""; }
 

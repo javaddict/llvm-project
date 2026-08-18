@@ -13,7 +13,9 @@
 // MACROS-DAG: #define __HAYDN_FEATURE_AGU__ 1
 // MACROS-DAG: #define __HAYDN_FEATURE_HWLOOP__ 1
 // MACROS-DAG: #define __HAYDN_LE__ 1
+// MACROS-DAG: #define __HAYDN_SOFT_FLOAT__ 1
 // MACROS-DAG: #define __HAYDN__ 1
+// MACROS-DAG: #define __SOFTFP__ 1
 // MACROS-NOT: #define __HAYDN_FEATURE_SIMD__
 // MACROS-NOT: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__
 

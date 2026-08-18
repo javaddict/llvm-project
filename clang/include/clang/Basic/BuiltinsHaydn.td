@@ -721,7 +721,7 @@ def srai32r : HaydnBuiltin<"int(int, int)"> {
   let PublicPrototype = "int(int, int)";
   let Mnemonic = "SRAI32R";
   let ImmChecks = [ImmCheck<1, ImmCheck0_31>];
-  let Semantics = "32-bit arithmetic right with rounding by uimm5 (golden SRAI32R). Variable: haydn_sra32r.";
+  let Semantics = "32-bit arithmetic right with rounding by uimm5 (golden SRAI32R). If uimm5 > 0, a rounding bias of 1 << (uimm5-1) is added before the arithmetic right shift; uimm5 == 0 is identity. Variable: haydn_sra32r.";
 }
 def sll32 : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "sll32";
@@ -1944,7 +1944,7 @@ def sra64r : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "sra64r";
   let PublicPrototype = "int64_t(int64_t, int)";
   let Mnemonic = "SRA64R";
-  let Semantics = "64-bit arithmetic variable right shift with rounding of rsd by amount in rs (DB SRA64R). Immediate twin: haydn_srai64r. Pack-to-i32 composites cast the low 32 bits in haydn_dsp.h.";
+  let Semantics = "64-bit arithmetic variable right shift with rounding of rsd by amount in rs (DB SRA64R). If the shift amount > 0, a rounding bias of 1 << (shift-1) is added before the arithmetic right shift; shift 0 is identity. Immediate twin: haydn_srai64r. Pack-to-i32 composites (haydn_packsr32) cast the low 32 bits in haydn_dsp.h. SOURCE-REVALIDATE does not apply to this admitted rounding bias.";
 }
 def srl64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
   let PublicName = "srl64";
@@ -2992,13 +2992,13 @@ def x2sra32r : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, int)", "simd
   let PublicName = "x2sra32r";
   let PublicPrototype = "haydn_x2int32(haydn_x2int32, int)";
   let Mnemonic = "X2SRA32R";
-  let Semantics = "performs two parallel 32-bit variable arithmetic right shifts with rounding, or logical left shifts, depending on the sign of the shift amount. The shift amount simm6 is a signed 6-bit value extrac...";
+  let Semantics = "performs two parallel 32-bit variable arithmetic right shifts with rounding, or logical left shifts, depending on the sign of the shift amount. The shift amount simm6 is a signed 6-bit value extracted from rs. For a positive shift, each lane adds a rounding bias of 1 << (shift-1) before ASR; shift 0 is identity.";
 }
 def x4sra16r : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, int)", "simd"> {
   let PublicName = "x4sra16r";
   let PublicPrototype = "haydn_x4int16(haydn_x4int16, int)";
   let Mnemonic = "X4SRA16R";
-  let Semantics = "performs four parallel 16-bit variable arithmetic right shifts with rounding, or logical left shifts, by a signed 5-bit amount from register rs. The shift amount simm5 is extracted from rs[4:0] and...";
+  let Semantics = "performs four parallel 16-bit variable arithmetic right shifts with rounding, or logical left shifts, by a signed 5-bit amount from register rs. The shift amount simm5 is extracted from rs[4:0]. For a positive shift, each lane adds a rounding bias of 1 << (shift-1) before ASR; shift 0 is identity.";
 }
 def x2hadd32_h : HaydnBuiltin<"int64_t(_ExtVector<2, int>)", "simd"> {
   let PublicName = "x2hadd32_h";
@@ -5681,6 +5681,8 @@ def AE_MULF16SS_00 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs00"> {
   let OracleId = "emu.mulf16ss_00";
 }
 def AE_MULAAAAQ16 : HaydnAeCompatDef<"EMULATED", "haydn_fmulaa16_hs_11_00"> {
+  // Unnamed under default strict so vec_dot16 takes AE_MULAF16X4SS.
+  // Body exists only under __HAYDN_ALLOW_INEXACT_AE.
   let OracleId = "emu.mulaaaaq16";
 }
 def AE_MULSSSSQ16 : HaydnAeCompatDef<"EMULATED", "haydn_fmulss16_hs_11_00"> {
@@ -6656,6 +6658,8 @@ def AE_MULAAR16P16X4S_ : HaydnAeCompatDef<"EMULATED", "haydn_x4mula16s"> {
   let OracleId = "emu.mulaar16p16x4s_";
 }
 def AE_MULAF16X4SS : HaydnAeCompatDef<"EMULATED", "haydn_dpair_t+haydn_x4mula16s"> {
+  // Dest-typed writeback bitcasts each i64 dest onto ae_f32x2 / ae_int64.
+  // A C scalar-to-vector cast is a low-lane splat and is not this map.
   let OracleId = "emu.mulaf16x4ss";
 }
 def AE_MULSF16X4SS : HaydnAeCompatDef<"EMULATED", "overload"> {
@@ -6872,10 +6876,10 @@ def AE_MULAAFD32X16_H0_L1 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll
 def AE_MULZAAD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulzaa32rs_hhll+haydn_dr64_t"> {
   let OracleId = "emu.mulzaad32x16_h3_l2";
 }
-def AE_MULAAD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll+haydn_dr64_t"> {
+def AE_MULAAD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hh+haydn_mula64_ss_ll+haydn_movda32x2"> {
   let OracleId = "emu.mulaad32x16_h1_l0";
 }
-def AE_MULAAD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll+haydn_dr64_t"> {
+def AE_MULAAD32X16_H3_L2 : HaydnAeCompatDef<"EMULATED", "haydn_mula64_ss_hh+haydn_mula64_ss_ll+haydn_movda32x2"> {
   let OracleId = "emu.mulaad32x16_h3_l2";
 }
 def AE_MOVF16X4_FROMF32X2 : HaydnAeCompatDef<"EMULATED", "haydn_dr64_t"> {

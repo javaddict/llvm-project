@@ -16,15 +16,39 @@ __int128 unsupported_i128;
 // expected-error@+1 {{_Float16 is not supported on this target}}
 _Float16 unsupported_f16;
 
-// GPR constraint OK
+// GPR constraint OK on i32. i64 must use 'd' (no silent DR rebind).
 void ok_r(void) {
   int x;
   __asm__ volatile("" : "=r"(x));
 }
 
-// DR constraint rejected until backend implements 'd'
-void bad_d(void) {
+void ok_d(void) {
   long long x;
-  // expected-error@+1 {{invalid output constraint '=d' in asm}}
   __asm__ volatile("" : "=d"(x));
+}
+
+void bad_r_i64(void) {
+  long long x;
+  // expected-error@+1 {{invalid output size for constraint '=r'}}
+  __asm__ volatile("" : "=r"(x));
+}
+
+void bad_d_i32(void) {
+  int x;
+  // expected-error@+1 {{invalid output size for constraint '=d'}}
+  __asm__ volatile("" : "=d"(x));
+}
+
+void bad_q(void) {
+  int x;
+  // expected-error@+1 {{invalid output constraint '=q' in asm}}
+  __asm__ volatile("" : "=q"(x));
+}
+
+// Immediate constraints are not a product surface. 'm' is a Clang-generic
+// memory letter; backend still has no product mem constraint lowering.
+void bad_i(void) {
+  int x;
+  // expected-error@+1 {{invalid output constraint '=i' in asm}}
+  __asm__ volatile("" : "=i"(x));
 }

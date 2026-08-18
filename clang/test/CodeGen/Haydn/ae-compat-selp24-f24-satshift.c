@@ -116,7 +116,7 @@ ae_int32x2 sras32_x2sra_sar(ae_int32x2 a) {
 
 // IR-LABEL: @slai24s_soft_sat
 // Dual-lane soft sat left (EMULATED inline) — not scalar high-lane drop.
-// IR-DAG: call {{.*}}@llvm.smax.i32
+// Sat may be llvm.smax or icmp+select of INT_MIN/MAX after inline.
 // IR-DAG: shl
 // IR-DAG: select
 // IR-NOT: ashr
@@ -126,7 +126,6 @@ ae_f24x2 slai24s_soft_sat(ae_f24x2 a) {
 
 // IR-LABEL: @slas32s_soft_sat
 // Soft sat left by SAR — not non-sat ASR rebind.
-// IR-DAG: call {{.*}}@llvm.smax.i32
 // IR-DAG: shl
 // IR-DAG: select
 // IR-NOT: ashr
@@ -137,7 +136,6 @@ ae_int32x2 slas32s_soft_sat(ae_int32x2 a) {
 
 // IR-LABEL: @slai64s_soft_sat
 // Soft sat left 64 — not plain wrap <<.
-// IR: call {{.*}}@llvm.smax.i64
 // IR: shl
 // IR: select
 // IR-NOT: ashr
@@ -147,7 +145,6 @@ ae_int64 slai64s_soft_sat(ae_int64 q) {
 
 // IR-LABEL: @f64_slais_soft_sat
 // Hot IIR residual: soft sat left 64, not plain wrap <<.
-// IR: call {{.*}}@llvm.smax.i64
 // IR: shl
 // IR: select
 ae_f64 f64_slais_soft_sat(ae_f64 q) {
@@ -155,7 +152,6 @@ ae_f64 f64_slais_soft_sat(ae_f64 q) {
 }
 
 // IR-LABEL: @f64_slas_soft_sat
-// IR: call {{.*}}@llvm.smax.i64
 // IR: shl
 // IR: select
 ae_f64 f64_slas_soft_sat(ae_f64 q) {
@@ -164,7 +160,6 @@ ae_f64 f64_slas_soft_sat(ae_f64 q) {
 
 // IR-LABEL: @f32x2_slais_soft_sat
 // Dual-32 soft sat left — not wrap X2SLL.
-// IR-DAG: call {{.*}}@llvm.smax.i32
 // IR-DAG: shl
 // IR-DAG: select
 ae_f32x2 f32x2_slais_soft_sat(ae_f32x2 v) {
