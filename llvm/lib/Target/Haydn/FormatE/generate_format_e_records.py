@@ -3408,18 +3408,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # tie, so members stay at logical arity and the gap is a ledger item
     # (conditional moves / partial-word inserts with unmodeled dest reads).
     # Measured, pinned: a regen that changes this set must be re-audited.
-    # 2026-08-18 v2_1 re-audit history: 87 -> 159 when v2_1's fuller index
-    # Read_Port rows added the (then untied) 32X16 accumulator family; back
-    # to 87 the same day when the generated logical defs (HaydnInstrInfo
-    # Golden.td.inc) tied those 72 accumulators per this same golden law
-    # (CB-152c). The remaining 87 = older hand defs deliberately untied
-    # (conditional moves / partial-word inserts with unmodeled dest reads;
-    # SMULA16_*/FMULS16_*/MOVEI_*/MOVT64/MOVF64/CLAMP/MULSA*/MULSS32_*).
+    # History: 87 -> 159 (2026-08-18 v2_1 index Read_Port growth) -> 87
+    # (generated defs tied the 72 32X16 accumulators) -> 46 (2026-08-19
+    # S2b: the SMULA16/SMULA16S/SMULS16/SMULS16S families migrated to
+    # generated defs, which tie them per the golden law — CB-152c — and
+    # their HaydnIntrinsics.td Pats moved to the tied 3-op form). The
+    # remaining 46 are still-hand defs deliberately untied (F2MULAS32*,
+    # FMULS16_HS/LS, FMULAA16/SS16 pairs, MOVEI_*, MOVF64/MOVT64,
+    # MULSA32/MULSS32, X4CLAMP16); each closes when its family migrates.
     divergent_non_ls = [
         k for k in divergent
         if not k.startswith(("D_", "S_", "PLD", "WBAR"))
     ]
-    if len(divergent_non_ls) != 87:
+    if len(divergent_non_ls) != 45:
         raise SystemExit(
             "error: golden-tied-but-TD-untied set changed "
             f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "

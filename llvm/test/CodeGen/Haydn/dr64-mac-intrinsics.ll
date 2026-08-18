@@ -901,83 +901,83 @@ define i32 @test_mac32(i32 %a, i32 %b, i32 %c) {
 ; SMULA16 — Signed 16-bit MAC with lane selection (non-saturating)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.smula16.00(i64, i64)
-declare i64 @llvm.haydn.smula16.10(i64, i64)
-declare i64 @llvm.haydn.smula16.11(i64, i64)
-declare i64 @llvm.haydn.smula16.20(i64, i64)
-declare i64 @llvm.haydn.smula16.21(i64, i64)
-declare i64 @llvm.haydn.smula16.22(i64, i64)
-declare i64 @llvm.haydn.smula16.30(i64, i64)
-declare i64 @llvm.haydn.smula16.31(i64, i64)
-declare i64 @llvm.haydn.smula16.32(i64, i64)
-declare i64 @llvm.haydn.smula16.33(i64, i64)
+declare i64 @llvm.haydn.smula16.00(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.10(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.11(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.20(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.21(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.22(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.30(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.31(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.32(i64, i64, i64)
+declare i64 @llvm.haydn.smula16.33(i64, i64, i64)
 define i64 @test_smula16_00(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_00:
 ; CHECK: smula16_00
-  %r = call i64 @llvm.haydn.smula16.00(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.00(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_10(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_10:
 ; CHECK: smula16_10
-  %r = call i64 @llvm.haydn.smula16.10(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.10(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_11(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_11:
 ; CHECK: smula16_11
-  %r = call i64 @llvm.haydn.smula16.11(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.11(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_20(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_20:
 ; CHECK: smula16_20
-  %r = call i64 @llvm.haydn.smula16.20(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.20(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_21(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_21:
 ; CHECK: smula16_21
-  %r = call i64 @llvm.haydn.smula16.21(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.21(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_22(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_22:
 ; CHECK: smula16_22
-  %r = call i64 @llvm.haydn.smula16.22(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.22(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_30(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_30:
 ; CHECK: smula16_30
-  %r = call i64 @llvm.haydn.smula16.30(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.30(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_31(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_31:
 ; CHECK: smula16_31
-  %r = call i64 @llvm.haydn.smula16.31(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.31(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_32(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_32:
 ; CHECK: smula16_32
-  %r = call i64 @llvm.haydn.smula16.32(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.32(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16_33(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16_33:
 ; CHECK: smula16_33
-  %r = call i64 @llvm.haydn.smula16.33(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16.33(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
@@ -985,83 +985,83 @@ define i64 @test_smula16_33(i64 %a, i64 %b) {
 ; SMULA16S — Signed 16-bit saturating MAC with lane selection
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.smula16s.00(i64, i64)
-declare i64 @llvm.haydn.smula16s.10(i64, i64)
-declare i64 @llvm.haydn.smula16s.11(i64, i64)
-declare i64 @llvm.haydn.smula16s.20(i64, i64)
-declare i64 @llvm.haydn.smula16s.21(i64, i64)
-declare i64 @llvm.haydn.smula16s.22(i64, i64)
-declare i64 @llvm.haydn.smula16s.30(i64, i64)
-declare i64 @llvm.haydn.smula16s.31(i64, i64)
-declare i64 @llvm.haydn.smula16s.32(i64, i64)
-declare i64 @llvm.haydn.smula16s.33(i64, i64)
+declare i64 @llvm.haydn.smula16s.00(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.10(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.11(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.20(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.21(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.22(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.30(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.31(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.32(i64, i64, i64)
+declare i64 @llvm.haydn.smula16s.33(i64, i64, i64)
 define i64 @test_smula16s_00(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_00:
 ; CHECK: smula16s_00
-  %r = call i64 @llvm.haydn.smula16s.00(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.00(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_10(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_10:
 ; CHECK: smula16s_10
-  %r = call i64 @llvm.haydn.smula16s.10(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.10(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_11(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_11:
 ; CHECK: smula16s_11
-  %r = call i64 @llvm.haydn.smula16s.11(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.11(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_20(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_20:
 ; CHECK: smula16s_20
-  %r = call i64 @llvm.haydn.smula16s.20(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.20(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_21(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_21:
 ; CHECK: smula16s_21
-  %r = call i64 @llvm.haydn.smula16s.21(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.21(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_22(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_22:
 ; CHECK: smula16s_22
-  %r = call i64 @llvm.haydn.smula16s.22(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.22(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_30(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_30:
 ; CHECK: smula16s_30
-  %r = call i64 @llvm.haydn.smula16s.30(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.30(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_31(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_31:
 ; CHECK: smula16s_31
-  %r = call i64 @llvm.haydn.smula16s.31(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.31(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_32(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_32:
 ; CHECK: smula16s_32
-  %r = call i64 @llvm.haydn.smula16s.32(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.32(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smula16s_33(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smula16s_33:
 ; CHECK: smula16s_33
-  %r = call i64 @llvm.haydn.smula16s.33(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smula16s.33(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
@@ -1069,43 +1069,43 @@ define i64 @test_smula16s_33(i64 %a, i64 %b) {
 ; SMULS16 — Signed 16-bit multiply-subtract (non-saturating)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.smuls16.00(i64, i64)
-declare i64 @llvm.haydn.smuls16.10(i64, i64)
-declare i64 @llvm.haydn.smuls16.11(i64, i64)
-declare i64 @llvm.haydn.smuls16.22(i64, i64)
-declare i64 @llvm.haydn.smuls16.33(i64, i64)
+declare i64 @llvm.haydn.smuls16.00(i64, i64, i64)
+declare i64 @llvm.haydn.smuls16.10(i64, i64, i64)
+declare i64 @llvm.haydn.smuls16.11(i64, i64, i64)
+declare i64 @llvm.haydn.smuls16.22(i64, i64, i64)
+declare i64 @llvm.haydn.smuls16.33(i64, i64, i64)
 define i64 @test_smuls16_00(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16_00:
 ; CHECK: smuls16_00
-  %r = call i64 @llvm.haydn.smuls16.00(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16.00(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smuls16_10(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16_10:
 ; CHECK: smuls16_10
-  %r = call i64 @llvm.haydn.smuls16.10(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16.10(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smuls16_11(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16_11:
 ; CHECK: smuls16_11
-  %r = call i64 @llvm.haydn.smuls16.11(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16.11(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smuls16_22(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16_22:
 ; CHECK: smuls16_22
-  %r = call i64 @llvm.haydn.smuls16.22(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16.22(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smuls16_33(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16_33:
 ; CHECK: smuls16_33
-  %r = call i64 @llvm.haydn.smuls16.33(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16.33(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
@@ -1113,35 +1113,35 @@ define i64 @test_smuls16_33(i64 %a, i64 %b) {
 ; SMULS16S — Signed 16-bit saturating multiply-subtract
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.smuls16s.00(i64, i64)
-declare i64 @llvm.haydn.smuls16s.11(i64, i64)
-declare i64 @llvm.haydn.smuls16s.22(i64, i64)
-declare i64 @llvm.haydn.smuls16s.33(i64, i64)
+declare i64 @llvm.haydn.smuls16s.00(i64, i64, i64)
+declare i64 @llvm.haydn.smuls16s.11(i64, i64, i64)
+declare i64 @llvm.haydn.smuls16s.22(i64, i64, i64)
+declare i64 @llvm.haydn.smuls16s.33(i64, i64, i64)
 define i64 @test_smuls16s_00(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16s_00:
 ; CHECK: smuls16s_00
-  %r = call i64 @llvm.haydn.smuls16s.00(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16s.00(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smuls16s_11(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16s_11:
 ; CHECK: smuls16s_11
-  %r = call i64 @llvm.haydn.smuls16s.11(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16s.11(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smuls16s_22(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16s_22:
 ; CHECK: smuls16s_22
-  %r = call i64 @llvm.haydn.smuls16s.22(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16s.22(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_smuls16s_33(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_smuls16s_33:
 ; CHECK: smuls16s_33
-  %r = call i64 @llvm.haydn.smuls16s.33(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.smuls16s.33(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 

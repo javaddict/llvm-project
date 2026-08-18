@@ -445,10 +445,10 @@ def : Pat<(int_haydn_x4cmul16_f2  DR64:$a), (X4CMUL16_F2  DR64:$a)>;
 // X2/X4 binary (DR64 binary)
 def : Pat<(int_haydn_x2max32   DR64:$a, DR64:$b), (X2MAX32   DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x2min32   DR64:$a, DR64:$b), (X2MIN32   DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x2clamp32 DR64:$a, DR64:$b), (X2CLAMP32 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x2clamp32 DR64:$v, DR64:$lo, DR64:$hi), (X2CLAMP32 DR64:$v, DR64:$lo, DR64:$hi)>;
 def : Pat<(int_haydn_x4max16   DR64:$a, DR64:$b), (X4MAX16   DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_x4min16   DR64:$a, DR64:$b), (X4MIN16   DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_x4clamp16 DR64:$a, DR64:$b), (X4CLAMP16 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_x4clamp16 DR64:$v, DR64:$lo, DR64:$hi), (X4CLAMP16 DR64:$v, DR64:$lo, DR64:$hi)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: Shuffle/Pack ops
@@ -511,61 +511,61 @@ def : Pat<(int_haydn_sub64_l DR64:$a, DR64:$b), (SUB64_L DR64:$a, DR64:$b)>;
 // Wave 4 Tier 3: SMULA16 — Signed 16-bit MAC with lane selection (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_smula16_00 DR64:$a, DR64:$b), (SMULA16_00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_10 DR64:$a, DR64:$b), (SMULA16_10 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_11 DR64:$a, DR64:$b), (SMULA16_11 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_20 DR64:$a, DR64:$b), (SMULA16_20 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_21 DR64:$a, DR64:$b), (SMULA16_21 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_22 DR64:$a, DR64:$b), (SMULA16_22 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_30 DR64:$a, DR64:$b), (SMULA16_30 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_31 DR64:$a, DR64:$b), (SMULA16_31 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_32 DR64:$a, DR64:$b), (SMULA16_32 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16_33 DR64:$a, DR64:$b), (SMULA16_33 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_00 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_10 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_10 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_11 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_11 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_20 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_20 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_21 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_21 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_22 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_22 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_30 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_30 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_31 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_31 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_32 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_32 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16_33 DR64:$acc, DR64:$a, DR64:$b), (SMULA16_33 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: SMULA16S — Signed 16-bit saturating MAC (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_smula16s_00 DR64:$a, DR64:$b), (SMULA16S_00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_10 DR64:$a, DR64:$b), (SMULA16S_10 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_11 DR64:$a, DR64:$b), (SMULA16S_11 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_20 DR64:$a, DR64:$b), (SMULA16S_20 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_21 DR64:$a, DR64:$b), (SMULA16S_21 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_22 DR64:$a, DR64:$b), (SMULA16S_22 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_30 DR64:$a, DR64:$b), (SMULA16S_30 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_31 DR64:$a, DR64:$b), (SMULA16S_31 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_32 DR64:$a, DR64:$b), (SMULA16S_32 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smula16s_33 DR64:$a, DR64:$b), (SMULA16S_33 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_00 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_10 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_10 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_11 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_11 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_20 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_20 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_21 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_21 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_22 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_22 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_30 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_30 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_31 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_31 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_32 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_32 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smula16s_33 DR64:$acc, DR64:$a, DR64:$b), (SMULA16S_33 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: SMULS16 — Signed 16-bit multiply-subtract (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_smuls16_00 DR64:$a, DR64:$b), (SMULS16_00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_10 DR64:$a, DR64:$b), (SMULS16_10 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_11 DR64:$a, DR64:$b), (SMULS16_11 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_20 DR64:$a, DR64:$b), (SMULS16_20 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_21 DR64:$a, DR64:$b), (SMULS16_21 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_22 DR64:$a, DR64:$b), (SMULS16_22 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_30 DR64:$a, DR64:$b), (SMULS16_30 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_31 DR64:$a, DR64:$b), (SMULS16_31 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_32 DR64:$a, DR64:$b), (SMULS16_32 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16_33 DR64:$a, DR64:$b), (SMULS16_33 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_00 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_10 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_10 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_11 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_11 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_20 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_20 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_21 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_21 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_22 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_22 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_30 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_30 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_31 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_31 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_32 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_32 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16_33 DR64:$acc, DR64:$a, DR64:$b), (SMULS16_33 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: SMULS16S — Signed 16-bit saturating multiply-subtract (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_smuls16s_00 DR64:$a, DR64:$b), (SMULS16S_00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_10 DR64:$a, DR64:$b), (SMULS16S_10 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_11 DR64:$a, DR64:$b), (SMULS16S_11 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_20 DR64:$a, DR64:$b), (SMULS16S_20 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_21 DR64:$a, DR64:$b), (SMULS16S_21 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_22 DR64:$a, DR64:$b), (SMULS16S_22 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_30 DR64:$a, DR64:$b), (SMULS16S_30 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_31 DR64:$a, DR64:$b), (SMULS16S_31 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_32 DR64:$a, DR64:$b), (SMULS16S_32 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_smuls16s_33 DR64:$a, DR64:$b), (SMULS16S_33 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_00 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_10 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_10 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_11 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_11 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_20 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_20 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_21 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_21 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_22 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_22 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_30 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_30 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_31 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_31 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_32 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_32 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_smuls16s_33 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_33 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: FMULS16 — Fractional 16-bit multiply-subtract (binary DR64)

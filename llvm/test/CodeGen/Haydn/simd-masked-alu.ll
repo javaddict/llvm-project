@@ -102,7 +102,7 @@ define i64 @test_x2clamp32(i64 %a, i64 %b) {
 ; CHECK-DAG: x2clamp32
   %bc.1 = bitcast i64 %a to <2 x i32>
   %bc.2 = bitcast i64 %b to <2 x i32>
-  %call.3 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %bc.1, <2 x i32> %bc.2)
+  %call.3 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %bc.1, <2 x i32> %bc.2, <2 x i32> %bc.1)
   %r = bitcast <2 x i32> %call.3 to i64
   ret i64 %r
 }
@@ -166,7 +166,7 @@ define i64 @test_x4clamp16(i64 %a, i64 %b) {
 ; CHECK-DAG: x4clamp16
   %bc.4 = bitcast i64 %a to <4 x i16>
   %bc.5 = bitcast i64 %b to <4 x i16>
-  %call.6 = call <4 x i16> @llvm.haydn.x4clamp16(<4 x i16> %bc.4, <4 x i16> %bc.5)
+  %call.6 = call <4 x i16> @llvm.haydn.x4clamp16(<4 x i16> %bc.4, <4 x i16> %bc.5, <4 x i16> %bc.4)
   %r = bitcast <4 x i16> %call.6 to i64
   ret i64 %r
 }
@@ -253,7 +253,7 @@ declare <2 x i32> @llvm.haydn.x2add32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2sub32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2max32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2min32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>, <2 x i32>)
 ; X2 cross-lane HLLH (binary DR64)
 declare i64 @llvm.haydn.x2add32_hllh(i64, i64)
 declare i64 @llvm.haydn.x2add32s_hllh(i64, i64)
@@ -267,4 +267,4 @@ declare <4 x i16> @llvm.haydn.x4add16(<4 x i16>, <4 x i16>)
 declare <4 x i16> @llvm.haydn.x4sub16(<4 x i16>, <4 x i16>)
 declare <4 x i16> @llvm.haydn.x4max16(<4 x i16>, <4 x i16>)
 declare <4 x i16> @llvm.haydn.x4min16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4clamp16(<4 x i16>, <4 x i16>)
+declare <4 x i16> @llvm.haydn.x4clamp16(<4 x i16>, <4 x i16>, <4 x i16>)

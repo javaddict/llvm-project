@@ -214,10 +214,10 @@ define dso_local i64 @test_x4cmul16s(i64 %a) {
 
 declare <2 x i32> @llvm.haydn.x2max32(<2 x i32>, <2 x i32>)
 declare <2 x i32> @llvm.haydn.x2min32(<2 x i32>, <2 x i32>)
-declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>)
+declare <2 x i32> @llvm.haydn.x2clamp32(<2 x i32>, <2 x i32>, <2 x i32>)
 declare <4 x i16> @llvm.haydn.x4max16(<4 x i16>, <4 x i16>)
 declare <4 x i16> @llvm.haydn.x4min16(<4 x i16>, <4 x i16>)
-declare <4 x i16> @llvm.haydn.x4clamp16(<4 x i16>, <4 x i16>)
+declare <4 x i16> @llvm.haydn.x4clamp16(<4 x i16>, <4 x i16>, <4 x i16>)
 define dso_local <2 x i32> @test_x2max32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2max32:
 ; CHECK: x2max32
@@ -237,7 +237,7 @@ define dso_local i64 @test_x2clamp32(i64 %a, i64 %b) {
 ; CHECK: x2clamp32
   %bc.10 = bitcast i64 %a to <2 x i32>
   %bc.11 = bitcast i64 %b to <2 x i32>
-  %call.12 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %bc.10, <2 x i32> %bc.11)
+  %call.12 = call <2 x i32> @llvm.haydn.x2clamp32(<2 x i32> %bc.10, <2 x i32> %bc.11, <2 x i32> %bc.10)
   %r = bitcast <2 x i32> %call.12 to i64
   ret i64 %r
 }
@@ -261,7 +261,7 @@ define dso_local i64 @test_x4clamp16(i64 %a, i64 %b) {
 ; CHECK: x4clamp16
   %bc.13 = bitcast i64 %a to <4 x i16>
   %bc.14 = bitcast i64 %b to <4 x i16>
-  %call.15 = call <4 x i16> @llvm.haydn.x4clamp16(<4 x i16> %bc.13, <4 x i16> %bc.14)
+  %call.15 = call <4 x i16> @llvm.haydn.x4clamp16(<4 x i16> %bc.13, <4 x i16> %bc.14, <4 x i16> %bc.13)
   %r = bitcast <4 x i16> %call.15 to i64
   ret i64 %r
 }

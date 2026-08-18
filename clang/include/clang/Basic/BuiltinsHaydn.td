@@ -1138,7 +1138,7 @@ def mulss32_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
 // Golden MAXABS32S: dual 32-bit abs+max lanes (same shape as X2 abs/max family).
 def maxabs32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "maxabs32s";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MAXABS32S";
 }
 def fmul16_hs00 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
@@ -1508,7 +1508,7 @@ def srli64 : HaydnBuiltin<"int64_t(int64_t, int)"> {
 }
 def x4fcmul16rs : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4fcmul16rs";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FCMUL16RS";
   let Semantics = "performs four parallel complex 16×16-bit fixed-point multiplications on packed Q1.15 operands, with rounding back to Q1.15 and saturation. Each source register rsdX is treated as two complex Q1.15 ...";
 }
@@ -1520,7 +1520,7 @@ def x4fcmula16rs : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _Ext
 }
 def x4fcmul16rss : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4fcmul16rss";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FCMUL16RSS";
   let Semantics = "performs four parallel complex 16×16-bit fixed-point multiplications on packed Q1.15 operands, with symmetric rounding back to Q1.15 and saturation. Each source register rsdX is treated as two comp...";
 }
@@ -1542,243 +1542,243 @@ def x2cmul32s_pair : HaydnPairBuiltin<"int64_t(int64_t*, _ExtVector<2, int>, _Ex
   let Mnemonic = "X2CMUL32S";
   let Semantics = "performs a saturated complex multiplication using Format-1 packing of 32-bit complex operands in 64-bit data registers. Each operand is represented as: rsdX[63:32] = real part (signed 32-bit). rsdX... SOURCE-REVALIDATE (T-DSP14): public wrapper vs NatureDSP compatibility ordering remains unqualified.";
 }
-def smula16_00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_00";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_10 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_10 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_10";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_10";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_11 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_11 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_11";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_11";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_20 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_20 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_20";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_20";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_21 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_21 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_21";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_21";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_22";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_30 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_30 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_30";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_30";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_31 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_31 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_31";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_31";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_32 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_32 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_32";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_32";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16_33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16_33 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16_33";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16_33";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extended to 64 ...";
 }
-def smula16s_00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_00";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The selected...";
 }
-def smula16s_10 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_10 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_10";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_10";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_11 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_11 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_11";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_11";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_20 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_20 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_20";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_20";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_21 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_21 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_21";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_21";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_22";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_30 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_30 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_30";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_30";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_31 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_31 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_31";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_31";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_32 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_32 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_32";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_32";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smula16s_33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smula16s_33 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smula16s_33";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULA16S_33";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_00";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The 32-bit product is sign-extend...";
 }
-def smuls16_10 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_10 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_10";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_10";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_11 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_11 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_11";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_11";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_20 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_20 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_20";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_20";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_21 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_21 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_21";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_21";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_22";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_30 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_30 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_30";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_30";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_31 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_31 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_31";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_31";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_32 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_32 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_32";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_32";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16_33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16_33 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16_33";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16_33";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_00 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_00 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_00";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_00";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2. The...";
 }
-def smuls16s_10 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_10 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_10";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_10";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_11 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_11 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_11";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_11";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_20 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_20 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_20";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_20";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_21 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_21 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_21";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_21";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_22 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_22 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_22";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_22";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_30 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_30 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_30";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_30";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_31 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_31 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_31";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_31";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_32 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_32 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_32";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_32";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
-def smuls16s_33 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
+def smuls16s_33 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "smuls16s_33";
-  let PublicPrototype = "int64_t(int64_t, int64_t)";
+  let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "SMULS16S_33";
   let Semantics = "performs a signed 16-bit × 16-bit multiply-subtract-accumulate operation with signed 64-bit saturation on one selected 16-bit lane from each of the packed 64-bit source registers rsd1 and rsd2.";
 }
@@ -1796,25 +1796,25 @@ def x4cmul16s_f2 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<4, short>)", "sim
 }
 def x2sel32_hh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sel32_hh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SEL32_HH";
   let Semantics = "selects and reorders 32-bit sub-words from two source registers rsd1 and rsd2, and packs them into the destination register rtd.";
 }
 def x2sel32_hl : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sel32_hl";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SEL32_HL";
   let Semantics = "selects and reorders 32-bit sub-words from two source registers rsd1 and rsd2, and packs them into the destination register rtd.";
 }
 def x2sel32_lh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sel32_lh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SEL32_LH";
   let Semantics = "selects and reorders 32-bit sub-words from two source registers rsd1 and rsd2, and packs them into the destination register rtd.";
 }
 def x2sel32_ll : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sel32_ll";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SEL32_LL";
   let Semantics = "selects and reorders 32-bit sub-words from two source registers rsd1 and rsd2, and packs them into the destination register rtd.";
 }
@@ -2068,37 +2068,37 @@ def x2mjswap32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>)", "simd">
 }
 def x2addsub32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2addsub32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADDSUB32";
   let Semantics = "performs a parallel 32-bit add-subtract operation without saturation. The upper lane adds rsd1[63:32] to rsd2[63:32] and writes the result to rtd[63:32]. The lower lane subtracts rsd2[31:0] from rs...";
 }
 def x2subadd32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2subadd32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUBADD32";
   let Semantics = "performs a parallel 32-bit subtract-add operation without saturation. The upper lane subtracts rsd2[63:32] from rsd1[63:32] and writes the result to rtd[63:32]. The lower lane adds rsd1[31:0] to rs...";
 }
 def x2max32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2max32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MAX32";
   let Semantics = "performs two parallel 32-bit signed maximum comparisons.";
 }
 def x2min32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2min32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MIN32";
   let Semantics = "performs two parallel 32-bit signed minimum comparisons.";
 }
 def x2frst32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2frst32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FRST32";
   let Semantics = "performs two parallel asymmetrical roundings of two signed Q1.63 fixed-point values in rsd1 and rsd2 to the Q1.31 range, with saturation, and writes the two packed Q1.31 results into rtd[63:32] and...";
 }
 def x2frsst32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2frsst32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FRSST32";
   let Semantics = "performs two parallel symmetrical roundings of two signed Q1.63 fixed-point values in rsd1 and rsd2 to the Q1.31 range, with saturation, and writes the two packed Q1.31 results into rtd[63:32] and ...";
 }
@@ -2165,13 +2165,13 @@ def x4conj16s : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>)", "simd
 }
 def x4max16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4max16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4MAX16";
   let Semantics = "performs four parallel 16-bit signed maximum comparisons.";
 }
 def x4min16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4min16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4MIN16";
   let Semantics = "performs four parallel 16-bit signed minimum comparisons.";
 }
@@ -2196,49 +2196,49 @@ def x2neg32s_l : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>)", "simd"> 
 }
 def x2addsub32_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2addsub32_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADDSUB32_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit add-subtract operation without saturation. The upper lane adds the upper 32-bit sub-word of rsd1 (rsd1[63:32]) to the lower 32-bit sub-word of rsd2 (rsd2[31:0]...";
 }
 def x2addsub32s_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2addsub32s_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADDSUB32S_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit add-subtract operation with signed saturation (SAT32). The upper lane adds the upper 32-bit sub-word of rsd1 (rsd1[63:32]) to the lower 32-bit sub-word of rsd2...";
 }
 def x2subadd32_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2subadd32_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUBADD32_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit subtract-add operation without saturation. The upper lane subtracts the lower 32-bit sub-word of rsd2 (rsd2[31:00]) from the upper 32-bit sub-word of rsd1 (rsd...";
 }
 def x2subadd32s_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2subadd32s_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUBADD32S_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit subtract-add operation with signed saturation (SAT32). The upper lane subtracts the lower 32-bit sub-word of rsd2 (rsd2[31:00]) from the upper 32-bit sub-word ...";
 }
-def x2clamp32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
+def x2clamp32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2clamp32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2CLAMP32";
   let Semantics = "performs per-lane clamping of two packed 32-bit signed values in rtd. For each 32-bit lane, the value in rtd is first limited to the upper bound from rsd1, then limited to the lower bound from rsd2.";
 }
 def x2fmul32rs : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2fmul32rs";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMUL32RS";
   let Semantics = "performs two parallel 32-bit fixed-point multiplications in Q1.31 format with rounding and saturation. The upper 32-bit elements rsd1[63:32] and rsd2[63:32] are treated as signed Q1.31 values and m...";
 }
 def x2fmul32rss : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2fmul32rss";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMUL32RSS";
   let Semantics = "performs two parallel 32-bit fixed-point multiplications in Q1.31 format with symmetric rounding and saturation. The upper 32-bit elements rsd1[63:32] and rsd2[63:32] are treated as signed Q1.31 va...";
 }
 def x2fmul32ts : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2fmul32ts";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FMUL32TS";
   let Semantics = "performs two parallel 32-bit fixed-point multiplications on packed Q1.31 operands and writes the Q1.31 truncated products to the destination lanes with saturation. rsd1[63:32] and rsd2[63:32] are i...";
 }
@@ -2296,39 +2296,39 @@ def x4energy16 : HaydnBuiltin<"int64_t(_ExtVector<4, short>)", "simd"> {
   let Mnemonic = "X4ENERGY16";
   let Semantics = "computes the sum of squares (energy) of four packed 16-bit signed values. The 32-bit result is written to the lower 32 bits of rtd. The upper 32 bits are cleared to zero.";
 }
-def x4clamp16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
+def x4clamp16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4clamp16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4CLAMP16";
   let Semantics = "performs per-lane clamping of four packed 16-bit signed values in rtd. For each 16-bit lane, the value in rtd is first limited to the upper bound from rsd1, then limited to the lower bound from rsd2.";
 }
 def x4fmul16rs : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4fmul16rs";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FMUL16RS";
   let Semantics = "performs four parallel signed 16×16-bit fixed-point multiplications on packed Q1.15 operands, with rounding back to Q1.15 and saturation. Each source register rsdX is treated as four signed 16-bit ...";
 }
 def x4fmul16rss : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4fmul16rss";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FMUL16RSS";
   let Semantics = "performs four parallel signed 16×16-bit fixed-point multiplications on packed Q1.15 operands, with symmetric rounding back to Q1.15 and saturation. Each source register rsdX is treated as four sign...";
 }
 def x4fmul16ts : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4fmul16ts";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FMUL16TS";
   let Semantics = "performs four parallel signed 16×16-bit fixed-point multiplications on packed Q1.15 operands, with truncation back to Q1.15 and saturation. Each source register rsdX is treated as four signed 16-bi...";
 }
 def x4frst16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4frst16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FRST16";
   let Semantics = "performs four parallel asymmetrical roundings of four signed Q1.31 fixed-point values packed in rsd1 and rsd2 to the Q1.15 range, with saturation, and writes the four packed Q1.15 results into rtd[...";
 }
 def x4frsst16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4frsst16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4FRSST16";
   let Semantics = "performs four parallel symmetrical roundings of four signed Q1.31 fixed-point values packed in rsd1 and rsd2 to the Q1.15 range, with saturation, and writes the four packed Q1.15 results into rtd[6...";
 }
@@ -2336,7 +2336,7 @@ def x2seq32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2,
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2seq32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SEQ32";
   let Semantics = "performs two parallel 32-bit equality comparisons to update the SFR.";
 }
@@ -2344,7 +2344,7 @@ def x2slt32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2,
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2slt32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SLT32";
   let Semantics = "performs two parallel 32-bit signed less-than comparisons to update the SFR.";
 }
@@ -2352,7 +2352,7 @@ def x2sle32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2,
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2sle32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SLE32";
   let Semantics = "performs two parallel 32-bit signed less-than-or-equal comparisons to update the SFR.";
 }
@@ -2360,7 +2360,7 @@ def x2movf32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2movf32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MOVF32";
   let Semantics = "conditionally moves two 32-bit sub-words of rsd into the corresponding lanes of rtd. Each lane is updated independently based on its SFR bits.";
 }
@@ -2368,7 +2368,7 @@ def x2movt32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x2movt32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MOVT32";
   let Semantics = "conditionally moves two 32-bit sub-words of rsd into the corresponding lanes of rtd. Each lane is updated independently based on its SFR bits.";
 }
@@ -2376,7 +2376,7 @@ def x4seq16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVecto
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4seq16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SEQ16";
   let Semantics = "performs four parallel 16-bit equality comparisons to update the SFR.";
 }
@@ -2384,7 +2384,7 @@ def x4slt16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVecto
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4slt16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SLT16";
   let Semantics = "performs four parallel 16-bit signed less-than comparisons to update the SFR.";
 }
@@ -2392,7 +2392,7 @@ def x4sle16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVecto
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4sle16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SLE16";
   let Semantics = "performs four parallel 16-bit signed less-than-or-equal comparisons to update the SFR.";
 }
@@ -2400,7 +2400,7 @@ def x4movf16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVect
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4movf16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4MOVF16";
   let Semantics = "conditionally moves four 16-bit sub-words of rsd into the corresponding lanes of rtd. Each lane is updated independently based on the corresponding SFR bit.";
 }
@@ -2408,7 +2408,7 @@ def x4movt16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVect
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "x4movt16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4MOVT16";
   let Semantics = "conditionally moves four 16-bit sub-words of rsd into the corresponding lanes of rtd. Each lane is updated independently based on the corresponding SFR bit.";
 }
@@ -2534,7 +2534,7 @@ def brev32 : HaydnBuiltin<"int(int, int)", "bit-reversed"> {
 }
 def x2subadd32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2subadd32s";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUBADD32S";
   let Semantics = "performs a parallel 32-bit subtract-add operation with signed saturation (SAT32). The upper lane subtracts rsd2[63:32] from rsd1[63:32], saturates the result, and writes to rtd[63:32]. The lower la...";
 }
@@ -2826,38 +2826,38 @@ def sw_brev_reg : HaydnBuiltin<"void*(int, void*, int)", "bit-reversed"> {
 }
 def x2add32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2add32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADD32";
   let Semantics = "performs two parallel 32-bit additions without saturation. The upper 32-bit sub-word of rsd1 is added to the upper 32-bit sub-word of rsd2, and the result is written to rtd[63:32]. The lower 32-bit...";
 }
 
 def x2add32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2add32s";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADD32S";
   let Semantics = "performs a dual 32-bit saturating addition on the high and low 32-bit sub-words of rsd1 and rsd2.";
 }
 def x2sub32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sub32s";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUB32S";
   let Semantics = "performs a dual 32-bit saturating subtraction on the high and low 32-bit sub-words of rsd1 and rsd2.";
 }
 def x2addsub32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2addsub32s";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADDSUB32S";
   let Semantics = "dual 32-bit add-sub with saturation.";
 }
 def x4add16s : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4add16s";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4ADD16S";
   let Semantics = "performs a quad 16-bit saturating addition on the four 16-bit sub-words of rsd1 and rsd2.";
 }
 def x4sub16s : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4sub16s";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SUB16S";
   let Semantics = "performs a quad 16-bit saturating subtraction on the four 16-bit sub-words of rsd1 and rsd2.";
 }
@@ -2870,43 +2870,43 @@ def x2mul32_pair : HaydnPairBuiltin<"int64_t(int64_t*, _ExtVector<2, int>, _ExtV
 
 def x2sub32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sub32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUB32";
   let Semantics = "performs two parallel 32-bit subtractions without saturation. The upper 32-bit sub-word of rsd2 is subtracted from the upper 32-bit sub-word of rsd1, and the result is written to rtd[63:32]. The lo...";
 }
 def x4add16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4add16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4ADD16";
   let Semantics = "performs four parallel 16-bit signed additions without saturation.";
 }
 def x4sub16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVector<4, short>)", "simd"> {
   let PublicName = "x4sub16";
-  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16)";
+  let PublicPrototype = "haydn_x4int16(haydn_x4int16, haydn_x4int16, haydn_x4int16)";
   let Mnemonic = "X4SUB16";
   let Semantics = "performs four parallel 16-bit signed subtractions without saturation.";
 }
 def x2add32_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2add32_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADD32_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit addition without saturation. The upper lane adds the upper 32-bit sub-word of rsd1 (rsd1[63:32]) to the lower 32-bit sub-word of rsd2 (rsd2[31:00]), and writes...";
 }
 def x2add32s_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2add32s_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2ADD32S_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit addition with signed saturation (SAT32). The upper lane adds the upper 32-bit sub-word of rsd1 (rsd1[63:32]) to the lower 32-bit sub-word of rsd2 (rsd2[31:00])...";
 }
 def x2sub32_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sub32_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUB32_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit subtraction without saturation. The upper lane subtracts the lower 32-bit sub-word of rsd2 (rsd2[31:00]) from the upper 32-bit sub-word of rsd1 (rsd1[63:32]), ...";
 }
 def x2sub32s_hllh : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2sub32s_hllh";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2SUB32S_HLLH";
   let Semantics = "performs a cross-lane parallel 32-bit subtraction with signed saturation (SAT32). The upper lane subtracts the lower 32-bit sub-word of rsd2 (rsd2[31:00]) from the upper 32-bit sub-word of rsd1 (rs...";
 }
@@ -3069,13 +3069,13 @@ def x4mul16_pair : HaydnPairBuiltin<"int64_t(int64_t*, _ExtVector<4, short>, _Ex
 }
 def x2mulph32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2mulph32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MULPH32";
   let Semantics = "performs two parallel 32-bit × 32-bit signed multiplications on packed 32-bit operands and writes the upper 32 bits of each 64-bit product to rtd. The upper lane uses rsd1[63:32] and rsd2[63:32]; t...";
 }
 def x2mulpl32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2mulpl32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2MULPL32";
   let Semantics = "performs two parallel 32-bit × 32-bit signed multiplications on packed 32-bit operands. For each lane, the full 64-bit product is computed and the lower 32 bits of the product are written to the co...";
 }
@@ -3105,13 +3105,13 @@ def x2mulspl32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector
 }
 def x2fcmul32rs : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2fcmul32rs";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FCMUL32RS";
   let Semantics = "performs a saturated fixed-point complex multiplication between two packed 32-bit complex Q1.31 operands. Each source operand is interpreted as a complex number in Format-1 packing: rsdX[63:32] = r...";
 }
 def x2fcmul32rss : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2fcmul32rss";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FCMUL32RSS";
   let Semantics = "performs a saturated fixed-point complex multiplication between two packed 32-bit complex Q1.31 operands. Each source operand is interpreted as a complex number in Format-1 packing: rsdX[63:32] = r...";
 }
@@ -3141,13 +3141,13 @@ def x2cmul32s_f2_pair : HaydnPairBuiltin<"int64_t(int64_t*, _ExtVector<2, int>, 
 }
 def x2ff2rsst32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2ff2rsst32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FF2RSST32";
   let Semantics = "performs two parallel symmetrical roundings of two signed Q17.47 fixed-point values in rsd1 and rsd2 to the Q1.31 range, with saturation, and writes the two packed Q1.31 results into rtd[63:32] and...";
 }
 def x2ff2rst32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2ff2rst32";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "X2FF2RST32";
   let Semantics = "performs two parallel asymmetrical roundings of two signed Q17.47 fixed-point values in rsd1 and rsd2 to the Q1.31 range, with saturation, and writes the two packed Q1.31 results into rtd[63:32] an...";
 }
