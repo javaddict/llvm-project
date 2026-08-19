@@ -17,6 +17,7 @@
 
 #include "MCTargetDesc/HaydnFixupKinds.h"
 #include "MCTargetDesc/HaydnRelocLayout.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
@@ -144,25 +145,28 @@ TEST(HaydnRelocLayoutTest, CallSImm20BytePositiveNegativeBounds) {
   EXPECT_STREQ(err(K, -524289), "relocation offset out of range");
 }
 
-// WIDE_CallSImm20: signed 20-bit PC-relative BYTE field (ValueShift=0).
-// Effective window [-524288, +524287]. Distinct from WIDE_BranchSImm12 (byte simm12).
+// WIDE_CallSImm20: signed 20-bit PC-relative BYTE field (ValueShift=0,
+// Align=2 — parcel-aligned window per MinBundleAddressAlignBytes; the row
+// comment in HaydnRelocLayout.cpp pins this to the branch path). Effective
+// window [-524288, +524286] in even bytes. Distinct from
+// WIDE_BranchSImm12 (byte simm12) and non-WIDE CallSImm20 (Align=1).
 TEST(HaydnRelocLayoutTest, WideCallDiv2PositiveNegativeBounds) {
   const RelocKind K = RelocKind::WIDE_CallSImm20;
   const RelocFieldInfo &FI = getRelocFieldInfo(K);
   EXPECT_EQ(FI.ValueShift, 0u);
-  EXPECT_EQ(FI.Align, 1u);
+  EXPECT_EQ(FI.Align, 2u);
   EXPECT_EQ(FI.FieldSize, 20u);
   EXPECT_TRUE(FI.IsSigned);
 
-  EXPECT_TRUE(ok(K, +524287));
-  EXPECT_EQ(field(K, +524287), 0x7FFFFu);
+  EXPECT_TRUE(ok(K, +524286));
+  EXPECT_EQ(field(K, +524286), 0x7FFFEu);
   EXPECT_FALSE(ok(K, +524288));
   EXPECT_TRUE(ok(K, -524288));
   EXPECT_EQ(field(K, -524288) & 0xFFFFFu, 0x80000u);
   EXPECT_FALSE(ok(K, -524289));
-  // Byte scale: odd offsets are legal (no halfword align gate).
-  EXPECT_TRUE(ok(K, +1));
-  // Parcel-sized JAL displacement is a plain byte field.
+  // Parcel-aligned byte scale: odd offsets are rejected (even-byte gate).
+  EXPECT_FALSE(ok(K, +1));
+  // Parcel-sized JAL displacement is a plain (even) byte field.
   EXPECT_TRUE(ok(K, +12));
   EXPECT_EQ(field(K, +12), 12u);
   EXPECT_TRUE(ok(K, +24));
@@ -414,6 +418,8 @@ TEST(HaydnRelocLayoutTest, JalrSImm12DedicatedRowNotBranchAlias) {
             RelocKind::WIDE_BranchSImm12_RI);
   EXPECT_EQ(findFixupFromFixupFields("RI12", 7, Imm12, 12, false),
             RelocKind::WIDE_BranchSImm12_RI);
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::JALRSImm12),
+            static_cast<unsigned>(ELF::R_HAYDN_JALRSImm12));
   EXPECT_EQ(mapRelocKindToFixup(RelocKind::JALRSImm12),
             Haydn::FIXUP_HAYDN_JALRSImm12);
   EXPECT_EQ(mapFixupKind(Haydn::FIXUP_HAYDN_JALRSImm12), RelocKind::JALRSImm12);

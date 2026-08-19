@@ -3,8 +3,9 @@
 # RUN:   | FileCheck --check-prefix=KIND %s
 # RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=JALR=1 %s \
 # RUN:   | FileCheck --check-prefix=JALR %s
-# RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=JALREXT=1 %s \
-# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=JALREXT %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=JALREXT=1 %s \
+# RUN:   -o %t.jalr.o
+# RUN: llvm-readobj -r %t.jalr.o | FileCheck --check-prefix=JALREXT %s
 # RUN: not llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=UNKNOWN=1 %s \
 # RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=F19 %s
 
@@ -19,9 +20,8 @@
 # opcode + field size look up RelocFieldInfo. JALR (RI12 opc 1) resolves
 # to the dedicated JALRSImm12 row (same RI12 field numbers as the branch
 # row, distinct identity — W27); execution stays golden rs+imm12. F17/
-# F18/F19 and W37/W38 HWLoop Off1/Off2 defaults stay. JALRSImm12 is
-# MC-only: an *external* symbolic jalr fails closed at the object writer
-# until an R_HAYDN_* kind is minted.
+# F18/F19 and W37/W38 HWLoop Off1/Off2 defaults stay. M23: an *external*
+# symbolic jalr emits R_HAYDN_JALRSImm12 (not a branch row).
 #
 # If the name-switch returns, KIND lines drift or JALR borrows a branch
 # kind. If F19 regresses, UNKNOWN emits FIXUP_HAYDN_32.
@@ -57,8 +57,8 @@ jalr_local_target:
 
 .ifdef JALREXT
 	jalr r1, r2, ext_sym
-# JALREXT: error: symbolic jalr to an external symbol has no Haydn ELF relocation
-# JALREXT-NOT: kind: FIXUP_HAYDN_WIDE_BranchSImm12
+# JALREXT: R_HAYDN_JALRSImm12 ext_sym
+# JALREXT-NOT: R_HAYDN_WIDE_BranchSImm12
 .endif
 
 .ifdef UNKNOWN

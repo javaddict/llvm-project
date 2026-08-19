@@ -187,17 +187,10 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_LS_IMM;
 
   case Haydn::FIXUP_HAYDN_JALRSImm12:
-    // JALR RI12 symbolic imm12 is MC-only: no R_HAYDN_* kind is minted yet.
-    // Local (same-section) targets resolve in the AsmBackend via the
-    // JALRSImm12 RelocLayout row; a cross-object external target must fail
-    // closed here rather than borrow a differently-identitied row (W37
-    // HWLoopOffset precedent). Minting the ELF kind is an ABI decision
-    // owned by the encoding topic.
-    reportError(Fixup.getLoc(),
-                "symbolic jalr to an external symbol has no Haydn ELF "
-                "relocation (MC-only JALRSImm12); refusing alias to a "
-                "branch/call row");
-    return ELF::R_HAYDN_NONE;
+    // M23: minted R_HAYDN_JALRSImm12 (ELF 22). Distinct from the RI12
+    // branch row (W27). Local targets still resolve in the AsmBackend;
+    // unresolved externals now emit this kind instead of failing closed.
+    return ELF::R_HAYDN_JALRSImm12;
   }
 }
 

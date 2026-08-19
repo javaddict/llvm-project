@@ -44,6 +44,23 @@ void expectAltOccupiesResidualSlot(const HaydnMCFormats &Fmts, unsigned Member,
       << Name << " slot " << Slot;
 }
 
+// WFI occupancy: Mask bit 0, Fallback {0,0,0}. A miss used to cache 0
+// (silent skip). Fail-closed requires a Format E HINT member in slot 0;
+// getAlternateInstsOpcode fatals on a remaining hole instead of returning
+// a zeroed alt (HaydnMCFormats.cpp cachedMemberAlts).
+TEST(HaydnMCFormatsTest, WFIOccupancyIsFormatEMemberNotZeroedFallback) {
+  HaydnMCFormats Fmts;
+  const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(Haydn::WFI);
+  ASSERT_NE(Alts, nullptr);
+  ASSERT_EQ(Alts->size(), 3u);
+  EXPECT_NE((*Alts)[0], 0u) << "WFI slot 0 must not be a zeroed fallback hole";
+  EXPECT_EQ((*Alts)[1], 0u);
+  EXPECT_EQ((*Alts)[2], 0u);
+  const StringRef Name = haydnOpcodeName((*Alts)[0]);
+  EXPECT_TRUE(Name.contains("WFI") || Name.contains("HINT")) << Name;
+  EXPECT_EQ(Fmts.getLegalSlots(Haydn::WFI), SlotBits(Haydn::SLOT0));
+}
+
 TEST(HaydnMCFormatsTest, GetLegalSlotsSpotChecks) {
   // getLegalSlots returns a bitmask (bit k = slot k in Haydn::SLOT convention:
   // SLOT0=1<<0, SLOT1=1<<1, SLOT2=1<<2). Derived from sparse alts.

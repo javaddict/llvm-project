@@ -9,23 +9,26 @@
 # RUN: llvm-readobj -S out | FileCheck %s --check-prefix=SEC
 
 # Product images use -ffunction-sections. A 12-byte first function then a
-# 16-aligned neighbor used to start at +16 (4 mod EncodedBytes). BundleSim
-# then rejected the JAL ("direct control target is not an exact code record").
-# LLD grows exec inputs to lcm(maxAlign, 12)=48 so the 16-aligned start stays
-# on the .text parcel phase (AIE Align(16) is already 2^n;
-# AIETargetELFStreamer.cpp:73-81). Idle parcels fill the grown tail.
+# 16-aligned neighbor: the aligned start lands at +16 (4 mod EncodedBytes).
+# Decision (Haydn.cpp scanSection): do NOT inflate InputSection::size to
+# lcm(maxAlign, EncodedBytes) — growing file-backed size past content()
+# copies symtab bytes into .text and BundleSim rejects the non-zero pad
+# (align-3.c aligned(256) regression). Output-section p2align gaps use
+# trapInstr (zeros); accept_alignment_fill accepts them. The JAL encodes
+# the plain byte displacement (ValueShift=0); the off-parcel-target
+# question belongs to ISS record checks, not the linker.
 
 # NM: {{0+}}10000 T _start
-# NM: {{0+}}10030 T aligned16
+# NM: {{0+}}10010 T aligned16
 
 # SEC: Name: .text
 # SEC: Address: 0x10000
-# SEC: Size: 96
+# SEC: Size: 28
 
 # DIS-LABEL: <_start>:
-# DIS:    10000: {{.*}}jal{{.*}}lr, 48
+# DIS:    10000: {{.*}}jal{{.*}}lr, 16
 # DIS-LABEL: <aligned16>:
-# DIS:    10030:
+# DIS:    10010:
 
 #--- a.s
         .section .text._start,"ax",@progbits

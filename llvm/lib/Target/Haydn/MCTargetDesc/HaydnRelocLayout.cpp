@@ -131,7 +131,7 @@ constexpr Row Table[] = {
     // displacement from the parcel origin (ValueShift=0, Align=2 — GE96-03
     // no extra scale; execution semantics stay PC = rs + imm12). E3 e0/e1
     // windows resolve via resolveFieldLsb like the branch kinds.
-    // MC-only; no ELF reloc minted yet.
+    // ELF 22 (R_HAYDN_JALRSImm12) — M23 minted row, not MC-only.
     {RelocKind::JALRSImm12, {12, 12, 32, 0, 2, true, true, RelocTrans::None}},
 };
 
@@ -140,6 +140,9 @@ static_assert(static_cast<unsigned>(RelocKind::WIDE_BranchSImm12_RI) ==
               "shared RelocKind values must match ELF R_HAYDN_*");
 static_assert(static_cast<unsigned>(RelocKind::LS_IMM) == ELF::R_HAYDN_LS_IMM,
               "LS_IMM RelocKind must match ELF R_HAYDN_LS_IMM");
+static_assert(static_cast<unsigned>(RelocKind::JALRSImm12) ==
+                  ELF::R_HAYDN_JALRSImm12,
+              "JALRSImm12 RelocKind must match ELF R_HAYDN_JALRSImm12");
 
 // Fail-closed sentinel: unknown / Invalid kinds are never product-ready.
 // Returning Table[0] (None, Trans::None) used to make isRelocTransformReady

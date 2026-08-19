@@ -57,3 +57,8 @@ ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI, 20)
 // Distinct from R_HAYDN_LO20 (ALU RI20 / retired WIDE LSOff20 geometry @
 // bits[31:50]). Must not alias R_HAYDN_SImm16 (16-bit field at bit 0).
 ELF_RELOC(R_HAYDN_LS_IMM,               21)
+// Format E JALR RI12 symbolic imm12 @ the same window as the RI12 branch
+// row (parcel bits[43:32] E2 e0; E3 via resolveFieldLsb). Distinct identity
+// so a JALR fixup never borrows R_HAYDN_WIDE_BranchSImm12_RI (W27 / M23).
+// ValueShift=0, Align=2; execution stays golden PC = rs + imm12.
+ELF_RELOC(R_HAYDN_JALRSImm12,           22)

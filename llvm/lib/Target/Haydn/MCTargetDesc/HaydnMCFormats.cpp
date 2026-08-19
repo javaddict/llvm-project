@@ -345,6 +345,17 @@ bool formatELogicalIsModeOnly(unsigned Opcode, uint8_t WantMode) {
 
 const std::vector<unsigned> *
 HaydnMCFormats::getAlternateInstsOpcode(unsigned Opcode) const {
+  // Pre-lowering pseudos with no explicit AltOccupancy row never direct-
+  // place: the golden member lookup would happily match the post-lowering
+  // immediate shape (SET_HWLOOP pseudo 4-imm matches the HWLRIII member
+  // exactly) and silently claim placeability before FixupHwLoops/
+  // ExpandPseudos resolved the targets — dropping relocs. Parcel ops with
+  // a real occupancy row (WFI) and lowered forms (SET_HWLOOP_W, CSRW_W)
+  // have explicit rows and pass through unfiltered.
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  if (Opcode < MII.getNumOpcodes() && MII.get(Opcode).isPseudo() &&
+      haydnAltOccupancyIndex(Opcode) < 0)
+    return nullptr;
   if (const std::vector<unsigned> *Cached = cachedMemberAlts(Opcode))
     return Cached;
   return cachedFormatEOnlyAlts(Opcode);

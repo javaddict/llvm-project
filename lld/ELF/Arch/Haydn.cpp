@@ -128,6 +128,7 @@ public:
     case R_HAYDN_WIDE_CallSImm20:
     case R_HAYDN_HWLoopOff1:
     case R_HAYDN_HWLoopOff2:
+    case R_HAYDN_JALRSImm12:
       return R_PC;
     case R_HAYDN_NONE:
       return R_NONE;
@@ -164,7 +165,7 @@ public:
   }
 
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override {
-    if (type > R_HAYDN_LS_IMM) {
+    if (type > R_HAYDN_JALRSImm12) {
       InternalErr(ctx, buf) << "cannot read addend for relocation " << type;
       return 0;
     }
@@ -254,7 +255,7 @@ public:
                   "(no golden TLS model); refusing silent R_ABS";
       return;
     }
-    if (type > R_HAYDN_LS_IMM) {
+    if (type > R_HAYDN_JALRSImm12) {
       Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << type;
       return;
     }

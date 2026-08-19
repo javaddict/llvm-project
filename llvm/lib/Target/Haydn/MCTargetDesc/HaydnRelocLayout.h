@@ -71,23 +71,22 @@ enum class RelocKind : uint16_t {
   // Format E LOADSTORE0/LOAD1 RI6 signed imm6 @ parcel bits[33:28].
   // Distinct from LO20 (ALU RI20 / retired WIDE LSOff20 @ bits[31:50]).
   LS_IMM = 21,
+  // Format E JALR RI12 symbolic imm12 (ELF 22). Same field numbers as
+  // WIDE_BranchSImm12_RI but distinct identity (W27). Promoted from
+  // MC-only so unresolved external targets emit R_HAYDN_JALRSImm12
+  // instead of failing closed (M23).
+  JALRSImm12 = 22,
   // MC-only fixups (never become ELF relocs)
-  C_BranchSImm4 = 22,
-  C_UImm4 = 23,
-  C_BranchSImm10 = 24,
-  HWLoopOffset = 25, // legacy placeholder (WIDE path uses HWLoopOff1/2)
-  LongBranchSImm20 = 26,
+  C_BranchSImm4 = 23,
+  C_UImm4 = 24,
+  C_BranchSImm10 = 25,
+  HWLoopOffset = 26, // legacy placeholder (WIDE path uses HWLoopOff1/2)
+  LongBranchSImm20 = 27,
   // s0 LS scaled-imm fields (MC-only — FI spill offsets are local).
-  S0LSOff4_2 = 27, // LD32/ST32 word offset (÷4)
-  S0LSOff4_3 = 28, // LD64/ST64 doubleword offset (÷8)
-  S0LSOff2_0 = 29, // LD16/LDU16/LD8/LDU8 (unscaled)
-  S0LSOff3_0 = 30, // ST16/ST8 (unscaled)
-  // JALR RI12 symbolic imm12: signed byte displacement from parcel origin
-  // (assembler convention; execution stays golden PC = rs + imm12). Same
-  // field numbers as WIDE_BranchSImm12_RI but distinct identity so a JALR
-  // fixup can never borrow the branch row (W27). MC-only — no ELF reloc
-  // minted yet; unresolved externals fail closed in the object writer.
-  JALRSImm12 = 31,
+  S0LSOff4_2 = 28, // LD32/ST32 word offset (÷4)
+  S0LSOff4_3 = 29, // LD64/ST64 doubleword offset (÷8)
+  S0LSOff2_0 = 30, // LD16/LDU16/LD8/LDU8 (unscaled)
+  S0LSOff3_0 = 31, // ST16/ST8 (unscaled)
   Invalid = 0xFFFF,
 };
 
