@@ -2605,9 +2605,14 @@ def emit_logical_defs_td_inc(
                     asm_ops.append("$rs")
                     tie = "$rs = $rs_wb"
                     continue
+                is_gpr_dest = r in ("dest", "dest1") and r not in ("dest2",)
+                if is_gpr_dest and (may_load or kind == "REG_GPR" and r == "dest"):
+                    # Result dest in GPR: loads (rt = mem..[..]) and ALU/MAC
+                    # GPR-dest ops (MULL rt, rs1, rs2 — golden GPR_Write=[rt]).
+                    out_frags.append("GPR32:$rt")
+                    asm_ops.append("$rt")
+                    continue
                 if r == "dest1" and may_load:
-                    # GPR load value dest (S_LW/S_LB: rt = mem..[..]).
-                    # dest2 is the base register, never the value.
                     out_frags.append("GPR32:$rt")
                     asm_ops.append("$rt")
                     continue

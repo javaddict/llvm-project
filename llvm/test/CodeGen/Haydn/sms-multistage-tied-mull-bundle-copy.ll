@@ -31,8 +31,11 @@
 ; ASM: BEQZ
 
 ; MCP-LABEL: name: fill_nn
-; MCP: $r{{[0-9]+}} = COPY $r{{[0-9]+}}
-; MCP-NEXT: $r{{[0-9]+}} = MULL{{.*}}$r{{[0-9]+}}{{.*}}$r{{[0-9]+}}
+; 2026-08-19: MULL untied per golden (rt = rs1*rs2 non-destructive; ISS
+; CC_G_GG_M) — the tied-form COPY-before-MULL is gone; MULL consumes regs
+; directly.
+; MCP: $r{{[0-9]+}} = MULL{{.*}}$r{{[0-9]+}}{{.*}}$r{{[0-9]+}}
+; MCP-NOT: COPY{{.*}}= COPY{{.*}}
 ; MCP-NOT: BUNDLE{{.*}}{
 
 define dso_local void @fill_nn(ptr noundef writeonly captures(none) %C,

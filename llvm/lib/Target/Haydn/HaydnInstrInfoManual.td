@@ -28,32 +28,6 @@
 //===----------------------------------------------------------------------===//
 
 let isCodeGenOnly = 1 in {
-
-//===----------------------------------------------------------------------===//
-// FmtALU64 — Binary register (rd, rs1, rs2) — slots 1+2 (0b110)
-// 391 instructions
-//===----------------------------------------------------------------------===//
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def ADD64S : FmtALU64<0x67, 0x000,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "add64s	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def ADD64_H : FmtALU64<0x67, 0x003,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "add64_h	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def ADD64_L : FmtALU64<0x67, 0x004,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "add64_l	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def F2MULAA32RS_HHLL : FmtALU64Acc<0x67, 0x005,
     (outs DR64:$rd),
@@ -165,139 +139,6 @@ def F2MULSS32R_HLLH : FmtALU64Acc<0x67, 0x014,
     "f2mulss32r.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAA32RS_HHLL : FmtALU64<0x67, 0x015,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32rs.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAA32RS_HLLH : FmtALU64<0x67, 0x016,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32rs.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAA32R_HHLL : FmtALU64<0x67, 0x017,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32r.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAA32R_HLLH : FmtALU64<0x67, 0x018,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzaa32r.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAS32RS_HHLL : FmtALU64<0x67, 0x019,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32rs.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAS32RS_HLLH : FmtALU64<0x67, 0x01A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32rs.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAS32R_HHLL : FmtALU64<0x67, 0x01B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32r.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZAS32R_HLLH : FmtALU64<0x67, 0x01C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzas32r.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSA32RS_HHLL : FmtALU64<0x67, 0x01D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32rs.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSA32RS_HLLH : FmtALU64<0x67, 0x01E,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32rs.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSA32R_HHLL : FmtALU64<0x67, 0x01F,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32r.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSA32R_HLLH : FmtALU64<0x67, 0x020,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzsa32r.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSS32RS_HHLL : FmtALU64<0x67, 0x021,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32rs.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSS32RS_HLLH : FmtALU64<0x67, 0x022,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32rs.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSS32R_HHLL : FmtALU64<0x67, 0x023,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32r.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def F2MULZSS32R_HLLH : FmtALU64<0x67, 0x024,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "f2mulzss32r.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FF2MUL32RS_HH : FmtALU64<0x67, 0x025,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs.hh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FF2MUL32RS_LH : FmtALU64<0x67, 0x026,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs.lh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FF2MUL32RS_LL : FmtALU64<0x67, 0x027,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32rs.ll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FF2MUL32R_HH : FmtALU64<0x67, 0x028,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r.hh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FF2MUL32R_LH : FmtALU64<0x67, 0x029,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r.lh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FF2MUL32R_LL : FmtALU64<0x67, 0x02A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "ff2mul32r.ll	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FF2MULA32RS_HH : FmtALU64Acc<0x67, 0x02B,
     (outs DR64:$rd),
@@ -404,145 +245,6 @@ def FF2MULS32R_LL : FmtALU64Acc<0x67, 0x036,
     "ff2muls32r.ll	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS00 : FmtALU64<0x67, 0x037,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs00	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS01 : FmtALU64<0x67, 0x038,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs01	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS02 : FmtALU64<0x67, 0x039,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs02	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS03 : FmtALU64<0x67, 0x03A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs03	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS11 : FmtALU64<0x67, 0x03B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs11	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS12 : FmtALU64<0x67, 0x03C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs12	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS13 : FmtALU64<0x67, 0x03D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs13	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS22 : FmtALU64<0x67, 0x03E,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs22	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS23 : FmtALU64<0x67, 0x03F,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs23	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_HS33 : FmtALU64<0x67, 0x040,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.hs33	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS00 : FmtALU64<0x67, 0x041,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls00	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS01 : FmtALU64<0x67, 0x042,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls01	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS02 : FmtALU64<0x67, 0x043,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls02	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS03 : FmtALU64<0x67, 0x044,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls03	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS11 : FmtALU64<0x67, 0x045,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls11	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS12 : FmtALU64<0x67, 0x046,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls12	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS13 : FmtALU64<0x67, 0x047,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls13	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS22 : FmtALU64<0x67, 0x048,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls22	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS23 : FmtALU64<0x67, 0x049,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls23	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL16_LS33 : FmtALU64<0x67, 0x04A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul16.ls33	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL32S_HH : FmtALU64<0x67, 0x04B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s.hh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL32S_LH : FmtALU64<0x67, 0x04C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s.lh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMUL32S_LL : FmtALU64<0x67, 0x04D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmul32s.ll	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def FMULA16_HS00 : FmtALU64Acc<0x67, 0x04E,
     (outs DR64:$rd),
@@ -1052,139 +754,6 @@ def FMULSS32S_HLLH : FmtALU64Acc<0x67, 0x08F,
     "fmulss32s.hllh	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA16_HS_11_00 : FmtALU64<0x67, 0x090,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16.hs.11.00	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA16_HS_13_02 : FmtALU64<0x67, 0x091,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16.hs.13.02	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA16_HS_33_22 : FmtALU64<0x67, 0x092,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16.hs.33.22	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA16_LS_11_00 : FmtALU64<0x67, 0x093,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16.ls.11.00	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA16_LS_13_02 : FmtALU64<0x67, 0x094,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16.ls.13.02	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA16_LS_33_22 : FmtALU64<0x67, 0x095,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa16.ls.33.22	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA32S_HHLL : FmtALU64<0x67, 0x096,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa32s.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAA32S_HLLH : FmtALU64<0x67, 0x097,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzaa32s.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAS32S_HHLL : FmtALU64<0x67, 0x098,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzas32s.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZAS32S_HLLH : FmtALU64<0x67, 0x099,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzas32s.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSA32S_HHLL : FmtALU64<0x67, 0x09A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzsa32s.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSA32S_HLLH : FmtALU64<0x67, 0x09B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzsa32s.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS16_HS_11_00 : FmtALU64<0x67, 0x09C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16.hs.11.00	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS16_HS_13_02 : FmtALU64<0x67, 0x09D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16.hs.13.02	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS16_HS_33_22 : FmtALU64<0x67, 0x09E,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16.hs.33.22	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS16_LS_11_00 : FmtALU64<0x67, 0x09F,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16.ls.11.00	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS16_LS_13_02 : FmtALU64<0x67, 0x0A0,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16.ls.13.02	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS16_LS_33_22 : FmtALU64<0x67, 0x0A1,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss16.ls.33.22	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS32S_HHLL : FmtALU64<0x67, 0x0A2,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss32s.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def FMULZSS32S_HLLH : FmtALU64<0x67, 0x0A3,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "fmulzss32s.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MAX64 : FmtALU64<0x67, 0x0A4,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "max64	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MIN64 : FmtALU64<0x67, 0x0A5,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "min64	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MUL16AQ : FmtALU64Acc<0x67, 0x0A6,
     (outs DR64:$rd),
@@ -1192,109 +761,6 @@ def MUL16AQ : FmtALU64Acc<0x67, 0x0A6,
     "mul16aq	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL16ZAQ : FmtALU64<0x67, 0x0A7,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul16zaq	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_HH : FmtALU64<0x67, 0x0A8,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.hh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_HL : FmtALU64<0x67, 0x0A9,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.hl	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_HUH : FmtALU64<0x67, 0x0AA,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.huh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_HUL : FmtALU64<0x67, 0x0AB,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.hul	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_LH : FmtALU64<0x67, 0x0AC,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.lh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_LL : FmtALU64<0x67, 0x0AD,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_LUH : FmtALU64<0x67, 0x0AE,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.luh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_LUL : FmtALU64<0x67, 0x0AF,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.lul	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_UHH : FmtALU64<0x67, 0x0B0,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_UHL : FmtALU64<0x67, 0x0B1,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhl	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_UHUH : FmtALU64<0x67, 0x0B2,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhuh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_UHUL : FmtALU64<0x67, 0x0B3,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uhul	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_ULH : FmtALU64<0x67, 0x0B4,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ulh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_ULL : FmtALU64<0x67, 0x0B5,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ull	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_ULUH : FmtALU64<0x67, 0x0B6,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.uluh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MUL64_ULUL : FmtALU64<0x67, 0x0B7,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mul64.ulul	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULA64_HH : FmtALU64Acc<0x67, 0x0B8,
     (outs DR64:$rd),
@@ -1582,36 +1048,6 @@ def MULAS64_ULUL : FmtALU64Acc<0x67, 0x0DB,
     "mulas64.ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-// MULL/MULSSH/MULSUH/MULUUH — slot-0 GPR32 multiply (DB pipeline=MAC
-// slots=[0], latency 2; golden slot0_alu indices 65-68). migrated these
-// off the legacy FmtALU64<0x67> 4-byte parcel onto the Mode-0 §6.5 s0 ALU32
-// layout: opcode 0x3F (extended-ALU32 marker) + ext[4:2] sub-variant. The
-// wire form is destructive 2-operand (spec §6.5: rt = rs*rt — only rs1 + rt
-// on the wire); the architectural/asm view stays 3-operand (DB: rt = rs1*rs2).
-// The tied constraint "$rd = $rs2" bridges the two: when the selector builds
-// MULL with dst != src2, LLVM's TwoAddress pass inserts a MOV (copy rs2->rd)
-// before MULL, so the encoded rt field always holds rs2 at silicon time. The
-// encoder (HaydnMCCodeEmitter PS_S0) packs rt=$rd, rs1=$rs1, ext=getMullVariant
-// (drops $rs2 — it is tied to $rd); the decoder reconstructs rs2 = rt.
-//
-// The funct template param writes the variant STATICALLY into Inst bits[8:4]
-// (ext[4:2]=variant, ext[1:0]=0) so tablegen's decoder table can distinguish
-// the 4 variants (FmtALU32 leaves ext unset → all collide → "Decoding
-// conflict"). FmtALU32Ext provides 32-bit TSFlags width bits + Slot012_ALU itinerary + GPR32
-// operand model; Format E encode uses generated member InstBits (not these Inst
-// bits).
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULL : FmtALU32Ext<0x3F, 0b00000,
-    (outs GPR32:$rd),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "mull	$rd, $rs1, $rs2", []> {
-  // rt = rs*rt destructive wire form — $rs2 (source 2) is tied to $rd
-  // (dest), so the encoded rt field carries rs2. TwoAddress inserts a MOV
-  // copy when the selector's dst != src2.
-  let Constraints = "$rd = $rs2";
-}
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MULS64_HH : FmtALU64Acc<0x67, 0x0DD,
     (outs DR64:$rd),
@@ -1891,117 +1327,6 @@ def MULSS64_ULUL : FmtALU64Acc<0x67, 0x100,
     "mulss64.ulul	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-// MULSSH/MULSUH/MULUUH — slot-0 GPR32 multiply (see MULL comment above;
-// Mode-0 §6.5 migration). Same destructive wire form: opcode 0x3F, ext[4:2]
-// variant 1/2/3 (written statically via FmtALU32Ext funct at bits[8:4]).
-// B3 (golden-authoritative): NON-destructive — rt, rs1, rs2 distinct
-// (golden: GPR_Write_Port=[rt], GPR_Read_Port=[rs1,rs2], no tie). REMOVE the
-// spurious `let Constraints = "$rd = $rs2"` (it was the B3 verifier-reject
-// cause — golden says rt is distinct from rs1/rs2).
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULSSH : FmtALU32Ext<0x3F, 0b00100,
-    (outs GPR32:$rd),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "mulssh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULSUH : FmtALU32Ext<0x3F, 0b01000,
-    (outs GPR32:$rd),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "mulsuh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULUUH : FmtALU32Ext<0x3F, 0b01100,
-    (outs GPR32:$rd),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "muluuh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZAA32_HHLL : FmtALU64<0x67, 0x104,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzaa32.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZAA32_HLLH : FmtALU64<0x67, 0x105,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzaa32.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZAS32_HHLL : FmtALU64<0x67, 0x106,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzas32.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZAS32_HLLH : FmtALU64<0x67, 0x107,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzas32.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZSA32_HHLL : FmtALU64<0x67, 0x108,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzsa32.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZSA32_HLLH : FmtALU64<0x67, 0x109,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzsa32.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZSS32_HHLL : FmtALU64<0x67, 0x10A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzss32.hhll	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def MULZSS32_HLLH : FmtALU64<0x67, 0x10B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "mulzss32.hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def SLL64 : FmtALU64<0x67, 0x10C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, GPR32:$rs2),
-    "sll64	$rd, $rs1, $rs2", []>;
-
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2FF2RSST32 : FmtALU64<0x67, 0x14A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2ff2rsst32	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2FF2RST32 : FmtALU64<0x67, 0x14B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2ff2rst32	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2FMUL32RS : FmtALU64<0x67, 0x14C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmul32rs	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2FMUL32RSS : FmtALU64<0x67, 0x14D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmul32rss	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2FMUL32TS : FmtALU64<0x67, 0x14E,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2fmul32ts	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2FMULA32RS : FmtALU64Acc<0x67, 0x14F,
     (outs DR64:$rd),
@@ -2049,31 +1374,6 @@ def X2FMULS32TS : FmtALU64Acc<0x67, 0x154,
     "x2fmuls32ts	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2FRSST32 : FmtALU64<0x67, 0x155,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2frsst32	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2FRST32 : FmtALU64<0x67, 0x156,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2frst32	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2MAX32 : FmtALU64<0x67, 0x157,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2max32	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2MIN32 : FmtALU64<0x67, 0x158,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2min32	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULAPH32 : FmtALU64Acc<0x67, 0x159,
     (outs DR64:$rd),
@@ -2089,19 +1389,6 @@ def X2MULAPL32 : FmtALU64Acc<0x67, 0x15A,
     "x2mulapl32	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2MULPH32 : FmtALU64<0x67, 0x15B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2mulph32	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2MULPL32 : FmtALU64<0x67, 0x15C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2mulpl32	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULSPH32 : FmtALU64Acc<0x67, 0x15D,
     (outs DR64:$rd),
@@ -2117,98 +1404,6 @@ def X2MULSPL32 : FmtALU64Acc<0x67, 0x15E,
     "x2mulspl32	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SEL32_HH : FmtALU64<0x67, 0x15F,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_hh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SEL32_HL : FmtALU64<0x67, 0x160,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_hl	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SEL32_LH : FmtALU64<0x67, 0x161,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_lh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SEL32_LL : FmtALU64<0x67, 0x162,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2sel32_ll	$rd, $rs1, $rs2", []>;
-
-// X2SRA32R: per spec, rtd=DR64, rsd=DR64, rs=GPR32 (shift amount).
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SRA32R : FmtALU64<0x67, 0x163,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, GPR32:$rs2),
-    "x2sra32r	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SUB32S : FmtALU64<0x67, 0x164,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2sub32s	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SUB32S_HLLH : FmtALU64<0x67, 0x165,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2sub32s_hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SUB32_HLLH : FmtALU64<0x67, 0x166,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2sub32_hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SUBADD32 : FmtALU64<0x67, 0x167,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SUBADD32S : FmtALU64<0x67, 0x168,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32s	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SUBADD32S_HLLH : FmtALU64<0x67, 0x169,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32s_hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SUBADD32_HLLH : FmtALU64<0x67, 0x16A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2subadd32_hllh	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4ADD16S : FmtALU64<0x67, 0x16B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4add16s	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CJMUL16S_H : FmtALU64<0x67, 0x16C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmul16s.h	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CJMUL16S_L : FmtALU64<0x67, 0x16D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4cjmul16s.l	$rd, $rs1, $rs2", []>;
-
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4CJMULA16S_H : FmtALU64Acc<0x67, 0x16E,
     (outs DR64:$rd),
@@ -2233,28 +1428,6 @@ def X4CMULA16S_L : FmtALU64Acc<0x67, 0x174,
     "x4cmula16s.l	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4DOT16 : FmtALU64<0x67, 0x175,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4dot16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FCMUL16RS : FmtALU64<0x67, 0x176,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4fcmul16rs	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FCMUL16RSS : FmtALU64<0x67, 0x177,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4fcmul16rss	$rd, $rs1, $rs2", []>;
-
-// X4FCMULA16RS / RSS — complex MAC accumulate forms. DB behavior reads rtd
-// as accumulator (rtd[lane] = SAT(rtd[lane] +...)), so these are tied-def
-// FmtALU64Acc (was mis-modeled as FmtALU64 non-accumulating —).
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FCMULA16RS : FmtALU64Acc<0x67, 0x178,
     (outs DR64:$rd),
@@ -2270,144 +1443,6 @@ def X4FCMULA16RSS : FmtALU64Acc<0x67, 0x179,
     "x4fcmula16rss	$rd, $rs1, $rs2", []> {
     let Constraints = "$rd = $rd_in";
   }
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FMUL16RS : FmtALU64<0x67, 0x17A,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4fmul16rs	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FMUL16RSS : FmtALU64<0x67, 0x17B,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4fmul16rss	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FMUL16TS : FmtALU64<0x67, 0x17C,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4fmul16ts	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FRSST16 : FmtALU64<0x67, 0x17D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4frsst16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FRST16 : FmtALU64<0x67, 0x17E,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4frst16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4MAX16 : FmtALU64<0x67, 0x17F,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4max16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4MIN16 : FmtALU64<0x67, 0x180,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4min16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SAT32T16 : FmtALU64<0x67, 0x181,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4sat32t16	$rd, $rs1, $rs2", []>;
-
-// X4 SIMD shifts: per spec, rtd=DR64, rsd=DR64, rs=GPR32 (shift amount).
-// The shift amount comes from a GPR32 register (signed 5-bit value in rs[4:0]).
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SLL16 : FmtALU64<0x67, 0x182,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, GPR32:$rs2),
-    "x4sll16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SRA16 : FmtALU64<0x67, 0x183,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, GPR32:$rs2),
-    "x4sra16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SRA16R : FmtALU64<0x67, 0x184,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, GPR32:$rs2),
-    "x4sra16r	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SRL16 : FmtALU64<0x67, 0x185,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, GPR32:$rs2),
-    "x4srl16	$rd, $rs1, $rs2", []>;
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SUB16S : FmtALU64<0x67, 0x186,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4sub16s	$rd, $rs1, $rs2", []>;
-
-//===----------------------------------------------------------------------===//
-// FmtMAC — Ternary register (rd, rs1, rs2, ra). DB restricts this whole
-// SIMD-MAC family to SLOT 1 ONLY (capstone-schedule-port-audit §(b)-1
-// 15 instrs over-promised slot 2 under FmtMAC's default
-// Slot12_ALU + slot-1/2 bits). Each def overrides Itinerary + TSFlags{2-0} =
-// 0b010 so two of these cannot pack into one bundle.
-//
-// Itinerary split (D2XX): ACCUMULATOR-form SIMD-MACs (X*MULA*/X*MULS*) use
-// Slot1_MAC -> OperandCycles [2,1,1,2] so the 1-cycle acc feedback path
-// and 2-cycle regfile writeback are both modeled. MULTIPLY-form SIMD-MACs
-// (X*CMUL*, X4FF2MUL16S) keep Slot1_ALU (latency 1, no acc read). X4SEL16
-// is a lane permutation, not a MAC -> Slot1_ALU.
-//===----------------------------------------------------------------------===//
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2CMUL32 : FmtMAC2Dest<0x68, 0x00,
-    (outs DR64:$rd, DR64:$rtd2),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2cmul32	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot12_MAC;
-  let TSFlags{2-0} = 0b010;
-}
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2CMUL32S : FmtMAC2Dest<0x68, 0x01,
-    (outs DR64:$rd, DR64:$rtd2),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2cmul32s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot12_MAC;
-  let TSFlags{2-0} = 0b010;
-}
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2CMUL32S_F2 : FmtMAC2Dest<0x68, 0x02,
-    (outs DR64:$rd, DR64:$rtd2),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2cmul32s.f2	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot12_MAC;
-  let TSFlags{2-0} = 0b010;
-}
-
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2CMUL32_F2 : FmtMAC2Dest<0x68, 0x03,
-    (outs DR64:$rd, DR64:$rtd2),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x2cmul32.f2	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
-  let TSFlags{2-0} = 0b010;
-}
-
-// (Path B): TRUE 2-output accumulate (golden DR_Write_Port=[rtd1,rtd2]
-// DR_Read_Port=[rtd1,rtd2,rsd1,rsd2]). The legacy dag binds 2 dests + 2 acc
-// inputs + 2 srcs (6 operands) with tied-def Constraints so MI.setDesc(legacy
-// > _S<k>) preserves the operand count (6) and def count (2). The 2nd
-// dest ($rtd2) and 2nd accum ($ra2) are unencoded passthroughs here (FmtMAC
-// has no rtd2/ra2 fields) — the slot encoder handles the real encoding after
-// setDesc. The Constraints force regalloc to coalesce acc1->rtd1, acc2->rtd2.
 let Constraints = "$rd = $ra, $rtd2 = $ra2" in {
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X2MULA32 : FmtMAC2Dest<0x68, 0x04,
@@ -2427,18 +1462,6 @@ def X2MULS32 : FmtMAC2Dest<0x68, 0x05,
   let TSFlags{2-0} = 0b010;
 }
 }  // Constraints = "$rd = $ra, $rtd2 = $ra2"
-
-// X4FF2MUL16S — (Path B): TRUE 2-output NON-accum (golden DR_Write_Port
-// =[rtd1,rtd2], DR_Read_Port=[rsd1,rsd2]). 2 dests + 2 srcs (4 operands).
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4FF2MUL16S : FmtMAC2Dest<0x68, 0x06,
-    (outs DR64:$rd, DR64:$rtd2),
-    (ins DR64:$rs1, DR64:$rs2),
-    "x4ff2mul16s	$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot12_MAC;
-  let TSFlags{2-0} = 0b010;
-}
-
 let Constraints = "$rd = $ra, $rtd2 = $ra2" in {
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def X4FF2MULA16S : FmtMAC2Dest<0x68, 0x07,
@@ -2494,22 +1517,6 @@ def X4MULS16S : FmtMAC2Dest<0x68, 0x0C,
   let TSFlags{2-0} = 0b010;
 }
 }  // Constraints = "$rd = $ra, $rtd2 = $ra2"
-
-// X4SEL16 — DB syntax `X4SEL16 rtd, rsd1, rsd2, rs` (DR64 dest + 2 DR64
-// sources + GPR32 lane selector; DB slot 1 only). Previously stubbed with
-// all-GPR32 operands (capstone drift cat 1/2). Fixed to DR64 dest/sources;
-// the GPR32 selector `ra` (DB `rs`) stays GPR32. Inert: no selector case
-// no intrinsic Pat. FmtMAC encoding uses DR64 register fields, matching.
-// Slot-1-only per capstone-schedule-port-audit §(b)-1.
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SEL16 : FmtMAC<0x68, 0x0D,
-    (outs DR64:$rd),
-    (ins DR64:$rs1, DR64:$rs2, GPR32:$ra),
-    "x4sel16	$rd, $rs1, $rs2, $ra", []> {
-  let Itinerary = Slot1_ALU;
-  let TSFlags{2-0} = 0b010;
-}
-
 //===----------------------------------------------------------------------===//
 // FmtALU32 — Binary GPR32 (rd, rs1, rs2) — slot 0 (0b001)
 // 23 instructions
@@ -2555,37 +1562,6 @@ let isAsmParserOnly = 1 in {
 //===----------------------------------------------------------------------===//
 
 let isPseudo = 1 in {
-
-// MC crash-shield (capstone-mc-encoding-audit H1): isPseudo=1
-// alone does NOT exclude these from the asm matcher, so `llvm-mc` accepted
-// them and the emitter then crashed (LLVM ERROR: Unsupported instruction).
-// isCodeGenOnly=1 excludes them from the matcher (and decoder) while keeping
-// them selectable via Pat patterns. Drop isCodeGenOnly once real encoding
-// bits land (M5). Same pattern as SEXT32T64 (line ~2885) /.
-// ABS64 / ABS64S moved to HaydnInstrInfo.td (real FmtALU64Unary 0x67/0x1A7
-// 0x1A8). The HaydnInst<4> isPseudo stubs here were dropped by AsmPrinter
-// (EMPTY_SEL: intrin_sat64). Post-RA leaveRegion setDesc commits base →
-// ABS64*_S1/_S2 members; encode prints Desc as-is.
-
-// ARCTAN — DB syntax `ARCTAN rt, rsd, uimm4` (GPR32 dest + DR64 source
-// DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
-// as GPR32 (capstone drift cat 1). Fixed to DR64 source. Inert: no selector
-// case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
-// T-SM2: conservative dest Data_Latency 17 (golden uimm4+2 max) so pre-RA
-// and LatencyStalls see the read window; members cover the same OperandCycles.
-let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", Itinerary = Slot12_ALU_SinCosLat in
-def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
-    (ins DR64:$rs, simm16:$imm),
-    "arctan	$rd, $rs, $imm", []>;
-
-// BREV/CB load + BREV imm-store encodings (extracted from the
-// blanket isPseudo=1 block above). Encoded as FmtALU32 (RR-form, slot
-// 012) and FmtI (RI-form) under isAsmParserOnly=1, mirroring wave 2's
-// SDW_BREV_REG/S_SW_BREV_REG treatment. The disassembler conflict with
-// FmtI (ISA-02 note above) is accepted: assembly + AsmPrinter emission
-// work, disassembly is excluded until the encoding space is partitioned.
-// `let isPseudo = 0` is required because these defs are still inside
-// the surrounding `let isPseudo = 1 in { … }` scope (HaydnInstrInfoManual.td:2205).
 //===---------------------------------------------------------------===//
 // Fused post-increment / pre-increment / offset DR64 loads.
 // DB (haydn_instruction_db.json) is authoritative: every D_L*_POST/PRE/WITH
@@ -2670,363 +1646,6 @@ let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
 def MOVEI_L : HaydnInst<4, (outs DR64:$rd),
     (ins simm32_movei:$imm32),
     "movei_l\t$rd, $imm32", []>;
-
-
-// MOVF64 / MOVT64 moved to HaydnInstrInfo.td (— real FmtALU64Unary
-// encodings under opcode 0x67 funct 0x18A/0x18B). The HaydnInst<4> defs
-// here were blanket pseudos with no encoding; AsmPrinter dropped them.
-
-// NEG64 / NEG64S moved to HaydnInstrInfo.td (real FmtALU64Unary 0x67/0x1A9
-// 0x1AA). Same EMPTY_SEL → emit fix as ABS64/ABS64S.
-
-// NOT64 moved to HaydnInstrInfo.td (real FmtALU64Unary — was MCID::Pseudo
-// HaydnInst shell that AsmPrinter dropped; slot members NOT64_S1/S2 live).
-
-// NSA*/POPCOUNT64/HMAX*/LOG2/EXP2/RECIP/SQRT moved to HaydnInstrInfo.td
-// (FmtALU64Unary 0x67/0x1AE..0x1BC).
-// R_GD family (FormatsALU64): outs GPR32:$rt, ins DR64:$rsd.
-// Logical operand dag MUST match members so leaveRegion setDesc is legal.
-// Prior stubs modeled GPR32 source (capstone drift); product members are
-// DR64 source. Same shape as POPCOUNT64.
-// POPCOUNT64 — DB syntax `POPCOUNT64 rt, rsd` (GPR32 dest + DR64 source
-// DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
-// as GPR32 (capstone drift cat 1). Fixed to DR64 source (R_GD).
-// SEQ64 / SLE64 / SLT64 moved to HaydnInstrInfo.td (— real
-// FmtALU64Unary encodings under opcode 0x67 funct 0x187/0x188/0x189).
-
-// Auto-gen stub for the SEXT32T64 mnemonic — KEEPS isCodeGenOnly=1.
-// The REAL instruction is SEXT_GPR32_TO_DR64 in HaydnInstrInfo.td :
-// FmtALU64Unary with the correct `(outs DR64:$rd), (ins GPR32:$rs1)`
-// operand types and a real encoding (opcode 0x67 funct 0x197), and it is
-// NOT isCodeGenOnly so the AsmParser matcher + disassembler both see it.
-//
-// This stub's operand-type typo (GPR32:$rd instead of DR64:$rd) and absent
-// encoding mean it MUST stay out of both the AsmParser matcher and the
-// decoder. isPseudo=1 alone was NOT enough : it excludes the *decoder*
-// but NOT the AsmParser's MatchInstructionImpl table. The first fix attempt
-// put isCodeGenOnly=1 on BOTH this stub AND the real instruction — but that
-// excluded the real instruction too, so `llvm-mc` had nothing to match
-// `sext32t64 d0, r8` against and still failed. The correct split:
-// real instruction NOT isCodeGenOnly (parseable + encodable), this stub
-// isCodeGenOnly (excluded from matcher). AsmPrinter never emits this opcode
-// (it emits SEXT_GPR32_TO_DR64), so MC encoding of the stub is irrelevant.
-let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def SEXT32T64 : HaydnInst<4, (outs GPR32:$rd),
-    (ins GPR32:$rs),
-    "sext32t64	$rd, $rs", []>;
-
-// SIN_COS — DB syntax `SIN_COS rtd, rs, uimm4` (DR64 dest + GPR32 src
-// DB slots DR_Write=['rtd'] GPR_Read=['rs']). Stub previously modeled dest
-// as GPR32 (capstone drift cat 2). Fixed to DR64 dest. Inert: no selector
-// case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
-// T-SM2: conservative dest Data_Latency 17 (golden uimm4+2 max) so pre-RA
-// and LatencyStalls see the read window; members cover the same OperandCycles.
-let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", Itinerary = Slot12_ALU_SinCosLat in
-def SIN_COS : HaydnInst<4, (outs DR64:$rd),
-    (ins GPR32:$rs, simm16:$imm),
-    "sin_cos	$rd, $rs, $imm", []>;
-
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LBS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs, simm6:$scaled_imm),
-    "s_lbs_with_imm\t$rt, $rs, $scaled_imm", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LBS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "s_lbs_with_reg\t$rt, $rs1, $rs2", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LBU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs, simm6:$scaled_imm),
-    "s_lbu_with_imm\t$rt, $rs, $scaled_imm", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LBU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "s_lbu_with_reg\t$rt, $rs1, $rs2", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LHWS_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs, simm6:$scaled_imm),
-    "s_lhws_with_imm\t$rt, $rs, $scaled_imm", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LHWS_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "s_lhws_with_reg\t$rt, $rs1, $rs2", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LHWU_WITH_IMM : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs, simm6:$scaled_imm),
-    "s_lhwu_with_imm\t$rt, $rs, $scaled_imm", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-let isPseudo = 0, isAsmParserOnly = 1, mayLoad = 1 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def S_LHWU_WITH_REG : HaydnInst<4, (outs GPR32:$rt),
-    (ins GPR32:$rs1, GPR32:$rs2),
-    "s_lhwu_with_reg\t$rt, $rs1, $rs2", []> {
-  let TSFlags{2-0} = 0b011;
-  let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_LS;
-}
-
-// S_LW_BREV — DB: rt = mem32[REVERSE32(rs)]; rs += imm6<<2. GPR32 dest + WB.
-// (followup, SILENT WRONG-CODE class): `let isPseudo = 0` is
-// REQUIRED because these defs sit inside the surrounding `let isPseudo = 1
-// in {... }` scope opened at line 2413. Without it, AsmPrinter drops the
-// MCInst (MCID::Pseudo) and the load has NO effect — the exact defect
-// fixed for D_LDW_POST_IMM / S_LW_POST_IMM. Mirrors D_LDW_BREV_IMM/REG at
-// lines 2467/2477 which correctly carry the override. The S_LW_BREV_IMM/REG
-// forms emit TableGen encoding bits for single-child bundles (like the
-// working D_SDW_BREV_REG / S_SW_BREV_REG); product encode is Format E member.
-
-
-
-
-// S_LW (word). DB: rt = mem32[rs]; POST: rs += imm6<<2.
-// This reuses the existing LD32_POST/FmtLSPostInc encoding slot. It must be a
-// real codegen-only instruction, not an asm-parser-only pseudo: AsmPrinter
-// bundle emission skips pseudos, and TableGen does not emit an MC encoder case
-// for asm-parser-only records.
-
-
-
-
-
-// BREV store — DB: mem32[REVERSE32(rs)] = rt; rs += imm6<<2. GPR32 data, WB.
-// (followup, SILENT WRONG-CODE class): `let isPseudo = 0` is
-// REQUIRED because this def sits inside the surrounding `let isPseudo = 1
-// in {... }` scope opened at line 2413. Without it, AsmPrinter drops the
-// MCInst (MCID::Pseudo) and the store has NO effect — the exact defect
-// fixed for D_LDW_POST_IMM / S_LW_POST_IMM. Mirrors D_LDW_BREV_IMM at line
-// 2467 which correctly carries the override. S_SW_BREV_IMM emits TableGen
-// encoding bits for single-child bundles (same as the working S_SW_BREV_REG);
-// product encode is Format E member.
-
-
-// TRANSF64 / TRANSF64F2 — DB syntax `TRANSF64 rtd, rs` (DR64 dest + GPR32
-// src, per DB slots DR_Write=['rtd'] GPR_Read=['rs']). The stub below
-// previously modeled both operands as GPR32 (capstone drift cat 1/2). Fixed
-// to match the DB. Inert placeholder: no selector (HaydnInstructionSelector
-// has no case), no intrinsic Pat in HaydnIntrinsics.td. Stays isCodeGenOnly
-// until a real encoding lands (M5).
-let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def TRANSF64 : HaydnInst<4, (outs DR64:$rd),
-    (ins GPR32:$rs),
-    "transf64	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def TRANSF64F2 : HaydnInst<4, (outs DR64:$rd),
-    (ins GPR32:$rs),
-    "transf64f2	$rd, $rs", []>;
-
-let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-// X2ABS32 / X2ABS32S / X2NEG32 / X2NEG32S / X2NEG32_L / X2NEG32S_L moved to
-// HaydnInstrInfo.td (FmtALU64Unary 0x67/0x18C + 0x1A2..0x1A6). Flex _S1/_S2
-// forms remain in HaydnFormatsALU64.td (golden Mode-0 opcodes 0x51..0x56).
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2HADD32S_H : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x2hadd32s_h	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2HADD32S_L : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x2hadd32s_l	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2HADD32_H : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x2hadd32_h	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2HADD32_L : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x2hadd32_l	$rd, $rs", []>;
-
-// X2HMAX/X2HMIN — R_GD members (FormatsALU64): outs GPR32 / ins DR64.
-// Prior logical used DR64 dest (R_DD drift); setDesc then aborted
-// '$d0 is not a GPR32'. Match members so alts leaveRegion is legal.
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2MJSWAP32 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x2mjswap32	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2MJSWAP32S : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x2mjswap32s	$rd, $rs", []>;
-
-// X2MOVF32 / X2MOVT32 moved to HaydnInstrInfo.td (— FmtALU64Binary
-// 0x67/0x190, 0x67/0x191).
-
-// X2NEG* base stubs removed — see note above (real FmtALU64Unary in
-// HaydnInstrInfo.td).
-
-// X2SEQ32 / X2SLE32 / X2SLT32 moved to HaydnInstrInfo.td.
-// X2SLLI32 / X2SRAI32 / X2SRAI32R / X2SRLI32 moved to HaydnInstrInfo.td
-// (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X2SWAP32 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x2swap32	$rd, $rs", []>;
-
-// X4ABS16 / X4ABS16S promoted to real FmtALU64Unary in HaydnInstrInfo.td
-// (same EMPTY_SEL / AsmPrinter MCID::Pseudo drop as ABS64/X2ABS32S).
-// Slot forms remain X4ABS16{,S}_S1/_S2 in HaydnFormatsALU64.td.
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CMUL16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CMUL16S : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16s	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CMUL16S_F2 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16s.f2	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CMUL16_F2 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4cmul16.f2	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CONJ16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4conj16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4CONJ16S : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4conj16s	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4ENERGY16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4energy16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4HADD16_H : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4hadd16_h	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4HADD16_L : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4hadd16_l	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4MJSWAP16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4mjswap16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4MJSWAP16S : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4mjswap16s	$rd, $rs", []>;
-
-// X4MOVF16 / X4MOVT16 / X4SELI16 / X4SEQ16 / X4SLE16 / X4SLT16 moved to
-// HaydnInstrInfo.td (— FmtALU64Binary / FmtALU64SelImm encodings).
-// X4SLLI16 / X4SRAI16 / X4SRAI16R / X4SRLI16 moved to HaydnInstrInfo.td
-// (— FmtALU64ShiftImm encoding, retiring the AsmPrinter hack).
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4NEG16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4neg16	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4NEG16S : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4neg16s	$rd, $rs", []>;
-
-let TSFlags = 14 in
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def X4SWAP16 : HaydnInst<4, (outs DR64:$rd),
-    (ins DR64:$rs),
-    "x4swap16	$rd, $rs", []>;
-
-// ZERO_DR — isCodeGenOnly logical base for S1/S2 I8_ZERODR members.
-// Operand dag must match members (DR64 def, no imm) so LogicalMaterialize
-// can setDesc. Golden ZERO_DR has no immediate; the simm16 stub was a
-// hypothesized Auto encoding and blocked ISel from using the logical.
-let TSFlags = 14, isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
-def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
-    (ins),
-    "zero_dr\t$rd", []>;
-
-// MOVESFR2GPR / MOVEGPR2SFR / ZERO_SFR moved to HaydnInstrInfo.td (
-// real 32-bit R-type encodings under opcode 0x67 funct 0x198/0x199/0x19A
-// with explicit Inst{...}=... assignments for the unusual operand shapes).
-
 //===----------------------------------------------------------------------===//
 // Circular Buffer Load/Store (CBR — Circular Buffer Registers)
 //
@@ -3220,3 +1839,157 @@ def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs1_wb),
 // FmtALU32: 23
 // HaydnInst (no format class): 167
 } // isCodeGenOnly: hypothesized Auto encodings quarantined from MC
+
+//===----------------------------------------------------------------------===//
+// Multi-dest (2×DR64) logicals — hand-owned until the golden-logicals
+// emitter learns dual accumulator ties (same class as X2MULA32).
+//===----------------------------------------------------------------------===//
+
+
+//===----------------------------------------------------------------------===//
+// FmtMAC — Ternary register (rd, rs1, rs2, ra). DB restricts this whole
+// SIMD-MAC family to SLOT 1 ONLY (capstone-schedule-port-audit §(b)-1
+// 15 instrs over-promised slot 2 under FmtMAC's default
+// Slot12_ALU + slot-1/2 bits). Each def overrides Itinerary + TSFlags{2-0} =
+// 0b010 so two of these cannot pack into one bundle.
+//
+// Itinerary split (D2XX): ACCUMULATOR-form SIMD-MACs (X*MULA*/X*MULS*) use
+// Slot1_MAC -> OperandCycles [2,1,1,2] so the 1-cycle acc feedback path
+// and 2-cycle regfile writeback are both modeled. MULTIPLY-form SIMD-MACs
+// (X*CMUL*, X4FF2MUL16S) keep Slot1_ALU (latency 1, no acc read). X4SEL16
+// is a lane permutation, not a MAC -> Slot1_ALU.
+//===----------------------------------------------------------------------===//
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
+def X2CMUL32 : FmtMAC2Dest<0x68, 0x00,
+    (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32	$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+
+
+
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
+def X2CMUL32S : FmtMAC2Dest<0x68, 0x01,
+    (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32s	$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+
+
+
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
+def X2CMUL32S_F2 : FmtMAC2Dest<0x68, 0x02,
+    (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32s.f2	$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+
+
+
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
+def X2CMUL32_F2 : FmtMAC2Dest<0x68, 0x03,
+    (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32.f2	$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot1_ALU;
+  let TSFlags{2-0} = 0b010;
+}
+
+// (Path B): TRUE 2-output accumulate (golden DR_Write_Port=[rtd1,rtd2]
+// DR_Read_Port=[rtd1,rtd2,rsd1,rsd2]). The legacy dag binds 2 dests + 2 acc
+// inputs + 2 srcs (6 operands) with tied-def Constraints so MI.setDesc(legacy
+// > _S<k>) preserves the operand count (6) and def count (2). The 2nd
+// dest ($rtd2) and 2nd accum ($ra2) are unencoded passthroughs here (FmtMAC
+// has no rtd2/ra2 fields) — the slot encoder handles the real encoding after
+// setDesc. The Constraints force regalloc to coalesce acc1->rtd1, acc2->rtd2.
+
+
+
+// X4FF2MUL16S — (Path B): TRUE 2-output NON-accum (golden DR_Write_Port
+// =[rtd1,rtd2], DR_Read_Port=[rsd1,rsd2]). 2 dests + 2 srcs (4 operands).
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
+def X4FF2MUL16S : FmtMAC2Dest<0x68, 0x06,
+    (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x4ff2mul16s	$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+
+// ZERO_DR — hand-owned: golden I8 member has no dest field; the value-dest
+// law cannot see the implicit DR64 def the GISel ZERO_DR pseudo expects.
+
+// ZERO_DR — isCodeGenOnly logical base for S1/S2 I8_ZERODR members.
+// Operand dag must match members (DR64 def, no imm) so LogicalMaterialize
+// can setDesc. Golden ZERO_DR has no immediate; the simm16 stub was a
+// hypothesized Auto encoding and blocked ISel from using the logical.
+let TSFlags = 14, isPseudo = 0, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
+def ZERO_DR : HaydnInst<4, (outs DR64:$rd),
+    (ins),
+    "zero_dr\t$rd", []>;
+
+// MOVESFR2GPR / MOVEGPR2SFR / ZERO_SFR moved to HaydnInstrInfo.td (
+// real 32-bit R-type encodings under opcode 0x67 funct 0x198/0x199/0x19A
+// with explicit Inst{...}=... assignments for the unusual operand shapes).
+
+// SIN_COS / ARCTAN — hand-owned: Slot12_ALU_SinCosLat is a conservative
+// dest Data_Latency-17 law (golden uimm4+2 max, T-SM2) the port-derived
+// itinerary cannot see.
+
+
+// SIN_COS — DB syntax `SIN_COS rtd, rs, uimm4` (DR64 dest + GPR32 src
+// DB slots DR_Write=['rtd'] GPR_Read=['rs']). Stub previously modeled dest
+// as GPR32 (capstone drift cat 2). Fixed to DR64 dest. Inert: no selector
+// case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
+// T-SM2: conservative dest Data_Latency 17 (golden uimm4+2 max) so pre-RA
+// and LatencyStalls see the read window; members cover the same OperandCycles.
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", Itinerary = Slot12_ALU_SinCosLat in
+def SIN_COS : HaydnInst<4, (outs DR64:$rd),
+    (ins GPR32:$rs, simm16:$imm),
+    "sin_cos	$rd, $rs, $imm", []>;
+
+
+
+
+
+// MC crash-shield (capstone-mc-encoding-audit H1): isPseudo=1
+// alone does NOT exclude these from the asm matcher, so `llvm-mc` accepted
+// them and the emitter then crashed (LLVM ERROR: Unsupported instruction).
+// isCodeGenOnly=1 excludes them from the matcher (and decoder) while keeping
+// them selectable via Pat patterns. Drop isCodeGenOnly once real encoding
+// bits land (M5). Same pattern as SEXT32T64 (line ~2885) /.
+// ABS64 / ABS64S moved to HaydnInstrInfo.td (real FmtALU64Unary 0x67/0x1A7
+// 0x1A8). The HaydnInst<4> isPseudo stubs here were dropped by AsmPrinter
+// (EMPTY_SEL: intrin_sat64). Post-RA leaveRegion setDesc commits base →
+// ABS64*_S1/_S2 members; encode prints Desc as-is.
+
+// ARCTAN — DB syntax `ARCTAN rt, rsd, uimm4` (GPR32 dest + DR64 source
+// DB slots DR_Read=['rsd'] GPR_Write=['rt']). Stub previously modeled source
+// as GPR32 (capstone drift cat 1). Fixed to DR64 source. Inert: no selector
+// case, no intrinsic Pat. Stays isCodeGenOnly until a real encoding (M5).
+// T-SM2: conservative dest Data_Latency 17 (golden uimm4+2 max) so pre-RA
+// and LatencyStalls see the read window; members cover the same OperandCycles.
+let TSFlags = 14, isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", Itinerary = Slot12_ALU_SinCosLat in
+def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
+    (ins DR64:$rs, simm16:$imm),
+    "arctan	$rd, $rs, $imm", []>;
+
+// BREV/CB load + BREV imm-store encodings (extracted from the
+// blanket isPseudo=1 block above). Encoded as FmtALU32 (RR-form, slot
+// 012) and FmtI (RI-form) under isAsmParserOnly=1, mirroring wave 2's
+// SDW_BREV_REG/S_SW_BREV_REG treatment. The disassembler conflict with
+// FmtI (ISA-02 note above) is accepted: assembly + AsmPrinter emission
+// work, disassembly is excluded until the encoding space is partitioned.
+// `let isPseudo = 0` is required because these defs are still inside
+// the surrounding `let isPseudo = 1 in { … }` scope (HaydnInstrInfoManual.td:2205).
+

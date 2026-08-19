@@ -225,10 +225,10 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; ASM-NEXT:    { addi32 r5, r5, 1; ld32 r6, r4, 0 }
 ; ASM-NEXT:    { nop; s_lw_post_imm r7, r2, 1 }
 ; ASM-NEXT:    { nop; addi32 r4, r4, 4 }
-; ASM-NEXT:    { slt32 r6, r5, r3; mull r7, r6, r7 }
+; ASM-NEXT:    { nop; mull r6, r6, r7 }
 ; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { nop; add32 r1, r1, r7 }
-; ASM-NEXT:    { nop; bnez r6, .LBB2_2 }
+; ASM-NEXT:    { slt32 r7, r5, r3; add32 r1, r1, r6 }
+; ASM-NEXT:    { nop; bnez r7, .LBB2_2 }
 ; ASM-NEXT:  .LBB2_3: // %exit
 ; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa sp, 0
@@ -262,10 +262,10 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; PREGREEDY-NEXT:   [[LD32_:%[0-9]+]]:gpr32 = LD32 [[COPY]], 0 :: (load (s32) from %ir.lsr.iv1)
 ; PREGREEDY-NEXT:   [[S_LW_POST_IMM:%[0-9]+]]:gpr32, [[COPY1:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[COPY1]], 1 :: (load (s32) from %ir.lsr.iv)
 ; PREGREEDY-NEXT:   [[COPY3:%[0-9]+]]:gpr32 = ADDI32 [[COPY3]], 1
-; PREGREEDY-NEXT:   [[S_LW_POST_IMM:%[0-9]+]]:gpr32 = MULL [[LD32_]], [[S_LW_POST_IMM]]
+; PREGREEDY-NEXT:   [[MULL:%[0-9]+]]:gpr32 = MULL [[LD32_]], [[S_LW_POST_IMM]]
 ; PREGREEDY-NEXT:   [[SLT32_1:%[0-9]+]]:gpr32 = SLT32 [[COPY3]], [[COPY2]]
 ; PREGREEDY-NEXT:   [[COPY:%[0-9]+]]:gpr32 = ADDI32 [[COPY]], 4
-; PREGREEDY-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = ADD32 [[LOADI32_]], [[S_LW_POST_IMM]]
+; PREGREEDY-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = ADD32 [[LOADI32_]], [[MULL]]
 ; PREGREEDY-NEXT:   BNEZ_W [[SLT32_1]], %bb.2
 ; PREGREEDY-NEXT:   B %bb.3
 ; PREGREEDY-NEXT: {{  $}}
@@ -300,11 +300,11 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; PREPOST-NEXT:   $r6 = LD32 $r4, 0 :: (load (s32) from %ir.lsr.iv1)
 ; PREPOST-NEXT:   $r7, $r2 = S_LW_POST_IMM killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
 ; PREPOST-NEXT:   $r5 = ADDI32 killed $r5, 1
-; PREPOST-NEXT:   $r7 = MULL killed $r6, killed $r7
-; PREPOST-NEXT:   $r6 = SLT32 $r5, $r3
+; PREPOST-NEXT:   $r6 = MULL killed $r6, killed $r7
+; PREPOST-NEXT:   $r7 = SLT32 $r5, $r3
 ; PREPOST-NEXT:   $r4 = ADDI32 killed $r4, 4
-; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r7
-; PREPOST-NEXT:   BNEZ_W $r6, %bb.2
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r6
+; PREPOST-NEXT:   BNEZ_W $r7, %bb.2
 ; PREPOST-NEXT: {{  $}}
 ; PREPOST-NEXT: bb.3.exit:
 ; PREPOST-NEXT:   liveins: $r1
@@ -343,12 +343,12 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; POST-NEXT:   }
 ; POST-NEXT:   $r7, $r2 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
 ; POST-NEXT:   $r4 = ADDI32_E2_E1_ALU1_RI20 killed $r4, 4
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r7, implicit-def $r6, implicit killed $r6, implicit killed $r7, implicit $r5, implicit $r3 {
-; POST-NEXT:     $r7 = MULL_E2_E1_MAC1_RR killed $r6, killed $r7
-; POST-NEXT:     $r6 = SLT32_E2_E0_ALU0_RR $r5, $r3
+; POST-NEXT:   $r6 = MULL_E3_E2_MAC1_RR killed $r6, killed $r7
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r7, implicit killed $r1, implicit killed $r6, implicit $r5, implicit $r3 {
+; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r6
+; POST-NEXT:     $r7 = SLT32_E3_E0_ALU2_RR $r5, $r3
 ; POST-NEXT:   }
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r7
-; POST-NEXT:   BNEZ_W killed $r6, %bb.2
+; POST-NEXT:   BNEZ_W killed $r7, %bb.2
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.3.exit:
 ; POST-NEXT:   liveins: $r1

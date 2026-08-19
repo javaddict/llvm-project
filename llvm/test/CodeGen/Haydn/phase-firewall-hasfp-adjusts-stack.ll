@@ -16,6 +16,7 @@
 ; SRC-NOT: if (MFI.adjustsStack())
 
 declare void @callee()
+declare void @many(i32, i32, i32, i32, i32, i32, i32, i32, i32)
 
 define void @reg_only_call() {
 ; CHECK-LABEL: reg_only_call:
@@ -24,5 +25,25 @@ define void @reg_only_call() {
 ; CHECK:       jal{{.*}}callee
 ; CHECK:       jalr
   call void @callee()
+  ret void
+}
+
+; Outgoing stack args set adjustsStack / ADJCALLSTACK. Pre-fix, hasFPImpl
+; returned true and reserved R14. Live law: still SP-relative; SPAdj
+; covers the live call-frame window.
+define void @outgoing_stack_args() {
+; CHECK-LABEL: outgoing_stack_args:
+; CHECK-NOT:   .cfi_def_cfa {{fp|r14}}
+; CHECK:       jal{{.*}}many
+; CHECK:       jalr
+  call void @many(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9)
+  ret void
+}
+
+; VLA still requires FP (AIE/RISCV peer).
+define void @vla_needs_fp(i32 %n) {
+; CHECK-LABEL: vla_needs_fp:
+; CHECK:       .cfi_def_cfa {{fp|r14}}
+  %p = alloca i32, i32 %n
   ret void
 }

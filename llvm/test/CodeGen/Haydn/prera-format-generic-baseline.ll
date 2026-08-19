@@ -325,12 +325,12 @@ define i32 @base_dual_load_mac_stream(ptr nocapture readonly %x,
 ; POST-NEXT:   }
 ; POST-NEXT:   $r7, $r2 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
 ; POST-NEXT:   $r4 = ADDI32_E2_E1_ALU1_RI20 killed $r4, 4
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r7, implicit-def $r6, implicit killed $r6, implicit killed $r7, implicit $r5, implicit $r3 {
-; POST-NEXT:     $r7 = MULL_E2_E1_MAC1_RR killed $r6, killed $r7
-; POST-NEXT:     $r6 = SLT32_E2_E0_ALU0_RR $r5, $r3
+; POST-NEXT:   $r6 = MULL_E3_E2_MAC1_RR killed $r6, killed $r7
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r7, implicit killed $r1, implicit killed $r6, implicit $r5, implicit $r3 {
+; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r6
+; POST-NEXT:     $r7 = SLT32_E3_E0_ALU2_RR $r5, $r3
 ; POST-NEXT:   }
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r7
-; POST-NEXT:   BNEZ_W killed $r6, %bb.2
+; POST-NEXT:   BNEZ_W killed $r7, %bb.2
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.3.exit:
 ; POST-NEXT:   liveins: $r1

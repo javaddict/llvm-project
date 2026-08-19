@@ -30,8 +30,9 @@ define i32 @sub(i32 %a, i32 %b) {
 
 define i32 @mul(i32 %a, i32 %b) {
 ; CHECK-LABEL: mul:
+; 2026-08-19: MULL untied per golden (non-destructive rt = rs1*rs2; ISS
+; CC_G_GG_M) — the two-address move32 copy is gone.
 ; CHECK-DAG: mull
-; CHECK-DAG: move32
   %r = mul i32 %a, %b
   ret i32 %r
 }

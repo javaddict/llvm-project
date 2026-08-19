@@ -105,9 +105,11 @@ entry:
 ; ASM-DAG: st32{{.*}}{{r[0-9]+|fp}}, r7,
 
 ; Coefficient multiplies (mull).
-; ASM: mull
-; ASM: mull
-; ASM: mull
+; 2026-08-19: mull untied per golden — order vs DAG groups changed;
+; presence of the 3 tap products is the contract.
+; ASM-DAG: mull
+; ASM-DAG: mull
+; ASM-DAG: mull
 
 ; Accumulation via add32 (the selector no longer emits mac32; the adds sum the
 ; per-tap products).

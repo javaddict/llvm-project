@@ -126,9 +126,9 @@ define i32 @test_2d_array_const_col(ptr %arr, i32 %row) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 20 }
-; CHECK-NEXT:    { nop; mull r3, r2, r3 }
+; CHECK-NEXT:    { nop; mull r2, r2, r3 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add32 r2, r1, r3 }
+; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; s_lw_pre_imm r1, r2, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

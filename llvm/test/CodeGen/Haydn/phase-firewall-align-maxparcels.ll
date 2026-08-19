@@ -26,6 +26,7 @@ define void @aligned256() align 256 {
 }
 
 ; SEC: Name: .text
+; SEC: Size: 816
 ; SEC: AddressAlignment: 256
 
 ; DIS-LABEL: <lead>:

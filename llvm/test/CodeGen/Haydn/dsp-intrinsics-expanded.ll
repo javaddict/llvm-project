@@ -651,8 +651,9 @@ declare i32 @llvm.haydn.mulsuh(i32, i32)
 declare i32 @llvm.haydn.muluuh(i32, i32)
 define i32 @test_mull(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_mull:
+; 2026-08-19: MULL untied per golden (rt = rs1*rs2, non-destructive; ISS
+; CC_G_GG_M) — the old $rd=$rs2 two-address copy (move32) is gone.
 ; CHECK-DAG: mull
-; CHECK-DAG: move32
   %r = call i32 @llvm.haydn.mull(i32 %a, i32 %b)
   ret i32 %r
 }
