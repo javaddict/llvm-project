@@ -109,80 +109,19 @@ add_subdirectory(AsmParser)
 add_subdirectory(Disassembler)
 add_subdirectory(TargetInfo)
 
-# T-TII2 / R1: fail-closed Format E importer --check (generated records +
-# XLSX↔JSON parity + canonical-vector ledger round-trip). Peer is BundleSim
-# generate_catalog.py --check wired as add_custom_target / add_test
-# (bundlesim/CMakeLists.txt:82-83 and :538-546). AIE has no golden importer;
-# formats come from TableGen -gen-instr-format (AIE/CMakeLists.txt:18) and
-# AIEMCFormats.h:45-47 generated includes.
-# Golden check targets require an explicit dir. Peer: BundleSim
-# bundlesim/CMakeLists.txt:529-553 (env or -D cache; skip if unset).
-# AIE has no golden importer (AIE/CMakeLists.txt:18 TableGen -gen-instr-format).
-# Never fall back to a host-absolute plans-tree path or a home-directory copy.
-if(Python3_EXECUTABLE)
-  set(_HAYDN_GOLDEN_DIR "")
-  if(DEFINED ENV{HAYDN_GOLDEN_DIR} AND NOT "$ENV{HAYDN_GOLDEN_DIR}" STREQUAL "")
-    set(_HAYDN_GOLDEN_DIR "$ENV{HAYDN_GOLDEN_DIR}")
-  elseif(DEFINED HAYDN_GOLDEN_DIR AND NOT "${HAYDN_GOLDEN_DIR}" STREQUAL "")
-    set(_HAYDN_GOLDEN_DIR "${HAYDN_GOLDEN_DIR}")
-  elseif(DEFINED ENV{BUNDLESIM_GOLDEN_DIR} AND NOT "$ENV{BUNDLESIM_GOLDEN_DIR}" STREQUAL "")
-    set(_HAYDN_GOLDEN_DIR "$ENV{BUNDLESIM_GOLDEN_DIR}")
-  elseif(DEFINED BUNDLESIM_GOLDEN_DIR AND NOT "${BUNDLESIM_GOLDEN_DIR}" STREQUAL "")
-    set(_HAYDN_GOLDEN_DIR "${BUNDLESIM_GOLDEN_DIR}")
-  endif()
-  if(NOT _HAYDN_GOLDEN_DIR STREQUAL "")
-    if(EXISTS "${_HAYDN_GOLDEN_DIR}/golden/format_e_bit_layout_v2.json"
-       AND NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json")
-      set(_HAYDN_GOLDEN_DIR "${_HAYDN_GOLDEN_DIR}/golden")
-    endif()
-  endif()
-  # The canonical-vector ledger exists only where it was authored (and must
-  # be regenerated against the repaired golden before --check passes again).
-  # Without it the checks cannot run — skip if unset or ledger missing
-  # instead of wedging every build that depends on HaydnTests.
-  if(_HAYDN_GOLDEN_DIR STREQUAL "" OR
-     NOT EXISTS "${_HAYDN_GOLDEN_DIR}/format_e_canonical_vectors_v1.json")
-    set(_HAYDN_CHECK_SKIP TRUE)
-  endif()
-  if(_HAYDN_CHECK_SKIP)
-    add_custom_target(HaydnFormatERecordsCheck
-      COMMAND "${CMAKE_COMMAND}" -E echo
-              "HaydnFormatERecordsCheck SKIPPED: canonical-vector ledger not found under ${_HAYDN_GOLDEN_DIR} (regenerate it against the repaired golden on the plans machine)"
-      COMMENT "T-TII2: Format E importer --check SKIPPED (no canonical ledger)"
-      VERBATIM
-    )
-    add_custom_target(HaydnSchedRecordsCheck
-      COMMAND "${CMAKE_COMMAND}" -E echo
-              "HaydnSchedRecordsCheck SKIPPED: canonical-vector ledger not found under ${_HAYDN_GOLDEN_DIR}"
-      COMMENT "T-TII2: sched records --check SKIPPED (no canonical ledger)"
-      VERBATIM
-    )
-  endif()
-  if(NOT _HAYDN_CHECK_SKIP)
-  add_custom_target(HaydnFormatERecordsCheck
-    COMMAND "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/FormatE/generate_format_e_records.py"
-            --check
-            --json "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json"
-            --xlsx "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.xlsx"
-            --canonical-vectors "${_HAYDN_GOLDEN_DIR}/format_e_canonical_vectors_v1.json"
-            --out-dir "${CMAKE_CURRENT_SOURCE_DIR}"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "T-TII2: Format E importer --check (records + XLSX/JSON + canonical vectors)"
-    VERBATIM
-  )
-  add_custom_target(HaydnSchedRecordsCheck
-    COMMAND "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/FormatE/generate_sched_records.py"
-            --check
-            --json "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.json"
-            --xlsx "${_HAYDN_GOLDEN_DIR}/format_e_bit_layout_v2.xlsx"
-            --canonical-vectors "${_HAYDN_GOLDEN_DIR}/format_e_canonical_vectors_v1.json"
-            --constraints "${_HAYDN_GOLDEN_DIR}/VLIW_Engine_Compiler_Constraints.md"
-            --out-dir "${CMAKE_CURRENT_SOURCE_DIR}"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Published itinerary generator --check (HaydnGenSchedRecords.inc)"
-    VERBATIM
-  )
-  endif()
-endif()
+# Generated-source regeneration is an explicit developer step, NOT part of the
+# build. Ordinary builds consume the checked-in generated outputs
+# (HaydnGenFormatE*.inc, HaydnFormatsE96Members.td.inc,
+# HaydnInstrInfoGolden.td.inc) the same way they consume authored sources.
+# To regenerate after a golden v2_1 update, run the importer manually against
+# the pinned nine-file golden bundle (see contracts/pipeline.md
+# "Generated/authored input and check contract" and GOALS P19):
+#   python3 FormatE/generate_format_e_records.py \
+#     --json  <golden>/format_e_bit_layout_v2_1.json \
+#     --xlsx  <golden>/format_e_bit_layout_v2_1.xlsx \
+#     --canonical-vectors <golden>/format_e_canonical_vectors_v1.json \
+#     --out-dir .
+# and generate_sched_records.py likewise (adds --constraints). Both default to
+# v2_1 names and pin golden hashes. Do not wire golden paths into CMake: they
+# are machine-specific and would silently skip (or worse, pass stale) on hosts
+# without the plans-tree bundle.

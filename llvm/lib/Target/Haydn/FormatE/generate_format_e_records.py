@@ -3415,17 +3415,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # Measured, pinned: a regen that changes this set must be re-audited.
     # History: 87 -> 159 (2026-08-18 v2_1 index Read_Port growth) -> 87
     # (generated defs tied the 72 32X16 accumulators) -> 46 (2026-08-19
-    # S2b: the SMULA16/SMULA16S/SMULS16/SMULS16S families migrated to
-    # generated defs, which tie them per the golden law — CB-152c — and
-    # their HaydnIntrinsics.td Pats moved to the tied 3-op form). The
-    # remaining 46 are still-hand defs deliberately untied (F2MULAS32*,
-    # FMULS16_HS/LS, FMULAA16/SS16 pairs, MOVEI_*, MOVF64/MOVT64,
-    # MULSA32/MULSS32, X4CLAMP16); each closes when its family migrates.
+    # S2b wave-1) -> 4 (2026-08-19 S2b wave-2: F2MULAS32R/RS, F2MULSA32R/
+    # RS, FMULS16_HS/LS, FMULAA16/SS16 pairs, MULSA32/MULSS32, SMULA16
+    # family, and X4CLAMP16 all migrated to generated tied defs). The
+    # remaining 4 ledger items are the partial-write/conditional-move
+    # families (MOVEI_H/L, MOVF64/MOVT64, X2MOVF/T32, X4MOVF/T16):
+    # golden reads the old rtd to preserve the unwritten half, but a tie
+    # requires an explicit old-destination operand through the whole API
+    # chain (builtin -> IR intrinsic -> GISel -> logical -> member).
+    # Tracked in GOALS under the partial-write taxonomy; do NOT add a
+    # generator-only tie (MI arity would desync from the public API).
     divergent_non_ls = [
         k for k in divergent
         if not k.startswith(("D_", "S_", "PLD", "WBAR"))
     ]
-    if len(divergent_non_ls) != 45:
+    if len(divergent_non_ls) != 4:
         raise SystemExit(
             "error: golden-tied-but-TD-untied set changed "
             f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "

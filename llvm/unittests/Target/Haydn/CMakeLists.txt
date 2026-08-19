@@ -43,7 +43,3 @@ add_llvm_target_unittest(HaydnTests
   HaydnRelocLayoutTest.cpp
   HaydnResourceRestrictionClassesTest.cpp
   )
-
-if(TARGET HaydnFormatERecordsCheck)
-  add_dependencies(HaydnTests HaydnFormatERecordsCheck)
-endif()
