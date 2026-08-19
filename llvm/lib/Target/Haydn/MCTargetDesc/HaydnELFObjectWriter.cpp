@@ -45,7 +45,13 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
   // Determine the type of the relocation based on fixup kind
   MCFixupKind Kind = Fixup.getKind();
 
-  // Handle generic fixup kinds (data relocations)
+  // Handle generic fixup kinds (data relocations).
+  // PIC/JT EK_LabelDifference32 is `.long LBB - JT` (AsmPrinter). ELFObjectWriter
+  // folds the subtract into IsPCRel + addend (ELFObjectWriter.cpp:1330-1356).
+  // Peer: RISCVELFObjectWriter.cpp:77-83 FK_Data_4+IsPCRel → R_RISCV_32_PCREL;
+  // HexagonELFObjectWriter.cpp:84 same for R_HEX_32_PCREL. Haydn emits
+  // R_HAYDN_32_PCREL; never R_HAYDN_32 (absolute would be LBB, not LBB-JT).
+  // This tree has no FK_PCRel_* kinds (PCRel is MCFixup::PCRel).
   if (Kind < FirstTargetFixupKind) {
     switch (Kind) {
     case FK_Data_4:
@@ -93,12 +99,12 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_SImm16;
 
   case Haydn::FIXUP_HAYDN_BranchSImm16:
-    // PC-relative branch relocation. Kind number is ABI-stable; value
-    // transform is fail-closed in HaydnRelocLayout until wire scale lands.
+    // PC-relative branch relocation. Byte PC+imm (ValueShift=0,
+    // RelocTrans::None) in HaydnRelocLayout.
     return ELF::R_HAYDN_BranchSImm16;
 
   case Haydn::FIXUP_HAYDN_CallSImm20:
-    // PC-relative call relocation. Same fail-closed transform gate as branch.
+    // PC-relative call relocation. Same byte PC+imm law as branch.
     return ELF::R_HAYDN_CallSImm20;
 
   case Haydn::FIXUP_HAYDN_HI20:
@@ -128,7 +134,7 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
   case Haydn::FIXUP_HAYDN_HWLoopOffset:
     // Legacy 8-byte placeholder kind (MC-only; HaydnFixupKinds.h). No emitter
     // produces it: product SET_HWLOOP_* symbolic offsets use the typed
-    // HWLoopOff1/Off2 kinds above. W37: this case previously aliased to
+    // HWLoopOff1/Off2 kinds above. This case previously aliased to
     // R_HAYDN_BranchSImm16, whose shared-layout row has ValueShift=0 while
     // HWLoopOffset has ValueShift=2 — an unresolved fixup of this kind would
     // link with the wrong scale (no <<2) and a wrong loop target. Fail
@@ -154,31 +160,33 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_HWLoopOff2;
 
   case Haydn::FIXUP_HAYDN_HI12:
-    // Wide-imm pair: LUI imm12 field (absolute)..
+    // Wide-imm pair: LUI I12 (absolute). FieldLsb is E2 e0 @32; E3 e0/e1/e2
+    // via resolveFieldLsb. Specifier %hi12 selects this kind.
     return ELF::R_HAYDN_HI12;
 
   case Haydn::FIXUP_HAYDN_LO20:
-    // Wide-imm pair: ADDI32_W/ORI32_W imm20 field (absolute)..
+    // Wide-imm pair: ADDI32 RI20 (absolute). Specifier %lo20. E2 e1 @65
+    // via resolveFieldLsb.
     return ELF::R_HAYDN_LO20;
 
   case Haydn::FIXUP_HAYDN_PC_LO20:
-    // Wide-imm pair: ADDI32_W/ORI32_W imm20 field (PC-relative)..
+    // Wide-imm pair: ADDI32 RI20 (PC-relative). Specifier %pc_lo20.
     return ELF::R_HAYDN_PC_LO20;
 
   case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12:
-    // I12 one-reg cond (BEQZ_W/…): historical s0 imm12 @ bits[15:4].
-    // ELF kind retained; layout transform is fail-closed until wire scale.
+    // I12 one-reg cond (BEQZ_W/…): E2 e0 imm12 @ parcel bits[32:43].
+    // Byte PC+imm (ValueShift=0, RelocTrans::None).
     return ELF::R_HAYDN_WIDE_BranchSImm12;
 
   case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI:
-    // RI12 two-reg cond (BEQ_W/BNE_W/…): historical s0 imm12 @ bits[19:8].
-    // Distinct from I12 so the linker does not overwrite rt/rs. Transform
-    // fail-closed with other branch kinds.
+    // RI12 two-reg cond (BEQ_W/BNE_W/…): E2 e0 imm12 @ parcel bits[32:43].
+    // Distinct from I12 so the linker does not overwrite rt/rs. Same byte
+    // PC+imm law as other branch kinds.
     return ELF::R_HAYDN_WIDE_BranchSImm12_RI;
 
   case Haydn::FIXUP_HAYDN_WIDE_CallSImm20:
-    // I20 call (JAL family): historical s0 imm20 @ bits[23:4]. Transform
-    // fail-closed with other call kinds (no dual call-scale product law).
+    // I20 call (JAL family): E2 e0 @ parcel bits[31:50]. Byte PC+imm; no
+    // dual call-scale product law.
     return ELF::R_HAYDN_WIDE_CallSImm20;
 
   case Haydn::FIXUP_HAYDN_LS_IMM:
@@ -187,25 +195,33 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_LS_IMM;
 
   case Haydn::FIXUP_HAYDN_JALRSImm12:
-    // M23: minted R_HAYDN_JALRSImm12 (ELF 22). Distinct from the RI12
-    // branch row (W27). Local targets still resolve in the AsmBackend;
-    // unresolved externals now emit this kind instead of failing closed.
+    // R_HAYDN_JALRSImm12 (ELF 22). Distinct from the RI12 branch row.
+    // Call-indirect / JT dispatch (jalr rd, rs, 0) bake a zero imm and
+    // never reach this mapping. PIC/JT table entries are R_HAYDN_32_PCREL
+    // (FK_Data_4 + IsPCRel), not a second JALR kind. Local targets still
+    // resolve in the AsmBackend; unresolved externals emit ELF 22.
+    // Peer: AIE dense fixup->ELF map (AIEELFObjectWriter.cpp:60-63);
+    // Haydn cannot be dense because MC-only kinds sit after the shared
+    // ELF range.
     return ELF::R_HAYDN_JALRSImm12;
+
+  case Haydn::FIXUP_HAYDN_CSR_UImm8:
+    // R_HAYDN_CSR_UImm8 (ELF 23). Format E I8 uimm8 CSR address.
+    // Distinct from R_HAYDN_8 (data-section 1-byte write). Local
+    // constants still resolve in the AsmBackend; unresolved externals
+    // emit this kind so reloc CSRW_W is not an untyped NONE fixup.
+    return ELF::R_HAYDN_CSR_UImm8;
   }
 }
 
 bool HaydnELFObjectWriter::needsRelocateWithSymbol(const MCValue &,
                                                     unsigned Type) const {
-  // M8-E2E: previously returned false unconditionally, which let the
-  // MCObjectStreamer drop the symbol from relocations it considered
-  // section-relative. For undefined extern symbols (no defining section)
-  // this produced a relocation against symbol index 0 -- silently breaking
-  // every cross-object function call (R_HAYDN_CallSImm20 against an extern
-  // resolved to address 0 at link time). RISC-V takes the conservative
-  // "return true" stance for the same reason; mirror it here so function
-  // and data symbol references survive into the relocation's symbol field.
-  // See ~/haydn-plans/lessons/m8-extern-call-null-reloc.md and
-  // ~/haydn-plans/decisions/-m8-end-to-end-pipeline.md.
+  // Returning false let MCObjectStreamer drop the symbol from relocations
+  // it treated as section-relative. Undefined externs then relocated
+  // against symbol index 0 (R_HAYDN_CallSImm20 linked to address 0).
+  // RISC-V ELFObjectWriter.cpp:needsRelocateWithSymbol returns true for
+  // the same reason; AIEELFObjectWriter.cpp:37-40 is the conservative
+  // VLIW peer. Keep the symbol so function and data references survive.
   return true;
 }
 

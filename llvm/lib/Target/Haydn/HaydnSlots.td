@@ -7,7 +7,7 @@
 //
 // Product (Format E 96-bit / 12-byte):
 //   Entry positions are first-class InstSlots. Two product composites own
-//   them (HaydnCompositeFormats.td):
+//   them (HaydnFormatE.td):
 //     BUNDLE_E96_TWO_ENTRY   — E2 entry0 (45b) + entry1 (41b)
 //     BUNDLE_E96_THREE_ENTRY — E3 entry0 (31b) + entry1 (31b) + entry2 (27b)
 //   Header bits (format_indicator / entry_num / reserved) and top-pad live
@@ -15,7 +15,7 @@
 //
 // Residual S0/S1/S2 windows (not product composites; FE8 deleted 128-bit full):
 //   s0/s1/s2 InstSlots remain so residual FU member families
-//   (HaydnFormatsALU32/ALU64/LS/LD/MAC.td) type-check for placement tables.
+//   (retired FieldSlot FU families; InstSlots remain for MCSlotKind).
 //
 // Migrated instructions use HaydnFormatInst (derives InstFormat; the
 // backend's isSubClassOf("InstFormat") filter in CodeGenFormat.cpp picks them
@@ -61,13 +61,13 @@ class HaydnFormatInst<dag outs, dag ins, string asmstr, list<dag> pattern>
   // bodies -- see hasSideEffects audit table.
   let hasSideEffects = 0;
   // No fixed Size here -- entry/slot sub-instructions set Size per window;
-  // product composites (HaydnCompositeFormats.td) set Size = EncodedBytes 12.
+  // product composites (HaydnFormatE.td) set Size = EncodedBytes 12.
   // Entry/slot sub-instructions are never emitted standalone.
   let DecoderNamespace = "HaydnFlex";
 }
 
 // Dual-inert slot-window bases (legacy FU families). Product
-// Format E entry bases live in HaydnFormatsE96.td. AsmStrings are slot-free
+// Format E entry bases live in HaydnFormatE.td. AsmStrings are slot-free
 // (no `.s0`/`.s1`/`.s2`); bare mnemonics shared across multi-slot ops.
 // InstPrinter prints the same bare AsmString for every slot; post-commit
 // authority is member Desc getSlotKind / Bundle SlotMap.
@@ -106,5 +106,5 @@ class HaydnSlotS2<dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 // Per-FU dual-inert slot-format classes + per-op defs: HaydnFormats<FU>.td.
-// Product Format E entry bases + composite rows: HaydnFormatsE96.td /
-// HaydnCompositeFormats.td. Multi-slot logicals: HaydnMultiSlotPseudo.td.
+// Product Format E entry bases + composite rows: HaydnFormatE.td.
+// Multi-slot logicals: HaydnMultiSlotPseudo.td.

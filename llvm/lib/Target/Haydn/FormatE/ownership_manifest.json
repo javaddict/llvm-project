@@ -1,0 +1,30 @@
+{
+  "schema_version": "format-e-records/1",
+  "admitted_families": ["e96"],
+  "authored_overlay": "llvm/lib/Target/Haydn/FormatE/authored_catalog_overlay.json",
+  "umbrella_check": "llvm/lib/Target/Haydn/FormatE/check_generated.sh",
+  "generators": [
+    {
+      "path": "llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py",
+      "family": "e96",
+      "check": "python3 llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py --check --family e96",
+      "outputs": [
+        "llvm/lib/Target/Haydn/HaydnGenFormatERecords.inc",
+        "llvm/lib/Target/Haydn/HaydnGenFormatESetDescLedger.inc",
+        "llvm/lib/Target/Haydn/HaydnFormatsE96Members.td.inc",
+        "llvm/lib/Target/Haydn/HaydnInstrInfoGolden.td.inc",
+        "llvm/lib/Target/Haydn/HaydnGenFormatEMemberOpcodes.inc",
+        "llvm/test/MC/Haydn/format-e-mnemonic-roundtrip.s"
+      ]
+    },
+    {
+      "path": "llvm/lib/Target/Haydn/FormatE/generate_sched_records.py",
+      "family": "e96",
+      "check": "python3 llvm/lib/Target/Haydn/FormatE/generate_sched_records.py --check --family e96",
+      "outputs": [
+        "llvm/lib/Target/Haydn/HaydnGenSchedRecords.inc",
+        "llvm/lib/Target/Haydn/HaydnGenMemoryCycles.inc"
+      ]
+    }
+  ]
+}

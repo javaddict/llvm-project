@@ -18,7 +18,7 @@
 # RT: set_hwloop
 # CHECK-NOT: <unknown>
 # RT-NOT: <unknown>
-{ set_hwloop_w 0, 16, 32, 4; nop; nop }
+{ set_hwloop_w 0, 16, 32, 4; nop }
 
 # Exact-commit address materialization (not residual LOADI32 / LOAD_ADDR).
 # ASM: lui
@@ -29,4 +29,4 @@
 # ASM: addi32
 # CHECK: addi32
 # RT: addi32
-{ addi32_w r1, r1, 2; nop; nop }
+{ addi32_w r1, r1, 2; nop }

@@ -18,7 +18,8 @@ define i32 @local_const_array(i32 %index) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 10 }
-; CHECK-NEXT:    { st32 r3, r2, 0; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; st32 r3, r2, 0 }
+; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 20 }
 ; CHECK-NEXT:    { nop; st32 r3, r2, 1 }
@@ -113,7 +114,7 @@ define i32 @sum_array(ptr %arr, i32 %count) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { slt32 r6, r4, r2; add32 r3, r3, r5 }
+; CHECK-NEXT:    { nop; slt32 r6, r4, r2; add32 r3, r3, r5 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB3_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
@@ -257,9 +258,9 @@ define i32 @two_d_array_access(ptr %matrix, i32 %row, i32 %col, i32 %width) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; mull r4, r2, r4 }
+; CHECK-NEXT:    { nop; mull r2, r2, r4 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add32 r2, r4, r3 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
 ; CHECK-NEXT:    { nop; s_lw_pre_reg r2, r1, r2 }
 ; CHECK-NEXT:    { nop; nop }
@@ -310,7 +311,7 @@ define i1 @array_contains(ptr %arr, i32 %size, i32 %target) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r5, r5, 1 }
-; CHECK-NEXT:    { seq32 r6, r6, r3; slt32 r7, r5, r2 }
+; CHECK-NEXT:    { nop; seq32 r6, r6, r3; slt32 r7, r5, r2 }
 ; CHECK-NEXT:    { nop; or32 r4, r4, r6 }
 ; CHECK-NEXT:    { nop; bnez r7, .LBB10_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit

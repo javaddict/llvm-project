@@ -1,0 +1,45 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — MOVT32 tied dest-read is a GPR read port even when <undef>.
+# ADD32 is 2R1W. MOVT32 is 3R1W (rt, rs1, rs2). Together 5R > GPR 4R, so
+# they must not share a cycle. Skipping undef uses under-counted MOVT32
+# as 2R and packed the pair.
+
+--- |
+  define void @movt32_undef_dest_plus_add32() { ret void }
+...
+---
+name:            movt32_undef_dest_plus_add32
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r8', virtual-reg: '' }
+  - { reg: '$r12', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r4, $r5, $r8, $r12
+
+    ; CHECK-LABEL: name: movt32_undef_dest_plus_add32
+    ; CHECK: liveins: $r4, $r5, $r8, $r12
+    ; Sequential members (5R > 4R). A shared BUNDLE is the regression.
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: $r12 = ADD32_E{{[23]}}_
+    ; CHECK: $r6 = MOVT32_E{{[23]}}_
+    $r12 = ADD32 $r5, $r12, implicit-def dead $sfr
+    $r6 = MOVT32 undef $r6, $r4, $r8, implicit-def dead $sfr
+    $r0 = COPY $r12
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

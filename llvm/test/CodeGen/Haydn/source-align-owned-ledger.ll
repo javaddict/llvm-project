@@ -4,7 +4,7 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSubtarget.h --check-prefix=O0POST
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnEnsureTerminators.cpp --check-prefix=ENSURE
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/CMakeLists.txt --check-prefix=CMAKE
-; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/Haydn.td --check-prefix=AUTO
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfoManual.td --check-prefix=AUTO
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFeatures.td --check-prefix=FEAT
 ;
 ; Role: semantic — T7-SOURCE-ALIGN owner-slice pins. Single AIE lifecycle
@@ -27,7 +27,7 @@
 ; CMAKE-NOT: HaydnFormatERecordsCheck
 ; CMAKE-NOT: /ssd2/mhyang/haydn-plans/Database/golden
 ; CMAKE-NOT: $ENV{HOME}/haydn
-; AUTO: generate_format_e_records.py does not emit it
 ; AUTO: hand-maintained hypothesized encodings
+; AUTO: generate_format_e_records.py does not emit this file
 ; FEAT: Does not enable HardwareLoops formation
 ; FEAT: hardwareLoopsProductDefaultEnabled()

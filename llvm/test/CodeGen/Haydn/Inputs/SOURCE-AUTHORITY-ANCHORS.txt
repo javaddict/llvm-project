@@ -1,9 +1,9 @@
 Haydn source / golden authority anchor inventory (G-SOURCE-ALIGNMENT / T1-ALIGN)
 ==========================================================================================
 Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual is docs/hygiene only;
-  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 38bd4059;
-  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Auto.td/CMake closed;
-  W54 D1000 and W55 nine-file stay LANDED; P13 waves stay gated on R13;
+  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 9e5c878a;
+  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed;
+  W54 D1000 and W55 nine-file stay LANDED; P13 Wave 1 unblocked (R13 LANDED);
   Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
   flip sites stay false until independent T2+T4 QUALIFY then combined matrix;
   T8-EVID leftover retained; T8-DEBUG-EVIDENCE leftover retained)
@@ -28,7 +28,7 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    SF1-SF3 (no coverage-fuzzer / perf-baseline invent);
    no pre-RA BUNDLE / private member / setDesc;
    no DecisionGuard revive; no PRODUCT_ON; no second format pipeline)
-Audited backend baseline: 38bd4059fbb4e489425becc4ded431235ae2c1ff
+Audited backend baseline: 9e5c878a03921a31f76b1c251954cd14d9fcfd72
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
 R15 provenance: ff42d9ad (`working`) is not an ancestor of this HEAD;
   1139639c5574, 1851c7541ab1, 2a82c904c023, 59b03784ebc7,
@@ -40,10 +40,13 @@ Golden nine-file set: see STATUS.md SHA-256 table only (W55).
   Five layout/constraints/manual files plus instruction_type_index.json,
   instruction_type_operands.json, instruction_to_entry.xlsx, operands_info.md.
 Consumer catalog provenance: BundleSim isa/database/generated/GOLDEN_INPUTS.sha256
-  still pins the five layout/constraints/manual files (catalog does not
-  consume the four importer extras); generate_catalog.py reads
-  format_e_bit_layout_v2.json only (retired seven per-slot JSONs and
-  17-file ledger are not inputs).
+  pins six consumed files; the pin FILE sha256 is the product stamp
+  02b5bed3c7d5030eca4451491b60e88ee2ad6caae6c5ebdeac3685a1c0aaeba3.
+  Header comments on that file are content drift (ARTIFACT hashes the
+  pin file, not only inner digests). Unused/derived nine-file members
+  stay on llvm/lib/Target/Haydn/FormatE/GOLDEN_INPUTS.sha256.
+  generate_catalog.py reads format_e_bit_layout_v2_1.json only (retired
+  seven per-slot JSONs and 17-file ledger are not inputs).
 
 Pipeline ownership anchors (current implementation)
 ---------------------------------------------------
@@ -61,8 +64,8 @@ Pipeline ownership anchors (current implementation)
 | VerifyBundles NO skipFunction (emission gate) | HaydnVerifyBundles.cpp::runOnMachineFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT |
 | PIPE-30 skipFunction closed | Finalize + Verify never call skipFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT; contracts/pipeline.md |
 | T1-ALIGN schema surface closed | one PacketFormats + FeasibleMask getFormatOrNull; refuse empty-cover representative | HaydnBundle.h getFormatOrNull; no second format pipeline |
-| Goal 1 ledger (T7-ALIGN) | contracts/pipeline.md + GOALS.md §1 closed at 38bd4059 | phase-firewall-inventory-pins.ll + this file |
-| T7-ALIGN residual hygiene | R15 leftover (orphan pass-deep-review + CLAUDE symlink + ISA-64) + P19 Auto.td/CMake closed; W54/W55 stay LANDED; MF0 INERT; no DG0 | llc-pipeline-haydn.ll AUTO/CMAKE/ISANEXT |
+| Goal 1 ledger (T7-ALIGN) | contracts/pipeline.md + GOALS.md §1 closed at 9e5c878a | phase-firewall-inventory-pins.ll + this file |
+| T7-ALIGN residual hygiene | R15 leftover (orphan pass-deep-review + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed; W54/W55 stay LANDED; MF0 INERT; no DG0 | llc-pipeline-haydn.ll AUTO/CMAKE/ISANEXT |
 | W55 nine-file golden pin | llvm-claude.md table; hashes only in STATUS.md; GOALS row LANDED | Inputs nine-file pin; do not reopen |
 | T7-ALIGN schema tip-reconcile | productVLIWFormatForRow PacketFormats full-cover only; no empty-cover / cross-row; no suffix discovery | HaydnBundlePlan.h; HaydnBundle.h getFormatOrNull |
 | P19 CMake leftover closed | Haydn/CMakeLists.txt golden-dir is env/-D only; banned plans-tree path gone; no home-directory discovery; skip if unset | llc-pipeline-haydn.ll CMAKE |
@@ -72,9 +75,9 @@ Pipeline ownership anchors (current implementation)
 | Plain O0 commits Format-E BUNDLE (row+completion) | postmisched + finalize path | authority-o0-vs-optnone-commit.ll PLAIN |
 | optnone also commits Format-E BUNDLE (no-reorder) | finalize no-skip path | authority-o0-vs-optnone-commit.ll OPT + ASM |
 | optnone bare after postmisched (quality skip) | PostMachineScheduler skipFunction | authority-o0-vs-optnone-commit.ll SKIP-OPTNONE/PACK |
-| Indep multi plain postmisched co-issue + Finalize wrap | postmisched setDesc members; PLAIN keeps BUNDLE 1, 0 | authority-o0-vs-optnone-commit.ll PACK/PLAIN indep_plain |
+| Indep multi plain postmisched members + Finalize wrap | postmisched setDesc members; Finalize singleton BUNDLE wrap; do not force-coissue | authority-o0-vs-optnone-commit.ll PACK/PLAIN indep_plain |
 | W51 one commit site (applyBundles funnel) | commitOneProductCycle = canCoissue + commitExact; as-is members kept | authority-o0-vs-optnone-commit.ll PACK; postmisched-exact-nosplit-pre-handoff.ll POST |
-| Postmisched multi-MI is BUNDLE, not bare setDesc | leaveMBB commitOneProductCycle after materializeMultiOpcodeInstrs | optnone-skip-policy.ll POST-O0; postmisched-exact-nosplit-pre-handoff.ll POST |
+| Postmisched may stamp generated members; Finalize wraps remaining encode MIs | leaveMBB materialize + Finalize no-skip (no force-coissue) | optnone-skip-policy.ll POST-O0/PLAIN-O0 |
 | GA-INFRA-4 MOVE32 per-field ports (no MI dedup) | countGPRPorts / countDRPorts / countARPorts / countSFRPorts | postmisched-move32-per-field-ports.mir |
 | W51 generated E2/E3 entry capacity | bundleRowEntryCount from registry row descriptor | HaydnBundleFormatSolver.h; no E2=2/E3=3 literals in commit/verify |
 | Indep multi optnone sequential singleton commit | Finalize no-reorder (quality skip of postmisched) | authority-o0-vs-optnone-commit.ll PLAIN/OPT indep_optnone |
@@ -97,7 +100,7 @@ Pipeline ownership anchors (current implementation)
 
 Phase-firewall inventory (PIPE-20; no issue-cycle/format identity crosses RA)
 -----------------------------------------------------------------------------
-CLOSED 2026-08-18 T1-ALIGN at 38bd4059fbb4 (D1000 HC#0 ledger). Structural
+CLOSED 2026-08-18 T1-ALIGN at 9e5c878afbb4 (D1000 HC#0 ledger). Structural
 barrier (primary): zero pre-RA BuildMI(BUNDLE)/MIBundleBuilder; no pre-RA
 BUNDLE / private member / setDesc / row identity; all finalizeBundle +
 stampBundleCommit seats are post-PostMachineScheduler only; pre-RA HR cannot
@@ -121,7 +124,7 @@ Live supplementary pins (not a permanent sole barrier):
 | s96 G_ANYEXT legalizer loop (COPY walk + AND/OR/XOR/SELECT rebuild) | HaydnLegalizerInfo.cpp; phase-firewall-s96-anyext.ll |
 | hasFP adjustsStack is not sufficient (AIE/RISCV peer; getCallFrameSPAdj) | HaydnFrameLowering.cpp; phase-firewall-hasfp-adjusts-stack.ll |
 | emitCodeAlignment MaxParcels = Align/gcd idle parcels | HaydnMCELFStreamer.cpp; phase-firewall-align-maxparcels.ll |
-| Post-wave rebound: 38bd4059 in-repo; 28700d57 is not an ancestor | ARTIFACT llvm_src.git_commit + product_coverage_pin ancestor check |
+| Post-wave rebound: 9e5c878a in-repo; 28700d57 is not an ancestor | ARTIFACT llvm_src.git_commit + product_coverage_pin ancestor check |
 | Folded same-artifact residual IDs (G-RUNTIME-TOOLCHAIN) | G-ECOSYSTEM-CONSUMERS / G-LIBRARY-COVERAGE / G-DEBUG-OBSERVABILITY / G-TEST-EVIDENCE | PRODUCT-IDENTITY.txt + product_coverage_pin (inventory; not QUALIFY) |
 
 DG-OPTNONE residual (correctness passes must not skip)
@@ -251,7 +254,7 @@ Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN /
 | XFAIL ledger parity unexplained=0 | Inputs/XFAIL-OWNER-LEDGER.txt | check_xfail_ledger.py + xfail-owner-ledger-selfcheck.ll |
 | lit summary Failed ≠ Expectedly Failed | llvm/utils/haydn/parse_lit_summary.py | parse-lit-summary-selfcheck.ll + --self-test |
 | Freestanding ARTIFACT 64-hex + libc/libm | $sysroot/ARTIFACT.json | product_coverage_pin.sh; full-gate restamp |
-| Five-file catalog authority + GOLDEN_INPUTS pin | BundleSim isa/database/generated/GOLDEN_INPUTS.sha256 | check_golden_pin.sh; product_coverage_pin; full-gate |
+| Six-file catalog authority + GOLDEN_INPUTS pin | BundleSim isa/database/generated/GOLDEN_INPUTS.sha256 (file sha256 02b5bed3c7d5…; no header comments) | catalog-golden-inputs-pin.ll; check_golden_pin.sh; product_coverage_pin; full-gate |
 | Catalog generate from layout only (no 7-slot/17-file) | generate_catalog.py + instruction_catalog_generated.inc | generate_catalog --check; ARTIFACT.catalog.complete |
 | ARTIFACT.catalog five-file + retired_inputs_consumed=false | record_haydn_artifact_set.py build_catalog_block | check_haydn_artifact_set.sh; product_coverage_pin |
 | ARTIFACT.decode Functional_Model + model hashes | record_haydn_artifact_set.py build_decode_block | check_isa_pin_discipline.sh; product_coverage; full-gate DECODE FM |
@@ -266,16 +269,16 @@ Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN /
 | libm.a required on sysroot install/restamp | install_haydn_sysroot.sh | check_haydn_artifact_set required components |
 | LLDB pointer return = r1; volatile unwind undefined | lldb ABISysV_haydn | GetPointerReturnRegister / GetFallbackRegisterLocation |
 | DG0 DecisionGuard product registry | absent by design | Inputs/* + ledger/parser + product_coverage_pin only; no G-DECISION-GUARD revive |
-| P19 Auto.td leftover | HaydnInstrInfoManual.td header is hand-maintained; generate_format_e_records.py does not emit it | llc-pipeline-haydn.ll AUTO |
+| P19 Auto.td leftover | HaydnInstrInfoManual.td is a tombstone (moved; generate_format_e_records.py does not emit it; do not include) | llc-pipeline-haydn.ll AUTO |
 | P19 CMake leftover closed | Haydn/CMakeLists.txt golden-dir is env/-D only; banned plans-tree path gone; no home-directory discovery; skip if unset | llc-pipeline-haydn.ll CMAKE |
 | R15 leftover (orphan docs) | gaps/pass-deep-review-2026-08-14 archived 2026-08-15; monorepo CLAUDE.md is a symlink; ISA-next is ISA-64 | llc-pipeline-haydn.ll ISANEXT |
 | MF0 multi-bundle proof | INERT; production E96-only; no second product format family | llc-pipeline-haydn.ll MF0; HaydnFormat shipping E96-only |
 | W51 idle-parcel provenance | golden POS_IDLE_CANONICAL OPEN_BLOCKED; no invent | fail-closed inventory; full-bundle NOP idle remains legal |
-| P13 source waves | gated on R13 empty `rg '^def \\w+_S[012]'` | inventory only; do not start Wave 1/2/3; leftover `_S*` stay (T4) |
+| P13 source waves | R13 LANDED; live `_S*` FieldSlot census 0 | Wave 1 unblocked; leftover `_S*` stay (T4) inventory only |
 | AR0 phase-firewall inventory | CLOSED (T1-ALIGN) | no pre-RA BUNDLE / member / setDesc / row; not a product registry |
 | AR0 leftover residual-pseudo matrix | CLOSED | Expand/Verify fatal SET_HWLOOP/SETCBR/LOOPCTL/LOAD_ADDR/bundled-child; vf5-residual-*.mir |
 | Authority inventory leftover (T8-EVID) | G-TEST-EVIDENCE T8-EVID | keep stamps/IDs synchronized; lifecycle pins only; no second format pipeline; no policy default ON; no DecisionGuard revive |
-| 38bd4059 rebound (in-repo ancestor) | $sysroot/ARTIFACT.json llvm_src.git_commit | product_coverage_pin.sh ancestor check; 28700d57 is not an ancestor |
+| 9e5c878a rebound (in-repo ancestor) | $sysroot/ARTIFACT.json llvm_src.git_commit | product_coverage_pin.sh ancestor check; 28700d57 is not an ancestor |
 | Historical 08-17 full-gate manifest | /tmp/bundlesim-672/full-gate-20260817_093415 git_commit=28700d57 | provenance only; haydn_lit_ok=n/a; do not re-bind |
 | Full Haydn lit + run_full_gate.sh | wave-close product gate | this track pins rebound identity only; does not run the product gate |
 | haydn-rt contract pins | llvm/lib/Target/Haydn/haydn-rt/{SOFTFLOAT-CONTRACT,NATUREDSP-CANARY-PIN,PRODUCT-IDENTITY}.txt | check_xfail_ledger.py --runtime-pin |

@@ -36,7 +36,8 @@
 # SCHED: let CompleteModel = 0
 # SCHED-NOT: let CompleteModel = 1
 #
-# GEN: Auto-generated
+# GEN: DO NOT EDIT
+# GEN: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
 # GEN: ProcessorItineraries
 # GEN: InstrItinData<Slot0_ALU
 # GEN: InstrItinData<Slot2_LS

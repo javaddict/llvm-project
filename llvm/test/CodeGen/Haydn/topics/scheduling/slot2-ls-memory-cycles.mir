@@ -6,11 +6,12 @@
 # REQUIRES: haydn-registered-target
 #
 # Role: MIR — Slot2_LS publishes First/LastMemoryCycle. Live S2 load
-# (D_LQHWUA_POST_S2; store S2 FieldSlots have no e2 member) → load is
+# (logical D_LQHWUA_POST; store S2 FieldSlots retired) → load is
 # Latency=2, not a silent 1. A published Slot*_LS class with no table
 # row fatals (ExactLatencies). Do not invent a latency.
 #
-# MEM: Auto-generated
+# MEM: DO NOT EDIT
+# MEM: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
 # MEM: HaydnInstrInfo::getFirstMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
@@ -49,9 +50,9 @@ body:             |
   bb.0.entry:
     liveins: $r1, $r2, $r3, $r15
 
-    ; PRODUCT: D_LQHWUA_POST_S2{{.*}}load
+    ; PRODUCT: D_LQHWUA_POST{{.*}}load
     ; PRODUCT: Ord{{ +}}Latency=2 {{Memory|Barrier}}
     ; PRODUCT: ST32{{.*}}store
-    $d0, $r1 = D_LQHWUA_POST_S2 $r1, $r3, 0, 0 :: (load (s64) from %ir.p)
+    $d0, $r1 = D_LQHWUA_POST $r1, $r3, 0, 0 :: (load (s64) from %ir.p)
     ST32 $r2, $r1, 0, implicit-def dead $sfr :: (store (s32) into %ir.p)
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

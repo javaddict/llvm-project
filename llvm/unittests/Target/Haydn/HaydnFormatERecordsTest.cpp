@@ -63,6 +63,22 @@ TEST(HaydnFormatERecords, GeometryPinsFromGeneratedConstants) {
   EXPECT_EQ(FormatEUnitCount, 7u);
 }
 
+TEST(HaydnFormatERecords, AdmittedFamilyHandleIsE96Only) {
+  EXPECT_EQ(kAdmittedFamily, BundleFamily::E96);
+  EXPECT_EQ(getFamilyRecords(BundleFamily::E96).Family, BundleFamily::E96);
+  EXPECT_EQ(getDefaultFamilyRecords().Family, BundleFamily::E96);
+  EXPECT_EQ(FormatEFamilyId, static_cast<uint8_t>(BundleFamily::E96));
+  EXPECT_EQ(FormatEAdmittedFamilyCount, 1u);
+}
+
+TEST(HaydnFormatERecords, MemberAndLedgerFamilyIsE96) {
+  for (unsigned I = 0; I < FormatEMemberCount; ++I)
+    EXPECT_EQ(FormatEMembers[I].Family, static_cast<uint8_t>(BundleFamily::E96));
+  for (unsigned I = 0; I < FormatESetDescLedgerCount; ++I)
+    EXPECT_EQ(FormatESetDescLedger[I].Family,
+              static_cast<uint8_t>(BundleFamily::E96));
+}
+
 TEST(HaydnFormatERecords, CatalogSnapshotPins) {
   EXPECT_EQ(FormatETypeLayoutCount, 126u);
   EXPECT_EQ(FormatEUniqueNonNopNames, 807u);

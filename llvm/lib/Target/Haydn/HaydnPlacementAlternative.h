@@ -11,9 +11,9 @@
 // MemberOpcode (mode → row mask). FieldSlots stay residual AlternateInsts
 // occupancy (index == SLOT bit) so Bundle.canAdd does not change.
 // Residual FieldSlot opcodes remain only when no Format E span exists
-// (CSRW_W, NOP). Suffix `_S*` spelling is occupancy recovery, not a
-// product alternate source. Product identity after post-RA commit is
-// Format E BundleFormatRowID.
+// (NOP pad occupancy). CSRW_W occupancy is catalog CSRW I8 members.
+// Suffix `_S*` spelling is occupancy recovery, not a product alternate
+// source. Product identity after post-RA commit is Format E BundleFormatRowID.
 //
 // CompatibleFormatMask is the Format E row frontier this residual member may
 // occupy. Most residual alts stamp ProductFormatMask (E2|E3). Logicals that
@@ -48,8 +48,8 @@ namespace llvm {
 /// (vector index == field; generated AlternateInsts order).
 struct PlacementAlternative {
   /// Post-setDesc Format E member opcode (e.g. ADD32_E2_E0_ALU0_RR).
-  /// Residual FieldSlots (WFI_S0 occupancy Fallback) appear only when no
-  /// Format E span exists.
+  /// Residual FieldSlots appear only when no Format E span exists
+  /// (NOP pad occupancy).
   unsigned MemberOpcode = 0;
 
 /// Bitmask of BundleFormatRowIDs this member may occupy.
@@ -119,7 +119,7 @@ bool isFormatEE3OnlyOpcodeName(llvm::StringRef OpcodeName);
 /// Fill \p Out with PlacementAlternative rows for \p LogicalOpc.
 /// Prefers generated Format E members for MemberOpcode (mode → row mask).
 /// FieldSlots stay residual AlternateInsts occupancy. Residual FieldSlot
-/// opcodes remain only when no Format E span exists (CSRW_W, NOP).
+/// opcodes remain only when no Format E span exists (NOP pad occupancy).
 /// Returns false if there are no alternatives.
 bool enumeratePlacementAlternatives(const HaydnMCFormats &Fmts,
                                     unsigned LogicalOpc,

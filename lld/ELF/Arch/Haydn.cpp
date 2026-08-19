@@ -15,18 +15,29 @@
 //
 // Relocation overview:
 //   Alignment, scale, and field range live only in HaydnRelocLayout
-//   (computeRelocValue). Branch scale remains fail-closed / table-driven until
-//   golden closes the wire unit; consumers must not invent a scale. Summary of
-//   common PC-rel kinds:
+//   (computeRelocValue). Branch/call are byte PC+imm (ValueShift=0);
+//   consumers must not invent a scale. Summary of common PC-rel kinds:
 //   R_HAYDN_BranchSImm16 — signed branch field (range via HaydnRelocLayout).
 //   R_HAYDN_CallSImm20 — signed call field (range via HaydnRelocLayout).
 //   R_HAYDN_WIDE_BranchSImm12/_RI — narrow signed branch field.
 //   R_HAYDN_WIDE_CallSImm20 — wide signed call field.
+//   R_HAYDN_JALRSImm12 — JALR RI12 symbolic imm12 (rs+imm12 execution;
+//     assembler symbol convention is parcel-relative, same R_PC as B/JAL).
+//   R_HAYDN_CSR_UImm8 — Format E CSR I8 uimm8 (absolute unsigned CSR
+//     address; reloc CSRW_W / CSRR). Not R_HAYDN_8 (data .byte).
 //   R_HAYDN_HWLoopOff1/Off2 — unsigned Format E SET_HWLOOP displacement
 //     fields (<<2 law; FieldLsb via HaydnRelocLayout / resolveFieldLsb).
 //   Out-of-range branch/call sites get long-branch thunks (needsThunk).
 //   R_HAYDN_HI20/LO16 — LUI+ADDI32 pair for 32-bit absolute addressing.
-//   R_HAYDN_LO20 — ALU RI20 / retired WIDE LSOff20 20-bit absolute field.
+//   R_HAYDN_HI12 — LUI I12 high 12 (RelocTrans::Hi12; specifier %hi12).
+//     FieldLsb via resolveFieldLsb (E2 e0 @32; E3 e0 ALU2 @21 / ALU0 @23;
+//     e1 @54; e2 ALU2 @83 / ALU0 @81).
+//   R_HAYDN_LO20 — ALU RI20 20-bit absolute field (specifier %lo20).
+//     FieldLsb via resolveFieldLsb (E2 e0 ALU0 @31; E2 e1 ALU1 @65).
+//     RI20 is E2-only — unrecognized parcels keep the table default.
+//   R_HAYDN_PC_LO20 — same RI20 windows, PC-relative (specifier %pc_lo20).
+//   R_HAYDN_32_PCREL — 32-bit data PC-rel (PIC/JT EK_LabelDifference32
+//     `.long LBB - JT`; FK_Data_4+IsPCRel).
 //   R_HAYDN_LS_IMM — Format E LS RI6 signed imm6 (not SImm16, not LO20).
 //   R_HAYDN_GOT_HI20 — GOT entry address high part.
 //   R_HAYDN_TPREL_HI20/LO16 — fail-closed: golden has no TLS model, so these
@@ -128,7 +139,13 @@ public:
     case R_HAYDN_WIDE_CallSImm20:
     case R_HAYDN_HWLoopOff1:
     case R_HAYDN_HWLoopOff2:
+      return R_PC;
     case R_HAYDN_JALRSImm12:
+      // Dedicated ELF 22. Assembler symbol convention is parcel-relative
+      // (same R_PC as B/JAL). Execution is rs+imm12; never the RI12 branch
+      // row. ValueShift=0 lives in HaydnRelocLayout — do not remint here.
+      // Call-indirect / JT jalr-with-zero is not this kind; PIC/JT
+      // label-diff is R_HAYDN_32_PCREL (R_PC on a 32-bit data word).
       return R_PC;
     case R_HAYDN_NONE:
       return R_NONE;
@@ -141,6 +158,7 @@ public:
     case R_HAYDN_HI12:
     case R_HAYDN_LO20:
     case R_HAYDN_LS_IMM:
+    case R_HAYDN_CSR_UImm8:
       return R_ABS;
     case R_HAYDN_TPREL_HI20:
     case R_HAYDN_TPREL_LO16:
@@ -165,7 +183,7 @@ public:
   }
 
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override {
-    if (type > R_HAYDN_JALRSImm12) {
+    if (type > R_HAYDN_CSR_UImm8) {
       InternalErr(ctx, buf) << "cannot read addend for relocation " << type;
       return 0;
     }
@@ -180,6 +198,7 @@ public:
     case R_HAYDN_WIDE_CallSImm20:
     case R_HAYDN_WIDE_BranchSImm12:
     case R_HAYDN_WIDE_BranchSImm12_RI:
+    case R_HAYDN_JALRSImm12:
     case R_HAYDN_HWLoopOff1:
     case R_HAYDN_HWLoopOff2: {
       HaydnReloc::RelocKind R =
@@ -204,6 +223,8 @@ public:
     case R_HAYDN_WIDE_BranchSImm12_RI:
     case R_HAYDN_WIDE_CallSImm20:
       return !inBranchRange(type, branchAddr, s.getVA(ctx, a));
+    // JALRSImm12 shares the signed-12 range oracle (inBranchRange) but is
+    // never veneered: execution is rs+imm12, not a PC-relative long-branch.
     default:
       return false;
     }
@@ -255,7 +276,7 @@ public:
                   "(no golden TLS model); refusing silent R_ABS";
       return;
     }
-    if (type > R_HAYDN_JALRSImm12) {
+    if (type > R_HAYDN_CSR_UImm8) {
       Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << type;
       return;
     }
@@ -268,8 +289,8 @@ public:
       return;
     }
     const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
-    // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI}: E2 e0 table FieldLsb;
-    // E3 e0/e1/e2 via resolveFieldLsb.
+    // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI} / JALRSImm12 / HI12: E2 e0
+    // table FieldLsb; E3 e0/e1/e2 (and E2 e1 LO20/PC_LO20) via resolveFieldLsb.
     const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, loc);
     HaydnReloc::patchField(loc, Comp.FieldVal, FI.NBytes, FI.FieldSize,
                            FieldLsb);

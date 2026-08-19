@@ -112,7 +112,7 @@ define float @neg_then_add(float noundef %a, float noundef %b) {
 ; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
-; CHECK-NEXT:    { move32 r1, r2; move32 r3, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r2; move32 r3, r1 }
 ; CHECK-NEXT:    { nop; move32 r2, r3 }
 ; CHECK-NEXT:    { nop; jal lr, __subsf3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

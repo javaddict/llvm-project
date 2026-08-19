@@ -63,9 +63,9 @@ public:
   // Single AIE-aligned pipeline (AIE2TargetMachine.cpp:229-244). Order lives
   // in HaydnTargetMachine.cpp and contracts/pipeline.md. Late Finalize+Verify
   // after BranchRelaxation reuses the same Finalize/Verify
-  // (AIEFinalizeBundle.cpp:40-59). Residual hygiene (R15 leftover, P19
-  // Auto.td/CMake) lives in Inputs SOURCE-AUTHORITY / FAULT / CORRUPTION —
-  // inventory pins, not a product registry, and not a second format pipeline.
+  // (AIEFinalizeBundle.cpp:40-59). Residual hygiene lives in Inputs
+  // SOURCE-AUTHORITY / FAULT / CORRUPTION — inventory pins, not a product
+  // registry, and not a second format pipeline.
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
   // provide TTI so the IR unroller + optimizer get Haydn-specific hints.

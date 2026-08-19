@@ -74,7 +74,8 @@ define i32 @vla_basic(i32 %n) {
 ; CHECK-NEXT:    { nop; sub32 r1, sp, r1 }
 ; CHECK-NEXT:    { nop; and32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 42 }
-; CHECK-NEXT:    { st32 r3, r2, 0; move32 sp, r2 }
+; CHECK-NEXT:    { nop; st32 r3, r2, 0 }
+; CHECK-NEXT:    { nop; move32 sp, r2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -117,7 +118,7 @@ define ptr @dynamic_alloca_with_call(i32 %size) {
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; sub32 r1, sp, r1 }
 ; CHECK-NEXT:    { nop; and32 r8, r1, r2 }
-; CHECK-NEXT:    { move32 r1, r8; move32 sp, r8 }
+; CHECK-NEXT:    { nop; move32 r1, r8; move32 sp, r8 }
 ; CHECK-NEXT:    { nop; jal lr, use_ptr }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
@@ -215,21 +216,21 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    .cfi_def_cfa fp, 0
 ; CHECK-NEXT:    .cfi_offset fp, -4
 ; CHECK-NEXT:    { nop; slli32 r2, r1, 2 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, -8 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, -8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 7 }
-; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
+; CHECK-NEXT:    { nop; and32 r2, r2, r4 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 7 }
-; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
+; CHECK-NEXT:    { nop; and32 r2, r2, r4 }
 ; CHECK-NEXT:    { nop; sub32 r2, sp, r2 }
-; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
-; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
-; CHECK-NEXT:    { move32 r3, r2; move32 sp, r2 }
+; CHECK-NEXT:    { nop; and32 r2, r2, r4 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
+; CHECK-NEXT:    { nop; move32 r4, r2; move32 sp, r2 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { mull r4, r4, r4; addi32 r5, r4, 1 }
+; CHECK-NEXT:    { nop; mull r5, r3, r3 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { s_sw_post_imm r4, r3, 1; slt32 r6, r5, r1 }
-; CHECK-NEXT:    { nop; move32 r4, r5 }
+; CHECK-NEXT:    { s_sw_post_imm r5, r4, 1; addi32 r3, r3, 1 }
+; CHECK-NEXT:    { nop; slt32 r6, r3, r1 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB6_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }

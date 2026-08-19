@@ -17,6 +17,7 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/ADT/bit.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -25,6 +26,7 @@
 #include "MCTargetDesc/HaydnFixupKinds.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnInstPrinter.h"
+#include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/BinaryFormat/ELF.h"
@@ -36,6 +38,7 @@
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -144,7 +147,7 @@ void HaydnAsmPrinter::emitSpillKPIComments() {
         return S.getValue().getFixedValue();
     }
     // Haydn PEI CSR path often omits MMO; ST32/LD32 = 4, ST64/LD64 = 8.
-    // Opcode may be setDesc member (*_S0/_S1/_S2); use mayLoad width via
+    // Opcode may be a generated setDesc member; use mayLoad width via
     // operand 0 register class when possible.
     if (MI.getNumOperands() >= 1 && MI.getOperand(0).isReg()) {
       Register R = MI.getOperand(0).getReg();
@@ -542,6 +545,23 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       }
     }
 
+    // Compiler BUNDLE roots carry a product row. Convert residual logical
+    // children to generated members here so encode never DFS/bag-sorts a
+    // skip-Finalize compiler composite (AIE serialize-only).
+    std::optional<haydn::bundle::BundleFormatRowID> Row =
+        haydn::bundle::getBundleRowID(*MI);
+    if (!Row)
+      report_fatal_error(
+          "HaydnAsmPrinter: BUNDLE missing BundleFormatRowID — refuse E2 "
+          "default",
+          /*GenCrashDiag=*/false);
+    const uint8_t Mode =
+        *Row == haydn::bundle::BundleFormatRowID::E96ThreeEntry ? 1 : 0;
+    uint32_t UsedUnits = 0;
+    uint8_t NextEntry = 0;
+    const MCInstrInfo &MII = *MF->getSubtarget().getInstrInfo();
+    const MCRegisterInfo *MRI = OutContext.getRegisterInfo();
+
     for (const MachineInstr *I : RawKids) {
       if (HasNonNop && isPadNop(I->getOpcode()))
         continue;
@@ -590,7 +610,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         ChildInst->addOperand(MCOperand::createReg(Rs));
         ChildInst->addOperand(MCOperand::createImm(0));
       } else if (isPadNop(ChildOpc)) {
-        // Architectural NOP (logical / FieldSlot / generated member) is the
+        // Architectural NOP (logical / generated member) is the
         // idle/pad opcode. TableGen may mark the logical as isPseudo; still
         // lower it. Unused windows and pad-only idle encode as zero-entry NOP.
         MCInstLowering.Lower(&*I, *ChildInst);
@@ -611,21 +631,73 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
       // Membership order is the composite operand order. E2/E3 is the
       // stamped bundle-root row, not a canAdd replan or child-count guess.
+      // Residual public logicals (including representation expands) bind
+      // to the generated member at this membership entry. Already-private
+      // members serialize as-is. Failure is fatal: encode must not DFS.
+      if (!MRI)
+        report_fatal_error(
+            "HaydnAsmPrinter: missing MCRegisterInfo — refuse skip-Finalize "
+            "DFS / bag-sort",
+            /*GenCrashDiag=*/false);
+      if (!isPadNop(ChildInst->getOpcode()) &&
+          !haydnFindFormatEMemberByOpcode(ChildInst->getOpcode())) {
+        // Membership-entry inverse only (AIE serialize-as-is). Dual ALU32
+        // under E2 (XOR32 e0-only) and store-last ST64 (LOADSTORE0 e0-only)
+        // cannot rebind here — Finalize owns assignFormatEMemberEntries.
+        // AIEHazardRecognizer.cpp:216-218 tries AlternateInsts until canAdd.
+        // Overlay: if the first inverse member fails the keep-map fill
+        // (CSRW ALU2 3-op vs catalog 2-op reloc/imm), try remaining inverse
+        // members at this entry. Do not DFS or bag-sort.
+        const std::string Log = haydn::format_e::peelLogicalOpcodeName(
+            MII.getName(ChildInst->getOpcode()));
+        MCInst Filled;
+        bool FilledOk = false;
+        uint32_t TryUsed = UsedUnits;
+        while (!FilledOk) {
+          const haydn::format_e::FormatEMemberRec *Mem =
+              haydn::bundle::findInverseLogicalAtEntry(Log, Mode, NextEntry,
+                                                       TryUsed);
+          if (!Mem)
+            break;
+          if (haydnFillFormatEMemberInst(*Mem, *ChildInst, MII, *MRI, Filled)) {
+            FilledOk = true;
+            break;
+          }
+          if (Mem->Unit >= 32)
+            break;
+          TryUsed |= (1u << Mem->Unit);
+        }
+        if (!FilledOk)
+          report_fatal_error(
+              Twine("HaydnAsmPrinter: compiler BUNDLE child '") +
+                  MII.getName(ChildInst->getOpcode()) +
+                  "' is not a generated Format E member — refuse skip-Finalize "
+                  "DFS / bag-sort",
+              /*GenCrashDiag=*/false);
+        *ChildInst = Filled;
+      }
+      if (const haydn::format_e::FormatEMemberRec *Bound =
+              haydnFindFormatEMemberByOpcode(ChildInst->getOpcode())) {
+        if (Bound->Unit < 32) {
+          if (UsedUnits & (1u << Bound->Unit))
+            report_fatal_error(
+                "HaydnAsmPrinter: compiler BUNDLE unit injectivity — refuse "
+                "skip-Finalize DFS / bag-sort",
+                /*GenCrashDiag=*/false);
+          UsedUnits |= (1u << Bound->Unit);
+        }
+        ++NextEntry;
+      } else if (!isPadNop(ChildInst->getOpcode())) {
+        ++NextEntry;
+      }
       TypedKids.push_back(ChildInst);
     }
 
     // Product composite: E2 vs E3 is the stamped bundle-root row only.
+    // NumEntries stays 0 until the row stamp selects a product composite —
+    // never an E2 default for a missing row.
     unsigned CompositeOpc = 0;
-    unsigned NumEntries = 2;
-    std::optional<haydn::bundle::BundleFormatRowID> Row =
-        haydn::bundle::getBundleRowID(*MI);
-    // Compiler-origin BUNDLE roots must already carry a product row stamp.
-    // Refuse silent child-count E3 override and missing-row E2 default.
-    if (!Row)
-      report_fatal_error(
-          "HaydnAsmPrinter: BUNDLE missing BundleFormatRowID — refuse E2 "
-          "default",
-          /*GenCrashDiag=*/false);
+    unsigned NumEntries = 0;
     if (TypedKids.size() >= 3 &&
         *Row != haydn::bundle::BundleFormatRowID::E96ThreeEntry)
       report_fatal_error(

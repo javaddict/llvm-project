@@ -42,8 +42,10 @@
 //     Unsuffixed catalog logicals and alias/`_W` forms (`MULA64_HH`,
 //     `CSRW_W`, `ST32_POST`) try the same rewrite when Desc+TIED_TO match;
 //     unlike `_S*` they do not fail the whole bundle if incompatible.
-//     Residual SET_HWLOOP (peel-identity) stays for the verifier ban. Reloc CSRW_W
-//     stays FieldSlot (no typed CSR fixup). Pad NOP/NOP_S0 is
+//     Residual SET_HWLOOP (peel-identity) stays for the verifier ban. Reloc
+//     CSRW_W cutovers to catalog CSRW I8 members; encode binds typed CSR I8
+//     (FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8), never untyped NONE. Pad
+//     NOP/NOP_S0 is
 //     CompletionState, not membership — skip without consuming an entry and
 //     erase co-issued pads after a successful rewrite. Pad-NOP census law
 //     (W28/CR-B3, encoding F11): every completion/count decision below is
@@ -129,6 +131,7 @@ bool isBundleCandidate(MachineBasicBlock::instr_iterator MII) {
 ///    (MOVE32/ABS32 vestigial rs2)
 ///  * skip first ins when NumDefs match and trailing drop fails
 ///    (LUI vestigial $rs between dest and imm)
+/// Extra implicit-defs (SETCBR expand CBR) are ImplicitTail, not keep-map.
 /// LUI/ZERO_GPR cutover requires generated dest as SSA out (catalog role
 /// `reg`). Skip-Finalize / hand-asm FieldSlot uses the same keep-map;
 /// class-bag rebuild is not a fill path.
@@ -388,6 +391,8 @@ bool isWideResidualName(StringRef Name) {
 /// Branch/call members carry brtarget_wide_*/calltarget_wide_*. ALU RI20
 /// members carry simm20_wide_abs/uimm20_wide_abs. SET_HWLOOP Off1/Off2 stay
 /// uimm6/uimm12; getExprFixupKind maps those ops to HWLoopOff1/Off2.
+/// CSRW members are catalog I8; reloc CSRW_W cutovers to that MemberId.
+/// Encode binds FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8, never NONE.
 bool isWideCutoverLogical(StringRef Log) {
   return Log.equals_insensitive("JAL") || Log.equals_insensitive("JALR") ||
          Log.equals_insensitive("BEQ") || Log.equals_insensitive("BNE") ||
@@ -398,7 +403,8 @@ bool isWideCutoverLogical(StringRef Log) {
          Log.equals_insensitive("ADDI32") || Log.equals_insensitive("ORI32") ||
          Log.equals_insensitive("ANDI32") || Log.equals_insensitive("XORI32") ||
          Log.equals_insensitive("SET_HWLOOP") ||
-         Log.equals_insensitive("SET_HWLOOP_F2");
+         Log.equals_insensitive("SET_HWLOOP_F2") ||
+         Log.equals_insensitive("CSRW");
 }
 
 /// LS RI6 fields are signed 6-bit (FieldSlot LD32 uses wider simm16).
@@ -499,19 +505,35 @@ bool fieldSlotCompatibleWithMember(
 /// stay uimm6/uimm12 and getExprFixupKind maps HWLoopOff by OpNo.
 /// POST/PRE/BREV cutover when the member TIED_TO map matches FieldSlot.
 /// Unsuffixed catalog logicals (`CSRW_W`, `ST32_POST`) use the same path.
-/// Reloc CSRW_W is not a WIDE-cutover logical (no typed CSR fixup —
-/// fail closed; do not invent a CSR reloc kind).
+/// Reloc CSRW_W cutovers to the CSRW member (same keep-map as immediate);
+/// encode binds typed CSR I8 (FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8).
 /// Nullptr = fail closed.
 const haydn::format_e::FormatEMemberRec *
 resolveFieldSlotMember(const MachineInstr &MI, uint8_t Mode, uint8_t EntryIdx,
                        uint32_t UsedUnits, const TargetInstrInfo &TII) {
   const std::string Log =
       haydn::format_e::peelLogicalOpcodeName(TII.getName(MI.getOpcode()));
-  const haydn::format_e::FormatEMemberRec *Mem =
-      haydn::format_e::findFormatEMember(Log, Mode, EntryIdx, UsedUnits);
-  if (!Mem || !fieldSlotCompatibleWithMember(MI, *Mem, TII))
-    return nullptr;
-  return Mem;
+  // AIEHazardRecognizer.cpp:191-218 tries every AlternateInsts opcode
+  // until canAdd. Overlay: walk generated members at (mode, entry) and
+  // keep the lowest-UnitMap candidate the FieldSlot keep-map accepts.
+  // findFormatEMember is UnitMap-min without operand proof; a 3-op ALU2
+  // sibling must not hide a compatible 2-op ALU0 (CSRW I8 reloc/imm).
+  const haydn::format_e::FormatEMemberRec *Best = nullptr;
+  for (unsigned I = 0; I < haydn::format_e::FormatEMemberCount; ++I) {
+    const haydn::format_e::FormatEMemberRec &M =
+        haydn::format_e::FormatEMembers[I];
+    if (M.IsNop || M.Mode != Mode || M.EntryIdx != EntryIdx)
+      continue;
+    if (!StringRef(Log).equals_insensitive(M.Logical))
+      continue;
+    if (M.Unit < 32 && (UsedUnits & (1u << M.Unit)))
+      continue;
+    if (!fieldSlotCompatibleWithMember(MI, M, TII))
+      continue;
+    if (!Best || M.UnitMap < Best->UnitMap)
+      Best = &M;
+  }
+  return Best;
 }
 
 /// FieldSlot→MemberId on one stamped BUNDLE. Leading membership order is
@@ -729,21 +751,38 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
     if (!Assign)
       return std::nullopt;
     SmallVector<PlanItem, 4> P;
+    uint32_t PlanUnits = 0;
     for (unsigned K = 0, KE = Kids.size(); K != KE; ++K) {
       const haydn::format_e::FormatEMemberRec *Mem = (*Assign)[K].Mem;
       if (!Mem)
         return std::nullopt;
       MachineInstr *Kid = Kids[K];
-      const bool MustResolve =
-          mustResolveToFormatEMember(Kid->getOpcode(), TII) ||
-          isGeneratedFormatEMemberName(TII.getName(Kid->getOpcode()));
-      if (!fieldSlotCompatibleWithMember(*Kid, *Mem, TII)) {
-        if (MustResolve)
+      // Assigned UnitMap-min may be operand-incompatible (CSRW ALU2 3-op vs
+      // catalog 2-op). Retry siblings at the same entry
+      // (AIEHazardRecognizer.cpp:216-218 alt-try). Dual LOADSTORE0 stores
+      // have no second unit — fail closed rather than skip a kid and mix
+      // MemberId with leftover logicals.
+      if (!fieldSlotCompatibleWithMember(*Kid, *Mem, TII) ||
+          (Mem->Unit < 32 && (PlanUnits & (1u << Mem->Unit)))) {
+        uint32_t Used = PlanUnits;
+        for (unsigned J = K + 1; J != KE; ++J) {
+          if (!(*Assign)[J].Mem || (*Assign)[J].Mem->Unit >= 32)
+            continue;
+          Used |= (1u << (*Assign)[J].Mem->Unit);
+        }
+        Mem = resolveFieldSlotMember(*Kid, TryMode, Mem->EntryIdx, Used, TII);
+        if (!Mem)
           return std::nullopt;
-        continue;
+      }
+      if (Mem->Unit < 32) {
+        if (PlanUnits & (1u << Mem->Unit))
+          return std::nullopt;
+        PlanUnits |= (1u << Mem->Unit);
       }
       P.emplace_back(Kid, Mem);
     }
+    if (P.size() != Kids.size())
+      return std::nullopt;
     return P;
   };
 

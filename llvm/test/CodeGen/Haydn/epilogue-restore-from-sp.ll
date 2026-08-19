@@ -29,8 +29,8 @@ define void @epilogue_restore_from_sp(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; CHECK-NEXT:    { nop; st32 r10, r5, 2 }
 ; CHECK-NEXT:    { nop; st32 r9, r5, 3 }
 ; CHECK-NEXT:    { nop; st32 r8, r5, 4 }
-; CHECK-NEXT:    { move32 r8, r1; move32 r9, r2 }
-; CHECK-NEXT:    { move32 r10, r3; move32 r11, r4 }
+; CHECK-NEXT:    { nop; move32 r8, r1; move32 r9, r2 }
+; CHECK-NEXT:    { nop; move32 r10, r3; move32 r11, r4 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32 r5, r8 }
 ; CHECK-NEXT:    { nop; move32 r6, r9 }

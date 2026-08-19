@@ -21,7 +21,7 @@ define i32 @switch_jt_8(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; jalr_w r0, r1, 0 }
+; CHECK-NEXT:    { nop; jalr r0, r1, 0 }
 ; CHECK-NEXT:  .LBB0_2: // %bb0
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
@@ -152,7 +152,7 @@ define i32 @switch_jt_offset(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; add32 r2, r3, r2 }
 ; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; jalr_w r0, r2, 0 }
+; CHECK-NEXT:    { nop; jalr r0, r2, 0 }
 ; CHECK-NEXT:  .LBB2_2: // %bb10
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
@@ -204,7 +204,7 @@ define i32 @switch_jt_with_default(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; jalr_w r0, r1, 0 }
+; CHECK-NEXT:    { nop; jalr r0, r1, 0 }
 ; CHECK-NEXT:  .LBB3_2: // %bb0
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 100 }

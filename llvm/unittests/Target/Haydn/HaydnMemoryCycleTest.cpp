@@ -155,7 +155,7 @@ TEST_F(HaydnMemoryCycleTest, OpcodeSchedClassesAreMemoryItineraries) {
   EXPECT_EQ(II.get(Haydn::S_LW_WITH_IMM_E2_E1_LOAD1_RI6).getSchedClass(),
             static_cast<unsigned>(Slot1_LD));
   EXPECT_EQ(II.get(Haydn::LD64).getSchedClass(), static_cast<unsigned>(Slot01_LD));
-  EXPECT_EQ(II.get(Haydn::D_LQHWUA_POST_S2).getSchedClass(),
+  EXPECT_EQ(II.get(Haydn::D_LQHWUA_POST).getSchedClass(),
             static_cast<unsigned>(Slot2_LS));
 }
 

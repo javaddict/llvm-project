@@ -36,7 +36,7 @@ define i32 @ret_after_csr_epilogue(i32 %x) {
 ; CHECK-NEXT:    .cfi_offset r9, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
 ; CHECK-NEXT:    { nop; addi32 r9, sp, 12 }
-; CHECK-NEXT:    { move32 r1, r9; move32 r8, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r9; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; jal lr, ext }
 ; CHECK-NEXT:    { nop; addi32 r1, r8, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -69,7 +69,8 @@ define i32 @ret_after_csr_epilogue(i32 %x) {
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 212 }
 ; CHECK-NEXT:    { nop; ld32_reg r8, sp, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 216 }
-; CHECK:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %buf = alloca [48 x i32], align 4
   call void @ext(ptr %buf)

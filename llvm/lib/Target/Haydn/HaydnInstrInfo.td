@@ -14,202 +14,9 @@
 // HaydnInstrFormats.td is included by Haydn.td before this file.
 // Do not re-include it here.
 
-//===----------------------------------------------------------------------===//
-// Pseudo Instructions (CodeGen only)
-//===----------------------------------------------------------------------===//
-
-// Pseudo for loading large immediates. Rematerializable: single imm operand so
-// RA re-emits at each use instead of spilling across complex CFG (same class of
-// bug as LOADI64). Expanded post-RA via HaydnMatInt (LUI <<20).
-let isReMaterializable = 1, isCodeGenOnly = 1, hasNoSchedulingInfo = 1 in
-def LOADI32 : HaydnPseudo<(outs GPR32:$rd), (ins i32imm:$imm),
-                           "loadi32\t$rd, $imm", []>;
-
-// Pseudo for loading a 64-bit immediate into a DR64 register. Rematerializable
-// (single immediate operand, no vreg uses) so RA re-emits it at each use instead
-// of cross-block-copying the DR64 via OR64 — the latter fails dominance for i64
-// constants used in non-dominating join blocks. Expanded post-RA in
-// expandPostRAPseudo: materialise lo32/hi32 into the reserved R12 scratch via
-// HaydnMatInt, spill to a transient 8-byte SP slot, LD64.
-//
-// Code-size cost: because RA now rematerialises i64 constants at each use
-// instead of one materialisation + cheap OR64 copies, the NatureDSP gate grows
-// ~+1.2% bundles (43303 -> 43811). Accepted for correctness (clears a
-// verifier-aborting dominance bug). A follow-up could keep the old
-// single-materialisation sequence for provably single-block/single-use consts.
-let isReMaterializable = 1, isCodeGenOnly = 1, hasNoSchedulingInfo = 1 in
-def LOADI64 : HaydnPseudo<(outs DR64:$rd), (ins i64imm:$imm),
-                           "loadi64\t$rd, $imm", []>;
-
-// Global / block / JT address materialization. MUST be rematerializable:
-// seed 3148 — without remat, RA spills LOAD_ADDR across a diamond;
-// the store is only on one arm and the join reloads an uninitialized slot
-// (0xffffffff) → S_LW_WITH_IMM MEMORY_FAULT. Expanded post-RA (ExpandPseudos)
-// to LUI+ADDI32_W with HI12/LO20 fixups (or MatInt for imm form).
-let isReMaterializable = 1, isCodeGenOnly = 1, hasNoSchedulingInfo = 1 in
-def LOAD_ADDR : HaydnPseudo<(outs GPR32:$rd), (ins i32imm:$addr),
-                            "load_addr\t$rd, $addr", []>;
-
-// Return pseudo — GISel handles returns via CallLowering, no SDAG pattern.
-// Uses R15 (LR, return address). Return value register (R0/D0) is added as
-// implicit-use by lowerReturn at the MI level, not via TableGen Uses.
-let isReturn = 1, isTerminator = 1, isBarrier = 1, Uses = [R15] in
-def RET : HaydnPseudo<(outs), (ins), "ret", []>;
-
-//===----------------------------------------------------------------------===//
-// Varargs Pseudo Instructions
-//===----------------------------------------------------------------------===//
-
-// VASTART/VACOPY write the va_list struct in memory (a side effect) but have
-// no register defs, no Uses, and no memoperands. Without hasSideEffects the
-// dead-mi-elimination pass sees them as side-effect-free dead code at -O1/-O2
-// and deletes them BEFORE the AsmPrinter can expand them, leaving the va_list
-// struct uninitialized so va_arg reads garbage (returns 0 instead of the
-// variadic value). hasSideEffects=1 is load-bearing here, exactly as it is for
-// CSRW below (which otherwise gets DCE'd and the CSR is never programmed).
-// The same trap as the CSRW WUR_AE_CBEGIN0/CEND0 case. VAEND is intentionally
-// excluded: it is a genuine no-op on baremetal and SHOULD stay DCE-able.
-// hasSideEffects keeps DCE off; mayLoad/mayStore admit real MMOs through
-// select→ExpandPseudos so memory-effect ownership is not dropped.
-let hasSideEffects = 1, mayStore = 1 in {
-// Pseudo for va_start - initializes va_list pointer
-// Operands: [va_list_ptr]
-// Stores the address of the first variadic argument to the va_list pointer
-def VASTART : HaydnPseudo<(outs), (ins GPR32:$ptr),
-                           "vastart\t$ptr", []>;
-} // hasSideEffects / mayStore
-
-let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
-// Pseudo for va_copy - copies one va_list to another
-// Operands: [dst_ptr, src_ptr]
-// Loads from src_ptr and stores to dst_ptr
-def VACOPY : HaydnPseudo<(outs), (ins GPR32:$dst, GPR32:$src),
-                           "vacopy\t$dst, $src", []>;
-
-// CB-131: G_VAARG → thin ISel to these; ExpandPseudos implements the full
-// AArch64-style two-bank + stack-overflow algorithm (reg step 4/8, stack
-// step 8 per CCAssignToStack<8,8>). hasSideEffects so DCE cannot delete.
-def VAARG_I32 : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$valist),
-                             "vaarg.i32\t$rd, $valist", []>;
-def VAARG_I64 : HaydnPseudo<(outs DR64:$rd), (ins GPR32:$valist),
-                             "vaarg.i64\t$rd, $valist", []>;
-} // hasSideEffects / mayLoad / mayStore
-
-// Pseudo for va_end - no-op for baremetal
-def VAEND : HaydnPseudo<(outs), (ins GPR32:$ptr),
-                        "vaend\t$ptr", []>;
-
-// Call frame adjustment pseudos. Two immediates: the size and the alignment
-// matching the convention used by RISC-V / AArch64 / ARM. ADJCALLSTACKDOWN
-// decrements SP by the outgoing stack-arg size; ADJCALLSTACKUP restores it.
-let Defs = [R13], Uses = [R13] in {
-def ADJCALLSTACKDOWN : HaydnPseudo<(outs), (ins i32imm:$amt, i32imm:$align),
-                                     "adjcallstackdown $amt, $align", []>;
-def ADJCALLSTACKUP : HaydnPseudo<(outs), (ins i32imm:$amt, i32imm:$align),
-                                   "adjcallstackup $amt, $align", []>;
-}
-
-// Libcall pseudos for operations without hardware support
-// These are emitted by the InstructionSelector and expanded by ExpandPseudos
-// into direct calls to compiler-rt functions (__divsi3, __udivsi3, etc.).
-//
-// Call clobbers (all R* are GPRs). R1–R7, R12, D0–D7, R15(link).
-// R14: never in Defs — always CSR via regmask (s0-style). CSR bank:
-// R8–R11, R14, R15, D8–D15.
-let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
-            D0, D1, D2, D3, D4, D5, D6, D7,
-            R15] in {
-def LIBCALL_SDIV : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                                "libcall_sdiv\t$rd, $rs1, $rs2",
-                                []>;
-
-def LIBCALL_UDIV : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                                "libcall_udiv\t$rd, $rs1, $rs2",
-                                []>;
-
-def LIBCALL_SREM : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                                "libcall_srem\t$rd, $rs1, $rs2",
-                                []>;
-
-def LIBCALL_UREM : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                                "libcall_urem\t$rd, $rs1, $rs2",
-                                []>;
-
-// 64-bit multiply libcall — emits a call to __muldi3
-def LIBCALL_MUL64 : HaydnPseudo<(outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
-                                  "libcall_mul64\t$rd, $rs1, $rs2", []>;
-} // Defs = caller-saved clobbers
-
-// Cross-bank copy pseudos for DR64 <-> GPR32 transfers.
-// These are expanded by the ExpandPseudos pass or AsmPrinter.
-// MOV_GPR_TO_DR64: Move a pair of GPR32 registers into one DR64 register.
-def MOV_GPR_TO_DR64 : HaydnPseudo<(outs DR64:$rd), (ins GPR32:$rs_lo, GPR32:$rs_hi),
-                                    "mov_gpr_to_dr64\t$rd, $rs_lo, $rs_hi", []>;
-
-// MOV_DR64_TO_GPR: Move one DR64 register into a pair of GPR32 registers.
-def MOV_DR64_TO_GPR : HaydnPseudo<(outs GPR32:$rd_lo, GPR32:$rd_hi), (ins DR64:$rs),
-                                    "mov_dr64_to_gpr\t$rd_lo, $rd_hi, $rs", []> {
-  let hasSideEffects = 0;
-  let hasNoSchedulingInfo = 1;
-}
-
-//===----------------------------------------------------------------------===//
-// Addressing Mode Pseudo Instructions
-//===----------------------------------------------------------------------===//
-//
-// These pseudos represent the Haydn ISA's post-increment and pre-decrement
-// addressing modes. They are produced by ISel / HaydnExpandPostIncEarly
-// (LD32 + ADDI32 fold) and expanded into real instructions.
-//
-// The ISA specifies:
-// S_LW_POST_IMM: rt, rs, imm6 — load word from [rs], then rs += (imm6 << 2)
-// S_SW_POST_IMM: rt, rs, imm6 — store word to [rs], then rs += (imm6 << 2)
-// S_LW_PRE_IMM: rt, rs, imm6 — rs += (imm6 << 2), then load word from [rs]
-// S_SW_PRE_IMM: rt, rs, imm6 — rs += (imm6 << 2), then store word to [rs]
-//
-// The immediate in the pseudo is the *stride* (post-increment amount), not
-// the scaled imm6. The expansion pass scales it appropriately.
-// For 32-bit word access, stride = imm6 << 2 (4-byte aligned).
-
-// Post-increment load 32-bit word: load from [BaseReg + Offset], then
-// BaseReg += Stride. Offset defaults to 0 for plain post-inc patterns; it
-// is non-zero when this pseudo is formed from an LD32 with a non-zero
-// displacement (e.g. the second LD32 of a cross-bank fold producing
-// offsets 0,4). Preserving Offset prevents the post-inc formation from
-// silently dropping the original displacement.
-// Expanded to: LD32 rt, BaseReg, Offset; ADDI32 BaseReg, BaseReg, Stride
-// When the ISA encoder supports S_LW_POST_IMM natively, this becomes one
-// instruction (imm6 carries the displacement, stride is the post-update).
-let mayLoad = 1 in
-def LD32_POST_INC : HaydnPseudo<(outs GPR32:$rt),
-                                 (ins GPR32:$base, i32imm:$stride, i32imm:$offset),
-                                 "ld32_post_inc\t$rt, $base, $stride, $offset", []>;
-
-// Post-increment store 32-bit word: store to [BaseReg + Offset], then
-// BaseReg += Stride. See LD32_POST_INC for the offset rationale.
-// Expanded to: ST32 rt, BaseReg, Offset; ADDI32 BaseReg, BaseReg, Stride
-let mayStore = 1, mayLoad = 0 in
-def ST32_POST_INC : HaydnPseudo<(outs),
-                                 (ins GPR32:$rt, GPR32:$base, i32imm:$stride,
-                                      i32imm:$offset),
-                                 "st32_post_inc\t$rt, $base, $stride, $offset", []>;
-
-// Post-increment load 64-bit double-word: load from [BaseReg + Offset]
-// then BaseReg += Stride. See LD32_POST_INC for the offset rationale.
-// Expanded to: LD64_S1 rt, BaseReg, Offset; ADDI32 BaseReg, BaseReg, Stride
-let mayLoad = 1 in
-def LD64_POST_INC : HaydnPseudo<(outs DR64:$rt),
-                                 (ins GPR32:$base, i32imm:$stride, i32imm:$offset),
-                                 "ld64_post_inc\t$rt, $base, $stride, $offset", []>;
-
-// Post-increment store 64-bit double-word: store to [BaseReg + Offset]
-// then BaseReg += Stride. See LD32_POST_INC for the offset rationale.
-// Expanded to: ST64 rt, BaseReg, Offset; ADDI32 BaseReg, BaseReg, Stride
-let mayStore = 1, mayLoad = 0 in
-def ST64_POST_INC : HaydnPseudo<(outs),
-                                 (ins DR64:$rt, GPR32:$base, i32imm:$stride,
-                                      i32imm:$offset),
-                                 "st64_post_inc\t$rt, $base, $stride, $offset", []>;
+// Compiler-only pseudos live in HaydnPseudos.td (included from
+// HaydnGeneric.td before this file). This file keeps logicals,
+// Patterns, and matcher-visible shells.
 
 //===----------------------------------------------------------------------===//
 // Slot 0 — ALU Instructions (32-bit scalar)
@@ -674,21 +481,6 @@ def BLTZ : FmtBR<0x36, (outs), (ins GPR32:$rs, brtarget:$offset),
 } // end isBranch, isTerminator
 
 //===----------------------------------------------------------------------===//
-// Unconditional branch pseudo
-//===----------------------------------------------------------------------===//
-
-// Pseudo for unconditional direct branch. Expands to BEQZ R0, target
-// (always taken since R0 is hardwired to zero).
-def B : HaydnPseudo<(outs), (ins brtarget:$offset),
-                     "b\t$offset",
-                     [(br bb:$offset)]> {
-  let isBranch = 1;
-  let isTerminator = 1;
-  let isBarrier = 1;
-  let TSFlags{2-0} = 0b001;
-}
-
-//===----------------------------------------------------------------------===//
 // Jump / Link Instructions
 //===----------------------------------------------------------------------===//
 //
@@ -722,128 +514,12 @@ def JALR : FmtJR<0x38, (outs GPR32:$rd), (ins GPR32:$rs, calltarget:$target),
   let TSFlags{2-0} = 0b001;
 }
 
-// Pseudo call instruction - expands to JAL_W (HaydnExpandPseudos).
-// Used by CallLowering for direct calls. Must set isCall=1 so pre-RA
-// MachineScheduler treats it as a call barrier (isSchedulingBoundary
-// mayLoad+mayStore semantics). PseudoCALLIndirect already had isCall=1;
-// omitting it here let misched reorder memory/ops across empty calls
-// (seed7: empty tf_3_foo flips oracle). Expands after RA.
-def PseudoCALL : HaydnPseudo<(outs GPR32:$rd), (ins calltarget:$target),
-                              "call\t$target",
-                              []> {
-  let isCall = 1;
-  let TSFlags{2-0} = 0b001;
-}
-
-// Pseudo indirect call — expands to JALR. Used by CallLowering for function
-// pointer calls (callee is a register). Modeled as a call (same caller-saved
-// clobbers as JAL/PseudoCALL) but NOT a terminator, since control returns
-// unlike raw JALR which is isTerminator=1 (RET / indirect-branch use).
-// a reg callee previously went through JAL, whose calltarget operand
-// cannot hold a register, so the printer dropped the target and the ISS saw
-// r0=0 -> self-loop on every fnptr call.
-def PseudoCALLIndirect : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$rs),
-                                      "calli\t$rs",
-                                      []> {
-  let isCall = 1;
-  let TSFlags{2-0} = 0b001;
-}
 } // Defs = caller-saved clobbers for call instructions
-
-// Indirect branch pseudo for jump table dispatch.
-// Has the same successor list as G_BRJT and is expanded to JALR by AsmPrinter.
-let isBarrier = 1, isTerminator = 1, isBranch = 1, isIndirectBranch = 1 in {
-def BR_JT : HaydnPseudo<(outs), (ins GPR32:$addr, i32imm:$jt),
-                          "br_jt\t$addr, $jt",
-                          []>;
-}
 
 // Long-branch expansion is CodeGen BranchRelaxation only (insertBranch /
 // insertIndirectBranch / isBranchOffsetInRange). MC has no PseudoLongB* and
 // no expandLongBranch: AsmBackend mayNeedRelaxation is always false. Do not
 // reintroduce an MC-layer second long-branch mechanism (F17).
-
-//===----------------------------------------------------------------------===//
-// Hardware Loop Instructions
-//===----------------------------------------------------------------------===//
-
-// Hardware loop configuration pseudos.
-// The asm printer expands these to SET_HWLOOP/SET_HWLOOP_F2 instructions
-// with PC-relative offsets computed from the MBB symbols.
-// Operands: sel (0=inner, 1=outer — golden manual: HWLR_*[0] is the inner
-// loop seat), loop_start MBB, loop_end MBB, trip count.
-// hasSideEffects=1 matches LoopStart: programs HWLR; must not be DCE'd or
-// freely reordered relative to the remat count producer (post-RA free-reg
-// remat → SET dep chain).
-// Defs=[SFR] mirrors the real _W forms: every SET variant writes the HWLR
-// CSRs (an SFR-space def), so the golden Constraints same-sel
-// two-SETs-per-bundle ban rides the ONE HR same-bundle WAW predicate — the
-// SFR write-port / WAW law — instead of depending on the fragile
-// hasSideEffects=1 DAG Ord-barrier topology alone (audit G-2 / GOALS W47).
-let hasSideEffects = 1, isNotDuplicable = 1, Defs = [SFR] in {
-def SET_HWLOOP : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, uimm16:$cnt),
-                               "set_hwloop\t$sel, $loop_start, $loop_end, $cnt", []>;
-
-def SET_HWLOOP_REG : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, GPR32:$rs),
-                                  "set_hwloop_f2\t$sel, $loop_start, $loop_end, $rs", []>;
-} // hasSideEffects = 1, isNotDuplicable = 1, Defs = [SFR]
-
-//===----------------------------------------------------------------------===//
-// SMS-safe hardware-loop pseudos (AIE design).
-//
-// These pseudos are created by the GlobalISel selector when it lowers the
-// upstream HardwareLoops IR intrinsics (llvm.set.loop.iterations
-// llvm.loop.decrement, llvm.loop.decrement.reg). They participate in the
-// standard analyzeBranch/insertBranch/removeBranch round-trip so the SMS
-// ModuloScheduleExpander can clone+erase them safely (the fix for the
-// expander crash). The post-RA HaydnHardwareLoops pass lowers them to
-// the real SET_HWLOOP_REG encoding.
-//
-// Two loop models (mirrors AIE AIE2InstrInfo.td:550-572):
-// ZOL (innermost): LoopStart (preheader) + PseudoLoopEnd (latch)
-// JNZD (outer): LoopDec + LoopJNZ (counter-in-reg)
-//===----------------------------------------------------------------------===//
-
-// JNZD loops (counter-in-reg, for outer nested loops).
-// LoopDec decrements the GPR trip counter and sets the condition for LoopJNZ.
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def LoopDec : HaydnPseudo<(outs GPR32:$dst), (ins GPR32:$src),
-                          "loop_dec\t$dst, $src", []>;
-
-// LoopJNZ: jump-if-nonzero to the loop body. This is the latch terminator for
-// JNZD loops — it branches back to the loop header while the counter != 0.
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
-    isBranch = 1, isTerminator = 1 in
-def LoopJNZ : HaydnPseudo<(outs), (ins GPR32:$tc, brtarget:$target),
-                          "loop_jnz\t$tc, $target", []>;
-
-// Zero-overhead loops (ZOL, innermost).
-// LoopStart lives in the preheader and programs the hardware loop registers
-// (HWLR_COUNT/BEGIN/END). The $adj immediate is the pipeliner's trip-count
-// adjustment (prologue/epilogue correction), edited in-place by
-// ZeroOverheadLoop::adjustTripCount.
-let hasSideEffects = 1, isNotDuplicable = 1 in
-def LoopStart : HaydnPseudo<(outs), (ins GPR32:$src, simm6:$adj),
-                            "loop_start\t$src, $adj", []>;
-
-// PseudoLoopEnd: the ZOL latch terminator. Represents the implicit hardware
-// loop back-edge. isMeta = true so the scheduler/packetizer treats it as a
-// placeholder (zero-cycle, no real encoding). isBranch + isTerminator (but
-// NOT isBarrier) so it auto-derives isConditionalBranch — this is what
-// makes analyzeBranch recognize it via the standard branch-predicate path.
-// Single MBB operand: the loop body (self-back-edge for single-BB loops).
-//
-// (AIE-first layout): AIE binds the last-bundle END label as a symbol
-// operand on PseudoLoopEnd and propagates it via setPreInstrSymbol on the
-// preceding real MI. Haydn deliberately does NOT put the END MCSymbol on
-// PseudoLoopEnd (keeps analyzeBranch/SMS operand shape stable); instead
-// HaydnAsmPrinter::getOrCreateHwloopEndSym binds HWLR_END via
-// setPreInstrSymbol on the latch's last real body MI ( pending multi-END).
-let isBranch = 1, isTerminator = 1, isMeta = 1,
-    hasSideEffects = 1, isNotDuplicable = 1,
-    mayLoad = 0, mayStore = 0 in
-def PseudoLoopEnd : HaydnPseudo<(outs), (ins brtarget:$loopBody),
-                                "pseudo_loop_end\t$loopBody", []>;
 
 //===----------------------------------------------------------------------===//
 // System Instructions
@@ -1572,25 +1248,6 @@ def MOVE32_DR_H : HaydnInst<4, (outs GPR32:$rt), (ins DR64:$rsd),
 }
 }  // isAsmParserOnly = 1, isPseudo = 0
 
-//===----------------------------------------------------------------------===//
-// Circular-buffer setup pseudos — Hexagon-style.
-//
-// Haydn configures a CBR set by writing CBR_BEGIN[cbr_sel] / CBR_END[cbr_sel]
-// as CSRs (0x2C/0x2D for set 0, 0x2E/0x2F for set 1) via CSRW. There is no
-// dedicated SETCBR opcode — the setup IS a CSRW. Pseudos take (cbr_sel, value);
-// ExpandPseudos emits final CSRW_W with that CSR map plus implicit-def
-// CBR0/CBR1 before post-RA pack. Residual SETCBR at late Verify/AsmPrinter is
-// fatal (one-to-one MC). Mirrors Hexagon `m0=rN; cs0=rN` boundary setup via
-// existing CSR space. cbr_sel is an i32 immediate (0 or 1).
-//===----------------------------------------------------------------------===//
-let hasSideEffects = 1 in {
-def SETCBR_BEGIN : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
-    "setcbr_begin\t$cbr_sel, $val", []>;
-
-def SETCBR_END : HaydnPseudo<(outs), (ins i32imm:$cbr_sel, GPR32:$val),
-    "setcbr_end\t$cbr_sel, $val", []>;
-}  // hasSideEffects = 1
-
 // Fractional operations
 //
 // MULQ31 / MACQ31 / MULQ63 REMOVED — they do not exist in the ISA DB
@@ -1910,6 +1567,10 @@ def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
 // are retained (CSRW_W still uses Fmt48_WideCSR — HaydnAsmPrinter +
 // HaydnHazardRecognizer). CSRR_W's `Uses = [SFR]` comment is preserved for
 // historical context.
+// CSRW_W — GISel CBR / ExpandPseudos SETCBR form. Operand shape matches
+// catalog CSRW I8 members (uimm8, rs). Immediate and reloc addresses
+// cutover to those members (2-op identity/swap keep-map). Encode binds
+// FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8, never untyped NONE.
 let hasSideEffects = 0, Defs = [SFR] in
 def CSRW_W : Fmt48_WideCSR<0x81, (outs),
                            (ins uimm8_csr:$uimm8, GPR32:$rt),
@@ -1938,3 +1599,178 @@ def SET_HWLOOP_REG_W : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
 // Fmt48_WideLS class (HaydnInstrFormatsC.td). Wide-offset LS is now reached
 // via the _S0 family-2 defs (HaydnFormatsLS.td).
 //===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// AR / unaligned UA logicals (moved from HaydnFormatsLS.td).
+// Product encode is Format E members. No FieldSlot occupancy defs.
+// D_LQHWUA_POST carries Slot2_LS so the published memory-cycle itinerary
+// stays live after the last `_S*` FieldSlot was deleted.
+//===----------------------------------------------------------------------===//
+
+let mayLoad = 1, hasSideEffects = 1 in
+def PLDWWUA : HaydnInst<4, (outs), (ins uimm2:$ar_sel, GPR32:$rs),
+                        "pldwwua\t$ar_sel, $rs", []> {
+  let Itinerary = Slot012_ALU;
+}
+
+let mayLoad = 1, hasSideEffects = 1 in
+def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
+    (ins GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
+    "d_lqhwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+  let Itinerary = Slot2_LS;
+}
+
+let mayLoad = 1, hasSideEffects = 1 in
+def D_LTWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
+    (ins GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
+    "d_ltwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+  let Itinerary = Slot012_ALU;
+}
+
+let hasSideEffects = 1 in
+def FLAR : HaydnInst<4, (outs), (ins uimm2:$ar_sel), "flar\t$ar_sel", []> {
+  let Itinerary = Slot012_ALU;
+}
+
+let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
+def WBARWUA : HaydnInst<4, (outs), (ins GPR32:$rs, uimm2:$ar_sel, uimm1:$dir_sel),
+                        "wbarwua\t$ar_sel, $rs, $dir_sel", []> {
+  let Itinerary = Slot012_ALU;
+}
+
+let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
+def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
+    (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
+    "d_sqhwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+  let Itinerary = Slot012_ALU;
+}
+
+let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
+def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
+    (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
+    "d_stwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
+  let Constraints = "$rs1 = $rs1_wb";
+  let Itinerary = Slot012_ALU;
+}
+
+//===----------------------------------------------------------------------===//
+// Hand-owned logicals (formerly HaydnInstrInfoManual.td). No Inst bits —
+// product encode is Format E members. Dual-dest MAC ties stay authored
+// until the golden emitter grows dual accumulator projection.
+//===----------------------------------------------------------------------===//
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in {
+let Constraints = "$rd = $ra, $rtd2 = $ra2" in {
+def X2MULA32 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x2mula32\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X2MULS32 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x2muls32\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X4FF2MULA16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x4ff2mula16s\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X4FF2MULS16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x4ff2muls16s\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X4MULA16 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x4mula16\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X4MULA16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x4mula16s\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X4MULS16 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x4muls16\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X4MULS16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$ra, DR64:$ra2, DR64:$rs1, DR64:$rs2),
+    "x4muls16s\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+} // Constraints dual-acc
+
+def X2CMUL32 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X2CMUL32S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32s\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X2CMUL32S_F2 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32s.f2\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+def X2CMUL32_F2 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x2cmul32.f2\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot1_ALU;
+  let TSFlags{2-0} = 0b010;
+}
+def X4FF2MUL16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
+    (ins DR64:$rs1, DR64:$rs2),
+    "x4ff2mul16s\t$rd, $rtd2, $rs1, $rs2", []> {
+  let Itinerary = Slot12_MAC;
+  let TSFlags{2-0} = 0b010;
+}
+
+let TSFlags = 14 in {
+def MOVEI_H : HaydnInst<4, (outs DR64:$rd),
+    (ins simm32_movei:$imm32), "movei_h\t$rd, $imm32", []>;
+def MOVEI_L : HaydnInst<4, (outs DR64:$rd),
+    (ins simm32_movei:$imm32), "movei_l\t$rd, $imm32", []>;
+}
+
+let isPseudo = 0, TSFlags = 14 in
+def ZERO_DR : HaydnInst<4, (outs DR64:$rd), (ins), "zero_dr\t$rd", []>;
+
+let TSFlags = 14, Itinerary = Slot12_ALU_SinCosLat in {
+def SIN_COS : HaydnInst<4, (outs DR64:$rd),
+    (ins GPR32:$rs, uimm4:$imm), "sin_cos\t$rd, $rs, $imm", []>;
+def ARCTAN : HaydnInst<4, (outs GPR32:$rd),
+    (ins DR64:$rs, uimm4:$imm), "arctan\t$rd, $rs, $imm", []>;
+}
+} // isCodeGenOnly=0 HaydnAutoNoDecode
+
+// Hand Slot01_LD exception for CB-load ResMII (see GOALS M18). No Inst bits.
+let isAsmParserOnly = 1, isPseudo = 0, mayLoad = 1,
+    isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in
+def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
+    (ins GPR32:$rs, i32imm:$cbr_sel, simm8:$imm),
+    "d_ldw_cb_imm\t$cbr_sel, $rtd, $rs, $imm", []> {
+  let Constraints = "$rs = $rs_wb";
+  let TSFlags{2-0} = 0b001;
+  let TSFlags{4-3} = 0b01;
+  let Itinerary = Slot01_LD;
+}

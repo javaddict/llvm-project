@@ -11,9 +11,9 @@ define i32 @cmp_eq_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32_dr_l r1, d0; move32_dr_h r2, d0 }
-; CHECK-NEXT:    { move32_dr_l r3, d1; move32_dr_h r4, d1 }
-; CHECK-NEXT:    { seq32 r2, r2, r4; seq32 r1, r1, r3 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0; move32_dr_h r2, d0 }
+; CHECK-NEXT:    { nop; move32_dr_l r3, d1; move32_dr_h r4, d1 }
+; CHECK-NEXT:    { nop; seq32 r2, r2, r4; seq32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; and32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -31,9 +31,9 @@ define i32 @cmp_ne_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32_dr_l r1, d0; move32_dr_h r2, d0 }
-; CHECK-NEXT:    { move32_dr_l r3, d1; move32_dr_h r4, d1 }
-; CHECK-NEXT:    { seq32 r2, r2, r4; seq32 r1, r1, r3 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0; move32_dr_h r2, d0 }
+; CHECK-NEXT:    { nop; move32_dr_l r3, d1; move32_dr_h r4, d1 }
+; CHECK-NEXT:    { nop; seq32 r2, r2, r4; seq32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; and32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
@@ -52,10 +52,10 @@ define i32 @cmp_ult_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32_dr_l r1, d0; move32_dr_h r2, d0 }
-; CHECK-NEXT:    { move32_dr_l r3, d1; move32_dr_h r4, d1 }
-; CHECK-NEXT:    { seq32 r5, r2, r4; sltu32 r1, r1, r3 }
-; CHECK-NEXT:    { sltu32 r2, r2, r4; and32 r1, r1, r5 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0; move32_dr_h r2, d0 }
+; CHECK-NEXT:    { nop; move32_dr_l r3, d1; move32_dr_h r4, d1 }
+; CHECK-NEXT:    { nop; seq32 r5, r2, r4; sltu32 r1, r1, r3 }
+; CHECK-NEXT:    { nop; sltu32 r2, r2, r4; and32 r1, r1, r5 }
 ; CHECK-NEXT:    { nop; or32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -76,10 +76,10 @@ define i32 @cmp_slt_i64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { move32_dr_l r1, d0; move32_dr_h r2, d0 }
-; CHECK-NEXT:    { move32_dr_l r3, d1; move32_dr_h r4, d1 }
-; CHECK-NEXT:    { seq32 r5, r2, r4; sltu32 r1, r1, r3 }
-; CHECK-NEXT:    { slt32 r2, r2, r4; and32 r1, r1, r5 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0; move32_dr_h r2, d0 }
+; CHECK-NEXT:    { nop; move32_dr_l r3, d1; move32_dr_h r4, d1 }
+; CHECK-NEXT:    { nop; seq32 r5, r2, r4; sltu32 r1, r1, r3 }
+; CHECK-NEXT:    { nop; slt32 r2, r2, r4; and32 r1, r1, r5 }
 ; CHECK-NEXT:    { nop; or32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

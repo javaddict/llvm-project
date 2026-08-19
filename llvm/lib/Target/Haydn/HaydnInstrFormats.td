@@ -9,7 +9,7 @@
 // Haydn instruction formats for the 3-issue VLIW DSP.
 //
 // LIVE encode path : Format E only — 12-byte parcel
-// {s2[39:0], s1[39:0], s0[47:0]} via HaydnFormats*.td + HaydnCompositeFormats.td.
+// {s2[39:0], s1[39:0], s0[47:0]} via HaydnFormats*.td + HaydnFormatE.td.
 // These legacy format classes still back codegen *names* (selector MIR) and
 // residual `_W` / G / C defs until Phase-5 M0 island delete. Width bits in
 // TSFlags are NOT consulted by getInstSizeInBytes — sizes from committed
@@ -133,13 +133,14 @@ def calltarget_s0_ri12 : Operand<OtherVT> {
 // in HaydnMCCodeEmitter.cpp / HaydnDisassembler.cpp):
 // N = encoded field width in bits
 // Shift = right-shift applied to the immediate before masking (0 for
-// GE96-03 branch/call byte PC+imm, ÷4 for SET_HWLOOP offsets).
+// branch/call byte PC+imm, ÷4 for SET_HWLOOP offsets).
 // IsSigned = 1 => sign-extend the masked field on decode; 0 => zero-extend.
 // IsPCRel = 1 => the symbolic fixup is PC-relative; 0 => absolute.
 // FixupKind = Haydn::FIXUP_HAYDN_* kind pushed when the operand is symbolic
 // or `fixup_none` when no fixup is ever emitted (pure-immediate
-// fields like ADDI64 imm20, SLLI64 imm6, MAXI64 imm32, CSR uimm8
-// hwloop cnt). `fixup_none` makes the encoder skip the fixup push.
+// fields like ADDI64 imm20, SLLI64 imm6, MAXI64 imm32, hwloop cnt).
+// `fixup_none` makes the encoder skip the fixup push. CSR uimm8 is not
+// in that set: reloc CSRW_W binds FIXUP_HAYDN_CSR_UImm8.
 //
 // These classes are USED ONLY by the Fmt48_Wide* / Fmt48_MOVEI formats in
 // HaydnInstrFormatsC.td. The shared 16/32-bit operands (`simm16`, `simm20`
@@ -148,7 +149,7 @@ def calltarget_s0_ri12 : Operand<OtherVT> {
 //
 // The `Fixup` template argument is a `Haydn::Fixups` enum value. For
 // pure-immediate fields that never emit a fixup (ADDI64 imm20, SLLI64 imm6
-// MAXI64 imm32, CSR uimm8, hwloop cnt), pass `Haydn::FIXUP_HAYDN_NONE`: the
+// MAXI64 imm32, hwloop cnt), pass `Haydn::FIXUP_HAYDN_NONE`: the
 // encoder tests for NONE and skips the MCFixup::create call.
 //===----------------------------------------------------------------------===//
 
@@ -272,14 +273,17 @@ def simm32_drx
   let DecoderMethod = "decodeSImmOperandXStepWide<32,0,/*IsSigned*/1>";
 }
 
-// 48-bit WIDE CSR uimm8 (CSRR_W/CSRW_W, §5.9/5.10). bits[47:40]; unsigned
-// 8-bit; pure immediate.
+// 48-bit WIDE CSR uimm8 (CSRW_W, §5.9/5.10). bits[47:40]; unsigned 8-bit.
+// Immediate and reloc addresses. Reloc CSRW_W cutovers to catalog CSRW I8
+// members; this class binds FIXUP_HAYDN_CSR_UImm8 so a residual FieldSlot
+// never emits untyped NONE / R_HAYDN_8. Peer: AIE immxstep FixupKind
+// (AIEBaseInstrInfo.td:61-70); same template as simm20_wide_abs → LO20.
 def uimm8_csr
     : Operand<i32>, ImmLeaf<i32, [{ return isUInt<8>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<8>;
   let EncoderMethod =
       "getSImmOpValueXStepWide<8,0,/*IsSigned*/0,/*IsPCRel*/0,"
-      "Haydn::FIXUP_HAYDN_NONE>";
+      "Haydn::FIXUP_HAYDN_CSR_UImm8>";
   let DecoderMethod = "decodeSImmOperandXStepWide<8,0,/*IsSigned*/0>";
 }
 

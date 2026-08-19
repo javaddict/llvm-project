@@ -6,8 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains code to lower Haydn MachineInstrs to their corresponding
-// MCInst.
+// Desc-as-is lower (AIE serialize-only; AIEMCInstLower.cpp:16-72).
+// Opcode is post-setDesc format member when materialize succeeded.
+// No FieldSlot conversion and no dangling-MBB rewrite onto the parent —
+// removed blocks fatal. Reloc CSRW members lower GlobalAddress as expr;
+// encode binds typed CSR I8 (FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8).
 //
 //===----------------------------------------------------------------------===//
 
@@ -51,7 +54,7 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // Format composite (AIEBaseMCFormats.cpp:66-75) — no Flags re-slot.
   OutMI.setOpcode(MI->getOpcode());
 
-  // SET_HWLOOP_{W,F2_W} and setDesc members (*_S0): operands are
+  // SET_HWLOOP_{W,F2_W} and setDesc members: operands are
   // (sel, start, end, cnt/rs). Start/end are MBB in MIR; emit uses inclusive
   // temp labels (HWLR_BEGIN = first real of body, HWLR_END = last real of
   // latch). Owned by Lower so BUNDLE/standalone stay pure Desc-as-is (no
@@ -112,6 +115,7 @@ MCOperand HaydnMCInstLower::LowerOperand(const MachineOperand &MO) const {
   }
 
   case MachineOperand::MO_GlobalAddress: {
+    // Reloc CSR I8 members consume this expr as FIXUP_HAYDN_CSR_UImm8.
     const MCExpr *Expr = MCSymbolRefExpr::create(
         Printer.getSymbol(MO.getGlobal()), Ctx);
     if (MO.getOffset()) {

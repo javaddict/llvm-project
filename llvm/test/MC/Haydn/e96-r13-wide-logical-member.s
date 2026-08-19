@@ -24,7 +24,7 @@
 .endif
 
 .ifdef SUFFIX
-# SUFFIX: error: invalid instruction mnemonic
+# SUFFIX: error: assembler matched a private placement opcode
 addi32_w_s0 r1, r2, 1
 ori32_w_s0 r3, r4, 1
 beq_w_s0 r1, r2, 8

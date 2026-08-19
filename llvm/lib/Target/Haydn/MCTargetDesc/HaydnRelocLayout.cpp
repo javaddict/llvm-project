@@ -10,7 +10,7 @@
 // generic geometric patcher. See HaydnRelocLayout.h. Product FieldLsb is Format
 // E E2 e0 absolute parcel bits (r_offset = parcel origin). Scales follow the
 // product RelocFieldInfo table (branch/call byte PC+imm; CallSImm20 byte;
-// hwloop ÷4). GE96-03: B*/JAL field stores the byte displacement (no ÷2).
+// hwloop ÷4). B*/JAL field stores the byte displacement (no ÷2).
 // RelocTrans::Unresolved remains for unpublished kinds and for unknown/
 // Invalid kinds (rowFor is fail-closed). Both MC and lld delegate here.
 //
@@ -60,7 +60,7 @@ constexpr Row Table[] = {
     {RelocKind::None, {0, 0, 0, 0, 1, false, false, RelocTrans::None}},
     {RelocKind::Data32, {4, 32, 0, 0, 1, true, false, RelocTrans::None}},
     {RelocKind::SImm16, {4, 16, 0, 0, 1, true, false, RelocTrans::None}},
-    // Branch/call product scales (GE96-03: byte PC+imm; CallSImm20 byte).
+    // Branch/call product scales (byte PC+imm; CallSImm20 byte).
     {RelocKind::BranchSImm16, {4, 16, 0, 0, 2, true, true, RelocTrans::None}},
     // CallSImm20: signed PC-relative BYTE offset (ValueShift=0). Used by
     // assembler-independent YAML thunk geometry tests; FieldLsb=4 is a
@@ -74,11 +74,11 @@ constexpr Row Table[] = {
     {RelocKind::TPREL_LO16, {4, 16, 0, 0, 1, true, false, RelocTrans::LoMips}},
     {RelocKind::Data8, {1, 8, 0, 0, 1, true, false, RelocTrans::None}},
     {RelocKind::Data16, {2, 16, 0, 0, 1, true, false, RelocTrans::None}},
-    // Format E LUI I12: imm12 @ parcel bits[32:43] (golden E2 e0 ALU0).
-    // Distinct from WIDE_BranchSImm12 I12 @ bits[24:35].
-    // NBytes=8: field at bit 32 needs image width > 48 (old NBytes=6 truncated
-    // high bits of RI20/I20 when FieldLsb+FieldSize > 48).
-    {RelocKind::HI12, {8, 12, 32, 0, 1, false, false, RelocTrans::Hi12}},
+    // Format E LUI I12: table FieldLsb is E2 e0 ALU0 imm @ parcel bits[32:43].
+    // Distinct from WIDE_BranchSImm12 I12 @ bits[24:35]. E3 e0/e1/e2 windows
+    // via resolveFieldLsb. NBytes=12 covers e1 @54 (past bit 63) and e2 @81/83
+    // (same image-width law as LO20/LS_IMM).
+    {RelocKind::HI12, {12, 12, 32, 0, 1, false, false, RelocTrans::Hi12}},
     // Format E ADDI32 RI20: imm20 @ parcel bits[31:50] (golden abs[50:31]).
     // RI20 is E2-only: e0 ALU0 @31 (table default), e1 ALU1 @ abs[84:65]
     // (resolveFieldLsb). NBytes=12 covers the e1 window past bit 63.
@@ -94,7 +94,7 @@ constexpr Row Table[] = {
     {RelocKind::HWLoopOff2, {12, 12, 38, 2, 4, false, true, RelocTrans::None}},
     // Format E I12 one-reg branch (BEQZ/BNEZ): table FieldLsb is E2 e0
     // imm12 @ parcel bits[32:43]. E3 windows differ — resolveFieldLsb.
-    // NBytes=12 covers E3 e1/e2 (imm past bit 48). GE96-03: ValueShift=0.
+    // NBytes=12 covers E3 e1/e2 (imm past bit 48). ValueShift=0.
     {RelocKind::WIDE_BranchSImm12,
      {12, 12, 32, 0, 2, true, true, RelocTrans::None}},
     // Format E RI12 two-reg branch (BEQ/BNE): table FieldLsb is E2 e0
@@ -127,12 +127,17 @@ constexpr Row Table[] = {
     {RelocKind::LS_IMM, {12, 6, 28, 0, 1, true, false, RelocTrans::None}},
     // Format E JALR RI12 imm12: same golden E2 e0 window as the RI12 branch
     // row (imm @ parcel bits[43:32], FieldLsb=32) but a distinct kind so a
-    // JALR fixup never borrows the branch row (W27). Signed 12-bit byte
-    // displacement from the parcel origin (ValueShift=0, Align=2 — GE96-03
-    // no extra scale; execution semantics stay PC = rs + imm12). E3 e0/e1
-    // windows resolve via resolveFieldLsb like the branch kinds.
-    // ELF 22 (R_HAYDN_JALRSImm12) — M23 minted row, not MC-only.
+    // JALR fixup never borrows the branch row. Signed 12-bit byte
+    // displacement from the parcel origin (ValueShift=0, Align=2; no extra
+    // scale; execution stays PC = rs + imm12). E3 e0/e1 windows resolve via
+    // resolveFieldLsb like the branch kinds. ELF 22 (R_HAYDN_JALRSImm12).
+    // Call-indirect / JT jalr-with-zero never mint a second ELF number.
     {RelocKind::JALRSImm12, {12, 12, 32, 0, 2, true, true, RelocTrans::None}},
+    // Format E CSR I8 uimm8: table FieldLsb is E2 e0 imm @ parcel
+    // bits[39:32] (FieldLsb=32). Unsigned 8-bit CSR address, ValueShift=0,
+    // Align=1, not PC-relative. NBytes=12 covers E3 e2 @ bit 85 via
+    // resolveFieldLsb. Distinct from Data8 (1-byte data image at LSB 0).
+    {RelocKind::CSR_UImm8, {12, 8, 32, 0, 1, false, false, RelocTrans::None}},
 };
 
 static_assert(static_cast<unsigned>(RelocKind::WIDE_BranchSImm12_RI) ==
@@ -143,6 +148,9 @@ static_assert(static_cast<unsigned>(RelocKind::LS_IMM) == ELF::R_HAYDN_LS_IMM,
 static_assert(static_cast<unsigned>(RelocKind::JALRSImm12) ==
                   ELF::R_HAYDN_JALRSImm12,
               "JALRSImm12 RelocKind must match ELF R_HAYDN_JALRSImm12");
+static_assert(static_cast<unsigned>(RelocKind::CSR_UImm8) ==
+                  ELF::R_HAYDN_CSR_UImm8,
+              "CSR_UImm8 RelocKind must match ELF R_HAYDN_CSR_UImm8");
 
 // Fail-closed sentinel: unknown / Invalid kinds are never product-ready.
 // Returning Table[0] (None, Trans::None) used to make isRelocTransformReady
@@ -319,27 +327,46 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
 
   // HI12 / LUI I12. Table FieldLsb=32 is E2 e0 ALU0
   // (LUI_E2_E0_ALU0_I12: e0={c0:7, imm12, c1:8, rt:4, opc:3, c3:4, type:5=0xa,
-  // map:2=0} → imm @ entry+26 → abs 32). The only other generated LUI
-  // members are E3 e0:
-  //   ALU2 I12 LUI_E3_E0_ALU2_I12: map=1, type=4, opc=1
-  //     e0={c0:4, imm12, c1:4, rt:4, opc:1, type:4, map:2} → imm @ entry+15
-  //     → abs 21 (golden I12 imm bit[32:21])
-  //   ALU0 I12 LUI_E3_E0_ALU0_I12: map=2, type=0xa, opc=1
-  //     e0={c0:2, imm12, rt:4, opc:3, c2:4, type:4, map:2} → imm @ entry+17
-  //     → abs 23
+  // map:2=0} → imm @ entry+26 → abs 32). Generated E3 LUI members
+  // (HaydnFormatsE96Members.td.inc Inst{} MSB-first):
+  //   e0 ALU2 31b {pad4, imm12, pad4, rt4, opc1, type4=4, map2=1}
+  //     imm @ entry+15 → abs 21
+  //   e0 ALU0 31b {pad2, imm12, rt4, opc3, pad4, type4=0xa, map2=2}
+  //     imm @ entry+17 → abs 23
+  //   e1 ALU1 31b {pad2, imm12, rt4, opc1, pad6, type4=4, map2=1}
+  //     imm @ entry+17 → abs 54
+  //   e1 ALU0 31b {pad2, imm12, rt4, opc3, pad4, type4=0xa, map2=2}
+  //     imm @ entry+17 → abs 54
+  //   e2 ALU2 27b {imm12, pad4, rt4, opc1, type4=4, map2=1}
+  //     imm @ entry+15 → abs 83
+  //   e2 ALU0 27b {pad2, imm12, rt4, opc3, type4=0xa, map2=2}
+  //     imm @ entry+13 → abs 81
   // Patching the E2 LSB on an E3 ALU2 LUI writes bit 32, which is only the
-  // top bit of [21:32] — hi12=1 becomes executed imm 0x800 (plat_extras
-  // freopen %hi12(stdout) / %hi12("w")).
+  // top bit of [21:32] — hi12=1 becomes executed imm 0x800.
   if (R == RelocKind::HI12) {
     if (Indicator != 0x7u)
       return I.FieldLsb;
     if (EntryNum == 0)
       return 32u; // E2 e0
-    // E3 e0 @ abs [6:36].
-    if (GetBits(6, 2) == 1u && GetBits(8, 4) == 4u && GetBits(12, 1) == 1u)
+    auto IsLuiAlu2 = [&](unsigned EntryLo) -> bool {
+      return GetBits(EntryLo, 2) == 1u && GetBits(EntryLo + 2, 4) == 4u;
+    };
+    auto IsLuiAlu0 = [&](unsigned EntryLo) -> bool {
+      return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xau;
+    };
+    // E3 e0 @ abs [6:36]. opc pins match the existing e0 unit test buffers.
+    if (IsLuiAlu2(6) && GetBits(12, 1) == 1u)
       return 21u;
-    if (GetBits(6, 2) == 2u && GetBits(8, 4) == 0xau && GetBits(16, 3) == 1u)
+    if (IsLuiAlu0(6) && GetBits(16, 3) == 1u)
       return 23u;
+    // E3 e1 @ abs [37:67]: both ALU1/ALU0 31b pack imm @ entry+17.
+    if (IsLuiAlu2(37) || IsLuiAlu0(37))
+      return 54u;
+    // E3 e2 @ abs [68:94]: 27b ALU2 imm @ entry+15; ALU0 imm @ entry+13.
+    if (IsLuiAlu2(68))
+      return 83u;
+    if (IsLuiAlu0(68))
+      return 81u;
     return I.FieldLsb;
   }
 
@@ -350,7 +377,7 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   // A symbolic ADDI32 placed at E2 e1 (e.g. `{ xor32; addi32 rt, rs, sym }`,
   // which packs as xor32@e0 ALU0 + addi32@e1 ALU1) previously patched 20
   // bits at LSB 31 — clobbering the e0 tail (rs/reg bits) and leaving the
-  // real imm field zero (W25 / encoding F15 residual).
+  // real imm field zero.
   // ALU1 I32 shares map=0 but has 2-bit opcode @ [55:54] and no imm20; the
   // full 1-bit type check @53 (=0) plus FieldSize=20 acceptance is the
   // golden discriminator (I32 imm sits at e1 [70:65] with opc≠RI20 range).
@@ -402,6 +429,36 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
       return 54u; // E3 e1 LOAD1
     if (GetBits(68, 2) == 3u && GetBits(70, 2) == 1u)
       return 85u; // E3 e2 LOAD1
+    return I.FieldLsb;
+  }
+
+  // CSR_UImm8 — I8 uimm8 (CSRW/CSRR). Table FieldLsb=32 is E2 e0
+  // (golden imm[39:32]). E3 generated Inst{} (MSB-first):
+  //   e0 ALU2 31b {pad2, imm8, src4, pad4, opc3, pad4, type4=1, map2=1}
+  //     imm @ abs [34:27]
+  //   e0 ALU0 31b {pad6, imm8, reg4, opc3, pad4, type4=3, map2=2}
+  //     imm @ abs [30:23]
+  //   e1 ALU1/ALU0 31b: same type/map pairing, imm @ abs [61:54]
+  //   e2 ALU2/ALU0 27b: same type/map pairing, imm @ abs [92:85]
+  if (R == RelocKind::CSR_UImm8) {
+    if (Indicator != 0x7u)
+      return I.FieldLsb;
+    if (EntryNum == 0)
+      return 32u; // E2 e0
+    auto IsI8Alu2 = [&](unsigned EntryLo) -> bool {
+      return GetBits(EntryLo, 2) == 1u && GetBits(EntryLo + 2, 4) == 1u;
+    };
+    auto IsI8Alu0 = [&](unsigned EntryLo) -> bool {
+      return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 3u;
+    };
+    if (IsI8Alu2(6))
+      return 27u;
+    if (IsI8Alu0(6))
+      return 23u;
+    if (IsI8Alu2(37) || IsI8Alu0(37))
+      return 54u;
+    if (IsI8Alu2(68) || IsI8Alu0(68))
+      return 85u;
     return I.FieldLsb;
   }
 
@@ -676,6 +733,8 @@ RelocKind mapFixupKind(unsigned MCFixupKind) {
     return RelocKind::LS_IMM;
   case Haydn::FIXUP_HAYDN_JALRSImm12:
     return RelocKind::JALRSImm12;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8:
+    return RelocKind::CSR_UImm8;
   default:
     return RelocKind::Invalid;
   }
@@ -728,6 +787,8 @@ unsigned mapRelocKindToFixup(RelocKind R) {
     return Haydn::FIXUP_HAYDN_LS_IMM;
   case RelocKind::JALRSImm12:
     return Haydn::FIXUP_HAYDN_JALRSImm12;
+  case RelocKind::CSR_UImm8:
+    return Haydn::FIXUP_HAYDN_CSR_UImm8;
   case RelocKind::C_BranchSImm4:
     return Haydn::FIXUP_HAYDN_C_BranchSImm4;
   case RelocKind::C_UImm4:
@@ -755,7 +816,7 @@ unsigned mapRelocKindToFixup(RelocKind R) {
 // Generated Format E type → published RelocKind. TypeOpcode ranges are the
 // golden type-opcode column in FormatEMembers (not logical mnemonics).
 // RI12 opcode 1 is JALR: dedicated JALRSImm12 row — never the RI12 branch
-// row (W27); golden execution stays rs+imm12 (GE96-03).
+// row; execution stays rs+imm12.
 struct TypeFixupSpec {
   const char *TypeName;
   uint16_t OpcodeLo;
@@ -773,6 +834,9 @@ constexpr TypeFixupSpec TypeFixupSpecs[] = {
     {"I20", 1, 1, RelocKind::WIDE_CallSImm20, false, 20},
     {"RI20", 1, 7, RelocKind::LO20, false, 20},
     {"RI6", 0, 255, RelocKind::LS_IMM, true, 6},
+    // I8 type-opcodes 4/5 are CSRR/CSRW (golden I8 mapping). NOP/ZERO_*
+    // share the type name but have no uimm8 reloc field.
+    {"I8", 4, 5, RelocKind::CSR_UImm8, false, 8},
     {"HWLRIIR", 0, 255, RelocKind::HWLoopOff1, false, 6},
     {"HWLRIIR", 0, 255, RelocKind::HWLoopOff2, false, 12},
     {"HWLRIII", 0, 255, RelocKind::HWLoopOff1, false, 6},

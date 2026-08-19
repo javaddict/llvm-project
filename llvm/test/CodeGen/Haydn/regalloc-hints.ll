@@ -152,7 +152,8 @@ define i32 @test_forces_callee_saved() nounwind {
 ; CHECK-NEXT:    { nop; st32 r9, r1, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r1, 5 }
 ; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { st32 r1, sp, 3; xor32 r0, r0, r0 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; jal lr, get_value }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

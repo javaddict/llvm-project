@@ -1,8 +1,8 @@
 // RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 // RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 // REQUIRES: haydn-registered-target
-// CHECK: {{.*}}0: 4f 49 08 19 a0 74 00 00 00 00 00 00 { xor32 r0, r0, r0; add32 r1, r2, r3 }
-// CHECK: {{.*}}c: 4f e9 00 00 20 02 76 00 00 00 00 00 { lui sp, 1; xor32 r0, r0, r0 }
+// CHECK: {{.*}}0: 4f 49 08 19 a0 74 00 00 00 00 00 00 { nop; xor32 r0, r0, r0; add32 r1, r2, r3 }
+// CHECK: {{.*}}c: 4f e9 00 00 20 02 76 00 00 00 00 00 { nop; lui sp, 1; xor32 r0, r0, r0 }
 
 # Role: object — (/): the `Haydn::Bundle<MCInst>` shuffler (encodeFormatE) must auto-assign DISTINCT slots to bare (unsuffixed) bundle.
 

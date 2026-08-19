@@ -57,8 +57,8 @@ define i32 @qor_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) {
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { xor32 r2, r3, r4; add32 r1, r1, r2 }
-; ASM-NEXT:    { or32 r3, r5, r6; add32 r1, r1, r2 }
+; ASM-NEXT:    { nop; xor32 r2, r3, r4; add32 r1, r1, r2 }
+; ASM-NEXT:    { nop; or32 r3, r5, r6; add32 r1, r1, r2 }
 ; ASM-NEXT:    { nop; add32 r1, r1, r3 }
 ; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa sp, 0
@@ -227,7 +227,7 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; ASM-NEXT:    { nop; addi32 r4, r4, 4 }
 ; ASM-NEXT:    { nop; mull r6, r6, r7 }
 ; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { slt32 r7, r5, r3; add32 r1, r1, r6 }
+; ASM-NEXT:    { nop; slt32 r7, r5, r3; add32 r1, r1, r6 }
 ; ASM-NEXT:    { nop; bnez r7, .LBB2_2 }
 ; ASM-NEXT:  .LBB2_3: // %exit
 ; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -386,7 +386,7 @@ define i32 @qor_critical_and_side(i32 %a, i32 %b, i32 %c) {
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { or32 r2, r2, r3; xor32 r4, r2, r3 }
+; ASM-NEXT:    { nop; or32 r2, r2, r3; xor32 r4, r2, r3 }
 ; ASM-NEXT:    { nop; add32 r2, r4, r2 }
 ; ASM-NEXT:    { nop; add32 r1, r1, r2 }
 ; ASM-NEXT:    { nop; addi32 r1, r1, 6 }

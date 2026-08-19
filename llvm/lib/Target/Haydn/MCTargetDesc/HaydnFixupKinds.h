@@ -22,12 +22,11 @@ enum Fixups {
   // 16-bit signed immediate (I-type bits 15:0)
   FIXUP_HAYDN_SImm16,
 
-  // Branch PC-relative field. Transform is not product-closed in
-  // HaydnRelocLayout (fail closed until wire scale is published).
+  // Branch PC-relative 16-bit field (byte PC+imm, RelocTrans::None).
   FIXUP_HAYDN_BranchSImm16,
 
-  // Call PC-relative field. Same fail-closed gate as branch kinds; dual
-  // call-scale tables must not be product law.
+  // Call PC-relative field (byte PC+imm, RelocTrans::None). Dual call-scale
+  // tables must not be product law.
   FIXUP_HAYDN_CallSImm20,
 
   // Upper 20 bits of address (for LUI/LOADI32 pair)
@@ -72,44 +71,38 @@ enum Fixups {
   FIXUP_HAYDN_HWLoopOff1,
   FIXUP_HAYDN_HWLoopOff2,
 
-  // Long-branch JAL offset: fail-closed with other branch/call kinds.
-  // MC-only; product transform regenerates after wire scale is published.
+  // Long-branch JAL offset: MC-only kind. Product JAL uses WIDE_CallSImm20
+  // (byte PC+imm). This kind must not introduce a second call-scale law.
   FIXUP_HAYDN_LongBranchSImm20,
 
-  // Wide-imm pair relocations.
-  // LUI is emitted as s0 ALU32 FLEX (LUI_S0
-  // HaydnFU_ALU32_S0_I12); full imm12 lives at LoWord bits[15:4].
-  // ADDI32_W(imm20) carries a 20-bit field (sign-extended for ADDI32_W
-  // zero-extended for ORI32_W) in the s0 window at bits[37:18]
-  // (FieldLsb cutover).
-  // HI12 -- LUI imm12: (val + 0x80000) >> 20, written to bits[15:4] of
-  // the LoWord (FieldSize=12 via HaydnRelocLayout; fixed
-  // Mode-0 residual FieldSize=5).
+  // Wide-imm pair relocations. Product FieldLsb is Format E parcel bits
+  // (HaydnRelocLayout); residual s0 LoWord windows are retired.
+  // HI12 -- LUI I12 imm12 @ parcel bits[32:43] (FieldLsb=32, FieldSize=12):
+  // (val + 0x80000) >> 20. Generated members are LUI_E2_E0_ALU0_I12 / E3
+  // ALU0/ALU1/ALU2 I12 (occupancy suffixes retired).
   FIXUP_HAYDN_HI12,
-  // LO20 -- ADDI32_W/ORI32_W imm20 field (absolute): val & 0xFFFFF, written
-  // to LoWord bits[37:18] (FieldLsb=18).
+  // LO20 -- ADDI32_W/ORI32_W RI20 field (absolute): val & 0xFFFFF @ parcel
+  // bits[31:50] (FieldLsb=31). E3 windows via resolveFieldLsb.
   FIXUP_HAYDN_LO20,
-  // PC_LO20 -- ADDI32_W/ORI32_W imm20 field (PC-relative): (val) & 0xFFFFF.
+  // PC_LO20 -- ADDI32_W/ORI32_W RI20 field (PC-relative): (val) & 0xFFFFF.
   FIXUP_HAYDN_PC_LO20,
 
-  // WIDE branch/call PC-rel fields. Geometry stubs may list historical s0
-  // LoWord LSB positions; range/scale acceptance is fail-closed in
-  // HaydnRelocLayout::computeRelocValue until wire scale is published.
-  // I12 zero-compare form (BEQZ_W/BNEZ_W/…): imm12 at s0 bits[15:4]
-  // (FieldLsb=4).
+  // WIDE branch/call PC-rel fields. Byte PC+imm (ValueShift=0,
+  // RelocTrans::None) in HaydnRelocLayout. Table FieldLsb is E2 e0; E3
+  // windows via resolveFieldLsb.
+  // I12 zero-compare form (BEQZ_W/BNEZ_W/…): imm12 @ parcel bits[32:43]
+  // (FieldLsb=32).
   FIXUP_HAYDN_WIDE_BranchSImm12,
-  // RI12 two-reg cond form (BEQ_W/BNE_W/…): imm12 at s0 bits[19:8]
-  // (FieldLsb=8). Distinct from the I12 kind above — sharing FieldLsb=4
-  // clobbered rt/rs. Maps to ELF R_HAYDN_WIDE_BranchSImm12_RI.
+  // RI12 two-reg cond form (BEQ_W/BNE_W/…): imm12 @ parcel bits[32:43]
+  // (FieldLsb=32). Distinct kind from I12 so a shared ELF row cannot
+  // clobber rt/rs. Maps to ELF R_HAYDN_WIDE_BranchSImm12_RI.
   FIXUP_HAYDN_WIDE_BranchSImm12_RI,
-  // WIDE call (JAL_W): imm20 at s0 bits[23:4] (FieldLsb=4). Byte PC+imm,
-  // Align=2 — same even-byte law as WIDE branch (MinBundleAddressAlignBytes).
+  // WIDE call (JAL_W): I20 @ E2 e0 parcel bits[31:50] (FieldLsb=31). Byte
+  // PC+imm, Align=2 — same even-byte law as WIDE branch.
   FIXUP_HAYDN_WIDE_CallSImm20,
 
-  // reloc-aware slot-OR: s0 LS scaled-imm fields (FI/spill offsets).
-  // The LS _M0 variants (LD32_M0S0LS etc.) pack a scaled byte offset into the
-  // s0 ext field. For a symbolic (frame-index/reloc) offset, the EncoderMethod
-  // emits this fixup; the AsmBackend patches the field with ValueShift scaling.
+  // MC-only FI/spill scaled-imm fields (reloc kind names kept). EncoderMethod
+  // emits the fixup; AsmBackend patches with ValueShift scaling.
   // S0LSOff4_2 — LD32/ST32: 4-bit field @ bits[7:4] of LoWord, ÷4 (<<2).
   // S0LSOff4_3 — LD64/ST64: 4-bit field @ bits[7:4] of LoWord, ÷8 (<<3).
   // S0LSOff2_0 — LD16/LDU16/LD8/LDU8: 2-bit field, unscaled.
@@ -123,21 +116,29 @@ enum Fixups {
   // Format E LOADSTORE0/LOAD1 RI6 signed imm6 @ parcel bits[33:28]
   // (HaydnRelocLayout LS_IMM). Distinct from FIXUP_HAYDN_LO20 (ALU RI20 /
   // retired WIDE LSOff20 @ bits[31:50]). Encoder getExprFixupKind routes
-  // generated LS RI6 members (and peeled LD32/ST32/LD64/ST64 → S_LW_WITH_IMM
-  // etc.) here. Maps 1:1 to ELF R_HAYDN_LS_IMM — never R_HAYDN_SImm16.
+  // generated LS RI6 members here. Maps 1:1 to ELF R_HAYDN_LS_IMM — never
+  // R_HAYDN_SImm16.
   FIXUP_HAYDN_LS_IMM,
 
   // Format E JALR RI12 symbolic imm12 (HaydnRelocLayout JALRSImm12): signed
   // 12-bit byte displacement from the parcel origin — E2 e0 @ parcel
   // bits[43:32] (FieldLsb=32), E3 e0/e1 via resolveFieldLsb, ValueShift=0,
-  // Align=2 (GE96-03 no-scale). Execution stays golden PC = rs + imm12; the
-  // kind types the *assembler symbol* convention imm = target - parcel,
-  // pinned by MC/Haydn basic.s / branch-all.s / roundtrip-branches.s.
+  // Align=2. Execution is PC = rs + imm12; the kind types the assembler
+  // symbol convention imm = target - parcel.
   // Distinct identity from FIXUP_HAYDN_WIDE_BranchSImm12_RI (same field
-  // numbers) so a JALR fixup can never borrow the branch row (W27).
-  // MC-only: unresolved externals fail closed in the object writer until an
-  // R_HAYDN_* kind is minted (ABI decision owned by the encoding topic).
+  // numbers) so a JALR fixup can never borrow the branch row.
+  // Unresolved externals emit ELF R_HAYDN_JALRSImm12 (ELF 22). Call-indirect
+  // and JT dispatch pass a literal 0 and do not emit this fixup.
   FIXUP_HAYDN_JALRSImm12,
+
+  // Format E CSR I8 uimm8 (HaydnRelocLayout CSR_UImm8): unsigned 8-bit
+  // CSR address — E2 e0 @ parcel bits[39:32] (FieldLsb=32), E3 windows
+  // via resolveFieldLsb, ValueShift=0, Align=1, not PC-relative.
+  // Reloc CSRW_W / CSRR I8 members use this kind so encode never emits
+  // an untyped NONE fixup. Unresolved externals emit ELF R_HAYDN_CSR_UImm8
+  // (ELF 23). Do not borrow R_HAYDN_8 / Data32 (those are data-section
+  // 1-byte writes, not a parcel field).
+  FIXUP_HAYDN_CSR_UImm8,
 
   // Marker - must be last
   FIXUP_HAYDN_INVALID,

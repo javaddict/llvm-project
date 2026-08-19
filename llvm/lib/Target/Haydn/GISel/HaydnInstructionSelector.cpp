@@ -159,8 +159,7 @@ static bool isLegalScaledSimm6(int64_t ByteOff, unsigned Scale) {
 // Fail-closed ImmArg range check. Out-of-range values must not be emitted:
 // MC N-bit-truncates them into silent wrong code (PA2-B7 / W52: slli32 33
 // encodes as shift-by-1). Widths are the product field, not the loose
-// logical-stub operand type (SIN_COS/ARCTAN td simm16 vs golden uimm4;
-// CB logical simm16 vs member simm8; LS logical simm16 vs member simm6).
+// product field width (SIN_COS/ARCTAN uimm4; CB simm8; LS simm6).
 static bool expectUImm(int64_t Val, unsigned Bits, const char *What) {
   if (Val >= 0 && isUIntN(Bits, static_cast<uint64_t>(Val)))
     return true;
@@ -400,8 +399,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   // Gate on the MCID::PreISelOpcode FLAG (MachineInstr::isPreISelOpcode), not
   // the isPreISelGenericOpcode opcode-RANGE test. The range test only covers
   // the shared TargetOpcode namespace (G_ADD..G_UBFX); target-namespaced
-  // generic ops like Haydn::G_MAC32 (enum 362) are ABOVE that range and so
-  // would be misclassified as "already selected" and silently skipped here
+  // target-namespaced generic ops are ABOVE that range and so would be
+  // misclassified as "already selected" and silently skipped here,
   // leaking the unselected generic op into machine code. The flag test
   // returns true for BOTH standard and target generic ops (all set
   // MCID::PreIselOpcode via GenericInstruction), so !flag is true only for
@@ -4154,7 +4153,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     int64_t ImmVal = 0;
     if (!getConstOpSExt(I.getOperand(3), ImmVal))
       return false;
-    // Golden: SIN_COS imm is uimm4 (RI4_DG member), not the td stub simm16.
+    // Golden: SIN_COS imm is uimm4 (logical + RI4 member).
     if (!expectUImm(ImmVal, 4, "SIN_COS"))
       return false;
     if (DstReg.isVirtual())

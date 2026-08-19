@@ -2,8 +2,8 @@ Haydn lit XFAIL owner / failure ledger
 Durable map for live XFAIL directives under CodeGen/Haydn + MC/Haydn.
 Re-query live files before citing counts.
 Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (live=5: GE96-09 + four dual-ON combined).
-  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Auto.td/CMake closed; W54/W55 stay LANDED.
-  Rebound: 38bd4059 is the in-repo ancestor; 28700d57 is not an ancestor.
+  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed; W54/W55 stay LANDED.
+  Rebound: 9e5c878a is the in-repo ancestor; 28700d57 is not an ancestor.
   GE96-03 tests remain product PASS (cb89/cb94/reloc-range-branch).
   Combined dual-ON files stay expected-fail:
     hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll

@@ -24,9 +24,6 @@
 //===----------------------------------------------------------------------===//
 
 include "HaydnGeneric.td"
-// HaydnInstrInfoManual.td is included from HaydnGeneric.td. The filename is
-// historical; generate_format_e_records.py does not emit it. Treat that
-// file as hand-maintained hypothesized encodings (isCodeGenOnly quarantine).
 
 //===----------------------------------------------------------------------===//
 // CodeGenFormat backend : product Format E entry model only (FE8).
@@ -34,28 +31,11 @@ include "HaydnGeneric.td"
 // PacketFormats tables). Product PacketFormats rows are Format E Size=12
 // (BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY). Retired 128-bit composite
 // opcode deleted. Backend filters to InstFormat-derived instructions; legacy
-// HaydnInst defs are skipped.
-// Residual `_S*` families are occupancy / setDesc placement tables, not a
-// product alternate source (suffix name discovery fails closed at TableGen).
+// HaydnInst defs are skipped. Residual `_S*` FieldSlot families are deleted.
 //===----------------------------------------------------------------------===//
 include "llvm/Target/CodeGenFormat.td"
 include "HaydnSlots.td"
-// Residual `_S*` FU member families (placement tables; not product composite).
-include "HaydnFormatsALU32.td"
-include "HaydnFormatsALU64.td"
-include "HaydnFormatsLS.td"
-include "HaydnFormatsMAC.td"
-// Format E entry bases (product placement scaffolding).
-include "HaydnFormatsE96.td"
-// MultiSlot_Pseudo / materializableInto (sparse AlternateInsts for residual
-// `_S*` members; Format E alts come from generated records).
+include "HaydnFormatE.td"
+include "HaydnFamilies.td"
 include "HaydnMultiSlotPseudo.td"
-// Product Format E composites only (Size=12).
-include "HaydnCompositeFormats.td"
 def HaydnCodeGenFormat : CodeGenFormat {}
-
-//===----------------------------------------------------------------------===//
-// Mode-0/3 decode-variant islands and Bundle128 composites deleted (FE8).
-// Product composites are Format E 12-byte only (HaydnCompositeFormats.td).
-// Residual `_S<k>` families remain as Format E placement/setDesc members.
-//===----------------------------------------------------------------------===//

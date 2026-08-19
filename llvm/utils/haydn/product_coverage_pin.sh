@@ -73,13 +73,13 @@ if [[ -x "$SCRIPT_DIR/parse_lit_summary.py" ]]; then
   else
     echo "  PASS: parse_lit_summary refuses 28700d57 (not an ancestor)"
   fi
-  if printf '%s\n' 'Passed           :   1' 'git_commit: 38bd4059fbb4e489425becc4ded431235ae2c1ff' \
+  if printf '%s\n' 'Passed           :   1' 'git_commit: 9e5c878a03921a31f76b1c251954cd14d9fcfd72' \
        | python3 "$SCRIPT_DIR/parse_lit_summary.py" --require-ancestor \
             --llvm-src "$LLVM_SRC" - \
             >/tmp/haydn-parse-lit-rebind.log 2>&1; then
-    echo "  PASS: parse_lit_summary accepts repo-resident 38bd4059"
+    echo "  PASS: parse_lit_summary accepts repo-resident 9e5c878a"
   else
-    echo "  FAIL: parse_lit_summary must accept in-repo 38bd4059" >&2
+    echo "  FAIL: parse_lit_summary must accept in-repo 9e5c878a" >&2
     tail -10 /tmp/haydn-parse-lit-rebind.log >&2 || true
     fail=1
   fi
@@ -168,7 +168,7 @@ else
       echo "  PASS: artifact_id=${_aid}"
       if [[ -n "$_llvm" ]]; then echo "  INFO: ARTIFACT llvm_src.git_commit=${_llvm}"; fi
       # Rebound: 08-17 full-gate manifest git_commit=28700d57 is not an
-      # ancestor. ARTIFACT must name an in-repo commit (38bd4059 at this stamp).
+      # ancestor. ARTIFACT must name an in-repo commit (9e5c878a at this stamp).
       if [[ "${_llvm}" == 28700d57* ]]; then
         echo "  FAIL: ARTIFACT rebound required (28700d57 is not an ancestor)" >&2
         fail=1

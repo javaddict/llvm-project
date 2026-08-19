@@ -24,7 +24,7 @@
 .endif
 
 .ifdef S12
-# S12: error: invalid instruction mnemonic
+# S12: error: assembler matched a private placement opcode
 d_sdw_post_imm_s1 d0, r1, 1
 d_sdw_post_imm_s2 d0, r1, 1
 d_sw_l_with_imm_s2 d0, r1, 0

@@ -121,8 +121,8 @@ class LogicalMaterialize<Instruction logical,
 // D_LHW_PRE_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LHW_PRE_REG FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LHW_WITH_* FieldSlots retired. Occupancy Mask 0x7 stays.
-// D_LQHWUA_POST S0/S1 retired. S2 keeps Slot2_LS published; Format E fills e0/e1/e2.
-def : LogicalMaterialize<D_LQHWUA_POST, [D_LQHWUA_POST_S2]>;
+// D_LQHWUA_POST FieldSlots retired. Slot2_LS itinerary lives on the logical.
+// Format E members fill e0/e1/e2. Occupancy Mask 0x7 stays; Fallback 0.
 // D_LTWUA_POST FieldSlot occupancy retired. Format E members fill residual indices; no LogicalMaterialize Fallback.
 // D_LW_POST_IMM FieldSlots retired. Occupancy Mask 0x7 stays.
 // D_LW_POST_REG FieldSlots retired. Occupancy Mask 0x7 stays.

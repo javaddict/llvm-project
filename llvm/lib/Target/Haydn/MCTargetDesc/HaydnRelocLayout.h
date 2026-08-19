@@ -37,13 +37,13 @@
 
 namespace llvm::HaydnReloc {
 
-// Neutral relocation kind. Shared members (None..LS_IMM 0..21) have the
+// Neutral relocation kind. Shared members (None..CSR_UImm8 0..23) have the
 // SAME numeric values as the ELF `R_HAYDN_*` (ELFRelocs/Haydn.def), so lld
 // indexes the table directly via `static_cast<RelocKind>(rel.type)`. MC
 // maps its `MCFixupKind` through `mapFixupKind`. MC-only fixups (no ELF
 // reloc) are appended after the shared range.
 enum class RelocKind : uint16_t {
-  // Shared with ELF R_HAYDN_* (values 0..21 must match Haydn.def)
+  // Shared with ELF R_HAYDN_* (values 0..23 must match Haydn.def)
   None = 0,
   Data32 = 1,
   SImm16 = 2,
@@ -72,21 +72,25 @@ enum class RelocKind : uint16_t {
   // Distinct from LO20 (ALU RI20 / retired WIDE LSOff20 @ bits[31:50]).
   LS_IMM = 21,
   // Format E JALR RI12 symbolic imm12 (ELF 22). Same field numbers as
-  // WIDE_BranchSImm12_RI but distinct identity (W27). Promoted from
-  // MC-only so unresolved external targets emit R_HAYDN_JALRSImm12
-  // instead of failing closed (M23).
+  // WIDE_BranchSImm12_RI but distinct identity. Unresolved external
+  // targets emit R_HAYDN_JALRSImm12.
   JALRSImm12 = 22,
+  // Format E CSR I8 uimm8 (CSRW/CSRR, ELF 23). Absolute unsigned CSR
+  // address; table FieldLsb is E2 e0 @ bits[39:32]. E3 windows via
+  // resolveFieldLsb. Reloc CSRW_W uses this kind so the encoder does not
+  // emit an untyped NONE fixup. Unresolved externals emit R_HAYDN_CSR_UImm8.
+  CSR_UImm8 = 23,
   // MC-only fixups (never become ELF relocs)
-  C_BranchSImm4 = 23,
-  C_UImm4 = 24,
-  C_BranchSImm10 = 25,
-  HWLoopOffset = 26, // legacy placeholder (WIDE path uses HWLoopOff1/2)
-  LongBranchSImm20 = 27,
+  C_BranchSImm4 = 24,
+  C_UImm4 = 25,
+  C_BranchSImm10 = 26,
+  HWLoopOffset = 27, // legacy placeholder (WIDE path uses HWLoopOff1/2)
+  LongBranchSImm20 = 28,
   // s0 LS scaled-imm fields (MC-only — FI spill offsets are local).
-  S0LSOff4_2 = 28, // LD32/ST32 word offset (÷4)
-  S0LSOff4_3 = 29, // LD64/ST64 doubleword offset (÷8)
-  S0LSOff2_0 = 30, // LD16/LDU16/LD8/LDU8 (unscaled)
-  S0LSOff3_0 = 31, // ST16/ST8 (unscaled)
+  S0LSOff4_2 = 29, // LD32/ST32 word offset (÷4)
+  S0LSOff4_3 = 30, // LD64/ST64 doubleword offset (÷8)
+  S0LSOff2_0 = 31, // LD16/LDU16/LD8/LDU8 (unscaled)
+  S0LSOff3_0 = 32, // ST16/ST8 (unscaled)
   Invalid = 0xFFFF,
 };
 
@@ -149,8 +153,9 @@ struct FixupField {
 /// Off2 (12). \p IsLSUnit is required for RI6 (ALU RI6 has no LS_IMM row).
 ///
 /// Returns Invalid when zero or >1 product-ready rows match. JALR is RI12
-/// type-opcode 1 and maps to the dedicated JALRSImm12 row (W27: never borrow
-/// the RI12 branch row); golden execution stays PC = rs + imm12 (GE96-03).
+/// type-opcode 1 and maps to the dedicated JALRSImm12 row (never borrow
+/// the RI12 branch row); execution stays PC = rs + imm12. I8 type-opcodes
+/// 4/5 (CSRR/CSRW) map to CSR_UImm8; other I8 opcodes have no reloc row.
 RelocKind findFixupFromFixupFields(StringRef TypeName, unsigned TypeOpcode,
                                    ArrayRef<FixupField> Fields,
                                    unsigned FormatBytes, bool IsLSUnit);
@@ -182,6 +187,8 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
 //     e1 ALU1 @65 (golden imm bit[84:65]).
 //   LS_IMM — LS RI6: E2 e0 LOADSTORE0 @28 (table default); E2 e1 LOAD1 @72;
 //     E3 e0 LOADSTORE0 @25; E3 e1 LOAD1 @54; E3 e2 LOAD1 @85.
+//   CSR_UImm8 — I8 uimm8: E2 e0 @32 (table default); E3 e0 ALU2 @27 /
+//     ALU0 @23; E3 e1 @54; E3 e2 @85.
 // Returns the table default when Loc is not a recognizable Format E site.
 unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc);
 

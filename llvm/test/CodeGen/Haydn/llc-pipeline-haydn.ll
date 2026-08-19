@@ -27,7 +27,7 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRAMultiStage.h --check-prefix=SMSDEF
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSubtarget.h --check-prefix=O0POST
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnEnsureTerminators.cpp --check-prefix=ENSURE
-; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfoAuto.td --check-prefix=AUTO
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfoManual.td --check-prefix=AUTO
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/CMakeLists.txt --check-prefix=CMAKE
 ; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=P13PLAN
 ; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=MF0
@@ -209,7 +209,7 @@ define i32 @f(i32 %a, i32 %b) {
 ; PIPE20-DAG: inventory only
 ; PIPE20-DAG: T8-EVID
 ; PIPE20-DAG: T8-DEBUG-EVIDENCE
-; PIPE20-DAG: 38bd4059
+; PIPE20-DAG: 9e5c878a
 ; PIPE20-DAG: 28700d57
 ; PIPE20-DAG: not an ancestor
 ; PIPE20-DAG: G_ANYEXT
@@ -255,12 +255,10 @@ define i32 @f(i32 %a, i32 %b) {
 ; AUTO: hand-maintained hypothesized encodings
 ; AUTO: generate_format_e_records.py does not emit this file
 ; AUTO-NOT: Auto-generated from spec JSON
-; CMAKE: Never fall back to a host-absolute plans-tree path
-; CMAKE: HAYDN_GOLDEN_DIR
-; CMAKE: BUNDLESIM_GOLDEN_DIR
-; CMAKE: skip if unset
 ; CMAKE-NOT: /ssd2/mhyang/haydn-plans/Database/golden
 ; CMAKE-NOT: $ENV{HOME}/haydn
+; CMAKE-NOT: HAYDN_GOLDEN_DIR
+; CMAKE-NOT: BUNDLESIM_GOLDEN_DIR
 ; P13PLAN-DAG: P13 source waves
 ; P13PLAN-DAG: gated on R13
 ; P13PLAN-DAG: do not start Wave 1/2/3

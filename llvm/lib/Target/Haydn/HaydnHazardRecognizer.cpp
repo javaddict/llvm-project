@@ -16,6 +16,7 @@
 #include "HaydnAlternateDescriptors.h"
 #include "HaydnBundle.h"
 #include "HaydnBundleFormatSolver.h"
+#include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePortBudget.h"
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
@@ -1290,6 +1291,37 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
         MI->print(dbgs());
         dbgs() << " (no free PlacementAlternative field this cycle; occ="
                << currentCyclePreferred().OccupiedSlots << ")\n";
+      });
+      return Hazard;
+    }
+  }
+
+  // Post-RA emission probe (AIE applyBundles size()>1 peer at
+  // AIEHazardRecognizer.cpp:326-352). Only consult the batch bake for
+  // already-assigned members: incremental exactTryAdd owns logicals with
+  // PlacementAlternatives. A batch bake of still-logical ALUs can assign
+  // two independent ops to the same unit and reject a pack leaveMBB would
+  // accept. COPY is not a cycle member (PostRA skippable).
+  if (!IsPreRA && DeltaCycles == 0 && !CurrentCyclePlacedMIs.empty() &&
+      !MI->isCopy()) {
+    bool AnyLogicalAlt = hasPlacementAlternatives(Fmts, MI->getOpcode());
+    SmallVector<MachineInstr *, 4> Cycle;
+    Cycle.reserve(CurrentCyclePlacedMIs.size() + 1);
+    for (MachineInstr *P : CurrentCyclePlacedMIs) {
+      if (!P || P->isCopy())
+        continue;
+      if (hasPlacementAlternatives(Fmts, P->getOpcode()))
+        AnyLogicalAlt = true;
+      Cycle.push_back(P);
+    }
+    Cycle.push_back(MI);
+    if (!AnyLogicalAlt && Cycle.size() >= 2 &&
+        !canCoissueProductCycle(Cycle)) {
+      LLVM_DEBUG({
+        dbgs() << "Product coissue hazard for ";
+        MI->print(dbgs());
+        dbgs() << " (baked-member emission probe rejects this cycle;\n"
+                  " sequentialize is recovery only)\n";
       });
       return Hazard;
     }

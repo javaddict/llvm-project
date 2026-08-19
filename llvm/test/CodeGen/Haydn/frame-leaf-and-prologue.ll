@@ -46,9 +46,9 @@ define i32 @leaf_arith(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
-; CHECK-NEXT:    { nop; mull r3, r2, r3 }
+; CHECK-NEXT:    { nop; mull r2, r2, r3 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; sub32 r1, r3, r1 }
+; CHECK-NEXT:    { nop; sub32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -105,7 +105,8 @@ define i32 @non_leaf(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    { nop; jal lr, extern }
-; CHECK-NEXT:    { xor32 r0, r0, r0; addi32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }

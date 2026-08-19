@@ -183,11 +183,20 @@ define float @sup_fmaximum_residual(float %a, float %b) {
   ret float %r
 }
 
+declare void @musttail_sink(i32)
+define void @sup_musttail_sibcall(i32 %x) nounwind {
+; SUP-LABEL: sup_musttail_sibcall:
+; SUP: {{jal_w|jal}}
+  musttail call void @musttail_sink(i32 %x)
+  ret void
+}
+
 
 ;--- musttail.ll
-declare void @callee(i32)
-define void @musttail_reject(i32 %x) {
-  musttail call void @callee(i32 %x)
+%struct.by = type { [8 x i32] }
+declare void @byval_callee(ptr byval(%struct.by) %p)
+define void @musttail_byval(ptr byval(%struct.by) %p) {
+  musttail call void @byval_callee(ptr byval(%struct.by) %p)
   ret void
 }
 ; MUSTTAIL: unable to translate instruction: call

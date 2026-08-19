@@ -1,0 +1,90 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=MIR
+# RUN: llc -mtriple=haydn-unknown-elf -x mir \
+# RUN:   -start-before=haydn-finalize-mi-bundles -filetype=obj %s -o %t.o
+# RUN: llvm-readobj -r %t.o | FileCheck %s --check-prefix=RELOC
+# REQUIRES: haydn-registered-target
+
+# Reloc CSRW_W in a compiler BUNDLE cutovers to catalog CSRW I8 MemberId
+# (row, entry, typed CSR fixup). Encode binds FIXUP_HAYDN_CSR_UImm8 /
+# R_HAYDN_CSR_UImm8 — never FieldSlot uimm8_csr FIXUP_HAYDN_NONE, R_HAYDN_8,
+# or R_HAYDN_32. Extra implicit-def $cbr0 (SETCBR expand) is ImplicitTail.
+# Dual ADD32+CSRW_W cannot bind in E2 membership order (CSRW is e0 ALU0-only
+# under E2; ADD32 also claims ALU0 at e0). assignFormatEMemberEntries rematches
+# the same two kids onto E3 (ADD32 e0 ALU2 + CSRW e1 ALU1) and restamps the
+# row. E3 singleton takes an E3 e0 CSRW I8 member.
+
+# RELOC: R_HAYDN_CSR_UImm8 g
+# RELOC-NOT: R_HAYDN_8
+# RELOC-NOT: R_HAYDN_NONE
+
+--- |
+  @g = external global i32
+  define void @csrw_w_reloc_memberid() { ret void }
+  define void @csrw_w_reloc_e3() { ret void }
+  define void @csrw_w_reloc_extra_cbr() { ret void }
+  define void @csrw_w_reloc_dual_add32() { ret void }
+...
+---
+name:            csrw_w_reloc_memberid
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; MIR-LABEL: name: csrw_w_reloc_memberid
+    ; MIR: CSRW_E2_E0_ALU0_I8
+    ; MIR-NOT: CSRW_W
+    BUNDLE 0, 0, implicit $r1, implicit-def $sfr {
+      CSRW_W @g, $r1, implicit-def $sfr
+    }
+    RET implicit $r15
+...
+---
+name:            csrw_w_reloc_e3
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; MIR-LABEL: name: csrw_w_reloc_e3
+    ; MIR: CSRW_E3_E0_ALU{{[02]}}_I8
+    ; MIR-NOT: CSRW_W
+    BUNDLE 1, 0, implicit $r1, implicit-def $sfr {
+      CSRW_W @g, $r1, implicit-def $sfr
+    }
+    RET implicit $r15
+...
+---
+name:            csrw_w_reloc_extra_cbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; MIR-LABEL: name: csrw_w_reloc_extra_cbr
+    ; MIR: CSRW_E2_E0_ALU0_I8
+    ; MIR: implicit-def $cbr0
+    ; MIR-NOT: CSRW_W
+    BUNDLE 0, 0, implicit $r1, implicit-def $sfr, implicit-def $cbr0 {
+      CSRW_W @g, $r1, implicit-def $sfr, implicit-def $cbr0
+    }
+    RET implicit $r15
+...
+---
+name:            csrw_w_reloc_dual_add32
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r3, $r15
+    ; MIR-LABEL: name: csrw_w_reloc_dual_add32
+    ; MIR: ADD32_E3_E0_ALU2_RR
+    ; MIR: CSRW_E3_E1_ALU1_I8
+    ; MIR-NOT: CSRW_W
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r3 {
+      $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+      CSRW_W @g, $r3, implicit-def $sfr
+    }
+    RET implicit $r15
+...

@@ -66,7 +66,7 @@ define i64 @test_dr64_copy_or64(i64 %a) nounwind {
 ; CHECK-NEXT:    { nop; st64 d8, r1, 2 }
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; jal lr, get_i64 }
-; CHECK-NEXT:    { xor32 r0, r0, r0; or64 d9, d0, d0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; or64 d9, d0, d0 }
 ; CHECK-NEXT:    { nop; jal lr, get_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
@@ -112,15 +112,15 @@ define i64 @test_dr64_many_copies(i64 %a, i64 %b, i64 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { nop; sext32t64 d4, r1 }
 ; CHECK-NEXT:    { nop; slli64 d4, d4, 32 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
-; CHECK-NEXT:    { srli64 d4, d4, 32; sext32t64 d5, r1 }
+; CHECK-NEXT:    { nop; srli64 d4, d4, 32; sext32t64 d5, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 3 }
-; CHECK-NEXT:    { sext32t64 d0, r1; add64 d8, d0, d4 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1; add64 d8, d0, d4 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 4 }
-; CHECK-NEXT:    { slli64 d0, d0, 32; sext32t64 d4, r1 }
-; CHECK-NEXT:    { slli64 d5, d5, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { slli64 d4, d4, 32; srli64 d5, d5, 32 }
-; CHECK-NEXT:    { srli64 d4, d4, 32; add64 d10, d2, d0 }
-; CHECK-NEXT:    { or64 d0, d8, d8; add64 d9, d1, d5 }
+; CHECK-NEXT:    { nop; slli64 d0, d0, 32; sext32t64 d4, r1 }
+; CHECK-NEXT:    { nop; slli64 d5, d5, 32; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; slli64 d4, d4, 32; srli64 d5, d5, 32 }
+; CHECK-NEXT:    { nop; srli64 d4, d4, 32; add64 d10, d2, d0 }
+; CHECK-NEXT:    { nop; or64 d0, d8, d8; add64 d9, d1, d5 }
 ; CHECK-NEXT:    { nop; add64 d11, d3, d4 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
@@ -209,7 +209,7 @@ define i64 @test_copy_elim_stress() nounwind {
 ; CHECK-NEXT:    { nop; st64 d9, r1, 5 }
 ; CHECK-NEXT:    { nop; st64 d8, r1, 6 }
 ; CHECK-NEXT:    { nop; jal lr, get_i64 }
-; CHECK-NEXT:    { xor32 r0, r0, r0; or64 d8, d0, d0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; jal lr, get_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; or64 d9, d0, d0 }
@@ -284,7 +284,8 @@ define i32 @test_gpr_copy_elim_stress() nounwind {
 ; CHECK-NEXT:    { nop; st32 r9, r1, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r1, 5 }
 ; CHECK-NEXT:    { nop; jal lr, get_i32 }
-; CHECK-NEXT:    { st32 r1, sp, 3; xor32 r0, r0, r0 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; jal lr, get_i32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

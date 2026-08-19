@@ -4,7 +4,7 @@ Stamp: 2026-08-18 T-RT
 Same-artifact tuple: compiler + linker + sysroot + loader + debugger.
 Decode live bind: ARTIFACT.decode shim/model sha256 must match live files.
 Post-wave rebind: llvm_src.git_commit must be an in-repo ancestor
-  (38bd4059). Historical full-gate git_commit=28700d57 is refused.
+  (9e5c878a). Historical full-gate git_commit=28700d57 is refused.
 Folded residual IDs (same-artifact inventory under G-RUNTIME-TOOLCHAIN;
   not separate QUALIFY tracks): G-ECOSYSTEM-CONSUMERS (loader / catalog /
   e_flags), G-LIBRARY-COVERAGE (product_library_pin + torture seats),

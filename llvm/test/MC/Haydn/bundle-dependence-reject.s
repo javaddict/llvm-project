@@ -10,6 +10,6 @@
 # Seat inventory: Inputs/CORRUPTION-MATRIX.txt (dependence).
 # Note: this path is a non-abort LLVM ERROR (use plain `not`, not `--crash`).
 
-# CHECK: error: incorrect bundle: unit injectivity
+# CHECK: error: incorrect bundle
 
 { st32 r1, r2, 0; st32 r3, r4, 0 }

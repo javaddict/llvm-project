@@ -1,8 +1,8 @@
 Haydn all-seat fault injection inventory (policy + QUALIFY seats / T8-HYGIENE)
 =================================================================================
 Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual is docs/hygiene only;
-  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 38bd4059;
-  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Auto.td/CMake closed;
+  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 9e5c878a;
+  T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed;
   W54 D1000 and W55 nine-file stay LANDED; P13 waves stay gated on R13;
   Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
   flip sites stay false until independent T2+T4 QUALIFY then combined matrix;
@@ -18,7 +18,7 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    inventories pinned; combined dual-ON QUALIFY waits for T2+T4; no PRODUCT_ON;
    hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are live XFAIL;
    no DecisionGuard revive; no second format pipeline)
-Audited backend baseline: 38bd4059fbb4e489425becc4ded431235ae2c1ff
+Audited backend baseline: 9e5c878a03921a31f76b1c251954cd14d9fcfd72
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
 
 R15 provenance: the previous inventory baseline ff42d9ad (`working`) and the eight
@@ -174,18 +174,18 @@ XFAIL (ledger TOTAL=5) owned by G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE.
 
 Goal-9 docs/inventory on this track (P13 / P18 / P19 / P20 / R15)
 -----------------------------------------------------------------
-P13 Wave 1 on owned TU: dead `~/haydn-pass-pipeline.md` now names
-contracts/pipeline.md; deleted BitSimplify/PEIPeephole are not listed as
-live. Wave 2/3 `_S*` deletion stays GATED on R13 LANDED. KEEP
-SMS/hwloop product default OFF. Inventory: HAYDN-STALE-PATH-CLEANUP.md.
+P13 Wave 1 unblocked (R13 LANDED; live `_S*` FieldSlot census 0). Dead
+`~/haydn-pass-pipeline.md` now names contracts/pipeline.md; deleted
+BitSimplify/PEIPeephole are not listed as live. KEEP SMS/hwloop product
+default OFF. Inventory: HAYDN-STALE-PATH-CLEANUP.md.
 
 P18 leftover: TableGen AlternateInsts backfill comment stays outside
 this code track. Owned Haydn TUs do not revive suffix `_S*` discovery.
 P19: query live `_S*` with `rg '^def \w+_S[012]' llvm/lib/Target/Haydn/*.td`
 instead of transcribed CLAUDE.md / GOALS R13 counts.
 
-P19 leftover closed (T7-ALIGN residual hygiene): HaydnInstrInfoManual.td header is hand-maintained
-(generate_format_e_records.py does not emit it). CMake golden-dir is
+P19 leftover closed (T7-ALIGN residual hygiene): HaydnInstrInfoManual.td is a tombstone
+(moved; generate_format_e_records.py does not emit it; do not include). CMake golden-dir is
 env/-D only; banned plans-tree path gone; no home-directory discovery.
 
 P20(a) LANDED (LatencyStalls in addPreSched2; late Finalize/Verify after

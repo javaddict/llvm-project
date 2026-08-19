@@ -17,6 +17,6 @@
 .endif
 
 .ifdef SUFFIX
-# SUFFIX: error: invalid instruction mnemonic
+# SUFFIX: error: assembler matched a private placement opcode
 wfi_s0
 .endif

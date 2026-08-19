@@ -32,4 +32,4 @@ skipped-classified. Do not invent TestFloat vectors.
 T-SF10 leftover (owned hygiene, not a fuzz gate):
   install_product_ld refuses sysroot lib/*.bak and lib/*.broken*.
   yarpgen stays the frozen-28 informational corpus (not a fuzz gate).
-  Post-wave identity rebind refuses git_commit=28700d57; pin 38bd4059.
+  Post-wave identity rebind refuses git_commit=28700d57; pin 9e5c878a.

@@ -1,29 +1,18 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
-; Role: semantic — s for the HaydnConditionOptimizer pass (post-RA).
-
-; Status : previously-XFAIL regression resolved; lit PASS.
+; Role: semantic — GISel combiner owns ConditionOptimizer identity folds.
 ;
-; Tests for the HaydnConditionOptimizer pass (post-RA).
-;
-; Pass optimizations tested:
-; Self-comparison elimination: SLT32/SLTU32 r, rX, rX → SUB32 r, r, r (== 0)
-; Inverse comparison reuse: SLT32 rA, rX, rY + SLT32 rB, rY, rX
-; → second replaced with XORI32 rB, rA, 1
-; Cmp+branch folding: when CMP dst != CMP src and the result feeds
-; (optionally through XOR32 with 1) into BNEZ/BEQZ, replace with a
-; single two-register branch (BEQ/BNE/BLT/BGE/BLTU/BGEU).
-;
-; elimination (slt i32 %a, %a should fold to sub32) and the inverse-pair
-; reuse (slt a,b + slt b,a should fold to slt + xori32) no longer fire.
-; Actual output retains two slt32 ops. Likely the post-RA pattern matcher
-; in HaydnConditionOptimizer no longer recognizes the _S0 slot-suffixed
-; opcode form. The optimizations themselves remain desirable; only the matcher
+; Self-comparison: icmp slt/ult x,x folds to 0 at post-legalizer combine
+; (generic known-bits icmp fold misses live-in operands).
+; Inverse slt(a,b)+slt(b,a) is not xor (both false when a==b); left as two slt.
+; Branch seats: SEQ32/SLT32/SLTU32 plus beqz/bnez (optional _w suffix).
 
 ;===--- Self-comparison: slt i32 %a, %a → 0 ---===
 
 define i32 @self_comparison_slt(i32 %a) nounwind {
 ; CHECK-LABEL: self_comparison_slt:
+; CHECK-NOT: slt32
+; CHECK: addi32{{.*}}, 0
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp = icmp slt i32 %a, %a
   %r = zext i1 %cmp to i32
@@ -34,6 +23,8 @@ define i32 @self_comparison_slt(i32 %a) nounwind {
 
 define i32 @self_comparison_ult(i32 %a) nounwind {
 ; CHECK-LABEL: self_comparison_ult:
+; CHECK-NOT: sltu32
+; CHECK: addi32{{.*}}, 0
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %cmp = icmp ult i32 %a, %a
   %r = zext i1 %cmp to i32
@@ -106,7 +97,7 @@ entry:
 define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_eq:
 ; CHECK: seq32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -122,7 +113,7 @@ else:
 define void @branch_ne(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ne:
 ; CHECK: seq32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z
 entry:
   %cmp = icmp ne i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -138,7 +129,7 @@ else:
 define void @branch_slt(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_slt:
 ; CHECK: slt32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z
 entry:
   %cmp = icmp slt i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -154,7 +145,7 @@ else:
 define void @branch_sge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_sge:
 ; CHECK: slt32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z
 entry:
   %cmp = icmp sge i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -170,7 +161,7 @@ else:
 define void @branch_ult(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_ult:
 ; CHECK: sltu32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z
 entry:
   %cmp = icmp ult i32 %a, %b
   br i1 %cmp, label %then, label %else
@@ -186,7 +177,7 @@ else:
 define void @branch_uge(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: branch_uge:
 ; CHECK: sltu32
-; CHECK: b{{eq|ne}}z_w{{(\.s[012])?}}
+; CHECK: b{{eq|ne}}z
 entry:
   %cmp = icmp uge i32 %a, %b
   br i1 %cmp, label %then, label %else

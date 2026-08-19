@@ -52,8 +52,7 @@
 # OVER-ISSUE: memberCount > ISSUE_SLOT_COUNT (3)
 # E2-PRIV-E3: structural inverse: E3 member under E96TwoEntry row
 # P7-NO-MEMBER: structural inverse: committed logical has no generated member
-# PRIV-REPLACE: committed Format E private member cannot enter standalone DFS
-# (duplicate EntryIdx scatter miss — typed members never DFS)
+# PRIV-REPLACE: {{cannot enter standalone DFS|refuse skip-Finalize DFS}}
 
 #--- missing-formatid.mir
 --- |

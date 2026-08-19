@@ -44,27 +44,27 @@ define i32 @jt_base_lui_addi(i32 %sel, i32 %v) nounwind {
 ; CHECK-NEXT:    { nop; add32 r1, r4, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; jalr_w r0, r1, 0 }
+; CHECK-NEXT:    { nop; jalr r0, r1, 0 }
 ; CHECK-NEXT:  .LBB0_2: // %c0
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_7 }
+; CHECK-NEXT:    { nop; beqz r0, .LBB0_7 }
 ; CHECK-NEXT:  .LBB0_3: // %c3
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_7 }
+; CHECK-NEXT:    { nop; beqz r0, .LBB0_7 }
 ; CHECK-NEXT:  .LBB0_4: // %c1
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_7 }
+; CHECK-NEXT:    { nop; beqz r0, .LBB0_7 }
 ; CHECK-NEXT:  .LBB0_5: // %c2
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 2 }
-; CHECK-NEXT:    { nop; beqz_w r0, .LBB0_7 }
+; CHECK-NEXT:    { nop; beqz r0, .LBB0_7 }
 ; CHECK-NEXT:  .LBB0_6: // %def
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 99 }
 ; CHECK-NEXT:  .LBB0_7: // %ret
-; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r3, r2 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; add32 r1, r3, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:

@@ -137,8 +137,8 @@ NINJA_LOCK="$LLVM_BUILD/.ninja_lock"
 
 head_sha="$(git -C "$LLVM_SRC" rev-parse HEAD 2>/dev/null || echo unknown)"
 # Rebound: 08-17 full-gate manifest 28700d57 is not an ancestor. Bind the
-# verdict to an in-repo commit (38bd4059 is the current GOALS stamp).
-REBIND_ANCESTOR="${HAYDN_REBIND_ANCESTOR:-38bd4059fbb4e489425becc4ded431235ae2c1ff}"
+# verdict to an in-repo commit (9e5c878a is the current GOALS stamp).
+REBIND_ANCESTOR="${HAYDN_REBIND_ANCESTOR:-9e5c878a03921a31f76b1c251954cd14d9fcfd72}"
 STALE_FULL_GATE_COMMIT="${HAYDN_STALE_FULL_GATE_COMMIT:-28700d57366a35a7d04e8adfbdf782743ec847e0}"
 if ! git -C "$LLVM_SRC" merge-base --is-ancestor "$REBIND_ANCESTOR" HEAD 2>/dev/null; then
   echo "run_ci_gate: $REBIND_ANCESTOR is not an ancestor of HEAD (cannot rebind)" >&2

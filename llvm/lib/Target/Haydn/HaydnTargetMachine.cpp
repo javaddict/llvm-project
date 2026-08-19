@@ -68,10 +68,10 @@ static cl::opt<bool> EnableHaydnPostSelectOptimize(
     cl::desc("Enable HaydnPostSelectOptimize (O1+; live: cross-bank elide)."));
 // Post-inc: form + fused-vs-split at InstructionSelect. Leftover *_POST_INC
 // (MIR-injected) expands in ExpandPseudos via one helper.
-// FULL FATE (2026-07-23): invent densify deleted permanently — not default-OFF
-// quarantine. FATED: LoadStoreOpt, CircularBuffer stats, RedundantCopyElim,
-// FormUpdateAddr, PostPipeliner Stage-0, InterBlock Stage-0, formMACs, Role B
-// convert. Sole AGU form = GISel. contracts/pipeline.md.
+// Tombstone (do not revive): LoadStoreOpt, CircularBuffer stats,
+// RedundantCopyElim, FormUpdateAddr, PostPipeliner Stage-0, InterBlock
+// Stage-0, formMACs, Role B convert. Sole AGU form is GISel.
+// contracts/pipeline.md.
 // (2026-07-27): HaydnCFGOptimizer deleted. Post-PEI BranchFolder +
 // MachineBlockPlacement already cover empty-forward / identical-succ /
 // unreachable / tail-merge; ON/OFF asm identity across Haydn lit kernels with
@@ -462,8 +462,9 @@ void HaydnPassConfig::addPreSched2() {
   // re-runs the same Finalize+Verify after BR so those parcels commit.
   addPass(createHaydnLatencyStallsPass());
   // After scheduling (or after an optnone skip), wrap remaining standalone
-  // MIs as singleton BUNDLEs with FormatID imm (AIE2TargetMachine.cpp:242-244
-  // createAIEFinalizeBundle; AIEFinalizeBundle.cpp:40-59). Multi-MI already
+  // MIs as singleton BUNDLEs and stamp generated Format E members
+  // (AIE2TargetMachine.cpp:242-244 createAIEFinalizeBundle;
+  // AIEFinalizeBundle.cpp:40-59). Multi-MI already
   // stamped in HaydnPostRASchedStrategy::finalizeLegalMultiMI. Finalize and
   // Verify never call skipFunction: they are target-local no-reorder commit
   // ownership so product emission never sees uncommitted bare encode MIR.
@@ -501,7 +502,7 @@ void HaydnPassConfig::addPreEmitPass() {
   //      materialize bare MIs via empty-cycle tryAdd → setDesc
   //        (AIEMachineScheduler.cpp:1121-1139; AIEHazardRecognizer.cpp:174-214;
   //         HaydnBundleMaterialize commitLateProductCycle)
-  //      FinalizeBundle singleton wrap + FormatID
+  //      FinalizeBundle singleton wrap + generated member stamp
   //        (AIEFinalizeBundle.cpp:40-59; AIE2TargetMachine.cpp:242-244)
   //      fail-closed verifyCommittedBundle
   //        (AIEBaseInstrInfo.cpp:1440-1459; haydn-verify-bundles)

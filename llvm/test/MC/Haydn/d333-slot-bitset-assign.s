@@ -52,9 +52,9 @@ test_d333_assign_slots_bitset:
   { x2mula32 d1, d2, d3, d1 ; add64 d6, d7, d8 }
 
 # CHECK-LABEL: <test_d333_assign_slots_bitset>:
-# CHECK: {{.*}}0: 4f 09 82 10 a0 24 60 2a 00 00 00 00 { add32 r8, r9, r10; add64 d0, d1, d2 }
-# CHECK: c: 4f 49 c0 54 a0 04 41 08 00 00 00 00 { add64 d0, d1, d2; add32 r8, r9, r10 }
-# CHECK: {{.*}}18: 4f 09 b2 43 a0 04 0d 15 00 00 00 00 { add64 d3, d4, d5; add64 d6, d7, d8 }
+# CHECK: {{.*}}0: 4f 09 82 10 a0 24 60 2a 00 00 00 00 { nop; add32 r8, r9, r10; add64 d0, d1, d2 }
+# CHECK: c: 4f 49 c0 54 a0 04 41 08 00 00 00 00 { nop; add64 d0, d1, d2; add32 r8, r9, r10 }
+# CHECK: {{.*}}18: 4f 09 b2 43 a0 04 0d 15 00 00 00 00 { nop; add64 d3, d4, d5; add64 d6, d7, d8 }
 # CHECK: {{.*}}24: 4f 42 18 02 a0 04 0d 15 20 29 42 00 { neg32 r1, r2; add64 d3, d4, d5; not32 r3, r4 }
 # CHECK: {{.*}}30: 07 0b 64 87 00 00 48 20 21 13 00 00 { x2mula32 d1, d2, d3, d1; add64 d6, d7, d8 }
 

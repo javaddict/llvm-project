@@ -51,10 +51,10 @@ body:             |
     ; CHECK: ADDI32
     ; CHECK: BUNDLE 0
     ; CHECK: JALR
-    BUNDLE 0 {
+    BUNDLE 0, 0 {
       $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     }
-    BUNDLE 0 {
+    BUNDLE 0, 0 {
       $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     }
 
@@ -94,11 +94,11 @@ body:             |
     ; CHECK: ADDI32
     ; CHECK: BUNDLE {{[01]}}
     ; CHECK: JALR
-    BUNDLE 0 {
+    BUNDLE 0, 0 {
       $r7 = ADD32 killed $r3, killed $r4, implicit-def dead $sfr
       $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     }
-    BUNDLE 0 {
+    BUNDLE 0, 0 {
       $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
     }
 

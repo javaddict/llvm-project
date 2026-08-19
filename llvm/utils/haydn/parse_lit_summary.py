@@ -50,6 +50,10 @@ _RE_GIT_COMMIT = re.compile(
     r"""(?m)["']?git_commit["']?\s*[:=]\s*["']?([0-9a-fA-F]{7,40})"""
 )
 STALE_FULL_GATE_COMMIT = "28700d57"
+# new_gerrit rebound: TD reshape / 0 `_S*` defs (T7-ALIGN 38bd4059 is not
+# an ancestor of this lineage).
+REBIND_ANCESTOR = "9e5c878a03921a31f76b1c251954cd14d9fcfd72"
+REBIND_SHORT = "9e5c878a"
 
 
 def parse_git_commit(text: str) -> Optional[str]:
@@ -193,8 +197,8 @@ Total Discovered Tests: 4
     stale = parse_git_commit(stale_manifest)
     assert stale and stale.startswith(STALE_FULL_GATE_COMMIT), stale
     assert is_stale_full_gate_commit(stale)
-    rebound = parse_git_commit('llvm_src.git_commit=38bd4059fbb4e489425becc4ded431235ae2c1ff')
-    assert rebound and rebound.startswith("38bd4059"), rebound
+    rebound = parse_git_commit(f"llvm_src.git_commit={REBIND_ANCESTOR}")
+    assert rebound and rebound.startswith(REBIND_SHORT), rebound
     assert not is_stale_full_gate_commit(rebound)
     live_repo = Path("/ssd/mhyang/llvm/llvm-head")
     if (live_repo / ".git").exists() or git_commit_is_repo_resident(

@@ -9,17 +9,16 @@
 ; RUN:     -stop-after=instruction-select -verify-machineinstrs -o - \
 ; RUN:     %t/soft_tail.ll | FileCheck %s --check-prefix=SOFT
 ;
-; Role: semantic — musttail and ISR stay fail-closed; soft tail is JAL+RET.
-;
-; lowerTailCall is the AIE-shaped seat (AIECallLowering.cpp:622) and returns
-; false: JAL_W is not isReturn+isTerminator, so a fake tail would skip the
-; PEI epilogue. No product ISR vector / CC_ISR analog.
+; Role: semantic — ineligible musttail (byval) and ISR stay fail-closed;
+; legal musttail sibcall is JAL_W_MSP (musttail-reject.ll). Soft tail is
+; JAL+RET. No product ISR vector / CC_ISR analog.
 
 ;--- musttail.ll
-declare void @callee(i32)
-define void @musttail_caller(i32 %x) {
+%struct.by = type { [8 x i32] }
+declare void @byval_callee(ptr byval(%struct.by) %p)
+define void @musttail_byval(ptr byval(%struct.by) %p) {
   ; MUSTTAIL: unable to translate instruction: call
-  musttail call void @callee(i32 %x)
+  musttail call void @byval_callee(ptr byval(%struct.by) %p)
   ret void
 }
 

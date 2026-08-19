@@ -386,7 +386,9 @@ public:
 
   // Return the hazard type of issuing SU DeltaCycles from the current cycle.
   // NoHazard if the candidate's slots and GPR ports fit in the current cycle;
-  // Hazard if they would exceed a limit.
+  // Hazard if they would exceed a limit. Post-RA also consults the shared
+  // canCoissueProductCycle emission probe so leaveMBB sequentialize cannot
+  // become a second packing authority (AIE applyBundles size()>1 peer).
   HazardType getHazardType(SUnit *SU, int DeltaCycles = 0) override;
 
   // Record SU's resource footprint in the scoreboard (DeltaCycles defaults

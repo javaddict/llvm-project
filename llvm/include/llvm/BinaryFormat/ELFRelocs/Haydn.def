@@ -62,3 +62,8 @@ ELF_RELOC(R_HAYDN_LS_IMM,               21)
 // so a JALR fixup never borrows R_HAYDN_WIDE_BranchSImm12_RI (W27 / M23).
 // ValueShift=0, Align=2; execution stays golden PC = rs + imm12.
 ELF_RELOC(R_HAYDN_JALRSImm12,           22)
+// Format E CSR I8 uimm8 (CSRW/CSRR). Absolute unsigned 8-bit CSR address
+// at the golden I8 window (E2 e0 @ parcel bits[39:32]; E3 via
+// HaydnRelocLayout::resolveFieldLsb). Distinct from R_HAYDN_8 (data-section
+// 1-byte write). ValueShift=0, Align=1, not PC-relative.
+ELF_RELOC(R_HAYDN_CSR_UImm8,            23)

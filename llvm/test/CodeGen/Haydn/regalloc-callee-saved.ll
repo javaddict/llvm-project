@@ -58,7 +58,7 @@ define i32 @test_minimal_callee_save(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
 ; CHECK-NEXT:    { nop; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
-; CHECK-NEXT:    { xor32 r0, r0, r0; add32 r1, r8, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; add32 r1, r8, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
@@ -90,8 +90,8 @@ define i32 @test_all_gpr_callee_saved(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK-NEXT:    { nop; st32 r10, r6, 3 }
 ; CHECK-NEXT:    { nop; st32 r9, r6, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r6, 5 }
-; CHECK-NEXT:    { move32 r8, r2; move32 r9, r3 }
-; CHECK-NEXT:    { move32 r10, r4; move32 r11, r5 }
+; CHECK-NEXT:    { nop; move32 r8, r2; move32 r9, r3 }
+; CHECK-NEXT:    { nop; move32 r10, r4; move32 r11, r5 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
@@ -157,7 +157,7 @@ define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind 
 ; CHECK-NEXT:    { nop; st64 d10, r1, 4 }
 ; CHECK-NEXT:    { nop; st64 d9, r1, 5 }
 ; CHECK-NEXT:    { nop; st64 d8, r1, 6 }
-; CHECK-NEXT:    { or64 d9, d1, d1; or64 d10, d2, d2 }
+; CHECK-NEXT:    { nop; or64 d9, d1, d1; or64 d10, d2, d2 }
 ; CHECK-NEXT:    { nop; or64 d11, d3, d3 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
@@ -246,8 +246,10 @@ define i64 @test_mixed_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    { nop; addi32 r5, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d9, r5, 0 }
 ; CHECK-NEXT:    { nop; st64 d8, r5, 1 }
-; CHECK-NEXT:    { move32 r9, r3; or64 d8, d0, d0; move32 r8, r2 }
-; CHECK-NEXT:    { move32 r10, r4; or64 d9, d1, d1 }
+; CHECK-NEXT:    { nop; move32 r8, r2 }
+; CHECK-NEXT:    { nop; move32 r9, r3 }
+; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
+; CHECK-NEXT:    { nop; move32 r10, r4; or64 d9, d1, d1 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r11, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }

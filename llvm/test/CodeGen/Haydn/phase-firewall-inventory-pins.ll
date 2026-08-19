@@ -3,7 +3,8 @@
 ; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=REBIND
 ; RUN: FileCheck %s --input-file=%S/Inputs/FAULT-INJECTION-SEATS.txt --check-prefix=FAULT
 ; RUN: FileCheck %s --input-file=%S/Inputs/CORRUPTION-MATRIX.txt --check-prefix=CORR
-; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfoAuto.td --check-prefix=AUTO
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfoManual.td --check-prefix=AUTO
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/FormatE/family_core.py --check-prefix=GOLDENPY
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/CMakeLists.txt --check-prefix=CMAKE
 ; RUN: FileCheck %s --input-file=%S/../../../utils/haydn/product_coverage_pin.sh --check-prefix=PIN
 ; RUN: FileCheck %s --input-file=%S/../../../../CLAUDE.md --check-prefix=ISANEXT
@@ -12,7 +13,7 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnAlternateDescriptors.h --check-prefix=ALT
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPlacementAlternative.h --check-prefix=PLACE
 ; RUN: test -f %S/../../../utils/haydn/product_coverage_pin.sh
-; RUN: git -C %S/../../../.. merge-base --is-ancestor 38bd4059fbb4e489425becc4ded431235ae2c1ff HEAD
+; RUN: git -C %S/../../../.. merge-base --is-ancestor 9e5c878a03921a31f76b1c251954cd14d9fcfd72 HEAD
 ; RUN: not git -C %S/../../../.. merge-base --is-ancestor 28700d57366a35a7d04e8adfbdf782743ec847e0 HEAD
 ; RUN: %python %S/../../../utils/haydn/parse_lit_summary.py --self-test
 ; RUN: %python %S/../../../utils/haydn/check_xfail_ledger.py --inventory-pin --llvm-src %S/../../../..
@@ -24,7 +25,7 @@
 ; DecisionGuard product registry stays absent. SMS/hwloop defaults stay OFF.
 ; Auto.td is hand-maintained. CMake golden-dir is env/-D only; skip if unset.
 ; Monorepo CLAUDE.md stays a symlink (R15 leftover docs stay outside this
-; code track). Rebound: 38bd4059 is an ancestor; 28700d57 is not an ancestor.
+; code track). Rebound: 9e5c878a is an ancestor; 28700d57 is not an ancestor.
 ; AR0 phase-firewall inventory is closed (no pre-RA identity).
 
 ; PIPE20-DAG: Phase-firewall inventory (PIPE-20
@@ -40,7 +41,7 @@
 ; DG0-DAG: product_coverage_pin
 ; DG0-NOT: DecisionGuardRegistry
 
-; REBIND-DAG: 38bd4059
+; REBIND-DAG: 9e5c878a
 ; REBIND-DAG: 28700d57
 ; REBIND-DAG: not an ancestor
 ; REBIND-DAG: G_ANYEXT
@@ -104,12 +105,16 @@
 ; AUTO: generate_format_e_records.py does not emit this file
 ; AUTO-NOT: Auto-generated from spec JSON
 
-; CMAKE: Never fall back to a host-absolute plans-tree path
-; CMAKE: HAYDN_GOLDEN_DIR
-; CMAKE: BUNDLESIM_GOLDEN_DIR
-; CMAKE: skip if unset
+; GOLDENPY: HAYDN_GOLDEN_DIR
+; GOLDENPY: BUNDLESIM_GOLDEN_DIR
+; GOLDENPY: no host-path fallback
+; GOLDENPY-NOT: /ssd2/mhyang/haydn-plans/Database/golden
+; GOLDENPY-NOT: Path.home() / "haydn"
+
 ; CMAKE-NOT: /ssd2/mhyang/haydn-plans/Database/golden
 ; CMAKE-NOT: $ENV{HOME}/haydn
+; CMAKE-NOT: HAYDN_GOLDEN_DIR
+; CMAKE-NOT: BUNDLESIM_GOLDEN_DIR
 
 ; Highest existing ISA file is ISA-63; the next new file is ISA-64.
 ; ISANEXT: next new file is `ISA-64`

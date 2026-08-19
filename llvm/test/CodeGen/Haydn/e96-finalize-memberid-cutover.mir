@@ -14,6 +14,8 @@
 # simm20_wide_abs; reloc SET_HWLOOP_F2_W uses uimm6/uimm12 + HWLoopOff
 # fixups. POST/PRE FieldSlots cutover: members carry tied dest2 writeback.
 # Unsuffixed catalog logicals CSRW_W / ST32_POST cutover when Desc matches.
+# Reloc CSRW_W (@g CSR address) cutovers to CSRW I8 MemberId; encode binds
+# FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8 (MC/Haydn/reloc-csr-uimm8.s).
 # Extra trailing uses (MOVE32/ABS32 vestigial rs2) and tied MAC acc ins
 # (`$rta = $rtd`) drop onto the member Desc. Vestigial first ins (LUI $rs)
 # drops when generated dest is an SSA out. Catalog role `reg` is an SSA
@@ -55,6 +57,8 @@
   }
   define void @cutover_csrw_w_s0() { ret void }
   define void @cutover_csrw_w() { ret void }
+  define void @cutover_csrw_w_reloc() { ret void }
+  define void @cutover_csrw_w_extra_cbr() { ret void }
   define void @cutover_st32_post() { ret void }
   define void @cutover_store_last_srli_sext_st64() { ret void }
   define void @cutover_alu_then_dual_load() { ret void }
@@ -342,6 +346,39 @@ body:             |
     ; CHECK-NOT: CSRW_W
     BUNDLE 0, 0, implicit $r1, implicit-def $sfr {
       CSRW_W 44, $r1, implicit-def $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_csrw_w_reloc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: cutover_csrw_w_reloc
+    ; CHECK: CSRW_E2_E0_ALU0_I8
+    ; CHECK-NOT: CSRW_W
+    BUNDLE 0, 0, implicit $r1, implicit-def $sfr {
+      CSRW_W @g, $r1, implicit-def $sfr
+    }
+    RET implicit $r15
+
+...
+---
+name:            cutover_csrw_w_extra_cbr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: cutover_csrw_w_extra_cbr
+    ; CHECK: CSRW_E2_E0_ALU0_I8
+    ; CHECK: implicit-def $cbr0
+    ; CHECK-NOT: CSRW_W
+    BUNDLE 0, 0, implicit $r1, implicit-def $sfr, implicit-def $cbr0 {
+      CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
     }
     RET implicit $r15
 

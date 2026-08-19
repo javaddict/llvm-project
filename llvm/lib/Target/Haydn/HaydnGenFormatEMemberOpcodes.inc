@@ -1,5 +1,12 @@
 //===-- HaydnGenFormatEMemberOpcodes.inc -*- C++ -*-===//
-// Auto-generated. DO NOT EDIT.
+// DO NOT EDIT.
+// Generator: llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py
+// Schema: format-e-records/1
+// Family: e96 (id=0)
+// Check: python3 llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py --check --family e96
+// Umbrella: llvm/lib/Target/Haydn/FormatE/check_generated.sh
+// Overlay: authored_catalog_overlay.json
+// Overlay-SHA256: 276dea569f8761e81bb3d17e041a4f74911d34ba6f30711939a293519ac531fc
 #ifdef GET_FORMAT_E_MEMBER_OPCODES
 #undef GET_FORMAT_E_MEMBER_OPCODES
 static constexpr unsigned FormatEMemberOpcodeCount = 4294u;
@@ -4304,7 +4311,7 @@ static_assert(sizeof(FormatEMemberOpcodes)/sizeof(FormatEMemberOpcodes[0]) == Fo
 
 #ifdef GET_FORMAT_E_MEMBER_TO_LOGICAL
 #undef GET_FORMAT_E_MEMBER_TO_LOGICAL
-static constexpr unsigned FormatEMemberToLogicalCount = 4169u;
+static constexpr unsigned FormatEMemberToLogicalCount = 4168u;
 static_assert(FormatEMemberToLogicalCount > 0u, "member to logical pin");
 unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) {
   switch (Opcode) {
@@ -4597,7 +4604,6 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::D_LQHWUA_POST_E3_E0_LOADSTORE0_AR:
   case Haydn::D_LQHWUA_POST_E3_E1_LOAD1_AR:
   case Haydn::D_LQHWUA_POST_E3_E2_LOAD1_AR:
-  case Haydn::D_LQHWUA_POST_S2:
     return Haydn::D_LQHWUA_POST;
   case Haydn::D_LTWUA_POST_E2_E0_LOADSTORE0_AR:
   case Haydn::D_LTWUA_POST_E2_E1_LOAD1_AR:

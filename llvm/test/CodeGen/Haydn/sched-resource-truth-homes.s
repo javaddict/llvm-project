@@ -62,7 +62,8 @@
 # RC: return haydnOpcodeIssuesAloneInCycle(Opcode)
 # RC-NOT: Opcode == Haydn::ARCTAN || Opcode == Haydn::SIN_COS
 #
-# MEM: Auto-generated
+# MEM: DO NOT EDIT
+# MEM: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
 # MEM: HaydnInstrInfo::getFirstMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
@@ -76,7 +77,8 @@
 # MEM-NOT: Slot12_ALU_AccLat
 # MEM-NOT: Slot2_ALU_AccLat
 #
-# GEN: Auto-generated
+# GEN: DO NOT EDIT
+# GEN: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
 # GEN: MemoryCycle first/last literals live in HaydnGenMemoryCycles.inc
 # GEN: defvar FormatEE2EntryCapacity = 2;
 # GEN: defvar FormatEE3EntryCapacity = 3;

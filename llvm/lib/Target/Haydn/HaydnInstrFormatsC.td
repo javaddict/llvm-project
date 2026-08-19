@@ -236,9 +236,12 @@ class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
 // Class 100 — Control (§5.8-5.13). CSR + ZERO_GPR + SET_HWLOOP forms.
 //===----------------------------------------------------------------------===//
 
-// 48-bit WIDE CSR format (CSRR/CSRW). TableGen size-6 shell; product encode is Format E member.
-// CSRR: `rt = CSR[uimm8]`. CSRW: `CSR[uimm8] = rs`. bits[47:40]=uimm8
-// bits[39:16]=spare(0), bits[15:12]=rt/rs, opcode=0x80/0x81.
+// 48-bit WIDE CSR format (CSRW_W). TableGen size-6 shell; product encode is
+// Format E CSRW I8 members. Reloc CSRW_W uses the same 2-op keep-map; encode
+// binds typed CSR I8 (FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8), never an
+// untyped NONE fixup.
+// CSRW: `CSR[uimm8] = rs`. bits[47:40]=uimm8 bits[39:16]=spare(0),
+// bits[15:12]=rs, opcode=0x81.
 class Fmt48_WideCSR<bits<8> opcode, dag outs, dag ins, string asmstr,
                     list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {

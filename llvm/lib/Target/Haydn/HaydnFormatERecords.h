@@ -28,6 +28,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -65,6 +66,40 @@ namespace format_e {
 
 #define GET_FORMAT_E_SETDESC_LEDGER
 #include "HaydnGenFormatESetDescLedger.inc"
+
+// ---------------------------------------------------------------------------
+// Family handle (inert; E96 only)
+// ---------------------------------------------------------------------------
+// Numeric member identity will later be (family, row, entry, unit, type).
+// This wave only adds the handle so later waves can thread it. E96 tables
+// stay registered under the current FormatE* names. Generated
+// FormatEMemberRec / FormatESetDescLedgerRec carry Family (E96=0).
+// Consumers must not string-parse family/entry/unit out of member def names.
+// Callers that need family-scoped facts go through this handle so a second
+// family can land as an additive table, not a second pipeline.
+
+enum class BundleFamily : uint8_t {
+  E96 = 0,
+};
+
+inline constexpr BundleFamily kAdmittedFamily = BundleFamily::E96;
+
+/// Family-scoped view of the generated Format E tables.
+/// Today E96 is the only admitted family; the tables remain the existing
+/// FormatE* globals.
+struct FamilyRecords {
+  BundleFamily Family;
+};
+
+inline FamilyRecords getFamilyRecords(BundleFamily Family) {
+  if (Family != BundleFamily::E96)
+    llvm_unreachable("Haydn: no admitted bundle-format family besides E96");
+  return FamilyRecords{Family};
+}
+
+inline FamilyRecords getDefaultFamilyRecords() {
+  return getFamilyRecords(kAdmittedFamily);
+}
 
 /// Alternative span for a golden logical name. The generated FormatEAltSpans
 /// table is sorted by `strcmp` key order — binary search, never a linear walk

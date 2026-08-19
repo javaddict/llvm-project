@@ -19,14 +19,15 @@
 # emits first=0 / last=1 like the other LS classes. Product MemoryEdges
 # fatals if a Slot*_LS / Slot*_LD class still has no First/Last (AIE
 # ExactLatencies). Do not invent a latency.
-# Live producer is D_LQHWUA_POST_S2 (mayLoad + Slot2_LS). Store S2
-# FieldSlots have no e2 member (reject-not-migrate).
+# Live producer is logical D_LQHWUA_POST (mayLoad + Slot2_LS). Store S2
+# FieldSlots retired; no e2 store member (reject-not-migrate).
 # If this regresses: Slot2_LS drops out of the generated table, or S2
 # memory→memory falls back to Latency=1 / fatals on a published class.
 #
 # Role: semantic — Slot2_LS MemoryCycle product pin.
 #
-# MEM: Auto-generated
+# MEM: DO NOT EDIT
+# MEM: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
 # MEM: HaydnInstrInfo::getFirstMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
@@ -68,12 +69,12 @@ body:             |
     ; Live Slot2_LS load (UA S2) then store. hasSideEffects makes the
     ; Ord edge Barrier; MemoryEdges still applies getMemoryLatency.
     ; Product=2. Store S2 FieldSlots have no e2 member.
-    ; PRODUCT: D_LQHWUA_POST_S2{{.*}}load
+    ; PRODUCT: D_LQHWUA_POST{{.*}}load
     ; PRODUCT: Ord{{ +}}Latency=2 {{Memory|Barrier}}
     ; PRODUCT: ST32{{.*}}store
-    ; SOFT: D_LQHWUA_POST_S2{{.*}}load
+    ; SOFT: D_LQHWUA_POST{{.*}}load
     ; SOFT: Ord{{ +}}Latency=1 {{Memory|Barrier}}
     ; SOFT: ST32{{.*}}store
-    $d0, $r1 = D_LQHWUA_POST_S2 $r1, $r3, 0, 0 :: (load (s64) from %ir.p)
+    $d0, $r1 = D_LQHWUA_POST $r1, $r3, 0, 0 :: (load (s64) from %ir.p)
     ST32 $r2, $r1, 0, implicit-def dead $sfr :: (store (s32) into %ir.p)
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

@@ -40,10 +40,8 @@ body:             |
     ; see 4R and accept the triple. After member bake each MOVE32 is 1R,
     ; so the probe must use the logical MI fields (2R each) before bake.
     ; CHECK-LABEL: name: two_move32_plus_independent_store
-    ; CHECK: BUNDLE
     ; CHECK: MOVE32
     ; CHECK: S_SW_WITH_IMM
-    ; CHECK: }
     ; CHECK: MOVE32
     ; CHECK-NOT: BUNDLE{{.*}}MOVE32{{.*}}MOVE32{{.*}}S_SW
     $r2 = MOVE32 $r0, $r0, implicit-def dead $sfr

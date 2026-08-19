@@ -132,8 +132,9 @@ define i64 @mixed_locals(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { st32 r3, sp, 2; ld32 r1, r1, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { st32 r1, sp, 3; sext32t64 d0, r2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
@@ -245,9 +246,9 @@ define i32 @nested_call_chain(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_offset lr, -12
 ; CHECK-NEXT:    { nop; move32 r8, r2 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
-; CHECK-DAG:     move32 r9, r1
-; CHECK-DAG:     move32 r1, r8
-; CHECK:         { nop; jal lr, use_i32 }
+; CHECK-NEXT:    { nop; move32 r1, r8; move32 r9, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r9, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

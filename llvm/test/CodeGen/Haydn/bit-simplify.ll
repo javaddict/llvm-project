@@ -93,11 +93,8 @@ define i32 @and_or_disjoint_full(i32 %a) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r2, 16 }
-; CHECK-NEXT:    { nop; lui r3, 4064 }
-; CHECK-NEXT:    { nop; addi32 r2, r2, -65281 }
-; CHECK-NEXT:    { nop; addi32 r3, r3, 130561 }
-; CHECK-NEXT:    { add32 r2, r2, r3; and32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; lui r2, 4080 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, 65280 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

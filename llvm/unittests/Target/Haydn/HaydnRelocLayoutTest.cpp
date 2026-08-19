@@ -43,7 +43,7 @@ static uint64_t field(RelocKind K, int64_t ByteOffset) {
 // HaydnRelocLayout table (golden E2 e0 / FE8 12-byte parcels):
 //   I12/RI12 branch imm12 @32 (bits[32:43]); NBytes=12 (E3 e1/e2 past bit 48)
 //   WIDE_Call table FieldLsb=31 (E2 e0); NBytes=12 (E3 e1 imm may reach bit 67)
-//   LO20 / PC_LO20 @31 (bits[31:50]); LUI HI12 @32; NBytes=8
+//   LO20 / PC_LO20 @31 (bits[31:50]); LUI HI12 @32; NBytes=12
 // WIDE_Call is byte PC-relative (ValueShift=0); branches are also byte (GE96-03).
 // E3 call windows are resolved dynamically via resolveFieldLsb(Loc).
 TEST(HaydnRelocLayoutTest, FormatEE2E0FieldLsbParcelOrigin) {
@@ -54,7 +54,7 @@ TEST(HaydnRelocLayoutTest, FormatEE2E0FieldLsbParcelOrigin) {
   EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_CallSImm20).FieldLsb, 31u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_CallSImm20).NBytes, 12u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::HI12).FieldLsb, 32u);
-  EXPECT_EQ(getRelocFieldInfo(RelocKind::HI12).NBytes, 8u);
+  EXPECT_EQ(getRelocFieldInfo(RelocKind::HI12).NBytes, 12u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::LO20).FieldLsb, 31u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::PC_LO20).FieldLsb, 31u);
   EXPECT_EQ(getRelocFieldInfo(RelocKind::LS_IMM).FieldLsb, 28u);
@@ -350,6 +350,7 @@ TEST(HaydnRelocLayoutTest, Hi12FieldLsbFollowsCommittedLuiWindow) {
   const RelocFieldInfo &HI = getRelocFieldInfo(RelocKind::HI12);
   EXPECT_EQ(HI.FieldLsb, 32u);
   EXPECT_EQ(HI.FieldSize, 12u);
+  EXPECT_EQ(HI.NBytes, 12u);
 
   // E2 (entry_num=0): table window.
   uint8_t E2[12] = {};
@@ -375,6 +376,43 @@ TEST(HaydnRelocLayoutTest, Hi12FieldLsbFollowsCommittedLuiWindow) {
   EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3Alu0), 23u);
   patchField(E3Alu0, 1, HI.NBytes, HI.FieldSize, 23u);
   EXPECT_EQ(readField(E3Alu0, HI.NBytes, HI.FieldSize, 23u), 1u);
+
+  // E3 e1 ALU1 LUI: map=1 type=4 at entry 37 → imm abs 54.
+  uint8_t E3e1Alu1[12] = {};
+  E3e1Alu1[0] = 0x0f;
+  E3e1Alu1[4] = 0x20; // map LSB at bit 37
+  E3e1Alu1[5] = 0x02; // type=4 at bits [39:42]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e1Alu1), 54u);
+  patchField(E3e1Alu1, 1, HI.NBytes, HI.FieldSize, 54u);
+  EXPECT_EQ(readField(E3e1Alu1, HI.NBytes, HI.FieldSize, 54u), 1u);
+  // e1 map/type live in bits [37:42], which overlap the E2 LSB=32 window;
+  // do not require that window to read 0.
+
+  // E3 e1 ALU0 LUI: map=2 type=0xa at entry 37 → imm abs 54.
+  uint8_t E3e1Alu0[12] = {};
+  E3e1Alu0[0] = 0x0f;
+  E3e1Alu0[4] = 0x40; // map=2 at bits [37:38]
+  E3e1Alu0[5] = 0x05; // type=0xa at bits [39:42]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e1Alu0), 54u);
+
+  // E3 e2 ALU2 LUI: map=1 type=4 at entry 68 → imm abs 83.
+  uint8_t E3e2Alu2[12] = {};
+  E3e2Alu2[0] = 0x0f;
+  E3e2Alu2[8] = 0x10; // map LSB at bit 68
+  E3e2Alu2[9] = 0x01; // type=4 at bits [70:73]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e2Alu2), 83u);
+  patchField(E3e2Alu2, 1, HI.NBytes, HI.FieldSize, 83u);
+  EXPECT_EQ(readField(E3e2Alu2, HI.NBytes, HI.FieldSize, 83u), 1u);
+  EXPECT_EQ(readField(E3e2Alu2, HI.NBytes, HI.FieldSize, 32u), 0u);
+
+  // E3 e2 ALU0 LUI: map=2 type=0xa at entry 68 → imm abs 81.
+  uint8_t E3e2Alu0[12] = {};
+  E3e2Alu0[0] = 0x0f;
+  E3e2Alu0[8] = 0xa0; // map=2 + type bit1 at [68:71]
+  E3e2Alu0[9] = 0x02; // type bit3 at bit 73
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e2Alu0), 81u);
+  patchField(E3e2Alu0, 1, HI.NBytes, HI.FieldSize, 81u);
+  EXPECT_EQ(readField(E3e2Alu0, HI.NBytes, HI.FieldSize, 81u), 1u);
 }
 
 // JALRSImm12 (RI12 type-opcode 1): dedicated row for the JALR symbolic
@@ -432,6 +470,62 @@ TEST(HaydnRelocLayoutTest, JalrSImm12DedicatedRowNotBranchAlias) {
   EXPECT_EQ(resolveFieldLsb(RelocKind::JALRSImm12, E3), 23u);
   patchField(E3, 24, FI.NBytes, FI.FieldSize, 23u);
   EXPECT_EQ(readRelocAddend(RelocKind::JALRSImm12, E3), 24);
+}
+
+// CSR_UImm8 (I8 type-opcodes 4/5 = CSRR/CSRW): dedicated row for the
+// reloc CSRW_W / CSRR uimm8. Golden E2 e0 imm @ bits[39:32]; unsigned
+// 8-bit, ValueShift=0, Align=1, not PC-relative. Distinct from Data8
+// (1-byte data image). Other I8 opcodes (NOP/ZERO_*) have no reloc row.
+TEST(HaydnRelocLayoutTest, CsrUImm8TypedRowNotData8) {
+  const RelocKind K = RelocKind::CSR_UImm8;
+  const RelocFieldInfo &FI = getRelocFieldInfo(K);
+  EXPECT_NE(K, RelocKind::Data8);
+  EXPECT_EQ(FI.FieldLsb, 32u);
+  EXPECT_EQ(FI.FieldSize, 8u);
+  EXPECT_EQ(FI.NBytes, 12u);
+  EXPECT_EQ(FI.ValueShift, 0u);
+  EXPECT_EQ(FI.Align, 1u);
+  EXPECT_FALSE(FI.IsSigned);
+  EXPECT_FALSE(FI.IsPCRel);
+  EXPECT_TRUE(isRelocTransformReady(K));
+
+  EXPECT_TRUE(ok(K, 0));
+  EXPECT_TRUE(ok(K, 10));
+  EXPECT_TRUE(ok(K, 255));
+  EXPECT_EQ(field(K, 10), 10u);
+  EXPECT_FALSE(ok(K, 256));
+  EXPECT_STREQ(err(K, 256), "relocation offset out of range");
+
+  const FixupField Imm8{kUnspecifiedFieldLsb, 8};
+  EXPECT_EQ(findFixupFromFixupFields("I8", 4, Imm8, 12, false),
+            RelocKind::CSR_UImm8);
+  EXPECT_EQ(findFixupFromFixupFields("I8", 5, Imm8, 12, false),
+            RelocKind::CSR_UImm8);
+  EXPECT_EQ(findFixupFromFixupFields("I8", 0, Imm8, 12, false),
+            RelocKind::Invalid);
+  EXPECT_EQ(findFixupFromFixupFields("I8", 1, Imm8, 12, false),
+            RelocKind::Invalid);
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::CSR_UImm8),
+            static_cast<unsigned>(ELF::R_HAYDN_CSR_UImm8));
+  EXPECT_EQ(mapRelocKindToFixup(RelocKind::CSR_UImm8),
+            Haydn::FIXUP_HAYDN_CSR_UImm8);
+  EXPECT_EQ(mapFixupKind(Haydn::FIXUP_HAYDN_CSR_UImm8), RelocKind::CSR_UImm8);
+
+  // E3 e0 ALU0 I8: map=2, type=3 → imm abs 23.
+  uint8_t E3Alu0[12] = {};
+  E3Alu0[0] = 0x8f; // indicator 111, entry_num=1, map=2 at bits[6:7]
+  E3Alu0[1] = 0x03; // type=3 at bits[8:11]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E3Alu0), 23u);
+  patchField(E3Alu0, 10, FI.NBytes, FI.FieldSize, 23u);
+  EXPECT_EQ(readRelocAddend(RelocKind::CSR_UImm8, E3Alu0), 10);
+
+  // E3 e0 ALU2 I8: map=1, type=1 → imm abs 27.
+  uint8_t E3Alu2[12] = {};
+  E3Alu2[0] = 0x4f; // indicator 111, entry_num=1, map=1 at bits[6:7]
+  E3Alu2[1] = 0x01; // type=1 at bits[8:11]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E3Alu2), 27u);
+  patchField(E3Alu2, 10, FI.NBytes, FI.FieldSize, 27u);
+  EXPECT_EQ(readRelocAddend(RelocKind::CSR_UImm8, E3Alu2), 10);
 }
 
 // W25 / encoding F15 residual: LO20/PC_LO20 (ALU RI20, E2-only type) and

@@ -1,11 +1,11 @@
 //===-- HaydnGeneric.td - Generic Haydn defs (no decode variants) --------===//
 //
 // Shared generic content included by BOTH:
-// Haydn.td (generic + Format E product composites + residual `_S*` FU members)
-// HaydnAsmMatcher.td (same generic + FLEX; no composite for matcher)
+// Haydn.td (generic + Format E product composites)
+// HaydnAsmMatcher.td (same generic; no composites, no FieldSlots)
 //
-// Mode-0/3 decode-variant islands (HaydnInstrInfoM0/MACM0/M3/S*M0.td) and
-// Bundle128 composites are deleted. Product composites are Format E only.
+// Mode-0/3 decode-variant islands and Bundle128 composites are deleted.
+// Product composites are Format E only.
 //
 //===----------------------------------------------------------------------===//
 
@@ -45,10 +45,8 @@ include "HaydnCallingConv.td"
 // Instructions (generic — decode-variant files are NOT included here; each
 // downstream.td adds them as needed)
 //===----------------------------------------------------------------------===//
+include "HaydnPseudos.td"
 include "HaydnInstrInfo.td"
-// Hand-maintained hypothesized encodings (filename is historical;
-// generate_format_e_records.py does not emit this file).
-include "HaydnInstrInfoManual.td"
 include "HaydnInstrInfoGolden.td.inc"
 
 

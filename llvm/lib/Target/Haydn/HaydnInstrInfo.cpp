@@ -2746,7 +2746,7 @@ static bool analyzeSimpleLoop(MachineBasicBlock *LoopBB,
   if (!CondDef || CondDef->getParent() != LoopBB)
     return false;
   // Accept both the logical compare opcodes and their generated members:
-  // GISel InstructionSelect may emit `SLT32_S0` / Format E members.
+  // GISel InstructionSelect may emit Format E members.
   unsigned CondOpc = haydnLogicalOpcode(CondDef->getOpcode());
   // GISel emitInvert01 / CondOpt Pattern B (logical-not of a 0/1 cmp):
   //   SEQ/SLT/SLTU rd, a, b

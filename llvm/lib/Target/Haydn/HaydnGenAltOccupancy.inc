@@ -141,7 +141,7 @@ static const HaydnAltOccupancyRow HaydnAltOccupancy[] = {
     { Haydn::D_LHW_POST_REG, 0x7, { 0, 0, 0 } },
     { Haydn::D_LHW_WITH_IMM, 0x7, { 0, 0, 0 } },
     { Haydn::D_LHW_WITH_REG, 0x7, { 0, 0, 0 } },
-    { Haydn::D_LQHWUA_POST, 0x7, { 0, 0, Haydn::D_LQHWUA_POST_S2 } },
+    { Haydn::D_LQHWUA_POST, 0x7, { 0, 0, 0 } },
     { Haydn::D_LTWUA_POST, 0x7, { 0, 0, 0 } },
     { Haydn::D_LW_POST_REG, 0x7, { 0, 0, 0 } },
     { Haydn::D_LW_WITH_IMM, 0x7, { 0, 0, 0 } },

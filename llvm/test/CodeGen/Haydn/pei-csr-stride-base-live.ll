@@ -1,11 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs < %s | FileCheck %s
 
-; Role: semantic — PEI CSR-stride materialisation (ADDI scratch, SP, off) must survive HaydnPEIPeephole.
-
-; PEI CSR-stride materialisation (ADDI scratch, SP, off) must survive
-; HaydnPEIPeephole. That pass used to delete any FrameSetup ADDI R14,R13,*
-; when !hasFP as "dead FP setup", even when R14 was the live base for CSR
-; ST64 — leaving ST64 d*, fp, * with an uninitialized FP → MEMORY_FAULT.
+; Role: semantic — PEI CSR-stride materialisation (ADDI scratch, SP, off)
+; must remain live. HaydnPEIPeephole is deleted; FrameLowering emits FP
+; setup only when hasFP(). The deleted pass used to drop FrameSetup
+; ADDI R14,R13,* when !hasFP as "dead FP setup", even when R14 was the
+; live base for CSR ST64 — leaving ST64 d*, fp, * with an uninitialized
+; FP → MEMORY_FAULT.
 ;
 ; Force several DR64 CSRs live across a call so PEI emits stride ST64s.
 ; The first CSR store's base must be defined from SP (addi/or), never a bare

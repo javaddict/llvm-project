@@ -8,8 +8,8 @@ add_llvm_component_group(Haydn)
 # gen-asm-matcher uses HaydnAsmMatcher.td; every other backend uses Haydn.td.
 # Mode-0/3 decode-variant islands and Bundle128 composites are deleted —
 # not included by either root.td.
-# Live product encoding is Format E (BUNDLE_E96_* in HaydnCompositeFormats.td).
-# Residual `_S*` FU members remain in HaydnFormats*.td for placement tables.
+# Live product encoding is Format E (BUNDLE_E96_* in HaydnFormatE.td).
+# Residual `_S*` FieldSlot families are deleted.
 
 set(LLVM_TARGET_DEFINITIONS HaydnAsmMatcher.td)
 tablegen(LLVM HaydnGenAsmMatcher.inc -gen-asm-matcher)

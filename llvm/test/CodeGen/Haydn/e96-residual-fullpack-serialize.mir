@@ -1,14 +1,14 @@
 # RUN: llc -mtriple=haydn-unknown-elf -x mir \
-# RUN:   -start-after=livedebugvalues -filetype=obj %s -o %t.o
+# RUN:   -start-before=haydn-finalize-mi-bundles -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
 # REQUIRES: haydn-registered-target
 
 # Role: residual full-pack serializes without FieldSlot suffix→entry
-# certification (ADD32_S0 + XOR32). Composite entry position + logical
-# placeability; dual single-unit packs Mode-retry to E3 (no residual free
-# DFS). encodeSlotSubInst is serialize-only (generated members / NOP).
-# Residual FieldSlot still bag-sorts in placement when Desc shapes differ.
-# Bare hand-asm alone may free-DFS.
+# certification (ADD32 + XOR32). Finalize Mode-retries the E2 dual-ALU32
+# pack onto E3 (XOR32 is e0-only under E2). Skip-Finalize must not DFS —
+# that isolation is e96-skip-finalize-no-keepmap-fill.mir. encodeSlotSubInst
+# is serialize-only (generated members / NOP). Bare hand-asm alone may
+# free-DFS.
 
 --- |
   define void @residual_e2_fullpack() { ret void }
