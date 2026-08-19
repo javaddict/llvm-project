@@ -34,7 +34,7 @@ define i64 @test_cb_and_linear_load(ptr %cb_ptr, ptr %linear_ptr) {
 ;=============================================================================
 
 ; CHECK-LABEL: name: test_cb_and_linear_store
-; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM {{%.*}}, {{%.*}}, 0, 1,
+; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM 0, {{%.*}}, {{%.*}}, 1,
 define void @test_cb_and_linear_store(i64 %data, ptr %cb_ptr, ptr %linear_ptr) {
   %np = call ptr @llvm.haydn.sdw.cb.imm(i64 %data, ptr %cb_ptr, i32 0, i32 1)
   store i64 %data, ptr %linear_ptr
@@ -79,7 +79,7 @@ define i64 @test_dual_cb_channels(ptr %ptr0, ptr %ptr1) {
 
 ; CHECK-LABEL: name: test_cb_load_compute_store
 ; CHECK: {{%.*}}:dr64, {{%.*}}:gpr32 = D_LDW_CB_IMM {{%.*}}, 0, 1,
-; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM {{%.*}}, {{%.*}}, 0, 1,
+; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM 0, {{%.*}}, {{%.*}}, 1,
 define i64 @test_cb_load_compute_store(ptr %ptr, i64 %coeff) {
   %sample_pair = call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %ptr, i32 0, i32 1)
   %sample = extractvalue { i64, ptr } %sample_pair, 0
@@ -131,7 +131,7 @@ define i64 @test_register_pressure(ptr %ptr_cb, ptr %ptr_brev, i64 %a, i64 %b, i
 
 ; CHECK-LABEL: name: test_cb_mixed_stride
 ; CHECK: {{%.*}}:dr64, {{%.*}}:gpr32 = D_LDW_CB_IMM {{%.*}}, 0, 1,
-; CHECK: {{%.*}}:dr64, {{%.*}}:gpr32 = D_LDW_CB_REG {{%.*}}, 1, {{%.*}},
+; CHECK: {{%.*}}:dr64, {{%.*}}:gpr32 = D_LDW_CB_REG 1, {{%.*}}, {{%.*}},
 define i64 @test_cb_mixed_stride(ptr %ptr, i32 %reg_stride) {
   %val1_pair = call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %ptr, i32 0, i32 1)
   %val1 = extractvalue { i64, ptr } %val1_pair, 0

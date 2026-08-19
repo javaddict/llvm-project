@@ -21,10 +21,10 @@
 ; O0POST-DAG: enablePostRAMachineScheduler() const override { return true; }
 ; O0POST-DAG: no BUNDLE, private member, row
 ; ENSURE: never call skipFunction
-; CMAKE: Never fall back to a host-absolute plans-tree path
-; CMAKE: HAYDN_GOLDEN_DIR
-; CMAKE: BUNDLESIM_GOLDEN_DIR
-; CMAKE: skip if unset
+; CMAKE: regeneration is an explicit developer step
+; CMAKE-NOT: HAYDN_GOLDEN_DIR
+; CMAKE-NOT: BUNDLESIM_GOLDEN_DIR
+; CMAKE-NOT: HaydnFormatERecordsCheck
 ; CMAKE-NOT: /ssd2/mhyang/haydn-plans/Database/golden
 ; CMAKE-NOT: $ENV{HOME}/haydn
 ; AUTO: generate_format_e_records.py does not emit it

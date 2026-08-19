@@ -255,10 +255,10 @@ def : Pat<(int_haydn_nsaz32_l DR64:$a), (NSAZ32_L DR64:$a)>;
 // MULSA32/MULSS32 — Dual 32-bit multiply-accumulate/subtract (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_mulsa32_hhll DR64:$a, DR64:$b), (MULSA32_HHLL DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_mulsa32_hllh DR64:$a, DR64:$b), (MULSA32_HLLH DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_mulss32_hhll DR64:$a, DR64:$b), (MULSS32_HHLL DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_mulss32_hllh DR64:$a, DR64:$b), (MULSS32_HLLH DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_mulsa32_hhll DR64:$acc, DR64:$a, DR64:$b), (MULSA32_HHLL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_mulsa32_hllh DR64:$acc, DR64:$a, DR64:$b), (MULSA32_HLLH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_mulss32_hhll DR64:$acc, DR64:$a, DR64:$b), (MULSS32_HHLL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_mulss32_hllh DR64:$acc, DR64:$a, DR64:$b), (MULSS32_HLLH DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 2: LC3 BASOP 16x16 fractional multiply (binary DR64)
@@ -379,38 +379,38 @@ def : Pat<(int_haydn_fmul16_ls33 DR64:$a, DR64:$b), (FMUL16_LS33 DR64:$a, DR64:$
 // Wave 4: FMULAA16 HS/LS MAC variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_fmulaa16_hs_13_02 DR64:$a, DR64:$b), (FMULAA16_HS_13_02 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulaa16_hs_13_02 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_HS_13_02 DR64:$acc, DR64:$a, DR64:$b)>;
 // Ternary Acc (FmtALU64Acc): GISel selectAccMAC is the live path; SDAG Pat
 // kept consistent with the tied-def shape.
 def : Pat<(int_haydn_fmulaa16_hs_33_22 DR64:$acc, DR64:$a, DR64:$b),
           (FMULAA16_HS_33_22 DR64:$acc, DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulaa16_ls_11_00 DR64:$a, DR64:$b), (FMULAA16_LS_11_00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulaa16_ls_13_02 DR64:$a, DR64:$b), (FMULAA16_LS_13_02 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulaa16_ls_33_22 DR64:$a, DR64:$b), (FMULAA16_LS_33_22 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulaa16_ls_11_00 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_LS_11_00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulaa16_ls_13_02 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_LS_13_02 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulaa16_ls_33_22 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_LS_33_22 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: FMULSS16 HS/LS MSU variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_fmulss16_hs_13_02 DR64:$a, DR64:$b), (FMULSS16_HS_13_02 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulss16_hs_33_22 DR64:$a, DR64:$b), (FMULSS16_HS_33_22 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulss16_ls_11_00 DR64:$a, DR64:$b), (FMULSS16_LS_11_00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulss16_ls_13_02 DR64:$a, DR64:$b), (FMULSS16_LS_13_02 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmulss16_ls_33_22 DR64:$a, DR64:$b), (FMULSS16_LS_33_22 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulss16_hs_13_02 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_HS_13_02 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulss16_hs_33_22 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_HS_33_22 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulss16_ls_11_00 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_LS_11_00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulss16_ls_13_02 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_LS_13_02 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulss16_ls_33_22 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_LS_33_22 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4: F2MUL zero-accumulator variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_f2mulas32rs_hhll DR64:$a, DR64:$b), (F2MULAS32RS_HHLL DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_f2mulas32rs_hllh DR64:$a, DR64:$b), (F2MULAS32RS_HLLH DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_f2mulsa32rs_hhll DR64:$a, DR64:$b), (F2MULSA32RS_HHLL DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_f2mulsa32rs_hllh DR64:$a, DR64:$b), (F2MULSA32RS_HLLH DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulas32rs_hhll DR64:$acc, DR64:$a, DR64:$b), (F2MULAS32RS_HHLL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulas32rs_hllh DR64:$acc, DR64:$a, DR64:$b), (F2MULAS32RS_HLLH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulsa32rs_hhll DR64:$acc, DR64:$a, DR64:$b), (F2MULSA32RS_HHLL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulsa32rs_hllh DR64:$acc, DR64:$a, DR64:$b), (F2MULSA32RS_HLLH DR64:$acc, DR64:$a, DR64:$b)>;
 
-def : Pat<(int_haydn_f2mulas32r_hhll DR64:$a, DR64:$b), (F2MULAS32R_HHLL DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_f2mulas32r_hllh DR64:$a, DR64:$b), (F2MULAS32R_HLLH DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_f2mulsa32r_hhll DR64:$a, DR64:$b), (F2MULSA32R_HHLL DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_f2mulsa32r_hllh DR64:$a, DR64:$b), (F2MULSA32R_HLLH DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulas32r_hhll DR64:$acc, DR64:$a, DR64:$b), (F2MULAS32R_HHLL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulas32r_hllh DR64:$acc, DR64:$a, DR64:$b), (F2MULAS32R_HLLH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulsa32r_hhll DR64:$acc, DR64:$a, DR64:$b), (F2MULSA32R_HHLL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_f2mulsa32r_hllh DR64:$acc, DR64:$a, DR64:$b), (F2MULSA32R_HLLH DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 2: X2/X4 SIMD Unary ops (unary DR64)
@@ -571,27 +571,27 @@ def : Pat<(int_haydn_smuls16s_33 DR64:$acc, DR64:$a, DR64:$b), (SMULS16S_33 DR64
 // Wave 4 Tier 3: FMULS16 — Fractional 16-bit multiply-subtract (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_fmuls16_hs00 DR64:$a, DR64:$b), (FMULS16_HS00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs01 DR64:$a, DR64:$b), (FMULS16_HS01 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs02 DR64:$a, DR64:$b), (FMULS16_HS02 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs03 DR64:$a, DR64:$b), (FMULS16_HS03 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs11 DR64:$a, DR64:$b), (FMULS16_HS11 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs12 DR64:$a, DR64:$b), (FMULS16_HS12 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs13 DR64:$a, DR64:$b), (FMULS16_HS13 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs22 DR64:$a, DR64:$b), (FMULS16_HS22 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs23 DR64:$a, DR64:$b), (FMULS16_HS23 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_hs33 DR64:$a, DR64:$b), (FMULS16_HS33 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs00 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs01 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS01 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs02 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS02 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs03 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS03 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs11 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS11 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs12 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS12 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs13 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS13 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs22 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS22 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs23 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS23 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_hs33 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_HS33 DR64:$acc, DR64:$a, DR64:$b)>;
 
-def : Pat<(int_haydn_fmuls16_ls00 DR64:$a, DR64:$b), (FMULS16_LS00 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls01 DR64:$a, DR64:$b), (FMULS16_LS01 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls02 DR64:$a, DR64:$b), (FMULS16_LS02 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls03 DR64:$a, DR64:$b), (FMULS16_LS03 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls11 DR64:$a, DR64:$b), (FMULS16_LS11 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls12 DR64:$a, DR64:$b), (FMULS16_LS12 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls13 DR64:$a, DR64:$b), (FMULS16_LS13 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls22 DR64:$a, DR64:$b), (FMULS16_LS22 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls23 DR64:$a, DR64:$b), (FMULS16_LS23 DR64:$a, DR64:$b)>;
-def : Pat<(int_haydn_fmuls16_ls33 DR64:$a, DR64:$b), (FMULS16_LS33 DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls00 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls01 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS01 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls02 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS02 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls03 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS03 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls11 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS11 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls12 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS12 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls13 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS13 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls22 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS22 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls23 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS23 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmuls16_ls33 DR64:$acc, DR64:$a, DR64:$b), (FMULS16_LS33 DR64:$acc, DR64:$a, DR64:$b)>;
 
 //===----------------------------------------------------------------------===//
 // Wave 4 Tier 3: FMULAS32S/FMULSA32S — Saturating fractional add-subtract MAC

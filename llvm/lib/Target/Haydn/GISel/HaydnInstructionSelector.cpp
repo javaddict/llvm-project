@@ -5682,8 +5682,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     MachineInstr *MI = MIB.buildInstr(D_LDW_CB_REG)
                            .addDef(DataReg)
                            .addDef(WbReg)
-                           .addReg(PtrBase)
                            .addImm(CbrSel)
+                           .addReg(PtrBase)
                            .addReg(StrideReg);
     if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
       return false;
@@ -5719,8 +5719,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     MachineInstr *MI = MIB.buildInstr(D_LDW_CB_REG)
                            .addDef(DataReg)
                            .addDef(WbReg)
-                           .addReg(PtrBase)
                            .addImm(CbrSel)
+                           .addReg(PtrBase)
                            .addReg(StrideReg);
     if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
       return false;
@@ -5757,9 +5757,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
         return false;
       MachineInstr *MI = MIB.buildInstr(D_SDW_CB_IMM)
                              .addDef(WbReg)
+                             .addImm(CbrSel)
                              .addReg(Data)
                              .addReg(PtrBase)
-                             .addImm(CbrSel)
                              .addImm(StrideImm);
       if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
         return false;
@@ -5774,9 +5774,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
     MachineInstr *MI = MIB.buildInstr(D_SDW_CB_REG)
                            .addDef(WbReg)
+                           .addImm(CbrSel)
                            .addReg(Data)
                            .addReg(PtrBase)
-                           .addImm(CbrSel)
                            .addReg(StrideReg);
     if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
       return false;
@@ -5814,9 +5814,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
 
     MachineInstr *MI = MIB.buildInstr(D_SDW_CB_REG)
                            .addDef(WbReg)
+                           .addImm(CbrSel)
                            .addReg(Data)
                            .addReg(PtrBase)
-                           .addImm(CbrSel)
                            .addReg(StrideReg);
     if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
       return false;

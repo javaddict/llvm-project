@@ -175,36 +175,36 @@ define i64 @test_min64(i64 %a, i64 %b) {
 ; Dual 32-bit multiply-accumulate/subtract (MULSA32/MULSS32)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.mulsa32.hhll(i64, i64)
-declare i64 @llvm.haydn.mulsa32.hllh(i64, i64)
-declare i64 @llvm.haydn.mulss32.hhll(i64, i64)
-declare i64 @llvm.haydn.mulss32.hllh(i64, i64)
+declare i64 @llvm.haydn.mulsa32.hhll(i64, i64, i64)
+declare i64 @llvm.haydn.mulsa32.hllh(i64, i64, i64)
+declare i64 @llvm.haydn.mulss32.hhll(i64, i64, i64)
+declare i64 @llvm.haydn.mulss32.hllh(i64, i64, i64)
 
 define i64 @test_mulsa32_hhll(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulsa32_hhll:
 ; CHECK: mulsa32_hhll
-  %r = call i64 @llvm.haydn.mulsa32.hhll(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.mulsa32.hhll(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulsa32_hllh(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulsa32_hllh:
 ; CHECK: mulsa32_hllh
-  %r = call i64 @llvm.haydn.mulsa32.hllh(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.mulsa32.hllh(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss32_hhll(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss32_hhll:
 ; CHECK: mulss32_hhll
-  %r = call i64 @llvm.haydn.mulss32.hhll(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.mulss32.hhll(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 
 define i64 @test_mulss32_hllh(i64 %a, i64 %b) {
 ; CHECK-LABEL: test_mulss32_hllh:
 ; CHECK: mulss32_hllh
-  %r = call i64 @llvm.haydn.mulss32.hllh(i64 %a, i64 %b)
+  %r = call i64 @llvm.haydn.mulss32.hllh(i64 %a, i64 %a, i64 %b)
   ret i64 %r
 }
 

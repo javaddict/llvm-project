@@ -68,6 +68,14 @@ def D_LDW_BREV_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LDW_CB_REG : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins uimm1:$imm_1, GPR32:$rs, GPR32:$rs2),
+    "d_ldw_cb_reg	$imm_1, $rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
 def D_LDW_POST_IMM : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
     (ins GPR32:$rs, simm6:$scaled_imm),
     "d_ldw_post_imm	$rd1, $rs, $scaled_imm", []> {
@@ -223,6 +231,22 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def D_SDW_BREV_REG : HaydnInst<4, (outs GPR32:$rs_wb),
     (ins DR64:$rd1, GPR32:$rs, GPR32:$rs2),
     "d_sdw_brev_reg	$rd1, $rs, $rs2", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_CB_IMM : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm1:$imm_1, DR64:$rd1, GPR32:$rs, uimm8:$imm_8),
+    "d_sdw_cb_imm	$imm_1, $rd1, $rs, $imm_8", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SDW_CB_REG : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm1:$imm_1, DR64:$rd1, GPR32:$rs, GPR32:$rs2),
+    "d_sdw_cb_reg	$imm_1, $rd1, $rs, $rs2", []> {
   let Itinerary = Slot0_LS;
 }
 }
@@ -435,6 +459,134 @@ def D_SW_L_WITH_REG : HaydnInst<4, (outs),
 }
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAA32RS_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulaa32rs.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAA32RS_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulaa32rs.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAA32R_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulaa32r.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAA32R_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulaa32r.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAS32RS_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulas32rs.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAS32RS_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulas32rs.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAS32R_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulas32r.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULAS32R_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulas32r.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSA32RS_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulsa32rs.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSA32RS_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulsa32rs.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSA32R_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulsa32r.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSA32R_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulsa32r.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSS32RS_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulss32rs.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSS32RS_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulss32rs.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSS32R_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulss32r.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def F2MULSS32R_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "f2mulss32r.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
 def F2MULZAA32RS_HHLL : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2, DR64:$rd3),
@@ -608,6 +760,102 @@ def FF2MUL32R_LL : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2, DR64:$rd3),
     "ff2mul32r.ll	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULA32RS_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2mula32rs.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULA32RS_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2mula32rs.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULA32RS_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2mula32rs.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULA32R_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2mula32r.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULA32R_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2mula32r.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULA32R_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2mula32r.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULS32RS_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2muls32rs.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULS32RS_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2muls32rs.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULS32RS_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2muls32rs.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULS32R_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2muls32r.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULS32R_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2muls32r.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FF2MULS32R_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "ff2muls32r.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
 }
 }
 
@@ -860,6 +1108,190 @@ def FMUL32X16_L3 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS01 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs01	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS03 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs03	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS11 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs11	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS12 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs12	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS13 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs13	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS23 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs23	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_HS33 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.hs33	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS01 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls01	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS03 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls03	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS11 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls11	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS12 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls12	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS13 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls13	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS23 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls23	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA16_LS33 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula16.ls33	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA32S_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula32s.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA32S_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula32s.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULA32S_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmula32s.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def FMULA32X16_H0 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "fmula32x16.h0	$rd1, $rd2, $rd3", []> {
@@ -924,6 +1356,70 @@ def FMULA32X16_L3 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA16_HS_11_00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa16.hs.11.00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA16_HS_13_02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa16.hs.13.02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA16_HS_33_22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa16.hs.33.22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA16_LS_11_00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa16.ls.11.00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA16_LS_13_02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa16.ls.13.02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA16_LS_33_22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa16.ls.33.22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA32S_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa32s.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAA32S_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulaa32s.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def FMULAA32X16_H0_L1 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "fmulaa32x16.h0.l1	$rd1, $rd2, $rd3", []> {
@@ -956,6 +1452,22 @@ def FMULAA32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAS32S_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulas32s.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULAS32S_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulas32s.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def FMULAS32X16_H1_L0 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "fmulas32x16.h1.l0	$rd1, $rd2, $rd3", []> {
@@ -967,6 +1479,190 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def FMULAS32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "fmulas32x16.h3.l2	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS01 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs01	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS03 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs03	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS11 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs11	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS12 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs12	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS13 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs13	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS23 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs23	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_HS33 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.hs33	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS01 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls01	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS03 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls03	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS11 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls11	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS12 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls12	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS13 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls13	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS23 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls23	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS16_LS33 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls16.ls33	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS32S_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls32s.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS32S_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls32s.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULS32S_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmuls32s.ll	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC_AccFirst;
 }
 }
@@ -1036,6 +1732,22 @@ def FMULS32X16_L3 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSA32S_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulsa32s.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSA32S_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulsa32s.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def FMULSA32X16_H1_L0 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "fmulsa32x16.h1.l0	$rd1, $rd2, $rd3", []> {
@@ -1047,6 +1759,70 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def FMULSA32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "fmulsa32x16.h3.l2	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS16_HS_11_00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss16.hs.11.00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS16_HS_13_02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss16.hs.13.02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS16_HS_33_22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss16.hs.33.22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS16_LS_11_00 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss16.ls.11.00	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS16_LS_13_02 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss16.ls.13.02	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS16_LS_33_22 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss16.ls.33.22	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS32S_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss32s.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def FMULSS32S_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "fmulss32s.hllh	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC_AccFirst;
 }
 }
@@ -1331,6 +2107,14 @@ def MOVE64 : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MUL16AQ : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mul16aq	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
 def MUL16ZAQ : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2, DR64:$rd3),
@@ -1596,6 +2380,134 @@ def MULA32X16_L3 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_HL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.hl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_HUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.huh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_HUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.hul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_LUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.luh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_LUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.lul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_UHH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.uhh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_UHL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.uhl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_UHUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.uhuh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_UHUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.uhul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_ULH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.ulh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_ULL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.ull	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_ULUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.uluh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULA64_ULUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mula64.ulul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def MULAA32X16_H0_L1 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "mulaa32x16.h0.l1	$rd1, $rd2, $rd3", []> {
@@ -1628,6 +2540,22 @@ def MULAA32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAA32_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulaa32.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAA32_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulaa32.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def MULAS32X16_H1_L0 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "mulas32x16.h1.l0	$rd1, $rd2, $rd3", []> {
@@ -1639,6 +2567,150 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def MULAS32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "mulas32x16.h3.l2	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS32_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas32.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS32_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas32.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_HL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.hl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_HUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.huh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_HUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.hul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_LUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.luh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_LUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.lul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_UHH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.uhh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_UHL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.uhl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_UHUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.uhuh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_UHUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.uhul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_ULH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.ulh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_ULL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.ull	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_ULUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.uluh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULAS64_ULUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulas64.ulul	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC_AccFirst;
 }
 }
@@ -1716,6 +2788,134 @@ def MULS32X16_L3 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_HL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.hl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_HUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.huh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_HUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.hul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_LUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.luh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_LUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.lul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_UHH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.uhh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_UHL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.uhl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_UHUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.uhuh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_UHUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.uhul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_ULH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.ulh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_ULL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.ull	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_ULUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.uluh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULS64_ULUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "muls64.ulul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def MULSA32X16_H1_L0 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "mulsa32x16.h1.l0	$rd1, $rd2, $rd3", []> {
@@ -1732,6 +2932,22 @@ def MULSA32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSA32_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulsa32.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSA32_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulsa32.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def MULSS32X16_H1_L0 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "mulss32x16.h1.l0	$rd1, $rd2, $rd3", []> {
@@ -1743,6 +2959,150 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def MULSS32X16_H3_L2 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "mulss32x16.h3.l2	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS32_HHLL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss32.hhll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS32_HLLH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss32.hllh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_HH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.hh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_HL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.hl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_HUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.huh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_HUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.hul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_LH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.lh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_LL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.ll	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_LUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.luh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_LUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.lul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_UHH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.uhh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_UHL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.uhl	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_UHUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.uhuh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_UHUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.uhul	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_ULH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.ulh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_ULL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.ull	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_ULUH : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.uluh	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def MULSS64_ULUL : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "mulss64.ulul	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC_AccFirst;
 }
 }
@@ -3044,6 +4404,30 @@ def X2FMUL32X16TS_L : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2FMULA32RS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2fmula32rs	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2FMULA32RSS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2fmula32rss	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2FMULA32TS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2fmula32ts	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def X2FMULA32X16RSS_H : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "x2fmula32x16rss.h	$rd1, $rd2, $rd3", []> {
@@ -3087,6 +4471,30 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def X2FMULA32X16TS_L : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "x2fmula32x16ts.l	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2FMULS32RS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2fmuls32rs	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2FMULS32RSS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2fmuls32rss	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2FMULS32TS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2fmuls32ts	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC_AccFirst;
 }
 }
@@ -3251,6 +4659,22 @@ def X2MULA32X16_L : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2MULAPH32 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2mulaph32	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2MULAPL32 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2mulapl32	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
 def X2MULPH32 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2, DR64:$rd3),
@@ -3279,6 +4703,22 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def X2MULS32X16_L : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "x2muls32x16.l	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2MULSPH32 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2mulsph32	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X2MULSPL32 : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x2mulspl32	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC_AccFirst;
 }
 }
@@ -3412,6 +4852,22 @@ def X4CJMUL16S_L : HaydnInst<4, (outs DR64:$rd1),
 }
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X4CJMULA16S_H : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x4cjmula16s.h	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X4CJMULA16S_L : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x4cjmula16s.l	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
 def X4CLAMP16 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
     "x4clamp16	$rd1, $rd2, $rd3", []> {
@@ -3475,6 +4931,14 @@ def X4CMULA16S_H : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X4CMULA16S_L : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x4cmula16s.l	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
 def X4CONJ16 : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2),
@@ -3520,6 +4984,22 @@ def X4FCMUL16RSS : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2, DR64:$rd3),
     "x4fcmul16rss	$rd1, $rd2, $rd3", []> {
   let Itinerary = Slot12_MAC;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X4FCMULA16RS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x4fcmula16rs	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, Constraints = "$rd1 = $rd1_in" in {
+def X4FCMULA16RSS : HaydnInst<4, (outs DR64:$rd1),
+    (ins DR64:$rd1_in, DR64:$rd2, DR64:$rd3),
+    "x4fcmula16rss	$rd1, $rd2, $rd3", []> {
+  let Itinerary = Slot12_MAC_AccFirst;
 }
 }
 
@@ -3691,4 +5171,4 @@ def X4SWAP16 : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
-// generated logical defs: 460
+// generated logical defs: 645

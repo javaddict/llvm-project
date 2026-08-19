@@ -52,7 +52,7 @@ define i64 @test_ldw_cb_imm(ptr %ptr) {
 ; D_LDW_CB_REG: 64-bit load from circular buffer, post-increment by register
 
 ; CHECK-LABEL: name: test_ldw_cb_reg
-; CHECK: {{%.*}}:dr64, {{%.*}}:gpr32 = D_LDW_CB_REG {{%.*}}, 1, {{%.*}},
+; CHECK: {{%.*}}:dr64, {{%.*}}:gpr32 = D_LDW_CB_REG 1, {{%.*}}, {{%.*}},
 define i64 @test_ldw_cb_reg(ptr %ptr, i32 %stride) {
   %r_pair = call { i64, ptr } @llvm.haydn.ldw.cb.reg(ptr %ptr, i32 1, i32 %stride)
   %r = extractvalue { i64, ptr } %r_pair, 0
@@ -65,14 +65,14 @@ define i64 @test_ldw_cb_reg(ptr %ptr, i32 %stride) {
 ; D_SDW_CB_IMM/REG: returns AGU-updated ptr — side effects keep them live.
 
 ; CHECK-LABEL: name: test_sdw_cb_imm
-; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM {{%.*}}, {{%.*}}, 0, 1,
+; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM 0, {{%.*}}, {{%.*}}, 1,
 define ptr @test_sdw_cb_imm(i64 %data, ptr %ptr) {
   %np = call ptr @llvm.haydn.sdw.cb.imm(i64 %data, ptr %ptr, i32 0, i32 1)
   ret ptr %np
 }
 
 ; CHECK-LABEL: name: test_sdw_cb_reg
-; CHECK: {{%.*}}:gpr32 = D_SDW_CB_REG {{%.*}}, {{%.*}}, 1, {{%.*}},
+; CHECK: {{%.*}}:gpr32 = D_SDW_CB_REG 1, {{%.*}}, {{%.*}}, {{%.*}},
 define ptr @test_sdw_cb_reg(i64 %data, ptr %ptr, i32 %stride) {
   %np = call ptr @llvm.haydn.sdw.cb.reg(i64 %data, ptr %ptr, i32 1, i32 %stride)
   ret ptr %np
@@ -174,7 +174,7 @@ define ptr @test_fft_butterfly(ptr %ptr_in, ptr %ptr_out) {
 
 ; CHECK-LABEL: name: test_cb_delay_line
 ; CHECK: {{%.*}}:dr64, {{%.*}}:gpr32 = D_LDW_CB_IMM {{%.*}}, 0, 1,
-; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM {{%.*}}, {{%.*}}, 0, 1,
+; CHECK: {{%.*}}:gpr32 = D_SDW_CB_IMM 0, {{%.*}}, {{%.*}}, 1,
 define i64 @test_cb_delay_line(ptr %ptr, i64 %new_sample) {
   %old_sample_pair = call { i64, ptr } @llvm.haydn.ldw.cb.imm(ptr %ptr, i32 0, i32 1)
   %old_sample = extractvalue { i64, ptr } %old_sample_pair, 0
@@ -200,8 +200,8 @@ define i64 @test_ldw_cb_imm_chain(ptr %ptr) {
 
 ; CHECK-LABEL: name: test_sdw_cb_imm_chain
 ; CHECK: [[BASE:%[0-9]+]]:gpr32 = COPY $r1
-; CHECK: [[WB:%[0-9]+]]:gpr32 = D_SDW_CB_IMM {{%.*}}, [[BASE]], 0, 1,
-; CHECK: {{%[0-9]+}}:gpr32 = D_SDW_CB_IMM {{%.*}}, [[WB]], 0, 1,
+; CHECK: [[WB:%[0-9]+]]:gpr32 = D_SDW_CB_IMM 0, {{%.*}}, [[BASE]], 1,
+; CHECK: {{%[0-9]+}}:gpr32 = D_SDW_CB_IMM 0, {{%.*}}, [[WB]], 1,
 define ptr @test_sdw_cb_imm_chain(i64 %d0, i64 %d1, ptr %ptr) {
   %p1 = call ptr @llvm.haydn.sdw.cb.imm(i64 %d0, ptr %ptr, i32 0, i32 1)
   %p2 = call ptr @llvm.haydn.sdw.cb.imm(i64 %d1, ptr %p1, i32 0, i32 1)

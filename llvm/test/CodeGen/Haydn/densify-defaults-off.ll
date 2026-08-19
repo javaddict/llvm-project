@@ -63,8 +63,9 @@
 ; SMSFLAG: cl::init(HaydnMultiStageSMS::productDefaultEnabled())
 ; FEAT: ISA capability only
 ; FEAT: hardwareLoopsProductDefaultEnabled
-; CMAKE: Never fall back to a host-absolute plans-tree path
+; CMAKE: regeneration is an explicit developer step
 ; CMAKE-NOT: ENV{HOME}
+; CMAKE-NOT: HaydnFormatERecordsCheck
 
 ; PIPE-NOT:      Hardware Loop Insertion
 ; PIPE-NOT:      Haydn Load/Store Optimizer

@@ -37,6 +37,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
@@ -270,8 +271,21 @@ const std::vector<unsigned> *cachedMemberAlts(unsigned Opcode) {
           continue;
         if (unsigned Mem = formatEMemberAtResidualIndex(Row.LogicalOpc, Slot))
           Cache[I][Slot] = Mem;
-        else
+        else if (Row.Fallback[Slot] != 0)
           Cache[I][Slot] = Row.Fallback[Slot];
+        else {
+          // WFI: Mask bit 0 + Fallback {0,0,0}. A miss used to cache 0
+          // (silent skip). Fail closed — HINT members must fill the hole.
+          // Other retired families still skip (mask bit, no member).
+          const std::string Log = haydn::format_e::peelLogicalOpcodeName(
+              occupancyOpcodeName(Row.LogicalOpc));
+          if (StringRef(Log).starts_with_insensitive("WFI"))
+            report_fatal_error(
+                "Haydn: WFI occupancy hole: mask bit " + Twine(Slot) +
+                    " has no Format E HINT member and zero fallback",
+                /*GenCrashDiag=*/false);
+          Cache[I][Slot] = 0;
+        }
       }
     }
   });
@@ -433,11 +447,33 @@ haydnFormatEKeepOperands(
     if (accept(Keep))
       return Keep;
   }
+  // CB load extra writeback, generated operand order (S2b golden logicals):
+  // [dest, wb, sel, base, rs2] → [dest, sel, base, rs2]. The generated
+  // D_LDW_CB_REG logical emits uimm1 cbr_sel as the FIRST ins operand
+  // (HaydnInstrInfoGolden.td.inc), unlike the hand order above.
+  if (OldDefs == NewDefs + 1 && NewDefs == 1 && OldN == NewN + 1 &&
+      NewN >= 3) {
+    SmallVector<unsigned, 4> Keep{0, 2, 3, 4};
+    for (unsigned I = 5; I < OldN && Keep.size() < NewN; ++I)
+      Keep.push_back(I);
+    if (accept(Keep))
+      return Keep;
+  }
   // CB store extra writeback: [wb, data, base, sel, imm|rs] →
   // [sel, data, base, imm|rs].
   if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 && NewN >= 3) {
     SmallVector<unsigned, 4> Keep{3, 1, 2};
     for (unsigned I = 4; I < OldN && Keep.size() < NewN; ++I)
+      Keep.push_back(I);
+    if (accept(Keep))
+      return Keep;
+  }
+  // CB store extra writeback, generated operand order (S2b golden logicals):
+  // [wb, sel, data, base, imm] → [sel, data, base, imm]. Mirrors the
+  // generated load order above (uimm cbr_sel first in ins).
+  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 && NewN >= 3) {
+    SmallVector<unsigned, 4> Keep{1, 2, 3, 4};
+    for (unsigned I = 5; I < OldN && Keep.size() < NewN; ++I)
       Keep.push_back(I);
     if (accept(Keep))
       return Keep;
