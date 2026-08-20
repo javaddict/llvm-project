@@ -4,6 +4,8 @@
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/Disassembler/HaydnDisassembler.cpp --check-prefix=NO-COUNT-DISASM --implicit-check-not=peelLogicalOpcodeName --implicit-check-not=lookupLogicalOpcode
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp --check-prefix=NO-COUNT-EMIT --implicit-check-not=tryMode
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.cpp --check-prefix=NO-COUNT-FILL --implicit-check-not=peelLogicalOpcodeName
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnBundleMaterialize.h --check-prefix=NO-COUNT-OPC --implicit-check-not=selectProductRowForMemberCount
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/AsmParser/HaydnAsmParser.cpp --check-prefix=NO-COUNT-PARSER --implicit-check-not=selectProductRowForMemberCount
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d -z --no-show-raw-insn --triple=haydn-unknown-elf %t.o | \
 # RUN:   FileCheck %s --check-prefix=OBJ
@@ -26,6 +28,9 @@
 # NO-COUNT-CHECKER: haydnFormatELogicalIsE3Only
 # NO-COUNT-CHECKER: haydnFormatELogicalIsE2Only
 # NO-COUNT-PRINTER-NOT: Children.size() > 2
+# NO-COUNT-PRINTER-NOT: SlotN = 2
+# NO-COUNT-PRINTER-NOT: SlotN = 3
+# NO-COUNT-PRINTER: getBundleFormatRow
 # NO-COUNT-PRINTER: BUNDLE_E96_TWO_ENTRY
 # NO-COUNT-PRINTER: BUNDLE_E96_THREE_ENTRY
 # NO-COUNT-DISASM: BUNDLE_E96_TWO_ENTRY
@@ -37,6 +42,7 @@
 # NO-COUNT-EMIT: refuse skip-Finalize
 # NO-COUNT-FILL: haydnSelectStandaloneFormatEOpcode
 # NO-COUNT-FILL: assignFormatEMemberEntries
+# NO-COUNT-FILL: haydnFormatERowForCompositeOpcode
 # NO-COUNT-FILL: haydnCatalogOccupancyName
 # NO-COUNT-FILL-NOT: N <= Fam.E2EntryCapacity
 # NO-COUNT-FILL-NOT: N <= Fam.E3EntryCapacity
@@ -44,6 +50,22 @@
 # NO-COUNT-FILL: findFixupFromFixupFields
 # NO-COUNT-FILL: haydnFillFormatEMemberInst
 # NO-COUNT-FILL: Class-bag reconstruction is deleted
+# Opcode-list row select: InstSlot, Mode-only membership, then unit cover.
+# Extra NOP pads are idle fill. A cover miss keeps ProductDefaultRowID.
+# NO-COUNT-OPC: haydnFormatELogicalIsE3Only
+# NO-COUNT-OPC: haydnFormatELogicalIsE2Only
+# NO-COUNT-OPC: opcodesHaveFormatEUnitCoverForMode
+# NO-COUNT-OPC: ProductDefaultRowID
+# NO-COUNT-OPC-NOT: Opcodes.size() >= 3
+# NO-COUNT-OPC-NOT: Opcodes.size() <= 1
+# Parser capacity is a bound on the membership row, never TWO vs THREE
+# from child count.
+# NO-COUNT-PARSER: selectParsedFormatEComposite
+# NO-COUNT-PARSER: haydnFormatERowForCompositeOpcode
+# NO-COUNT-PARSER: Selected row capacity is a bound
+# NO-COUNT-PARSER-NOT: UseE3
+# NO-COUNT-PARSER-NOT: Fam.E2EntryCapacity
+# NO-COUNT-PARSER-NOT: Fam.E3EntryCapacity
 
 .ifdef IDLE
 .text

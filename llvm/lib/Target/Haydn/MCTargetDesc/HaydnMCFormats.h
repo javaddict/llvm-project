@@ -70,6 +70,13 @@ bool haydnFormatELogicalIsE2Only(unsigned Opcode);
 /// NOP pads are not occupancy. Returns 0 when no product row covers.
 unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes);
 
+/// Generated Format E row for a stamped product composite, or null.
+/// Generic TargetOpcode::BUNDLE is not a product row — callers fail closed
+/// instead of recovering TWO vs THREE from child cardinality (AIE
+/// PacketFormats::getFormat / emitBundle, AIEBaseAsmParser.h:164-180).
+const haydn::format::BundleFormatRowDesc *
+haydnFormatERowForCompositeOpcode(unsigned Opcode);
+
 /// Catalog occupancy key for a public opcode name. Refuses residual FieldSlot
 /// (`_S0/_S1/_S2`) and generated-member (`_E2_/_E3_`) spellings — those names
 /// do not certify a Format E entry (AIE MultiSlot alts, AIEMCFormats.h:376-379).

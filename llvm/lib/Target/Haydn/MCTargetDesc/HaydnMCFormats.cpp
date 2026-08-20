@@ -579,6 +579,16 @@ unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes) {
   return 0;
 }
 
+const haydn::format::BundleFormatRowDesc *
+haydnFormatERowForCompositeOpcode(unsigned Opcode) {
+  using namespace haydn::format;
+  if (Opcode == Haydn::BUNDLE_E96_TWO_ENTRY)
+    return getBundleFormatRow(BundleFormatRowID::E96TwoEntry);
+  if (Opcode == Haydn::BUNDLE_E96_THREE_ENTRY)
+    return getBundleFormatRow(BundleFormatRowID::E96ThreeEntry);
+  return nullptr;
+}
+
 std::string haydnCatalogOccupancyName(StringRef Raw) {
   return catalogOccupancyName(Raw);
 }
@@ -922,11 +932,24 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
       if (AnyTied || TrailingExtraReg)
         return false;
     }
+    // Compiler LUI vestigial $rs: extra register at first ins where the
+    // member wants an imm. Hand-asm MOVE32 omitted rs2 is trailing Imm 0
+    // and stays in the Imm-0 keep-map below. Finalize owns this cutover —
+    // standalone fill never bag-sorts it.
+    if (LogDesc.getNumDefs() == MemDesc.getNumDefs() && Have == Need + 1 &&
+        LogDesc.getNumDefs() >= 1 && LogDesc.getNumDefs() < Need) {
+      const unsigned Mid = LogDesc.getNumDefs();
+      const MCOperandInfo &MemMid = MemDesc.operands()[Mid];
+      const bool MemMidWantsReg =
+          MemMid.OperandType == MCOI::OPERAND_REGISTER || MemMid.RegClass >= 0;
+      if (Logical.getOperand(Mid).isReg() && !MemMidWantsReg)
+        return false;
+    }
   }
 
-  // Closed keep-map (same law as Finalize fieldSlotKeepOperands):
-  // identity, tied-acc drop, trailing extra uses, dest-as-ins, CB
-  // writeback, AR-UA POST (rs2/dir_sel unencoded). Not a class bag-sort.
+  // Standalone-only closed keep-map: Imm-0 hole, CB writeback, AR-UA POST,
+  // WBARWUA, CSRW swap. Compiler extras (MOVE32 trailing, tied MAC, LUI
+  // vestigial $rs) already returned false above.
   {
     const MCInstrDesc &OldDesc = MII.get(Logical.getOpcode());
     const MCInstrDesc &NewDesc = MII.get(MemberOpc);
@@ -991,9 +1014,23 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
         if (DroppedHole && emitKeep(Keep))
           return finishLogicalFill();
       }
-      if (auto Keep = haydnFormatEKeepOperands(OldDesc, NewDesc, kindOk))
+      if (auto Keep = haydnFormatEKeepOperands(OldDesc, NewDesc, kindOk)) {
+        const unsigned OldDefs = OldDesc.getNumDefs();
+        const unsigned NewDefs = NewDesc.getNumDefs();
+        // Compiler LUI vestigial $rs keep-vector: drop the first ins after
+        // defs. Hand-asm LUI is positional and never reaches here.
+        if (OldDefs == NewDefs && OldN == NewN + 1 && OldDefs >= 1 &&
+            OldDefs < NewN && Keep->size() == NewN) {
+          bool DropsFirstIns = (*Keep)[0] == 0;
+          for (unsigned NewI = OldDefs; NewI != NewN && DropsFirstIns; ++NewI)
+            if ((*Keep)[NewI] != NewI + 1)
+              DropsFirstIns = false;
+          if (DropsFirstIns)
+            return false;
+        }
         if (emitKeep(*Keep))
           return finishLogicalFill();
+      }
     }
   }
 

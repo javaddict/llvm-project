@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnInstPrinter.h"
+#include "HaydnFormat.h"
 #include "HaydnMCTargetDesc.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCExpr.h"
@@ -48,18 +49,27 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
         Children.push_back(Op.getInst());
     }
     // AIE AIECommonInstPrinter.cpp:43-54 prints every composite isInst slot.
-    // Haydn overlay: slot count comes from the stamped composite opcode
-    // (BUNDLE_E96_TWO_ENTRY / THREE_ENTRY), not child cardinality. Missing
-    // children of a stamped row print as nop (AIE empty-slot NOP). Do not
-    // drop high-entry NOPs to recover a two-member face.
+    // Haydn overlay: slot count is the stamped row's generated EntryCount
+    // (getBundleFormatRow), not child cardinality. Missing children of a
+    // stamped row print as nop (AIE empty-slot NOP). Do not drop high-entry
+    // NOPs to recover a two-member face. Generic BUNDLE is not a product
+    // row — print isInst children only; do not invent TWO vs THREE, and do
+    // not collapse an empty composite to a singleton nop.
     unsigned SlotN = 0;
-    if (Opc == Haydn::BUNDLE_E96_TWO_ENTRY)
-      SlotN = 2;
-    else if (Opc == Haydn::BUNDLE_E96_THREE_ENTRY)
-      SlotN = 3;
+    if (Opc == Haydn::BUNDLE_E96_TWO_ENTRY) {
+      if (const haydn::format::BundleFormatRowDesc *Row =
+              haydn::format::getBundleFormatRow(
+                  haydn::format::BundleFormatRowID::E96TwoEntry))
+        SlotN = Row->EntryCount;
+    } else if (Opc == Haydn::BUNDLE_E96_THREE_ENTRY) {
+      if (const haydn::format::BundleFormatRowDesc *Row =
+              haydn::format::getBundleFormatRow(
+                  haydn::format::BundleFormatRowID::E96ThreeEntry))
+        SlotN = Row->EntryCount;
+    }
     const unsigned PrintN = SlotN ? SlotN : Children.size();
     if (PrintN == 0) {
-      O << "\t{ nop }";
+      O << "\t{ }";
       printAnnotation(O, Annot);
       return;
     }

@@ -314,13 +314,16 @@ inline constexpr uint64_t ProductFormatMask =
 // Row / completion selection for a committed cycle
 //===----------------------------------------------------------------------===//
 
-/// Capacity-only row default when both E2 and E3 remain feasible and no
-/// opcode/unit cover is known:
-///   * 3 real members → E96ThreeEntry (E2 cannot hold three)
-///   * 0..2 real members → E96TwoEntry (geometry default only)
-/// Never use this alone for E3-only singletons (LOG2/EXP2/…): prefer
-/// selectProductRow(FeasibleMask, Count) so a mask that has already dropped
-/// E2 stamps E96ThreeEntry even at member count 1.
+/// Capacity bound for selectProductRow when both E2 and E3 remain on the
+/// FeasibleMask frontier:
+///   * 3 real members cannot occupy E2's two entries → E96ThreeEntry
+///   * 0..2 real members keep first-covering E96TwoEntry
+/// Not standalone parser/MC row identity. Opcode/unit cover uses
+/// selectProductRowForOpcodes; braced syntax uses
+/// haydnSelectStandaloneFormatEOpcode. Never use this alone for E3-only
+/// singletons (LOG2/EXP2/…): prefer selectProductRow(FeasibleMask, Count)
+/// so a mask that has already dropped E2 stamps E96ThreeEntry even at
+/// member count 1.
 inline constexpr BundleFormatRowID
 selectProductRowForMemberCount(unsigned MemberCount) {
   if (MemberCount >= 3)
@@ -330,9 +333,10 @@ selectProductRowForMemberCount(unsigned MemberCount) {
 
 /// Select product row from the surviving Format E frontier and capacity.
 /// Sole-row masks win over member count (E3-only singleton stays E3; E2-only
-/// stays E2). When both rows remain feasible, capacity decides as in
-/// selectProductRowForMemberCount. Empty/non-product masks fall back to that
-/// capacity default so transitional call sites keep a defined row.
+/// stays E2). When both rows remain feasible, capacity is a bound (E2 cannot
+/// hold three entries), not a reason to invent the other Format E row.
+/// Empty/non-product masks keep ProductDefaultRowID so transitional call
+/// sites keep a defined row — never a parser/MC count identity.
 inline constexpr BundleFormatRowID
 selectProductRow(uint64_t FeasibleMask, unsigned MemberCount) {
   const uint64_t Prod = FeasibleMask & ProductFormatMask;
@@ -350,7 +354,7 @@ selectProductRow(uint64_t FeasibleMask, unsigned MemberCount) {
     return BundleFormatRowID::E96TwoEntry;
   if (HasE3)
     return BundleFormatRowID::E96ThreeEntry;
-  return selectProductRowForMemberCount(MemberCount);
+  return ProductDefaultRowID;
 }
 
 /// Select completion for \p Row given real member count.

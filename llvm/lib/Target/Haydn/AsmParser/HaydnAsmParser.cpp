@@ -881,12 +881,17 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
         break;
       }
     };
-    const haydn::format_e::FamilyRecords Fam =
-        haydn::format_e::getDefaultFamilyRecords();
+    unsigned MaxEntries = 0;
+    for (const haydn::format::BundleFormatRowDesc &R :
+         haydn::format::getProductBundleFormatRows())
+      if (R.EntryCount > MaxEntries)
+        MaxEntries = R.EntryCount;
     if (TextChildren.empty())
       return Error(NameLoc, "empty bundle");
-    dropIdleNopsToFit(TextChildren, Fam.E3EntryCapacity);
-    if (TextChildren.size() > Fam.E3EntryCapacity)
+    if (MaxEntries == 0)
+      return Error(NameLoc, "incorrect bundle");
+    dropIdleNopsToFit(TextChildren, MaxEntries);
+    if (TextChildren.size() > MaxEntries)
       return Error(NameLoc, "Format E bundle supports at most three entries");
 
     // Standalone row from generated membership / unit occupancy, never
@@ -923,9 +928,11 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
                      "a three-entry row");
       return Error(NameLoc, "incorrect bundle");
     }
-    const bool IsE3 = CompositeOpc == Haydn::BUNDLE_E96_THREE_ENTRY;
-    const unsigned EntryCount =
-        IsE3 ? Fam.E3EntryCapacity : Fam.E2EntryCapacity;
+    const haydn::format::BundleFormatRowDesc *Row =
+        haydnFormatERowForCompositeOpcode(CompositeOpc);
+    if (!Row || Row->EntryCount == 0)
+      return Error(NameLoc, "incorrect bundle");
+    const unsigned EntryCount = Row->EntryCount;
     // Selected row capacity is a bound, not a reason to invent the other
     // Format E row from child count.
     if (RealPtrs.size() > EntryCount) {

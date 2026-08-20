@@ -543,7 +543,7 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
         // Member uimm Off1/Off2 are field units. Logical hwloop_off already
         // applied DecoderMethod Shift. Do not scale a logical, and do not
         // retry Imm/2 or Imm/4. Scale is MemberId RelocLayout, not a
-        // child-count or `_S*` peel.
+        // child-count or suffix peel.
         const unsigned ByteShift =
             haydnFormatEHwloopImmFieldShift(Resolved.MemberId);
         if (ByteShift != 0 &&

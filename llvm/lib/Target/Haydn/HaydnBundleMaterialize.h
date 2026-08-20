@@ -267,21 +267,36 @@ inline bool formatECompositeSlotIsE2(MCSlotKind Kind) {
 }
 
 /// Product row from committed member InstSlots (bundle format TD), then
-/// logical unit cover. An `e3_*` member cannot be an operand of
-/// BUNDLE_E96_TWO_ENTRY; an `e2_*` member cannot be an operand of
-/// BUNDLE_E96_THREE_ENTRY. AIE: PacketFormats + getSlotKind, no suffix.
-/// Dual single-unit logicals must not freeze E2 and rely on MC DFS.
+/// generated Mode-only membership, then Format E unit cover. An `e3_*`
+/// member cannot be an operand of BUNDLE_E96_TWO_ENTRY; an `e2_*` member
+/// cannot be an operand of BUNDLE_E96_THREE_ENTRY. AIE: PacketFormats +
+/// getSlotKind, no suffix (AIEFormat.cpp:20-26 first-covering;
+/// AIEBundle.h:150-156). Dual single-unit logicals must not freeze E2
+/// and rely on MC DFS. Child/member cardinality is never row identity:
+/// extra NOP pads are idle fill, E3-only logicals stay E3 at size 1,
+/// and a unit-cover miss does not invent the other Format E row.
 inline BundleFormatRowID
 selectProductRowForOpcodes(ArrayRef<unsigned> Opcodes) {
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   bool AnyE3 = false;
   bool AnyE2 = false;
+  bool AnyE3Only = false;
+  bool AnyE2Only = false;
+  SmallVector<unsigned, 3> Real;
+  Real.reserve(Opcodes.size());
   for (unsigned Opc : Opcodes) {
+    if (Opc == 0 || format_e::logicalOpcodeOrSelf(Opc) == Haydn::NOP)
+      continue;
+    Real.push_back(Opc);
     const MCSlotKind Kind = Fmts.getSlotKind(Opc);
     if (formatECompositeSlotIsE3(Kind))
       AnyE3 = true;
     else if (formatECompositeSlotIsE2(Kind))
       AnyE2 = true;
+    if (haydnFormatELogicalIsE3Only(Opc))
+      AnyE3Only = true;
+    if (haydnFormatELogicalIsE2Only(Opc))
+      AnyE2Only = true;
   }
   // Mixed E2+E3 members are not one parcel. Prefer E2 so a stray E3
   // slot-kind on a logical cannot stamp E96ThreeEntry over an E2
@@ -292,15 +307,29 @@ selectProductRowForOpcodes(ArrayRef<unsigned> Opcodes) {
     return BundleFormatRowID::E96ThreeEntry;
   if (AnyE2)
     return BundleFormatRowID::E96TwoEntry;
-  if (Opcodes.size() >= 3)
-    return BundleFormatRowID::E96ThreeEntry;
-  if (Opcodes.size() <= 1)
+  // Generated Mode-only membership, never child count. Mixed Mode-only
+  // logicals are not one parcel — keep E2 so callers refuse rather than
+  // invent E3 from occupancy of the other Mode.
+  if (AnyE2Only && AnyE3Only)
     return BundleFormatRowID::E96TwoEntry;
-  if (opcodesHaveFormatEUnitCoverForMode(Opcodes, /*Mode=*/0))
-    return BundleFormatRowID::E96TwoEntry;
-  if (opcodesHaveFormatEUnitCoverForMode(Opcodes, /*Mode=*/1))
+  if (AnyE3Only)
     return BundleFormatRowID::E96ThreeEntry;
-  return selectProductRowForMemberCount(Opcodes.size());
+  if (AnyE2Only)
+    return BundleFormatRowID::E96TwoEntry;
+  // PacketFormats first-covering (AIEFormat.cpp:20-26): smaller product
+  // row when both Modes place. opcodesHaveFormatEUnitCoverForMode is
+  // vacuously true for |N|<2 — that is not occupancy. Dual-mode idle
+  // and singleton take the first-covering E2 row.
+  if (Real.size() >= 2) {
+    if (opcodesHaveFormatEUnitCoverForMode(Real, /*Mode=*/0))
+      return BundleFormatRowID::E96TwoEntry;
+    if (opcodesHaveFormatEUnitCoverForMode(Real, /*Mode=*/1))
+      return BundleFormatRowID::E96ThreeEntry;
+    // No Mode covers: fail closed to ProductDefaultRowID. Do not invent
+    // E96ThreeEntry from member count.
+    return ProductDefaultRowID;
+  }
+  return ProductDefaultRowID;
 }
 
 inline BundleFormatRowID

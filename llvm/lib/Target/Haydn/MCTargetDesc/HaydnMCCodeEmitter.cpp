@@ -31,9 +31,9 @@
 // as-is (no Mode/swap retry) and never free-DFS. Bounded one-parcel DFS is
 // standalone hand-asm only (golden logical names). Compiler 3-child rebind
 // (store at E3 e0 LOADSTORE0; dual loads LS0+LOAD1) lives in Finalize
-// assignFormatEMemberEntries. Residual FieldSlots never peel into DFS/fill
-// (AIE MultiSlot alts, AIEMCFormats.h:376-379). Retired slot suffixes never
-// pin entries.
+// assignFormatEMemberEntries. Residual FieldSlots never recover occupancy
+// into DFS/fill (AIE MultiSlot alts, AIEMCFormats.h:376-379). Retired slot
+// suffixes never pin entries. Occupancy is haydnCatalogOccupancyName.
 // encodeSlotSubInst is serialize-only: every non-NOP child must already be a
 // generated private member. Compiler BUNDLE_E96_* roots serialize typed
 // (row, entry, member) as-is via encodeInstructionFromCompilerRoot and never
@@ -124,9 +124,7 @@ static std::optional<unsigned> fixupKindFromSpecifier(const MCExpr *Expr) {
 // Residual FieldSlots cannot recover a catalog logical by suffix. AIE
 // occupancy is generated MultiSlot alts (AIEMCFormats.h:376-379).
 static bool isResidualFieldSlotOpcodeName(StringRef Name) {
-  return Name.ends_with_insensitive("_S0") ||
-         Name.ends_with_insensitive("_S1") ||
-         Name.ends_with_insensitive("_S2");
+  return haydnIsResidualFieldSlotName(Name);
 }
 
 // Forward decls for Format E placement (defined with encodeSlotSubInst).
@@ -695,9 +693,18 @@ static bool isFormatENopOpcode(unsigned Opc, const MCInstrInfo &MII) {
   // Residual FieldSlots are not NOP via suffix peel.
   if (isResidualFieldSlotOpcodeName(Name))
     return false;
-  std::string Log = haydn::format_e::peelLogicalOpcodeName(Name);
+  // Generated members: IsNop from the member table, never a name peel.
+  if (haydnIsGeneratedMemberName(Name)) {
+    for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+      if (FormatEMemberOpcodes[I] != Opc)
+        continue;
+      return I < haydn::format_e::FormatEMemberCount &&
+             haydn::format_e::FormatEMembers[I].IsNop;
+    }
+    return false;
+  }
+  std::string Log = haydnCatalogOccupancyName(Name);
   // Empty catalog name is not a product real (unknown pseudo / meta).
-  // Generated NOP_* members peel to NOP (Mode marker, not `_S*`).
   return Log.empty() || StringRef(Log).equals_insensitive("NOP");
 }
 
@@ -891,11 +898,12 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
 }
 
 // Catalog / alias occupancy for standalone DFS only. Residual FieldSlots
-// do not recover a logical by `_S*` suffix (AIEMCFormats.h:376-379).
+// and generated members do not recover a logical by suffix peel
+// (AIEMCFormats.h:376-379). haydnCatalogOccupancyName is the one map.
 static std::string formatELogicalName(StringRef Name) {
-  if (isResidualFieldSlotOpcodeName(Name))
+  if (isResidualFieldSlotOpcodeName(Name) || haydnIsGeneratedMemberName(Name))
     return {};
-  return haydn::format_e::peelLogicalOpcodeName(Name);
+  return haydnCatalogOccupancyName(Name);
 }
 
 // Entry field packing is TableGen Inst{} on live Format E members
@@ -922,8 +930,29 @@ static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
   const MCInstrDesc &MemDesc = MII.get(MemberOpc);
   const unsigned Need = MemDesc.getNumOperands();
   const unsigned Have = Logical.getNumOperands();
-  if (LogDesc.getNumDefs() != MemDesc.getNumDefs() || Have == Need ||
-      LogDesc.getNumOperands() <= Need)
+  if (Have == Need || LogDesc.getNumOperands() <= Need)
+    return false;
+
+  // Compiler LUI vestigial $rs: extra register at first ins (index
+  // NumDefs) where the member wants an imm. Runs before NumDefs
+  // equality so dest-as-ins members (NumDefs 1->0) still fail closed.
+  // Hand-asm omitted $rs is Imm 0 and stays in standalone Imm-0 fill.
+  if (Have == Need + 1 && LogDesc.getNumDefs() >= 1) {
+    const unsigned Mid = LogDesc.getNumDefs();
+    if (Mid < Need && Mid < Have) {
+      const MCOperandInfo &MemMid = MemDesc.operands()[Mid];
+      const bool MemMidWantsReg =
+          MemMid.OperandType == MCOI::OPERAND_REGISTER || MemMid.RegClass >= 0;
+      if (Logical.getOperand(Mid).isReg() && !MemMidWantsReg)
+        return true;
+    }
+    // dest-as-ins extra $rs at logical index 1 (member has no defs).
+    if (LogDesc.getNumDefs() == 1 && MemDesc.getNumDefs() == 0 && Have > 1 &&
+        Logical.getOperand(1).isReg())
+      return true;
+  }
+
+  if (LogDesc.getNumDefs() != MemDesc.getNumDefs())
     return false;
   for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands(); ++I) {
     if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0)

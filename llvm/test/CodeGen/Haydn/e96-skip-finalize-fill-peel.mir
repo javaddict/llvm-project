@@ -1,0 +1,66 @@
+# RUN: split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/lui-3op.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=LUI
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/lui-bundle.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=LUIB
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/typed.mir -o %t.typed.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.typed.o | FileCheck %s --check-prefix=TYPED
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION: skip-Finalize compiler LUI 3-op (rd, vestigial $rs, imm) must
+# not bag-sort through fillFormatEMemberInst / haydnFillFormatEMemberInst.
+# Hand-asm LUI is 2-op positional (rd, imm). Finalize keep-map owns the
+# extra-op cutover. Typed MemberId LUI serializes as-is.
+#
+# LUI: one-parcel placement failed{{.*}}refuse sequential E2 singleton split
+# LUIB: is not a generated Format E member{{.*}}refuse skip-Finalize
+# TYPED-LABEL: <skip_finalize_lui_memberid>:
+# TYPED: lui
+# TYPED-NOT: <unknown>
+
+#--- lui-3op.mir
+--- |
+  define void @skip_finalize_lui_vestigial_rs() { ret void }
+...
+---
+name:            skip_finalize_lui_vestigial_rs
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    $r1 = LUI $r0, 1
+    RET implicit $r15
+
+#--- lui-bundle.mir
+--- |
+  define void @skip_finalize_lui_bundle() { ret void }
+...
+---
+name:            skip_finalize_lui_bundle
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    BUNDLE 0, 0, implicit-def $r1, implicit $r0 {
+      $r1 = LUI $r0, 1
+    }
+    RET implicit $r15
+
+#--- typed.mir
+--- |
+  define void @skip_finalize_lui_memberid() { ret void }
+...
+---
+name:            skip_finalize_lui_memberid
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r1 {
+      $r1 = LUI_E2_E0_ALU0_I12 1
+    }
+    RET implicit $r15
