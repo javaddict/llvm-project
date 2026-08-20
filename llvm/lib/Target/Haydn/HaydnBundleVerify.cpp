@@ -65,39 +65,43 @@ static bool isUnexpandedResidualPseudo(unsigned Opc) {
 const format_e::FormatEMemberRec *lookupPrivateFormatEMember(unsigned Opc) {
   if (Opc == 0 || Opc == Haydn::NOP)
     return nullptr;
-  // Opcode-keyed inverse map (AIE getFormatDescIndex / getAlternateInstsOpcode
-  // overlay). Source is FormatEInverse via completeInverseRecord — never a
-  // linear walk of FormatEMembers, never peelLogicalOpcodeName.
-  static const DenseMap<unsigned, const format_e::FormatEMemberRec *> Map = [] {
-    DenseMap<unsigned, const format_e::FormatEMemberRec *> M;
+  // Opcode → MemberId, then independently generated FormatEInverse
+  // (inverseRecordForMemberId). Peer: AIE getFormatDescIndex opcode switch
+  // (AIEMCFormats.h:373-374; CodeGenFormat.cpp:132) — never a linear walk of
+  // independently sorted FormatEInverse as if the row index were MemberId,
+  // never peelLogicalOpcodeName.
+  static const DenseMap<unsigned, unsigned> Map = [] {
+    DenseMap<unsigned, unsigned> M;
     M.reserve(FormatEMemberOpcodeCount);
-    for (unsigned I = 0; I < format_e::FormatEMemberCount; ++I) {
-      const format_e::FormatEInverseRec &R = format_e::FormatEInverse[I];
-      if (!format_e::completeInverseRecord(R))
-        continue;
-      const unsigned Mid = R.MemberId;
-      if (Mid >= FormatEMemberOpcodeCount)
-        continue;
+    for (unsigned Mid = 0; Mid < FormatEMemberOpcodeCount; ++Mid) {
       const unsigned MemberOpc = FormatEMemberOpcodes[Mid];
       if (MemberOpc == 0 || MemberOpc == Haydn::NOP)
         continue;
-      M.try_emplace(MemberOpc, &format_e::FormatEMembers[Mid]);
+      const format_e::FormatEInverseRec *Inv =
+          format_e::inverseRecordForMemberId(Mid);
+      if (!Inv || Inv->MemberId != Mid || !format_e::completeInverseRecord(*Inv))
+        continue;
+      M.try_emplace(MemberOpc, Mid);
     }
     return M;
   }();
   auto It = Map.find(Opc);
   if (It == Map.end())
     return nullptr;
-  return It->second;
+  return &format_e::FormatEMembers[It->second];
 }
 
 static bool encodeableInverseRecord(const format_e::FormatEInverseRec &R);
 
 /// Opcode → generated FormatEInverse row ids (table indices, not MemberId).
 /// Sole inverse source is HaydnGenFormatEInverse.inc / FormatEInverse.
-/// Member opcodes come from the generated MemberId→opcode column; catalog
-/// logicals from lookupGeneratedMemberToLogical; public aliases from a
-/// closed opcode→catalog extra key (AIE AIEMCFormats.h:376-379 overlay).
+/// Keys: MemberId opcode column, generated member→logical, canonical MC
+/// name matching FormatEInverse.Logical (MCInstrInfo::getName — same
+/// backing store as TII getName). Extra public mnemonic opcodes that are
+/// not MC-pseudo may share a catalog logical's inverse span (AIE
+/// getAlternateInstsOpcode overlay, AIEMCFormats.h:376-379). Residual
+/// cycle-forming / expand-owned / other MC-pseudos that the inverse table
+/// does not list cannot complete through that extra key.
 /// Never Bundle.canAdd, occupancy DFS, or peelLogicalOpcodeName.
 static void collectInverseIdsForOpcode(unsigned Opc,
                                        SmallVectorImpl<unsigned> &Ids) {
@@ -110,6 +114,7 @@ static void collectInverseIdsForOpcode(unsigned Opc,
     M.reserve(FormatEMemberOpcodeCount);
     const unsigned InverseN =
         sizeof(format_e::FormatEInverse) / sizeof(format_e::FormatEInverse[0]);
+    const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
     for (unsigned I = 0; I < InverseN; ++I) {
       // Independently sorted inverse row — never FormatEInverse[MemberId].
       const format_e::FormatEInverseRec &R = format_e::FormatEInverse[I];
@@ -128,8 +133,31 @@ static void collectInverseIdsForOpcode(unsigned Opc,
           M[Log].push_back(I);
       }
     }
+    // Canonical opcode name (MC / TII getName) matching generated Logical.
+    // Residual FieldSlot suffixes are not Logical names — no peel.
+    SmallVector<unsigned, 8> NameIds;
+    for (unsigned NameOpc = 1; NameOpc < MII.getNumOpcodes(); ++NameOpc) {
+      if (NameOpc == Haydn::NOP || M.count(NameOpc) ||
+          isUnexpandedResidualPseudo(NameOpc) || MII.get(NameOpc).isPseudo())
+        continue;
+      NameIds.clear();
+      format_e::inverseIdsForLogical(MII.getName(NameOpc), NameIds);
+      if (NameIds.empty())
+        continue;
+      SmallVector<unsigned, 8> Encodeable;
+      for (unsigned I : NameIds) {
+        if (I >= InverseN)
+          continue;
+        if (encodeableInverseRecord(format_e::FormatEInverse[I]))
+          Encodeable.push_back(I);
+      }
+      if (!Encodeable.empty())
+        M[NameOpc] = std::move(Encodeable);
+    }
     // Extra inverse keys: public mnemonic opcode → catalog logical opcode.
     // Opcode-keyed (not suffix peel). Catalog rows already sit in M.
+    // MC-pseudo sources cannot complete through this extra key: residual
+    // expand-owned / cycle-forming leftovers are not inverse records.
     static const std::pair<unsigned, unsigned> AliasToCatalog[] = {
         {Haydn::LD32, Haydn::S_LW_WITH_IMM},
         {Haydn::ST32, Haydn::S_SW_WITH_IMM},
@@ -149,6 +177,8 @@ static void collectInverseIdsForOpcode(unsigned Opc,
     };
     for (const auto &Pair : AliasToCatalog) {
       if (Pair.first == Pair.second || M.count(Pair.first))
+        continue;
+      if (Pair.first >= MII.getNumOpcodes() || MII.get(Pair.first).isPseudo())
         continue;
       auto It = M.find(Pair.second);
       if (It == M.end())
@@ -356,10 +386,11 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
                            uint32_t &SeenUnits, uint32_t &SeenEntryBits,
                            uint32_t *ResidualCompletedBits = nullptr,
                            unsigned ResidualBit = 0) {
-  // Unexpanded residual pseudos are not inverse keys. A catalog alias must
-  // not complete LD32_POST_INC / MOV_GPR_TO_DR64 as if they were the real
-  // member. Peer: AIEPseudoBranchExpansion.cpp:43-57 leftover expand-owned
-  // is fatal after the expand pass.
+  // Unexpanded residual pseudos are not inverse keys. A catalog extra key
+  // must not complete LD32_POST_INC / MOV_GPR_TO_DR64 as if they were the
+  // real member (MC-pseudo sources are excluded from that extra key).
+  // Peer: AIEPseudoBranchExpansion.cpp:43-57 leftover expand-owned is fatal
+  // after the expand pass.
   if (isUnexpandedResidualPseudo(Opc))
     return std::string(
                "structural inverse: residual/logical inverse record not "
@@ -404,6 +435,26 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
   SeenEntryBits |= 1u << Inv->EntryIdx;
   if (ResidualLogical && ResidualCompletedBits && ResidualBit < 32)
     *ResidualCompletedBits |= 1u << ResidualBit;
+  return std::nullopt;
+}
+
+/// Residual/logical roots with no FormatEInverse ids fail before unit-cover
+/// so the diagnostic is inverse-record completion, not a structural mask.
+static std::optional<std::string>
+haydnRequireInverseIdsOnResidualRoots(ArrayRef<unsigned> MemberOpcodes) {
+  for (unsigned I = 0, E = MemberOpcodes.size(); I != E; ++I) {
+    const unsigned Opc = MemberOpcodes[I];
+    if (!haydnResidualLogicalNeedsCompletedInverse(Opc))
+      continue;
+    SmallVector<unsigned, 8> Ids;
+    collectInverseIdsForOpcode(Opc, Ids);
+    if (Ids.empty())
+      return std::string(
+                 "structural inverse: residual/logical inverse record not "
+                 "completed at membership entry: ") +
+             std::string(inverseOpcodeName(Opc)) + " entry " +
+             std::to_string(I);
+  }
   return std::nullopt;
 }
 
@@ -461,6 +512,10 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
 
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
+
+  if (auto ResidualIdsErr =
+          haydnRequireInverseIdsOnResidualRoots(MemberOpcodes))
+    return ResidualIdsErr;
 
   // Format E unit injectivity pre-check (units ≠ encoded entry identity):
   // independently generated FormatEInverse unit bits keyed by opcode, not
@@ -606,6 +661,9 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
   }
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
+  if (auto ResidualIdsErr =
+          haydnRequireInverseIdsOnResidualRoots(MemberOpcodes))
+    return ResidualIdsErr;
   if (!inverseOpcodesHaveUnitCoverForMode(MemberOpcodes, ExpectMode))
     return std::string(
         "structural inverse: chosen Format E members are not "

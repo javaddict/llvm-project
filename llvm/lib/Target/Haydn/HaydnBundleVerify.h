@@ -71,7 +71,9 @@ bool isExpandOwnedSemanticPseudo(unsigned Opc);
 bool isResidualExecutablePseudo(const MachineInstr &MI);
 
 /// Reverse map: live private Format E member opcode → generated member record.
-/// Residual `_S*` / bare logicals return nullptr. Defined in HaydnBundleVerify.cpp.
+/// Source is FormatEInverse (inverseRecordForMemberId + completeInverseRecord).
+/// Residual `_S*` / bare logicals / incomplete inverse rows return nullptr.
+/// Defined in HaydnBundleVerify.cpp.
 const format_e::FormatEMemberRec *lookupPrivateFormatEMember(unsigned Opc);
 
 /// Completion-state pad NOP (logical NOP / NOP_S0 / generated NOP member).

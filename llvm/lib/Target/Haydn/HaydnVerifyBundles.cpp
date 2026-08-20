@@ -247,7 +247,9 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
           raw_string_ostream OS(Msg);
           OS << "HaydnVerifyBundles: residual expand-owned pseudo child in "
              << MF.getName() << " BB#" << MBB.getNumber()
-             << " (inverse records require exact-committed real members):\n"
+             << " (inverse records require completed FormatEInverse on every "
+                "residual/logical root; leftover expand-owned is not an "
+                "inverse key):\n"
              << "  child: " << *I << "\n  root: " << MI;
           report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
         }

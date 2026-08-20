@@ -16,12 +16,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HaydnBundleFormatSolver.h"
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "gtest/gtest.h"
+#include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 
@@ -401,49 +401,52 @@ TEST(HaydnBundleVerifyTest, VF24_ClosestLegalIllegalVerifierPins) {
   }
 }
 
-TEST(HaydnBundleVerifyTest, ResidualFieldSlotUsesExactMemberNotAnyCover) {
-  // F12: residual `_S*` verify must call findFormatEMember (logical, mode,
-  // membership entry), not "any non-NOP inverse exists at that entry".
+TEST(HaydnBundleVerifyTest, ResidualLogicalUsesInverseRecordNotStamper) {
+  // Residual/logical roots complete independently generated FormatEInverse
+  // records at the membership entry. findFormatEMember is the stamper/UnitMap
+  // helper — verify must not accept via that or any-cover at the same entry.
   // Entry is membership position — never a peeled `_S*` / `_E3_` suffix.
   HaydnMCFormats Fmts;
-
-  const haydn::format_e::FormatEMemberRec *BnezE2E0 =
-      haydn::format_e::findFormatEMember(
-          "BNEZ", /*Mode=*/0, /*EntryIdx=*/0, /*UsedUnitMask=*/0);
-  ASSERT_NE(BnezE2E0, nullptr)
-      << "BNEZ_W_S0 residual exact-cover requires a BNEZ E2 e0 member";
 
   BundlePlan Plan;
   auto Exact = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
                                      {Haydn::WFI}, Fmts, &Plan);
   EXPECT_FALSE(Exact.has_value()) << (Exact ? *Exact : "");
+  EXPECT_EQ(Plan.Completion, expectedGoldenRowCompletion(1, false));
 
-  // Catalog token is WFI<TBD>; the public opcode name is not the inverse key.
+  // Catalog token is WFI<TBD>; the public opcode name is not a stamper key.
+  // Opcode-keyed inverse still completes WFI via generated member→logical.
   EXPECT_EQ(haydn::format_e::findFormatEMember(
                 "WFI", /*Mode=*/0, /*EntryIdx=*/0, /*UsedUnitMask=*/0),
             nullptr)
-      << "WFI opcode name is not the catalog inverse key";
+      << "WFI opcode name is not the catalog stamper key";
   EXPECT_NE(haydn::format_e::findFormatEMember(
                 "WFI<TBD>", /*Mode=*/0, /*EntryIdx=*/0, /*UsedUnitMask=*/0),
             nullptr)
-      << "WFI peels onto the generated HINT span";
-  EXPECT_EQ(haydn::format_e::findFormatEMember(
-                "X2SLT32", /*Mode=*/0, /*EntryIdx=*/1, /*UsedUnitMask=*/0),
-            nullptr)
-      << "X2SLT32 has no E2 e1 0-def member";
+      << "stamper catalog token remains WFI<TBD>";
+
+  // X2SLT32 has no E2 e1 inverse record — membership entry 1 must fail closed
+  // even though other non-NOP inverse rows exist at E2 e1 (any-cover).
+  auto Misplaced = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                         {Haydn::ADD32, Haydn::X2SLT32}, Fmts);
+  ASSERT_TRUE(Misplaced.has_value());
+  EXPECT_TRUE(Misplaced->find("no generated member") != std::string::npos ||
+              Misplaced->find("unit injectivity") != std::string::npos)
+      << *Misplaced;
 
   bool AnyCoverE2E1 = false;
   for (unsigned J = 0; J < haydn::format_e::FormatEMemberCount; ++J) {
     const haydn::format_e::FormatEInverseRec &R =
         haydn::format_e::FormatEInverse[J];
     if (R.Mode == 0 && R.EntryIdx == 1 && R.Logical && R.Logical[0] != '\0' &&
-        !StringRef(R.Logical).equals_insensitive("NOP")) {
+        !StringRef(R.Logical).equals_insensitive("NOP") &&
+        haydn::format_e::completeInverseRecord(R)) {
       AnyCoverE2E1 = true;
       break;
     }
   }
   EXPECT_TRUE(AnyCoverE2E1)
-      << "F12 residual must not treat any-cover as exact-entry";
+      << "residual/logical verify must not treat any-cover as exact-entry";
 }
 
 static MCInst mcRR(unsigned Opc, unsigned Rd, unsigned Rs, unsigned Rt) {
@@ -537,6 +540,97 @@ TEST(HaydnBundleVerifyTest, ResidualFieldSlotsRemainUntilGoldenSpan) {
   // (reject-not-migrate). Occupancy fills e0/e2 from generated members.
   // WFI FieldSlot is retired onto the generated HINT span.
   EXPECT_NE(Haydn::WFITBDTBDTBD_E2_E0_ALU0_HINT, Haydn::WFI);
+}
+
+TEST(HaydnBundleVerifyTest, ResidualLogicalRequiresCompletedInverseRecord) {
+  HaydnMCFormats Fmts;
+
+  BundlePlan Plan;
+  auto Add = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                   {Haydn::ADD32}, Fmts, &Plan);
+  EXPECT_FALSE(Add.has_value()) << (Add ? *Add : "");
+  EXPECT_EQ(Plan.Completion, expectedGoldenRowCompletion(1, false));
+  EXPECT_EQ(Plan.Completion, CompletionStateID::AllEntriesReal);
+
+  auto Loadi = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                     {Haydn::LOADI32}, Fmts);
+  ASSERT_TRUE(Loadi.has_value());
+  EXPECT_NE(Loadi->find("residual/logical inverse record not completed"),
+            std::string::npos)
+      << *Loadi;
+
+  auto PostInc = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                       {Haydn::LD32_POST_INC}, Fmts);
+  ASSERT_TRUE(PostInc.has_value());
+  EXPECT_NE(PostInc->find("residual/logical inverse record not completed"),
+            std::string::npos)
+      << *PostInc;
+
+  auto Mov = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                   {Haydn::MOV_GPR_TO_DR64}, Fmts);
+  ASSERT_TRUE(Mov.has_value());
+  EXPECT_TRUE(Mov->find("residual/logical inverse record not completed") !=
+                  std::string::npos ||
+              Mov->find("no generated member") != std::string::npos)
+      << *Mov;
+
+  auto Copy = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                    {TargetOpcode::COPY}, Fmts);
+  ASSERT_TRUE(Copy.has_value());
+  EXPECT_TRUE(Copy->find("no generated member") != std::string::npos ||
+              Copy->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *Copy;
+}
+
+TEST(HaydnBundleVerifyTest, PublicMnemonicInverseNotPseudoAlias) {
+  // Real public mnemonics whose catalog Logical differs (LD32 vs
+  // S_LW_WITH_IMM) still complete generated inverse records. MC-pseudo
+  // leftovers cannot borrow that extra key.
+  HaydnMCFormats Fmts;
+  BundlePlan Plan;
+  auto Ld = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                  {Haydn::LD32}, Fmts, &Plan);
+  EXPECT_FALSE(Ld.has_value()) << (Ld ? *Ld : "");
+  EXPECT_EQ(Plan.Completion, expectedGoldenRowCompletion(1, false));
+
+  auto Sext = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                    {Haydn::SEXT_GPR32_TO_DR64}, Fmts);
+  EXPECT_FALSE(Sext.has_value()) << (Sext ? *Sext : "");
+}
+
+TEST(HaydnBundleVerifyTest, InverseRecordMutationFailClosed) {
+  const haydn::format_e::FormatEInverseRec *Inv =
+      haydn::format_e::inverseRecordForMemberId(1);
+  ASSERT_NE(Inv, nullptr);
+  EXPECT_TRUE(haydn::format_e::completeInverseRecord(*Inv));
+
+  haydn::format_e::FormatEInverseRec Mut = *Inv;
+  Mut.EntryIdx = static_cast<uint8_t>(Mut.EntryIdx == 0 ? 1 : 0);
+  EXPECT_FALSE(haydn::format_e::completeInverseRecord(Mut));
+
+  Mut = *Inv;
+  Mut.Unit = static_cast<uint8_t>(Mut.Unit ^ 1u);
+  EXPECT_FALSE(haydn::format_e::completeInverseRecord(Mut));
+
+  Mut = *Inv;
+  Mut.Mode = static_cast<uint8_t>(Mut.Mode ^ 1u);
+  EXPECT_FALSE(haydn::format_e::completeInverseRecord(Mut));
+}
+
+TEST(HaydnBundleVerifyTest, LookupPrivateMemberUsesCompletedInverse) {
+  const haydn::format_e::FormatEMemberRec *Add =
+      lookupPrivateFormatEMember(Haydn::ADD32_E2_E0_ALU0_RR);
+  ASSERT_NE(Add, nullptr);
+  const haydn::format_e::FormatEInverseRec *Inv =
+      haydn::format_e::inverseRecordForMemberId(Add->MemberId);
+  ASSERT_NE(Inv, nullptr);
+  EXPECT_TRUE(haydn::format_e::completeInverseRecord(*Inv));
+  EXPECT_EQ(Inv->MemberId, Add->MemberId);
+
+  EXPECT_EQ(lookupPrivateFormatEMember(Haydn::ADD32), nullptr);
+  EXPECT_EQ(lookupPrivateFormatEMember(Haydn::LOADI32), nullptr);
+  EXPECT_EQ(lookupPrivateFormatEMember(Haydn::MOV_GPR_TO_DR64), nullptr);
 }
 
 } // namespace
