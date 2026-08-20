@@ -188,8 +188,8 @@ define i32 @test_all_callee_saved_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) no
 ; CHECK-NEXT:    { nop; st32 r10, r6, 3 }
 ; CHECK-NEXT:    { nop; st32 r9, r6, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r6, 5 }
-; CHECK-NEXT:    { nop; move32 r8, r2; move32 r9, r3 }
-; CHECK-NEXT:    { nop; move32 r10, r4; move32 r11, r5 }
+; CHECK-NEXT:    { nop; move32 r9, r3; move32 r8, r2 }
+; CHECK-NEXT:    { nop; move32 r11, r5; move32 r10, r4 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }

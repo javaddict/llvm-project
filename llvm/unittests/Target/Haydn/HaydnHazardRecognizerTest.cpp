@@ -1023,13 +1023,19 @@ TEST(HaydnPortModelTest, PreRASMSHandoffPackabilityOracleSurface) {
 }
 
 TEST(HaydnPortModelTest, PreRAMove32ClassMiVsDescPortDifferential) {
-  // Pre-RA surface for the MOVE32-class MI-versus-descriptor port split.
-  // MI PortModel (list-sched / CreateTargetMIHazardRecognizer IsPreRA) dedupes
-  // repeated sources → 1R1W. Descriptor shape (SMS MID placement peer) has no
-  // operand identity → 2R1W. Not a format predicate and not a PortModel bug.
+  // REGRESSION TEST REBASE (2026-08-21). Pre-RA surface for the MOVE32-class
+  // port law. The owning layer unified GPR port charging to per-field in
+  // 0ad0d5d64088 (2026-08-18): every explicit GPR operand field reserves one
+  // port — no same-register identity dedup. MOVE32 rd, rs, rs is 2R1W on the
+  // MI PortModel path (list-sched / CreateTargetMIHazardRecognizer IsPreRA)
+  // AND on the descriptor path (SMS MID placement peer). The pre-rebase
+  // expectations (MI dedup to 1R1W, descriptor overcount, descriptor blowing
+  // the 4R pool at N=3 while MI fit) pinned a dedup countGPRPorts never
+  // performed. Pins here agree with HaydnResourceCycle.cpp static_asserts and
+  // the lit doc-pin sched-resource-truth-homes.s (= 2).
   using S = HaydnPreRASchedStrategy;
-  EXPECT_TRUE(S::move32ClassDescOvercountsMiPorts());
-  EXPECT_EQ(S::move32ClassMiRepeatedSrcGprReads, 1u);
+  EXPECT_FALSE(S::move32ClassDescOvercountsMiPorts());
+  EXPECT_EQ(S::move32ClassMiRepeatedSrcGprReads, 2u);
   EXPECT_EQ(S::move32ClassMiRepeatedSrcGprWrites, 1u);
   EXPECT_EQ(S::move32ClassDescShapeGprReads, 2u);
   EXPECT_EQ(S::move32ClassDescShapeGprWrites, 1u);
@@ -1044,16 +1050,17 @@ TEST(HaydnPortModelTest, PreRAMove32ClassMiVsDescPortDifferential) {
     EXPECT_EQ(D.GPRWrites, S::move32ClassDescShapeGprWrites);
   }
 
-  // N=2: both models fit one cycle (MI 2R2W, desc 4R2W under 4R2W budgets).
+  // N=2: both models fit one cycle (4R2W exactly at both GPR pools).
   EXPECT_EQ(S::move32ClassMiRepeatedSrcPortLowerBoundResMII(2), 1u);
   EXPECT_EQ(S::move32ClassDescShapePortLowerBoundResMII(2), 1u);
   EXPECT_FALSE(S::move32ClassDescSaturatesReadPoolEarlier(2));
 
-  // N=3: write pool forces ≥2 for both; descriptor also blows the 4R pool.
+  // N=3: both pools blow together (6R > 4R and 3W > 2W) — the retired
+  // saturates-earlier differential is never true under the per-field law.
   EXPECT_EQ(S::move32ClassMiRepeatedSrcPortLowerBoundResMII(3), 2u);
   EXPECT_EQ(S::move32ClassDescShapePortLowerBoundResMII(3), 2u);
-  EXPECT_TRUE(S::move32ClassDescSaturatesReadPoolEarlier(3));
-  EXPECT_LE(3u * S::move32ClassMiRepeatedSrcGprReads, HAYDN_GPR_READ_PORTS);
+  EXPECT_FALSE(S::move32ClassDescSaturatesReadPoolEarlier(3));
+  EXPECT_GT(3u * S::move32ClassMiRepeatedSrcGprReads, HAYDN_GPR_READ_PORTS);
   EXPECT_GT(3u * S::move32ClassDescShapeGprReads, HAYDN_GPR_READ_PORTS);
 
   // Format-only three MOVE32 still report product ResMII 1 (slots, no ports).
@@ -1288,7 +1295,8 @@ TEST(HaydnPortModelTest, PreRASoftExitQoRFloorsAndExactPack) {
     EXPECT_EQ(S::productSoftExitIIFloor(Ops, 0, 0), 2u);
   }
 
-  // MOVE32-class MI path: 3×1R1W → port floor 2; format-only still 1.
+  // MOVE32-class MI path: 3×2R1W (per-field, 0ad0d5d64088) → port floor 2;
+  // format-only still 1.
   {
     unsigned Ops[] = {Haydn::MOVE32, Haydn::MOVE32, Haydn::MOVE32};
     EXPECT_EQ(S::productExhaustiveResMII(Ops), 1u);
@@ -1514,7 +1522,8 @@ TEST(HaydnPortModelTest, PreRASMSPeriodicCertificateSurface) {
 // CreateTargetMIHazardRecognizer installs IsPreRA HR that expands the same
 // candidate set; scoreMatchingFrontier.Feasible is the list-sched probe.
 // Format is opcode-keyed → MI and descriptor forms of equal opcodes agree.
-// MOVE32-class *port* overcount is orthogonal (not a format gap). Sibling SMS
+// MOVE32-class *port* demand (per-field 2R1W, both paths since 0ad0d5d64088)
+// is orthogonal (not a format gap). Sibling SMS
 // owns live ResourceCycle packing differential tests. Metrics-only; never
 // setDesc / member opcodes / ResourceCycle edit.
 
@@ -1602,12 +1611,13 @@ TEST(HaydnPortModelTest, PreRARCHrFormatAcceptanceDifferentialSurface) {
     AgreeSeq(Coissue);
   }
 
-  // MOVE32-class ports may diverge MI vs desc, but format three MOVE32 packs
-  // under exact matching for both views (format ≠ port differential).
+  // MOVE32-class ports are per-field 2R1W on both MI and desc views
+  // (0ad0d5d64088), so no port differential survives; format three MOVE32
+  // still packs under exact matching for both views (format ≠ ports).
   {
     unsigned ThreeMove[] = {Haydn::MOVE32, Haydn::MOVE32, Haydn::MOVE32};
     EXPECT_TRUE(S::productExactCanPackSequence(ThreeMove));
-    EXPECT_TRUE(S::move32ClassDescOvercountsMiPorts());
+    EXPECT_FALSE(S::move32ClassDescOvercountsMiPorts());
     EXPECT_EQ(S::productGreedyResMII(ThreeMove), 1u);
     EXPECT_GT(S::move32ClassMiRepeatedSrcPortLowerBoundResMII(3),
               S::productGreedyResMII(ThreeMove));
@@ -2949,9 +2959,11 @@ TEST_F(HaydnBundleBoundaryTest, WP2_TiedMacChildStillRootOnlyBoundary) {
 
 TEST_F(HaydnBundleBoundaryTest, PreRAMove32MiVsDescPortsAndIsPreRAHR) {
   // Live MI vs table-backed MID for MOVE32-class, plus pre-RA HR factory.
-  // CreateTargetMIHazardRecognizer(IsPreRA) must install HaydnHazardRecognizer
-  // that charges PortModel MI ports (1R1W for MOVE32 rd,rs,rs) — never the
-  // descriptor 2R1W overcount, never setDesc/member opcodes.
+  // REGRESSION TEST REBASE (2026-08-21): per-field port law (0ad0d5d64088) —
+  // CreateTargetMIHazardRecognizer(IsPreRA) installs HaydnHazardRecognizer
+  // that charges PortModel MI ports per explicit field (2R1W for
+  // MOVE32 rd,rs,rs — both use fields occupy a read port), identical to the
+  // descriptor shape; never setDesc/member opcodes.
   const HaydnInstrInfo &II = TII();
   DebugLoc DL;
   MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
@@ -2966,7 +2978,7 @@ TEST_F(HaydnBundleBoundaryTest, PreRAMove32MiVsDescPortsAndIsPreRAHR) {
   auto [MiR, MiW] = countGPRPorts(*MoveRepeated);
   EXPECT_EQ(MiR, HaydnPreRASchedStrategy::move32ClassMiRepeatedSrcGprReads);
   EXPECT_EQ(MiW, HaydnPreRASchedStrategy::move32ClassMiRepeatedSrcGprWrites);
-  EXPECT_EQ(MiR, 1u);
+  EXPECT_EQ(MiR, 2u);
   EXPECT_EQ(MiW, 1u);
 
   // Distinct sources: MI and descriptor agree at 2R1W (no identity overcount).
@@ -2990,8 +3002,9 @@ TEST_F(HaydnBundleBoundaryTest, PreRAMove32MiVsDescPortsAndIsPreRAHR) {
             HaydnPreRASchedStrategy::move32ClassDescShapeGprWrites);
   EXPECT_EQ(Desc.GPRReads, 2u);
   EXPECT_EQ(Desc.GPRWrites, 1u);
-  EXPECT_GT(Desc.GPRReads, MiR)
-      << "descriptor path must overcount repeated-source MOVE32 vs PortModel";
+  // Per-field law: descriptor and MI paths agree for repeated sources too
+  // (no identity overcount — both charge every explicit use field).
+  EXPECT_EQ(Desc.GPRReads, MiR);
   EXPECT_EQ(Desc.GPRWrites, MiW);
   // Distinct-source MI matches descriptor shape (parity when no repeated reg).
   EXPECT_EQ(Desc.GPRReads, MiR2);

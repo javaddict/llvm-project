@@ -205,16 +205,22 @@ TEST(HaydnAlternateDescriptorsTest, ResidualAltCompatibleFormatMaskPins) {
           << haydnOpcodeName(Opc) << " idx=" << Idx;
   }
 
-  // Dual-mode and residual-reloc logicals keep the product frontier. `_W`
-  // reloc identities are residual FieldSlot rows with no Format E span
-  // (enumerateFormatEMemberAlts peels with StripWide=false; span lookup
-  // misses and the residual path keeps ProductFormatMask — matching the
-  // pre-W44 switch default). The coissue predicates below carry the E2-only
-  // law for these forms instead, via the base logical.
+  // Dual-mode logicals keep the product frontier. Reloc `_W` identities
+  // inherit the compact catalog logical's Mode in the residual mask too:
+  // one peel rule (StripWide=true) for every consumer surface, so ADDI32_W
+  // is E2-only exactly as ADDI32 is (MemberId occupancy is those generated
+  // rows).
+  //
+  // REBASED 2026-08-21: the original law (pre-2026-08-20, W44-era) kept
+  // ProductFormatMask for `_W` residuals via a second StripWide=false peel
+  // mode, matching the pre-W44 switch default. be22ec604d9e ("Mode
+  // occupancy row, not child/text count") unified classifyModeOnlySpelling
+  // to StripWide=true — residual mask and coissue predicates now share one
+  // mechanism over the W44 generated name sets. This pin tracks the unified
+  // law; ProductFormatMask here would demand re-splitting the peel modes.
   EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::ADD32, 0),
             ProductFormatMask);
-  EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::ADDI32_W, 0),
-            ProductFormatMask);
+  EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::ADDI32_W, 0), E2Bit);
   EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::SET_HWLOOP_F2_W, 0),
             ProductFormatMask);
   EXPECT_EQ(residualAltCompatibleFormatMask(Haydn::CSRW_W, 0),
@@ -232,14 +238,20 @@ TEST(HaydnAlternateDescriptorsTest, ResidualAltCompatibleFormatMaskPins) {
 }
 
 TEST(HaydnAlternateDescriptorsTest, ModeOnlyOpcodeNamePredicates) {
-  // E2-only: bare logical, member spelling, and reloc `_W`/`_W_S0` forms.
+  // E2-only: bare logical, member spelling, and reloc `_W` forms.
   EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32"));
   EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32_E2_E1_ALU1_RI20"));
   EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32S"));
   EXPECT_TRUE(isFormatEE2OnlyOpcodeName("MOVEI_H"));
   EXPECT_TRUE(isFormatEE2OnlyOpcodeName("SET_HWLOOP"));
   EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32_W"));
-  EXPECT_TRUE(isFormatEE2OnlyOpcodeName("ADDI32_W_S0"));
+  // REBASED 2026-08-21: `_S<digits>` slot suffixes are RETIRED (0 defs in
+  // TD; never-reintroduce list). The original 2026-08-16 expectation peeled
+  // ADDI32_W_S0 → ADDI32_W → ADDI32 (E2-only) via a `_W_S0`-accepting peel.
+  // peelLogicalOpcodeName now deliberately refuses `*_S<digits>` (returns
+  // the spelling unchanged — occupancy must not recover ST8 from ST8_S0),
+  // so a retired slot-suffixed spelling must NOT classify as E2-only.
+  EXPECT_FALSE(isFormatEE2OnlyOpcodeName("ADDI32_W_S0"));
   EXPECT_FALSE(isFormatEE2OnlyOpcodeName("SET_HWLOOP_F2"));
   EXPECT_FALSE(isFormatEE2OnlyOpcodeName("SET_HWLOOP_F2_W"));
   EXPECT_FALSE(isFormatEE2OnlyOpcodeName("SET_HWLOOP_REG"));

@@ -146,7 +146,7 @@ define i32 @test_indirect_many_args(ptr %fp, i32 %a) {
 ; CHECK-NEXT:    .cfi_offset r9, -8
 ; CHECK-NEXT:    .cfi_offset r10, -12
 ; CHECK-NEXT:    .cfi_offset lr, -16
-; CHECK-NEXT:    { nop; move32 r12, r1; move32 r8, r2 }
+; CHECK-NEXT:    { nop; move32 r8, r2; move32 r12, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }

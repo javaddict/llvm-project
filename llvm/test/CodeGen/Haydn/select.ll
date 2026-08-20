@@ -152,8 +152,8 @@ define i64 @select_i64(i1 %cond, i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; move32_dr_l r2, d0; move32_dr_h r3, d0 }
-; CHECK-NEXT:    { nop; move32_dr_l r4, d1; move32_dr_h r5, d1 }
+; CHECK-NEXT:    { nop; move32_dr_h r3, d0; move32_dr_l r2, d0 }
+; CHECK-NEXT:    { nop; move32_dr_h r5, d1; move32_dr_l r4, d1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; movt32 r4, r2, r1 }
 ; CHECK-NEXT:    { nop; movt32 r5, r3, r1 }
@@ -260,7 +260,7 @@ define i32 @abs(i32 %x) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, -1 }
-; CHECK-NEXT:    { nop; sub32 r2, r2, r1; slt32 r3, r3, r1 }
+; CHECK-NEXT:    { nop; slt32 r3, r3, r1; sub32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; movt32 r2, r1, r3 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

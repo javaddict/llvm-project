@@ -148,12 +148,12 @@ define i32 @base_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) 
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r2, implicit killed $r1, implicit killed $r2, implicit killed $r3, implicit killed $r4 {
-; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r2
-; POST-NEXT:     $r2 = XOR32_E3_E0_ALU2_RR killed $r3, killed $r4
+; POST-NEXT:     $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
+; POST-NEXT:     $r2 = XOR32_E3_E1_ALU1_RR killed $r3, killed $r4
 ; POST-NEXT:   }
-; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r3, implicit killed $r1, implicit killed $r2, implicit killed $r5, implicit killed $r6 {
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r3, implicit-def $r1, implicit killed $r5, implicit killed $r6, implicit killed $r1, implicit killed $r2 {
+; POST-NEXT:     $r3 = OR32_E3_E2_ALU2_RR killed $r5, killed $r6
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r2
-; POST-NEXT:     $r3 = OR32_E3_E0_ALU2_RR killed $r5, killed $r6
 ; POST-NEXT:   }
 ; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r3
 ; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
@@ -272,8 +272,8 @@ define i32 @base_critical_and_side(i32 %a, i32 %b, i32 %c) {
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r4, implicit-def $r2, implicit killed $r2, implicit killed $r3 {
-; POST-NEXT:     $r4 = XOR32_E3_E1_ALU1_RR $r2, $r3
-; POST-NEXT:     $r2 = OR32_E3_E0_ALU2_RR killed $r2, killed $r3
+; POST-NEXT:     $r4 = XOR32_E3_E2_ALU2_RR $r2, $r3
+; POST-NEXT:     $r2 = OR32_E3_E1_ALU1_RR killed $r2, killed $r3
 ; POST-NEXT:   }
 ; POST-NEXT:   $r2 = ADD32_E3_E2_ALU2_RR killed $r4, killed $r2
 ; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
@@ -326,9 +326,9 @@ define i32 @base_dual_load_mac_stream(ptr nocapture readonly %x,
 ; POST-NEXT:   $r7, $r2 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
 ; POST-NEXT:   $r4 = ADDI32_E2_E1_ALU1_RI20 killed $r4, 4
 ; POST-NEXT:   $r6 = MULL_E3_E2_MAC1_RR killed $r6, killed $r7
-; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r7, implicit killed $r1, implicit killed $r6, implicit $r5, implicit $r3 {
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r7, implicit-def $r1, implicit $r5, implicit $r3, implicit killed $r1, implicit killed $r6 {
+; POST-NEXT:     $r7 = SLT32_E3_E2_ALU2_RR $r5, $r3
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r6
-; POST-NEXT:     $r7 = SLT32_E3_E0_ALU2_RR $r5, $r3
 ; POST-NEXT:   }
 ; POST-NEXT:   BNEZ_W killed $r7, %bb.2
 ; POST-NEXT: {{  $}}
@@ -439,13 +439,13 @@ define i32 @base_mid_pressure_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION offset $r10, -12
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION offset $r11, -16
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION offset $r15, -20
-; POST-NEXT:   BUNDLE 1, 0, implicit-def $r9, implicit-def $r8, implicit killed $r2, implicit killed $r1 {
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r8, implicit-def $r9, implicit killed $r1, implicit killed $r2 {
+; POST-NEXT:     $r8 = MOVE32_E3_E2_ALU2_R killed $r1
 ; POST-NEXT:     $r9 = MOVE32_E3_E1_ALU1_R killed $r2
-; POST-NEXT:     $r8 = MOVE32_E3_E0_ALU2_R killed $r1
 ; POST-NEXT:   }
-; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r10, implicit $r8, implicit $r9, implicit killed $r3 {
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r10, implicit-def $r1, implicit killed $r3, implicit $r8, implicit $r9 {
+; POST-NEXT:     $r10 = MOVE32_E3_E2_ALU2_R killed $r3
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR $r8, $r9
-; POST-NEXT:     $r10 = MOVE32_E3_E0_ALU2_R killed $r3
 ; POST-NEXT:   }
 ; POST-NEXT:   $r11 = ADD32_E3_E2_ALU2_RR killed $r1, $r10
 ; POST-NEXT:   $r15 = JAL_W @get_value, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit-def $r1

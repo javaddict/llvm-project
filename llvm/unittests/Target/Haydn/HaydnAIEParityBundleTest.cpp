@@ -330,15 +330,18 @@ TEST(HaydnAIEParityBundleTest, FormatOpcodeIsProductCompositeSerializeOnly) {
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96"));
 
   // Committed members keep fixed getSlotKind — encode must not re-auction.
-  ASSERT_NE(B.at(MCSlotKind::Haydn_SLOT_E3_0), nullptr);
-  ASSERT_NE(B.at(MCSlotKind::Haydn_SLOT_E3_1), nullptr);
-  ASSERT_NE(B.at(MCSlotKind::Haydn_SLOT_E3_2), nullptr);
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_E3_0)->getOpcode()),
-            MCSlotKind());
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_E3_1)->getOpcode()),
-            MCSlotKind());
-  EXPECT_NE(Fmts.getSlotKind(B.at(MCSlotKind::Haydn_SLOT_E3_2)->getOpcode()),
-            MCSlotKind());
+  // REBASED 2026-08-21: SlotMap keys are residual S* FieldSlots kinds
+  // (E3_0→S0, E3_1→S1, E3_2→S2 via issueFieldSlotsForCommittedKind); the
+  // entry kinds stay on the Format.getSlots()/getSlotKind axis.
+  const MCInst *AtS0 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+  const MCInst *AtS1 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+  const MCInst *AtS2 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
+  ASSERT_NE(AtS0, nullptr);
+  ASSERT_NE(AtS1, nullptr);
+  ASSERT_NE(AtS2, nullptr);
+  EXPECT_NE(Fmts.getSlotKind(AtS0->getOpcode()), MCSlotKind());
+  EXPECT_NE(Fmts.getSlotKind(AtS1->getOpcode()), MCSlotKind());
+  EXPECT_NE(Fmts.getSlotKind(AtS2->getOpcode()), MCSlotKind());
 }
 
 TEST(HaydnAIEParityBundleTest, SerializeSlotMapNoReAuctionOnMembers) {

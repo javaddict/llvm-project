@@ -30,20 +30,22 @@ body:             |
   ; CHECK-NEXT:   successors: %bb.1(0x80000000)
   ; CHECK-NEXT:   liveins: $r1, $r2, $r15
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
-  ; CHECK-NEXT:   $r3 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r1, killed $r2, implicit-def dead $sfr
-  ; CHECK-NEXT:   NOP{{(_S0)?}}
-  ; CHECK-NEXT:   NOP{{(_S0)?}}
-  ; CHECK-NEXT:   NOP{{(_S0)?}}
+  ; CHECK-NEXT:   SET_HWLOOP_E2_E0_ALU0_HWLRIII 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+  ; CHECK-NEXT:   BUNDLE 1, 0, implicit-def $r3, implicit-def dead $sfr, implicit killed $r1, implicit killed $r2 {
+  ; CHECK-NEXT:     $r3 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2, implicit-def dead $sfr
+  ; CHECK-NEXT:     NOP
+  ; CHECK-NEXT:   }
+  ; CHECK-NEXT:   NOP
+  ; CHECK-NEXT:   NOP
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1:
   ; CHECK-NEXT:   successors: %bb.2(0x80000000)
   ; CHECK-NEXT:   liveins: $r3, $r15
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   $r1 = COPY killed $r3
-  ; CHECK-NEXT:   NOP{{(_S0)?}}
-  ; CHECK-NEXT:   NOP{{(_S0)?}}
-  ; CHECK-NEXT:   NOP{{(_S0)?}}
+  ; CHECK-NEXT:   NOP
+  ; CHECK-NEXT:   NOP
+  ; CHECK-NEXT:   NOP
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2:
   ; CHECK-NEXT:   liveins: $r1, $r15

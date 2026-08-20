@@ -72,7 +72,7 @@ define i32 @save_across_call(i32 %a) {
 ; CHECK-NEXT:    .cfi_offset lr, -8
 ; CHECK-NEXT:    { nop; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0; add32 r1, r1, r8 }
+; CHECK-NEXT:    { nop; add32 r1, r1, r8; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
@@ -108,8 +108,8 @@ define i32 @save_many_gpr(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK-NEXT:    .cfi_offset r11, -16
 ; CHECK-NEXT:    .cfi_offset fp, -20
 ; CHECK-NEXT:    .cfi_offset lr, -24
-; CHECK-NEXT:    { nop; move32 r8, r2; move32 r9, r3 }
-; CHECK-NEXT:    { nop; move32 r10, r4; move32 r11, r5 }
+; CHECK-NEXT:    { nop; move32 r9, r3; move32 r8, r2 }
+; CHECK-NEXT:    { nop; move32 r11, r5; move32 r10, r4 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
@@ -174,7 +174,7 @@ define i64 @save_dr64(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    .cfi_offset d8, -16
 ; CHECK-NEXT:    .cfi_offset d9, -24
 ; CHECK-NEXT:    .cfi_offset d10, -32
-; CHECK-NEXT:    { nop; or64 d8, d1, d1; or64 d9, d2, d2 }
+; CHECK-NEXT:    { nop; or64 d9, d2, d2; or64 d8, d1, d1 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; nop; or64 d10, d0, d0 }
 ; CHECK-NEXT:    { nop; nop; or64 d0, d8, d8 }
@@ -218,7 +218,7 @@ define i64 @save_mixed_gpr_dr64(i32 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_offset d8, -16
 ; CHECK-NEXT:    { nop; nop; sext32t64 d8, r1 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0; add64 d0, d0, d8 }
+; CHECK-NEXT:    { nop; add64 d0, d0, d8; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 1 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 5 }
@@ -247,7 +247,7 @@ define i32 @clobber_test(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { nop; move32 r8, r1; move32 r9, r2 }
+; CHECK-NEXT:    { nop; move32 r9, r2; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; jal lr, clobber_all }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r8, r9 }
@@ -278,7 +278,7 @@ define i32 @nested_calls(i32 %a) {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0; move32 r8, r1 }
+; CHECK-NEXT:    { nop; move32 r8, r1; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r8, r1 }
@@ -316,8 +316,8 @@ define i32 @deep_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    .cfi_offset r11, -16
 ; CHECK-NEXT:    .cfi_offset fp, -20
 ; CHECK-NEXT:    .cfi_offset lr, -24
-; CHECK-NEXT:    { nop; move32 r11, r2; move32 fp, r3 }
-; CHECK-NEXT:    { nop; move32 r8, r4; move32 r9, r5 }
+; CHECK-NEXT:    { nop; move32 fp, r3; move32 r11, r2 }
+; CHECK-NEXT:    { nop; move32 r9, r5; move32 r8, r4 }
 ; CHECK-NEXT:    { nop; move32 r10, r6 }
 ; CHECK-NEXT:    { nop; st32 r7, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -403,7 +403,7 @@ define i64 @dr64_deep_pressure(i64 %a0, i64 %a1, i64 %a2) {
 ; CHECK-NEXT:    .cfi_offset d8, -16
 ; CHECK-NEXT:    .cfi_offset d9, -24
 ; CHECK-NEXT:    .cfi_offset d10, -32
-; CHECK-NEXT:    { nop; or64 d8, d1, d1; or64 d9, d2, d2 }
+; CHECK-NEXT:    { nop; or64 d9, d2, d2; or64 d8, d1, d1 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; nop; or64 d10, d0, d0 }
 ; CHECK-NEXT:    { nop; nop; or64 d0, d8, d8 }

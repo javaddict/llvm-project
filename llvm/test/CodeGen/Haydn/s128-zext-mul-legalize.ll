@@ -15,15 +15,15 @@ define i64 @cb51_zext_mul_i128(i64 %x, i64 %y) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; move32_dr_l r1, d0; move32_dr_h r2, d0 }
+; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_l r3, d1 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; move32_dr_h r1, d1 }
 ; CHECK-NEXT:    { nop; sext32t64 d2, r2; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r3; slli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32; sext32t64 d3, r1 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; slli64 d3, d3, 32; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d3, r1; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32; srli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; mul64.ulul d2, d2, d1 }
 ; CHECK-NEXT:    { nop; mul64.ulul d3, d0, d3 }
@@ -48,15 +48,15 @@ define i64 @cb51_sext_mul_i128(i64 %x, i64 %y) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; move32_dr_l r1, d0; move32_dr_h r2, d0 }
+; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_l r3, d1 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; move32_dr_h r1, d1 }
 ; CHECK-NEXT:    { nop; sext32t64 d2, r2; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r3; slli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32; sext32t64 d3, r1 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; slli64 d3, d3, 32; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d3, r1; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32; srli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; mul64.ulul d2, d2, d1 }
 ; CHECK-NEXT:    { nop; mul64.ulul d3, d0, d3 }

@@ -61,7 +61,7 @@ define i64 @phi_i64_loop(i32 %n, i64 %init) nounwind {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
 ; CHECK-NEXT:    { nop; nop; or64 d1, d0, d0 }
-; CHECK-NEXT:    { nop; slt32 r3, r2, r1; add64 d0, d1, d2 }
+; CHECK-NEXT:    { nop; add64 d0, d1, d2; slt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB1_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; nop; or64 d0, d1, d1 }
@@ -158,7 +158,7 @@ define i32 @phi_nested_loops(i32 %n, i32 %m) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
-; CHECK-NEXT:    { nop; move32 r5, r4; move32 r3, r4 }
+; CHECK-NEXT:    { nop; move32 r3, r4; move32 r5, r4 }
 ; CHECK-NEXT:  .LBB4_1: // %outer
 ; CHECK-NEXT:    // =>This Loop Header: Depth=1
 ; CHECK-NEXT:    // Child Loop BB4_2 Depth 2
@@ -216,7 +216,7 @@ define i64 @phi_mixed_types(i32 %n) nounwind {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; sext32t64 d2, r2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
-; CHECK-NEXT:    { nop; or64 d0, d1, d1; slt32 r3, r2, r1 }
+; CHECK-NEXT:    { nop; slt32 r3, r2, r1; or64 d0, d1, d1 }
 ; CHECK-NEXT:    { nop; nop; add64 d1, d0, d2 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB5_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
@@ -246,7 +246,7 @@ define i32 @phi_cond_update(i32 %n, i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; move32 r5, r4 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; move32 r3, r4; slt32 r6, r2, r5 }
+; CHECK-NEXT:    { nop; slt32 r6, r2, r5; move32 r3, r4 }
 ; CHECK-NEXT:    { addi32 r7, r3, 1; addi32 r5, r5, 1 }
 ; CHECK-NEXT:    { nop; slt32 r12, r5, r1 }
 ; CHECK-NEXT:    { nop; movt32 r4, r7, r6 }

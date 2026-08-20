@@ -54,8 +54,8 @@ define i32 @test_many_gpr_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e) {
 ; CHECK-NEXT:    .cfi_offset r11, -16
 ; CHECK-NEXT:    .cfi_offset fp, -20
 ; CHECK-NEXT:    .cfi_offset lr, -24
-; CHECK-NEXT:    { nop; move32 r8, r2; move32 r9, r3 }
-; CHECK-NEXT:    { nop; move32 r10, r4; move32 r11, r5 }
+; CHECK-NEXT:    { nop; move32 r9, r3; move32 r8, r2 }
+; CHECK-NEXT:    { nop; move32 r11, r5; move32 r10, r4 }
 ; CHECK-NEXT:    { nop; jal lr, callee_i32 }
 ; CHECK-NEXT:    { nop; move32 fp, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
@@ -146,7 +146,7 @@ define i64 @test_dr64_callee_saves(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    .cfi_offset d8, -16
 ; CHECK-NEXT:    .cfi_offset d9, -24
 ; CHECK-NEXT:    .cfi_offset d10, -32
-; CHECK-NEXT:    { nop; or64 d8, d1, d1; or64 d9, d2, d2 }
+; CHECK-NEXT:    { nop; or64 d9, d2, d2; or64 d8, d1, d1 }
 ; CHECK-NEXT:    { nop; jal lr, callee_i64 }
 ; CHECK-NEXT:    { nop; nop; or64 d10, d0, d0 }
 ; CHECK-NEXT:    { nop; nop; or64 d0, d8, d8 }

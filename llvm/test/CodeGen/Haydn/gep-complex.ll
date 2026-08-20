@@ -163,7 +163,7 @@ define i32 @gep_in_loop(ptr %arr, i32 %n) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { nop; slt32 r6, r4, r2; add32 r3, r3, r5 }
+; CHECK-NEXT:    { nop; add32 r3, r3, r5; slt32 r6, r4, r2 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB7_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r3 }

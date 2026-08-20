@@ -183,7 +183,7 @@ define i32 @test_loop(i32 %n) {
 ; CHECK-NEXT:    { nop; ld32 r2, sp, 5 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; addi32 r3, r4, 1 }
-; CHECK-NEXT:    { nop; slt32 r1, r3, r1; add32 r2, r2, r4 }
+; CHECK-NEXT:    { nop; add32 r2, r2, r4; slt32 r1, r3, r1 }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; st32 r3, sp, 4 } // 4-byte Folded Spill

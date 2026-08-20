@@ -118,7 +118,7 @@ define ptr @dynamic_alloca_with_call(i32 %size) {
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; sub32 r1, sp, r1 }
 ; CHECK-NEXT:    { nop; and32 r8, r1, r2 }
-; CHECK-NEXT:    { nop; move32 r1, r8; move32 sp, r8 }
+; CHECK-NEXT:    { nop; move32 sp, r8; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; jal lr, use_ptr }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
@@ -224,7 +224,7 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    { nop; sub32 r2, sp, r2 }
 ; CHECK-NEXT:    { nop; and32 r2, r2, r4 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; move32 r4, r2; move32 sp, r2 }
+; CHECK-NEXT:    { nop; move32 sp, r2; move32 r4, r2 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; mull r5, r3, r3 }

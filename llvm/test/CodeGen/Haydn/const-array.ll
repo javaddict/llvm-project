@@ -114,7 +114,7 @@ define i32 @sum_array(ptr %arr, i32 %count) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { nop; slt32 r6, r4, r2; add32 r3, r3, r5 }
+; CHECK-NEXT:    { nop; add32 r3, r3, r5; slt32 r6, r4, r2 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB3_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; move32 r1, r3 }
@@ -311,7 +311,7 @@ define i1 @array_contains(ptr %arr, i32 %size, i32 %target) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r5, r5, 1 }
-; CHECK-NEXT:    { nop; seq32 r6, r6, r3; slt32 r7, r5, r2 }
+; CHECK-NEXT:    { nop; slt32 r7, r5, r2; seq32 r6, r6, r3 }
 ; CHECK-NEXT:    { nop; or32 r4, r4, r6 }
 ; CHECK-NEXT:    { nop; bnez r7, .LBB10_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit

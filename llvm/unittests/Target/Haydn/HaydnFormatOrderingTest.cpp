@@ -57,11 +57,17 @@ namespace {
 
 // Walk Format.getSlots() and collect Bundle.at(Slot) opcodes — pure data
 // half of applyFormatOrdering (AIEHazardRecognizer.cpp:292-306).
+// REBASED 2026-08-21: SlotMap keys are residual S* FieldSlots kinds;
+// translate each E2/E3 entry kind to its S* kind before at().
 static SmallVector<unsigned, 3>
 fieldOrderOpcodes(const Bundle<MCInst> &B, const VLIWFormat &Fmt) {
   SmallVector<unsigned, 3> Out;
   for (MCSlotKind Slot : Fmt.getSlots()) {
-    if (const MCInst *I = B.at(Slot))
+    MCSlotKind Kind = Slot;
+    if (MCSlotKind Residual = haydnSlotMaskToKind(
+            haydn::bundle::issueFieldSlotsForCommittedKind(Kind)))
+      Kind = Residual;
+    if (const MCInst *I = B.at(Kind))
       Out.push_back(I->getOpcode());
   }
   return Out;
@@ -110,6 +116,13 @@ TEST(HaydnFormatOrdering, FieldOrderIgnoresScheduleInputOrder) {
   // Three committed Format E members (E3 e0/e1/e2, distinct units, one row).
   // SlotMap placement is independent of schedule order; Format.getSlots()
   // field walk is E3_2→E3_1→E3_0 regardless of add order.
+  //
+  // REBASED 2026-08-21: SlotMap is keyed by residual S* FieldSlots kinds
+  // (syncSlotMapFromPreferred → haydnSlotMaskToKind; E3 entry kinds live on
+  // the Format.getSlots() axis only). The original E3_* at() lookups predate
+  // that split and segfaulted on nullptr. at() queries use S0/S1/S2 here;
+  // entry↔field mapping is E3_0→S0, E3_1→S1, E3_2→S2
+  // (issueFieldSlotsForCommittedKind).
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst E0, E1, E2;
@@ -134,12 +147,15 @@ TEST(HaydnFormatOrdering, FieldOrderIgnoresScheduleInputOrder) {
   ASSERT_NE(Fmt, nullptr);
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
 
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0))->getOpcode(),
-            Haydn::ADD32_E3_E0_ALU0_RR);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1))->getOpcode(),
-            Haydn::ADD32_E3_E1_ALU1_RR);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2))->getOpcode(),
-            Haydn::ADD32_E3_E2_ALU2_RR);
+  const MCInst *AtS0 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+  const MCInst *AtS1 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+  const MCInst *AtS2 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
+  ASSERT_NE(AtS0, nullptr);
+  ASSERT_NE(AtS1, nullptr);
+  ASSERT_NE(AtS2, nullptr);
+  EXPECT_EQ(AtS0->getOpcode(), Haydn::ADD32_E3_E0_ALU0_RR);
+  EXPECT_EQ(AtS1->getOpcode(), Haydn::ADD32_E3_E1_ALU1_RR);
+  EXPECT_EQ(AtS2->getOpcode(), Haydn::ADD32_E3_E2_ALU2_RR);
 
   SmallVector<unsigned, 3> Fields = fieldOrderOpcodes(B, *Fmt);
   ASSERT_EQ(Fields.size(), 3u);
@@ -149,8 +165,10 @@ TEST(HaydnFormatOrdering, FieldOrderIgnoresScheduleInputOrder) {
 }
 
 TEST(HaydnFormatOrdering, FieldOrderFromReverseScheduleStillS2S1S0) {
-  // Schedule input already E3_2→E3_1→E3_0 — SlotMap keyed by generated
-  // entry kinds (field order E3_2→E3_1→E3_0).
+  // Schedule input already E3_2→E3_1→E3_0. REBASED 2026-08-21: SlotMap is
+  // keyed by residual S* FieldSlots kinds (E3_0→S0, E3_1→S1, E3_2→S2 via
+  // issueFieldSlotsForCommittedKind); entry kinds stay on the
+  // Format.getSlots() axis. See FieldOrderIgnoresScheduleInputOrder.
   HaydnMCFormats Fmts;
   Bundle<MCInst> B(&Fmts);
   MCInst E2, E1, E0;
@@ -164,12 +182,15 @@ TEST(HaydnFormatOrdering, FieldOrderFromReverseScheduleStillS2S1S0) {
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2))->getOpcode(),
-            Haydn::ADD32_E3_E2_ALU2_RR);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1))->getOpcode(),
-            Haydn::ADD32_E3_E1_ALU1_RR);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0))->getOpcode(),
-            Haydn::ADD32_E3_E0_ALU0_RR);
+  const MCInst *AtS2 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
+  const MCInst *AtS1 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+  const MCInst *AtS0 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+  ASSERT_NE(AtS2, nullptr);
+  ASSERT_NE(AtS1, nullptr);
+  ASSERT_NE(AtS0, nullptr);
+  EXPECT_EQ(AtS2->getOpcode(), Haydn::ADD32_E3_E2_ALU2_RR);
+  EXPECT_EQ(AtS1->getOpcode(), Haydn::ADD32_E3_E1_ALU1_RR);
+  EXPECT_EQ(AtS0->getOpcode(), Haydn::ADD32_E3_E0_ALU0_RR);
 }
 
 TEST(HaydnFormatOrdering, SparsePairStillFieldOrder) {
@@ -189,10 +210,18 @@ TEST(HaydnFormatOrdering, SparsePairStillFieldOrder) {
   const VLIWFormat *Fmt = B.getFormatOrNull();
   ASSERT_NE(Fmt, nullptr);
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
-  EXPECT_EQ(B.at(Fmts.getSlotKind(Ad.getOpcode()))->getOpcode(),
-            Ad.getOpcode());
-  EXPECT_EQ(B.at(Fmts.getSlotKind(St.getOpcode()))->getOpcode(),
-            St.getOpcode());
+  // REBASED 2026-08-21: SlotMap keys are S* FieldSlots kinds; translate the
+  // member's fixed E3 entry kind before at().
+  const MCInst *AtAd = B.at(haydnSlotMaskToKind(
+      haydn::bundle::issueFieldSlotsForCommittedKind(
+          Fmts.getSlotKind(Ad.getOpcode()))));
+  const MCInst *AtSt = B.at(haydnSlotMaskToKind(
+      haydn::bundle::issueFieldSlotsForCommittedKind(
+          Fmts.getSlotKind(St.getOpcode()))));
+  ASSERT_NE(AtAd, nullptr);
+  ASSERT_NE(AtSt, nullptr);
+  EXPECT_EQ(AtAd->getOpcode(), Ad.getOpcode());
+  EXPECT_EQ(AtSt->getOpcode(), St.getOpcode());
 }
 
 //===----------------------------------------------------------------------===//
@@ -238,9 +267,11 @@ TEST(HaydnFormatOrdering, MemberResolutionPrefersGetSlotKind) {
   MCInst M;
   M.setOpcode(Haydn::ADD32_E3_E2_ALU2_RR);
   B.add(&M);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2)), &M);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1)), nullptr);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0)), nullptr);
+  // REBASED 2026-08-21: SlotMap keys are residual S* FieldSlots kinds
+  // (E3_2→S2); the fixed getSlotKind() entry identity above is unchanged.
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2)), &M);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1)), nullptr);
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0)), nullptr);
 }
 
 TEST(HaydnFormatOrdering, ResidualLogicalUsesBundlePickSlotNotAltDesc) {
@@ -275,7 +306,10 @@ TEST(HaydnFormatOrdering, FixedKindIsSolePostCommitAuthority) {
   M.setOpcode(Opc);
   ASSERT_TRUE(B.canAdd(M.getOpcode()));
   B.add(&M);
-  EXPECT_EQ(B.at(Fixed), &M);
+  // REBASED 2026-08-21: SlotMap keys are residual S* FieldSlots kinds
+  // (E3_2→S2). Fixed getSlotKind() entry identity (E3_2) is asserted above
+  // and remains the sole post-commit authority.
+  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2)), &M);
   EXPECT_EQ(Fixed, MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2));
   EXPECT_EQ(static_cast<unsigned>(Fixed),
             static_cast<unsigned>(MCSlotKind::Haydn_SLOT_E3_2));
@@ -292,6 +326,10 @@ TEST(HaydnFormatOrdering, FixedKindIsSolePostCommitAuthority) {
 
 // Pure data half of HaydnAsmPrinter composite emit: reverse of
 // Format.getSlots() Bundle.at, with null for empty (caller inserts NOP).
+// REBASED 2026-08-21: SlotMap keys are residual S* FieldSlots kinds while
+// Format.getSlots() yields E2/E3 entry kinds — translate each entry kind to
+// its S* kind (issueFieldSlotsForCommittedKind) before at(), matching the
+// mixed E*/S* walk HaydnHazardRecognizer.cpp performs.
 static SmallVector<const MCInst *, 3>
 encodeOrderSlots(const Bundle<MCInst> &B) {
   SmallVector<const MCInst *, 3> Out;
@@ -301,8 +339,13 @@ encodeOrderSlots(const Bundle<MCInst> &B) {
   SmallVector<MCSlotKind, 3> Slots;
   for (MCSlotKind S : Fmt->getSlots())
     Slots.push_back(S);
-  for (auto It = Slots.rbegin(); It != Slots.rend(); ++It)
-    Out.push_back(B.at(*It));
+  for (auto It = Slots.rbegin(); It != Slots.rend(); ++It) {
+    MCSlotKind Kind = *It;
+    if (MCSlotKind Residual = haydnSlotMaskToKind(
+            haydn::bundle::issueFieldSlotsForCommittedKind(Kind)))
+      Kind = Residual;
+    Out.push_back(B.at(Kind));
+  }
   return Out;
 }
 
@@ -352,12 +395,17 @@ TEST(HaydnFormatOrdering, AsmPrinterEncodeOrderIsS0S1S2) {
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96_")) << Fmt->Name;
   EXPECT_TRUE(StringRef(Fmt->Name).starts_with("BUNDLE_E96"));
 
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_0))->getOpcode(),
-            Haydn::ADD32_E3_E0_ALU0_RR);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_1))->getOpcode(),
-            Haydn::ADD32_E3_E1_ALU1_RR);
-  EXPECT_EQ(B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_E3_2))->getOpcode(),
-            Haydn::ADD32_E3_E2_ALU2_RR);
+  // REBASED 2026-08-21: SlotMap keys are residual S* FieldSlots kinds
+  // (E3_0→S0, E3_1→S1, E3_2→S2); entry kinds stay on Format.getSlots().
+  const MCInst *AtS0 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S0));
+  const MCInst *AtS1 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S1));
+  const MCInst *AtS2 = B.at(MCSlotKind(MCSlotKind::Haydn_SLOT_S2));
+  ASSERT_NE(AtS0, nullptr);
+  ASSERT_NE(AtS1, nullptr);
+  ASSERT_NE(AtS2, nullptr);
+  EXPECT_EQ(AtS0->getOpcode(), Haydn::ADD32_E3_E0_ALU0_RR);
+  EXPECT_EQ(AtS1->getOpcode(), Haydn::ADD32_E3_E1_ALU1_RR);
+  EXPECT_EQ(AtS2->getOpcode(), Haydn::ADD32_E3_E2_ALU2_RR);
 
   auto Enc = encodeOrderSlots(B);
   ASSERT_EQ(Enc.size(), 3u);

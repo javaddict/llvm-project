@@ -362,10 +362,10 @@ define i32 @reverse_bytes(i32 %value) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; slli32 r2, r1, 24; srli32 r3, r1, 24 }
+; CHECK-NEXT:    { nop; srli32 r3, r1, 24; slli32 r2, r1, 24 }
 ; CHECK-NEXT:    { nop; or32 r2, r3, r2 }
 ; CHECK-NEXT:    { nop; andi32 r3, r1, 65280 }
-; CHECK-NEXT:    { nop; slli32 r3, r3, 8; srli32 r1, r1, 8 }
+; CHECK-NEXT:    { nop; srli32 r1, r1, 8; slli32 r3, r3, 8 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 65280 }
 ; CHECK-NEXT:    { nop; or32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; or32 r1, r2, r1 }

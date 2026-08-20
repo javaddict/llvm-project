@@ -159,7 +159,7 @@ define i32 @test_many_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e,
 ; CHECK-NEXT:    { nop; ld32 r12, r12, 0 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r3, r5, r6; add32 r2, r3, r4 }
-; CHECK-NEXT:    { nop; add32 r4, r7, r12; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; add32 r1, r1, r2; add32 r4, r7, r12 }
 ; CHECK-NEXT:    { nop; add32 r2, r3, r4 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

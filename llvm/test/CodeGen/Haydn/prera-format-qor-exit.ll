@@ -58,7 +58,7 @@ define i32 @qor_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) {
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
 ; ASM-NEXT:    { nop; xor32 r2, r3, r4; add32 r1, r1, r2 }
-; ASM-NEXT:    { nop; or32 r3, r5, r6; add32 r1, r1, r2 }
+; ASM-NEXT:    { nop; add32 r1, r1, r2; or32 r3, r5, r6 }
 ; ASM-NEXT:    { nop; add32 r1, r1, r3 }
 ; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa sp, 0
@@ -105,12 +105,12 @@ define i32 @qor_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) {
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r2, implicit killed $r1, implicit killed $r2, implicit killed $r3, implicit killed $r4 {
-; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r2
-; POST-NEXT:     $r2 = XOR32_E3_E0_ALU2_RR killed $r3, killed $r4
+; POST-NEXT:     $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
+; POST-NEXT:     $r2 = XOR32_E3_E1_ALU1_RR killed $r3, killed $r4
 ; POST-NEXT:   }
-; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r3, implicit killed $r1, implicit killed $r2, implicit killed $r5, implicit killed $r6 {
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r3, implicit-def $r1, implicit killed $r5, implicit killed $r6, implicit killed $r1, implicit killed $r2 {
+; POST-NEXT:     $r3 = OR32_E3_E2_ALU2_RR killed $r5, killed $r6
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r2
-; POST-NEXT:     $r3 = OR32_E3_E0_ALU2_RR killed $r5, killed $r6
 ; POST-NEXT:   }
 ; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r3
 ; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
@@ -227,7 +227,7 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; ASM-NEXT:    { nop; addi32 r4, r4, 4 }
 ; ASM-NEXT:    { nop; mull r6, r6, r7 }
 ; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { nop; slt32 r7, r5, r3; add32 r1, r1, r6 }
+; ASM-NEXT:    { nop; add32 r1, r1, r6; slt32 r7, r5, r3 }
 ; ASM-NEXT:    { nop; bnez r7, .LBB2_2 }
 ; ASM-NEXT:  .LBB2_3: // %exit
 ; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -344,9 +344,9 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; POST-NEXT:   $r7, $r2 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
 ; POST-NEXT:   $r4 = ADDI32_E2_E1_ALU1_RI20 killed $r4, 4
 ; POST-NEXT:   $r6 = MULL_E3_E2_MAC1_RR killed $r6, killed $r7
-; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r7, implicit killed $r1, implicit killed $r6, implicit $r5, implicit $r3 {
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r7, implicit-def $r1, implicit $r5, implicit $r3, implicit killed $r1, implicit killed $r6 {
+; POST-NEXT:     $r7 = SLT32_E3_E2_ALU2_RR $r5, $r3
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r6
-; POST-NEXT:     $r7 = SLT32_E3_E0_ALU2_RR $r5, $r3
 ; POST-NEXT:   }
 ; POST-NEXT:   BNEZ_W killed $r7, %bb.2
 ; POST-NEXT: {{  $}}
@@ -432,8 +432,8 @@ define i32 @qor_critical_and_side(i32 %a, i32 %b, i32 %c) {
 ; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r4, implicit-def $r2, implicit killed $r2, implicit killed $r3 {
-; POST-NEXT:     $r4 = XOR32_E3_E1_ALU1_RR $r2, $r3
-; POST-NEXT:     $r2 = OR32_E3_E0_ALU2_RR killed $r2, killed $r3
+; POST-NEXT:     $r4 = XOR32_E3_E2_ALU2_RR $r2, $r3
+; POST-NEXT:     $r2 = OR32_E3_E1_ALU1_RR killed $r2, killed $r3
 ; POST-NEXT:   }
 ; POST-NEXT:   $r2 = ADD32_E3_E2_ALU2_RR killed $r4, killed $r2
 ; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
