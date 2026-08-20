@@ -6,20 +6,23 @@
 
 # Isolation wall: committed MemberId BUNDLE_E96_* serialize as-is
 # (trySerializeFormatECompositeAsIs) and never enter standalone DFS/fill.
-# encodeSlotSubInst is serialize-only. fillFormatEMemberInst is hand-asm
-# public-logical only (positional / closed keep-map). Compiler extra-op
-# cutover (MOVE32 3-op vs member 2-op) stays in Finalize. Suffix _S* does
-# not certify a Format E entry. Peer: AIEBaseMCCodeEmitter.cpp:45-68.
+# encodeSlotSubInst is serialize-only. fillFormatEMemberInst never calls
+# FromRawBundle. Reconstruction is fillFormatEMemberInstPublicHandAsm only
+# (positional / closed keep-map). Compiler extra-op cutover (MOVE32 3-op vs
+# member 2-op) stays in Finalize. Suffix _S* does not certify a Format E
+# entry. Peer: AIEBaseMCCodeEmitter.cpp:45-68.
 #
 # ISOLATE: AnyPrivate
 # ISOLATE: AnyPublicReal
 # ISOLATE: trySerializeFormatECompositeAsIs
 # ISOLATE: refuse skip-Finalize
 # ISOLATE: encodeSlotSubInst never calls this
+# ISOLATE: fillFormatEMemberInstPublicHandAsm
 # ISOLATE: Operand count is occupancy, not row width
 # ISOLATE: never enter this function
 # ISOLATE: committed MemberId opcodes return false
 # ISOLATE: MOVE32/ABS32 trailing extra
+# ISOLATE: Matching public logicals still do not FromRawBundle
 
 .text
   { add32 r1, r2, r3 }

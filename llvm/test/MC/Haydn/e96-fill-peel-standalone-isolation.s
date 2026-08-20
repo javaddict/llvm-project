@@ -7,17 +7,20 @@
 # RUN:   FileCheck %s --check-prefix=FIELDSLOT
 
 # Isolation wall: skip-Finalize / compiler extra-op never bag-sorts through
-# fillFormatEMemberInstFromRawBundle. Standalone public logicals still place
-# (positional / Imm-0 / AR-UA POST / CB). Occupancy is
+# fillFormatEMemberInstFromRawBundle. Reconstruction is PublicHandAsm only.
+# fillFormatEMemberInst never calls FromRawBundle. Standalone public logicals
+# still place (positional / Imm-0 / AR-UA POST / CB). Occupancy is
 # haydnCatalogOccupancyName; leftover `_S*` / `_E2_` name peel is deleted.
 # Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
 
 # EMIT: haydnCatalogOccupancyName
 # EMIT: fillFormatEMemberInstFromCompilerRoot
 # EMIT: fillFormatEMemberInstFromRawBundle
+# EMIT: fillFormatEMemberInstPublicHandAsm
 # EMIT: Compiler LUI vestigial $rs
 # EMIT: dest-as-ins members
 # EMIT: Always false
+# EMIT: Matching public logicals still do not FromRawBundle
 # EMIT-NOT: tryMode
 
 .ifdef FIELDSLOT

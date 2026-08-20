@@ -38,7 +38,10 @@
 // generated private member. Compiler BUNDLE_E96_* roots serialize typed
 // (row, entry, member) as-is via encodeInstructionFromCompilerRoot and never
 // re-enter standalone DFS. fillFormatEMemberInstFromCompilerRoot is fail-closed.
-// fillFormatEMemberInstFromRawBundle is hand-asm only (positional / Imm-0).
+// fillFormatEMemberInst never calls FromRawBundle (compiler-root wall).
+// fillFormatEMemberInstFromRawBundle is positional copy only.
+// fillFormatEMemberInstPublicHandAsm is standalone keep-map only
+// (AR-UA POST / CB / Imm-0); the sole reconstruction caller.
 // Closed extra-op keep-map (AR-UA POST, CB writeback, Imm-0 hole, 0-op HINT) is
 // standalone only. Compiler extra-op cutover (MOVE32/ABS32 trailing rs2,
 // tied MAC acc) stays in Finalize. Residual FieldSlot never enters fill.
@@ -221,6 +224,11 @@ private:
 };
 
 } // end anonymous namespace
+
+/// Compiler-root wall: never FromRawBundle. Defined later in this TU.
+static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
+                                  const MCInst &Logical, const MCInstrInfo &MII,
+                                  const MCRegisterInfo &MRI, MCInst &Out);
 
 /// Resolve the generated Format E type record for \p MI from the committed
 /// MemberId opcode only. Public-logical name match would pick the first catalog
@@ -533,7 +541,14 @@ bool HaydnMCCodeEmitter::encodeInstructionFromCompilerRoot(
       continue;
     if (isResidualFieldSlotOpcodeName(MII.getName(ChildOpc)))
       return false;
-    if (!findFormatEMemberByOpcode(ChildOpc))
+    const FormatEMemberRec *Mem = findFormatEMemberByOpcode(ChildOpc);
+    if (!Mem)
+      return false;
+    // fillFormatEMemberInst is the compiler-root wall: it never calls
+    // FromRawBundle. Success here would mean reconstruction leaked in.
+    MCInst Discard;
+    if (fillFormatEMemberInst(*Mem, *Op.getInst(), MII, *Ctx.getRegisterInfo(),
+                              Discard))
       return false;
   }
   SmallVector<MCInst, 4> PlaceStorage;
@@ -675,6 +690,11 @@ static bool fillFormatEMemberInstFromCompilerRoot(
     const FormatEMemberRec &Mem, const MCInst &Logical, const MCInstrInfo &MII,
     const MCRegisterInfo &MRI, MCInst &Out);
 static bool fillFormatEMemberInstFromRawBundle(const FormatEMemberRec &Mem,
+                                               const MCInst &Logical,
+                                               const MCInstrInfo &MII,
+                                               const MCRegisterInfo &MRI,
+                                               MCInst &Out);
+static bool fillFormatEMemberInstPublicHandAsm(const FormatEMemberRec &Mem,
                                                const MCInst &Logical,
                                                const MCInstrInfo &MII,
                                                const MCRegisterInfo &MRI,
@@ -894,12 +914,13 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
       Storage.emplace_back();
       // Skip-Finalize compiler extras / FieldSlot / MemberId never enter
       // fill (no bag-sort, no operand rebuild). Standalone public logicals
-      // fill positional / Imm-0 / AR-UA POST / CB only.
+      // reconstruct only through PublicHandAsm (positional / Imm-0 /
+      // AR-UA POST / CB). fillFormatEMemberInst never calls FromRawBundle.
       // Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
       if (isSkipFinalizeFillRefuse(*(*Best)[Kid].Mem, *Reals[Kid], MII))
         return false;
-      if (!fillFormatEMemberInst(*(*Best)[Kid].Mem, *Reals[Kid], MII, MRI,
-                                 Storage.back()))
+      if (!fillFormatEMemberInstPublicHandAsm(*(*Best)[Kid].Mem, *Reals[Kid],
+                                             MII, MRI, Storage.back()))
         return false;
       Out.addOperand(MCOperand::createInst(&Storage.back()));
     } else {
@@ -1017,10 +1038,9 @@ static bool fillFormatEMemberInstFromCompilerRoot(
   return false;
 }
 
-/// Raw/hand-asm BUNDLE_E96_* public logicals only. Positional copy, then
-/// closed standalone keep-map (AR-UA POST, CB writeback, Imm-0 hole, 0-op
-/// HINT). Never FieldSlot, never MemberId, never compiler extra-op.
-/// encodeSlotSubInst never calls this — placement only.
+/// Raw/hand-asm positional copy only. Never keep-map reconstruction — that
+/// lives in fillFormatEMemberInstPublicHandAsm. Never FieldSlot, never
+/// MemberId, never compiler extra-op. encodeSlotSubInst never calls this.
 static bool fillFormatEMemberInstFromRawBundle(const FormatEMemberRec &Mem,
                                                const MCInst &Logical,
                                                const MCInstrInfo &MII,
@@ -1080,21 +1100,37 @@ static bool fillFormatEMemberInstFromRawBundle(const FormatEMemberRec &Mem,
     return true;
   }
 
-  // Standalone-only closed extra-op keep-map (AR-UA POST, CB writeback,
-  // Imm-0 hole, 0-op HINT). MOVE32/ABS32 trailing extra and tied MAC extra
-  // already returned false above. Not a class bag-sort.
+  // Keep-map reconstruction is PublicHandAsm only. Positional miss fails
+  // closed here so compiler-root callers of FromRawBundle cannot peel.
+  return false;
+}
+
+/// Standalone/hand-asm only. Positional copy, then closed keep-map (AR-UA
+/// POST, CB writeback, Imm-0 hole, 0-op HINT). Sole reconstruction caller.
+/// Skip-Finalize compiler extras / FieldSlot / MemberId refuse before fill.
+/// Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
+static bool fillFormatEMemberInstPublicHandAsm(const FormatEMemberRec &Mem,
+                                               const MCInst &Logical,
+                                               const MCInstrInfo &MII,
+                                               const MCRegisterInfo &MRI,
+                                               MCInst &Out) {
+  if (isSkipFinalizeFillRefuse(Mem, Logical, MII))
+    return false;
+  if (fillFormatEMemberInstFromRawBundle(Mem, Logical, MII, MRI, Out))
+    return true;
   return haydnFillFormatEMemberInst(Mem, Logical, MII, MRI, Out);
 }
 
-/// Dispatcher: compiler-root / FieldSlot / extra-op fail closed; raw-bundle
-/// hand-asm may fill. Public-logical / private-member firewall:
+/// Public wrapper: skip-Finalize / compiler-root never fill. Never calls
+/// FromRawBundle — reconstruction is PublicHandAsm only (standalone
+/// buildFormatEPlacedComposite). Public-logical / private-member firewall:
 ///   * typed members serialize as-is (trySerializeFormatECompositeAsIs)
 ///   * compiler TargetOpcode::BUNDLE residual logicals fatal in encodeBundle
 ///   * encodeSlotSubInst never calls this (serialize-only)
 ///   * committed MemberId opcodes return false (never as-is copy here)
 ///   * MOVE32/ABS32 trailing extra and tied MAC extra are Finalize keep-map,
 ///     not bag-sort reconstruction — isCompilerKeepMapExtraOp refuses fill
-/// Hand-asm MOVE32 AsmString is 2-op and matches positional below.
+/// Hand-asm MOVE32 AsmString is 2-op and matches positional in FromRawBundle.
 /// Peer: AIE serializes typed members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
 static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
                                   const MCInst &Logical, const MCInstrInfo &MII,
@@ -1106,7 +1142,9 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
     return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
   if (isSkipFinalizeFillRefuse(Mem, Logical, MII))
     return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
-  return fillFormatEMemberInstFromRawBundle(Mem, Logical, MII, MRI, Out);
+  // Matching public logicals still do not FromRawBundle: reconstruction
+  // is PublicHandAsm only.
+  return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
 }
 
 void HaydnMCCodeEmitter::encodeSlotSubInst(

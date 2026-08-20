@@ -15,7 +15,10 @@
 //     never enter standalone DFS.
 //   * encodeSlotSubInst is serialize-only (generated members / NOP).
 //   * fillFormatEMemberInstFromCompilerRoot always fails closed (no bag-sort).
-//   * fillFormatEMemberInstFromRawBundle is standalone/hand-asm only.
+//   * fillFormatEMemberInst never calls FromRawBundle (compiler-root wall).
+//   * fillFormatEMemberInstFromRawBundle is positional copy only.
+//   * fillFormatEMemberInstPublicHandAsm is standalone keep-map only
+//     (AR-UA POST / CB / Imm-0); the sole reconstruction caller.
 //     Residual FieldSlot never enters fill. Compiler extra-op
 //     (MOVE32 3-op vs member 2-op; LUI vestigial $rs) never enters fill.
 //     Occupancy is haydnCatalogOccupancyName, never peelLogicalOpcodeName.
