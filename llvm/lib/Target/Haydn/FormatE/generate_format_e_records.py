@@ -50,6 +50,7 @@ from family_core import (
     get_family,
     golden_inputs_pin_path,
     prove_derived_xlsx_not_authority,
+    prove_text_has_authority_pins,
     prove_unpublished_choice_fails,
     prove_unpinned_consumed_fails,
     prove_unused_authority_not_consumed,
@@ -1812,7 +1813,7 @@ def emit_members_td_inc(
         f"//===-- {family.members_td_inc} - LIVE {family.display} members -*-===//"
     )
     lines.extend(generated_banner(
-        generator=RECORDS_GENERATOR, family=family))
+        generator=RECORDS_GENERATOR, family=family, authority_pins=True))
     lines.append("// Included by HaydnFormatE.td.")
     lines.append("")
     count = 0
@@ -2772,7 +2773,7 @@ def emit_logical_defs_td_inc(
     )
     lines.append("//")
     lines.extend(generated_banner(
-        generator=RECORDS_GENERATOR, family=family))
+        generator=RECORDS_GENERATOR, family=family, authority_pins=True))
     lines.append("//")
     lines.append("// Logical (matcher-facing) defs for golden catalog names that have NO")
     lines.append("// hand def in HaydnInstrInfo.td. Encoding")
@@ -3835,6 +3836,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             prove_derived_xlsx_not_authority(golden)
             prove_unused_authority_not_consumed(golden)
             prove_unpublished_choice_fails(golden)
+            prove_text_has_authority_pins(members_td, family.members_td_inc)
+            prove_text_has_authority_pins(
+                logical_defs_td, family.logical_defs_td_inc
+            )
+            print("OK owned generated nine-file pin stamp")
             if not canonical_path.is_file():
                 raise SystemExit(
                     f"canonical-vector ledger not found: {canonical_path}"

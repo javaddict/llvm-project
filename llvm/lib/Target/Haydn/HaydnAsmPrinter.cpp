@@ -341,8 +341,25 @@ static void applyHiLoSpecifiers(MCInst &Inst, MCContext &Ctx,
     }
     if (!MO.isExpr() || isa<MCSpecifierExpr>(MO.getExpr()))
       continue;
-    std::string Log =
-        haydn::format_e::peelLogicalOpcodeName(MII.getName(Inst.getOpcode()));
+    // Occupancy / inverse logical only. Residual FieldSlot `*_S*` names
+    // are not a catalog LUI/ADDI32 recovery (AIE MultiSlot alts,
+    // AIEMCFormats.h:376-379).
+    const StringRef RawName = MII.getName(Inst.getOpcode());
+    if (haydnIsResidualFieldSlotName(RawName))
+      continue;
+    const unsigned LogOpc =
+        haydn::format_e::logicalOpcodeOrSelf(Inst.getOpcode());
+    StringRef Name = MII.getName(LogOpc);
+    if (haydnIsResidualFieldSlotName(Name))
+      continue;
+    std::string Log = haydnCatalogOccupancyName(Name);
+    if (Log.empty()) {
+      if (const haydn::format_e::FormatEMemberRec *Mem =
+              haydnFindFormatEMemberByOpcode(Inst.getOpcode()))
+        Log = Mem->Logical;
+    }
+    if (Log.empty())
+      continue;
     uint16_t Spec = 0;
     if (StringRef(Log).equals_insensitive("LUI"))
       Spec = ELF::R_HAYDN_HI12;
@@ -647,9 +664,28 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         // AIEHazardRecognizer.cpp:216-218 tries AlternateInsts until canAdd.
         // Overlay: if the first inverse member fails the keep-map fill
         // (CSRW ALU2 3-op vs catalog 2-op reloc/imm), try remaining inverse
-        // members at this entry. Do not DFS or bag-sort.
-        const std::string Log = haydn::format_e::peelLogicalOpcodeName(
-            MII.getName(ChildInst->getOpcode()));
+        // members at this entry. Do not DFS, bag-sort, or peel leftover
+        // FieldSlot `*_S*` names into a catalog logical.
+        const StringRef ChildName = MII.getName(ChildInst->getOpcode());
+        if (haydnIsResidualFieldSlotName(ChildName) ||
+            haydnIsGeneratedMemberName(ChildName))
+          report_fatal_error(
+              Twine("HaydnAsmPrinter: compiler BUNDLE child '") + ChildName +
+                  "' is not a public logical — refuse FieldSlot / member-name "
+                  "peel",
+              /*GenCrashDiag=*/false);
+        std::string Log = haydnCatalogOccupancyName(ChildName);
+        if (Log.empty()) {
+          const unsigned LogOpc =
+              haydn::format_e::logicalOpcodeOrSelf(ChildInst->getOpcode());
+          Log = haydnCatalogOccupancyName(MII.getName(LogOpc));
+        }
+        if (Log.empty())
+          report_fatal_error(
+              Twine("HaydnAsmPrinter: compiler BUNDLE child '") + ChildName +
+                  "' is not a generated Format E member — refuse skip-Finalize "
+                  "DFS / bag-sort",
+              /*GenCrashDiag=*/false);
         MCInst Filled;
         bool FilledOk = false;
         uint32_t TryUsed = UsedUnits;
@@ -669,8 +705,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         }
         if (!FilledOk)
           report_fatal_error(
-              Twine("HaydnAsmPrinter: compiler BUNDLE child '") +
-                  MII.getName(ChildInst->getOpcode()) +
+              Twine("HaydnAsmPrinter: compiler BUNDLE child '") + ChildName +
                   "' is not a generated Format E member — refuse skip-Finalize "
                   "DFS / bag-sort",
               /*GenCrashDiag=*/false);

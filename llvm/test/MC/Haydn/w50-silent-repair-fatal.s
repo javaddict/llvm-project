@@ -8,5 +8,7 @@
 
 # A: refuse E2
 # A: E3 override
+# A-NOT: peelLogicalOpcodeName
 # D: refuse dangling-block repair
+# D-NOT: peelLogicalOpcodeName
 # F: silent repair

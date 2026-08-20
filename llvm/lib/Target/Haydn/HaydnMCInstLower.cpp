@@ -19,11 +19,8 @@
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -34,17 +31,11 @@ using namespace llvm;
 #define DEBUG_TYPE "haydn-mcinstlower"
 
 static bool isHwloopWideSetup(const MachineInstr &MI) {
+  // Inverse / public opcode only. Residual FieldSlot `*_S*` names are not
+  // recovered into SET_HWLOOP (AIE MultiSlot alts, AIEMCFormats.h:376-379).
   const unsigned Opc = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
-  if (Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W)
-    return true;
-  const MachineFunction *MF = MI.getMF();
-  if (!MF)
-    return false;
-  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
-  const std::string Log =
-      haydn::format_e::peelLogicalOpcodeName(TII->getName(Opc));
-  return StringRef(Log).equals_insensitive("SET_HWLOOP") ||
-         StringRef(Log).equals_insensitive("SET_HWLOOP_F2");
+  return Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
+         Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG;
 }
 
 void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {

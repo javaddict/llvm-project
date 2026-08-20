@@ -2,6 +2,8 @@
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.cpp --check-prefix=NO-PEEL
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/AsmParser/HaydnAsmParser.cpp --check-prefix=NO-PARSER-PEEL
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnInstPrinter.cpp --check-prefix=NO-PRINT-PEEL
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnAsmPrinter.cpp --check-prefix=NO-ASM-PEEL
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnMCInstLower.cpp --check-prefix=NO-LOWER-PEEL
 # RUN: not llvm-mc -triple=haydn-unknown-elf --defsym=TRIPLE_REAL=1 %s -o /dev/null 2>&1 | \
 # RUN:   FileCheck %s --check-prefix=TRIPLE-REAL
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=THREE=1 %s -o %t3.o
@@ -32,6 +34,12 @@
 # NO-PARSER-PEEL-NOT: UseE3
 # NO-PRINT-PEEL-NOT: peelLogicalOpcodeName
 # NO-PRINT-PEEL-NOT: HaydnFormatERecords.h
+# NO-ASM-PEEL: haydnCatalogOccupancyName
+# NO-ASM-PEEL: haydnIsResidualFieldSlotName
+# NO-ASM-PEEL-NOT: peelLogicalOpcodeName
+# NO-LOWER-PEEL: logicalOpcodeOrSelf
+# NO-LOWER-PEEL: refuse dangling-block repair
+# NO-LOWER-PEEL-NOT: peelLogicalOpcodeName
 
 .ifdef TRIPLE_REAL
 # TRIPLE-REAL: error: incorrect bundle: E2-only logical cannot occupy a three-entry row

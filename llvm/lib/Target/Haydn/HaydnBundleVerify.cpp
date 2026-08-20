@@ -372,16 +372,29 @@ static bool haydnResidualLogicalNeedsCompletedInverse(unsigned Opc) {
   return privateMemberIdForOpcode(Opc) == ~0u;
 }
 
+/// True when Inv is a row of the independently generated FormatEInverse
+/// table (pointer identity). A mutated stack copy is not a generated record.
+/// Peer: AIE getAlternateInstsOpcode returns generated table entries
+/// (CodeGenFormat.cpp:155-163; AIEMCFormats.h:376-379).
+static bool isGeneratedInverseTableRow(const format_e::FormatEInverseRec *Inv) {
+  if (!Inv)
+    return false;
+  const format_e::FormatEInverseRec *ById =
+      format_e::inverseRecordForMemberId(Inv->MemberId);
+  return ById == Inv && encodeableInverseRecord(*Inv);
+}
+
 /// Complete an independently generated inverse record: membership,
 /// encodeability, unit injectivity, and (for residual/logical) stamped
 /// entry. Never FormatEMembers Mode/Entry/Logical re-filter, never
-/// Bundle.canAdd / occupancy DFS / name peel.
+/// Bundle.canAdd / occupancy DFS / name peel. Rejects mutated copies —
+/// only independently generated FormatEInverse table rows complete.
 static std::optional<std::string>
 completeInverseRecord(const format_e::FormatEInverseRec &R, unsigned Opc,
                       uint8_t ExpectMode, uint8_t EntryIdx,
                       unsigned RowEntries, uint32_t UsedUnitMask,
                       bool MatchEntry) {
-  if (!encodeableInverseRecord(R))
+  if (!isGeneratedInverseTableRow(&R) || !encodeableInverseRecord(R))
     return std::string(
                "structural inverse: inverse record not encodeable for "
                "committed member at stamped entry: ") +
@@ -408,15 +421,15 @@ completeInverseRecord(const format_e::FormatEInverseRec &R, unsigned Opc,
 /// encode-dag entry. Private members use inverseRecordForMemberId (child
 /// order may not match after residual rebind). Residual/logicals use
 /// membership EntryIdx against opcode-keyed FormatEInverse rows, then
-/// completeInverseRecord (mandatory). Source is inverseRecordForMemberId /
-/// haydnInverseRecordFromOpcode only (no peelLogicalOpcodeName, no
-/// findFormatEMember / Bundle.canAdd).
+/// completeInverseRecord (mandatory; ResidualCompletedBits is not optional).
+/// Source is inverseRecordForMemberId / haydnInverseRecordFromOpcode only
+/// (no peelLogicalOpcodeName, no findFormatEMember / Bundle.canAdd).
 static std::optional<std::string>
 verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
                            uint8_t EntryIdx, unsigned RowEntries,
                            uint32_t &SeenUnits, uint32_t &SeenEntryBits,
-                           uint32_t *ResidualCompletedBits = nullptr,
-                           unsigned ResidualBit = 0) {
+                           uint32_t &ResidualCompletedBits,
+                           unsigned ResidualBit) {
   // Pad NOP is completion fill, not a membership inverse root.
   // Peer: AIE idle slot is an unused format entry, not an alternate opcode.
   if (isPadNopOpcode(Opc))
@@ -458,6 +471,20 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
              std::to_string(EntryIdx);
   }
 
+  // Consume only independently generated FormatEInverse table rows.
+  // A mutated copy (stack / rewritten fields) is not a generated record.
+  if (!isGeneratedInverseTableRow(Inv)) {
+    if (ResidualLogical)
+      return std::string(
+                 "structural inverse: residual/logical inverse record not "
+                 "completed at membership entry: ") +
+             std::string(inverseOpcodeName(Opc)) + " entry " +
+             std::to_string(EntryIdx);
+    return std::string(
+        "structural inverse: FormatEInverse misses exact encodeable "
+        "MemberId for private member");
+  }
+
   if (auto CompErr = completeInverseRecord(*Inv, Opc, ExpectMode, EntryIdx,
                                            RowEntries, SeenUnits,
                                            /*MatchEntry=*/ResidualLogical))
@@ -469,8 +496,8 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
     return std::string(
         "structural inverse: duplicate entry index among members");
   SeenEntryBits |= 1u << Inv->EntryIdx;
-  if (ResidualLogical && ResidualCompletedBits && ResidualBit < 32)
-    *ResidualCompletedBits |= 1u << ResidualBit;
+  if (ResidualLogical && ResidualBit < 32)
+    ResidualCompletedBits |= 1u << ResidualBit;
   return std::nullopt;
 }
 
@@ -655,7 +682,7 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     // members complete an independently generated inverse record here.
     if (auto MemErr = verifyMemberAtStampedEntry(
             Opc, ExpectMode, static_cast<uint8_t>(I), RowEntries, SeenUnits,
-            SeenEntryBits, &ResidualCompletedBits, I))
+            SeenEntryBits, ResidualCompletedBits, I))
       return MemErr;
   }
 
@@ -734,7 +761,7 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
     ResidualAtEntry[E] = Inst->getOpcode();
     if (auto MemErr = verifyMemberAtStampedEntry(
             Inst->getOpcode(), ExpectMode, static_cast<uint8_t>(E), RowEntries,
-            SeenUnits, SeenEntryBits, &ResidualCompletedBits, E))
+            SeenUnits, SeenEntryBits, ResidualCompletedBits, E))
       return MemErr;
   }
   if (auto ResidualErr = haydnRequireCompletedInverseOnResidualRoots(

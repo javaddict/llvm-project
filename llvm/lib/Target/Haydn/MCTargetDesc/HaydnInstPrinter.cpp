@@ -49,12 +49,13 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
         Children.push_back(Op.getInst());
     }
     // AIE AIECommonInstPrinter.cpp:43-54 prints every composite isInst slot.
-    // Haydn overlay: slot count is the stamped row's generated EntryCount
-    // (getBundleFormatRow), not child cardinality. Missing children of a
-    // stamped row print as nop (AIE empty-slot NOP). Do not drop high-entry
-    // NOPs to recover a two-member face. Generic BUNDLE is not a product
-    // row — print isInst children only; do not invent TWO vs THREE, and do
-    // not collapse an empty composite to a singleton nop.
+    // Haydn overlay: product slot count is the stamped row's generated
+    // EntryCount (getBundleFormatRow), not child cardinality. Missing
+    // children of a stamped row print as nop (AIE empty-slot NOP). Do not
+    // drop high-entry NOPs to recover a two-member face. Generic BUNDLE is
+    // not a product row — print isInst children only; do not invent TWO vs
+    // THREE from child count, and do not collapse an empty composite to a
+    // singleton nop.
     unsigned SlotN = 0;
     if (Opc == Haydn::BUNDLE_E96_TWO_ENTRY) {
       if (const haydn::format::BundleFormatRowDesc *Row =
@@ -67,20 +68,30 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
                   haydn::format::BundleFormatRowID::E96ThreeEntry))
         SlotN = Row->EntryCount;
     }
-    const unsigned PrintN = SlotN ? SlotN : Children.size();
-    if (PrintN == 0) {
+    if (SlotN) {
+      O << "\t{ ";
+      for (unsigned I = SlotN; I-- > 0;) {
+        if (I + 1 != SlotN)
+          O << "; ";
+        if (I < Children.size())
+          printSingleInst(Children[I], Address, STI, O);
+        else
+          O << "nop";
+      }
+      O << " }";
+      printAnnotation(O, Annot);
+      return;
+    }
+    if (Children.empty()) {
       O << "\t{ }";
       printAnnotation(O, Annot);
       return;
     }
     O << "\t{ ";
-    for (unsigned I = PrintN; I-- > 0;) {
-      if (I + 1 != PrintN)
+    for (unsigned I = Children.size(); I-- > 0;) {
+      if (I + 1 != Children.size())
         O << "; ";
-      if (I < Children.size())
-        printSingleInst(Children[I], Address, STI, O);
-      else
-        O << "nop";
+      printSingleInst(Children[I], Address, STI, O);
     }
     O << " }";
     printAnnotation(O, Annot);

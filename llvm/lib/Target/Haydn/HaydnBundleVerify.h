@@ -191,6 +191,9 @@ findInverseLogicalAtEntry(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
       continue;
     if (!format_e::completeInverseRecord(R))
       continue;
+    // Independently generated table row only — mutated copies are not keys.
+    if (format_e::inverseRecordForMemberId(R.MemberId) != &R)
+      continue;
     if (R.Unit < 32 && (UsedUnitMask & (1u << R.Unit)))
       continue;
     // Return vehicle for AsmPrinter fill; selection is FormatEInverse only
@@ -216,6 +219,8 @@ findInverseLogicalAtEntry(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
 ///     never re-plans; never findFormatEMember / UnitMap stamper). Inverse
 ///     rows must be completed (unit injectivity, membership, encodeability)
 ///     on every residual root — never structural/forward acceptance.
+///     Mutated inverse copies are rejected (pointer identity with the
+///     independently generated FormatEInverse table).
 ///   * anything else fails closed
 ///   * OutPlan filled from stamped row + inverse occupancy + golden-row
 ///     completion (never makeProductPlan / selectProductRow /

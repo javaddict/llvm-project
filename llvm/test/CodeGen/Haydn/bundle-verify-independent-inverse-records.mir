@@ -21,6 +21,11 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   -verify-machineinstrs %t/pad-only-idle.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=OK-IDLE
+# COPY is not expand-owned / cycle-forming; inverse completion must still
+# fail closed (no generated FormatEInverse key, no structural accept).
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/residual-copy.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=COPY-RES
 # REQUIRES: haydn-registered-target
 
 # Role: MIR — independent inverse records only (opcode-keyed FormatEInverse).
@@ -38,6 +43,7 @@
 # RES-NO-COMP: missing CompletionStateID
 # STUB-COMP: does not match row and member count
 # EXPAND-OWNED: residual expand-owned pseudo child
+# COPY-RES: residual/logical inverse record not completed
 # OK-LOG-LABEL: name: legal_e2_logical
 # OK-LOG: BUNDLE 0, 0
 # OK-LOG: ADD32
@@ -160,6 +166,22 @@ body:             |
     liveins: $r15
     BUNDLE 0, 0 {
       NOP
+    }
+    RET implicit $r15
+...
+#--- residual-copy.mir
+--- |
+  define void @residual_copy() { ret void }
+...
+---
+name:            residual_copy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    BUNDLE 0, 0, implicit $r0 {
+      $r2 = COPY $r0
     }
     RET implicit $r15
 ...

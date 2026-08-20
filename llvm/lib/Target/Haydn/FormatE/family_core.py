@@ -256,6 +256,29 @@ SCHEMA_VERSION = "format-e-records/1"
 UMBRELLA_CHECK = "llvm/lib/Target/Haydn/FormatE/check_generated.sh"
 
 
+def authority_pin_banner_lines(prefix: str = "//") -> list:
+    """Stamp the compiler nine-file pin (8 byte + 1 cell digest).
+
+    Catalog generate_catalog.py stays six-file; unused/derived rows live here.
+    Derived instruction_to_entry.xlsx is named with #cells, never ZIP bytes.
+    """
+    lines = [
+        f"{prefix} Compiler nine-file pin (8 byte + 1 cell). "
+        "Catalog generate_catalog.py stays six-file."
+    ]
+    for rec in AUTHORITY_FILES:
+        if rec.role == "derived":
+            name = ENTRY_XLSX_PIN_NAME
+            digest = rec.cell_sha256
+        else:
+            name = rec.filename
+            digest = rec.sha256
+        if not digest:
+            raise SystemExit(f"error: authority pin missing digest for {name}")
+        lines.append(f"{prefix} PIN: {digest}  {name}")
+    return lines
+
+
 def generated_banner(
     *,
     generator: str,
@@ -263,6 +286,7 @@ def generated_banner(
     json_sha: str = "",
     xlsx_sha: str = "",
     prefix: str = "//",
+    authority_pins: bool = False,
 ) -> list:
     """P19 generated-file header. prefix is '//' or '#'."""
     check = f"python3 {generator} --check --family {family.cli_name}"
@@ -281,6 +305,8 @@ def generated_banner(
     if AUTHORED_OVERLAY_PATH.is_file():
         lines.append(f"{prefix} Overlay: {AUTHORED_OVERLAY_PATH.name}")
         lines.append(f"{prefix} Overlay-SHA256: {sha256_file(AUTHORED_OVERLAY_PATH)}")
+    if authority_pins:
+        lines.extend(authority_pin_banner_lines(prefix))
     return lines
 
 
@@ -1031,6 +1057,7 @@ def prove_catalog_invented_seventh_fails() -> None:
 def check_pin_ledgers() -> None:
     """Compiler nine-file + catalog six-file pins; no golden directory."""
     verify_golden_inputs_pin(golden_inputs_pin_path())
+    prove_owned_generated_authority_pins(haydn_target_dir())
     prove_catalog_pin_refuses_retired()
     prove_catalog_six_file_pin_ok()
     prove_incomplete_compiler_pin_fails()
@@ -1173,17 +1200,64 @@ def prove_derived_xlsx_not_authority(golden: Path) -> None:
 
 
 def prove_unused_authority_not_consumed(golden: Path) -> None:
-    try:
-        verify_authority_inputs(golden, ["operands_info.md"])
-    except SystemExit as exc:
-        msg = str(exc)
-        if "unused nine-file member" in msg and "operands_info.md" in msg:
-            print("OK unused authority input refused")
-            return
+    unused = [rec.filename for rec in AUTHORITY_FILES if rec.role == "unused"]
+    if not unused:
+        raise SystemExit("error: no unused nine-file members to probe")
+    for name in unused:
+        try:
+            verify_authority_inputs(golden, [name])
+        except SystemExit as exc:
+            msg = str(exc)
+            if "unused nine-file member" in msg and name in msg:
+                continue
+            raise SystemExit(
+                f"error: unused-authority probe failed unexpectedly: {msg}"
+            ) from exc
         raise SystemExit(
-            f"error: unused-authority probe failed unexpectedly: {msg}"
-        ) from exc
-    raise SystemExit("error: unused authority consume did not fail closed")
+            f"error: unused authority consume did not fail closed: {name}"
+        )
+    print("OK unused authority input refused")
+
+
+_ZIP_BYTE_ENTRY_PIN_RE = re.compile(
+    r"PIN:\s+[0-9a-fA-F]{64}\s+instruction_to_entry\.xlsx\s*$", re.M
+)
+
+
+def prove_text_has_authority_pins(text: str, label: str) -> None:
+    """Fail closed unless *text* stamps every nine-file pin (cell, not ZIP)."""
+    if ENTRY_XLSX_PIN_NAME not in text:
+        raise SystemExit(
+            f"error: {label} missing cell pin "
+            "(xlsx ZIP bytes are not authority)"
+        )
+    if _ZIP_BYTE_ENTRY_PIN_RE.search(text):
+        raise SystemExit(
+            f"error: {label} pins instruction_to_entry.xlsx ZIP bytes"
+        )
+    expected = expected_golden_inputs_pin()
+    for name, digest in expected.items():
+        if digest not in text or name not in text:
+            raise SystemExit(f"error: {label} missing nine-file pin {name}")
+
+
+def haydn_target_dir() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def prove_owned_generated_authority_pins(haydn_dir: Path) -> None:
+    """Member and logical generated files stamp the compiler nine-file pin."""
+    owned = (
+        haydn_dir / "HaydnFormatsE96Members.td.inc",
+        haydn_dir / "HaydnInstrInfoGolden.td.inc",
+    )
+    for path in owned:
+        if not path.is_file():
+            raise SystemExit(f"error: owned generated file missing: {path}")
+        prove_text_has_authority_pins(
+            path.read_text(encoding="utf-8"), path.name
+        )
+    print("OK owned generated nine-file pin stamp")
 
 
 def prove_unpublished_choice_fails(golden: Path) -> None:
