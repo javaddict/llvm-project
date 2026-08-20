@@ -3,8 +3,9 @@
 # REQUIRES: haydn-registered-target
 
 # Role: standalone hand-asm still places public logicals (one-parcel DFS).
-# Compiler skip-Finalize bag-sort is isolated in AsmPrinter (member fill or
-# fatal). Immediate CSRW_W places as the CSRW member (csrw print).
+# Compiler skip-Finalize bag-sort is isolated: AsmPrinter inverse-at-entry
+# is positional only; keep-map is PublicHandAsm. Immediate CSRW_W places as
+# the CSRW member (csrw print).
 
 .text
 

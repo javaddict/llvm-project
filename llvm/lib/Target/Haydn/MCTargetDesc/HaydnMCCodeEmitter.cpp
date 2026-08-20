@@ -45,6 +45,7 @@
 // Closed extra-op keep-map (AR-UA POST, CB writeback, Imm-0 hole, 0-op HINT) is
 // standalone only. Compiler extra-op cutover (MOVE32/ABS32 trailing rs2,
 // tied MAC acc) stays in Finalize. Residual FieldSlot never enters fill.
+// FieldSlot, MemberId, and compiler extra-op never reconstruct.
 // Class-bag operand rebuild is deleted.
 // Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
 //
@@ -956,48 +957,7 @@ static std::string formatELogicalName(StringRef Name) {
 static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
                                      const MCInst &Logical,
                                      const MCInstrInfo &MII) {
-  if (Mem.MemberId >= FormatEMemberOpcodeCount)
-    return false;
-  const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
-  if (MemberOpc == 0)
-    return false;
-  const MCInstrDesc &LogDesc = MII.get(Logical.getOpcode());
-  const MCInstrDesc &MemDesc = MII.get(MemberOpc);
-  const unsigned Need = MemDesc.getNumOperands();
-  const unsigned Have = Logical.getNumOperands();
-  if (Have == Need || LogDesc.getNumOperands() <= Need)
-    return false;
-
-  // Compiler LUI vestigial $rs: extra register at first ins (index
-  // NumDefs) where the member wants an imm. Runs before NumDefs
-  // equality so dest-as-ins members (NumDefs 1->0) still fail closed.
-  // Hand-asm omitted $rs is Imm 0 and stays in standalone Imm-0 fill.
-  if (Have == Need + 1 && LogDesc.getNumDefs() >= 1) {
-    const unsigned Mid = LogDesc.getNumDefs();
-    if (Mid < Need && Mid < Have) {
-      const MCOperandInfo &MemMid = MemDesc.operands()[Mid];
-      const bool MemMidWantsReg =
-          MemMid.OperandType == MCOI::OPERAND_REGISTER || MemMid.RegClass >= 0;
-      if (Logical.getOperand(Mid).isReg() && !MemMidWantsReg)
-        return true;
-    }
-    // dest-as-ins extra $rs at logical index 1 (member has no defs).
-    if (LogDesc.getNumDefs() == 1 && MemDesc.getNumDefs() == 0 && Have > 1 &&
-        Logical.getOperand(1).isReg())
-      return true;
-  }
-
-  if (LogDesc.getNumDefs() != MemDesc.getNumDefs())
-    return false;
-  for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands(); ++I) {
-    if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0)
-      return true;
-  }
-  for (unsigned I = Need; I < Have; ++I) {
-    if (Logical.getOperand(I).isReg())
-      return true;
-  }
-  return false;
+  return haydnIsCompilerKeepMapExtraOp(Mem, Logical, MII);
 }
 
 /// Skip-Finalize / compiler-root shapes never enter standalone fill.
@@ -1046,68 +1006,17 @@ static bool fillFormatEMemberInstFromRawBundle(const FormatEMemberRec &Mem,
                                                const MCInstrInfo &MII,
                                                const MCRegisterInfo &MRI,
                                                MCInst &Out) {
-  if (Mem.MemberId >= FormatEMemberOpcodeCount)
-    return false;
-  const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
-  if (MemberOpc == 0)
-    return false;
-
-  const MCInstrDesc &MemDesc = MII.get(MemberOpc);
-  const unsigned Need = MemDesc.getNumOperands();
-  const unsigned Have = Logical.getNumOperands();
-
   // Residual FieldSlots, committed MemberId, compiler extra-op, and
   // extra operands past the public logical Desc never bag-sort here.
   if (isSkipFinalizeFillRefuse(Mem, Logical, MII))
     return false;
-
-  // Positional: count and kinds already match. Hand-asm MOVE32 is 2-op
-  // from AsmString ("move32 rd, rs1"); the generated member is 2-op.
-  if (Have == Need && Need > 0) {
-    bool PosOk = true;
-    for (unsigned I = 0; I != Need; ++I) {
-      const MCOperand &MO = Logical.getOperand(I);
-      const MCOperandInfo &Info = MemDesc.operands()[I];
-      const bool WantReg =
-          Info.OperandType == MCOI::OPERAND_REGISTER || Info.RegClass >= 0;
-      if (WantReg) {
-        if (!MO.isReg()) {
-          PosOk = false;
-          break;
-        }
-        if (Info.RegClass >= 0 && MO.getReg() != Haydn::NoRegister &&
-            !MRI.getRegClass(Info.RegClass).contains(MO.getReg())) {
-          PosOk = false;
-          break;
-        }
-      } else if (!MO.isImm() && !MO.isExpr()) {
-        PosOk = false;
-        break;
-      }
-    }
-    if (PosOk) {
-      Out.clear();
-      Out.setOpcode(MemberOpc);
-      for (unsigned I = 0; I != Need; ++I)
-        Out.addOperand(Logical.getOperand(I));
-      return true;
-    }
-  }
-
-  if (Need == 0 && Have == 0) {
-    Out.clear();
-    Out.setOpcode(MemberOpc);
-    return true;
-  }
-
-  // Keep-map reconstruction is PublicHandAsm only. Positional miss fails
-  // closed here so compiler-root callers of FromRawBundle cannot peel.
-  return false;
+  return haydnFillFormatEMemberInstPositional(Mem, Logical, MII, MRI, Out);
 }
 
 /// Standalone/hand-asm only. Positional copy, then closed keep-map (AR-UA
 /// POST, CB writeback, Imm-0 hole, 0-op HINT). Sole reconstruction caller.
 /// Skip-Finalize compiler extras / FieldSlot / MemberId refuse before fill.
+/// FieldSlot, MemberId, and compiler extra-op never reconstruct.
 /// Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
 static bool fillFormatEMemberInstPublicHandAsm(const FormatEMemberRec &Mem,
                                                const MCInst &Logical,

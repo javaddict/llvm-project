@@ -831,6 +831,117 @@ haydnFindFormatEMemberByOpcode(unsigned Opc) {
   return nullptr;
 }
 
+bool haydnIsCompilerKeepMapExtraOp(
+    const haydn::format_e::FormatEMemberRec &Mem, const MCInst &Logical,
+    const MCInstrInfo &MII) {
+  if (Mem.MemberId >= FormatEMemberOpcodeCount)
+    return false;
+  const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
+  if (MemberOpc == 0)
+    return false;
+  const MCInstrDesc &LogDesc = MII.get(Logical.getOpcode());
+  const MCInstrDesc &MemDesc = MII.get(MemberOpc);
+  const unsigned Need = MemDesc.getNumOperands();
+  const unsigned Have = Logical.getNumOperands();
+  if (Have == Need || LogDesc.getNumOperands() <= Need)
+    return false;
+
+  // Compiler LUI vestigial $rs: extra register at first ins (index
+  // NumDefs) where the member wants an imm. Runs before NumDefs
+  // equality so dest-as-ins members (NumDefs 1->0) still fail closed.
+  // Hand-asm omitted $rs is Imm 0 and stays in standalone Imm-0 fill.
+  if (Have == Need + 1 && LogDesc.getNumDefs() >= 1) {
+    const unsigned Mid = LogDesc.getNumDefs();
+    if (Mid < Need && Mid < Have) {
+      const MCOperandInfo &MemMid = MemDesc.operands()[Mid];
+      const bool MemMidWantsReg =
+          MemMid.OperandType == MCOI::OPERAND_REGISTER || MemMid.RegClass >= 0;
+      if (Logical.getOperand(Mid).isReg() && !MemMidWantsReg)
+        return true;
+    }
+    // dest-as-ins extra $rs at logical index 1 (member has no defs).
+    if (LogDesc.getNumDefs() == 1 && MemDesc.getNumDefs() == 0 && Have > 1 &&
+        Logical.getOperand(1).isReg())
+      return true;
+  }
+
+  if (LogDesc.getNumDefs() != MemDesc.getNumDefs())
+    return false;
+  for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands(); ++I) {
+    if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0)
+      return true;
+  }
+  for (unsigned I = Need; I < Have; ++I) {
+    if (Logical.getOperand(I).isReg())
+      return true;
+  }
+  return false;
+}
+
+static bool formatEMemberPositionalKindsOk(const MCInstrDesc &Desc,
+                                           const MCInst &Logical,
+                                           const MCRegisterInfo &MRI) {
+  const unsigned Need = Desc.getNumOperands();
+  if (Logical.getNumOperands() != Need)
+    return false;
+  for (unsigned OI = 0; OI != Need; ++OI) {
+    const MCOperand &MO = Logical.getOperand(OI);
+    const MCOperandInfo &Info = Desc.operands()[OI];
+    const bool WantReg =
+        Info.OperandType == MCOI::OPERAND_REGISTER || Info.RegClass >= 0;
+    if (WantReg) {
+      if (!MO.isReg())
+        return false;
+      if (Info.RegClass >= 0 && MO.getReg() != Haydn::NoRegister &&
+          !MRI.getRegClass(Info.RegClass).contains(MO.getReg()))
+        return false;
+    } else if (!MO.isImm() && !MO.isExpr()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool haydnFillFormatEMemberInstPositional(
+    const haydn::format_e::FormatEMemberRec &Mem, const MCInst &Logical,
+    const MCInstrInfo &MII, const MCRegisterInfo &MRI, MCInst &Out) {
+  if (Mem.MemberId >= FormatEMemberOpcodeCount)
+    return false;
+  const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
+  if (MemberOpc == 0)
+    return false;
+
+  // FieldSlot, committed MemberId, and compiler extra-op never reconstruct.
+  // AIE lowers as-is (AIEBaseAsmPrinter.cpp:166-177) and serializes typed
+  // members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
+  const unsigned LogOpc = Logical.getOpcode();
+  if (isResidualFieldSlotName(MII.getName(LogOpc)))
+    return false;
+  if (LogOpc == MemberOpc || haydnFindFormatEMemberByOpcode(LogOpc))
+    return false;
+  const MCInstrDesc &LogDesc = MII.get(LogOpc);
+  if (Logical.getNumOperands() > LogDesc.getNumOperands())
+    return false;
+  if (haydnIsCompilerKeepMapExtraOp(Mem, Logical, MII))
+    return false;
+
+  const MCInstrDesc &Desc = MII.get(MemberOpc);
+  const unsigned Need = Desc.getNumOperands();
+  const unsigned Have = Logical.getNumOperands();
+  if (Need == 0 && Have == 0) {
+    Out.clear();
+    Out.setOpcode(MemberOpc);
+    return applyHwloopDumpBytesToMemberFields(Mem, Out);
+  }
+  if (!formatEMemberPositionalKindsOk(Desc, Logical, MRI))
+    return false;
+  Out.clear();
+  Out.setOpcode(MemberOpc);
+  for (unsigned OI = 0; OI != Need; ++OI)
+    Out.addOperand(Logical.getOperand(OI));
+  return applyHwloopDumpBytesToMemberFields(Mem, Out);
+}
+
 bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
                                 const MCInst &Logical, const MCInstrInfo &MII,
                                 const MCRegisterInfo &MRI, MCInst &Out) {
@@ -840,112 +951,26 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
   if (MemberOpc == 0)
     return false;
 
+  // FieldSlot, committed MemberId, and compiler extra-op never reconstruct.
   // Residual FieldSlots never recover occupancy here. AIE MultiSlot alts
   // (AIEMCFormats.h:376-379) are generated; suffix peel is not a fill.
-  if (isResidualFieldSlotName(MII.getName(Logical.getOpcode())))
+  const unsigned LogOpc = Logical.getOpcode();
+  if (isResidualFieldSlotName(MII.getName(LogOpc)))
     return false;
+  if (LogOpc == MemberOpc || haydnFindFormatEMemberByOpcode(LogOpc))
+    return false;
+  const MCInstrDesc &LogDesc = MII.get(LogOpc);
+  if (Logical.getNumOperands() > LogDesc.getNumOperands())
+    return false;
+  if (haydnIsCompilerKeepMapExtraOp(Mem, Logical, MII))
+    return false;
+
+  if (haydnFillFormatEMemberInstPositional(Mem, Logical, MII, MRI, Out))
+    return true;
 
   auto finishLogicalFill = [&]() -> bool {
     return applyHwloopDumpBytesToMemberFields(Mem, Out);
   };
-
-  // Typed as-is path: SubInst is already the private Format E member opcode
-  // with wire-shaped operands — copy Desc operands without bag-sort rebuild.
-  if (Logical.getOpcode() == MemberOpc) {
-    const MCInstrDesc &Desc = MII.get(MemberOpc);
-    if (Logical.getNumOperands() < Desc.getNumOperands())
-      return false;
-    Out.clear();
-    Out.setOpcode(MemberOpc);
-    for (unsigned OI = 0, OE = Desc.getNumOperands(); OI != OE; ++OI)
-      Out.addOperand(Logical.getOperand(OI));
-    return true;
-  }
-
-  // Residual positional promote: when residual/slot-member operands already
-  // match the private member Desc in count, order, and operand kind, copy
-  // without bag-sort. Shape-mismatched residual falls through to keep-map.
-  {
-    const MCInstrDesc &Desc = MII.get(MemberOpc);
-    const unsigned Need = Desc.getNumOperands();
-    if (Logical.getNumOperands() == Need) {
-      bool PosOk = true;
-      for (unsigned OI = 0; OI != Need; ++OI) {
-        const MCOperand &MO = Logical.getOperand(OI);
-        const MCOperandInfo &Info = Desc.operands()[OI];
-        const bool WantReg = Info.OperandType == MCOI::OPERAND_REGISTER ||
-                             Info.RegClass >= 0;
-        if (WantReg) {
-          if (!MO.isReg()) {
-            PosOk = false;
-            break;
-          }
-          if (Info.RegClass >= 0 && MO.getReg() != Haydn::NoRegister &&
-              !MRI.getRegClass(Info.RegClass).contains(MO.getReg())) {
-            PosOk = false;
-            break;
-          }
-        } else if (!MO.isImm() && !MO.isExpr()) {
-          PosOk = false;
-          break;
-        }
-      }
-      if (PosOk) {
-        Out.clear();
-        Out.setOpcode(MemberOpc);
-        for (unsigned OI = 0; OI != Need; ++OI)
-          Out.addOperand(Logical.getOperand(OI));
-        return finishLogicalFill();
-      }
-    }
-  }
-
-  // Compiler extra-op cutover is Finalize keep-map, not this fill:
-  //   * MOVE32/ABS32 trailing rs2 (3-op logical vs 2-op member)
-  //   * tied MAC/MOVT acc ins when the logical carries more ops than
-  //     the generated member
-  // Hand-asm omitted rs2 is Imm 0; AR-UA POST / CB writeback change
-  // NumDefs and stay in the closed keep-map below. Peer: AIE serializes
-  // typed members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
-  {
-    const MCInstrDesc &LogDesc = MII.get(Logical.getOpcode());
-    const MCInstrDesc &MemDesc = MII.get(MemberOpc);
-    const unsigned Need = MemDesc.getNumOperands();
-    const unsigned Have = Logical.getNumOperands();
-    if (LogDesc.getNumDefs() == MemDesc.getNumDefs() && Have != Need &&
-        LogDesc.getNumOperands() > Need) {
-      bool AnyTied = false;
-      for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands();
-           ++I) {
-        if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0) {
-          AnyTied = true;
-          break;
-        }
-      }
-      bool TrailingExtraReg = false;
-      for (unsigned I = Need; I < Have; ++I) {
-        if (Logical.getOperand(I).isReg()) {
-          TrailingExtraReg = true;
-          break;
-        }
-      }
-      if (AnyTied || TrailingExtraReg)
-        return false;
-    }
-    // Compiler LUI vestigial $rs: extra register at first ins where the
-    // member wants an imm. Hand-asm MOVE32 omitted rs2 is trailing Imm 0
-    // and stays in the Imm-0 keep-map below. Finalize owns this cutover —
-    // standalone fill never bag-sorts it.
-    if (LogDesc.getNumDefs() == MemDesc.getNumDefs() && Have == Need + 1 &&
-        LogDesc.getNumDefs() >= 1 && LogDesc.getNumDefs() < Need) {
-      const unsigned Mid = LogDesc.getNumDefs();
-      const MCOperandInfo &MemMid = MemDesc.operands()[Mid];
-      const bool MemMidWantsReg =
-          MemMid.OperandType == MCOI::OPERAND_REGISTER || MemMid.RegClass >= 0;
-      if (Logical.getOperand(Mid).isReg() && !MemMidWantsReg)
-        return false;
-    }
-  }
 
   // Standalone-only closed keep-map: Imm-0 hole, CB writeback, AR-UA POST,
   // WBARWUA, CSRW swap. Compiler extras (MOVE32 trailing, tied MAC, LUI
@@ -1023,6 +1048,18 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
             OldDefs < NewN && Keep->size() == NewN) {
           bool DropsFirstIns = (*Keep)[0] == 0;
           for (unsigned NewI = OldDefs; NewI != NewN && DropsFirstIns; ++NewI)
+            if ((*Keep)[NewI] != NewI + 1)
+              DropsFirstIns = false;
+          if (DropsFirstIns)
+            return false;
+        }
+        // dest-as-ins extra $rs keep-vector: skip first ins after dest
+        // (Keep = [0, 2, 3, ...]). CB store extra writeback is NumDefs
+        // 1->0 with a reorder keep ({3,1,2} / {1,2,3,4}) and stays.
+        if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 &&
+            Keep->size() == NewN && (*Keep)[0] == 0) {
+          bool DropsFirstIns = true;
+          for (unsigned NewI = 1; NewI != NewN && DropsFirstIns; ++NewI)
             if ((*Keep)[NewI] != NewI + 1)
               DropsFirstIns = false;
           if (DropsFirstIns)

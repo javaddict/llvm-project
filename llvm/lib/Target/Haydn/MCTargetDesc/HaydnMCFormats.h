@@ -114,10 +114,27 @@ haydnFormatEKeepOperands(
 const haydn::format_e::FormatEMemberRec *
 haydnFindFormatEMemberByOpcode(unsigned Opc);
 
-/// Map a public logical / residual MCInst onto generated member \p Mem
-/// (wire field order + reg classes from tblgen Desc). As-is copy when
-/// the opcode already is the member; otherwise positional promote or the
-/// closed keep-map. Not a register-class bag-sort. False = fail closed.
+/// Finalize extra-op keep-map (MOVE32/ABS32 trailing rs2, tied MAC/MOVT
+/// acc, LUI vestigial $rs, dest-as-ins extra $rs). True = compiler extra
+/// that must not reconstruct in MC fill. Peer: AIE serializes typed
+/// members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
+bool haydnIsCompilerKeepMapExtraOp(const haydn::format_e::FormatEMemberRec &Mem,
+                                   const MCInst &Logical,
+                                   const MCInstrInfo &MII);
+
+/// Positional copy of a public logical onto generated member \p Mem.
+/// Count and operand kinds must already match. Never keep-map, never
+/// FieldSlot, never MemberId, never compiler extra-op. Hwloop dump-byte
+/// immediates convert to field units. False = fail closed.
+/// Peer: AIEBaseAsmPrinter.cpp:166-177 lowers as-is (no fill).
+bool haydnFillFormatEMemberInstPositional(
+    const haydn::format_e::FormatEMemberRec &Mem, const MCInst &Logical,
+    const MCInstrInfo &MII, const MCRegisterInfo &MRI, MCInst &Out);
+
+/// Standalone/hand-asm keep-map after positional miss (AR-UA POST, CB
+/// writeback, Imm-0 hole, 0-op HINT, CSRW swap). FieldSlot, MemberId, and
+/// compiler extra-op never reconstruct. Not a register-class bag-sort.
+/// False = fail closed. Peer: AIEBaseMCCodeEmitter.cpp:45-68.
 bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
                                 const MCInst &Logical, const MCInstrInfo &MII,
                                 const MCRegisterInfo &MRI, MCInst &Out);

@@ -562,9 +562,11 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       }
     }
 
-    // Compiler BUNDLE roots carry a product row. Convert residual logical
-    // children to generated members here so encode never DFS/bag-sorts a
-    // skip-Finalize compiler composite (AIE serialize-only).
+    // Compiler BUNDLE roots carry a product row. Bind residual public
+    // logicals (representation expands) positionally at membership entry
+    // so encode never DFS/keep-map bag-sorts a skip-Finalize compiler
+    // composite. AIEBaseAsmPrinter.cpp:166-177 lowers as-is; Haydn
+    // overlay is inverse-at-entry positional only (no keep-map).
     std::optional<haydn::bundle::BundleFormatRowID> Row =
         haydn::bundle::getBundleRowID(*MI);
     if (!Row)
@@ -662,10 +664,11 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
         // under E2 (XOR32 e0-only) and store-last ST64 (LOADSTORE0 e0-only)
         // cannot rebind here — Finalize owns assignFormatEMemberEntries.
         // AIEHazardRecognizer.cpp:216-218 tries AlternateInsts until canAdd.
-        // Overlay: if the first inverse member fails the keep-map fill
-        // (CSRW ALU2 3-op vs catalog 2-op reloc/imm), try remaining inverse
-        // members at this entry. Do not DFS, bag-sort, or peel leftover
-        // FieldSlot `*_S*` names into a catalog logical.
+        // Overlay: positional fill at this entry; remaining inverse members
+        // at the same entry may still match. Keep-map (AR-UA POST / CB /
+        // Imm-0) is PublicHandAsm only. Do not DFS, bag-sort, or peel
+        // leftover FieldSlot `*_S*` names into a catalog logical. FieldSlot,
+        // MemberId, and compiler extra-op never reconstruct.
         const StringRef ChildName = MII.getName(ChildInst->getOpcode());
         if (haydnIsResidualFieldSlotName(ChildName) ||
             haydnIsGeneratedMemberName(ChildName))
@@ -695,7 +698,8 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
                                                        TryUsed);
           if (!Mem)
             break;
-          if (haydnFillFormatEMemberInst(*Mem, *ChildInst, MII, *MRI, Filled)) {
+          if (haydnFillFormatEMemberInstPositional(*Mem, *ChildInst, MII, *MRI,
+                                                  Filled)) {
             FilledOk = true;
             break;
           }

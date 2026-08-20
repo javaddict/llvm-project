@@ -119,21 +119,20 @@ std::optional<std::string> llvm::haydnCheckParsedBundleRegs(
 }
 
 std::optional<std::string> llvm::haydnCheckParsedBundle(
-    ArrayRef<const MCInst *> Reals, unsigned TextEntries, const MCInstrInfo &MII,
-    const MCRegisterInfo *MRI) {
+    ArrayRef<const MCInst *> Reals, unsigned RowEntryCount,
+    const MCInstrInfo &MII, const MCRegisterInfo *MRI) {
   // HexagonMCChecker.cpp:692-703 checkSolo uses bundleSize only as a bound on
   // an already-formed packet; it does not choose the packet format. Haydn
-  // overlay: TextEntries is the membership-selected row capacity (2/3),
-  // never raw child/text count and never size≤1→E2.
-  if (TextEntries != 2 && TextEntries != 3)
+  // overlay: RowEntryCount is the membership-selected row capacity (2/3),
+  // never raw child/text cardinality and never size≤1→E2.
+  if (RowEntryCount != 2 && RowEntryCount != 3)
     return std::string(
-        "bundle row is not a child count (need a two- or three-entry row)");
+        "bundle row is not a generated two- or three-entry Format E row");
 
-  const FamilyRecords Fam = getDefaultFamilyRecords();
-  if (Reals.size() > Fam.E3EntryCapacity)
-    return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
-  if (TextEntries == 2 && Reals.size() > Fam.E2EntryCapacity)
-    return std::string("occupancy exceeds selected two-entry row");
+  // Occupancy bound on the already-selected row (Hexagon checkSolo). Not a
+  // TWO vs THREE identity and not a family E2/E3 capacity map.
+  if (Reals.size() > RowEntryCount)
+    return std::string("occupancy exceeds selected Format E row");
 
   SmallVector<std::string, 3> Logs;
   Logs.reserve(Reals.size());
@@ -150,8 +149,7 @@ std::optional<std::string> llvm::haydnCheckParsedBundle(
     // Catalog occupancy / MemberId span (Hexagon MCChecker.cpp:692-703 uses
     // the packet's real opcodes). Not a row-identity peel and not `_S*`
     // recovery (those names already returned above). Unknown names fail
-    // closed so unit cover cannot treat them as unconstrained and then
-    // pick a row from child count.
+    // closed so unit cover cannot treat them as unconstrained occupancy.
     std::string Log = haydnCatalogOccupancyName(Name);
     if (Log.empty())
       return std::string("unknown logical occupancy");
@@ -165,9 +163,9 @@ std::optional<std::string> llvm::haydnCheckParsedBundle(
   }
   if (AnyE2Only && AnyE3Only)
     return std::string("E2-only and E3-only logicals cannot share a row");
-  if (AnyE3Only && TextEntries != 3)
+  if (AnyE3Only && RowEntryCount != 3)
     return std::string("E3-only logical cannot occupy a two-entry row");
-  if (AnyE2Only && TextEntries != 2)
+  if (AnyE2Only && RowEntryCount != 2)
     return std::string("E2-only logical cannot occupy a three-entry row");
 
   const bool CoverE2 = logicalsHaveUnitCoverForMode(Logs, /*Mode=*/0);

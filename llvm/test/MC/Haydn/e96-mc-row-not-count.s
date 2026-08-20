@@ -6,6 +6,7 @@
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.cpp --check-prefix=NO-COUNT-FILL --implicit-check-not=peelLogicalOpcodeName
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFormatERecords.h --check-prefix=NO-COUNT-RECORDS
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnBundleMaterialize.h --check-prefix=NO-COUNT-OPC --implicit-check-not=selectProductRowForMemberCount
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnBundlePlan.h --check-prefix=NO-COUNT-PLAN
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/AsmParser/HaydnAsmParser.cpp --check-prefix=NO-COUNT-PARSER --implicit-check-not=selectProductRowForMemberCount
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d -z --no-show-raw-insn --triple=haydn-unknown-elf %t.o | \
@@ -25,6 +26,12 @@
 
 # NO-COUNT-CHECKER-NOT: TextEntries >= 3
 # NO-COUNT-CHECKER-NOT: ForceE3
+# NO-COUNT-CHECKER-NOT: TextEntries
+# NO-COUNT-CHECKER-NOT: memberCount > ISSUE
+# NO-COUNT-CHECKER-NOT: E2EntryCapacity
+# NO-COUNT-CHECKER-NOT: E3EntryCapacity
+# NO-COUNT-CHECKER: RowEntryCount
+# NO-COUNT-CHECKER: occupancy exceeds selected Format E row
 # NO-COUNT-CHECKER: haydnCatalogOccupancyName
 # NO-COUNT-CHECKER: haydnFormatELogicalIsE3Only
 # NO-COUNT-CHECKER: haydnFormatELogicalIsE2Only
@@ -40,6 +47,10 @@
 # NO-COUNT-DISASM: BUNDLE_E96_THREE_ENTRY
 # NO-COUNT-DISASM: haydnFormatEHwloopImmFieldShift
 # NO-COUNT-DISASM: haydnFindFormatEMemberByOpcode
+# NO-COUNT-DISASM-NOT: Size / 2
+# NO-COUNT-DISASM-NOT: Imm / 2
+# NO-COUNT-PLAN: haydnSelectStandaloneFormatEOpcode
+# NO-COUNT-PLAN: return selectProductRow(ProductFormatMask, MemberCount)
 # NO-COUNT-EMIT: haydnSelectStandaloneFormatEOpcode
 # NO-COUNT-EMIT-NOT: auto tryMode
 # NO-COUNT-EMIT: refuse skip-Finalize
@@ -58,6 +69,8 @@
 # NO-COUNT-RECORDS-NOT: "_LD_S0"
 # NO-COUNT-FILL: haydnFormatEHwloopImmFieldShift
 # NO-COUNT-FILL: findFixupFromFixupFields
+# NO-COUNT-FILL: haydnFillFormatEMemberInstPositional
+# NO-COUNT-FILL: FieldSlot, committed MemberId, and compiler extra-op never reconstruct
 # NO-COUNT-FILL: haydnFillFormatEMemberInst
 # NO-COUNT-FILL: Class-bag reconstruction is deleted
 # Opcode-list row select: InstSlot, Mode-only membership, then unit cover.

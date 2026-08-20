@@ -1,5 +1,7 @@
 # REQUIRES: haydn-registered-target
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp --check-prefix=EMIT --implicit-check-not=peelLogicalOpcodeName
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.cpp --check-prefix=FILL --implicit-check-not=peelLogicalOpcodeName
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnAsmPrinter.cpp --check-prefix=PRINT --implicit-check-not=peelLogicalOpcodeName
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s --check-prefix=OBJ
 # RUN: llvm-readobj -S %t.o | FileCheck %s --check-prefix=SEC
@@ -8,20 +10,30 @@
 
 # Isolation wall: skip-Finalize / compiler extra-op never bag-sorts through
 # fillFormatEMemberInstFromRawBundle. Reconstruction is PublicHandAsm only.
-# fillFormatEMemberInst never calls FromRawBundle. Standalone public logicals
-# still place (positional / Imm-0 / AR-UA POST / CB). Occupancy is
-# haydnCatalogOccupancyName; leftover `_S*` / `_E2_` name peel is deleted.
-# Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
+# fillFormatEMemberInst never calls FromRawBundle. AsmPrinter inverse-at-entry
+# is positional only. Standalone public logicals still place (positional /
+# Imm-0 / AR-UA POST / CB). Occupancy is haydnCatalogOccupancyName; leftover
+# `_S*` / `_E2_` name peel is deleted. FieldSlot / MemberId / extra-op never
+# reconstruct. Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members
+# as-is. AIEBaseAsmPrinter.cpp:166-177 lowers as-is.
 
 # EMIT: haydnCatalogOccupancyName
 # EMIT: fillFormatEMemberInstFromCompilerRoot
-# EMIT: fillFormatEMemberInstFromRawBundle
-# EMIT: fillFormatEMemberInstPublicHandAsm
-# EMIT: Compiler LUI vestigial $rs
-# EMIT: dest-as-ins members
 # EMIT: Always false
+# EMIT: fillFormatEMemberInstFromRawBundle
+# EMIT: haydnFillFormatEMemberInstPositional
+# EMIT: fillFormatEMemberInstPublicHandAsm
 # EMIT: Matching public logicals still do not FromRawBundle
 # EMIT-NOT: tryMode
+# FILL: haydnIsCompilerKeepMapExtraOp
+# FILL: Compiler LUI vestigial $rs
+# FILL: dest-as-ins members
+# FILL: haydnFillFormatEMemberInstPositional
+# FILL: FieldSlot, committed MemberId, and compiler extra-op never reconstruct
+# FILL: Class-bag reconstruction is deleted
+# PRINT: refuse E2
+# PRINT: haydnFillFormatEMemberInstPositional
+# PRINT-NOT: haydnFillFormatEMemberInst(*Mem
 
 .ifdef FIELDSLOT
 # Residual FieldSlots are not occupancy. Do not recover ABS64 by suffix.

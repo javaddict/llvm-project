@@ -35,11 +35,11 @@ haydnCheckParsedBundleRegs(ArrayRef<const MCInst *> Reals,
                            const MCInstrInfo &MII, const MCRegisterInfo *MRI);
 
 /// Check a parsed hand-asm bundle. \p Reals are non-NOP children in source
-/// order. \p TextEntries is the membership-selected row capacity (2 = E2,
+/// order. \p RowEntryCount is the membership-selected row capacity (2 = E2,
 /// 3 = E3) from haydnSelectStandaloneFormatEOpcode — not raw text
 /// cardinality, and never a size≤1→E2 invent. Returns a diagnostic or nullopt.
 std::optional<std::string> haydnCheckParsedBundle(ArrayRef<const MCInst *> Reals,
-                                                  unsigned TextEntries,
+                                                  unsigned RowEntryCount,
                                                   const MCInstrInfo &MII,
                                                   const MCRegisterInfo *MRI);
 
