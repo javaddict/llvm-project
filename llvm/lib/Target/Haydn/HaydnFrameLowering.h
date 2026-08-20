@@ -99,14 +99,15 @@ public:
   bool canUseAsEpilogue(const MachineBasicBlock &MBB) const override;
 
   // Override to prevent PEI from inserting default individual spill stores.
-  // Our emitPrologue handles optimized spill sequences (ST32_POST_INC).
+  // emitPrologue emits ST32/ST64 (imm or REG-offset) CSR spills
+  // (AIEBaseFrameLowering.cpp:218).
   bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator MI,
                                  ArrayRef<CalleeSavedInfo> CSI,
                                  const TargetRegisterInfo *TRI) const override;
 
   // Override to prevent PEI from inserting default individual restore loads.
-  // Our emitEpilogue handles optimized restore sequences (LD32_POST_INC).
+  // emitEpilogue emits LD32/LD64 CSR restores (same ST/LD family as spill).
   bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
                                    MachineBasicBlock::iterator MI,
                                    MutableArrayRef<CalleeSavedInfo> CSI,

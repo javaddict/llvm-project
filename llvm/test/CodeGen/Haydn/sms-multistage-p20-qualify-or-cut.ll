@@ -8,26 +8,29 @@
 ; RUN:   2>%t.on.rmk | FileCheck %s --check-prefix=ASM
 ; RUN: FileCheck %s --check-prefix=ON < %t.on.rmk
 ;
-; P20(i) qualify-or-cut seat. Product default stays OFF until independent
-; then combined QUALIFY. The host may search under the explicit flag;
-; sunset/prune is deferred to that measurement, not a silent product-ON.
-; SWPSolver (P17(c)) is unavailable without Z3 / pragma-II. Combined
-; hwloop+SMS stays off.
+; Qualify-or-cut seat. Product default stays OFF until independent then
+; combined QUALIFY. The host is seated (not pruned): search is live under
+; the explicit flag; sunset/prune waits on that measurement, not a silent
+; product-ON. SWPS is observe-only (no #<swps> stamp from analysis-only).
+; SWPSolver is unavailable without Z3 / pragma-II. Combined hwloop+SMS
+; stays off. RegionEnd/WAW mutations stay default-off.
 ;
 ; ASM-LABEL: p20_qualify:
+; ASM-NOT: #<swps>
 ; ASM: jalr
 ; OFF-NOT: accepted II=
 ; OFF-NOT: MultiStageStageMBB
 ; OFF-NOT: qualify-or-cut
+; OFF-NOT: #<swps>
 ; ON: {{accepted II=|exhausted:|rejected:}}
-; ON: qualify-or-cut
-; ON: product-off
+; ON: qualify-or-cut: seated product-off host-live
 ; ON: swpsolver=unavailable
 ; ON: hwloop-combined=off
 ; ON: nat-ipc=measured-miss
 ; ON: no-competitive-ipc
 ; ON: no-stage0-ib-pp
 ; ON-NOT: sequential (preflight)
+; ON-NOT: #<swps>
 
 define i32 @p20_qualify(ptr nocapture readonly %a, i32 %n) {
 entry:

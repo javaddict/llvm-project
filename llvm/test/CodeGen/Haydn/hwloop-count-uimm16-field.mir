@@ -1,0 +1,141 @@
+# RUN: split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/keep_max.mir -o - | FileCheck %s --check-prefix=KEEP
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/demote_over.mir -o - | FileCheck %s --check-prefix=DEMOTE
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/demote_over.mir -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+# RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
+# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/loopstart_unresolved.mir -o - 2>&1 | FileCheck %s --check-prefix=UNRES
+
+# Role: MIR — independent SCEV-proven QUALIFY while product default stays
+# OFF. Imm-trip COUNT must fit the uimm16 field (ISA uimm16_cnt). Max
+# 65535 keeps hardware form; 65536 demotes to SUBI32+BNEZ. Debug
+# -haydn-enable-hwloop-demote=false on a live over-field COUNT or an
+# unresolved LoopStart is fatal — never erase-only once-through
+# (Hexagon FixupHwLoops.cpp:137-148 converts or leaves LOOP;
+# AIEBaseHardwareLoops.cpp:311-316 early-returns).
+
+# KEEP-LABEL: name: keep_max
+# KEEP: SET_HWLOOP_W
+# KEEP-NOT: SUBI32
+# KEEP-NOT: BNEZ
+# DEMOTE-LABEL: name: demote_over
+# DEMOTE-NOT: SET_HWLOOP_W
+# DEMOTE: SUBI32
+# DEMOTE: BNEZ
+# FATAL: refusing erase-only once-through
+# UNRES: refusing erase-only once-through
+
+#--- keep_max.mir
+--- |
+  define dso_local void @keep_max(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            keep_max
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 65535, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- demote_over.mir
+--- |
+  define dso_local void @demote_over(ptr %p) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            demote_over
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 65536, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- loopstart_unresolved.mir
+--- |
+  define dso_local void @loopstart_unresolved(ptr %p) {
+  entry:
+    br label %work
+  work:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            loopstart_unresolved
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.work:
+    liveins: $r1, $r0, $r15
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15

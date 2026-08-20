@@ -7,11 +7,23 @@
 ; RUN:     | FileCheck %s --check-prefix=ASM
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 \
+; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms=false \
+; RUN:     < %s | FileCheck %s --check-prefix=ORD-ASM
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -verify-machineinstrs -O2 \
 ; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-analysis-only \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.postra.rmk | FileCheck %s --check-prefix=POSTRA-ASM
 ; RUN: FileCheck %s --check-prefix=POSTRA < %t.postra.rmk
+; RUN: not grep -q 'accepted II=' %t.postra.rmk || FileCheck %s --check-prefix=POSTRA-ACC < %t.postra.rmk
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -verify-machineinstrs -O2 \
+; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
+; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
+; RUN:   2>%t.mat.rmk | FileCheck %s --check-prefix=MAT-ASM
+; RUN: FileCheck %s --check-prefix=MAT < %t.mat.rmk
+; RUN: not grep -q 'accepted II=' %t.mat.rmk || FileCheck %s --check-prefix=POSTRA-ACC < %t.mat.rmk
 
 ; Role: semantic — NatureDSP bkfir32x32 MAC hot-loop shape: dual coef loads + 4x4
 ; acc-MAC chains + dual circular-buffer sample loads. Positive SMS schedule-found
@@ -20,9 +32,12 @@
 ; ADDI32_W), and MachinePipeliner computeNodeOrder pred_L filtered by NodeSet.
 ;
 ; Hang containment: generic SMS arms still stop after the pipeliner so
-; "Schedule Found?" stays independent of RA. The POSTRA arm runs through
-; RA + post-RA analysis-only; Latest / LastEarliestPusher caps keep the
-; MAC DAG from hanging. Product multi-stage stays OFF.
+; "Schedule Found?" stays independent of RA. ORD-ASM / POSTRA / MAT run
+; through RA + post-RA (T4 hang-root is capped). Same-artifact QUALIFY is
+; hwloops OFF: ordinary list-schedule+commit completes; SMS analysis and
+; materialize either exhaust/reject (recorded capped-reject QoR on this
+; dense MAC body) or accept with parcels-per-iter == searched II.
+; Product multi-stage stays OFF.
 ;
 ; Why this is contract-only (no brittle bundle body): the D999 no-forwarding
 ; fix changes SMS placement to call the operand-aware MI overload of
@@ -46,13 +61,35 @@
 ; ASM: name:{{[ 	]+}}bkfir_mac_hot
 ; ASM: RET
 ;
+; ORD-ASM: bkfir_mac_hot:
+; ORD-ASM: jalr
+; ORD-ASM-NOT: set_hwloop
+; ORD-ASM-NOT: #<swps>
+;
 ; POSTRA-ASM: bkfir_mac_hot:
 ; POSTRA-ASM: jalr
 ; POSTRA: resource-bias=slot-windows
 ; POSTRA: {{accepted II=|exhausted:|rejected:}}
 ; POSTRA: qualify-or-cut
 ; POSTRA: product-off
+; POSTRA: nat-ipc=measured-miss
+; POSTRA: no-competitive-ipc
+; POSTRA: no-stage0-ib-pp
+; POSTRA: hwloop-combined=off
 ; POSTRA-NOT: sequential (preflight)
+;
+; MAT-ASM: bkfir_mac_hot:
+; MAT-ASM: jalr
+; MAT: {{accepted II=|exhausted:|rejected:|preflight reject:}}
+; MAT: qualify-or-cut
+; MAT: product-off
+; MAT: nat-ipc=measured-miss
+; MAT-NOT: sequential (preflight)
+;
+; POSTRA-ACC: accepted II=[[II:[0-9]+]]
+; POSTRA-ACC-SAME: measured-II=[[II]]
+; POSTRA-ACC: qualify parcels-per-iter=[[II]]
+; POSTRA-ACC-SAME: searched-II=[[II]]
 
 define void @bkfir_mac_hot(
     ptr nocapture readonly %C,

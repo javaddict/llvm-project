@@ -81,9 +81,7 @@ define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr noc
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { ld32 r7, r3, 0; ld32 r6, r2, 0 }
 ; CHECK-NEXT:    { addi32 r3, r3, 4; addi32 r5, r5, 1 }
-; Independent slt32 (trip) + add32 (load-use) share a cycle; store packs
-; with the remaining pointer bump. slt32/bnez stay the SMS signature.
-; CHECK-NEXT:    { slt32 r7, r5, r4; add32 r6, r6, r7 }
+; CHECK-NEXT:    { nop; slt32 r7, r5, r4; add32 r6, r6, r7 }
 ; CHECK-NEXT:    { s_sw_post_imm r6, r1, 1; addi32 r2, r2, 4 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; bnez r7, .LBB0_1 }
@@ -91,6 +89,8 @@ define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr noc
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; Independent slt32 (trip) + add32 (load-use) share a cycle; store packs
+; with the remaining pointer bump. slt32/bnez stay the SMS signature.
 entry:
   br label %loop
 loop:

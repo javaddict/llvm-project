@@ -91,6 +91,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "HaydnFixupHwLoops.h"
 #include "Haydn.h"
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
@@ -159,53 +160,16 @@ static constexpr int64_t MaxOff2Bytes = haydn::hwloop::MaxEndOffsetBytes;
 static constexpr int64_t MaxOff1BytesSafe =
     haydn::hwloop::MaxStartOffsetBytesSafe;
 
-class HaydnFixupHwLoops : public MachineFunctionPass {
-public:
-  static char ID;
-  HaydnFixupHwLoops() : MachineFunctionPass(ID) {
-    initializeHaydnFixupHwLoopsPass(*PassRegistry::getPassRegistry());
-  }
-
-  StringRef getPassName() const override {
-    return "Haydn Hardware Loop Fixup";
-  }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    // Demotion rewrites latch successors / terminators (CFG change).
-    MachineFunctionPass::getAnalysisUsage(AU);
-  }
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-
-private:
-  bool fixupOne(MachineInstr &SetMI, const HaydnInstrInfo &TII);
-  unsigned countFollowingBundles(MachineInstr &SetMI,
-                                 const HaydnInstrInfo &TII) const;
-  int64_t estimateMBBDistance(const MachineFunction &MF,
-                              const MachineBasicBlock *FromMBB,
-                              MachineBasicBlock::const_iterator FromIt,
-                              const MachineBasicBlock *ToMBB,
-                              const HaydnInstrInfo &TII) const;
-  bool computeOffsets(MachineInstr &SetMI, const HaydnInstrInfo &TII,
-                      int64_t &StartOff, int64_t &EndOff,
-                      MachineBasicBlock *&StartMBB,
-                      MachineBasicBlock *&EndMBB) const;
-  bool tryShortenStartOffset(MachineInstr &SetMI, const HaydnInstrInfo &TII,
-                             int64_t &StartOff, int64_t &EndOff);
-  // Body resolution: shared CFG-only core (HaydnHWLoopDemote) plus the
-  // fixup-only final-layout tail (def below). The tail accepts the layout
-  // successor only when it still proves a ZOL latch — never a bare
-  // getNextNode invent. Formation stays CFG-only fail-closed
-  // (HaydnHardwareLoops resolveRoleABody law).
-  MachineBasicBlock *resolveBodyMBB(MachineInstr &SetMI) const;
-};
+} // namespace
 
 char HaydnFixupHwLoops::ID = 0;
 
-} // namespace
-
 INITIALIZE_PASS(HaydnFixupHwLoops, DEBUG_TYPE, "Haydn Hardware Loop Fixup",
                 false, false)
+
+HaydnFixupHwLoops::HaydnFixupHwLoops() : MachineFunctionPass(ID) {
+  initializeHaydnFixupHwLoopsPass(*PassRegistry::getPassRegistry());
+}
 
 FunctionPass *llvm::createHaydnFixupHwLoopsPass() {
   return new HaydnFixupHwLoops();
@@ -326,44 +290,6 @@ int64_t HaydnFixupHwLoops::estimateMBBDistance(
   return -1; // To not after From in layout.
 }
 
-// Fixup-only final-layout tail for body resolution. Formation stays
-// CFG-only (resolveBodyMBBCore / resolveRoleABody): a next-MBB that is
-// not a successor is incomplete retained state and rejects fail-closed.
-// At fixup, layout is final and BranchRelaxation may have severed the
-// direct preheader->body edge into a continue-trampoline. Walk those
-// trampolines (empty / LUI+ADDI+JALR) and accept the first layout
-// candidate that still proves a ZOL latch. A live next-MBB without
-// that proof is a trampoline/exit — never invent it as the body
-// (Hexagon FixupHwLoops.cpp:97-148 converts or leaves LOOP; it does
-// not invent a body from layout order). Static so its address can feed
-// the shared demote/erase ResolveBody parameter.
-static MachineBasicBlock *resolveFixupBodyMBB(MachineInstr &SetMI) {
-  if (MachineBasicBlock *B = haydn::hwloop::resolveBodyMBBCore(SetMI))
-    return B;
-  if (SetMI.getOpcode() != Haydn::LoopStart)
-    return nullptr;
-  MachineBasicBlock *Pre = SetMI.getParent();
-  if (!Pre)
-    return nullptr;
-  const MachineFunction *MF = Pre->getParent();
-  MachineBasicBlock *Cand = Pre->getNextNode();
-  for (unsigned Depth = 0; isLiveMBB(*MF, Cand) && Depth < 8;
-       Cand = Cand->getNextNode(), ++Depth) {
-    if (haydn::hwloop::resolveLoopStartLatch(Cand, Pre))
-      return Cand;
-    if (!haydn::hwloop::isContinueTrampolineBlock(Cand) ||
-        Cand->succ_size() != 1)
-      return nullptr;
-  }
-  return nullptr;
-}
-
-MachineBasicBlock *
-HaydnFixupHwLoops::resolveBodyMBB(MachineInstr &SetMI) const {
-  return resolveFixupBodyMBB(SetMI);
-}
-
-
 bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
                                        const HaydnInstrInfo &TII,
                                        int64_t &StartOff, int64_t &EndOff,
@@ -377,14 +303,17 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
   if (!MF)
     return false;
 
-  // LoopStart (IR ZOL): body MBB from PseudoLoopEnd / layout successor.
-  // Without this, AsmPrinter still emits set_hwloop_f2_w with Off1 that can
-  // exceed uimm6 → "relocation offset out of range" / missing END labels.
+  // LoopStart (IR ZOL): Header from CFG-or-layout-tail; Latch is END
+  // (single-BB Header==Latch). Multi-BB residual LoopStart must not
+  // treat Header as END — that under-counts Off2. Expand normally
+  // rewrites to SET_HWLOOP_F2_W with Header/Latch operands first.
   if (SetMI.getOpcode() == Haydn::LoopStart) {
-    StartMBB = resolveBodyMBB(SetMI);
-    EndMBB = StartMBB;
+    StartMBB = haydn::hwloop::resolveBodyMBBFixup(SetMI);
     if (!StartMBB)
       return false;
+    EndMBB = haydn::hwloop::resolveLoopStartLatch(StartMBB, SetMI.getParent());
+    if (!EndMBB)
+      EndMBB = StartMBB;
   } else if (SetMI.getNumOperands() >= 3 && SetMI.getOperand(1).isMBB() &&
              SetMI.getOperand(2).isMBB()) {
     StartMBB = SetMI.getOperand(1).getMBB();
@@ -757,7 +686,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
         LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: out-of-domain selector "
                           << Sel << " — demote-first / fatal fail-closed\n");
         if (demoteHardwareLoopToSoftware(SetMI, TII, "HaydnFixupHwLoops",
-                                         resolveFixupBodyMBB))
+                                         haydn::hwloop::resolveBodyMBBFixup))
           return true;
         report_fatal_error(
             "HaydnFixupHwLoops: unsupported SET_HWLOOP selector cannot "
@@ -770,7 +699,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
         LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: stale Header/Latch "
                              "(%bb.-1 or foreign) — erase SET only\n");
         return eraseHardwareLoopSetup(SetMI, "HaydnFixupHwLoops",
-                                  resolveFixupBodyMBB);
+                                  haydn::hwloop::resolveBodyMBBFixup);
       }
       // Product programs HWLR only through SET. A body CSRW to the
       // unpublished 0x20-0x25 window is fail-closed: demote would leave
@@ -785,12 +714,22 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
             "SET_HWLOOP",
             /*gen_crash_diag=*/false);
     } else if (Opc == Haydn::LoopStart) {
-      MachineBasicBlock *Body = resolveBodyMBB(SetMI);
+      MachineBasicBlock *Body = haydn::hwloop::resolveBodyMBBFixup(SetMI);
       if (!Body) {
+        // Unresolved LoopStart: cannot prove the body is dead. Hexagon
+        // FixupHwLoops.cpp:137-148 converts or leaves LOOP; it never
+        // erases to a once-through fallthrough. Overlay: debug demote
+        // OFF fatals; product demote ON may L1-erase only when no latch
+        // was found (no back-edge remains).
+        if (!haydn::hwloop::isHwLoopDemoteEnabled())
+          report_fatal_error(
+              "HaydnFixupHwLoops: LoopStart with unresolved body; "
+              "demote disabled; refusing erase-only once-through",
+              /*gen_crash_diag=*/false);
         LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: LoopStart with no live body "
                              "— erase setup\n");
         return eraseHardwareLoopSetup(SetMI, "HaydnFixupHwLoops",
-                                  resolveFixupBodyMBB);
+                                  haydn::hwloop::resolveBodyMBBFixup);
       }
     }
   }
@@ -835,7 +774,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
                               ? " — demote-first (product)\n"
                               : " — demote disabled; refuse erase-only\n"));
     if (demoteHardwareLoopToSoftware(SetMI, TII, "HaydnFixupHwLoops",
-                                     resolveFixupBodyMBB))
+                                     haydn::hwloop::resolveBodyMBBFixup))
       return true;
     // Live body, soft edge not installable (or demote off). Never
     // silent single-pass body.
@@ -922,10 +861,12 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
     // Timing law is the cycle pair, not this product under mixed widths.
     if (StartOff < MinSetupBytes)
       return true;
-    // Imm trip COUNT must be >= MinCount when statically known.
+    // Imm trip COUNT must fit the uimm16 field and meet MinCount.
+    // Over-field values demote (or fatal when demote is off) rather
+    // than reaching MC as an unencodable immediate.
     if (TII.isHardwareLoopImmTripOpcode(SetMI.getOpcode()) &&
         SetMI.getNumOperands() >= 4 && SetMI.getOperand(3).isImm() &&
-        !haydn::hwloop::countMeetsMinLaw(SetMI.getOperand(3).getImm()))
+        !haydn::hwloop::countMeetsFieldLaw(SetMI.getOperand(3).getImm()))
       return true;
     return false;
   };

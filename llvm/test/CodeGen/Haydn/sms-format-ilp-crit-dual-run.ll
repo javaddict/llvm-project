@@ -234,7 +234,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; GEN-NEXT:    { nop; addi32 r6, r6, 1 }
 ; GEN-NEXT:    { nop; add32 r7, r7, r8 }
 ; GEN-NEXT:    { nop; addi32 r2, r2, 4 }
-; GEN-NEXT:    { slt32 r7, r6, r4; add32 r5, r5, r7 }
+; GEN-NEXT:    { nop; slt32 r7, r6, r4; add32 r5, r5, r7 }
 ; GEN-NEXT:    { nop; addi32 r1, r1, 4 }
 ; GEN-NEXT:    { nop; bnez r7, .LBB0_1 }
 ; GEN-NEXT:  // %bb.2: // %exit
@@ -262,7 +262,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; RP-NEXT:    { nop; addi32 r6, r6, 1 }
 ; RP-NEXT:    { nop; add32 r7, r7, r8 }
 ; RP-NEXT:    { nop; addi32 r2, r2, 4 }
-; RP-NEXT:    { slt32 r7, r6, r4; add32 r5, r5, r7 }
+; RP-NEXT:    { nop; slt32 r7, r6, r4; add32 r5, r5, r7 }
 ; RP-NEXT:    { nop; addi32 r1, r1, 4 }
 ; RP-NEXT:    { nop; bnez r7, .LBB0_1 }
 ; RP-NEXT:  // %bb.2: // %exit
@@ -369,13 +369,13 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; BASE-NEXT:    { nop; subi32 sp, sp, 8 }
 ; BASE-NEXT:    .cfi_def_cfa_offset 8
 ; BASE-NEXT:    { nop; addi32 r3, r0, 0 }
-; BASE-NEXT:    { move32 r5, r3; move32 r4, r3 }
+; BASE-NEXT:    { nop; move32 r5, r3; move32 r4, r3 }
 ; BASE-NEXT:  .LBB1_1: // %loop
 ; BASE-NEXT:    // =>This Inner Loop Header: Depth=1
 ; BASE-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; BASE-NEXT:    { nop; xor32 r4, r4, r3 }
 ; BASE-NEXT:    { nop; addi32 r3, r3, 1 }
-; BASE-NEXT:    { slt32 r6, r3, r2; add32 r5, r6, r5 }
+; BASE-NEXT:    { nop; slt32 r6, r3, r2; add32 r5, r6, r5 }
 ; BASE-NEXT:    { nop; addi32 r5, r5, 6 }
 ; BASE-NEXT:    { nop; bnez r6, .LBB1_1 }
 ; BASE-NEXT:  // %bb.2: // %exit
@@ -390,13 +390,13 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
 ; ASM-NEXT:    { nop; addi32 r3, r0, 0 }
-; ASM-NEXT:    { move32 r5, r3; move32 r4, r3 }
+; ASM-NEXT:    { nop; move32 r5, r3; move32 r4, r3 }
 ; ASM-NEXT:  .LBB1_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; ASM-NEXT:    { nop; xor32 r4, r4, r3 }
 ; ASM-NEXT:    { nop; addi32 r3, r3, 1 }
-; ASM-NEXT:    { slt32 r6, r3, r2; add32 r5, r6, r5 }
+; ASM-NEXT:    { nop; slt32 r6, r3, r2; add32 r5, r6, r5 }
 ; ASM-NEXT:    { nop; addi32 r5, r5, 6 }
 ; ASM-NEXT:    { nop; bnez r6, .LBB1_1 }
 ; ASM-NEXT:  // %bb.2: // %exit
@@ -499,12 +499,12 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; BASE-NEXT:    { nop; subi32 sp, sp, 8 }
 ; BASE-NEXT:    .cfi_def_cfa_offset 8
 ; BASE-NEXT:    { nop; addi32 r3, r0, 0 }
-; BASE-NEXT:    { move32 r4, r3; move32 r5, r3 }
+; BASE-NEXT:    { nop; move32 r4, r3; move32 r5, r3 }
 ; BASE-NEXT:  .LBB2_1: // %loop
 ; BASE-NEXT:    // =>This Inner Loop Header: Depth=1
 ; BASE-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; BASE-NEXT:    { nop; addi32 r3, r3, 1 }
-; BASE-NEXT:    { slt32 r7, r3, r2; add32 r4, r4, r6 }
+; BASE-NEXT:    { nop; slt32 r7, r3, r2; add32 r4, r4, r6 }
 ; BASE-NEXT:    { nop; xor32 r5, r5, r6 }
 ; BASE-NEXT:    { nop; bnez r7, .LBB2_1 }
 ; BASE-NEXT:  // %bb.2: // %exit
@@ -519,12 +519,12 @@ define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
 ; ASM-NEXT:    { nop; addi32 r3, r0, 0 }
-; ASM-NEXT:    { move32 r4, r3; move32 r5, r3 }
+; ASM-NEXT:    { nop; move32 r4, r3; move32 r5, r3 }
 ; ASM-NEXT:  .LBB2_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; ASM-NEXT:    { nop; addi32 r3, r3, 1 }
-; ASM-NEXT:    { slt32 r7, r3, r2; add32 r4, r4, r6 }
+; ASM-NEXT:    { nop; slt32 r7, r3, r2; add32 r4, r4, r6 }
 ; ASM-NEXT:    { nop; xor32 r5, r5, r6 }
 ; ASM-NEXT:    { nop; bnez r7, .LBB2_1 }
 ; ASM-NEXT:  // %bb.2: // %exit

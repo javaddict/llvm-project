@@ -18,8 +18,12 @@
 ; OFFRMK-NOT: MultiStageStageMBB
 ; OFFRMK-NOT: swps measured-II=
 ; ANALYSIS-LABEL: add_loop:
+; ANALYSIS-NOT: #<swps>
 ; ANALYSIS: jalr
 ; ANRMK-NOT: Sequential
+; ANRMK: qualify-or-cut: seated product-off host-live
+; ANRMK: swpsolver=unavailable
+; ANRMK: hwloop-combined=off
 ; FORCE-LABEL: add_loop:
 ; FORCE: jalr
 define i32 @add_loop(ptr nocapture readonly %a, i32 %n) {

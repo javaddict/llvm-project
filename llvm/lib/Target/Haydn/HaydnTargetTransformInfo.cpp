@@ -11,15 +11,22 @@
 #include "MCTargetDesc/HaydnMatInt.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
+
+#include <algorithm>
+#include <optional>
 
 using namespace llvm;
 
@@ -71,6 +78,29 @@ unsigned typeSizeInBits(Type *Ty, const DataLayout &DL) {
   return TS.getFixedValue();
 }
 
+// AIE AIEBaseTargetTransformInfo.cpp:204-208 reads loop-ID min-trip
+// via getMinTripCount(L->getLoopID()) (AIE LoopUtils itercount). This
+// tree has no that helper; overlay is the upstream
+// llvm.loop.estimated_trip_count operand (ProfDataUtils). Missing MD
+// does not invent a trip from latch weights.
+std::optional<unsigned> loopIdEstimatedTrip(const Loop *L) {
+  const MDNode *LoopID = L ? L->getLoopID() : nullptr;
+  if (!LoopID)
+    return std::nullopt;
+  for (unsigned I = 1, E = LoopID->getNumOperands(); I != E; ++I) {
+    const auto *MD = dyn_cast<MDNode>(LoopID->getOperand(I));
+    if (!MD || MD->getNumOperands() < 2)
+      continue;
+    const auto *Name = dyn_cast<MDString>(MD->getOperand(0));
+    if (!Name || Name->getString() != LLVMLoopEstimatedTripCount)
+      continue;
+    if (const auto *C =
+            mdconst::dyn_extract_or_null<ConstantInt>(MD->getOperand(1)))
+      return static_cast<unsigned>(C->getZExtValue());
+  }
+  return std::nullopt;
+}
+
 } // namespace
 
 void HaydnTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
@@ -94,18 +124,20 @@ void HaydnTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
 
   // AIE AIEBaseTargetTransformInfo.cpp:194-208 clears Partial/Runtime on
   // every single-BB loop whose loop-ID min trip >= aie-prefer-swp-over-unroll.
-  // Overlay: SCEV small constant trip (not loop-ID metadata). Apply before
-  // densify eligibility so BaseT Partial/Runtime cannot still unroll a loop
-  // reserved for software pipelining. Runtime / unknown trip still densifies.
-  if (unsigned SmallTrip = SE.getSmallConstantTripCount(L)) {
-    if (PreferSwpOverUnroll && SmallTrip >= PreferSwpOverUnroll) {
-      UP.Partial = false;
-      UP.Runtime = false;
-      ++NumSWPDefer;
-      LLVM_DEBUG(dbgs() << "HaydnTTI: defer densify (SCEV trip=" << SmallTrip
-                        << " >= " << PreferSwpOverUnroll << ")\n");
-      return;
-    }
+  // Overlay: max(SCEV small constant trip, llvm.loop.estimated_trip_count).
+  // Apply before densify eligibility so BaseT Partial/Runtime cannot still
+  // unroll a loop reserved for software pipelining. Runtime / unknown trip
+  // with no estimated_trip_count MD still densifies.
+  unsigned DeferTrip = SE.getSmallConstantTripCount(L);
+  if (std::optional<unsigned> Est = loopIdEstimatedTrip(L))
+    DeferTrip = std::max(DeferTrip, *Est);
+  if (PreferSwpOverUnroll && DeferTrip >= PreferSwpOverUnroll) {
+    UP.Partial = false;
+    UP.Runtime = false;
+    ++NumSWPDefer;
+    LLVM_DEBUG(dbgs() << "HaydnTTI: defer densify (trip=" << DeferTrip
+                      << " >= " << PreferSwpOverUnroll << ")\n");
+    return;
   }
 
   unsigned InstCount = 0;
@@ -181,7 +213,7 @@ void HaydnTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
 TTI::AddressingModeKind
 HaydnTTIImpl::getPreferredAddressingMode(const Loop *L,
                                          ScalarEvolution *SE) const {
-  // Hexagon HexagonTargetTransformInfo.cpp:100-103.
+  // Hexagon HexagonTargetTransformInfo.cpp:104-106.
   (void)L;
   (void)SE;
   return TTI::AMK_PostIndexed;

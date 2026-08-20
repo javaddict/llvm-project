@@ -10,7 +10,8 @@
 // AIE PostPipeliner scheduling core (NodeInfo windows, two-copy DAG,
 // fitInInterval) plus Haydn transaction wrapper: PF-*/JM-* seats,
 // snapshot/rollback, distinct prologue/kernel/epilogue MBBs, exact-E96
-// commit tail, golden HR overlay. Product default OFF.
+// commit tail, golden HR overlay. Product default OFF. Host seated
+// (not pruned): search is live under the explicit flag only.
 //
 //===----------------------------------------------------------------------===//
 
@@ -299,7 +300,19 @@ public:
   bool hasValidPlan() const { return HasValidPlan; }
   const char *getLastRejectReason() const { return LastRejectReason; }
 
+  /// Product default stays off. The host is seated (not pruned): format-aware
+  /// search is live under the explicit flag. Independent same-artifact QUALIFY,
+  /// combined hwloop interaction, and the policy flip remain later.
+  /// AIE constructs PostPipeliner from InterBlock
+  /// (AIEInterBlockScheduling.cpp:1563) with no product-off seat; Haydn
+  /// overlays the same core behind this flag (HaydnMachineScheduler.cpp:33-36).
+  /// AIE tryApproaches ends in SWPSolver (AIESWPSolver.cpp); Haydn does not
+  /// ship LLVM_WITH_Z3 / pragma-II, so that arm stays unavailable.
   static constexpr bool productDefaultEnabled() { return false; }
+  static constexpr bool productHostSeated() { return true; }
+  static constexpr bool productSWPSolverAvailable() { return false; }
+  static constexpr bool productHwloopCombinedEnabled() { return false; }
+  static StringRef productPolicyRemark();
   static ArrayRef<const char *> preflightSeatNames();
   static ArrayRef<const char *> journalSeatNames();
 
@@ -370,6 +383,7 @@ private:
 
   void emitRemark(MachineBasicBlock &MBB, const char *RemarkName,
                   const Twine &Msg) const;
+  void emitProductPolicy(MachineBasicBlock &MBB) const;
   unsigned placementOpcode(const MachineInstr &MI) const;
   bool pinTransientMembers();
   bool peelSideEffectFree();

@@ -18,7 +18,9 @@
 // Geometry (golden Format E product law; cycle-primary, byte-derived):
 //   1. Strict END: HWLR_END > HWLR_BEGIN (END is the last body cycle start).
 //      Body parcels from BEGIN through END inclusive >= MinBodyBundles (3).
-//      COUNT >= 1 when the selector is activated.
+//      COUNT >= 1 when the selector is activated. A statically known
+//      COUNT must also fit uimm16 (countMeetsFieldLaw); over-field
+//      trips demote or fatal — they must not reach MC.
 //   2. Primary hard rule — setup arithmetic (issue cycles):
 //
 //        cycle C:       SET issues
@@ -132,9 +134,10 @@ static_assert(ProductParcelBytes ==
 static_assert(ProductParcelBytes > 0,
               "product parcel EncodedBytes must be positive");
 
-// SET_HWLOOP offset field widths (ISA DB).
+// SET_HWLOOP offset / COUNT field widths (ISA DB).
 inline constexpr unsigned Offset1Bits = 6;  // uimm6 → START
 inline constexpr unsigned Offset2Bits = 12; // uimm12 → END
+inline constexpr unsigned CountBits = 16;   // uimm16_cnt → HWLR_COUNT
 
 // Displacement scale for Off1/Off2 immediates: field encodes (byte_delta >> 2).
 // Byte distance must be divisible by DisplacementScale. Absolute target
@@ -216,6 +219,9 @@ static_assert(BranchRelaxSafetyBufferBytes == MaxSingleBranchGrowthBytes,
 static_assert(BranchRelaxSafetyBufferBytes ==
                   bundle::productBundlesToBytes(MaxSingleBranchGrowthParcels),
               "BR safety buffer is 4 product parcels, not 200/1024");
+static_assert(BranchRelaxSafetyBufferBytes != 200 &&
+                  BranchRelaxSafetyBufferBytes != 1024,
+              "BR safety buffer is not a free-standing 200/1024");
 
 //===----------------------------------------------------------------------===//
 // Setup arithmetic (width-independent issue-cycle inequality)
@@ -296,11 +302,20 @@ inline constexpr int64_t MinBodySpanBytes =
 /// Minimum HWLR_COUNT when a hardware loop is activated.
 inline constexpr unsigned MinCount = 1;
 
+/// Maximum statically known COUNT that fits the uimm16 field.
+/// Over-field trips demote (or fatal when demote is disabled) — they must
+/// not reach MC as an unencodable immediate. Register-trip SET_HWLOOP_F2_W
+/// is not bound by this field (trip lives in a GPR).
+inline constexpr int64_t MaxCountImm =
+    (static_cast<int64_t>(1) << CountBits) - 1; // 65535
+
 static_assert(MinBodyBundles == 3, "body floor is 3 parcels");
 static_assert(MinBodySpanBytes ==
                   static_cast<int64_t>(MinBodyBundles - 1) * ProductParcelBytes,
               "MinBodySpanBytes = (MinBodyBundles-1) × product parcel");
 static_assert(MinCount == 1, "activated COUNT must be >= 1");
+static_assert(CountBits == 16, "SET_HWLOOP cnt field is uimm16");
+static_assert(MaxCountImm == 65535, "uimm16 COUNT ceiling is 65535");
 
 //===----------------------------------------------------------------------===//
 // Product selector domain (retained-state path)
@@ -384,6 +399,14 @@ inline constexpr bool countMeetsMinLaw(int64_t Count) {
   return Count >= static_cast<int64_t>(MinCount);
 }
 
+/// True iff a statically known COUNT is in [MinCount, MaxCountImm].
+/// Imm-trip SET_HWLOOP_W must satisfy this or demote / fatal. Over-field
+/// values used to fall through to MC ("relocation / imm out of range")
+/// instead of the recovery ladder.
+inline constexpr bool countMeetsFieldLaw(int64_t Count) {
+  return countMeetsMinLaw(Count) && Count <= MaxCountImm;
+}
+
 static_assert(isEncodableDisplacement(0, Offset1Bits),
               "zero START displacement is encodable");
 static_assert(isEncodableDisplacement(MaxStartOffsetBytes, Offset1Bits),
@@ -398,6 +421,11 @@ static_assert(offsetsMeetImmRelocLaw(MinSetupBytes,
               "min legal geometry must meet reloc law");
 static_assert(countMeetsMinLaw(MinCount) && !countMeetsMinLaw(0),
               "COUNT floor is MinCount");
+static_assert(countMeetsFieldLaw(MinCount) &&
+                  countMeetsFieldLaw(MaxCountImm) &&
+                  !countMeetsFieldLaw(0) &&
+                  !countMeetsFieldLaw(MaxCountImm + 1),
+              "COUNT field law is [MinCount, uimm16 max]");
 
 // Unpublished HWLR CSR window already named by haydnHwloopCsrAddr
 // (HaydnPortModel.h:288-297). Product programs HWLR only through

@@ -16,13 +16,13 @@
 // Body-resolution law (do not weaken):
 //   resolveBodyMBBCore resolves the LoopStart/SET body from CFG state only
 //   (SET op1 MBB; PLE-carrying preheader successor; unique successor whose
-//   latch PLE targets it; else the single live preheader successor).
-//   Formation uses core directly: a body reachable only via layout order
-//   is incomplete retained state and must reject fail-closed
-//   (HaydnHardwareLoops resolveRoleABody). Only pre-emit Fixup may append
-//   a final-layout tail — at fixup layout is final and BranchRelaxation
-//   may have severed the direct preheader->body edge into a
-//   continue-trampoline — and it does so in its own wrapper, never here.
+//   latch PLE targets it). Formation uses core directly: a body reachable
+//   only via layout order is incomplete retained state and must reject
+//   fail-closed (HaydnHardwareLoops resolveRoleABody). Only pre-emit Fixup
+//   may append a final-layout tail — at fixup layout is final and
+//   BranchRelaxation may have severed the direct preheader->body edge into
+//   a continue-trampoline — via resolveBodyMBBFixup, never via a second
+//   copy in the Fixup TU.
 //
 //===----------------------------------------------------------------------===//
 
@@ -75,6 +75,14 @@ bool loopBlocksContainUnpublishedHwlrCsr(const LoopBlockSet &Blocks);
 /// preheader successor whose latch PLE targets it (multi-BB header).
 /// No unique-successor-without-proof fallback (that successor may be exit).
 MachineBasicBlock *resolveBodyMBBCore(MachineInstr &SetMI);
+
+/// Fixup-only final-layout tail. CFG-only core first; then walk continue
+/// trampolines (empty / NOP / LUI+ADDI+JALR / B) and accept the first
+/// layout candidate that still proves a ZOL latch. A live next-MBB
+/// without that proof is trampoline/exit — never invent it as the body
+/// (Hexagon FixupHwLoops.cpp:97-148 converts or leaves LOOP). Formation
+/// must not call this: a layout-only body is incomplete retained state.
+MachineBasicBlock *resolveBodyMBBFixup(MachineInstr &SetMI);
 
 /// Latch for a LoopStart header: PLE on Header targeting Header (single-BB),
 /// or the unique non-preheader predecessor whose PLE targets Header.

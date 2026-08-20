@@ -287,7 +287,7 @@ static void emitCSRStore(MachineBasicBlock &MBB,
         .setMIFlag(FrameFlag);
     return;
   }
-  // logical REG forms only; private *_S0 peers are MC encode-only.
+  // Logical REG forms only; product encode is Format E members.
   unsigned RegOpc = (StoreOpc == Haydn::ST64) ? Haydn::ST64_REG_M0S0LS
                                               : Haydn::ST32_REG_M0S0LS;
   // Offset temp is a PEI scratch, never soft-zero R0 (F21). R0 is only
@@ -345,13 +345,20 @@ static void emitCSRLoad(MachineBasicBlock &MBB,
       .setMIFlag(FrameFlag);
 }
 
-// Snap the PEI-assigned stack size to ABI StackAlign. Peer:
-// RISCVFrameLowering.cpp:509-527 — FrameSize align only; it never writes
-// MaxCallFrameSize. That value is finalized in
-// processFunctionBeforeFrameFinalized after calculateCallFrameInfo.
+// Snap the PEI-assigned stack size. Peer:
+//   AIEBaseFrameLowering.cpp:47-62 — realign snaps FrameSize to MaxAlign
+//     so post-AND SP-relative locals stay MaxAlign-aligned; otherwise ABI
+//     StackAlign.
+//   RISCVFrameLowering.cpp:509-527 — FrameSize align only; it never writes
+//     MaxCallFrameSize. That value is finalized in
+//     processFunctionBeforeFrameFinalized after calculateCallFrameInfo.
 void HaydnFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  MFI.setStackSize(alignTo(MFI.getStackSize(), getStackAlign()));
+  const TargetRegisterInfo *RI = STI.getRegisterInfo();
+  uint64_t FrameSize = MFI.getStackSize();
+  Align FrameAlign =
+      RI->hasStackRealignment(MF) ? MFI.getMaxAlign() : getStackAlign();
+  MFI.setStackSize(alignTo(FrameSize, FrameAlign));
 }
 
 // Returns true if the specified function should have a dedicated frame
@@ -955,16 +962,20 @@ HaydnFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const HaydnRegisterInfo *TRI = MF.getSubtarget<HaydnSubtarget>().getRegisterInfo();
 
-  int64_t Offset = MFI.getObjectOffset(FI);
+  // AIE2RegisterInfo.cpp:169 / RISCVFrameLowering.cpp:1368: object offset
+  // plus OffsetAdjustment. Haydn never writes a non-zero adjustment today
+  // (no ARM-style FP-spill bias); keep the add so a later writer is not a
+  // silent FI-coordinate drift.
+  int64_t Offset = MFI.getObjectOffset(FI) + MFI.getOffsetAdjustment();
 
   // CSR spill slots live above the realign pad. Address them from the
   // pre-realign SP (prologue stores before AND32; epilogue RestoreSPFromFP
-  // then loads). Peer: RISCVFrameLowering.cpp:1418-1426.
+  // then loads). Peer: RISCVFrameLowering.cpp:1376-1388 uses CSI front/back
+  // as a contiguous FI range; exact membership so a scavenger/pack FI that
+  // happens to sit numerically between CSRs is not treated as a CSR slot.
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
-  if (!CSI.empty()) {
-    int MinCSFI = CSI.front().getFrameIdx();
-    int MaxCSFI = CSI.back().getFrameIdx();
-    if (FI >= MinCSFI && FI <= MaxCSFI) {
+  for (const CalleeSavedInfo &CI : CSI) {
+    if (CI.getFrameIdx() == FI) {
       FrameReg = Haydn::R13;
       Offset += static_cast<int64_t>(MFI.getStackSize());
       return StackOffset::getFixed(Offset);
@@ -1048,9 +1059,11 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
   // Interrupt / naked / stack-protector / i128 / half / inreg / nest /
   // swift* / byref have no product frame/CC seat. CallLowering rejects the
   // IR path first; this is the PEI last line if those attributes still
-  // reach layout. ISR / musttail stay fail-closed (no CC_ISR / tail
-  // opcode). AIE1ISelLowering.cpp:964 rejects interrupt at return
-  // lowering; RISCV has a CC_ISR analog only when an ISR vector exists.
+  // reach layout. ISR stays fail-closed (no CC_ISR). Legal musttail
+  // sibcall is JAL_W_MSP / JALR_W_MSP; ineligible musttail stays
+  // fail-closed at CallLowering. AIE1ISelLowering.cpp:964 rejects
+  // interrupt at return lowering; RISCV has a CC_ISR analog only when
+  // an ISR vector exists.
   auto IsUnsupportedCCType = [](Type *Ty) {
     if (IntegerType *IT = dyn_cast<IntegerType>(Ty))
       return IT->getBitWidth() > 64;

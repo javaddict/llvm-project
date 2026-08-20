@@ -16,6 +16,7 @@
 #include "HaydnFrameLowering.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
+#include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/STLExtras.h"
@@ -235,11 +236,16 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
            isInt<6>(ByteOff / static_cast<int64_t>(Sc));
   };
 
-  // If this is not an LS we know how to range-check, keep the legacy simm16
-  // guard for other FI users (e.g. ADDI-like shapes that still take simm16).
+  // Tracked LS: golden scaled simm6. G_FRAME_INDEX selects as ADDI32_W
+  // (simm20). Other FI users keep the simm16 guard (ADDI32/SUBI32).
   bool IsTrackedLS = Scale != 0;
-  bool OffsetLegal =
-      IsTrackedLS ? isLegalScaledSimm6(OffsetVal, Scale) : isInt<16>(OffsetVal);
+  bool OffsetLegal;
+  if (IsTrackedLS)
+    OffsetLegal = isLegalScaledSimm6(OffsetVal, Scale);
+  else if (Opc == Haydn::ADDI32_W)
+    OffsetLegal = isInt<20>(OffsetVal);
+  else
+    OffsetLegal = isInt<16>(OffsetVal);
 
   // Scratch for large FI offsets. Always a vreg: PEI FrameIndexVirtualScavenging
   // (RS == nullptr on the first replaceFrameIndices walk) and nested scavenger
@@ -255,11 +261,27 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     return MF.getRegInfo().createVirtualRegister(&Haydn::GPR32RegClass);
   };
 
+  // LOADI32 / ADDI32_W-from-R0 seed MatInt from soft-zero R0. FrameLowering
+  // emitCSROffsetScratch already restores locally; do the same here so a
+  // dirty R0 (JALR link-discard, shrink-wrap non-entry) cannot produce a
+  // wrong FI address. AIE2RegisterInfo.cpp:218-223 materializes FI as
+  // FrameReg+Offset with hardwired-zero; Haydn R0 is software.
+  auto materializeByteOffset = [&](Register Dst, int64_t Imm) {
+    ensureSoftZeroR0Clean(MBB, II, DL, *TII);
+    if (isInt<20>(Imm)) {
+      BuildMI(MBB, II, DL, TII->get(Haydn::ADDI32_W), Dst)
+          .addReg(Haydn::R0)
+          .addImm(Imm);
+    } else {
+      BuildMI(MBB, II, DL, TII->get(Haydn::LOADI32), Dst).addImm(Imm);
+    }
+  };
+
   if (!OffsetLegal && RegOpc) {
     // §6.5 register-offset (WITH_REG) LS path for LD32/ST32/LD64/ST64.
     // Offset in a scratch GPR vreg; base stays FrameReg.
     Register OffReg = getScratch();
-    BuildMI(MBB, II, DL, TII->get(Haydn::LOADI32), OffReg).addImm(OffsetVal);
+    materializeByteOffset(OffReg, OffsetVal);
     MI.setDesc(TII->get(RegOpc));
     MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
     MI.getOperand(FIOperandNum + 1).ChangeToRegister(OffReg, false);
@@ -275,7 +297,7 @@ bool HaydnRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
           .addReg(FrameReg)
           .addImm(OffsetVal);
     } else {
-      BuildMI(MBB, II, DL, TII->get(Haydn::LOADI32), NewBase).addImm(OffsetVal);
+      materializeByteOffset(NewBase, OffsetVal);
       BuildMI(MBB, II, DL, TII->get(Haydn::ADD32), NewBase)
           .addReg(FrameReg)
           .addReg(NewBase);
@@ -338,7 +360,9 @@ bool HaydnRegisterInfo::getRegAllocationHints(
   auto tryAddHint = [&](MCPhysReg PhysReg) -> bool {
     if (HintedRegs.count(PhysReg))
       return false;
-    if (MRI.isReserved(PhysReg))
+    // Soft-zero R0 is reserved and never a compact-subset / caller-saved
+    // preference. GPR32Lo includes it; skip even if a caller cleared reserved.
+    if (PhysReg == Haydn::R0 || MRI.isReserved(PhysReg))
       return false;
     if (!RC->contains(PhysReg))
       return false;

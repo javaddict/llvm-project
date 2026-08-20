@@ -228,22 +228,23 @@ static cl::opt<bool> ForceSMSHookIIWrapReject(
     cl::desc("SMS-HOOK test/bisect: reject every loop as II-wrap "
              "issue-time-only false-accept (fail-closed). Default OFF."));
 
-// Hexagon manner (HexagonBranchRelaxation.cpp:37, 95-114, 109-111): BR has no
-// exact final layout, so computeOffset charges alignment + extender growth
-// and a small BranchRelaxSafetyBuffer (default 200) remains. Haydn's generic
-// BranchRelaxation only sums getInstSizeInBytes, so named late-layout growth
-// (same-slot serial parcels, JT R0 re-zero, hwloop setup pads) is charged
-// there. The distance buffer is then only residual layout uncertainty —
-// one insertIndirectBranch sequence (MaxSingleBranchGrowthBytes), not 1024.
-// AIE has empty addPreEmitPass (no BR) — N/A there.
+// Hexagon manner (HexagonBranchRelaxation.cpp:37-38, 95-114): BR has no
+// exact final layout, so Hexagon keeps a residual byte buffer (cl::init 200
+// there). Haydn's generic BranchRelaxation only sums getInstSizeInBytes, so
+// named late-layout growth (same-slot serial parcels, JT R0 re-zero, hwloop
+// setup pads) is charged there. The distance buffer is then residual layout
+// uncertainty — one insertIndirectBranch sequence. AIE has empty
+// addPreEmitPass (no BR). Init is HaydnHWLoopContracts.h
+// BranchRelaxSafetyBufferBytes (equals MaxSingleBranchGrowthBytes), never a
+// free-standing 200/1024.
 static cl::opt<uint32_t> BranchRelaxSafetyBuffer(
     "haydn-branch-relax-safety-buffer", cl::Hidden,
-    cl::init(static_cast<uint32_t>(haydn::hwloop::MaxSingleBranchGrowthBytes)),
+    cl::init(static_cast<uint32_t>(
+        haydn::hwloop::BranchRelaxSafetyBufferBytes)),
     cl::desc("Extra bytes added to branch distance when deciding if a "
-             "conditional is in WIDE_BranchSImm12 range (GE96-03 signed "
-             "12-bit byte PC+imm; Hexagon-style safety buffer). Default is "
-             "MaxSingleBranchGrowthBytes after named growth is charged in "
-             "getInstSizeInBytes."));
+             "conditional is in WIDE_BranchSImm12 range (signed 12-bit "
+             "byte PC+imm). Default is BranchRelaxSafetyBufferBytes after "
+             "named growth is charged in getInstSizeInBytes."));
 
 // Product MemoryEdges latency is architectural: First/LastMemoryCycle tables
 // (Last-First+1, floored at 1) for Slot0_LS / Slot1_LD / Slot01_LD / Slot2_LS.
@@ -1402,10 +1403,12 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return false;
 
   case Haydn::BR_JT:
-    // JALR_W is isCall. Expanding a computed goto to a call before
-    // MBP/pack would treat the jump as a call (same reason
-    // PseudoCALLIndirect stays a printer expand). Printer emits
-    // JALR_W r0, addr, 0. ExpandPseudos still re-zeros successors.
+    // JALR_W is isCall (caller-saved clobbers). Expanding a computed goto
+    // to a call before pack would treat the jump as a call — same reason
+    // PseudoCALLIndirect stays a printer expand. Generic ExpandPostRAPseudos
+    // runs before MBP (TargetPassConfig.cpp:1192); HaydnExpandPseudos is
+    // after MBP but still before pack. Printer emits JALR_W r0, addr, 0.
+    // ExpandPseudos still re-zeros successors of the BR_JT pseudo.
     return false;
 
   case Haydn::LOADI32: {
@@ -1590,7 +1593,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // zero half and Dst is the only DR needed.
     //
     // fir_xcorr / firinterp: MOV_GPR_TO_DR64 R0, (srai hi,16) — the old SP
-    // path (subi32/st32/ld64 bloat, P7 / ISA-42 interim) is gone.
+    // path (subi32/st32/ld64 bloat) is gone.
     //
     // General (both halves live GPRs) packs via the per-function fixed
     // DR64PackFI (stable FP/SP base, NO SP motion): ST32 lo; ST32 hi; LD64 rd.
@@ -1851,9 +1854,9 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
 bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
                                             int64_t BrOffset) const {
   // BranchRelaxation may pass TargetOpcode::BUNDLE (header of a wrapped
-  // branch). Cond/B field is GE96-03 signed 12-bit byte PC+imm — same
-  // RelocFieldInfo as applyFixup. JAL long-reach is not modeled via BUNDLE
-  // opc (insertBranch emits bare MI).
+  // branch). Cond/B field is signed 12-bit byte PC+imm — same RelocFieldInfo
+  // as applyFixup. JAL long-reach is not modeled via BUNDLE opc
+  // (insertBranch emits bare MI).
   if (BranchOpc == TargetOpcode::BUNDLE)
     BranchOpc = Haydn::B; // conservative short-range (cond/B)
 
@@ -1895,13 +1898,13 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
 
   // Logical BEQ_W..BLTU_W / BEQZ_W..BLTZ_W. One window with
   // computeRelocValue: WIDE_BranchSImm12 FieldSize=12, ValueShift=0
-  // (GE96-03 byte PC+imm). isInt<13> was the leftover ÷2-era ±4 KiB
-  // window and left a 2–4 KiB dead zone that integrated-as then rejected.
+  // (byte PC+imm). isInt<13> was the leftover ÷2-era ±4 KiB window and
+  // left a 2–4 KiB dead zone that integrated-as then rejected.
   //
   // Hexagon-style residual buffer (HexagonBranchRelaxation.cpp:164-166):
   // Distance = |offset| + BranchRelaxSafetyBuffer after getInstSizeInBytes
   // has charged named late-layout growth. Inflate BrOffset away from zero,
-  // then apply the reloc row. Default is MaxSingleBranchGrowthBytes.
+  // then apply the reloc row. Default is BranchRelaxSafetyBufferBytes.
   const HaydnReloc::RelocFieldInfo &I = HaydnReloc::getRelocFieldInfo(
       HaydnReloc::RelocKind::WIDE_BranchSImm12);
   int64_t Inflated = BrOffset >= 0

@@ -2,6 +2,9 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
 # RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
 # RUN:   %t/fixup_keep.mir -o - | FileCheck %s --check-prefix=FIXUP
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %t/fixup_no_invent.mir -o - | FileCheck %s --check-prefix=NOINVENT
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
 # RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/form_reject.mir -o - 2>&1 | FileCheck %s --check-prefix=FORM
@@ -20,6 +23,9 @@
 # FIXUP: LoopStart
 # FIXUP: PseudoLoopEnd
 # FIXUP-NOT: BNEZ
+# NOINVENT-LABEL: name: fixup_no_invent
+# NOINVENT-NOT: LoopStart
+# NOINVENT-NOT: SET_HWLOOP
 # FORM: incomplete Role-A retained state rejected before mutation
 # FORM: no body MBB
 
@@ -114,5 +120,44 @@ body:             |
     PseudoLoopEnd %bb.2
 
   bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- fixup_no_invent.mir
+--- |
+  define dso_local void @fixup_no_invent(ptr %p) {
+  entry:
+    br label %work
+  work:
+    store i32 0, ptr %p
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            fixup_no_invent
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+
+  bb.1.work:
+    liveins: $r1, $r0, $r15
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
     liveins: $r15
     RET implicit killed $r15

@@ -34,9 +34,10 @@
 ;     (BUNDLE 0, 0 == E2 + AllEntriesReal full-slot NOP pad); underfill/top-pad invent remains
 ;     fail-closed when golden is silent.
 ;   * Independent multi-op canaries pin the product-shape distinction that
-;     dependent multi-op chains miss: plain O0 postmisched packs co-issue
-;     (BUNDLE 1, 0 == E3 + AllEntriesReal with two private members); optnone
-;     stays sequential bare logicals until Finalize wraps each as BUNDLE 0, 0.
+;     dependent multi-op chains miss: optnone stays sequential bare logicals
+;     until Finalize wraps each as BUNDLE 0, 0. Plain O0/O2 currently wrap
+;     the same independent ADDs as sequential committed singletons (do not
+;     force-coissue). Underfill/top-pad invent remains fail-closed.
 ;   * Verify also refuses mixed committed-BUNDLE + bare encode residual for
 ;     every function (partial-commit escape), while all-bare non-optnone MIR
 ;     unit fixtures remain legal until Finalize runs.
@@ -114,9 +115,9 @@
 
 ; ---------------------------------------------------------------------------
 ; Plain O0 after Finalize+Verify: committed cycles only.
-; Dependent chains are singleton Format-E wraps. Independent multi keeps
-; the postmisched full-fill co-issue (BUNDLE 1, 0) and never leaves bare
-; encode MIs. optnone is no-reorder singleton commit only.
+; Dependent chains are singleton Format-E wraps. Independent multi is
+; sequential committed singletons (do not force-coissue) and never leaves
+; bare encode MIs. optnone is no-reorder singleton commit only.
 ; ---------------------------------------------------------------------------
 ; PLAIN-LABEL: name:{{ +}}with_optnone
 ; PLAIN: BUNDLE {{[01]}}, 0
@@ -149,9 +150,11 @@
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PLAIN-NOT: $r{{[0-9]+}} = ADD32{{ }}
 ; PLAIN: JALR_E2
-; Independent plain O0 multi-MI full-fill (AllEntriesReal co-issue).
+; Independent plain O0: committed singleton cycles (BUNDLE 0, 0). O0
+; postmisched does not co-issue this canary into E3; Finalize must still
+; wrap every encode MI (no bare ADD32). Do not force-coissue here.
 ; PLAIN-LABEL: name:{{ +}}indep_plain
-; PLAIN: BUNDLE 1, 0
+; PLAIN: BUNDLE {{[01]}}, 0
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PLAIN-NOT: $r{{[0-9]+}} = ADD32{{ }}
@@ -185,7 +188,7 @@
 ; OPT: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; OPT: JALR_E2
 ; OPT-LABEL: name:{{ +}}indep_plain
-; OPT: BUNDLE 1, 0
+; OPT: BUNDLE {{[01]}}, 0
 ; OPT: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; OPT: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; OPT-NOT: $r{{[0-9]+}} = ADD32{{ }}

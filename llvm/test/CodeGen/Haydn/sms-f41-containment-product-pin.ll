@@ -11,6 +11,17 @@
 ; RUN:     -haydn-sms-containment-max=3 -haydn-pipeliner-track-regpressure=false \
 ; RUN:     -debug-only=pipeliner < %s -o /dev/null 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=LIFTED
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms=false \
+; RUN:     < %s | FileCheck %s --check-prefix=POSTRA-ORD
+; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
+; RUN:     -O2 -verify-machineinstrs \
+; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
+; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
+; RUN:   2>%t.postra.rmk | FileCheck %s --check-prefix=POSTRA-SMS-ASM
+; RUN: FileCheck %s --check-prefix=POSTRA-SMS < %t.postra.rmk
+; RUN: not grep -q 'accepted II=' %t.postra.rmk || FileCheck %s --check-prefix=POSTRA-ACC < %t.postra.rmk
 ; REQUIRES: asserts
 
 ; REGRESSION TEST (W34 / F41, CR-H3) — containment ownership pins for the
@@ -24,9 +35,12 @@
 ; post-pipeliner-default-equals-off.ll (this body hangs past the
 ; generic pipeliner). Combined dual-ON qualify waits for T2 then T5
 ; then this matrix; this file does not claim that matrix closed.
-; All three arms stop after the generic pipeliner: RA/post-RA hangs on
-; this body (T4 hang-root) must not mask the containment pin. POLICY
-; checks pre-RA MIR: no SET_HWLOOP and no SWPS metadata.
+; Product / POLICY / LIFTED still stop after the generic pipeliner so the
+; containment pin stays independent of RA. POSTRA-ORD / POSTRA-SMS run
+; through RA + post-RA (T4 hang-root is capped): ordinary list-schedule
+; commit completes with hwloops OFF, and SMS QUALIFY is exhaust/reject or
+; parcels-per-iter == searched II. POLICY checks pre-RA MIR: no SET_HWLOOP
+; and no SWPS metadata.
 ;
 ; Bug class guarded: the knob exists ONLY to drive a found soft multi-stage
 ; schedule through the classic expander for lit verification. Three invariants:
@@ -58,6 +72,27 @@
 ; LIFTED: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}}
 ; LIFTED: SMS-TC: soft adjustTripCount delta={{-?[0-9]+}} is a structural no-op
 ; LIFTED-NOT: Reading virtual register without a def
+;
+; POSTRA-ORD: sms_f41_containment_pin:
+; POSTRA-ORD: jalr
+; POSTRA-ORD-NOT: set_hwloop
+; POSTRA-ORD-NOT: #<swps>
+;
+; POSTRA-SMS-ASM: sms_f41_containment_pin:
+; POSTRA-SMS-ASM: jalr
+; POSTRA-SMS: {{accepted II=|exhausted:|rejected:}}
+; POSTRA-SMS: qualify-or-cut
+; POSTRA-SMS: product-off
+; POSTRA-SMS: nat-ipc=measured-miss
+; POSTRA-SMS: no-competitive-ipc
+; POSTRA-SMS: no-stage0-ib-pp
+; POSTRA-SMS: hwloop-combined=off
+; POSTRA-SMS-NOT: sequential (preflight)
+;
+; POSTRA-ACC: accepted II=[[II:[0-9]+]]
+; POSTRA-ACC-SAME: measured-II=[[II]]
+; POSTRA-ACC: qualify parcels-per-iter=[[II]]
+; POSTRA-ACC-SAME: searched-II=[[II]]
 
 ; CoreMark matrix_sum-like soft residual (proven to find a multi-stage
 ; schedule at -O2; same body as sms-multistage-naive-handoff-off-reject.ll).

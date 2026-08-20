@@ -992,9 +992,10 @@ void HaydnPostRASchedStrategy::leaveRegion(const SUnit &ExitSU) {
   // Mirrors AIEPostRASchedStrategy::leaveRegion (AIEMachineScheduler.cpp:1073-
   // 1119) without the inter-block fixpoint gate / delay-slot fixup.
   // AIE InterBlockScheduling (AIEInterBlockScheduling.cpp, ~59K+17K) is a
-  // separate unbounded port; this leaveRegion has no cross-block gate.
-  // successorsAreScheduled (AIEMachineScheduler.cpp:251-258) is the first
-  // brick and stays conservative (unknown / empty succs = not scheduled).
+  // separate unbounded port (post-QUALIFY). This leaveRegion has no
+  // cross-block gate. successorsAreScheduled (AIEMachineScheduler.cpp:251-258)
+  // is the first brick and stays conservative (unknown / empty succs =
+  // not scheduled). SWPSolver is not a leaveRegion concern (Z3 unavailable).
   //
   // CRITICAL: the base drive loop calls exitRegion (and thus this leaveRegion)
   // even for empty/single-MI regions that were SKIPPED (MachineScheduler.cpp:
@@ -1081,11 +1082,13 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
   //   * illegal (true RAW / SET trip-Off conflict / field-order fail) →
   //     sequentialize in schedule order and clear InternalRead
   //
-  // The product coissue probe is the only legality authority. Sequentialize
-  // is recovery after that probe rejects — it must not invent a pack.
-  // Stamped Format-E multi-member is re-probed: remat glue / free pack can
-  // stamp a cycle product law refuses (snapshot no-forwarding SET trip).
-  // Do not trust the stamp alone. Not a hard-root freeze path.
+  // The product coissue probe is the only legality authority (HR getHazardType
+  // consults the same predicate so scheduled cycles are not packed then
+  // sequentialized). Sequentialize is residual-shell recovery after that
+  // probe rejects — it must not invent a pack. Stamped Format-E multi-member
+  // is re-probed: remat glue / free pack can stamp a cycle product law
+  // refuses (snapshot no-forwarding SET trip). Do not trust the stamp
+  // alone. Not a hard-root freeze path.
   SmallVector<MachineInstr *, 4> Roots;
   for (MachineInstr &MI : MBB) {
     if (!MI.isBundle() || MI.isBundledWithPred())

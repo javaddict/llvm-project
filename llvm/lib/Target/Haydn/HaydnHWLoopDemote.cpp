@@ -135,6 +135,26 @@ MachineBasicBlock *haydn::hwloop::resolveBodyMBBCore(MachineInstr &SetMI) {
   return nullptr;
 }
 
+MachineBasicBlock *haydn::hwloop::resolveBodyMBBFixup(MachineInstr &SetMI) {
+  if (MachineBasicBlock *B = resolveBodyMBBCore(SetMI))
+    return B;
+  if (SetMI.getOpcode() != Haydn::LoopStart)
+    return nullptr;
+  MachineBasicBlock *Pre = SetMI.getParent();
+  if (!Pre)
+    return nullptr;
+  const MachineFunction *MF = Pre->getParent();
+  MachineBasicBlock *Cand = Pre->getNextNode();
+  for (unsigned Depth = 0; isLiveMBB(*MF, Cand) && Depth < 8;
+       Cand = Cand->getNextNode(), ++Depth) {
+    if (resolveLoopStartLatch(Cand, Pre))
+      return Cand;
+    if (!isContinueTrampolineBlock(Cand) || Cand->succ_size() != 1)
+      return nullptr;
+  }
+  return nullptr;
+}
+
 static bool isPLETargetingHeader(const MachineInstr *MI,
                                  const MachineBasicBlock *Header) {
   if (!MI || !Header || MI->getOpcode() != Haydn::PseudoLoopEnd)

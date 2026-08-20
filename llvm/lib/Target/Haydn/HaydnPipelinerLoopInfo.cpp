@@ -45,9 +45,6 @@ STATISTIC(NumSMSSharedResourceRecordConsumes,
           "Number of SMS shouldUseSchedule checks that consumed the shared "
           "availability-aware resource record (CompleteModel closed)");
 
-// Stage-0 PostPipeliner deleted — prefer-PP path retired (always false).
-static constexpr bool EnableZOLPreferPostPipeliner = false;
-
 // PPS-3: AIE-style stage-count gate for SMS (into shouldUseSchedule).
 static cl::opt<unsigned> HaydnSMSMaxStageCount(
     "haydn-sms-max-stagecount", cl::Hidden, cl::init(3),
@@ -263,17 +260,10 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   // sms-* lits pin reject lines with -debug-only=pipeliner (match SMS-HOOK /
   // SMS-RESMII). Product gates themselves are flag-driven, not log-driven.
 
-  // PR8 / AIE preferPostPipeliner seed: when the flag is set, defer ZOL to the
-  // post-pipeliner path by rejecting every SMS schedule for ZOL form. Default
-  // off so classic pre-RA SMS behavior is unchanged.
-  if (IsZOL && EnableZOLPreferPostPipeliner) {
-    DEBUG_WITH_TYPE("pipeliner", {
-      dbgs() << "ZOL: preferring post-pipeliner over SMS "
-                "(-haydn-zol-prefer-post-pipeliner)\n";
-      logZOLGeometryFloors();
-    });
-    return false;
-  }
+  // Stage-0 PostPipeliner is deleted. AIE ZeroOverheadLoop::preferPostPipeliner
+  // (AIEBasePipelinerLoopInfo.cpp:770-834) routes some ZOL to PostPipeliner;
+  // Haydn's post-RA host is the only multi-stage owner, so this pre-RA path
+  // never defers to a retired Stage-0 engine.
 
   // For ZOL loops, reject single-stage schedules (StageCount <= 1).
   // A single-stage schedule has no pipeline overlap -- it just adds
@@ -383,9 +373,8 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
 
   // Release-visible polarity pin: pure product StageCount1 helper agrees that
   // this soft StageCount==1 schedule is the only remaining accept path. Flag
-  // specials (prefer-post-pipeliner / force-pressure / containment-max lift)
-  // already returned above, so at product defaults this accept is exactly the
-  // helper's complement.
+  // specials (force-pressure / containment-max lift) already returned above,
+  // so at product defaults this accept is exactly the helper's complement.
   if (HaydnSMSContainmentMax ==
           HaydnPreRASchedStrategy::productSMSContainmentMaxStageCount &&
       HaydnPreRASchedStrategy::smsProductShouldUseScheduleFailsClosed(

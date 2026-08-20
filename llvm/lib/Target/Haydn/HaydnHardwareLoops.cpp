@@ -886,23 +886,22 @@ bool llvm::demoteHardwareLoopToSoftware(
   int64_t Imm = 0;
   bool HasImm = false;
 
-  // Debug-only demote OFF: never erase a SET whose body is not proven
-  // dead. Hexagon FixupHwLoops.cpp:137-148 converts out-of-range LOOP
-  // to the extended form or leaves it; Haydn has no extended form, so
-  // refuse the soft-edge / erase and let the caller fatal.
-  auto eraseOnlyIfDemoteAllowed = [&]() -> bool {
-    if (!haydn::hwloop::isHwLoopDemoteEnabled()) {
-      LLVM_DEBUG(dbgs() << DebugPrefix
-                        << ": demote disabled — refuse erase-only "
-                           "once-through\n");
-      return false;
-    }
-    return eraseHardwareLoopSetup(SetMI, DebugPrefix);
+  // Cannot parse Header/Latch/trip: cannot prove the body is dead and
+  // cannot install a soft edge. Hexagon FixupHwLoops.cpp:137-148 converts
+  // or leaves LOOP; AIEBaseHardwareLoops.cpp:311-316 early-returns with
+  // the setup intact. Haydn overlay: refuse erase-only so the caller
+  // fatals. Dead-body L1 erase stays on the path that parsed Header/Latch
+  // and proved them not live.
+  auto refuseUnparseable = [&]() -> bool {
+    LLVM_DEBUG(dbgs() << DebugPrefix
+                      << ": unparseable SET/LoopStart — refuse erase-only "
+                         "once-through\n");
+    return false;
   };
 
   if (IsLoopStart) {
     if (!SetMI.getOperand(0).isReg())
-      return eraseOnlyIfDemoteAllowed();
+      return refuseUnparseable();
     Prefer = SetMI.getOperand(0).getReg();
     Header = ResolveBodyFn(SetMI);
     Latch = haydn::hwloop::resolveLoopStartLatch(Header, Preheader);
@@ -915,16 +914,16 @@ bool llvm::demoteHardwareLoopToSoftware(
   } else {
     if (SetMI.getNumOperands() < 4 || !SetMI.getOperand(1).isMBB() ||
         !SetMI.getOperand(2).isMBB())
-      return eraseOnlyIfDemoteAllowed();
+      return refuseUnparseable();
     Header = SetMI.getOperand(1).getMBB();
     Latch = SetMI.getOperand(2).getMBB();
     if (TII.isHardwareLoopRegTripOpcode(Opc)) {
       if (!SetMI.getOperand(3).isReg())
-        return eraseOnlyIfDemoteAllowed();
+        return refuseUnparseable();
       Prefer = SetMI.getOperand(3).getReg();
     } else {
       if (!SetMI.getOperand(3).isImm())
-        return eraseOnlyIfDemoteAllowed();
+        return refuseUnparseable();
       Imm = SetMI.getOperand(3).getImm();
       HasImm = true;
     }

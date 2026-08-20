@@ -19,8 +19,10 @@
 // (AIE AIEPseudoBranchExpansion.cpp:43-57 expands named branch desc only;
 // Haydn in-bundle expand is leftover *_POST_INC).
 //
-// Pseudos already handled by HaydnInstrInfo::expandPostRAPseudo (RET, B,
+// Pseudos already handled by HaydnInstrInfo::expandPostRAPseudo (RET,
 // LOADI32, MOV_GPR_TO_DR64, MOV_DR64_TO_GPR) are NOT duplicated here.
+// B and BR_JT stay printer-owned: JALR_W is isCall, so a computed goto
+// must not become a call before pack.
 //
 //===----------------------------------------------------------------------===//
 
@@ -277,7 +279,9 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
   // inside a BUNDLE are fail-closed here. Pack has not run, so a BUNDLE
   // child is leftover injection; in-bundle expand is only leftover
   // *_POST_INC (expandBundledPostIncLeftovers). Bare LoopDec/LoopJNZ/
-  // LoopStart stay legal until Fixup / late Verify.
+  // LoopStart stay legal until Fixup / late Verify. Top-level leftover
+  // LOADI32/LOADI64 after ExpandPostRA (TargetPassConfig.cpp:1192) is
+  // fail-closed here so it cannot reach pack/commit.
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.instrs()) {
       if (MI.isBundle())
@@ -287,7 +291,10 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
           haydn::bundle::isExpandOwnedSemanticPseudo(Opc);
       const bool BundledCycle = MI.isInsideBundle() &&
                                 haydn::bundle::isResidualCycleFormingPseudo(Opc);
-      if (!ExpandOwned && !BundledCycle)
+      const bool LeftoverLoadI =
+          !MI.isInsideBundle() &&
+          (Opc == Haydn::LOADI32 || Opc == Haydn::LOADI64);
+      if (!ExpandOwned && !BundledCycle && !LeftoverLoadI)
         continue;
       std::string Msg;
       raw_string_ostream OS(Msg);
@@ -297,6 +304,10 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
            << " (SET_HWLOOP/SETCBR/LOOPCTL/LOAD_ADDR must not survive "
               "Expand as a BUNDLE child):\n  MI: "
            << MI;
+      } else if (LeftoverLoadI) {
+        OS << "HaydnExpandPseudos: residual LOADI32/LOADI64 in "
+           << MF.getName() << " BB#" << MBB.getNumber()
+           << " (expandPostRAPseudo must expand before pack):\n  MI: " << MI;
       } else {
         OS << "HaydnExpandPseudos: residual expand-owned semantic pseudo in "
            << MF.getName() << " BB#" << MBB.getNumber()

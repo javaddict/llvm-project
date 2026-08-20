@@ -33,8 +33,9 @@ class HaydnInstrInfo;
 
 /// Expands Haydn post-RA pseudo instructions into real machine instructions.
 /// Cross-bank register moves (MOV_GPR_TO_DR64, MOV_DR64_TO_GPR) are handled
-/// in HaydnInstrInfo::expandPostRAPseudo instead, because they create frame
-/// indices that must be eliminated by PEI.
+/// in HaydnInstrInfo::expandPostRAPseudo (generic ExpandPostRAPseudos, after
+/// PEI). Pack-slot FIs are reserved in determineCalleeSaves and resolved
+/// after PEI via getFrameIndexReferenceAt.
 class HaydnExpandPseudos : public MachineFunctionPass {
 public:
   static char ID;

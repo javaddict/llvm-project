@@ -27,6 +27,9 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRAMultiStage.h --check-prefix=SMSDEF
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSubtarget.h --check-prefix=O0POST
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnEnsureTerminators.cpp --check-prefix=ENSURE
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfo.cpp --check-prefix=W49
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfo.cpp --check-prefix=BRBUF
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnExpandPseudos.cpp --check-prefix=SETDESC
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfoManual.td --check-prefix=AUTO
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/CMakeLists.txt --check-prefix=CMAKE
 ; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=P13PLAN
@@ -201,8 +204,9 @@ define i32 @f(i32 %a, i32 %b) {
 ; HWON:      Haydn Bundle Finalization
 ; HWON-NEXT:      Haydn Bundle Invariant Verifier
 
-; PIPE-20 / DG0 / P19 / R15 inventory (Inputs/ is lit-excluded; this file
+; PIPE-20 / DG0 / R15 inventory (Inputs/ is lit-excluded; this file
 ; is the owner-slice seat). DecisionGuard registry stays absent.
+; No second format pipeline.
 ; PIPE20-DAG: Phase-firewall inventory (PIPE-20
 ; PIPE20-DAG: no issue-cycle/format identity crosses RA
 ; PIPE20-DAG: no pre-RA BUNDLE / private member / setDesc
@@ -252,16 +256,25 @@ define i32 @f(i32 %a, i32 %b) {
 ; SMSDEF: productDefaultEnabled() { return false; }
 ; O0POST: enablePostRAMachineScheduler() const override { return true; }
 ; ENSURE: never call skipFunction
-; AUTO: hand-maintained hypothesized encodings
+; W49: ensureSoftZeroR0Clean
+; W49: withDR64PackBase: soft-zero R0 must be clean before pack-base MatInt
+; BRBUF: BranchRelaxSafetyBufferBytes
+; BRBUF-NOT: cl::init(200)
+; SETDESC: leftover generic SET
+; SETDESC: SET_HWLOOP_F2_W
+; SETDESC: SET_HWLOOP_W
+; AUTO: HaydnInstrInfoManual.td - moved
+; AUTO: Former hand-maintained hypothesized encodings
 ; AUTO: generate_format_e_records.py does not emit this file
+; AUTO: Do not include it
 ; AUTO-NOT: Auto-generated from spec JSON
 ; CMAKE-NOT: /ssd2/mhyang/haydn-plans/Database/golden
 ; CMAKE-NOT: $ENV{HOME}/haydn
 ; CMAKE-NOT: HAYDN_GOLDEN_DIR
 ; CMAKE-NOT: BUNDLESIM_GOLDEN_DIR
 ; P13PLAN-DAG: P13 source waves
-; P13PLAN-DAG: gated on R13
-; P13PLAN-DAG: do not start Wave 1/2/3
+; P13PLAN-DAG: R13 LANDED
+; P13PLAN-DAG: Wave 1 unblocked
 ; P13PLAN-DAG: leftover `_S*` stay (T4)
 ; MF0-DAG: MF0 multi-bundle proof
 ; MF0-DAG: INERT

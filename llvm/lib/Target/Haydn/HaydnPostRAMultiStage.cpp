@@ -448,8 +448,9 @@ cl::opt<bool> EnableHaydnMultiStageSMS(
     cl::desc(
         "Enable the post-RA multi-stage software pipeliner "
         "(HaydnMultiStageSMS). Product default follows "
-        "HaydnMultiStageSMS::productDefaultEnabled(); remains OFF until "
-        "independent then combined qualification and a policy-only flip."));
+        "HaydnMultiStageSMS::productDefaultEnabled() (false). The host is "
+        "seated, not pruned; independent then combined qualification and a "
+        "policy-only flip remain later."));
 
 cl::opt<bool> HaydnMultiStageSMSAnalysisOnly(
     "haydn-multistage-sms-analysis-only", cl::Hidden, cl::init(false),
@@ -467,10 +468,11 @@ cl::opt<std::string> HaydnMultiStageSMSForceFailSeat(
 
 // Maximum body instructions the engine will attempt (keeps search cheap).
 // bkfir32x32 L1 MAC is ~26 real ops; leave headroom for similar FIR kernels.
-static constexpr unsigned MaxBodyInstrs = 40;
+static constexpr unsigned MaxBodyInstrs = 96;
 // Dense MAC bodies (bkfir) used to livelock Latest / LastEarliestPusher
-// walks. Those walks are capped; this bound also shrinks the Config
-// lattice so a later post-RA enable cannot look like a hang.
+// walks. Those walks skip first-copy Data back-edges (concatenated-clone
+// overlay vs AIE initSUnit x2). This bound is a safety cap only; AIE
+// PostPipeliner has none. LargeBodyInstrs still shrinks the Config lattice.
 static constexpr int LargeBodyInstrs = 20;
 // Cap II search distance.
 static constexpr int MaxIISearch = 24;
@@ -483,6 +485,21 @@ static const char *const PreflightNames[] = {
 static const char *const JournalNames[] = {
     "JM-ALLOC", "JM-SPLICE", "JM-COMMIT", "JM-TRIP",
     "JM-LIVE",  "JM-ALT",    "JM-META"};
+
+static_assert(!HaydnMultiStageSMS::productDefaultEnabled(),
+              "multi-stage product default stays off");
+static_assert(HaydnMultiStageSMS::productHostSeated(),
+              "multi-stage host stays seated");
+static_assert(!HaydnMultiStageSMS::productSWPSolverAvailable(),
+              "SWPSolver lattice is not product");
+static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled(),
+              "combined hwloop+SMS is not product");
+
+StringRef HaydnMultiStageSMS::productPolicyRemark() {
+  return "qualify-or-cut: seated product-off host-live "
+         "swpsolver=unavailable hwloop-combined=off "
+         "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp";
+}
 
 ArrayRef<const char *> HaydnMultiStageSMS::preflightSeatNames() {
   return ArrayRef(PreflightNames);
@@ -1153,6 +1170,23 @@ bool HaydnMultiStageSMS::buildTwoCopyGraph(ScheduleDAGMI &Host) {
       if (S < NInstr || S >= 2 * NInstr)
         continue;
       addLCD(K, S - NInstr, depLat(Dep), /*Distance=*/1);
+    }
+  }
+  // First-copy Data back-edges (P >= K) are RA-reuse / concatenated-clone
+  // artifacts. AIE first-copy is a DAG (AIEMachineScheduler.cpp:1777-1793).
+  // Record them as distance-1 LCDs so RecMII sees the cycle; computeBackward
+  // skips them so Latest cannot walk to -inf.
+  for (int K = 0; K < NInstr; ++K) {
+    for (const SDep &Dep : TwoCopyDAG->SUnits[K].Preds) {
+      if (Dep.getKind() != SDep::Data)
+        continue;
+      SUnit *Pred = Dep.getSUnit();
+      if (!Pred || Pred->isBoundaryNode())
+        continue;
+      const int P = static_cast<int>(Pred->NodeNum);
+      if (P < 0 || P >= NInstr || P < K)
+        continue;
+      addLCD(P, K, depLat(Dep), /*Distance=*/1);
     }
   }
   return true;
@@ -1869,8 +1903,16 @@ bool HaydnMultiStageSMS::computeBackward() {
     for (auto &Dep : SU.Preds) {
       if (Dep.getKind() != SDep::Data)
         continue;
-      int P = static_cast<int>(Dep.getSUnit()->NodeNum);
-      if (P < 0 || P >= NInstr)
+      SUnit *PredSU = Dep.getSUnit();
+      if (!PredSU || PredSU->isBoundaryNode())
+        continue;
+      int P = static_cast<int>(PredSU->NodeNum);
+      // AIE walks every first-copy Data pred (AIEPostPipeliner.cpp:376-391).
+      // AIE first-copy is a DAG (initSUnit twice + buildEdges,
+      // AIEMachineScheduler.cpp:1777-1793). Haydn concatenates clones and
+      // calls buildSchedGraph; RA physreg reuse can publish P >= K, which
+      // walks Latest to -inf. Skip those; they are already LCD edges.
+      if (P < 0 || P >= NInstr || P >= K)
         continue;
       HaydnMultiStageNodeInfo &Pred = Sched[P];
       addOffspring(Pred, K);
@@ -1927,18 +1969,22 @@ bool HaydnMultiStageSMS::computeLoopCarriedParameters() {
       Sched[K].Slots = conflictSlotsForMI(*MI);
   }
   computeForward();
-  // Bound the Latest fixpoint: Data-only Latest only decreases, but a
-  // cyclic first-copy edge would otherwise walk Latest to -inf (T4 hang).
-  // Hitting the cap means the first-copy graph is cyclic; a partial
-  // Latest is wider than the true window, so fail closed and retry II.
+  // Bound the Latest fixpoint: Data-only Latest only decreases. First-copy
+  // Data back-edges are skipped in computeBackward; a residual cycle is
+  // II-independent, so a cap miss keeps partial Latest and continues II
+  // search (certificates fail-close an illegal accept).
   int BackwardGuard = 0;
   const int BackwardCap = std::max(NInstr * 2, 8);
   while (computeBackward() && ++BackwardGuard < BackwardCap)
     ;
   if (BackwardGuard >= BackwardCap) {
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: Latest fixpoint did not "
-                         "converge (T4 cycle cap)\n");
-    return false;
+                         "converge after first-copy back-edge skip; "
+                         "keep partial Latest and search II\n");
+    // Do not return false: the cap is II-independent, so fail-closed
+    // here rejects every TryII (capped-reject on dense MAC bodies).
+    // Partial Latest is wider than the true window; certificates still
+    // fail-close an illegal accept.
   }
   computeRecMIIFromDAG();
   for (int K = 0; K < NInstr; ++K) {
@@ -3696,6 +3742,15 @@ void HaydnMultiStageSMS::emitRemark(MachineBasicBlock &MBB,
   });
 }
 
+void HaydnMultiStageSMS::emitProductPolicy(MachineBasicBlock &MBB) const {
+  // Runtime echo of the compile-time seat. AIE SWPSolver is Z3
+  // (AIESWPSolver.cpp); Haydn never installs a second solver.
+  assert(!productSWPSolverAvailable() &&
+         StringRef(LastSWPSolverStatus ? LastSWPSolverStatus : "") ==
+             "unavailable");
+  emitRemark(MBB, "MultiStagePolicy", productPolicyRemark());
+}
+
 //===----------------------------------------------------------------------===//
 // schedule
 //===----------------------------------------------------------------------===//
@@ -3729,6 +3784,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
       emitRemark(MBB, "MultiStageReject",
                  "rejected: not a single-BB ZOL/soft-countdown post-RA "
                  "candidate");
+      emitProductPolicy(MBB);
     }
     return false;
   }
@@ -3749,6 +3805,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
     LastRejectReason = "too-few-body";
     emitRemark(MBB, "MultiStageReject",
                "rejected: fewer than 2 body SUnits");
+    emitProductPolicy(MBB);
     return false;
   }
   if (Body.size() > MaxBodyInstrs) {
@@ -3758,10 +3815,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                "rejected: body SUnits=" + Twine((unsigned)Body.size()) +
                    " > cap=" + Twine(MaxBodyInstrs) +
                    " hang-containment no-seq-fallback");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
 
@@ -3770,10 +3824,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
     LastRejectReason = "member-pin";
     emitRemark(MBB, "MultiStageReject",
                "rejected: transient member pin failed no-seq-fallback");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
   emitRemark(MBB, "MultiStagePin",
@@ -3788,10 +3839,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
     LastRejectReason = "two-copy-graph";
     emitRemark(MBB, "MultiStageReject",
                "rejected: two-copy buildSchedGraph failed no-seq-fallback");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
   // Two-copy clones are distinct MI*; copy the instance pin so the
@@ -3839,10 +3887,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                "rejected: ASAP earliest placement did not converge ResMII=" +
                    Twine(ResMII) + " RecMII=" + Twine(RecMII) +
                    " no-seq-fallback");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
 
@@ -3868,10 +3913,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                "rejected: no schedule length (LinearLength=" +
                    Twine(LinearLength) + ") ResMII=" + Twine(ResMII) +
                    " RecMII=" + Twine(RecMII) + " no-seq-fallback");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
   const int ListBaseline = std::max(LinearLength, StartII);
@@ -3889,10 +3931,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                    " LinearLength=" + Twine(LinearLength) +
                    " pins=" + Twine((unsigned)MemberPin.size()) +
                    " no-seq-fallback qualify-or-cut=seated product-off");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
   LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: II search [" << StartII << ","
@@ -3935,10 +3974,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                    " LinearLength=" + Twine(LinearLength) +
                    " pins=" + Twine((unsigned)MemberPin.size()) +
                    " no-seq-fallback qualify-or-cut=seated product-off");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
 
@@ -3955,10 +3991,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                "rejected: measured-II=" + Twine(MeasuredII) +
                    " != searched II=" + Twine(II) + " ResMII=" +
                    Twine(ResMII) + " no-seq-fallback");
-    emitRemark(MBB, "MultiStagePolicy",
-               "qualify-or-cut: seated product-off host-live "
-               "swpsolver=unavailable hwloop-combined=off "
-               "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+    emitProductPolicy(MBB);
     return false;
   }
   ++NumMultiStageQualifySeated;
@@ -3982,13 +4015,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
   emitRemark(MBB, "MultiStageSWPS",
              "swps observe-only measured-II=" + Twine(MeasuredII) +
                  " searched-II=" + Twine(II) + " no-asm-stamp");
-  emitRemark(MBB, "MultiStagePolicy",
-             "qualify-or-cut: seated product-off host-live "
-             "swpsolver=" +
-                 Twine(LastSWPSolverStatus ? LastSWPSolverStatus
-                                           : "unavailable") +
-                 " hwloop-combined=off "
-                 "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp");
+  emitProductPolicy(MBB);
   return true;
 }
 
@@ -4003,10 +4030,12 @@ bool HaydnMultiStageSMS::tryAfterOrdinarySchedule(ScheduleDAGMI &TheDAG,
   if (!runPreflight()) {
     ++NumMultiStageCertReject;
     ++NumMultiStageFail;
-    if (LoopBB)
+    if (LoopBB) {
       emitRemark(*LoopBB, "MultiStageReject",
                  Twine("preflight reject: ") +
                      (LastRejectReason ? LastRejectReason : "unknown"));
+      emitProductPolicy(*LoopBB);
+    }
     destroyTwoCopyGraph();
     return false;
   }

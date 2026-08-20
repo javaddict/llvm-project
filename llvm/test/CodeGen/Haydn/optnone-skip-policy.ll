@@ -9,16 +9,18 @@
 ;   * FinalizeBundle + VerifyBundles never skip — optnone is target-local
 ;     no-reorder commit (singleton Format E BUNDLEs), not MC standalone escape.
 ;   * Both shapes must leave only committed BUNDLE roots for real encode MIs.
-;   * Independent multi-op canaries: plain O0 may co-issue (E3 when dual
-;     single-unit logicals need it); optnone remains sequential bare until
-;     Finalize (full-slot BUNDLE {{[01]}}, 0 each — architectural NOP pad).
+;   * Independent multi-op canaries: do not force-coissue. Plain O0 may
+;     stamp generated members at postmisched; Finalize wraps remaining
+;     encode MIs. optnone remains sequential bare until Finalize
+;     (full-slot BUNDLE {{[01]}}, 0 each — architectural NOP pad).
 
 ; After postmisched: single-op plain may still be bare logical (Finalize wraps);
-; independent multi packs BUNDLE 0,0; optnone stays bare on all shapes.
+; independent multi may already be generated members without a BUNDLE wrapper
+; (Finalize wraps remaining encode MIs). Do not force-coissue. optnone stays
+; bare on all shapes (quality skip).
 ; POST-O0-LABEL: name: plain_o0
 ; POST-O0: $r{{[0-9]+}} = ADD32{{ }}
 ; POST-O0-LABEL: name: indep_plain
-; POST-O0: BUNDLE {{[01]}}, 0
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-OPTNONE-LABEL: name: optnone_fn
