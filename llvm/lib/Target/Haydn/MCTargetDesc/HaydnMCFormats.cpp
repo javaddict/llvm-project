@@ -89,25 +89,36 @@ extern const char HaydnInstrNameData[];
 #define GET_FORMAT_E_MEMBER_OPCODES
 #include "HaydnGenFormatEMemberOpcodes.inc"
 
+bool haydnIsResidualFieldSlotName(StringRef Name) {
+  // Leftover FieldSlot `*_S<digits>` (ABS64_S1). Occupancy must not recover a
+  // catalog logical by stripping that suffix. AIE MultiSlot alts are generated
+  // (AIEMCFormats.h:376-379) — no suffix table. Saturating public names
+  // (ABS64S) do not end in `_S` + digits.
+  StringRef Rest = Name;
+  while (!Rest.empty() && Rest.back() >= '0' && Rest.back() <= '9')
+    Rest = Rest.drop_back();
+  if (Rest.size() == Name.size() || Rest.size() < 2)
+    return false;
+  return Rest.ends_with_insensitive("_S");
+}
+
+bool haydnIsGeneratedMemberName(StringRef Name) {
+  return Name.contains_insensitive("_E2_") ||
+         Name.contains_insensitive("_E3_");
+}
+
 namespace {
 
 StringRef occupancyOpcodeName(unsigned Opcode) {
   return StringRef(&HaydnInstrNameData[HaydnInstrNameIndices[Opcode]]);
 }
 
-/// Residual FieldSlot names are retired. Occupancy must not recover a
-/// logical by stripping `_S0/_S1/_S2` (AIE uses generated MultiSlot alts,
-/// AIEMCFormats.h:376-379 — no suffix table). A leftover `_S*` suffix must
-/// not certify a Format E entry (ABS64 has no unsuffixed FieldSlot form).
 bool isResidualFieldSlotName(StringRef Name) {
-  return Name.ends_with_insensitive("_S0") ||
-         Name.ends_with_insensitive("_S1") ||
-         Name.ends_with_insensitive("_S2");
+  return haydnIsResidualFieldSlotName(Name);
 }
 
 bool isGeneratedMemberName(StringRef Name) {
-  return Name.contains_insensitive("_E2_") ||
-         Name.contains_insensitive("_E3_");
+  return haydnIsGeneratedMemberName(Name);
 }
 
 /// Public mnemonic → golden catalog logical. Occupancy alias only — never

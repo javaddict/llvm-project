@@ -36,11 +36,13 @@
 // pin entries.
 // encodeSlotSubInst is serialize-only: every non-NOP child must already be a
 // generated private member. Compiler BUNDLE_E96_* roots serialize typed
-// (row, entry, member) as-is and never re-enter standalone DFS. Hand-asm
-// one-parcel fill is as-is / positional (MOVE32 AsmString is 2-op). Closed
-// extra-op keep-map (AR-UA POST, CB writeback, Imm-0 hole, 0-op HINT) is
+// (row, entry, member) as-is via encodeInstructionFromCompilerRoot and never
+// re-enter standalone DFS. fillFormatEMemberInstFromCompilerRoot is fail-closed.
+// fillFormatEMemberInstFromRawBundle is hand-asm only (positional / Imm-0).
+// Closed extra-op keep-map (AR-UA POST, CB writeback, Imm-0 hole, 0-op HINT) is
 // standalone only. Compiler extra-op cutover (MOVE32/ABS32 trailing rs2,
-// tied MAC acc) stays in Finalize. Class-bag operand rebuild is deleted.
+// tied MAC acc) stays in Finalize. Residual FieldSlot never enters fill.
+// Class-bag operand rebuild is deleted.
 // Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
 //
 //===----------------------------------------------------------------------===//
@@ -205,6 +207,17 @@ private:
                     SmallVectorImpl<MCFixup> &Fixups,
                     const MCSubtargetInfo &STI) const;
 
+  // Compiler-root BUNDLE_E96_*: serialize typed MemberId as-is. Never DFS,
+  // name peel, or fill. Peer: AIEBaseMCCodeEmitter.cpp:45-68.
+  bool encodeInstructionFromCompilerRoot(const MCInst &MI,
+                                         SmallVectorImpl<char> &CB,
+                                         SmallVectorImpl<MCFixup> &Fixups,
+                                         const MCSubtargetInfo &STI) const;
+
+  void emitFormatEParcel(const MCInst &Comp, SmallVectorImpl<char> &CB,
+                         SmallVectorImpl<MCFixup> &Fixups,
+                         const MCSubtargetInfo &STI) const;
+
   unsigned getBranchFixupKind(const MCInst &MI) const;
   unsigned getCallFixupKind(const MCInst &MI) const;
 };
@@ -303,34 +316,6 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
     // enter standalone DFS / fill. Public logicals (hand-asm) one-parcel DFS.
     SmallVector<MCInst, 4> PlaceStorage;
     MCInst Placed;
-    auto emitOneComposite = [&](const MCInst &Comp) {
-      APInt InstBits, Scratch;
-      SmallVector<MCFixup, 8> LocalFixups;
-      getBinaryCodeForInstr(Comp, LocalFixups, InstBits, Scratch, STI);
-      haydn::format::EncodedBits ProdBits = haydn::format::encodedBitsOrDie(
-          haydn::format::BundleFormatRowID::E96TwoEntry);
-      APInt Word = InstBits.zextOrTrunc(ProdBits.Value);
-      if ((Word.extractBitsAsZExtValue(3, 0) & 0x7u) !=
-          haydn::format::FormatEIndicatorBits) {
-        report_fatal_error(
-            "Haydn MC: Format E parcel missing indicator 111 after encode",
-            /*GenCrashDiag=*/false);
-      }
-      const uint32_t Base = static_cast<uint32_t>(CB.size());
-      // AIE translateFixupsInComposite (AIEBaseMCCodeEmitter.cpp:231-232)
-      // emits the composite MCFixup at offset 0 after field-identity
-      // translation. Haydn FieldLsb is absolute parcel bits with r_offset =
-      // parcel origin (HaydnRelocLayout). Member encoders may still report a
-      // mid-parcel field byte (E3 I12 sits at bit 23 → byte 2); keep the
-      // reloc at the parcel base so linked B/JAL targets stay exact records.
-      const unsigned Parcel = haydnProductionParcelBytes().Value;
-      for (const MCFixup &F : LocalFixups) {
-        const uint32_t Abs = Base + F.getOffset();
-        const uint32_t ParcelBase = Abs - (Abs % Parcel);
-        addHaydnFixup(Fixups, ParcelBase, F.getValue(), F.getKind());
-      }
-      haydnEmitFormatEParcelLE(Word, CB);
-    };
 
     // Isolate committed MemberId as-is from standalone DFS: any private
     // child means serialize-only (AIEBaseMCCodeEmitter.cpp:45-68). Mixed
@@ -364,15 +349,13 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
             "(serialize-only)",
             /*GenCrashDiag=*/false);
       }
-      if (!trySerializeFormatECompositeAsIs(MI, MII, *Ctx.getRegisterInfo(),
-                                            Placed, PlaceStorage)) {
+      if (!encodeInstructionFromCompilerRoot(MI, CB, Fixups, STI)) {
         report_fatal_error(
             "Haydn MC: committed Format E private member cannot enter "
             "standalone DFS re-place — refuse name recovery / row retry "
             "(serialize-only)",
             /*GenCrashDiag=*/false);
       }
-      emitOneComposite(Placed);
       return;
     }
 
@@ -380,7 +363,7 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
     // residuals never reach here (encodeBundle wall).
     if (buildFormatEPlacedComposite(MI, MII, *Ctx.getRegisterInfo(), Placed,
                                     PlaceStorage)) {
-      emitOneComposite(Placed);
+      emitFormatEParcel(Placed, CB, Fixups, STI);
       return;
     }
 
@@ -505,6 +488,65 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
     Comp.addOperand(MCOperand::createInst(&Nop));
   encodeInstruction(Comp, CB, Fixups, STI);
 }
+
+void HaydnMCCodeEmitter::emitFormatEParcel(
+    const MCInst &Comp, SmallVectorImpl<char> &CB,
+    SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
+  APInt InstBits, Scratch;
+  SmallVector<MCFixup, 8> LocalFixups;
+  getBinaryCodeForInstr(Comp, LocalFixups, InstBits, Scratch, STI);
+  haydn::format::EncodedBits ProdBits = haydn::format::encodedBitsOrDie(
+      haydn::format::BundleFormatRowID::E96TwoEntry);
+  APInt Word = InstBits.zextOrTrunc(ProdBits.Value);
+  if ((Word.extractBitsAsZExtValue(3, 0) & 0x7u) !=
+      haydn::format::FormatEIndicatorBits) {
+    report_fatal_error(
+        "Haydn MC: Format E parcel missing indicator 111 after encode",
+        /*GenCrashDiag=*/false);
+  }
+  const uint32_t Base = static_cast<uint32_t>(CB.size());
+  // AIE translateFixupsInComposite (AIEBaseMCCodeEmitter.cpp:231-232)
+  // emits the composite MCFixup at offset 0 after field-identity
+  // translation. Haydn FieldLsb is absolute parcel bits with r_offset =
+  // parcel origin (HaydnRelocLayout). Member encoders may still report a
+  // mid-parcel field byte (E3 I12 sits at bit 23 → byte 2); keep the
+  // reloc at the parcel base so linked B/JAL targets stay exact records.
+  const unsigned Parcel = haydnProductionParcelBytes().Value;
+  for (const MCFixup &F : LocalFixups) {
+    const uint32_t Abs = Base + F.getOffset();
+    const uint32_t ParcelBase = Abs - (Abs % Parcel);
+    addHaydnFixup(Fixups, ParcelBase, F.getValue(), F.getKind());
+  }
+  haydnEmitFormatEParcelLE(Word, CB);
+}
+
+bool HaydnMCCodeEmitter::encodeInstructionFromCompilerRoot(
+    const MCInst &MI, SmallVectorImpl<char> &CB,
+    SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
+  // Typed MemberId only. Residual FieldSlot and public logicals never
+  // serialize here — encodeInstruction fatals those before this call, and
+  // this returns false as a second wall (never DFS / fill).
+  for (unsigned I = 0, E = MI.getNumOperands(); I != E; ++I) {
+    const MCOperand &Op = MI.getOperand(I);
+    if (!Op.isInst() || !Op.getInst())
+      continue;
+    const unsigned ChildOpc = Op.getInst()->getOpcode();
+    if (isFormatENopOpcode(ChildOpc, MII))
+      continue;
+    if (isResidualFieldSlotOpcodeName(MII.getName(ChildOpc)))
+      return false;
+    if (!findFormatEMemberByOpcode(ChildOpc))
+      return false;
+  }
+  SmallVector<MCInst, 4> PlaceStorage;
+  MCInst Placed;
+  if (!trySerializeFormatECompositeAsIs(MI, MII, *Ctx.getRegisterInfo(),
+                                        Placed, PlaceStorage))
+    return false;
+  emitFormatEParcel(Placed, CB, Fixups, STI);
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Bundle encoding — fail-closed product idle / residual reject
 //===----------------------------------------------------------------------===//
@@ -601,7 +643,12 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
   for (unsigned E = 0; E < EntryCount; ++E)
     Comp.addOperand(
         MCOperand::createInst(ChildAt[E] ? ChildAt[E] : Pads[E]));
-  encodeInstruction(Comp, CB, Fixups, STI);
+  // Compiler-root serialize as-is. Never re-enter encodeInstruction DFS/fill.
+  if (!encodeInstructionFromCompilerRoot(Comp, CB, Fixups, STI))
+    report_fatal_error(
+        "Haydn MC: compiler BUNDLE MemberId serialize failed — refuse "
+        "skip-Finalize DFS / bag-sort",
+        /*GenCrashDiag=*/false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -623,6 +670,14 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
 static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
                                      const MCInst &Logical,
                                      const MCInstrInfo &MII);
+static bool fillFormatEMemberInstFromCompilerRoot(
+    const FormatEMemberRec &Mem, const MCInst &Logical, const MCInstrInfo &MII,
+    const MCRegisterInfo &MRI, MCInst &Out);
+static bool fillFormatEMemberInstFromRawBundle(const FormatEMemberRec &Mem,
+                                               const MCInst &Logical,
+                                               const MCInstrInfo &MII,
+                                               const MCRegisterInfo &MRI,
+                                               MCInst &Out);
 static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
                                   const MCInst &Logical, const MCInstrInfo &MII,
                                   const MCRegisterInfo &MRI, MCInst &Out);
@@ -819,10 +874,10 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
       if (!(*Best)[Kid].Mem)
         return false;
       Storage.emplace_back();
-      // Compiler extra-op (MOVE32 3-op vs member 2-op; tied MAC acc) is
-      // Finalize keep-map. Never enter fill / bag-sort for that shape.
-      if (isCompilerKeepMapExtraOp(*(*Best)[Kid].Mem, *Reals[Kid], MII) ||
-          !fillFormatEMemberInst(*(*Best)[Kid].Mem, *Reals[Kid], MII, MRI,
+      // Compiler extra-op (MOVE32 3-op vs member 2-op; tied MAC acc),
+      // FieldSlot, and MemberId route to FromCompilerRoot (fail closed).
+      // Raw-bundle public logicals use FromRawBundle (positional / Imm-0).
+      if (!fillFormatEMemberInst(*(*Best)[Kid].Mem, *Reals[Kid], MII, MRI,
                                  Storage.back()))
         return false;
       Out.addOperand(MCOperand::createInst(&Storage.back()));
@@ -881,19 +936,31 @@ static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
   return false;
 }
 
-/// Standalone DFS fill only (hand-asm BUNDLE_E96_* logicals and bare wrap).
-/// Public-logical / private-member firewall:
-///   * typed members serialize as-is (trySerializeFormatECompositeAsIs)
-///   * compiler TargetOpcode::BUNDLE residual logicals fatal in encodeBundle
-///   * encodeSlotSubInst never calls this (serialize-only)
-///   * committed MemberId opcodes return false (never as-is copy here)
-///   * MOVE32/ABS32 trailing extra and tied MAC extra are Finalize keep-map,
-///     not bag-sort reconstruction — isCompilerKeepMapExtraOp refuses fill
-/// Hand-asm MOVE32 AsmString is 2-op and matches positional below.
-/// Peer: AIE serializes typed members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
-static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
-                                  const MCInst &Logical, const MCInstrInfo &MII,
-                                  const MCRegisterInfo &MRI, MCInst &Out) {
+/// Compiler-root fill is deleted. MemberId composites serialize as-is
+/// (trySerializeFormatECompositeAsIs / encodeInstructionFromCompilerRoot).
+/// Extra-op keep-map is Finalize. Residual FieldSlot never fills.
+/// Always false — never bag-sort / name peel / operand rebuild.
+/// Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
+static bool fillFormatEMemberInstFromCompilerRoot(
+    const FormatEMemberRec &Mem, const MCInst &Logical, const MCInstrInfo &MII,
+    const MCRegisterInfo &MRI, MCInst &Out) {
+  (void)Mem;
+  (void)Logical;
+  (void)MII;
+  (void)MRI;
+  (void)Out;
+  return false;
+}
+
+/// Raw/hand-asm BUNDLE_E96_* public logicals only. Positional copy, then
+/// closed standalone keep-map (AR-UA POST, CB writeback, Imm-0 hole, 0-op
+/// HINT). Never FieldSlot, never MemberId, never compiler extra-op.
+/// encodeSlotSubInst never calls this — placement only.
+static bool fillFormatEMemberInstFromRawBundle(const FormatEMemberRec &Mem,
+                                               const MCInst &Logical,
+                                               const MCInstrInfo &MII,
+                                               const MCRegisterInfo &MRI,
+                                               MCInst &Out) {
   if (Mem.MemberId >= FormatEMemberOpcodeCount)
     return false;
   const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
@@ -961,6 +1028,32 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
   // Imm-0 hole, 0-op HINT). MOVE32/ABS32 trailing extra and tied MAC extra
   // already returned false above. Not a class bag-sort.
   return haydnFillFormatEMemberInst(Mem, Logical, MII, MRI, Out);
+}
+
+/// Dispatcher: compiler-root / FieldSlot / extra-op fail closed; raw-bundle
+/// hand-asm may fill. Public-logical / private-member firewall:
+///   * typed members serialize as-is (trySerializeFormatECompositeAsIs)
+///   * compiler TargetOpcode::BUNDLE residual logicals fatal in encodeBundle
+///   * encodeSlotSubInst never calls this (serialize-only)
+///   * committed MemberId opcodes return false (never as-is copy here)
+///   * MOVE32/ABS32 trailing extra and tied MAC extra are Finalize keep-map,
+///     not bag-sort reconstruction — isCompilerKeepMapExtraOp refuses fill
+/// Hand-asm MOVE32 AsmString is 2-op and matches positional below.
+/// Peer: AIE serializes typed members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
+static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
+                                  const MCInst &Logical, const MCInstrInfo &MII,
+                                  const MCRegisterInfo &MRI, MCInst &Out) {
+  if (Mem.MemberId >= FormatEMemberOpcodeCount)
+    return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
+  const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
+  if (MemberOpc == 0)
+    return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
+  if (isResidualFieldSlotOpcodeName(MII.getName(Logical.getOpcode())) ||
+      findFormatEMemberByOpcode(Logical.getOpcode()) ||
+      Logical.getOpcode() == MemberOpc ||
+      isCompilerKeepMapExtraOp(Mem, Logical, MII))
+    return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
+  return fillFormatEMemberInstFromRawBundle(Mem, Logical, MII, MRI, Out);
 }
 
 void HaydnMCCodeEmitter::encodeSlotSubInst(

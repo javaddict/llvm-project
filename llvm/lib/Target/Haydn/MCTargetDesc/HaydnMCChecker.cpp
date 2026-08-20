@@ -144,9 +144,8 @@ std::optional<std::string> llvm::haydnCheckParsedBundle(
       continue;
     const unsigned Opc = Inst->getOpcode();
     const StringRef Name = MII.getName(Opc);
-    if (Name.ends_with("_S0") || Name.ends_with("_S1") ||
-        Name.ends_with("_S2") || Name.contains("_E2_") ||
-        Name.contains("_E3_"))
+    if (haydnIsResidualFieldSlotName(Name) || haydnIsGeneratedMemberName(Name) ||
+        haydnFindFormatEMemberByOpcode(Opc))
       return std::string("private placement opcode");
     // Catalog occupancy / MemberId span (Hexagon MCChecker.cpp:692-703 uses
     // the packet's real opcodes). Not a row-identity peel and not `_S*`

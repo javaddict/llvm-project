@@ -77,6 +77,14 @@ unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes);
 /// are occupancy keys, not suffix peels. Empty = fail closed.
 std::string haydnCatalogOccupancyName(StringRef Raw);
 
+/// Residual FieldSlot mnemonic (`*_S<digits>`). Occupancy must not recover a
+/// catalog logical by stripping that suffix (AIE MultiSlot alts,
+/// AIEMCFormats.h:376-379). ABS64-class holes have a matcher-visible unsuffixed
+/// logical; `ABS64_S1` is not that logical.
+bool haydnIsResidualFieldSlotName(StringRef Name);
+/// Generated Format E member spelling (`*_E2_*` / `*_E3_*`).
+bool haydnIsGeneratedMemberName(StringRef Name);
+
 /// RelocLayout ValueShift for Format E HWLR Off1/Off2 word fields.
 /// 0 when \p MemberId is not HWLRIII/HWLRIIR. Dump bytes = field << shift.
 /// AIE getSImmOpValueXStep (AIEBaseMCCodeEmitter.h:127-150) binds Shift on

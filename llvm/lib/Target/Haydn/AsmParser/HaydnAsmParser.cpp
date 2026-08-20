@@ -502,16 +502,13 @@ private:
 
 } // end anonymous namespace
 
-/// Generated members (`_E2_`/`_E3_`) and residual FieldSlots (`_S*`) are
-/// not public match results. Do not recover a logical name from a suffix
-/// (AIE MultiSlot alts, AIEMCFormats.h:376-379). Textual mnemonics are
-/// case-insensitive.
+/// Generated members (`_E2_`/`_E3_`) and residual FieldSlots (`*_S<digits>`)
+/// are not public match results. Do not recover a catalog logical from a
+/// suffix (AIE MultiSlot alts, AIEMCFormats.h:376-379). ABS64-class holes
+/// keep the unsuffixed matcher name; `abs64_s1` is refused, not peeled.
 static bool isPrivatePlacementOpcode(StringRef Name) {
-  return Name.contains_insensitive("_E2_") ||
-         Name.contains_insensitive("_E3_") ||
-         Name.ends_with_insensitive("_S0") ||
-         Name.ends_with_insensitive("_S1") ||
-         Name.ends_with_insensitive("_S2");
+  return haydnIsGeneratedMemberName(Name) ||
+         haydnIsResidualFieldSlotName(Name);
 }
 
 static bool isPrivatePlacementInst(unsigned Opcode, const MCInstrInfo &MII) {
@@ -776,8 +773,7 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     // encode-dag position N-1-i: `{ a; b; c }` → e2,e1,e0; `{ a; b }` →
     // e1,e0; `{ a }` is single-entry (encoder/e0 placement, no reverse).
     // Text children include explicit nop fillers (catalog `{ insn; nop; nop }`).
-    SmallVector<MCInst *, 3> TextChildren;
-    unsigned TextSlot = 0;
+    SmallVector<MCInst *, 4> TextChildren;
 
     while (true) {
       // The next token should be the instruction mnemonic
@@ -831,10 +827,9 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       }
       Child->setLoc(MnemonicLoc);
 
-      // NOP is emit-time entry padding, not a co-issue resource — but it does
-      // hold a textual entry position for the children that follow it.
+      // NOP is emit-time entry padding, not a co-issue resource. Extra
+      // textual NOPs are idle fill, not occupancy and not a third entry.
       TextChildren.push_back(Child);
-      ++TextSlot;
 
       Operands.clear();
 
@@ -869,12 +864,29 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       Parser.Lex();
 
     // All-NOP text is the generated E2 idle cycle (NOP in every E2 entry).
-    // Extra textual NOPs are idle fill, not a third entry. Reject `{ }`.
+    // Extra textual NOPs are idle fill, not a third entry and never row
+    // identity. Drop leading/trailing NOPs to the E3 bound first; leftover
+    // overflow is too many real members. Reject `{ }`.
+    auto dropIdleNopsToFit = [](SmallVectorImpl<MCInst *> &Kids,
+                                unsigned Cap) {
+      while (Kids.size() > Cap) {
+        if (Kids.back()->getOpcode() == Haydn::NOP) {
+          Kids.pop_back();
+          continue;
+        }
+        if (Kids.front()->getOpcode() == Haydn::NOP) {
+          Kids.erase(Kids.begin());
+          continue;
+        }
+        break;
+      }
+    };
     const haydn::format_e::FamilyRecords Fam =
         haydn::format_e::getDefaultFamilyRecords();
-    if (TextSlot == 0)
+    if (TextChildren.empty())
       return Error(NameLoc, "empty bundle");
-    if (TextSlot > Fam.E3EntryCapacity)
+    dropIdleNopsToFit(TextChildren, Fam.E3EntryCapacity);
+    if (TextChildren.size() > Fam.E3EntryCapacity)
       return Error(NameLoc, "Format E bundle supports at most three entries");
 
     // Standalone row from generated membership / unit occupancy, never
@@ -925,18 +937,11 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     }
 
     // Extra textual NOP pads past the membership row are idle fill, not a
-    // third entry. Drop trailing then leading NOPs until the row fits.
-    while (TextChildren.size() > EntryCount) {
-      if (TextChildren.back()->getOpcode() == Haydn::NOP) {
-        TextChildren.pop_back();
-        continue;
-      }
-      if (TextChildren.front()->getOpcode() == Haydn::NOP) {
-        TextChildren.erase(TextChildren.begin());
-        continue;
-      }
+    // third entry. Drop trailing then leading NOPs until the selected row
+    // fits. Occupancy already chose the row — this is not count→E3.
+    dropIdleNopsToFit(TextChildren, EntryCount);
+    if (TextChildren.size() > EntryCount)
       return Error(NameLoc, "incorrect bundle");
-    }
 
     // Parse-time legality (Hexagon MCChecker): unit injectivity, WAW,
     // SET_HWLOOP sel, RF-port ceilings. Pass the membership row, not the

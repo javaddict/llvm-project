@@ -11,9 +11,12 @@
 //   * TargetOpcode::BUNDLE residuals with public logicals fatal in
 //     encodeBundle (skip-Finalize never DFS/fill).
 //   * Committed MemberId BUNDLE_E96_* serialize as-is
-//     (trySerializeFormatECompositeAsIs); never enter standalone DFS.
+//     (trySerializeFormatECompositeAsIs / encodeInstructionFromCompilerRoot);
+//     never enter standalone DFS.
 //   * encodeSlotSubInst is serialize-only (generated members / NOP).
-//   * fillFormatEMemberInst is standalone/hand-asm only. Compiler extra-op
+//   * fillFormatEMemberInstFromCompilerRoot always fails closed (no bag-sort).
+//   * fillFormatEMemberInstFromRawBundle is standalone/hand-asm only.
+//     Residual FieldSlot never enters fill. Compiler extra-op
 //     (MOVE32 3-op vs member 2-op) never enters fill.
 // Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is;
 // HexagonMCCodeEmitter.h:34-54 keeps the emitter class in the header,
