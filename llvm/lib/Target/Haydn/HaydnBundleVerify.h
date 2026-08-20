@@ -220,7 +220,9 @@ findInverseLogicalAtEntry(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
 ///     records at the child's MEMBERSHIP ENTRY under the stamped mode
 ///     (opcode-keyed inverse row ids, never FormatEInverse[MemberId];
 ///     committed child order IS the entry order — verify checks, it
-///     never re-plans; never findFormatEMember / UnitMap stamper). Inverse
+///     never re-plans and never compact-replans pad holes onto earlier
+///     entries; never findFormatEMember / UnitMap stamper). Pad NOP is an
+///     unused encode-dag entry, not a membership inverse root. Inverse
 ///     rows must be completed (unit injectivity, membership, encodeability)
 ///     on every residual root — never structural/forward acceptance.
 ///     Mutated inverse copies are rejected (pointer identity with the

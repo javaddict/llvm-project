@@ -40,11 +40,13 @@
 //     (uimm6/uimm12 + getExprFixupKind HWLoopOff). POST/PRE/BREV members
 //     carry a tied dest2 writeback matching FieldSlot `$rs = $rs_wb`.
 //     Unsuffixed catalog logicals and alias/`_W` forms (`MULA64_HH`,
-//     `CSRW_W`, `ST32_POST`) try the same rewrite when Desc+TIED_TO match;
-//     unlike `_S*` they do not fail the whole bundle if incompatible.
+//     `CSRW_W`, `ST32_POST`) use the same keep-map rewrite when Desc+TIED_TO
+//     match. Mixed MemberId + leftover FieldSlot/logical is fail-closed:
+//     a partial keep-map must not serialize beside an unbound child.
 //     Residual SET_HWLOOP (peel-identity) stays for the verifier ban. Reloc
-//     CSRW_W cutovers to catalog CSRW I8 members; encode binds typed CSR I8
-//     (FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8), never untyped NONE. Pad
+//     CSRW_W cutovers to catalog CSRW I8 members so encode consumes the
+//     generated (row, entry, MemberId, TypeName→FIXUP_HAYDN_CSR_UImm8 /
+//     R_HAYDN_CSR_UImm8) tuple, never untyped NONE. Pad
 //     NOP/NOP_S0 is
 //     CompletionState, not membership — skip without consuming an entry and
 //     erase co-issued pads after a successful rewrite. Pad-NOP census law
@@ -690,8 +692,13 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
         break;
       }
       const unsigned NewOpc = FormatEMemberOpcodes[Mem->MemberId];
-      if (NewOpc != KidOpc && memberDescCompatible(*Kid, NewOpc, TII))
+      if (NewOpc != KidOpc) {
+        if (!memberDescCompatible(*Kid, NewOpc, TII)) {
+          LeadingFailed = true;
+          break;
+        }
         Plan.emplace_back(Kid, Mem);
+      }
       if (Mem->Unit < 32)
         UsedUnits |= (1u << Mem->Unit);
       ++EntryIdx;
@@ -704,12 +711,8 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
     // Do not require an `_S*` postfix to attempt MemberId — AIE has no
     // suffix peel; PacketFormats + InstSlot choose the encoding.
     if (EntryIdx >= EntryCap) {
-      if (MustResolve) {
-        LeadingFailed = true;
-        break;
-      }
-      ++EntryIdx;
-      continue;
+      LeadingFailed = true;
+      break;
     }
     const haydn::format_e::FormatEMemberRec *Mem = resolveFieldSlotMember(
         *Kid, Mode, static_cast<uint8_t>(EntryIdx), UsedUnits, TII);
@@ -725,29 +728,49 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
                 !ri6ImmFitsMember(*Kid, *Mem)))
       Mem = nullptr;
     if (!Mem) {
-      if (MustResolve) {
+      LeadingFailed = true;
+      break;
+    }
+    Plan.emplace_back(Kid, Mem);
+    if (Mem->Unit < 32)
+      UsedUnits |= (1u << Mem->Unit);
+    ++EntryIdx;
+  }
+  // Sequential success is all-or-nothing: leftover logicals beside a
+  // converted MemberId would mix serialize identities (AIE PacketFormats
+  // children are slot members, AIEMCFormats.h:376-379).
+  if (!LeadingFailed) {
+    for (MachineInstr *Kid : Kids) {
+      if (isGeneratedFormatEMemberName(TII.getName(Kid->getOpcode())))
+        continue;
+      bool InPlan = false;
+      for (auto [MI, Mem] : Plan) {
+        if (MI == Kid) {
+          InPlan = true;
+          break;
+        }
+      }
+      if (!InPlan) {
         LeadingFailed = true;
         break;
       }
-    } else {
-      Plan.emplace_back(Kid, Mem);
-      if (Mem->Unit < 32)
-        UsedUnits |= (1u << Mem->Unit);
     }
-    ++EntryIdx;
   }
   if (!LeadingFailed)
     return applyPlan(Plan);
 
   // Inverse already accepts this stamp: identity. Do not E2/E3 restamp a
-  // verified root (late PreEmit re-entry). Still apply any FieldSlot
-  // rewrites collected before the sequential failure, and drop pad beside
-  // real work. Residual FieldSlot-only packs and inverse-rejected stale
-  // stamps (E2 child-count over E3-only two-ALU32) Mode-retry below.
+  // verified root (late PreEmit re-entry) and do not apply a partial
+  // FieldSlot keep-map (that would mix MemberId with leftover logicals).
+  // Drop pad beside real work only. Residual FieldSlot-only packs and
+  // inverse-rejected stale stamps (E2 child-count over E3-only two-ALU32)
+  // Mode-retry below.
   if (AnyMember) {
     HaydnMCFormats Fmts;
-    if (!haydn::bundle::verifyCommittedBundle(Root, Fmts))
-      return applyPlan(Plan);
+    if (!haydn::bundle::verifyCommittedBundle(Root, Fmts)) {
+      SmallVector<PlanItem, 4> Empty;
+      return applyPlan(Empty);
+    }
   }
 
   // Membership order could not bind every child. Residual FieldSlot-only
@@ -867,6 +890,40 @@ void refuseResidualRelocCsrFieldSlot(MachineFunction &MF,
           "Haydn FinalizeBundle: reloc CSR I8 remained FieldSlot after "
           "MemberId cutover — refuse untyped NONE fixup",
           /*GenCrashDiag=*/false);
+    }
+  }
+}
+
+/// Mixed generated MemberId + leftover FieldSlot/logical is not a
+/// serialize identity. Encode would refuse skip-Finalize DFS; fail here
+/// so a partial keep-map cannot leak untyped NONE (reloc CSR I8) or a
+/// leftover catalog child beside a committed member.
+void refuseMixedMemberIdAndFieldSlot(MachineFunction &MF,
+                                     const TargetInstrInfo &TII) {
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &Root : MBB) {
+      if (!Root.isBundle())
+        continue;
+      bool AnyMember = false;
+      bool AnyLeftover = false;
+      MachineBasicBlock::instr_iterator I = std::next(Root.getIterator());
+      MachineBasicBlock::instr_iterator E = getBundleEnd(Root.getIterator());
+      for (; I != E; ++I) {
+        if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
+          continue;
+        if (haydn::bundle::isPadNopOpcode(I->getOpcode()))
+          continue;
+        const StringRef Name = TII.getName(I->getOpcode());
+        if (isGeneratedFormatEMemberName(Name))
+          AnyMember = true;
+        else
+          AnyLeftover = true;
+      }
+      if (AnyMember && AnyLeftover)
+        report_fatal_error(
+            "Haydn FinalizeBundle: mixed MemberId and leftover FieldSlot "
+            "after cutover — refuse untyped encode",
+            /*GenCrashDiag=*/false);
     }
   }
 }
@@ -1032,6 +1089,7 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
   }
   // Reloc CSRW_W/CSRR must be MemberId before encode (typed CSR I8).
   refuseResidualRelocCsrFieldSlot(MF, TII);
+  refuseMixedMemberIdAndFieldSlot(MF, TII);
 
   // Product commit tail: fill empty BUNDLE-root DebugLoc from the earliest
   // member. Generic finalizeBundle already copies loc on new wraps; this

@@ -423,6 +423,12 @@ _MATCHER_BANNED_SUBSTRINGS = (
     "HaydnInstrInfoManual",
     "HaydnFamilies",
 )
+_INSTRINFO_DEF_RE = re.compile(r"^def\s+(\S+)\s*:\s*InstrInfo\b", re.M)
+_TARGET_DEF_RE = re.compile(r"^def\s+(\S+)\s*:\s*Target\b", re.M)
+_BUNDLE_FAMILY_ENUM_RE = re.compile(
+    r"enum class BundleFamily\s*:\s*uint8_t\s*\{([^}]*)\}", re.S
+)
+_FAMILY_COLUMN_RE = re.compile(r"^\s*\{\s*\d+\s*,\s*\d+\s*,\s*(\d+)\s*,", re.M)
 # Overlay-owned leftovers that stay in HaydnInstrInfo.td as matcher shells.
 # Dual-dest MAC ties and LS WITH lane stores; no hypothesized Inst bits.
 HAND_RESIDUAL_LOGICALS = (
@@ -597,13 +603,102 @@ def check_residual_hand_logicals(td_dir: Path) -> None:
             )
 
 
+def _check_family_handle_header(text: str) -> None:
+    """Family-handle C++ API stays E96-only; tables remain the FormatE* names."""
+    match = _BUNDLE_FAMILY_ENUM_RE.search(text)
+    if not match:
+        raise SystemExit("error: BundleFamily enum missing from family-handle header")
+    enumerators = re.findall(
+        r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d+)", match.group(1)
+    )
+    if enumerators != [("E96", "0")]:
+        raise SystemExit(
+            "error: family-handle tables must stay E96-only, found "
+            f"{enumerators}"
+        )
+    if "kAdmittedFamily = BundleFamily::E96" not in text:
+        raise SystemExit("error: kAdmittedFamily must be BundleFamily::E96")
+    if "getFamilyRecords" not in text:
+        raise SystemExit("error: getFamilyRecords family-handle API missing")
+    if "Family != BundleFamily::E96" not in text:
+        raise SystemExit(
+            "error: getFamilyRecords must refuse every family besides E96"
+        )
+
+
+def _table_family_column(text: str, table: str, label: str) -> None:
+    marker = f"{table}[] = {{"
+    start = text.find(marker)
+    if start < 0:
+        raise SystemExit(f"error: {label} missing {table} table")
+    open_at = text.find("{", start + len(marker) - 1)
+    close_at = text.find("\n};", open_at)
+    if open_at < 0 or close_at < 0:
+        raise SystemExit(f"error: {label} {table} table is not closed")
+    families = _FAMILY_COLUMN_RE.findall(text[open_at:close_at])
+    if not families:
+        raise SystemExit(f"error: {label} {table} has no family-column rows")
+    bad = sorted({value for value in families if value != "0"})
+    if bad:
+        raise SystemExit(
+            f"error: {label} {table} family column must stay 0 (E96), "
+            f"found {bad}"
+        )
+
+
+def _check_records_family_column(text: str) -> None:
+    if "static constexpr uint8_t FormatEFamilyId = 0u;" not in text:
+        raise SystemExit("error: FormatEFamilyId must be 0 (E96)")
+    if "static constexpr unsigned FormatEAdmittedFamilyCount = 1u;" not in text:
+        raise SystemExit("error: FormatEAdmittedFamilyCount must be 1")
+    if "uint8_t Family;" not in text:
+        raise SystemExit("error: FormatEMemberRec must carry numeric Family")
+    _table_family_column(text, "FormatEMembers", "HaydnGenFormatERecords.inc")
+
+
+def _check_ledger_family_column(text: str) -> None:
+    if "uint8_t Family;" not in text:
+        raise SystemExit(
+            "error: FormatESetDescLedgerRec must carry numeric Family"
+        )
+    _table_family_column(
+        text, "FormatESetDescLedger", "HaydnGenFormatESetDescLedger.inc"
+    )
+
+
+def _check_family_sched_handle(text: str) -> None:
+    if "GeneratedFamilyE2EntryCapacity = 2;" not in text:
+        raise SystemExit("error: family-handle E2 entry capacity missing")
+    if "GeneratedFamilyE3EntryCapacity = 3;" not in text:
+        raise SystemExit("error: family-handle E3 entry capacity missing")
+    if "GeneratedFamilySharedUnits[]" not in text:
+        raise SystemExit("error: family-handle SharedUnits table missing")
+
+
+def check_family_handle_records(haydn_dir: Path) -> None:
+    """Family-handle records stay inert: E96 only, no second family tables."""
+    header = haydn_dir / "HaydnFormatERecords.h"
+    records = haydn_dir / "HaydnGenFormatERecords.inc"
+    ledger = haydn_dir / "HaydnGenFormatESetDescLedger.inc"
+    sched = haydn_dir / "HaydnGenMemoryCycles.inc"
+    for path in (header, records, ledger, sched):
+        if not path.is_file():
+            raise SystemExit(f"error: family-handle file missing: {path.name}")
+    _check_family_handle_header(header.read_text(encoding="utf-8"))
+    _check_records_family_column(records.read_text(encoding="utf-8"))
+    _check_ledger_family_column(ledger.read_text(encoding="utf-8"))
+    _check_family_sched_handle(sched.read_text(encoding="utf-8"))
+    print("OK family-handle records inert")
+
+
 def check_cutover_surfaces(haydn_dir: Path) -> None:
     """Keep matcher/Manual/family surfaces collapsed; they are not authority.
 
     Matcher stays HaydnGeneric.td only. Manual.td stays a 0-def tombstone.
     Only HaydnFamilyE96 FamilyID=0 is admitted (MF0 stays inert).
     Matcher-reachable files may hold public logicals, never occupancy-suffix
-    or generated Format E member defs.
+    or generated Format E member defs. Family-handle records stay inert
+    (E96 FamilyID=0 only; getFamilyRecords refuses any other family).
     """
     manual = haydn_dir / "HaydnInstrInfoManual.td"
     defs = _DEF_RE.findall(manual.read_text(encoding="utf-8"))
@@ -617,12 +712,18 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
     residual = []
     member_defs = []
     extra_generated = []
+    instrinfo_defs = []
+    target_defs = []
     for path in closure:
         text = path.read_text(encoding="utf-8")
         residual.extend(f"{path.name}:{n}" for n in _RESIDUAL_OCCUPANCY_DEF_RE.findall(text))
         member_defs.extend(
             f"{path.name}:{n}" for n in _FORMAT_E_MEMBER_DEF_RE.findall(text)
         )
+        instrinfo_defs.extend(
+            f"{path.name}:{n}" for n in _INSTRINFO_DEF_RE.findall(text)
+        )
+        target_defs.extend(f"{path.name}:{n}" for n in _TARGET_DEF_RE.findall(text))
         if path.name.endswith(".inc") and path.name not in _MATCHER_ALLOWED_GENERATED:
             extra_generated.append(path.name)
     if residual:
@@ -640,6 +741,16 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
             "error: matcher root pulls generated members "
             f"{extra_generated}; matcher-facing generated includes are "
             + ", ".join(sorted(_MATCHER_ALLOWED_GENERATED))
+        )
+    if instrinfo_defs != ["HaydnGeneric.td:HaydnInstrInfo"]:
+        raise SystemExit(
+            "error: matcher root must expose HaydnInstrInfo only, "
+            f"found {instrinfo_defs}"
+        )
+    if target_defs != ["HaydnGeneric.td:Haydn"]:
+        raise SystemExit(
+            "error: matcher root must expose one Target (Haydn), "
+            f"found {target_defs}"
         )
     generic = (haydn_dir / "HaydnGeneric.td").read_text(encoding="utf-8")
     if 'include "HaydnInstrInfoGolden.td.inc"' not in generic:
@@ -729,6 +840,7 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
         )
     if "CompleteModel = 0" not in sched:
         raise SystemExit("error: HaydnSchedule.td CompleteModel=0 missing")
+    check_family_handle_records(haydn_dir)
 
 
 def verify_golden_dir_no_unpinned(golden: Path) -> None:
@@ -1062,6 +1174,8 @@ def check_pin_ledgers() -> None:
     prove_catalog_six_file_pin_ok()
     prove_incomplete_compiler_pin_fails()
     prove_xlsx_zip_bytes_not_authority_pin()
+    prove_second_family_enum_fails()
+    prove_second_family_records_fail()
     prove_catalog_pin_file_sha256()
     prove_catalog_pin_comment_rewrite_is_drift()
     prove_catalog_seventh_input_fails()
@@ -1095,6 +1209,53 @@ def prove_incomplete_compiler_pin_fails() -> None:
     finally:
         path.unlink(missing_ok=True)
     raise SystemExit("error: six-file compiler pin did not fail closed")
+
+
+def prove_second_family_enum_fails() -> None:
+    """A second BundleFamily enumerator is not an inert family handle."""
+    try:
+        _check_family_handle_header(
+            "enum class BundleFamily : uint8_t {\n"
+            "  E96 = 0,\n"
+            "  MF0 = 1,\n"
+            "};\n"
+            "inline constexpr BundleFamily kAdmittedFamily = BundleFamily::E96;\n"
+            "inline FamilyRecords getFamilyRecords(BundleFamily Family) {\n"
+            "  if (Family != BundleFamily::E96)\n"
+            '    llvm_unreachable("Haydn: no admitted bundle-format family besides E96");\n'
+            "}\n"
+        )
+    except SystemExit as exc:
+        msg = str(exc)
+        if "E96-only" in msg and "MF0" in msg:
+            print("OK second-family enum fail-closed")
+            return
+        raise SystemExit(
+            f"error: second-family-enum probe failed unexpectedly: {msg}"
+        ) from exc
+    raise SystemExit("error: second family enum did not fail closed")
+
+
+def prove_second_family_records_fail() -> None:
+    """AdmittedFamilyCount>1 is not an inert E96 table."""
+    try:
+        _check_records_family_column(
+            "static constexpr uint8_t FormatEFamilyId = 0u;\n"
+            "static constexpr unsigned FormatEAdmittedFamilyCount = 2u;\n"
+            "struct FormatEMemberRec { uint8_t Family; };\n"
+            "static constexpr FormatEMemberRec FormatEMembers[] = {\n"
+            '  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "X", "T", "X"},\n'
+            "};\n"
+        )
+    except SystemExit as exc:
+        msg = str(exc)
+        if "FormatEAdmittedFamilyCount must be 1" in msg:
+            print("OK second-family records fail-closed")
+            return
+        raise SystemExit(
+            f"error: second-family-records probe failed unexpectedly: {msg}"
+        ) from exc
+    raise SystemExit("error: second family records did not fail closed")
 
 
 def prove_matcher_root_member_include_fails() -> None:
@@ -1316,6 +1477,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("OK residual hand logicals")
         print("OK FormatsE96 tombstone")
         prove_matcher_root_member_include_fails()
+        prove_second_family_enum_fails()
+        prove_second_family_records_fail()
         prove_unknown_family_fails()
         prove_unpinned_consumed_fails(golden)
         prove_derived_xlsx_not_authority(golden)

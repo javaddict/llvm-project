@@ -19,8 +19,10 @@
 // optnone). Plain O0 without optnone still runs postmisched first and may
 // already hold multi-MI full-fill packs; already-bundled roots are left alone
 // by the wrap loop. Cutover is identity on roots the independent inverse
-// already accepts; residual FieldSlots still bind. Both paths leave only
-// committed Format-E cycles for product emission.
+// already accepts; residual FieldSlots still bind to generated members.
+// Mixed MemberId + leftover FieldSlot is fail-closed. Reloc CSRW_W carries
+// typed (row, entry, MemberId, CSR I8 fixup-kind) through setDesc. Both
+// paths leave only committed Format-E cycles for product emission.
 // Singleton completion is full-slot architectural NOP pad (AllEntriesReal),
 // not unqualified underfill/singleton stub invent.
 //

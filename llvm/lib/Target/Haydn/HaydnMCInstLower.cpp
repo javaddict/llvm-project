@@ -17,14 +17,20 @@
 #include "HaydnMCInstLower.h"
 #include "HaydnAsmPrinter.h"
 #include "HaydnFormatERecords.h"
+#include "HaydnMemberSetDesc.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <string>
 
 using namespace llvm;
 
@@ -44,6 +50,33 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // (hand-asm / pseudo expand). Placement is member Desc getSlotKind /
   // Format composite (AIEBaseMCFormats.cpp:66-75) — no Flags re-slot.
   OutMI.setOpcode(MI->getOpcode());
+
+  // Reloc CSR I8 must already be a generated member (Finalize keep-map).
+  // A leftover CSRW_W/CSRR FieldSlot would miss findFixupFromFixupFields
+  // I8 type-opcodes 4/5 and emit untyped NONE. AIE applyFixup is
+  // member-Desc fields (AIEMCFixupKinds.cpp:36-65); Haydn overlay refuses
+  // the FieldSlot here instead of inventing a specifier.
+  if (const MachineFunction *MF =
+          MI->getParent() ? MI->getParent()->getParent() : nullptr) {
+    const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
+    const StringRef Name = TII.getName(MI->getOpcode());
+    if (!isGeneratedFormatEMemberName(Name)) {
+      const std::string Log =
+          haydn::format_e::peelLogicalOpcodeName(Name);
+      if (StringRef(Log).equals_insensitive("CSRW") ||
+          StringRef(Log).equals_insensitive("CSRR")) {
+        for (const MachineOperand &MO : MI->explicit_operands()) {
+          if (MO.isGlobal() || MO.isSymbol() || MO.isMCSymbol() ||
+              MO.isBlockAddress() || MO.isCPI() || MO.isJTI() ||
+              MO.isTargetIndex())
+            report_fatal_error(
+                "Haydn MCInstLower: reloc CSR I8 remained FieldSlot — "
+                "refuse untyped NONE fixup",
+                /*GenCrashDiag=*/false);
+        }
+      }
+    }
+  }
 
   // SET_HWLOOP_{W,F2_W} and setDesc members: operands are
   // (sel, start, end, cnt/rs). Start/end are MBB in MIR; emit uses inclusive

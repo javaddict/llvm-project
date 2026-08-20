@@ -572,10 +572,11 @@ haydnRequireCompletedInverseOnResidualRoots(ArrayRef<unsigned> MemberOpcodes,
 ///   * residual/logical opcodes: haydnInverseRecordFromOpcode at the child's
 ///     MEMBERSHIP ENTRY under the stamped mode (FormatEInverse row ids, never
 ///     MemberId-as-index), then completeInverseRecord (unit injectivity,
-///     membership, encodeability). Committed child order IS the entry order;
-///     verify checks it, it never re-plans it, never findFormatEMember / name
-///     peel. Completion of the inverse record is mandatory on every residual
-///     root — never structural/forward acceptance.
+///     membership, encodeability). Committed child order IS the entry order,
+///     including pad NOP as unused windows; verify checks it, it never
+///     compact-replans pads onto earlier entries, never findFormatEMember /
+///     name peel. Completion of the inverse record is mandatory on every
+///     residual root — never structural/forward acceptance.
 ///   * anything else (unknown logical, no inverse at the stamped entry)
 ///     fails closed — the verifier must never ask the forward solver which
 ///     format fits
@@ -590,10 +591,11 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   if (!isProductBundleRow(Row))
     return std::string("non-product BundleFormatRowID");
 
-  // Pad NOP is CompletionState, not a membership entry. Opcode-only callers
-  // may still pass architectural NOP; strip it here so residual inverse
-  // roots never structurally accept a pad as a member. Peer: AIE unused
-  // format entry is idle, not an alternate opcode (AIEMCFormats.h:376-379).
+  // Pad NOP is CompletionState, not a membership inverse root. Opcode-only
+  // callers may still pass architectural NOP as an unused encode-dag entry.
+  // Do not compact pads: compacting would re-plan later residual/logicals
+  // onto earlier entries (structural acceptance). Peer: AIE unused format
+  // entry is idle, not an alternate opcode (AIEMCFormats.h:376-379).
   SmallVector<unsigned, 3> Reals;
   bool HasPadNop = false;
   Reals.reserve(MemberOpcodes.size());
@@ -608,7 +610,8 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   if (Reals.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
 
-  if (auto ResidualIdsErr = haydnRequireInverseIdsOnResidualRoots(Reals))
+  if (auto ResidualIdsErr =
+          haydnRequireInverseIdsOnResidualRoots(MemberOpcodes))
     return ResidualIdsErr;
 
   // Format E unit injectivity pre-check (units ≠ encoded entry identity):
@@ -630,7 +633,9 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     const format::BundleFormatRowDesc *Desc = format::getBundleFormatRow(Row);
     return Desc ? Desc->EntryCount : 0u;
   }();
-  if (Reals.size() > RowEntries)
+  // Encode-dag length includes pad holes. Extra pads must not compact away
+  // so a 3-slot sequence cannot hide in an E2 row.
+  if (MemberOpcodes.size() > RowEntries || Reals.size() > RowEntries)
     return std::string(
         "BUNDLE membership exceeds stamped row entry count (E2 holds 2; "
         "three real members require E96ThreeEntry)");
@@ -678,14 +683,17 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   uint32_t SeenUnits = 0;
   uint32_t ResidualCompletedBits = 0;
 
-  for (unsigned I = 0, E = Reals.size(); I != E; ++I) {
-    const unsigned Opc = Reals[I];
+  for (unsigned E = 0, EE = MemberOpcodes.size(); E != EE; ++E) {
+    const unsigned Opc = MemberOpcodes[E];
+    if (isPadNopOpcode(Opc))
+      continue;
 
     // Representation-expand pseudos (B / RET / BR_JT / PseudoCALLIndirect)
     // expand to a real Format E member at AsmPrinter emission. They are
     // legal committed SOLO cycles only: the expansion target occupies an
     // entry the committed members must not already hold. Co-issue with a
-    // representation expand is a corruption — fail closed.
+    // representation expand is a corruption — fail closed. Pad holes are
+    // unused windows, not co-issue partners.
     if (isRepresentationExpandPseudo(Opc)) {
       if (Reals.size() != 1)
         return std::string(
@@ -694,18 +702,19 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
       continue;
     }
 
-    // Shared inverse: membership index is the encode-dag entry (leading
-    // order; suffix digits never pin entries). Parse-time uses the same
-    // helper at the textual entry, including NOP holes. Residual/logical
-    // members complete an independently generated inverse record here.
+    // Shared inverse: committed child order is the encode-dag entry
+    // (leading order, including pad holes; suffix digits never pin
+    // entries). Parse-time uses the same helper at the textual entry.
+    // Residual/logical members complete an independently generated inverse
+    // record here — never compact pads onto earlier entries.
     if (auto MemErr = verifyMemberAtStampedEntry(
-            Opc, ExpectMode, static_cast<uint8_t>(I), RowEntries, SeenUnits,
-            SeenEntryBits, ResidualCompletedBits, I))
+            Opc, ExpectMode, static_cast<uint8_t>(E), RowEntries, SeenUnits,
+            SeenEntryBits, ResidualCompletedBits, E))
       return MemErr;
   }
 
   if (auto ResidualErr = haydnRequireCompletedInverseOnResidualRoots(
-          Reals, ResidualCompletedBits))
+          MemberOpcodes, ResidualCompletedBits))
     return ResidualErr;
 
   // Inverse-verified product plan: stamped row + inverse occupancy +
@@ -743,17 +752,21 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
   const uint8_t ExpectMode =
       Row == BundleFormatRowID::E96ThreeEntry ? 1 : 0;
   SmallVector<unsigned, 3> MemberOpcodes;
+  SmallVector<unsigned, 3> EntryOpcodes;
   SmallVector<const MCInst *, 3> RealInsts;
+  EntryOpcodes.reserve(Entries.size());
   for (const MCInst *Inst : Entries) {
-    if (!Inst || isPadNopOpcode(Inst->getOpcode()))
+    const unsigned Opc = Inst ? Inst->getOpcode() : 0;
+    EntryOpcodes.push_back(Opc);
+    if (!Inst || isPadNopOpcode(Opc))
       continue;
-    MemberOpcodes.push_back(Inst->getOpcode());
+    MemberOpcodes.push_back(Opc);
     RealInsts.push_back(Inst);
   }
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
   if (auto ResidualIdsErr =
-          haydnRequireInverseIdsOnResidualRoots(MemberOpcodes))
+          haydnRequireInverseIdsOnResidualRoots(EntryOpcodes))
     return ResidualIdsErr;
   if (!inverseOpcodesHaveUnitCoverForMode(MemberOpcodes, ExpectMode))
     return std::string(
@@ -804,8 +817,20 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &
     return std::string(
         "BUNDLE root missing or unknown BundleFormatRowID imm");
 
-  SmallVector<unsigned, 3> Members = collectBundleMemberOpcodes(BundleRoot);
-  auto Err = verifyCommittedBundle(*Row, Members, Fmts, OutPlan);
+  // Encode-dag order includes pad holes so residual/logical inverse
+  // completes at the stamped entry (never compact-replan). Census of
+  // real members stays collectBundleMemberOpcodes.
+  SmallVector<unsigned, 3> EntryOpcodes;
+  if (const MachineBasicBlock *MBB = BundleRoot.getParent()) {
+    for (MachineBasicBlock::const_instr_iterator I =
+             std::next(BundleRoot.getIterator());
+         I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
+      if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
+        continue;
+      EntryOpcodes.push_back(I->getOpcode());
+    }
+  }
+  auto Err = verifyCommittedBundle(*Row, EntryOpcodes, Fmts, OutPlan);
   if (Err)
     return Err;
 
@@ -844,6 +869,7 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &
         "(residual/private members require typed completion)");
   if (!isStubCompletion(*Comp) && !isProductLegalCompletion(*Comp))
     return std::string("BUNDLE root has unknown CompletionStateID");
+  SmallVector<unsigned, 3> Members = collectBundleMemberOpcodes(BundleRoot);
   const CompletionStateID Expected = expectedGoldenRowCompletion(
       static_cast<unsigned>(Members.size()), bundleHasPadNop(BundleRoot));
   if (*Comp != Expected)

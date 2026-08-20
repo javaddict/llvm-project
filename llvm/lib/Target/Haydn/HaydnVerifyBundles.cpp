@@ -286,7 +286,9 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
       // expectedGoldenRowCompletion (unused windows are architectural
       // NOP → AllEntriesReal). Never selectCompletionForMembersAndPads.
       // Census is still collectBundleMemberOpcodes / bundleHasPadNop so a
-      // hand `BUNDLE { NOP }` is product idle on both sides.
+      // hand `BUNDLE { NOP }` is product idle on both sides. Inverse
+      // records use encode-dag order including pad holes (never compact
+      // a later residual onto an earlier entry).
       {
         SmallVector<unsigned, 3> Members =
             haydn::bundle::collectBundleMemberOpcodes(MI);

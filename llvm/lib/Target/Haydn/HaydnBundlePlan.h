@@ -314,23 +314,6 @@ inline constexpr uint64_t ProductFormatMask =
 // Row / completion selection for a committed cycle
 //===----------------------------------------------------------------------===//
 
-/// Capacity bound for selectProductRow when both E2 and E3 remain on the
-/// FeasibleMask frontier:
-///   * 3 real members cannot occupy E2's two entries → E96ThreeEntry
-///   * 0..2 real members keep first-covering E96TwoEntry
-/// Not standalone parser/MC row identity. Opcode/unit cover uses
-/// selectProductRowForOpcodes; braced syntax uses
-/// haydnSelectStandaloneFormatEOpcode. Never use this alone for E3-only
-/// singletons (LOG2/EXP2/…): prefer selectProductRow(FeasibleMask, Count)
-/// so a mask that has already dropped E2 stamps E96ThreeEntry even at
-/// member count 1.
-inline constexpr BundleFormatRowID
-selectProductRowForMemberCount(unsigned MemberCount) {
-  if (MemberCount >= 3)
-    return BundleFormatRowID::E96ThreeEntry;
-  return BundleFormatRowID::E96TwoEntry;
-}
-
 /// Select product row from the surviving Format E frontier and capacity.
 /// Sole-row masks win over member count (E3-only singleton stays E3; E2-only
 /// stays E2). When both rows remain feasible, capacity is a bound (E2 cannot
@@ -355,6 +338,18 @@ selectProductRow(uint64_t FeasibleMask, unsigned MemberCount) {
   if (HasE3)
     return BundleFormatRowID::E96ThreeEntry;
   return ProductDefaultRowID;
+}
+
+/// Not parser/MC row identity and not a count→E2/E3 table. Braced standalone
+/// uses haydnSelectStandaloneFormatEOpcode; opcode cover uses
+/// selectProductRowForOpcodes. Wrapper is the schema-surface capacity bound
+/// on the full product frontier (AIE getFormat first-covering,
+/// AIEBaseAsmParser.h:164-180 / AIEBundle.h:150-156): three real members
+/// cannot occupy E2; otherwise ProductDefaultRowID. E3-only singletons must
+/// pass a mask that has already dropped E2 — never a size≤1→E2 invent.
+inline constexpr BundleFormatRowID
+selectProductRowForMemberCount(unsigned MemberCount) {
+  return selectProductRow(ProductFormatMask, MemberCount);
 }
 
 /// Select completion for \p Row given real member count.

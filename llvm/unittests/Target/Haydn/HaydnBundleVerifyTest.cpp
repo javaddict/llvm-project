@@ -711,6 +711,72 @@ TEST(HaydnBundleVerifyTest, ParseTimeResidualLogicalRequiresCompletedInverse) {
   EXPECT_FALSE(AddErr.has_value()) << (AddErr ? *AddErr : "");
 }
 
+TEST(HaydnBundleVerifyTest, LeadingPadDoesNotReplanResidualLogical) {
+  // Independent inverse must not compact a leading pad so ADD32 (E2 e0-only)
+  // is accepted at entry 1. Pad is an unused encode-dag window, not a
+  // membership re-plan. Peer: AIE unused format entry is idle
+  // (AIEMCFormats.h:376-379), not an alternate opcode.
+  HaydnMCFormats Fmts;
+  auto LeadPad = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                       {Haydn::NOP, Haydn::ADD32}, Fmts);
+  ASSERT_TRUE(LeadPad.has_value());
+  EXPECT_TRUE(LeadPad->find("no generated member") != std::string::npos ||
+              LeadPad->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *LeadPad;
+
+  BundlePlan Trailing;
+  auto TrailPad = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                        {Haydn::ADD32, Haydn::NOP}, Fmts,
+                                        &Trailing);
+  EXPECT_FALSE(TrailPad.has_value()) << (TrailPad ? *TrailPad : "");
+  EXPECT_EQ(Trailing.memberCount(), 1u);
+  EXPECT_EQ(Trailing.Completion, CompletionStateID::AllEntriesReal);
+
+  auto ExtraPads = verifyCommittedBundle(
+      BundleFormatRowID::E96TwoEntry, {Haydn::NOP, Haydn::NOP, Haydn::NOP},
+      Fmts);
+  ASSERT_TRUE(ExtraPads.has_value());
+  EXPECT_NE(ExtraPads->find("entry count"), std::string::npos) << *ExtraPads;
+}
+
+TEST(HaydnBundleVerifyTest, CycleFormingResidualRootRequiresInverse) {
+  HaydnMCFormats Fmts;
+  const unsigned Residuals[] = {
+      Haydn::LoopStart, Haydn::SET_HWLOOP, Haydn::SET_HWLOOP_REG,
+      Haydn::LOAD_ADDR, TargetOpcode::INSERT_SUBREG,
+      TargetOpcode::EXTRACT_SUBREG, TargetOpcode::SUBREG_TO_REG,
+      TargetOpcode::REG_SEQUENCE,
+  };
+  for (unsigned Opc : Residuals) {
+    auto Err = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry, {Opc},
+                                     Fmts);
+    ASSERT_TRUE(Err.has_value()) << "opc=" << Opc;
+    EXPECT_NE(Err->find("residual/logical inverse record not completed"),
+              std::string::npos)
+        << "opc=" << Opc << " diag=" << *Err;
+  }
+}
+
+TEST(HaydnBundleVerifyTest, ParseTimeLeadingHoleDoesNotReplanAdd32) {
+  HaydnMCFormats Fmts;
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  MCInst Add = mcRR(Haydn::ADD32, Haydn::R1, Haydn::R2, Haydn::R3);
+  const MCInst *LeadHole[] = {nullptr, &Add};
+  auto Err = verifyParsedBundle(BundleFormatRowID::E96TwoEntry, LeadHole, Fmts,
+                                MII, nullptr);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_TRUE(Err->find("no generated member") != std::string::npos ||
+              Err->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *Err;
+
+  const MCInst *TrailHole[] = {&Add, nullptr};
+  auto Ok = verifyParsedBundle(BundleFormatRowID::E96TwoEntry, TrailHole, Fmts,
+                               MII, nullptr);
+  EXPECT_FALSE(Ok.has_value()) << (Ok ? *Ok : "");
+}
+
 TEST(HaydnBundleVerifyTest, LookupPrivateMemberUsesCompletedInverse) {
   const haydn::format_e::FormatEMemberRec *Add =
       lookupPrivateFormatEMember(Haydn::ADD32_E2_E0_ALU0_RR);
