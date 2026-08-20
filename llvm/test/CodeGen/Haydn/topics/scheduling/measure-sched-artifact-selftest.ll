@@ -27,6 +27,9 @@
 ; CHECK-SAME: sf1_sf3_closed=false
 ; CHECK-SAME: object_mc_identity_only=true
 ; CHECK-SAME: ipc_proxy_measured_miss=true
+; CHECK-SAME: t4_postra_unstuck=true
+; CHECK-SAME: parcels_eq_ii_on_accept=true
+; CHECK-SAME: hwloops_off_qualify=true
 ;
 define void @measure_seat_anchor() {
   ret void

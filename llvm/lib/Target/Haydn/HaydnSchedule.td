@@ -82,8 +82,18 @@ include "HaydnGenSchedRecords.inc"
 
 def HaydnSchedModel : SchedMachineModel {
   // Max issue per cycle == generated E3 entry capacity (ProductRows
-  // EntryCount). Do not write a second 3 here.
+  // EntryCount). Do not write a second 3 here. AIE2PS uses 1000
+  // (AIE2PSSchedule.td:15) because format is the only issue limit;
+  // Haydn HR exactTryAdd is that limit, and IssueWidth still matches
+  // E3 so the generic scheduler does not over-issue past three entries.
   let IssueWidth = FormatEE3EntryCapacity;
+  // AIE1Schedule.td:258 is in-order (0). AIE2PSSchedule.td:23 uses 1000
+  // so generic list-sched will not bump after a future-cycle issue and
+  // so pre-RA checkAcyclicLatency compares local vs loop critical path.
+  // Haydn is in-order VLIW; Format/HR remain the pack authority. Do not
+  // adopt the AIE2PS 1000 overlay while per-op records are unadmitted.
+  let MicroOpBufferSize = 0;
+  let LoopMicroOpBufferSize = 0;
   let Itineraries = HaydnItineraries;
   // Common load Data_Latency scaffold (OperandCycles [2] on load classes).
   let LoadLatency = 2;

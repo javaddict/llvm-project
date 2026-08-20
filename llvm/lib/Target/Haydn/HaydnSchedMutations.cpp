@@ -93,7 +93,8 @@ static cl::opt<bool> EnableHaydnPostRAMemoryEdges(
 // successor reduction). Enabling the rebuild without that reduction can
 // still drop live-out Data edges that InterBlockScheduling would keep
 // (AIE AIEMaxLatencyFinder.cpp:101-191). Default off until that
-// successor reduction exists.
+// successor reduction exists. The post-RA multi-stage host being seated
+// does not flip these mutations.
 static cl::opt<bool> EnableHaydnPostRARegionEndEdges(
     "haydn-postra-region-end-edges", cl::init(false), cl::Hidden,
     cl::desc("Post-RA: recompute ExitSU edges (MaxLatencyFinder ported; "

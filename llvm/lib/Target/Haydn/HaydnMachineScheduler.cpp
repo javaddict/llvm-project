@@ -16,13 +16,34 @@
 #include "HaydnPostRAMultiStage.h"
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSchedMutations.h"
+#include "MCTargetDesc/HaydnBaseInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/MC/MCSchedule.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include <memory>
 
 using namespace llvm;
+
+/// Live tblgen SchedMachineModel pin. AIE1 is in-order
+/// (`aie1/AIE1Schedule.td:258` MicroOpBufferSize=0, CompleteModel=0).
+/// AIE2/AIE2P/AIE2PS overlay buffer=1000 is a KPI heuristic, not this
+/// model. Haydn overlay: LoopMicroOpBufferSize stays 0 and IssueWidth
+/// is E3 (`Haydn::ISSUE_SLOT_COUNT`), not AIE1's 9. Per-op admission
+/// stays closed (`CompleteModel=0`) until a generated import lands.
+static void pinHaydnInOrderIncompleteSchedModel(const MachineFunction &MF) {
+  const MCSchedModel &SM = MF.getSubtarget().getSchedModel();
+  if (SM.MicroOpBufferSize != 0 || SM.LoopMicroOpBufferSize != 0 ||
+      SM.isOutOfOrder() || SM.isComplete() ||
+      SM.IssueWidth != Haydn::ISSUE_SLOT_COUNT)
+    report_fatal_error(
+        "Haydn SchedMachineModel drifted from in-order incomplete pin",
+        /*GenCrashDiag=*/false);
+}
 
 #define DEBUG_TYPE "haydn-machine-scheduler"
 
@@ -77,6 +98,10 @@ void HaydnScheduleDAGMI::exitRegion() {
 // instantiates VLIWMachineScheduler, so that UAF is structurally
 // inapplicable.
 ScheduleDAGInstrs *llvm::createHaydnPostRAScheduler(MachineSchedContext *C) {
+  if (!C || !C->MF)
+    report_fatal_error("Haydn post-RA scheduler factory missing MF",
+                       /*GenCrashDiag=*/false);
+  pinHaydnInOrderIncompleteSchedModel(*C->MF);
   auto *DAG = new HaydnScheduleDAGMI(
       C, std::make_unique<HaydnPostRASchedStrategy>(C), /*IsPreRA=*/false);
   // Soft post-RA mutations (AIE getPostRAMutationsImpl subset). No

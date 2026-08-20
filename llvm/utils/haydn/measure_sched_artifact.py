@@ -173,6 +173,13 @@ SWPS_ASM_MEASURED_MISS = True
 SF1_SF3_GATES_CLOSED = False
 STAGE0_IB_PP_REVIVE = False
 THREE_ARM = "ordinary,stagecount1,multistage"
+# QUALIFY *contract* polarity (not a measured pass this wave). Hang
+# containment on dense MAC/post-RA is recorded; parcels==II is the
+# accept rule when QUALIFY later runs; hwloops stay OFF for that seat.
+# CompleteModel/NAT-IPC stay measured-miss. No Stage-0 IB/PP revive.
+T4_POSTRA_UNSTUCK = True
+PARCELS_EQ_II_ON_ACCEPT = True
+HWLOOPS_OFF_QUALIFY = True
 # M2 / M17 / M18 / M19–M22 stay observation seats. No competitive
 # II / density / NAT-IPC / SWPS-asm claim until admission.
 M_EVAL_ONLY = {
@@ -536,6 +543,9 @@ def product_summary_polarity() -> dict[str, Any]:
         "three_arm": THREE_ARM,
         "object_mc_identity_only": True,
         "ipc_proxy": dict(IPC_PROXY_MEASURED_MISS),
+        "t4_postra_unstuck": T4_POSTRA_UNSTUCK,
+        "parcels_eq_ii_on_accept": PARCELS_EQ_II_ON_ACCEPT,
+        "hwloops_off_qualify": HWLOOPS_OFF_QUALIFY,
     }
 
 
@@ -826,6 +836,9 @@ def cmd_self_test(_args: Any = None) -> int:
         ("stage0_ib_pp_revive", False),
         ("three_arm", THREE_ARM),
         ("object_mc_identity_only", True),
+        ("t4_postra_unstuck", True),
+        ("parcels_eq_ii_on_accept", True),
+        ("hwloops_off_qualify", True),
     ):
         if pol[k] != v:
             errs.append(f"{k} must be {v}")
@@ -927,6 +940,8 @@ def cmd_self_test(_args: Any = None) -> int:
         "swps_asm_measured_miss=true m_eval_only=M2,M17-M22 "
         "sf1_sf3_closed=false object_mc_identity_only=true "
         "ipc_proxy_measured_miss=true "
+        "t4_postra_unstuck=true parcels_eq_ii_on_accept=true "
+        "hwloops_off_qualify=true "
         f"semantic_drivers={len(SEMANTIC_DRIVERS)}"
     )
     return 0
