@@ -5,6 +5,10 @@ and fail closed on any other name.
 
 `python3 family_core.py --check` verifies every nine-file authority pin
 and refuses an unpinned, derived, or unpublished input.
+
+`--pin-check` verifies the compiler nine-file ledger and the catalog
+six-file product pin without a golden directory. Catalog provenance is
+six files by design; unused/derived members stay on the compiler pin.
 """
 
 from __future__ import annotations
@@ -63,6 +67,16 @@ PINNED_ENTRY_XLSX_CELLS_SHA256 = (
 
 SSML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 GOLDEN_INPUTS_PIN_REL = Path(__file__).with_name("GOLDEN_INPUTS.sha256")
+# In-tree catalog pin: six digest lines, no comments. Unused/derived
+# nine-file members stay on GOLDEN_INPUTS_PIN_REL.
+IN_TREE_CATALOG_PIN_REL = (
+    Path("simulator")
+    / "bundlesim"
+    / "isa"
+    / "database"
+    / "generated"
+    / "GOLDEN_INPUTS.sha256"
+)
 ENTRY_XLSX_PIN_NAME = "instruction_to_entry.xlsx#cells"
 _UNPUBLISHED_NAME = re.compile(
     r"(top[-_]?pad|underfill|absence[-_]?encode|competitive[-_]?resource)",
@@ -369,6 +383,34 @@ _BANNED_MATCHER_FILES = frozenset(
         "HaydnCompositeFormats.td",
     }
 )
+# Matcher-reachable generated includes: public logicals + published
+# itineraries. Member Inst defs stay on the product root (HaydnFormatE.td).
+_MATCHER_ALLOWED_GENERATED = frozenset(
+    {
+        "HaydnInstrInfoGolden.td.inc",
+        "HaydnGenSchedRecords.inc",
+    }
+)
+_MATCHER_BANNED_SUBSTRINGS = (
+    "HaydnFormatE",
+    "HaydnFormats",
+    "HaydnInstrInfoManual",
+    "HaydnFamilies",
+)
+# Overlay-owned leftovers that stay in HaydnInstrInfo.td as matcher shells.
+# Dual-dest MAC ties and LS WITH lane stores; no hypothesized Inst bits.
+HAND_RESIDUAL_LOGICALS = (
+    "X2MULA32",
+    "X2MULS32",
+    "X4FF2MULA16S",
+    "X4FF2MULS16S",
+    "X4MULA16",
+    "X4MULA16S",
+    "X4MULS16",
+    "X4MULS16S",
+    "D_SW_L_WITH_IMM",
+    "D_SW_H_WITH_IMM",
+)
 
 
 def _authority_name(item: object) -> str:
@@ -446,6 +488,21 @@ def verify_authority_inputs(golden: Path, consumed: Iterable[object]) -> None:
     verify_golden_dir_no_unpinned(golden)
 
 
+def _check_matcher_root_text(matcher_text: str) -> None:
+    """Fail closed unless the matcher file includes HaydnGeneric.td only."""
+    includes = _INCLUDE_RE.findall(matcher_text)
+    if includes != ["HaydnGeneric.td"]:
+        raise SystemExit(
+            f"error: matcher root includes {includes}, "
+            "expected HaydnGeneric.td only"
+        )
+    if any(name in matcher_text for name in _MATCHER_BANNED_SUBSTRINGS):
+        raise SystemExit(
+            "error: matcher root must not pull Format E members, "
+            "family geometry, or Manual.td"
+        )
+
+
 def _matcher_include_closure(haydn_dir: Path, root: Path) -> list:
     """Authored include closure of the matcher root. Skip llvm/Target paths."""
     seen: list = []
@@ -475,6 +532,45 @@ def _matcher_include_closure(haydn_dir: Path, root: Path) -> list:
     return seen
 
 
+def check_residual_hand_logicals(td_dir: Path) -> None:
+    """Manual.td stays empty; named leftovers are HaydnInst shells."""
+    manual = td_dir / "HaydnInstrInfoManual.td"
+    if re.search(r"^defm?\s+\S+", manual.read_text(encoding="utf-8"), re.M):
+        raise SystemExit(f"error: {manual.name} must remain a 0-def tombstone")
+    info = td_dir / "HaydnInstrInfo.td"
+    text = info.read_text(encoding="utf-8")
+    if re.search(r'^include\s+"HaydnInstrInfoManual\.td"', text, re.M):
+        raise SystemExit("error: HaydnInstrInfo.td must not include Manual.td")
+    for raw in text.splitlines():
+        if "HaydnInstrInfoManual" in raw and "formerly" not in raw:
+            raise SystemExit(
+                "error: HaydnInstrInfo.td still treats Manual.td as a def home: "
+                + raw.strip()
+            )
+    def_spans = list(re.finditer(r"^def\s+([A-Za-z0-9_]+)\b", text, re.M))
+    found = {m.group(1) for m in def_spans}
+    missing = [n for n in HAND_RESIDUAL_LOGICALS if n not in found]
+    if missing:
+        raise SystemExit(
+            "error: residual hand logicals missing from HaydnInstrInfo.td: "
+            + ", ".join(missing)
+        )
+    for i, m in enumerate(def_spans):
+        name = m.group(1)
+        if name not in HAND_RESIDUAL_LOGICALS:
+            continue
+        end = def_spans[i + 1].start() if i + 1 < len(def_spans) else len(text)
+        body = text[m.start() : end]
+        if (
+            re.search(r"\blet\s+Inst\{", body)
+            or "FmtLaneStore" in body
+            or not re.search(r":\s*HaydnInst\s*<", body)
+        ):
+            raise SystemExit(
+                f"error: {name} must be a HaydnInst shell without Inst bits"
+            )
+
+
 def check_cutover_surfaces(haydn_dir: Path) -> None:
     """Keep matcher/Manual/family surfaces collapsed; they are not authority.
 
@@ -490,34 +586,19 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
             f"error: {manual.name} must remain a 0-def tombstone, found {defs}"
         )
     matcher = haydn_dir / "HaydnAsmMatcher.td"
-    matcher_text = matcher.read_text(encoding="utf-8")
-    includes = _INCLUDE_RE.findall(matcher_text)
-    if includes != ["HaydnGeneric.td"]:
-        raise SystemExit(
-            f"error: matcher root includes {includes}, "
-            "expected HaydnGeneric.td only"
-        )
-    banned = (
-        "HaydnFormatE",
-        "HaydnFormats",
-        "HaydnInstrInfoManual",
-        "HaydnFamilies",
-    )
-    if any(name in matcher_text for name in banned):
-        raise SystemExit(
-            "error: matcher root must not pull Format E members, "
-            "family geometry, or Manual.td"
-        )
+    _check_matcher_root_text(matcher.read_text(encoding="utf-8"))
     closure = _matcher_include_closure(haydn_dir, matcher)
     residual = []
     member_defs = []
+    extra_generated = []
     for path in closure:
         text = path.read_text(encoding="utf-8")
         residual.extend(f"{path.name}:{n}" for n in _RESIDUAL_OCCUPANCY_DEF_RE.findall(text))
-        if path.suffix == ".td":
-            member_defs.extend(
-                f"{path.name}:{n}" for n in _FORMAT_E_MEMBER_DEF_RE.findall(text)
-            )
+        member_defs.extend(
+            f"{path.name}:{n}" for n in _FORMAT_E_MEMBER_DEF_RE.findall(text)
+        )
+        if path.name.endswith(".inc") and path.name not in _MATCHER_ALLOWED_GENERATED:
+            extra_generated.append(path.name)
     if residual:
         raise SystemExit(
             "error: matcher root still admits residual occupancy-suffix defs "
@@ -528,8 +609,27 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
             "error: matcher root still admits Format E member defs "
             f"{member_defs}"
         )
+    if extra_generated:
+        raise SystemExit(
+            "error: matcher root pulls generated members "
+            f"{extra_generated}; matcher-facing generated includes are "
+            + ", ".join(sorted(_MATCHER_ALLOWED_GENERATED))
+        )
+    generic = (haydn_dir / "HaydnGeneric.td").read_text(encoding="utf-8")
+    if 'include "HaydnInstrInfoGolden.td.inc"' not in generic:
+        raise SystemExit(
+            "error: HaydnGeneric.td must include matcher-facing logicals "
+            "(HaydnInstrInfoGolden.td.inc)"
+        )
+    if "HaydnFormatsE96Members" in generic or 'include "HaydnFormatE.td"' in generic:
+        raise SystemExit(
+            "error: HaydnGeneric.td must not pull Format E members"
+        )
     td_residual = []
-    for path in sorted(haydn_dir.glob("*.td")):
+    authored_and_generated = list(haydn_dir.glob("*.td")) + list(
+        haydn_dir.glob("*.td.inc")
+    )
+    for path in sorted(authored_and_generated):
         td_residual.extend(
             f"{path.name}:{n}"
             for n in _RESIDUAL_OCCUPANCY_DEF_RE.findall(
@@ -541,6 +641,7 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
             "error: occupancy-suffix defs remain outside matcher collapse "
             f"{td_residual}"
         )
+    check_residual_hand_logicals(haydn_dir)
     format_e = (haydn_dir / "HaydnFormatE.td").read_text(encoding="utf-8")
     if 'include "HaydnFormatsE96Members.td.inc"' not in format_e:
         raise SystemExit(
@@ -705,29 +806,58 @@ def expected_catalog_golden_inputs_pin() -> Dict[str, str]:
     return expected
 
 
-def catalog_golden_inputs_pin_path() -> Optional[Path]:
+def _monorepo_root() -> Path:
+    # llvm/lib/Target/Haydn/FormatE/family_core.py -> repo root
+    return Path(__file__).resolve().parents[5]
+
+
+def in_tree_catalog_golden_inputs_pin() -> Path:
+    return _monorepo_root() / IN_TREE_CATALOG_PIN_REL
+
+
+def catalog_golden_inputs_pin_paths() -> Tuple[Path, ...]:
+    """Every catalog pin that must match the six-file product FILE hash."""
+    found: list = []
+    seen = set()
+
+    def add(path: Path, *, required: bool) -> None:
+        if not path.is_file():
+            if required:
+                raise SystemExit(
+                    f"error: catalog GOLDEN_INPUTS.sha256 is not a file: {path}"
+                )
+            return
+        key = path.resolve()
+        if key in seen:
+            return
+        seen.add(key)
+        found.append(path)
+
     env = os.environ.get("HAYDN_CATALOG_GOLDEN_INPUTS_PIN")
     if env:
-        path = Path(env)
-        if not path.is_file():
-            raise SystemExit(
-                f"error: HAYDN_CATALOG_GOLDEN_INPUTS_PIN={env} is not a file"
-            )
-        return path
+        add(Path(env), required=True)
+    add(in_tree_catalog_golden_inputs_pin(), required=True)
     root = os.environ.get("BUNDLESIM_ROOT")
-    if not root:
-        return None
-    path = (
-        Path(root)
-        / "bundlesim"
-        / "isa"
-        / "database"
-        / "generated"
-        / "GOLDEN_INPUTS.sha256"
-    )
-    if path.is_file():
-        return path
-    return None
+    if root:
+        add(
+            Path(root)
+            / "bundlesim"
+            / "isa"
+            / "database"
+            / "generated"
+            / "GOLDEN_INPUTS.sha256",
+            required=True,
+        )
+    if not found:
+        raise SystemExit(
+            "error: catalog GOLDEN_INPUTS.sha256 pin not found "
+            "(six-file product pin; unused/derived stay on the compiler pin)"
+        )
+    return tuple(found)
+
+
+def catalog_golden_inputs_pin_path() -> Path:
+    return catalog_golden_inputs_pin_paths()[0]
 
 
 def catalog_pin_file_text() -> str:
@@ -856,6 +986,66 @@ def prove_catalog_pin_comment_rewrite_is_drift() -> None:
         path.unlink(missing_ok=True)
 
 
+def prove_catalog_seventh_input_fails() -> None:
+    """Unused/derived nine-file members are not a seventh catalog input."""
+    expected = expected_catalog_golden_inputs_pin()
+    rows = {name: expected[name] for name in CATALOG_PIN_FILES}
+    rows["operands_info.md"] = PINNED_OPERANDS_INFO_SHA256
+    path = _write_temp_pin(rows)
+    try:
+        verify_catalog_golden_inputs_pin(path)
+    except SystemExit as exc:
+        msg = str(exc)
+        if "retired/unused rows" in msg and "operands_info.md" in msg:
+            print("OK catalog pin refuses seventh input")
+            return
+        raise SystemExit(
+            f"error: seventh-catalog-input probe failed unexpectedly: {msg}"
+        ) from exc
+    finally:
+        path.unlink(missing_ok=True)
+    raise SystemExit("error: seventh catalog input did not fail closed")
+
+
+def prove_catalog_invented_seventh_fails() -> None:
+    """An unpublished catalog basename is not a seventh provenance row."""
+    expected = expected_catalog_golden_inputs_pin()
+    rows = {name: expected[name] for name in CATALOG_PIN_FILES}
+    rows["invented_catalog.json"] = "0" * 64
+    path = _write_temp_pin(rows)
+    try:
+        verify_catalog_golden_inputs_pin(path)
+    except SystemExit as exc:
+        msg = str(exc)
+        if "pin mismatch" in msg and "invented_catalog.json" in msg:
+            print("OK catalog pin refuses invented seventh input")
+            return
+        raise SystemExit(
+            f"error: invented-seventh-catalog probe failed unexpectedly: {msg}"
+        ) from exc
+    finally:
+        path.unlink(missing_ok=True)
+    raise SystemExit("error: invented seventh catalog input did not fail closed")
+
+
+def check_pin_ledgers() -> None:
+    """Compiler nine-file + catalog six-file pins; no golden directory."""
+    verify_golden_inputs_pin(golden_inputs_pin_path())
+    prove_catalog_pin_refuses_retired()
+    prove_catalog_six_file_pin_ok()
+    prove_incomplete_compiler_pin_fails()
+    prove_xlsx_zip_bytes_not_authority_pin()
+    prove_catalog_pin_file_sha256()
+    prove_catalog_pin_comment_rewrite_is_drift()
+    prove_catalog_seventh_input_fails()
+    prove_catalog_invented_seventh_fails()
+    prove_unknown_family_fails()
+    for catalog_pin in catalog_golden_inputs_pin_paths():
+        verify_catalog_golden_inputs_pin(catalog_pin, check_file_sha256=True)
+    print("OK catalog pin on-disk six-file")
+    print("OK compiler pin nine-file")
+
+
 def prove_incomplete_compiler_pin_fails() -> None:
     """Six-file catalog ledger is not a complete nine-file compiler pin."""
     expected = expected_catalog_golden_inputs_pin()
@@ -878,6 +1068,23 @@ def prove_incomplete_compiler_pin_fails() -> None:
     finally:
         path.unlink(missing_ok=True)
     raise SystemExit("error: six-file compiler pin did not fail closed")
+
+
+def prove_matcher_root_member_include_fails() -> None:
+    """A matcher include of Format E members is not a collapsed root."""
+    try:
+        _check_matcher_root_text(
+            'include "HaydnGeneric.td"\ninclude "HaydnFormatE.td"\n'
+        )
+    except SystemExit as exc:
+        msg = str(exc)
+        if "matcher root includes" in msg and "HaydnFormatE.td" in msg:
+            print("OK matcher-root member include fail-closed")
+            return
+        raise SystemExit(
+            f"error: matcher member-include probe failed unexpectedly: {msg}"
+        ) from exc
+    raise SystemExit("error: matcher root member include did not fail closed")
 
 
 def prove_unknown_family_fails() -> None:
@@ -1002,41 +1209,46 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Verify nine-file authority pins and cutover surfaces (no write)",
     )
     ap.add_argument(
+        "--pin-check",
+        action="store_true",
+        help="Verify compiler nine-file and catalog six-file pins (no golden dir)",
+    )
+    ap.add_argument(
         "--out-dir",
         type=Path,
         default=Path(__file__).resolve().parents[1],
         help="Target Haydn directory (default: llvm/lib/Target/Haydn)",
     )
     args = ap.parse_args(argv)
-    if not args.check:
-        ap.error("--check is required")
+    if not args.check and not args.pin_check:
+        ap.error("--check or --pin-check is required")
+    if args.pin_check and not args.check:
+        try:
+            check_pin_ledgers()
+        except SystemExit as exc:
+            msg = str(exc)
+            if msg:
+                print(msg, file=sys.stderr)
+            return 2 if msg else 0
+        return 0
     family = get_family(args.family)
     golden = resolve_golden_dir(family)
     consumed = [rec.filename for rec in AUTHORITY_FILES if rec.role == "consumed"]
     try:
         verify_authority_inputs(golden, consumed)
-        verify_golden_inputs_pin(golden_inputs_pin_path())
         check_cutover_surfaces(args.out_dir)
         print("OK matcher-root collapse")
         print("OK Manual.td tombstone")
+        print("OK residual hand logicals")
         print("OK FormatsE96 tombstone")
+        prove_matcher_root_member_include_fails()
         prove_unknown_family_fails()
         prove_unpinned_consumed_fails(golden)
         prove_derived_xlsx_not_authority(golden)
         prove_unused_authority_not_consumed(golden)
         prove_unpublished_choice_fails(golden)
         prove_unpinned_golden_dir_file_fails()
-        prove_catalog_pin_refuses_retired()
-        prove_catalog_six_file_pin_ok()
-        prove_incomplete_compiler_pin_fails()
-        prove_xlsx_zip_bytes_not_authority_pin()
-        prove_catalog_pin_file_sha256()
-        prove_catalog_pin_comment_rewrite_is_drift()
-        catalog_pin = catalog_golden_inputs_pin_path()
-        if catalog_pin is not None:
-            verify_catalog_golden_inputs_pin(
-                catalog_pin, check_file_sha256=True
-            )
+        check_pin_ledgers()
     except SystemExit as exc:
         msg = str(exc)
         if msg:

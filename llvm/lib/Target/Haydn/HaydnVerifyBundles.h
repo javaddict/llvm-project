@@ -26,7 +26,8 @@
 // and mixed committed-BUNDLE + bare encode MIR. Does not mutate MIR.
 // report_fatal_error on violation (no silent skip).
 // No MCFlags writers. setDesc is owned by Finalize / materialize / hard-root
-// commit-inside-group.
+// commit-inside-group. Never includes HaydnBundle.h / HaydnBundleFormatSolver.h
+// and never calls Bundle.canAdd or selectCompletionForMembersAndPads.
 //
 //===----------------------------------------------------------------------===//
 

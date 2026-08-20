@@ -45,6 +45,7 @@ from family_core import (
     SCHEMA_VERSION,
     add_family_argument,
     check_cutover_surfaces,
+    check_residual_hand_logicals,
     generated_banner,
     get_family,
     golden_inputs_pin_path,
@@ -1751,7 +1752,9 @@ def check_emitted_member_itineraries(text: str) -> None:
 
 
 def emit_members_td_inc(
-    cat: Catalog, accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None
+    cat: Catalog,
+    family,
+    accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None,
 ) -> str:
     """LIVE TableGen format-member Inst defs — included by HaydnFormatE.td.
 
@@ -1805,9 +1808,11 @@ def emit_members_td_inc(
 
     accum_tied_members: List[str] = []
     lines: List[str] = []
-    lines.append("//===-- HaydnFormatsE96Members.td.inc - LIVE E96 members -*-===//")
+    lines.append(
+        f"//===-- {family.members_td_inc} - LIVE {family.display} members -*-===//"
+    )
     lines.extend(generated_banner(
-        generator=RECORDS_GENERATOR, family=get_family("e96")))
+        generator=RECORDS_GENERATOR, family=family))
     lines.append("// Included by HaydnFormatE.td.")
     lines.append("")
     count = 0
@@ -2171,11 +2176,13 @@ def collect_member_to_logical(cat: Catalog, td_path: Path) -> Dict[str, str]:
     return mapping
 
 
-def emit_member_opcodes_inc(cat: Catalog, member_to_logical: Dict[str, str]) -> str:
+def emit_member_opcodes_inc(
+    cat: Catalog, member_to_logical: Dict[str, str], family
+) -> str:
     lines: List[str] = []
-    lines.append("//===-- HaydnGenFormatEMemberOpcodes.inc -*- C++ -*-===//")
+    lines.append(f"//===-- {family.member_opcodes_inc} -*- C++ -*-===//")
     lines.extend(generated_banner(
-        generator=RECORDS_GENERATOR, family=get_family("e96")))
+        generator=RECORDS_GENERATOR, family=family))
     lines.append("#ifdef GET_FORMAT_E_MEMBER_OPCODES")
     lines.append("#undef GET_FORMAT_E_MEMBER_OPCODES")
     lines.append(f"static constexpr unsigned FormatEMemberOpcodeCount = {len(cat.members)}u;")
@@ -2478,7 +2485,7 @@ def asm_packet_for_logical(cat: Catalog, logical: str) -> Optional[str]:
     return pack_full_bundle_text(rec, insn)
 
 
-def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
+def emit_mnemonic_roundtrip_s(cat: Catalog, family) -> str:
     """Committed MC harness: one packet per unique non-NOP logical."""
     logicals = list(cat.alternatives.keys())
     if len(logicals) != PIN_UNIQUE_NON_NOP:
@@ -2503,7 +2510,7 @@ def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
     lines.append("# REQUIRES: haydn-registered-target")
     lines.append("#")
     lines.extend(generated_banner(
-        generator=RECORDS_GENERATOR, family=get_family("e96"), prefix="#"))
+        generator=RECORDS_GENERATOR, family=family, prefix="#"))
     lines.append(
         "# One Format E packet per product non-NOP logical from the golden"
     )
@@ -2582,14 +2589,27 @@ def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
     return "\n".join(lines) + "\n"
 
 
+TOMBSTONE_TD_FILES = frozenset({
+    "HaydnInstrInfoManual.td",
+    "HaydnFormatsE96.td",
+})
+
+
 def load_hand_def_logicals(td_dir: Path) -> set:
     """Names with a hand def anywhere in the target .td set (all *.td,
-    excluding generated *.td.inc) — collision-safe superset."""
+    excluding generated *.td.inc and matcher/product tombstones)."""
     names = set()
     for path in sorted(td_dir.glob("*.td")):
         text = path.read_text(encoding="utf-8")
-        for m in re.finditer(r"^def\s+([A-Za-z0-9_]+)", text, re.M):
-            names.add(_logical_key(m.group(1)))
+        defs = re.findall(r"^def\s+([A-Za-z0-9_]+)", text, re.M)
+        if path.name in TOMBSTONE_TD_FILES:
+            if defs:
+                raise SystemExit(
+                    f"error: {path.name} must remain a 0-def tombstone, "
+                    f"found {defs}"
+                )
+            continue
+        names.update(_logical_key(n) for n in defs)
     return names
 
 
@@ -2727,9 +2747,13 @@ def prove_ownership_fail_closed(
 
 
 def emit_logical_defs_td_inc(
-    cat: Catalog, hand_logicals: set, accum_ties: Dict[str, Tuple[str, ...]],
-    behaviors: Dict[str, str], gpr_ports: Dict[str, Dict[str, list]],
-) -> str:
+    cat: Catalog,
+    family,
+    hand_logicals: set,
+    accum_ties: Dict[str, Tuple[str, ...]],
+    behaviors: Dict[str, str],
+    gpr_ports: Dict[str, Dict[str, list]],
+) -> Tuple[str, set, set]:
     """HaydnInst logical defs for golden logicals with no hand def.
 
     2026-08-18 (v2_1): the golden catalog grew past the hand-maintained
@@ -2743,10 +2767,12 @@ def emit_logical_defs_td_inc(
     overlap or a missing owner fails closed (P19).
     """
     lines: List[str] = []
-    lines.append("//===-- HaydnInstrInfoGolden.td.inc - generated logicals -*- tablegen -*-===//")
+    lines.append(
+        f"//===-- {family.logical_defs_td_inc} - generated logicals -*- tablegen -*-===//"
+    )
     lines.append("//")
     lines.extend(generated_banner(
-        generator=RECORDS_GENERATOR, family=get_family("e96")))
+        generator=RECORDS_GENERATOR, family=family))
     lines.append("//")
     lines.append("// Logical (matcher-facing) defs for golden catalog names that have NO")
     lines.append("// hand def in HaydnInstrInfo.td. Encoding")
@@ -3645,6 +3671,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
         verify_golden_inputs_pin(golden_inputs_pin_path())
         check_cutover_surfaces(args.out_dir)
+        check_residual_hand_logicals(args.out_dir)
+        print("OK matcher-root collapse")
+        print("OK Manual.td tombstone")
+        print("OK residual hand logicals")
     except SystemExit as exc:
         msg = str(exc)
         if msg:
@@ -3717,7 +3747,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         "R": _r.get("GPR_Read_Port") or [],
                     }
     logical_defs_td, emitted_tied, emitted_defs_keys = emit_logical_defs_td_inc(
-        cat, hand_logicals, full_accum_ties, behaviors, gpr_ports
+        cat, family, hand_logicals, full_accum_ties, behaviors, gpr_ports
     )
     overlay_authored, overlay_unavail = load_authored_catalog_overlay(
         AUTHORED_OVERLAY_PATH
@@ -3762,9 +3792,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "
             "member arity vs the logicals (CB ledger: unmodeled dest reads)"
         )
-    members_td = emit_members_td_inc(cat, accum_ties)
-    member_opcodes = emit_member_opcodes_inc(cat, member_to_logical)
-    mnemonic_rt = emit_mnemonic_roundtrip_s(cat)
+    members_td = emit_members_td_inc(cat, family, accum_ties)
+    member_opcodes = emit_member_opcodes_inc(cat, member_to_logical, family)
+    mnemonic_rt = emit_mnemonic_roundtrip_s(cat, family)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir, family.mnemonic_roundtrip_s)
 
     targets = {

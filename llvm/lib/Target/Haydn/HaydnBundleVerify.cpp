@@ -33,6 +33,14 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <utility>
 
+#if defined(LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLE_H)
+#error "HaydnBundleVerify.cpp must not include HaydnBundle.h (no Bundle.canAdd)"
+#endif
+#if defined(LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLEFORMATSOLVER_H)
+#error \
+    "HaydnBundleVerify.cpp must not include HaydnBundleFormatSolver.h (no forward solver)"
+#endif
+
 using namespace llvm;
 
 #define GET_FORMAT_E_MEMBER_OPCODES
@@ -309,6 +317,29 @@ bool bundleHasPadNop(const MachineInstr &BundleRoot) {
   return false;
 }
 
+/// BundlePlan from inverse-verified facts only.
+/// Peer: AIE verifyInstruction (AIEBaseInstrInfo.cpp:1595-1614) checks in
+/// place and does not rebuild a planner Bundle. Haydn overlay fills the
+/// existing BundlePlan for OutPlan callers from the stamped row, inverse
+/// occupancy, and golden-row completion. Never makeProductPlan /
+/// selectProductRow / selectCompletionFor /
+/// selectCompletionForMembersAndPads (those are the stamper / forward
+/// cardinality planner).
+static BundlePlan makeInverseVerifiedPlan(BundleFormatRowID Row,
+                                          SlotBits Occupied,
+                                          ArrayRef<unsigned> Members,
+                                          bool HasPadNop) {
+  BundlePlan P;
+  P.Row = Row;
+  P.Completion = expectedGoldenRowCompletion(
+      static_cast<unsigned>(Members.size()), HasPadNop);
+  P.OccupiedSlots = Occupied;
+  P.MemberOpcodes.assign(Members.begin(), Members.end());
+  P.Bytes = productParcelBytes();
+  P.Cycles = OneCycle;
+  return P;
+}
+
 /// MemberId of a generated private Format E member opcode, or ~0u.
 /// FormatEMemberOpcodes column only — never FormatEMembers / name peel.
 static unsigned privateMemberIdForOpcode(unsigned Opc) {
@@ -506,7 +537,9 @@ haydnRequireCompletedInverseOnResidualRoots(ArrayRef<unsigned> MemberOpcodes,
 ///   * anything else (unknown logical, no inverse at the stamped entry)
 ///     fails closed — the verifier must never ask the forward solver which
 ///     format fits
-///   * OutPlan rebuilt from makeProductPlan only (registry identity)
+///   * OutPlan filled from stamped row + inverse occupancy + golden-row
+///     completion (never makeProductPlan / selectProductRow /
+///     selectCompletionFor / selectCompletionForMembersAndPads)
 ///
 /// \returns nullopt on success; human-readable reason on failure.
 std::optional<std::string>
@@ -572,12 +605,10 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
 
   // Empty membership: pad-only idle is full-slot architectural NOP
   // (AllEntriesReal). Empty with no pad stays residual idle stub.
-  // No PacketFormats planner reselection.
+  // Inverse-verified plan only — never makeProductPlan / selectProductRow.
   if (Reals.empty()) {
-    BundlePlan Stall = makeProductPlan(/*Occupied=*/0, /*Members=*/{});
-    Stall.Row = Row;
-    Stall.Completion = expectedGoldenRowCompletion(/*RealMembers=*/0, HasPadNop);
-    Stall.Bytes = productParcelBytes();
+    BundlePlan Stall = makeInverseVerifiedPlan(Row, /*Occupied=*/0, Reals,
+                                               HasPadNop);
     if (!Stall.isProductLegal())
       return std::string("empty cycle BundlePlan not product-legal");
     if (OutPlan)
@@ -632,14 +663,11 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
           Reals, ResidualCompletedBits))
     return ResidualErr;
 
-  // Structural inverse product plan: registry row/completion/bytes only
-  // (entry occupancy from the inverse matrix, never the PacketFormats
-  // planner).
+  // Inverse-verified product plan: stamped row + inverse occupancy +
+  // golden-row completion. Never makeProductPlan / PacketFormats planner /
+  // selectCompletionForMembersAndPads.
   SlotBits Occupied = static_cast<SlotBits>(SeenEntryBits);
-  BundlePlan Plan = makeProductPlan(Occupied, Reals);
-  Plan.Row = Row;
-  Plan.Completion = expectedGoldenRowCompletion(Reals.size(), HasPadNop);
-  Plan.Bytes = productParcelBytes();
+  BundlePlan Plan = makeInverseVerifiedPlan(Row, Occupied, Reals, HasPadNop);
   if (Plan.Bytes != *GenBytes)
     return std::string("rebuilt plan Bytes != product EncodedBytes");
   if (!Plan.isProductLegal())

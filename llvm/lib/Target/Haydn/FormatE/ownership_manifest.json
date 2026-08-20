@@ -3,6 +3,9 @@
   "admitted_families": ["e96"],
   "authored_overlay": "llvm/lib/Target/Haydn/FormatE/authored_catalog_overlay.json",
   "umbrella_check": "llvm/lib/Target/Haydn/FormatE/check_generated.sh",
+  "authority_check": "python3 llvm/lib/Target/Haydn/FormatE/family_core.py --check --family e96",
+  "pin_check": "python3 llvm/lib/Target/Haydn/FormatE/family_core.py --pin-check",
+  "golden_pin": "llvm/lib/Target/Haydn/FormatE/GOLDEN_INPUTS.sha256",
   "generators": [
     {
       "path": "llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py",

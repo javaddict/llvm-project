@@ -217,7 +217,9 @@ findInverseLogicalAtEntry(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
 ///     rows must be completed (unit injectivity, membership, encodeability)
 ///     on every residual root — never structural/forward acceptance.
 ///   * anything else fails closed
-///   * OutPlan rebuilt from makeProductPlan only (no PacketFormats planner)
+///   * OutPlan filled from stamped row + inverse occupancy + golden-row
+///     completion (never makeProductPlan / selectProductRow /
+///     selectCompletionFor / selectCompletionForMembersAndPads)
 ///
 /// \returns nullopt on success; human-readable reason on failure.
 std::optional<std::string>

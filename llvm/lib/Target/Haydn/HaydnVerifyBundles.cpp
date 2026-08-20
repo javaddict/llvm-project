@@ -30,6 +30,14 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 
+#if defined(LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLE_H)
+#error "HaydnVerifyBundles.cpp must not include HaydnBundle.h (no Bundle.canAdd)"
+#endif
+#if defined(LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLEFORMATSOLVER_H)
+#error \
+    "HaydnVerifyBundles.cpp must not include HaydnBundleFormatSolver.h (no forward solver)"
+#endif
+
 using namespace llvm;
 
 #define DEBUG_TYPE "haydn-verify-bundles"
@@ -264,8 +272,9 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
 
       // Product emission ownership: empty roots fail here; row capacity
       // stays in verifyCommittedBundle so OVER-ISSUE FileCheck still
-      // matches. Completion is mandatory golden-row fill (unused windows
-      // are architectural NOP → AllEntriesReal), not the stamper helper.
+      // matches. Completion is mandatory golden-row fill via
+      // expectedGoldenRowCompletion (unused windows are architectural
+      // NOP → AllEntriesReal). Never selectCompletionForMembersAndPads.
       // Census is still collectBundleMemberOpcodes / bundleHasPadNop so a
       // hand `BUNDLE { NOP }` is product idle on both sides.
       {

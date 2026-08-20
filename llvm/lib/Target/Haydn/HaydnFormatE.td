@@ -22,6 +22,7 @@
 // Live member Inst defs: HaydnFormatsE96Members.td.inc.
 // Product encode/decode uses tblgen on those members; C++ frames
 // BUNDLE_E96_* parcels and selects the member.
+// Matcher root (HaydnAsmMatcher.td) must not include this file.
 //
 // Entry-window bases and Size=12 composites previously lived in
 // HaydnFormatsE96.td and HaydnCompositeFormats.td. Those files are

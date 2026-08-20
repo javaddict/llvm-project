@@ -44,11 +44,14 @@ from family_core import (
     PINNED_XLSX_SHA256,
     SCHED_GENERATOR,
     add_family_argument,
+    check_cutover_surfaces,
     generated_banner,
     get_family,
+    golden_inputs_pin_path,
     resolve_golden_dir,
     sha256_file,
     verify_authority_inputs,
+    verify_golden_inputs_pin,
 )
 
 # Unreferenced 5-cycle AccLat classes of unknown provenance. Must not emit.
@@ -556,6 +559,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         verify_golden_hashes(
             golden, json_path, xlsx_path, canonical_path, constraints_path
         )
+        verify_golden_inputs_pin(golden_inputs_pin_path())
+        check_cutover_surfaces(args.out_dir)
         surf = parse_constraints(constraints_path)
         rows = published_itineraries(surf)
         validate_published(rows, surf)

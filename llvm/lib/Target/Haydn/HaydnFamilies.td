@@ -19,5 +19,6 @@ class HaydnBundleFamily<string name, int id> {
 
 // E96 is the only admitted family. A second family is an admission
 // transaction (golden + STATUS pin + generator instance + inert tables),
-// not a line in this file with invented bits.
+// not a line in this file with invented bits. Matcher root must not
+// include this file (Haydn.td pulls it; HaydnAsmMatcher.td does not).
 def HaydnFamilyE96 : HaydnBundleFamily<"E96", 0>;
