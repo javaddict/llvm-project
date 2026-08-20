@@ -20,7 +20,7 @@
 #    opcodes (_S0/_S1/_S2) and no FormatID stamp before RA (phase identity).
 # 2. MRI classifies vreg banks: GPR32/DR64 charge the same pooled demand as
 #    equivalent physregs (parity). Unknown regs (no class) stay existential.
-# 3. GPR 4R2W / DR 7R3W boundaries fire on vregs (one-below / at / one-above).
+# 3. GPR 4R2W / DR 8R3W boundaries fire on vregs (one-below / at / one-above).
 #    Three independent GPR writes force multi-cycle packing (port ResMII ≥ 2
 #    under 2W) even though Full has three slots — CreateTargetMIHazardRecognizer
 #    IsPreRA charges PortModel; see vreg_three_writes_port_limit Hazard.

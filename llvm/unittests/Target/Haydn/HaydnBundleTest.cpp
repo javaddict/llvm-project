@@ -1006,7 +1006,7 @@ TEST(HaydnBundleTest, B42_ResourceCycleLDLDMACPacksOneCycle) {
 //===----------------------------------------------------------------------===//
 //
 // Format-only canReserveByOpcode still packs 3×ADD32 (slot cap). Port-aware
-// path enforces GPR 4R2W / DR 7R3W / AR 2R2W. SMS placement uses MID ports;
+// path enforces GPR 4R2W / DR 8R3W / AR 2R2W. SMS placement uses MID ports;
 // ResMII packing uses MI count*Ports (MRI-correct for vregs).
 
 TEST(HaydnBundleTest, VF3_ResourceCycleGPRWriteBudgetTwo) {

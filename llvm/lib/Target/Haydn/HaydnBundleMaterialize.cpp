@@ -158,7 +158,7 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
     }
   }
 
-  // Shared RF-port law (GPR 4R/2W, DR 7R/3W, AR 2R/2W, SFR 2R/1W) before
+  // Shared RF-port law (GPR 4R/2W, DR 8R/3W, AR 2R/2W, SFR 2R/1W) before
   // the bake probe. Same predicate as commitExact / verify / HR.
   if (cycleMembersExceedPortBudget(Instrs))
     return false;

@@ -113,7 +113,7 @@ std::optional<std::string> llvm::haydnCheckParsedBundleRegs(
   if (GPRR > 4 || GPRW > 2 || DRR > 7 || DRW > 3 || ARR > 2 || ARW > 2 ||
       SFRR > 2 || SFRW > 1)
     return std::string(
-        "cycle RF port demand exceeds one issue cycle (GPR 4R/2W, DR 7R/3W, "
+        "cycle RF port demand exceeds one issue cycle (GPR 4R/2W, DR 8R/3W, "
         "AR 2R/2W, SFR 2R/1W)");
   return std::nullopt;
 }

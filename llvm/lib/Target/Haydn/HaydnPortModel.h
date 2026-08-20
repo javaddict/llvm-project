@@ -86,12 +86,17 @@ namespace llvm {
 inline constexpr unsigned HAYDN_GPR_READ_PORTS = 4;
 inline constexpr unsigned HAYDN_GPR_WRITE_PORTS = 2;
 
-// DR64 port budget constants — spec hard cap, enforced as an RTL SVA
-// assertion (formal_verification_decoder_sva.json a_dr_read_budget<=7
-// a_dr_write_budget<=3; port_budget_analysis.py:119-122). Shared across all
-// three slots. The 3W ceiling is the binding constraint once fused-MAC
-// dual-write DR ops arrive.
-inline constexpr unsigned HAYDN_DR_READ_PORTS = 7;
+// DR64 port budget constants — golden VLIW_Engine_Compiler_Constraints.md
+// states 8 read ports and 3 write ports twice (§Registers DR bullet; §bundle
+// port law "[GPR : 4 / DR : 8 / AR : 2 / SFR : 2] read"). GE96-10
+// reconciliation 2026-08-21: the prior 7R constant cited
+// formal_verification_decoder_sva.json / port_budget_analysis.py — files
+// outside the golden nine (non-authority per CLAUDE.md; the SVA citation
+// does not exist in golden). Golden wins: 8R/3W, shared across all three
+// slots. Historical note: 7R was the shipped conservative value (stricter
+// direction — no illegal bundle was ever admitted under it); the golden
+// value restores truthful capacity for 8-read cycles.
+inline constexpr unsigned HAYDN_DR_READ_PORTS = 8;
 inline constexpr unsigned HAYDN_DR_WRITE_PORTS = 3;
 
 // AR (aligned-register) port budget constants — 2R2W shared across units

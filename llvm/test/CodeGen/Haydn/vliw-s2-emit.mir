@@ -135,7 +135,7 @@ body:             |
 # ADD32 r2,r0,r1 -> 2 GPR R, 1 GPR W, 0 DR R/W
 # ADD64 d0,d2,d3 -> 2 DR R, 1 DR W
 # F2MULAA32R_HHLL d4,d5,d6 -> 2 DR R, 1 DR W
-# Total: 4 DR R, 2 DR W (within DR 7R/3W), 2 GPR R, 1 GPR W (within 4R2W).
+# Total: 4 DR R, 2 DR W (within DR 8R/3W), 2 GPR R, 1 GPR W (within 4R2W).
 #
 name:            test2_alu32_alu64_s2_mac
 alignment:       1

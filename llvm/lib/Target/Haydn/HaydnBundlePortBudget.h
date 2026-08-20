@@ -14,7 +14,7 @@
 // parallel helpers that silently drift.
 //
 // Law: pooled per-cycle RF demand of the cycle's members must fit ONE issue
-// cycle (haydnPortLowerBoundResMII <= 1). GPR 4R/2W, DR64 7R/3W, AR 2R/2W,
+// cycle (haydnPortLowerBoundResMII <= 1). GPR 4R/2W, DR64 8R/3W, AR 2R/2W,
 // SFR 2R/1W per golden Constraints §Registers. Unit geometry may place
 // three ALU32s on ALU0/1/2 — three GPR writes still need >= 2 cycles under
 // 2W, so the pack is illegal regardless of entry placement.

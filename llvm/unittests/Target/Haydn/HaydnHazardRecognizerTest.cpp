@@ -10,7 +10,7 @@
 // `HaydnFuncUnitWrapper::conflict` predicate and CycleState tryAdd
 // placement authority.
 // Pins seven-unit injectivity, ALU0||LOADSTORE0 co-issue, 3-issue cap,
-// GPR 4R2W / DR 7R3W / AR 2R2W / SFR 2R1W, and product tryAdd field order.
+// GPR 4R2W / DR 8R3W / AR 2R2W / SFR 2R1W, and product tryAdd field order.
 //
 // HaydnFuncUnitWrapper is pure data (no MachineInstr/MachineFunction needed).
 // Unit bit indices match HaydnExecUnit / HaydnSchedule.td:
@@ -338,16 +338,19 @@ TEST(HaydnHazardRecognizerTest, DRAndGPRPortBudgetsIndependent) {
   EXPECT_FALSE(A.conflict(B));
 
   // Two ops that each take half of DR read budget co-issue; +1 overflows.
+  // REBASED 2026-08-21 (GE96-10): DR read budget is 8 per golden
+  // Constraints (stated twice); the prior 4+3=7-at-budget pin encoded the
+  // pre-reconciliation conservative constant.
   HaydnFuncUnitWrapper D0 = singleIssueInSlot(0);
   D0.setDRPorts(4, 0);
   HaydnFuncUnitWrapper D1 = singleIssueInSlot(1);
-  D1.setDRPorts(3, 0);
-  EXPECT_FALSE(D0.conflict(D1)); // 4+3=7 at budget
+  D1.setDRPorts(4, 0);
+  EXPECT_FALSE(D0.conflict(D1)); // 4+4=8 at budget
   HaydnFuncUnitWrapper D2 = singleIssueInSlot(2);
   D2.setDRPorts(1, 0);
   HaydnFuncUnitWrapper Combined = D0;
   Combined |= D1;
-  EXPECT_TRUE(Combined.conflict(D2)); // 7+1 > 7
+  EXPECT_TRUE(Combined.conflict(D2)); // 8+1 > 8
 }
 
 TEST(HaydnPackLegalityTest, ResourcesConflictIsSymmetric) {
@@ -367,7 +370,7 @@ TEST(HaydnPackLegalityTest, ProductRulesDocumentedInHeader) {
   EXPECT_EQ(NumExecutionUnits, 7u);
   EXPECT_EQ(HAYDN_GPR_READ_PORTS, 4u);
   EXPECT_EQ(HAYDN_GPR_WRITE_PORTS, 2u);
-  EXPECT_EQ(HAYDN_DR_READ_PORTS, 7u);
+  EXPECT_EQ(HAYDN_DR_READ_PORTS, 8u); // GE96-10: golden Constraints 8R (x2); 7R was the pre-2026-08-21 conservative value
   EXPECT_EQ(HAYDN_DR_WRITE_PORTS, 3u);
   EXPECT_EQ(HAYDN_AR_READ_PORTS, 2u);
   EXPECT_EQ(HAYDN_AR_WRITE_PORTS, 2u);
@@ -386,7 +389,7 @@ TEST(HaydnHazardRecognizerTest, AloneLawClosedUnderMemberIdentity) {
   EXPECT_EQ(FormatEUnitCount, 7u);
   EXPECT_EQ(HAYDN_GPR_READ_PORTS, 4u);
   EXPECT_EQ(HAYDN_GPR_WRITE_PORTS, 2u);
-  EXPECT_EQ(HAYDN_DR_READ_PORTS, 7u);
+  EXPECT_EQ(HAYDN_DR_READ_PORTS, 8u); // GE96-10: golden Constraints 8R (x2); 7R was the pre-2026-08-21 conservative value
   EXPECT_EQ(HAYDN_DR_WRITE_PORTS, 3u);
   EXPECT_EQ(HAYDN_AR_READ_PORTS, 2u);
   EXPECT_EQ(HAYDN_AR_WRITE_PORTS, 2u);
@@ -680,7 +683,7 @@ TEST(HaydnPortModelTest, OneBelowAtOneAboveCapacityMatrix) {
     BelowW.setGPRPorts(0, HAYDN_GPR_WRITE_PORTS - 1);
     EXPECT_FALSE(BelowW.conflict(OneMoreW));
   }
-  // DR 7R3W
+  // DR 8R3W
   {
     HaydnFuncUnitWrapper AtR = singleIssueInSlot(0);
     AtR.setDRPorts(HAYDN_DR_READ_PORTS, 0);

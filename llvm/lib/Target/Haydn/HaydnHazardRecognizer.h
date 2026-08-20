@@ -16,7 +16,7 @@
 // MAC0–1), plus pooled GPR/DR/AR/SFR register-file ports. Up to three
 // entries may issue per cycle, subject to:
 // * unit injectivity (no two entries map to the same unit)
-// * the GPR 4R2W, DR 7R3W, AR 2R2W port budgets (live SFR 2R1W vocabulary)
+// * the GPR 4R2W, DR 8R3W, AR 2R2W port budgets (live SFR 2R1W vocabulary)
 // * at most one SFR writer per cycle (dead implicit-def $sfr still counts)
 // * latency-bound data dependencies (DAG SDep edges plus the dest-read
 //   window below so a no-interlock machine cannot issue a reader inside
@@ -327,7 +327,7 @@ public:
   // * AIE Req/Res law: Required overlaps Other.Reserved OR Reserved overlaps
   //   Other.Required; Res/Res is legal
   // * issue cap: combined IssueCount exceeds 3
-  // * GPR 4R2W / DR 7R3W / AR 2R2W / SFR 2R1W port budgets
+  // * GPR 4R2W / DR 8R3W / AR 2R2W / SFR 2R1W port budgets
   // * Format E occupancy: both Slots nonempty and the combined SlotSet is
   //   not admitted by isFormatAvailable / getFormatOrNull / productCovers
   //   (AIE FuncUnitWrapper::conflict :147-150).

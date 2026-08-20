@@ -641,7 +641,7 @@ inline bool cycleMembersHaveTrueRAW(ArrayRef<MachineInstr *> Instrs,
 }
 
 /// True when pooled RF demand of \p Instrs exceeds one issue cycle
-/// (GPR 4R/2W, DR 7R/3W, AR 2R/2W, SFR 2R/1W). Defined out of line so
+/// (GPR 4R/2W, DR 8R/3W, AR 2R/2W, SFR 2R/1W). Defined out of line so
 /// this header does not pull `HaydnPortModel.h` / instruction enums.
 bool cycleMembersExceedPortBudget(ArrayRef<MachineInstr *> Instrs);
 

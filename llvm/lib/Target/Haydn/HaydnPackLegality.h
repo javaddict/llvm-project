@@ -29,7 +29,7 @@
 //      until the dest commits. Pre-RA leaves latency on DAG SDep (bottom-up
 //      recede must not grow dest windows). Scaffold OperandCycles 17 stay
 //      clamped so they do not size the scoreboard.
-//   5. Issue ≤ 3 entries; seven-unit injectivity; GPR 4R2W; DR 7R3W; AR 2R2W;
+//   5. Issue ≤ 3 entries; seven-unit injectivity; GPR 4R2W; DR 8R3W; AR 2R2W;
 //      SFR 2R1W (every SFR def counts as a write, dead or live). Port law
 //      is the shared haydnCycleMembersExceedPortBudget predicate (HR +
 //      commit + verify). Stores (D_SW_L_WITH_IMM, S_SB_WITH_IMM / ST8,

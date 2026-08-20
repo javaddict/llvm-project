@@ -8,7 +8,7 @@
 //
 // Hexagon MCChecker analog (HexagonMCChecker.h:33 / HexagonMCChecker.cpp).
 // Parse-time legality for public hand-asm bundles: unit injectivity, same-
-// register WAW, RF-port ceilings (GPR 4R/2W, DR 7R/3W, AR 2R/2W, SFR 2R/1W), SET_HWLOOP
+// register WAW, RF-port ceilings (GPR 4R/2W, DR 8R/3W, AR 2R/2W, SFR 2R/1W), SET_HWLOOP
 // same-sel. Does not require committed entry identity — standalone encode
 // still places bare logicals. Compiler composites stay serialize-only.
 //

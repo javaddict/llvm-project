@@ -257,7 +257,7 @@ verifyExactHardRootCommit(const MachineInstr &BundleRoot,
 /// is the structural peer — Haydn overlay is FormatEInverse, never Bundle.canAdd).
 /// One law with verifyCommittedBundle: opcode-keyed inverse + unit injectivity
 /// at each encode-dag entry, plus same-reg WAW, SET_HWLOOP same-sel, and
-/// RF port budget (GPR 4R/2W, DR 7R/3W, AR 2R/2W) from MC operands.
+/// RF port budget (GPR 4R/2W, DR 8R/3W, AR 2R/2W) from MC operands.
 /// Entries is encode-dag order; nullptr or NOP is an unused entry.
 /// Out-of-line so residual/logical members resolve through generated inverse
 /// records (no peelLogicalOpcodeName / DFS / canAdd).
