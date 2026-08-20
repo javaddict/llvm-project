@@ -73,6 +73,29 @@ inline void inverseIdsForLogical(StringRef Logical,
   Ids.append(It->second.begin(), It->second.end());
 }
 
+/// Membership + encodeability for one independently generated inverse row.
+/// Unit injectivity is a multi-member property (verifyCommittedBundle).
+/// Placement key reconstructs MemberId via findInverseMemberId (sorted
+/// inverse table, not FormatEMembers / UnitMap / name peel).
+inline bool completeInverseRecord(const FormatEInverseRec &R) {
+  if (R.MemberId >= FormatEMemberCount || !R.Logical)
+    return false;
+  if (StringRef(R.Logical).equals_insensitive("NOP"))
+    return false;
+  if (!R.TypeName || StringRef(R.TypeName).empty())
+    return false;
+  const FormatEInverseRec *ById = inverseRecordForMemberId(R.MemberId);
+  if (!ById || ById->MemberId != R.MemberId)
+    return false;
+  if (ById->Mode != R.Mode || ById->EntryIdx != R.EntryIdx ||
+      ById->Unit != R.Unit || ById->TypeCode != R.TypeCode ||
+      ById->Opcode != R.Opcode)
+    return false;
+  const int Hit =
+      findInverseMemberId(R.Mode, R.EntryIdx, R.Unit, R.TypeCode, R.Opcode);
+  return Hit >= 0 && static_cast<unsigned>(Hit) == R.MemberId;
+}
+
 } // namespace format_e
 } // namespace haydn
 } // namespace llvm

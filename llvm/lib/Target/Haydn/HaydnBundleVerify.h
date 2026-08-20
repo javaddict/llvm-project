@@ -93,15 +93,15 @@ inline uint32_t inverseUnitMaskForLogical(StringRef Logical, uint8_t Mode) {
   uint32_t Mask = 0;
   if (Logical.empty() || Logical.equals_insensitive("NOP"))
     return 0;
-  const unsigned N =
-      sizeof(format_e::FormatEInverse) / sizeof(format_e::FormatEInverse[0]);
-  for (unsigned I = 0; I < N; ++I) {
+  SmallVector<unsigned, 8> Ids;
+  format_e::inverseIdsForLogical(Logical, Ids);
+  for (unsigned I : Ids) {
+    if (I >= format_e::FormatEMemberCount)
+      continue;
     const format_e::FormatEInverseRec &R = format_e::FormatEInverse[I];
     if (R.Mode != Mode || R.Unit >= 32 || !R.Logical)
       continue;
-    if (!Logical.equals_insensitive(R.Logical))
-      continue;
-    if (StringRef(R.Logical).equals_insensitive("NOP"))
+    if (!format_e::completeInverseRecord(R))
       continue;
     Mask |= 1u << R.Unit;
   }
@@ -143,23 +143,27 @@ inline bool inverseMasksAssignable(ArrayRef<uint32_t> Masks) {
 /// FormatEInverse cannot structurally accept. Mapped stores stay exclusive.
 inline bool inverseLogicalsHaveUnitCoverForMode(ArrayRef<std::string> Logs,
                                                 uint8_t Mode) {
-  if (Logs.size() < 2)
+  if (Logs.empty())
     return true;
   SmallVector<uint32_t, 3> Masks;
   Masks.reserve(Logs.size());
   for (const std::string &L : Logs) {
     uint32_t M = inverseUnitMaskForLogical(L, Mode);
+    // Unknown logicals have mask 0 and must not pass — even as a singleton.
     if (M == 0)
       return false;
     Masks.push_back(M);
   }
+  if (Masks.size() < 2)
+    return true;
   return inverseMasksAssignable(Masks);
 }
 
 /// True when \p Logs have injective inverse-table units under E2 or E3.
 /// Independent of Bundle.canAdd / opcodesHaveFormatEUnitCover.
+/// Unknown singleton logicals fail closed (mask 0) — never structural accept.
 inline bool inverseLogicalsHaveUnitCover(ArrayRef<std::string> Logs) {
-  if (Logs.size() < 2)
+  if (Logs.empty())
     return true;
   return inverseLogicalsHaveUnitCoverForMode(Logs, /*Mode=*/0) ||
          inverseLogicalsHaveUnitCoverForMode(Logs, /*Mode=*/1);
@@ -169,24 +173,24 @@ inline bool inverseLogicalsHaveUnitCover(ArrayRef<std::string> Logs) {
 /// (logical, mode, membership-entry). FormatEInverse is independently
 /// sorted — never index it by MemberId. Never findFormatEMember (that
 /// helper is MC/Finalize placement and picks UnitMap — stamper reuse).
+/// Selection does not re-filter FormatEMembers by Mode/Entry/Logical;
+/// FormatEMembers[MemberId] is only the AsmPrinter fill vehicle.
 inline const format_e::FormatEMemberRec *
 findInverseLogicalAtEntry(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
                           uint32_t UsedUnitMask) {
   if (Logical.empty() || Logical.equals_insensitive("NOP"))
     return nullptr;
-  const unsigned N =
-      sizeof(format_e::FormatEInverse) / sizeof(format_e::FormatEInverse[0]);
-  for (unsigned I = 0; I < N; ++I) {
+  SmallVector<unsigned, 8> Ids;
+  format_e::inverseIdsForLogical(Logical, Ids);
+  for (unsigned I : Ids) {
+    if (I >= format_e::FormatEMemberCount)
+      continue;
     const format_e::FormatEInverseRec &R = format_e::FormatEInverse[I];
-    if (R.Mode != Mode || R.EntryIdx != EntryIdx || !R.Logical)
+    if (R.Mode != Mode || R.EntryIdx != EntryIdx)
       continue;
-    if (!Logical.equals_insensitive(R.Logical))
-      continue;
-    if (StringRef(R.Logical).equals_insensitive("NOP"))
+    if (!format_e::completeInverseRecord(R))
       continue;
     if (R.Unit < 32 && (UsedUnitMask & (1u << R.Unit)))
-      continue;
-    if (R.MemberId >= format_e::FormatEMemberCount)
       continue;
     // Return vehicle for AsmPrinter fill; selection is FormatEInverse only
     // (never FormatEMembers Mode/Entry/Logical re-filter).
@@ -209,7 +213,8 @@ findInverseLogicalAtEntry(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
 ///     (opcode-keyed inverse row ids, never FormatEInverse[MemberId];
 ///     committed child order IS the entry order — verify checks, it
 ///     never re-plans; never findFormatEMember / UnitMap stamper). Inverse
-///     rows must be encodeable (placement key reconstructs MemberId).
+///     rows must be completed (unit injectivity, membership, encodeability)
+///     on every residual root — never structural/forward acceptance.
 ///   * anything else fails closed
 ///   * OutPlan rebuilt from makeProductPlan only (no PacketFormats planner)
 ///

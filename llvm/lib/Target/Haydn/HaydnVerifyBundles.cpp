@@ -153,9 +153,11 @@ bool isUncommittedBareEncodeEscape(const MachineInstr &MI) {
 } // namespace
 
 bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
-  // Product emission gate: never call skipFunction. Committed-cycle verify is
-  // mandatory for optnone and every other function; scheduler skipFunction is
-  // quality/reorder only and must not open an MC uncommitted escape hatch.
+  // Product emission gate: never call skipFunction (FunctionPass::skipFunction
+  // is optnone/bisect quality; AIEFinalizeBundle.cpp:40-59 also never skips).
+  // Committed-cycle inverse is mandatory for optnone and every other function.
+  // A skipFunction-skipped function with a noncanonical cycle must still fail
+  // here — never an MC uncommitted/unverified escape hatch.
 
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   const bool OptNone = MF.getFunction().hasOptNone();
@@ -260,9 +262,10 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
           report_fatal_error(Twine(OS.str()));
         }
         auto Comp = haydn::bundle::getBundleCompletionID(MI);
-        // Row-only residual roots (product row, no completion) fail here.
-        // Missing/unknown row stays a later verifyCommittedBundle diagnostic
-        // so NO-IMM / BAD-ID FileCheck still match.
+        // Completion is mandatory on every residual/logical root that already
+        // carries a product row. Missing/unknown row stays a later
+        // verifyCommittedBundle diagnostic so NO-IMM / BAD-ID FileCheck still
+        // match; inverse-record completion is required once the row exists.
         if (Row && !Comp) {
           std::string Msg;
           raw_string_ostream OS(Msg);

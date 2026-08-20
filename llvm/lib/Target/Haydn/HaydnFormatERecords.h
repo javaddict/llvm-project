@@ -131,14 +131,35 @@ inline const FormatEAltSpan *findAltSpan(const char *Logical) {
 }
 
 /// Inverse lookup by placement key. Returns MemberId or -1.
+/// FormatEInverse is independently sorted by (Mode, EntryIdx, Unit, TypeCode,
+/// Opcode, MemberId) — binary search, never a linear walk. Peer: AIE
+/// getFormatDescIndex opcode switch (CodeGenFormat.cpp:132;
+/// AIEMCFormats.h:373-374) and getAlternateInstsOpcode
+/// (CodeGenFormat.cpp:155-163; AIEMCFormats.h:376-379). Overlay is the
+/// generated inverse table, not a sibling planner. Same lower_bound shape
+/// as findAltSpan in this file.
 inline int findInverseMemberId(uint8_t Mode, uint8_t EntryIdx, uint8_t Unit,
                                uint8_t TypeCode, uint16_t Opcode) {
-  for (unsigned I = 0; I < FormatEMemberCount; ++I) {
-    const FormatEInverseRec &R = FormatEInverse[I];
-    if (R.Mode == Mode && R.EntryIdx == EntryIdx && R.Unit == Unit &&
-        R.TypeCode == TypeCode && R.Opcode == Opcode)
-      return static_cast<int>(R.MemberId);
-  }
+  const FormatEInverseRec *Begin = FormatEInverse;
+  const FormatEInverseRec *End = Begin + FormatEMemberCount;
+  const FormatEInverseRec Probe{Mode, EntryIdx, Unit, TypeCode, Opcode, 0,
+                                nullptr, nullptr};
+  const FormatEInverseRec *It = std::lower_bound(
+      Begin, End, Probe,
+      [](const FormatEInverseRec &A, const FormatEInverseRec &B) {
+        if (A.Mode != B.Mode)
+          return A.Mode < B.Mode;
+        if (A.EntryIdx != B.EntryIdx)
+          return A.EntryIdx < B.EntryIdx;
+        if (A.Unit != B.Unit)
+          return A.Unit < B.Unit;
+        if (A.TypeCode != B.TypeCode)
+          return A.TypeCode < B.TypeCode;
+        return A.Opcode < B.Opcode;
+      });
+  if (It != End && It->Mode == Mode && It->EntryIdx == EntryIdx &&
+      It->Unit == Unit && It->TypeCode == TypeCode && It->Opcode == Opcode)
+    return static_cast<int>(It->MemberId);
   return -1;
 }
 
@@ -528,5 +549,12 @@ inline unsigned logicalOpcodeOrSelf(unsigned Opcode) {
 } // namespace format_e
 } // namespace haydn
 } // namespace llvm
+
+// MemberId / logical indexes over the independently sorted FormatEInverse
+// table. Included at global scope because the .inc opens its own namespaces.
+// Peer: AIE getAlternateInstsOpcode generated switch
+// (CodeGenFormat.cpp:155-163). Overlay is FormatEInverse, not a planner.
+#define GET_FORMAT_E_INVERSE_INDEX
+#include "HaydnGenFormatEInverse.inc"
 
 #endif // LLVM_LIB_TARGET_HAYDN_HAYDNFORMATERECORDS_H
