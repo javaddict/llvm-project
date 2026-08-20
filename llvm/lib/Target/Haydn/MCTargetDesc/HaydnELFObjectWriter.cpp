@@ -16,11 +16,14 @@
 
 using namespace llvm;
 
-// Peer of AIEELFObjectWriter.cpp:49-51 (ELF::EM_AIE, no second machine id).
-// Official ELF 259 is Kalray KVX. Stay on EM_HAYDN; distinguisher is
-// EF_HAYDN_E96. Do not invent a replacement e_machine.
+// Peer of AIEELFObjectWriter.cpp:49-51 (ELF::EM_AIE, no second machine id)
+// and AIE ELF.h:498-502 (public EF_AIE_*). Official ELF 259 is Kalray KVX.
+// Stay on EM_HAYDN; distinguisher is ELF::EF_HAYDN_E96. Do not invent a
+// replacement e_machine or extra e_flags image-version bits.
 static_assert(ELF::EM_HAYDN == 259,
               "EM_HAYDN stays 259; do not invent a replacement (KVX collision)");
+static_assert(ELF::EF_HAYDN_E96 == 0x1u,
+              "EF_HAYDN_E96 stays 0x1; do not invent e_flags image-versioning");
 
 namespace {
 
@@ -57,13 +60,28 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     case FK_Data_4:
       return IsPCRel ? ELF::R_HAYDN_32_PCREL : ELF::R_HAYDN_32;
     case FK_Data_2:
-      // 16-bit absolute DATA reloc (.short sym). /: previously mapped
-      // to R_HAYDN_SImm16 -- an instruction-field reloc whose 4-byte
+      // 16-bit absolute DATA reloc (.short sym). Previously mapped to
+      // R_HAYDN_SImm16 -- an instruction-field reloc whose 4-byte
       // read/mask/write handler clobbered the bytes following a 2-byte data
       // value. The dedicated R_HAYDN_16 handler does a 2-byte write only.
+      // Peer: RISCVELFObjectWriter.cpp:77-83 IsPCRel only on FK_Data_4
+      // (R_RISCV_32_PCREL); there is no R_HAYDN_16_PCREL — refuse rather
+      // than silently emit absolute R_HAYDN_16 for a label difference.
+      if (IsPCRel) {
+        reportError(Fixup.getLoc(),
+                    "16-bit PC-relative data relocations are not supported "
+                    "on Haydn");
+        return ELF::R_HAYDN_NONE;
+      }
       return ELF::R_HAYDN_16;
     case FK_Data_1:
-      // 8-bit absolute DATA reloc (.byte sym). /: see FK_Data_2.
+      // 8-bit absolute DATA reloc (.byte sym). See FK_Data_2.
+      if (IsPCRel) {
+        reportError(Fixup.getLoc(),
+                    "8-bit PC-relative data relocations are not supported "
+                    "on Haydn");
+        return ELF::R_HAYDN_NONE;
+      }
       return ELF::R_HAYDN_8;
     case FK_Data_8:
       // 64-bit data relocs are not a Haydn ELF kind (32-bit baremetal).
@@ -91,8 +109,9 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_NONE;
 
   case Haydn::FIXUP_HAYDN_32:
-    // 32-bit absolute relocation
-    return ELF::R_HAYDN_32;
+    // Same FK_Data_4 law: IsPCRel selects R_HAYDN_32_PCREL, never silent
+    // absolute R_HAYDN_32 for a PC-relative 32-bit data word.
+    return IsPCRel ? ELF::R_HAYDN_32_PCREL : ELF::R_HAYDN_32;
 
   case Haydn::FIXUP_HAYDN_SImm16:
     // 16-bit signed immediate relocation
@@ -132,6 +151,30 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
   case Haydn::FIXUP_HAYDN_32_PCREL:
     // 32-bit PC-relative relocation
     return ELF::R_HAYDN_32_PCREL;
+
+  case Haydn::FIXUP_HAYDN_C_BranchSImm4:
+  case Haydn::FIXUP_HAYDN_C_UImm4:
+  case Haydn::FIXUP_HAYDN_C_BranchSImm10:
+    // Compressed fixups are MC-only leftovers. No ELF kind — do not borrow
+    // BranchSImm16 / UImm rows.
+    reportError(Fixup.getLoc(),
+                "compressed Haydn fixup has no ELF relocation");
+    return ELF::R_HAYDN_NONE;
+
+  case Haydn::FIXUP_HAYDN_LongBranchSImm20:
+    // MC-only long-branch kind. Product JAL uses WIDE_CallSImm20.
+    reportError(Fixup.getLoc(),
+                "MC-only long-branch fixup has no ELF relocation");
+    return ELF::R_HAYDN_NONE;
+
+  case Haydn::FIXUP_HAYDN_S0LSOff4_2:
+  case Haydn::FIXUP_HAYDN_S0LSOff4_3:
+  case Haydn::FIXUP_HAYDN_S0LSOff2_0:
+  case Haydn::FIXUP_HAYDN_S0LSOff3_0:
+    // FI/spill scaled-imm fields resolve locally in the AsmBackend.
+    reportError(Fixup.getLoc(),
+                "MC-only FI/spill fixup has no ELF relocation");
+    return ELF::R_HAYDN_NONE;
 
   case Haydn::FIXUP_HAYDN_HWLoopOffset:
     // Legacy 8-byte placeholder kind (MC-only; HaydnFixupKinds.h). No emitter

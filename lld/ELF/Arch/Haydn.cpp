@@ -312,24 +312,31 @@ public:
   }
 
   uint32_t calcEFlags() const override {
-    // Product output carries production ELFFlagsValue (provisional
-    // consumer agreement; not an external e_machine allocation).
-    // Every participating object must already stamp that flag — zero and
-    // unknown nonzero profiles reject fail-closed (no silent upgrade).
-    // ctx.objectFiles includes extracted archive members and startup
-    // objects after symbol resolution (Driver.cpp calcEFlags seat).
-    // Peer: AIE.cpp:66-70 copies the first object's flags; Haydn overlay
-    // requires exact production equality. Empty objectFiles (empty
-    // archive) still stamps the production flag — Hexagon empty-archive
-    // default analog (hexagon-eflag.s), not a new e_machine.
+    // Product output carries ELF::EF_HAYDN_E96 (provisional consumer
+    // agreement; not an external e_machine allocation and not an
+    // image-versioning scheme). Every participating object must already
+    // stamp that flag — zero and unknown nonzero profiles reject
+    // fail-closed (no silent upgrade). ctx.objectFiles includes extracted
+    // archive members and startup objects after symbol resolution
+    // (Driver.cpp calcEFlags seat). Peer: AIE.cpp:66-70 copies the first
+    // object's flags; AIE ELF.h:498-502 publishes EF_AIE_*. Haydn overlay
+    // requires exact ELF::EF_HAYDN_E96. Empty objectFiles (empty archive)
+    // still stamps that flag — Hexagon empty-archive default analog
+    // (hexagon-eflag.s), not a new e_machine.
     //
     // EM_HAYDN=259 is the experimental producer number (ELF.h). Some ELF
     // registries assign 259 to Kalray KVX. Do not invent a replacement
     // e_machine here. A 259 object without the production flag is rejected
     // so a KVX-like file cannot silently link as Haydn.
-    const uint32_t Expected =
+    const uint32_t Profile =
         llvm::haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
-    assert(Expected != 0 && "E96 product profile must allocate nonzero e_flags");
+    assert(Profile != 0 && "E96 product profile must allocate nonzero e_flags");
+    if (Profile != ELF::EF_HAYDN_E96) {
+      ErrAlways(ctx) << "Haydn production ELFFlagsValue 0x"
+                     << Twine::utohexstr(Profile)
+                     << " is not EF_HAYDN_E96; refusing invented e_flags";
+    }
+    const uint32_t Expected = ELF::EF_HAYDN_E96;
     for (InputFile *f : ctx.objectFiles) {
       const auto &Hdr = cast<ObjFile<ELF32LE>>(f)->getObj().getHeader();
       if (Hdr.e_machine != EM_HAYDN) {

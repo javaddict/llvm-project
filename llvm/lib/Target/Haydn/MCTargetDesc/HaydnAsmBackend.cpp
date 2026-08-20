@@ -12,6 +12,7 @@
 #include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCELFObjectWriter.h"
@@ -139,51 +140,48 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       getContext().reportError(Fixup.getLoc(), "fixup offset exceeds fragment size");
       return;
     }
-    // Control P is the parcel origin (AIE translateFixupsInComposite offset 0;
-    // AIEBaseMCCodeEmitter.cpp:231-232). A mid-parcel r_offset makes lld
-    // compute P = PC+N so linked B/JAL targets miss the record grid.
-    if (Asm && FI.IsPCRel) {
-      switch (R) {
-      case HaydnReloc::RelocKind::BranchSImm16:
-      case HaydnReloc::RelocKind::CallSImm20:
-      case HaydnReloc::RelocKind::WIDE_BranchSImm12:
-      case HaydnReloc::RelocKind::WIDE_BranchSImm12_RI:
-      case HaydnReloc::RelocKind::WIDE_CallSImm20:
-      case HaydnReloc::RelocKind::HWLoopOff1:
-      case HaydnReloc::RelocKind::HWLoopOff2:
-      case HaydnReloc::RelocKind::JALRSImm12: {
-        const unsigned Parcel = haydnProductionParcelBytes().Value;
-        const uint64_t Abs =
-            Asm->getFragmentOffset(F) + Fixup.getOffset();
-        if (Parcel > 1 && (Abs % Parcel) != 0) {
+    // FieldLsb is parcel-absolute (AIE translateFixupsInComposite offset 0;
+    // AIEBaseMCCodeEmitter.cpp:231-232). A mid-parcel r_offset would make
+    // resolveFieldLsb sniff intra-slot bytes as a header and lld compute
+    // P = PC+N so linked B/JAL targets miss the record grid.
+    const unsigned Parcel = haydnProductionParcelBytes().Value;
+    if (Asm && Parcel > 1) {
+      const uint64_t Abs = Asm->getFragmentOffset(F) + Fixup.getOffset();
+      const bool ParcelAbsField = FI.NBytes == Parcel;
+      const bool ControlPCRel =
+          R == HaydnReloc::RelocKind::BranchSImm16 ||
+          R == HaydnReloc::RelocKind::CallSImm20 ||
+          R == HaydnReloc::RelocKind::WIDE_BranchSImm12 ||
+          R == HaydnReloc::RelocKind::WIDE_BranchSImm12_RI ||
+          R == HaydnReloc::RelocKind::WIDE_CallSImm20 ||
+          R == HaydnReloc::RelocKind::HWLoopOff1 ||
+          R == HaydnReloc::RelocKind::HWLoopOff2 ||
+          R == HaydnReloc::RelocKind::JALRSImm12;
+      if ((ParcelAbsField || ControlPCRel) && (Abs % Parcel) != 0) {
+        getContext().reportError(
+            Fixup.getLoc(),
+            ControlPCRel
+                ? "control relocation offset is not an exact Format E record"
+                : "Format E relocation offset is not an exact Format E record");
+        return;
+      }
+      // JALR is rs+imm (not a PC-relative long-branch); odd immediates are
+      // legal. PC-relative B/JAL/HWLOOP displacements must be whole parcels
+      // so the resolved target is an exact code record. Align=2/4 failures
+      // share computeRelocValue's "mis-aligned relocation target"; the
+      // parcel-grid check is only for Align-ok displacements that still
+      // miss a 12-byte record.
+      if (ControlPCRel && R != HaydnReloc::RelocKind::JALRSImm12 &&
+          FI.IsPCRel &&
+          (static_cast<int64_t>(Value) % static_cast<int64_t>(Parcel)) != 0) {
+        if (FI.Align <= 1 ||
+            (static_cast<int64_t>(Value) % static_cast<int64_t>(FI.Align)) ==
+                0) {
           getContext().reportError(
               Fixup.getLoc(),
-              "control relocation offset is not an exact Format E record");
+              "control relocation target is not an exact Format E record");
           return;
         }
-        // JALR is rs+imm (not PC-relative); odd immediates are legal.
-        // PC-relative B/JAL/HWLOOP displacements must be whole parcels so
-        // the resolved target is an exact code record. Align=2/4 failures
-        // share computeRelocValue's "mis-aligned relocation target" with
-        // the branch path; the parcel-grid check is only for Align-ok
-        // displacements that still miss a 12-byte record.
-        if (R != HaydnReloc::RelocKind::JALRSImm12 && FI.IsPCRel &&
-            Parcel > 1 &&
-            (static_cast<int64_t>(Value) % static_cast<int64_t>(Parcel)) !=
-                0) {
-          if (FI.Align <= 1 ||
-              (static_cast<int64_t>(Value) %
-               static_cast<int64_t>(FI.Align)) == 0) {
-            getContext().reportError(
-                Fixup.getLoc(),
-                "control relocation target is not an exact Format E record");
-            return;
-          }
-        }
-        break;
-      }
-      default:
-        break;
       }
     }
     // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
@@ -192,8 +190,8 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     // also shift by TargetOffset (AIE Dummy TargetOffset: AIEBaseAsmBackend.h
     // getFixupKindInfo 56-71; AIE applyFixup shifts only generic FK_Data_*).
     // Typed (mode, entry, unit) producers use resolveFieldLsbForMember;
-    // Loc sniffing here covers HI12/LO20/PC_LO20/JALRSImm12 E3 e0/e1/e2
-    // and E2 e1 windows.
+    // Loc sniffing here covers HI12/LO20/PC_LO20/JALRSImm12/CSR_UImm8
+    // E3 e0/e1/e2 and E2 e1 windows.
     const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, Data);
     HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FieldLsb);
     return;
@@ -278,14 +276,27 @@ HaydnAsmBackend::createObjectTargetWriter() const {
 bool HaydnAsmBackend::finishLayout() const {
   if (!Asm)
     return false;
-  // Consumer identity is production ELFFlagsValue (EF_HAYDN_E96=0x1).
+  // Consumer identity is production ELFFlagsValue (ELF::EF_HAYDN_E96=0x1).
   // Peer: RISCV.cpp:169 intersects object e_flags; AIE.cpp:66-71 copies the
   // first file. Haydn refuses mixed/zero/unknown and never mints a second
-  // e_machine (official 259 is Kalray KVX).
+  // e_machine (official 259 is Kalray KVX) or a second flag value.
+  static_assert(ELF::EM_HAYDN == 259,
+                "EM_HAYDN stays 259; do not invent a replacement (KVX collision)");
+  static_assert(ELF::EF_HAYDN_E96 == 0x1u,
+                "EF_HAYDN_E96 stays 0x1; do not invent e_flags image-versioning");
+  static_assert(ELF::EF_HAYDN_E96 == haydn::format::EF_HAYDN_E96,
+                "ELF and format-registry EF_HAYDN_E96 must stay identical");
   const uint32_t Flags =
       haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
   assert(Flags != 0 && "E96 product profile must allocate nonzero e_flags");
-  static_cast<ELFObjectWriter &>(Asm->getWriter()).setELFHeaderEFlags(Flags);
+  if (Flags != ELF::EF_HAYDN_E96) {
+    getContext().reportError(
+        SMLoc(), "Haydn production ELFFlagsValue is not EF_HAYDN_E96; "
+                 "refusing invented e_flags");
+    return false;
+  }
+  static_cast<ELFObjectWriter &>(Asm->getWriter())
+      .setELFHeaderEFlags(ELF::EF_HAYDN_E96);
   return false;
 }
 

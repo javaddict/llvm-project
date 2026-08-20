@@ -14,9 +14,20 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/BinaryFormat/ELF.h"
 
 using namespace clang;
 using namespace clang::targets;
+
+// Object identity. Peer: AIE ELF.h:498-502 (public EF_AIE_*) +
+// AIEELFObjectWriter.cpp:49-51 (one e_machine). Official ELF 259 is
+// Kalray KVX. Stay on EM_HAYDN; distinguisher is EF_HAYDN_E96. Do not
+// invent a replacement e_machine, extra e_flags image-version bits, or a
+// preprocessor macro that treats the provisional flag as qualification.
+static_assert(llvm::ELF::EM_HAYDN == 259,
+              "EM_HAYDN stays 259; do not invent a replacement (KVX collision)");
+static_assert(llvm::ELF::EF_HAYDN_E96 == 0x1u,
+              "EF_HAYDN_E96 stays 0x1; do not invent e_flags image-versioning");
 
 HaydnTargetInfo::HaydnTargetInfo(const llvm::Triple &Triple,
                                  const TargetOptions &Opts)

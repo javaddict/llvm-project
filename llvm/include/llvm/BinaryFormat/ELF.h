@@ -324,6 +324,8 @@ enum {
   EM_BPF = 247,           // Linux kernel bpf virtual machine
   EM_VE = 251,            // NEC SX-Aurora VE
   EM_CSKY = 252,          // C-SKY 32-bit processor
+  // Experimental producer number. Official ELF 259 is Kalray KVX; do not
+  // invent a replacement e_machine. Distinguisher is EF_HAYDN_E96.
   EM_HAYDN = 259,          // Haydn 3-issue VLIW DSP (experimental)
   EM_LOONGARCH = 258,     // LoongArch
 };
@@ -1094,6 +1096,15 @@ enum : unsigned {
 // ELF Relocation types for Xtensa
 enum {
 #include "ELFRelocs/Xtensa.def"
+};
+
+// Haydn specific e_flags.
+// Peer: AIE EF_AIE_* (llvm-aie llvm/include/llvm/BinaryFormat/ELF.h:498-502).
+// Sole product profile flag; not an image-versioning scheme and not a
+// replacement e_machine. Official ELF 259 is Kalray KVX — a 259 object
+// without this flag is not a Haydn E96 object.
+enum : unsigned {
+  EF_HAYDN_E96 = 0x00000001, // Format E 96-bit product profile (provisional)
 };
 
 // ELF Relocation types for Haydn
