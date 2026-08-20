@@ -94,7 +94,7 @@ define i64 @test_i64_arg_return(i64 %a, i64 %b) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:

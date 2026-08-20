@@ -79,26 +79,26 @@ define i64 @test_mixed_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 75 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32; or64 d9, d1, d1 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; addi32 r1, r3, 31 }
 ; CHECK-NEXT:    { nop; add64 d12, d9, d0; or64 d10, d2, d2 }
 ; CHECK-NEXT:    { nop; or64 d0, d12, d12; or64 d11, d3, d3 }
 ; CHECK-NEXT:    { nop; jal lr, consume_both }
-; CHECK-NEXT:    { nop; add64 d0, d9, d8 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d9, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; add64 d0, d10, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d11, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d9, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d10, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d10, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d11, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d9, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d10, d0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 346 }
-; CHECK-NEXT:    { nop; add64 d0, d11, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d11, d0 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d12 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d12 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d12, sp, 1 }
 ; CHECK-NEXT:    { nop; ld64 d11, sp, 2 }
@@ -176,15 +176,15 @@ define i64 @test_alternating_banks(i32 %a, i64 %b, i32 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 10 }
 ; CHECK-NEXT:    { nop; sext32t64 d9, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 10 }
-; CHECK-NEXT:    { nop; slli64 d9, d9, 32 }
-; CHECK-NEXT:    { nop; srli64 d9, d9, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d9, d9, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d9, d9, 32 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d9 }
+; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d9, sp, 1 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 2 }
@@ -240,46 +240,46 @@ define i64 @test_addr_plus_data_pressure(i64 %base, i32 %offset, i32 %stride) no
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2; sext32t64 d0, r3 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2; add64 d9, d8, d0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; add32 r8, r1, r2 }
-; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; jal lr, consume_both }
 ; CHECK-NEXT:    { nop; ld32 r2, sp, 5 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; add32 r1, r9, r10 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d8 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r11 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, fp }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; ld32 r2, sp, 4 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d9 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d9 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r8 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 84 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; sext32t64 d2, r1 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; slli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d2 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d2 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d9, sp, 3 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 4 }

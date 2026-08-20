@@ -90,8 +90,8 @@ define i64 @test_dr64_caller_saved_across_call(i64 %a, i64 %b) nounwind {
 ; CHECK-NEXT:    { nop; or64 d8, d0, d0; or64 d9, d1, d1 }
 ; CHECK-NEXT:    { nop; jal lr, clobber_dr64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; add64 d1, d8, d9 }
-; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d8, d9 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d9, sp, 1 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 2 }
@@ -240,9 +240,9 @@ define i64 @test_both_banks_clobbered(i32 %a, i64 %b) nounwind {
 ; CHECK-NEXT:    { nop; jal lr, clobber_all }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 1 }
 ; CHECK-NEXT:    { nop; ld32 lr, sp, 4 }

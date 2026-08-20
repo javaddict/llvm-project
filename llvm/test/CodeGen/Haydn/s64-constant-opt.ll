@@ -81,8 +81,8 @@ define i64 @pos_lo31_set() {
 ; CHECK-NEXT:    { nop; lui r1, 2048 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
-; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

@@ -259,7 +259,7 @@ define i64 @test_vaarg_types(i32 %count, ...) {
 ; CHECK-NEXT:    { ld32 r4, r1, 3; ld64 d0, r4, 0 }
 ; CHECK-NEXT:    { nop; movt32 r6, r8, r12 }
 ; CHECK-NEXT:    { nop; st32 r6, r1, 0 }
-; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; movt32 r7, r5, r12 }
 ; CHECK-NEXT:    { nop; ld32 r5, r1, 1 }
 ; CHECK-NEXT:    { st32 r7, r1, 4; ld32 r6, r1, 0 }
@@ -272,7 +272,7 @@ define i64 @test_vaarg_types(i32 %count, ...) {
 ; CHECK-NEXT:    { nop; movt32 r7, r4, r3 }
 ; CHECK-NEXT:    { nop; sext32t64 d2, r5 }
 ; CHECK-NEXT:    { nop; st32 r6, r1, 0 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d2 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d2 }
 ; CHECK-NEXT:    { nop; st32 r7, r1, 3 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }

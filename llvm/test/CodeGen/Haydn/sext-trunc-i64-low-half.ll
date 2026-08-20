@@ -39,9 +39,9 @@ define dso_local i64 @sext_trunc_low_half() {
 ; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(v4) }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 32 }
 ; CHECK-NEXT:    { nop; ld64 d1, r1, 0 }
-; CHECK-NEXT:    { nop; sll64 d0, d0, r2 }
-; CHECK-NEXT:    { nop; sra64 d0, d0, r2 }
-; CHECK-NEXT:    { nop; or64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; sll64 d0, d0, r2 }
+; CHECK-NEXT:    { nop; nop; sra64 d0, d0, r2 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

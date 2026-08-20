@@ -18,7 +18,7 @@ define i64 @merge_i32_to_i64(i32 %lo, i32 %hi) {
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32; sll64 d0, d0, r2 }
-; CHECK-NEXT:    { nop; or64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -53,7 +53,7 @@ define i32 @unmerge_high_i32(i64 %a) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 32 }
-; CHECK-NEXT:    { nop; srl64 d0, d0, r1 }
+; CHECK-NEXT:    { nop; nop; srl64 d0, d0, r1 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -75,7 +75,7 @@ define i64 @copy_gpr_to_dr64(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32; sll64 d0, d0, r2 }
-; CHECK-NEXT:    { nop; or64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -112,8 +112,8 @@ define i64 @merge_chain(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r2; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; slli64 d1, d1, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

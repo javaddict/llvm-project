@@ -34,11 +34,11 @@ define i64 @caller_5th_i64_spills(i64 %x) {
 ; CHECK-NEXT:    { nop; sext32t64 d3, r1; slli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; slli64 d3, d3, 32; srli64 d4, d4, 32 }
 ; CHECK-NEXT:    { nop; srli64 d1, d1, 32; srli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; srli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; or64 d0, d4, d4 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d4, d4 }
 ; CHECK-NEXT:    { nop; jal lr, sink_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

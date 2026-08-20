@@ -11,7 +11,7 @@ define i64 @add64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -26,7 +26,7 @@ define i64 @sub64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; sub64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; sub64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -50,14 +50,14 @@ define i64 @mul64(i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; slli64 d1, d1, 32; sext32t64 d3, r1 }
 ; CHECK-NEXT:    { nop; srli64 d2, d2, 32; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; slli64 d3, d3, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; mul64.ulul d2, d2, d1 }
 ; CHECK-NEXT:    { nop; mul64.ulul d3, d0, d3 }
 ; CHECK-NEXT:    { nop; mul64.ulul d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 32 }
-; CHECK-NEXT:    { nop; add64 d2, d3, d2 }
-; CHECK-NEXT:    { nop; sll64 d1, d2, r1 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d2, d3, d2 }
+; CHECK-NEXT:    { nop; nop; sll64 d1, d2, r1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -75,9 +75,9 @@ define i64 @add64_imm(i64 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -92,8 +92,8 @@ define i64 @arith64_chain(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
-; CHECK-NEXT:    { nop; sub64 d0, d0, d2 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; sub64 d0, d0, d2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

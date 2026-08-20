@@ -16,10 +16,10 @@ define i64 @complex_s64_expr(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; add64 d3, d0, d1 }
-; CHECK-NEXT:    { nop; sub64 d2, d3, d2 }
-; CHECK-NEXT:    { nop; and64 d0, d2, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d3, d0, d1 }
+; CHECK-NEXT:    { nop; nop; sub64 d2, d3, d2 }
+; CHECK-NEXT:    { nop; nop; and64 d0, d2, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -56,7 +56,7 @@ define i64 @load_arith_s64(ptr %p, ptr %q) {
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -74,7 +74,7 @@ define void @arith_store_s64(ptr %p, i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -151,7 +151,7 @@ define i64 @select_arith_s64(i64 %a, i64 %b, i64 %c, i64 %d) {
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -199,8 +199,8 @@ define i64 @extend_arith_s64(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r2; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; slli64 d1, d1, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

@@ -204,7 +204,7 @@ define i64 @vararg_mixed_types(i32 %count, ...) {
 ; CHECK-NEXT:    { nop; movt32 r6, r12, r2 }
 ; CHECK-NEXT:    { nop; movt32 r7, r5, r2 }
 ; CHECK-NEXT:    { nop; st32 r6, r1, 0 }
-; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; st32 r7, r1, 4 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 72 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

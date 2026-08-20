@@ -54,17 +54,17 @@ define i64 @phi_i64_loop(i32 %n, i64 %init) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; sext32t64 d2, r2 }
-; CHECK-NEXT:    { nop; slli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:  .LBB1_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
-; CHECK-NEXT:    { nop; or64 d1, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d1, d0, d0 }
 ; CHECK-NEXT:    { nop; slt32 r3, r2, r1; add64 d0, d1, d2 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB1_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { nop; or64 d0, d1, d1 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d1, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -209,15 +209,15 @@ define i64 @phi_mixed_types(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r2 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:  .LBB5_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    { nop; sext32t64 d2, r2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
 ; CHECK-NEXT:    { nop; or64 d0, d1, d1; slt32 r3, r2, r1 }
-; CHECK-NEXT:    { nop; add64 d1, d0, d2 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d0, d2 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB5_1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

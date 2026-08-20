@@ -32,7 +32,7 @@ define void @dual_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r6, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
@@ -72,14 +72,14 @@ define void @triple_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-NEXT:    { nop; ld32 r3, r5, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r4, r2, 4 }
 ; CHECK-NEXT:    { nop; ld64 d2, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add64 d0, d0, d2 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d2 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r4, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }

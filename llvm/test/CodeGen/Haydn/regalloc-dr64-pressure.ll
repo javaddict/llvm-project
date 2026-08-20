@@ -76,31 +76,31 @@ define i64 @test_dr64_spill_18_live(i64 %a0, i64 %a1, i64 %a2, i64 %a3) nounwind
 ; CHECK-NEXT:    { nop; slli64 d0, d0, 32; or64 d9, d1, d1 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32; or64 d10, d2, d2 }
 ; CHECK-NEXT:    { nop; add64 d12, d9, d0; or64 d11, d3, d3 }
-; CHECK-NEXT:    { nop; or64 d0, d12, d12 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d12, d12 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
-; CHECK-NEXT:    { nop; add64 d0, d9, d8 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d9, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; add64 d0, d10, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d11, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d9, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d10, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d11, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d9, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d10, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d11, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d9, d0 }
-; CHECK-NEXT:    { nop; add64 d0, d10, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d10, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d11, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d9, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d10, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d11, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d9, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d10, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d11, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d9, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d10, d0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 4760 }
-; CHECK-NEXT:    { nop; add64 d0, d11, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d11, d0 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
-; CHECK-NEXT:    { nop; add64 d0, d8, d0 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d12 }
-; CHECK-NEXT:    { nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d8, d0 }
+; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d12 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d12, sp, 1 }
 ; CHECK-NEXT:    { nop; ld64 d11, sp, 2 }
@@ -176,44 +176,44 @@ define i64 @test_all_dr64_callee_saved(i64 %a, i64 %b, i64 %c, i64 %d) nounwind 
 ; CHECK-NEXT:    { nop; st64 d9, r1, 5 }
 ; CHECK-NEXT:    { nop; st64 d8, r1, 6 }
 ; CHECK-NEXT:    { nop; or64 d9, d1, d1; or64 d10, d2, d2 }
-; CHECK-NEXT:    { nop; or64 d11, d3, d3 }
+; CHECK-NEXT:    { nop; nop; or64 d11, d3, d3 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
+; CHECK-NEXT:    { nop; nop; or64 d8, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d9, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d10, d10 }
+; CHECK-NEXT:    { nop; nop; or64 d9, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d10, d10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d11, d11 }
+; CHECK-NEXT:    { nop; nop; or64 d10, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d11, d11 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d11, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
+; CHECK-NEXT:    { nop; nop; or64 d11, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d12, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
+; CHECK-NEXT:    { nop; nop; or64 d12, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d13, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d10, d10 }
+; CHECK-NEXT:    { nop; nop; or64 d13, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d10, d10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d14, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d11, d11 }
+; CHECK-NEXT:    { nop; nop; or64 d14, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d11, d11 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; add64 d1, d8, d9 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d8, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d10 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d11 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d12 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d13 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d14 }
-; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d10 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d11 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d12 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d13 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d14 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d14, sp, 1 }
 ; CHECK-NEXT:    { nop; ld64 d13, sp, 2 }
@@ -293,56 +293,56 @@ define i64 @test_dr64_interleaved_calls() nounwind {
 ; CHECK-NEXT:    // 8-byte Spill
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; or64 d0, d11, d11 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d11, d11 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d11, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d13, d13 }
+; CHECK-NEXT:    { nop; nop; or64 d11, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d13, d13 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d13, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d15, d15 }
+; CHECK-NEXT:    { nop; nop; or64 d13, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d15, d15 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d15, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
+; CHECK-NEXT:    { nop; nop; or64 d15, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d10, d10 }
+; CHECK-NEXT:    { nop; nop; or64 d8, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d10, d10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d14, d14 }
+; CHECK-NEXT:    { nop; nop; or64 d10, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d14, d14 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d14, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d12, d12 }
+; CHECK-NEXT:    { nop; nop; or64 d14, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d12, d12 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
-; CHECK-NEXT:    { nop; or64 d12, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
+; CHECK-NEXT:    { nop; nop; or64 d12, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; or64 d9, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d9, d0, d0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
-; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i64 }
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add64 d1, d1, d11 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d13 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d15 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d8 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d10 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d14 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d12 }
-; CHECK-NEXT:    { nop; add64 d1, d1, d9 }
-; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d11 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d13 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d15 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d8 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d10 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d14 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d12 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d1, d9 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d15, sp, 2 }
 ; CHECK-NEXT:    { nop; ld64 d14, sp, 3 }

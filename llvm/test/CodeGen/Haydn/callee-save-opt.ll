@@ -148,17 +148,17 @@ define i64 @test_dr64_callee_saves(i64 %a, i64 %b, i64 %c) {
 ; CHECK-NEXT:    .cfi_offset d10, -32
 ; CHECK-NEXT:    { nop; or64 d8, d1, d1; or64 d9, d2, d2 }
 ; CHECK-NEXT:    { nop; jal lr, callee_i64 }
-; CHECK-NEXT:    { nop; or64 d10, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d8, d8 }
+; CHECK-NEXT:    { nop; nop; or64 d10, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d8, d8 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, callee_i64 }
-; CHECK-NEXT:    { nop; or64 d8, d0, d0 }
-; CHECK-NEXT:    { nop; or64 d0, d9, d9 }
+; CHECK-NEXT:    { nop; nop; or64 d8, d0, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, callee_i64 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; add64 d1, d10, d8 }
-; CHECK-NEXT:    { nop; add64 d0, d1, d0 }
+; CHECK-NEXT:    { nop; nop; add64 d1, d10, d8 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld64 d10, sp, 1 }
 ; CHECK-NEXT:    { nop; ld64 d9, sp, 2 }

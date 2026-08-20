@@ -257,8 +257,8 @@ define i64 @alloca_i64() nounwind {
 ; CHECK-NEXT:    { nop; addi32 r1, sp, 24 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r3 }
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { nop; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }

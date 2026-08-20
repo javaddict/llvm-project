@@ -286,7 +286,7 @@ define i32 @extract_bits_from_i64(i64 %value) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 16 }
-; CHECK-NEXT:    { nop; srl64 d0, d0, r1 }
+; CHECK-NEXT:    { nop; nop; srl64 d0, d0, r1 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 65535 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -310,21 +310,21 @@ define i64 @insert_bits_into_i64(i64 %value, i32 %new_field) {
 ; CHECK-NEXT:    { nop; st32 r2, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, -1 }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 16 }
 ; CHECK-NEXT:    { nop; ld64 d2, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; sll64 d1, d1, r1 }
+; CHECK-NEXT:    { nop; nop; sll64 d1, d1, r1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, -65536 }
 ; CHECK-NEXT:    { nop; sext32t64 d3, r2; and64 d0, d0, d2 }
-; CHECK-NEXT:    { nop; slli64 d3, d3, 32 }
-; CHECK-NEXT:    { nop; srli64 d3, d3, 32 }
-; CHECK-NEXT:    { nop; and64 d1, d1, d3 }
-; CHECK-NEXT:    { nop; or64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; slli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; nop; and64 d1, d1, d3 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

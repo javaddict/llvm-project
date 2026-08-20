@@ -66,7 +66,7 @@ define double @negd(double noundef %a) {
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; xor64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; xor64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -93,7 +93,7 @@ define double @fabsd_test(double noundef %a) {
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; and64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; nop; and64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
