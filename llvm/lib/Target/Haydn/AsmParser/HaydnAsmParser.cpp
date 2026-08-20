@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnBundle.h"
+#include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCAsmInfo.h"
 #include "MCTargetDesc/HaydnMCChecker.h"
@@ -14,6 +15,7 @@
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "MCTargetDesc/HaydnRelocLayout.h"
 #include "TargetInfo/HaydnTargetInfo.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -501,11 +503,44 @@ private:
 } // end anonymous namespace
 
 /// Generated members (`_E2_`/`_E3_`) and residual FieldSlots (`_S*`) are
-/// not public match results. Do not recover a logical name from a suffix.
+/// not public match results. Do not recover a logical name from a suffix
+/// (AIE MultiSlot alts, AIEMCFormats.h:376-379). Textual mnemonics are
+/// case-insensitive.
 static bool isPrivatePlacementOpcode(StringRef Name) {
-  return Name.contains("_E2_") || Name.contains("_E3_") ||
-         Name.ends_with("_S0") || Name.ends_with("_S1") ||
-         Name.ends_with("_S2");
+  return Name.contains_insensitive("_E2_") ||
+         Name.contains_insensitive("_E3_") ||
+         Name.ends_with_insensitive("_S0") ||
+         Name.ends_with_insensitive("_S1") ||
+         Name.ends_with_insensitive("_S2");
+}
+
+static bool isPrivatePlacementInst(unsigned Opcode, const MCInstrInfo &MII) {
+  if (Opcode == Haydn::NOP)
+    return false;
+  return isPrivatePlacementOpcode(MII.getName(Opcode)) ||
+         haydnFindFormatEMemberByOpcode(Opcode);
+}
+
+/// Composite opcode from generated Mode membership + unit occupancy.
+/// AIE emitBundle takes Format->Opcode from getFormatOrNull / OccupiedSlots
+/// (AIEBundle.h:150-156, AIEBaseAsmParser.h:164-180), not child cardinality.
+/// Extra NOP pads are not occupancy. Count never invents a Format E row:
+/// E2-only stays E2 (or fail); E3-only stays E3 (or fail); mixed Mode-only
+/// fails; both-legal uses first-covering occupancy that also fits generated
+/// EntryCapacity (E2 when it covers and N<=2, else E3).
+static unsigned selectParsedFormatEComposite(ArrayRef<unsigned> RealOpcs,
+                                            const MCInstrInfo &MII) {
+  for (unsigned Opc : RealOpcs) {
+    if (Opc == 0 || Opc == Haydn::NOP)
+      continue;
+    if (isPrivatePlacementInst(Opc, MII))
+      return 0;
+  }
+  // Same first-covering occupancy as standalone MC, including generated
+  // EntryCapacity (AIEBaseAsmParser.h:164-180). Three dual-mode logicals
+  // that cover E2 units must not select the two-entry row and then fail
+  // as "incorrect bundle".
+  return haydnSelectStandaloneFormatEOpcode(RealOpcs);
 }
 
 bool HaydnAsmParser::parseRegister(MCRegister &Reg, SMLoc &StartLoc,
@@ -741,8 +776,8 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     // `$e2; $e1; $e0` / `$e1; $e0`). For N textual entries, entry i names
     // encode-dag position N-1-i: `{ a; b; c }` → e2,e1,e0; `{ a; b }` →
     // e1,e0; `{ a }` is single-entry (encoder/e0 placement, no reverse).
-    // Matched real children (NOP fillers excluded) with their text index.
-    SmallVector<std::pair<MCInst *, unsigned>, 3> RealChildren;
+    // Text children include explicit nop fillers (catalog `{ insn; nop; nop }`).
+    SmallVector<MCInst *, 3> TextChildren;
     unsigned TextSlot = 0;
 
     while (true) {
@@ -754,6 +789,12 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       StringRef Mnemonic = Parser.getTok().getString();
       SMLoc MnemonicLoc = Parser.getTok().getLoc();
       Parser.Lex(); // Eat the mnemonic
+
+      // Refuse generated members / residual FieldSlots before match.
+      // Do not peel `_S*` into a catalog logical (AIEMCFormats.h:376-379).
+      if (isPrivatePlacementOpcode(Mnemonic))
+        return Error(MnemonicLoc,
+                     "assembler matched a private placement opcode");
 
       Operands.push_back(HaydnOperand::CreateToken(Mnemonic, MnemonicLoc));
 
@@ -793,8 +834,7 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
 
       // NOP is emit-time entry padding, not a co-issue resource — but it does
       // hold a textual entry position for the children that follow it.
-      if (Child->getOpcode() != Haydn::NOP)
-        RealChildren.push_back({Child, TextSlot});
+      TextChildren.push_back(Child);
       ++TextSlot;
 
       Operands.clear();
@@ -829,61 +869,97 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     if (Parser.getTok().is(AsmToken::EndOfStatement))
       Parser.Lex();
 
-    // All-NOP text is the product idle cycle. Two entries are E2 {NOP, NOP};
-    // three pad to E3 then the encoder serializes the generated E2 idle
-    // parcel (canonicalFullSlotIdleParcel). Reject only `{ }` — not a cycle.
+    // All-NOP text is the generated E2 idle cycle (NOP in every E2 entry).
+    // Extra textual NOPs are idle fill, not a third entry. Reject `{ }`.
+    const haydn::format_e::FamilyRecords Fam =
+        haydn::format_e::getDefaultFamilyRecords();
     if (TextSlot == 0)
       return Error(NameLoc, "empty bundle");
-    if (TextSlot > 3)
+    if (TextSlot > Fam.E3EntryCapacity)
       return Error(NameLoc, "Format E bundle supports at most three entries");
 
-    // Three text entries (including nop fillers) stay E3. Two entries are
-    // E2 unless a real opcode is generated E3-only — do not pick E2 from
-    // count alone for those logicals.
-    const unsigned NumEntries = TextSlot;
+    // Standalone row from generated membership / unit occupancy, never
+    // text-slot or real-child cardinality. Extra NOP pads hold entry
+    // positions only inside the membership row.
+    SmallVector<const MCInst *, 3> RealPtrs;
+    SmallVector<unsigned, 3> RealOpcs;
     bool AnyE3Only = false;
-    for (auto [Child, Index] : RealChildren) {
-      (void)Index;
-      if (haydnFormatELogicalIsE3Only(Child->getOpcode()))
-        AnyE3Only = true;
-    }
-    const bool UseE3 = NumEntries == 3 || AnyE3Only;
-    const unsigned CompositeOpc =
-        UseE3 ? Haydn::BUNDLE_E96_THREE_ENTRY : Haydn::BUNDLE_E96_TWO_ENTRY;
-    const unsigned EntryCount = UseE3 ? 3u : 2u;
-    const bool Positional =
-        NumEntries > 1 && NumEntries <= 3;
-
-    SmallVector<MCInst *, 3> Entries(EntryCount, nullptr);
-    for (auto [Child, Index] : RealChildren) {
-      // Public match is already a catalog logical. Refuse generated
-      // members and residual FieldSlots; do not peel `_S*`.
-      if (isPrivatePlacementOpcode(MII.getName(Child->getOpcode())))
+    bool AnyE2Only = false;
+    for (MCInst *Child : TextChildren) {
+      // Refuse generated members / residual FieldSlots before Mode select.
+      // Do not peel `_S*` into a catalog logical to pick E2 vs E3.
+      if (isPrivatePlacementInst(Child->getOpcode(), MII))
         return Error(Child->getLoc(),
                      "assembler matched a private placement opcode");
-      unsigned EntryIdx = 0;
-      if (Positional)
-        EntryIdx = NumEntries - 1 - Index;
+      if (Child->getOpcode() == Haydn::NOP)
+        continue;
+      RealPtrs.push_back(Child);
+      RealOpcs.push_back(Child->getOpcode());
+      if (haydnFormatELogicalIsE3Only(Child->getOpcode()))
+        AnyE3Only = true;
+      if (haydnFormatELogicalIsE2Only(Child->getOpcode()))
+        AnyE2Only = true;
+    }
+    if (AnyE2Only && AnyE3Only)
+      return Error(NameLoc,
+                   "incorrect bundle: mixed E2-only and E3-only logicals");
+    const unsigned CompositeOpc =
+        selectParsedFormatEComposite(RealOpcs, MII);
+    if (!CompositeOpc) {
+      if (AnyE2Only)
+        return Error(NameLoc,
+                     "incorrect bundle: E2-only logical cannot occupy "
+                     "a three-entry row");
+      return Error(NameLoc, "incorrect bundle");
+    }
+    const bool IsE3 = CompositeOpc == Haydn::BUNDLE_E96_THREE_ENTRY;
+    const unsigned EntryCount =
+        IsE3 ? Fam.E3EntryCapacity : Fam.E2EntryCapacity;
+    // Selected row capacity is a bound, not a reason to invent the other
+    // Format E row from child count.
+    if (RealPtrs.size() > EntryCount) {
+      if (AnyE2Only)
+        return Error(NameLoc,
+                     "incorrect bundle: E2-only logical cannot occupy "
+                     "a three-entry row");
+      return Error(NameLoc, "incorrect bundle");
+    }
+
+    // Extra textual NOP pads past the membership row are idle fill, not a
+    // third entry. Drop trailing then leading NOPs until the row fits.
+    while (TextChildren.size() > EntryCount) {
+      if (TextChildren.back()->getOpcode() == Haydn::NOP) {
+        TextChildren.pop_back();
+        continue;
+      }
+      if (TextChildren.front()->getOpcode() == Haydn::NOP) {
+        TextChildren.erase(TextChildren.begin());
+        continue;
+      }
+      return Error(NameLoc, "incorrect bundle");
+    }
+
+    // Parse-time legality (Hexagon MCChecker): unit injectivity, WAW,
+    // SET_HWLOOP sel, RF-port ceilings. Pass the membership row, not the
+    // pre-compress text count, so E2-only `{ insn; nop; nop }` is not
+    // forced onto E3 cover.
+    if (auto Err = haydnCheckParsedBundle(
+            RealPtrs, EntryCount, MII, Parser.getContext().getRegisterInfo()))
+      return Error(NameLoc, "incorrect bundle: " + *Err);
+
+    const unsigned PlaceN = TextChildren.size();
+    const bool Positional = PlaceN > 1;
+    SmallVector<MCInst *, 3> Entries(EntryCount, nullptr);
+    for (unsigned I = 0; I < PlaceN; ++I) {
+      MCInst *Child = TextChildren[I];
+      if (Child->getOpcode() == Haydn::NOP)
+        continue;
+      unsigned EntryIdx = Positional ? PlaceN - 1 - I : 0;
       if (EntryIdx >= EntryCount)
         return Error(Child->getLoc(), "incorrect bundle");
       if (Entries[EntryIdx])
         return Error(Child->getLoc(), "incorrect bundle");
       Entries[EntryIdx] = Child;
-    }
-
-    // Parse-time legality (Hexagon MCChecker): unit injectivity, WAW,
-    // SET_HWLOOP sel, RF-port ceilings. Does not stamp entry identity —
-    // standalone encode still places bare logicals. Compiler composites
-    // never enter this path.
-    {
-      SmallVector<const MCInst *, 3> RealPtrs;
-      for (auto [Child, Index] : RealChildren) {
-        (void)Index;
-        RealPtrs.push_back(Child);
-      }
-      if (auto Err = haydnCheckParsedBundle(
-              RealPtrs, NumEntries, MII, Parser.getContext().getRegisterInfo()))
-        return Error(NameLoc, "incorrect bundle: " + *Err);
     }
 
     MCInst MCB;
@@ -903,7 +979,10 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
     return false;
   }
 
-  // Normal (non-bundle) instruction parsing
+  // Normal (non-bundle) instruction parsing. Refuse private placement
+  // mnemonics before MatchInstructionImpl so `_S*` peel is unreachable.
+  if (isPrivatePlacementOpcode(Name))
+    return Error(NameLoc, "assembler matched a private placement opcode");
   Operands.push_back(HaydnOperand::CreateToken(Name, NameLoc));
 
   while (Parser.getTok().isNot(AsmToken::EndOfStatement)) {
@@ -943,7 +1022,7 @@ bool HaydnAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 
   switch (MatchResult) {
   case Match_Success:
-    if (isPrivatePlacementOpcode(MII.getName(Inst.getOpcode())))
+    if (isPrivatePlacementInst(Inst.getOpcode(), MII))
       return Error(IDLoc, "assembler matched a private placement opcode");
     Inst.setLoc(IDLoc);
     Out.emitInstruction(Inst, getSTI());

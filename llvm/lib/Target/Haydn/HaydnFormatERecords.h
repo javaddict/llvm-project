@@ -84,17 +84,30 @@ enum class BundleFamily : uint8_t {
 
 inline constexpr BundleFamily kAdmittedFamily = BundleFamily::E96;
 
-/// Family-scoped view of the generated Format E tables.
+/// Family-scoped view of the generated Format E tables plus the family's
+/// published slot/coissue facts (Shared Unit names + E2/E3 entry capacity).
 /// Today E96 is the only admitted family; the tables remain the existing
-/// FormatE* globals.
+/// FormatE* globals. Slot law is these generated capacities and units —
+/// not a second itinerary table and not a second family.
+/// Peer: AIE ProcessorItineraries FuncUnits list
+/// (AIE2PGenSchedule.td ProcessorItineraries) + MemInstrItinData
+/// (AIETarget.td:22-47). Overlay is family-handle, not a sibling pipeline.
 struct FamilyRecords {
   BundleFamily Family;
+  unsigned E2EntryCapacity;
+  unsigned E3EntryCapacity;
+  ArrayRef<const char *> SharedUnits;
 };
+
+#define GET_HAYDN_FAMILY_SCHED
+#include "HaydnGenMemoryCycles.inc"
 
 inline FamilyRecords getFamilyRecords(BundleFamily Family) {
   if (Family != BundleFamily::E96)
     llvm_unreachable("Haydn: no admitted bundle-format family besides E96");
-  return FamilyRecords{Family};
+  return FamilyRecords{
+      Family, GeneratedFamilyE2EntryCapacity, GeneratedFamilyE3EntryCapacity,
+      ArrayRef<const char *>(GeneratedFamilySharedUnits)};
 }
 
 inline FamilyRecords getDefaultFamilyRecords() {
@@ -144,7 +157,8 @@ inline bool inverseCoversMember(const FormatEMemberRec &M) {
 /// `_S*` name discovery does not emit typed alternates.
 /// \p StripWide drops reloc `_W` / `_F2_W`. Occupancy tries the compact
 /// catalog span when the unsuffixed `_W` name has no alt row (ADDI32_W →
-/// ADDI32). CSRW_W has no typed CSR reloc and stays FieldSlot Fallback.
+/// ADDI32). CSRW_W peels to CSRW; reloc CSRW_W cutovers to the member and
+/// encode refuses an untyped CSR fixup kind.
 inline std::string peelLogicalOpcodeName(StringRef Name,
                                          bool StripWide = true) {
   StringRef Base = Name;

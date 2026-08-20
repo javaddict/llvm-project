@@ -46,12 +46,26 @@
 
 namespace llvm {
 
+namespace haydn {
+namespace format_e {
+struct FormatEMemberRec;
+} // namespace format_e
+} // namespace haydn
+
 using SlotBits = uint64_t;
+class MCRegisterInfo;
 class MCSlotInfo;
 
 // Standalone parse: generated-member Mode, not textual child count.
 bool haydnFormatELogicalIsE3Only(unsigned Opcode);
 bool haydnFormatELogicalIsE2Only(unsigned Opcode);
+
+/// Standalone braced-bundle composite opcode from generated membership and
+/// unit cover. PacketFormats first-covering is the smaller product row when
+/// both Modes fit (AIE PacketFormats::getFormat, AIEMCFormats.cpp:29-36 /
+/// AIEBaseAsmParser.h:164-180 emitBundle). Extra NOP pads are not occupancy.
+/// Returns 0 when no product row covers.
+unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes);
 
 /// Closed FieldSlot / public-logical → generated member operand keep-map.
 /// Same law for Finalize cutover and MC fill (AIE serializes typed members
@@ -63,6 +77,19 @@ std::optional<SmallVector<unsigned, 4>>
 haydnFormatEKeepOperands(
     const MCInstrDesc &OldDesc, const MCInstrDesc &NewDesc,
     function_ref<bool(unsigned OldI, unsigned NewI)> KindOk = nullptr);
+
+/// Private generated member for opcode \p Opc, or null. NOP multi-maps and
+/// is excluded (product NOP is a completion pad, not a MemberId).
+const haydn::format_e::FormatEMemberRec *
+haydnFindFormatEMemberByOpcode(unsigned Opc);
+
+/// Map a public logical / residual MCInst onto generated member \p Mem
+/// (wire field order + reg classes from tblgen Desc). As-is copy when
+/// the opcode already is the member; otherwise positional promote or the
+/// closed keep-map. Not a register-class bag-sort. False = fail closed.
+bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
+                                const MCInst &Logical, const MCInstrInfo &MII,
+                                const MCRegisterInfo &MRI, MCInst &Out);
 
 //===----------------------------------------------------------------------===//
 // MCSlotKind — wrapper over the tablegen-generated Haydn_SLOT_* enum
@@ -472,9 +499,10 @@ public:
 
   // Alts-derived legal slots (OR of non-zero sparse alt indices).
   // Recognizes logical opcodes with a getAlternateInstsOpcode row. For a
-  // member-opcode-aware query (MC encoder residual on already-_S* children),
-  // use HaydnMCFormatsWithMII (strips `_S<k>` then consults alts / suffix).
-  // MC encode serializes member Desc as-is (AIE).
+  // member-opcode-aware query (post-setDesc Format E member), use
+  // HaydnMCFormatsWithMII (EntryIdx from FormatEMemberRec, AIE
+  // AIEBaseMCFormats.cpp:66-75 slot identity). MC encode serializes member
+  // Desc as-is (AIE).
   SlotBits getLegalSlots(unsigned Opc) const override;
 };
 
@@ -485,31 +513,31 @@ public:
 // Bundle's `pickSlot` calls `getLegalSlots(Opc)` through the
 // `HaydnBaseMCFormats*` interface. The base `HaydnMCFormats::getLegalSlots`
 // only recognizes logical opcodes (getAlternateInstsOpcode rows). For an
-// already-member child (AsmParser `.sN` / post-setDesc), `getLegalSlots`
-// would return 0 without suffix strip.
+// already-member child (post-setDesc), `getLegalSlots` would return 0
+// without member identity.
 //
-// `HaydnMCFormatsWithMII` NORMALIZES a `_S<k>` member opcode to its logical
-// base (via the name suffix) BEFORE consulting alts-derived getLegalSlots.
-// It carries an `MCInstrInfo&` for the name lookup. The HR/scheduler path
-// (no MII) keeps using base `HaydnMCFormats` and never sees member opcodes
-// before setDesc.
+// `HaydnMCFormatsWithMII` uses generated FormatEMemberRec EntryIdx (AIE
+// AIEBaseMCFormats.cpp:66-75), not a FieldSlot name suffix. Residual `_S*`
+// FieldSlots are retired (0 defs). It carries an `MCInstrInfo&` for the
+// name lookup. The HR/scheduler path (no MII) keeps using base
+// `HaydnMCFormats` and never sees member opcodes before setDesc.
 
-// \returns the slot index (0/1/2) encoded in \p Opc's `_S<k>` name
-// suffix, or -1 if \p Opc is not a format-member opcode.
+// \returns the generated Format E EntryIdx for member opcode \p Opc, or -1
+// if \p Opc is not a Format E member.
 int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII);
 
-// `HaydnMCFormats` subclass that normalizes member opcodes before consulting
-// alts-derived getLegalSlots. Constructed by the MC encoder (holds MCInstrInfo).
-// The HR/scheduler path keeps using the base `HaydnMCFormats` (logical-only).
+// `HaydnMCFormats` subclass that maps generated members to their EntryIdx
+// before consulting alts-derived getLegalSlots. Constructed by the MC
+// encoder (holds MCInstrInfo). The HR/scheduler path keeps using the base
+// `HaydnMCFormats` (logical-only).
 class HaydnMCFormatsWithMII : public HaydnMCFormats {
   const MCInstrInfo &MII;
 
 public:
   HaydnMCFormatsWithMII(const MCInstrInfo &MII) : MII(MII) {}
 
-  // Member-opcode-aware legal-slot query. Strips the `_S<k>` suffix to
-  // recover the logical base, then queries alts-derived getLegalSlots.
-  // For a logical opcode this is identical to the base implementation.
+  // Member-opcode-aware legal-slot query. Generated members occupy
+  // EntryIdx; logicals use alts-derived getLegalSlots.
   SlotBits getLegalSlots(unsigned Opc) const override;
 };
 

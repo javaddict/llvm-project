@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnInstPrinter.h"
-#include "HaydnFormatERecords.h"
 #include "HaydnMCTargetDesc.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCExpr.h"
@@ -33,12 +32,12 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
                                  StringRef Annot, const MCSubtargetInfo &STI,
                                  raw_ostream &O) {
   // VLIW / Format E parcels: high-entry-first text
-  // `{ e2; e1; e0 }` / `{ e1; e0 }` (CB-142 / #10). Product disasm emits
+  // `{ e2; e1; e0 }` / `{ e1; e0 }`. Product disasm emits
   // BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY of logical children (public
   // mnemonics, no private member suffix). Generic TargetOpcode::BUNDLE is a
-  // fallback for non-product composite roots. Print children via isInst
-  // operands — do not rely on generated AsmWriter for multi-entry composites
-  // (avoids empty / <unknown>-adjacent dumps).
+  // non-product composite root (print its isInst children; do not invent a
+  // row from child count). Print children via isInst operands — do not rely
+  // on generated AsmWriter for multi-entry composites.
   const unsigned Opc = MI->getOpcode();
   if (Opc == Haydn::BUNDLE || Opc == Haydn::BUNDLE_E96_TWO_ENTRY ||
       Opc == Haydn::BUNDLE_E96_THREE_ENTRY) {
@@ -48,37 +47,30 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
       if (Op.isInst() && Op.getInst())
         Children.push_back(Op.getInst());
     }
-    if (Children.empty()) {
-      // Composite with no children: still emit a braced nop so the line is
-      // never `<unknown>` / empty for a successfully decoded parcel.
+    // AIE AIECommonInstPrinter.cpp:43-54 prints every composite isInst slot.
+    // Haydn overlay: slot count comes from the stamped composite opcode
+    // (BUNDLE_E96_TWO_ENTRY / THREE_ENTRY), not child cardinality. Missing
+    // children of a stamped row print as nop (AIE empty-slot NOP). Do not
+    // drop high-entry NOPs to recover a two-member face.
+    unsigned SlotN = 0;
+    if (Opc == Haydn::BUNDLE_E96_TWO_ENTRY)
+      SlotN = 2;
+    else if (Opc == Haydn::BUNDLE_E96_THREE_ENTRY)
+      SlotN = 3;
+    const unsigned PrintN = SlotN ? SlotN : Children.size();
+    if (PrintN == 0) {
       O << "\t{ nop }";
       printAnnotation(O, Annot);
       return;
     }
-        // Drop high-entry architectural NOP pads from the print face only when
-    // at least two real members remain. Dual single-unit packs commit as E3
-    // (unit cover) with a high-entry NOP pad for encode; the historical
-    // two-member brace face stays stable for dumps/FileCheck. Singleton E2
-    // size==2 `{ nop; real }` is preserved. Encode remains full-slot.
-    auto isPrintNop = [&](const MCInst *C) {
-      if (!C)
-        return true;
-      const unsigned CO = C->getOpcode();
-      if (CO == Haydn::NOP)
-        return true;
-      return StringRef(haydn::format_e::peelLogicalOpcodeName(MII.getName(CO)))
-          .equals_insensitive("NOP");
-    };
-    while (Children.size() > 2 && isPrintNop(Children.back()))
-      Children.pop_back();
-// High entry first (`{ e2; e1; e0 }` / `{ e1; e0 }`), matching the
-    // BUNDLE_E96_* AsmStrings and the ISA bundle spelling (CB-142 / #10).
-    // Children[] is still encode-order e0..eN from the composite operand dag.
     O << "\t{ ";
-    for (unsigned I = Children.size(); I-- > 0;) {
-      if (I + 1 != Children.size())
+    for (unsigned I = PrintN; I-- > 0;) {
+      if (I + 1 != PrintN)
         O << "; ";
-      printSingleInst(Children[I], Address, STI, O);
+      if (I < Children.size())
+        printSingleInst(Children[I], Address, STI, O);
+      else
+        O << "nop";
     }
     O << " }";
     printAnnotation(O, Annot);
@@ -163,8 +155,8 @@ void HaydnInstPrinter::printRegName(raw_ostream &O, MCRegister Reg) {
   // range. Hostile decode or a straddle-filled MCInst can carry NoRegister /
   // an out-of-range id; never abort objdump — print a placeholder instead.
   // The bound is the GENERATED register count — a literal here silently
-  // banished every register whose enum value moved when AR2/AR3 came back
-  // (CB-149): lr printed as <?> in every epilogue.
+  // banished every register whose enum value moved when AR2/AR3 came back:
+  // lr printed as <?> in every epilogue.
   unsigned RegNo = Reg.id();
   if (RegNo == 0 || RegNo >= Haydn::NUM_TARGET_REGS) {
     O << "<?>";

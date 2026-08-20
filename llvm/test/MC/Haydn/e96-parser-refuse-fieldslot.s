@@ -8,12 +8,12 @@
 # catalog logicals; do not recover a logical name from an `_S*` suffix.
 
 .ifdef BUNDLE
-# BUNDLE: error: failed to match instruction in bundle
+# BUNDLE: error: assembler matched a private placement opcode
 { nop_s0 }
 .endif
 
 .ifdef BARE
-# BARE: error: invalid instruction mnemonic
+# BARE: error: assembler matched a private placement opcode
 nop_s0
 x2slt32_s1 d0, d1
 .endif

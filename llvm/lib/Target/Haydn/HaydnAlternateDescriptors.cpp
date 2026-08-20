@@ -81,38 +81,27 @@ ModeOnly classifyModeOnlyLogical(StringRef Logical) {
 
 /// Mode-only class of any residual/member/reloc spelling of \p OpcodeName.
 ///
-/// Two peel modes, one rule per consumer surface:
-///  - Coissue predicates pass \p StripWideForCoissue = true: a reloc `_W`
-///    spelling (ADDI32_W, SET_HWLOOP_F2_W) inherits its base golden
-///    logical's Mode class, because the base's catalog rows are the
-///    placement truth — ADDI32_W is E2-only exactly as ADDI32 is, so the
-///    3-wide-E3 coissue rejection keeps holding for the reloc form.
-///  - The residual mask passes false: `_W` identities are residual
-///    FieldSlot rows with no Format E span of their own (span lookup in
-///    enumerateFormatEMemberAlts also peels with StripWide=false), so they
-///    keep the product frontier there.
-ModeOnly classifyModeOnlySpelling(StringRef OpcodeName,
-                                  bool StripWideForCoissue) {
+/// Reloc `_W` spellings inherit the compact catalog logical's Mode because
+/// MemberId occupancy is those generated rows (ADDI32_W is E2-only exactly
+/// as ADDI32 is). `_F2_W` peels to `_F2`, not the bare SET_HWLOOP name.
+ModeOnly classifyModeOnlySpelling(StringRef OpcodeName) {
   return classifyModeOnlyLogical(haydn::format_e::peelLogicalOpcodeName(
-      OpcodeName, /*StripWide=*/StripWideForCoissue));
+      OpcodeName, /*StripWide=*/true));
 }
 
 } // namespace
 
 bool llvm::isFormatEE2OnlyOpcodeName(StringRef OpcodeName) {
-  return classifyModeOnlySpelling(OpcodeName, /*StripWideForCoissue=*/true) ==
-         ModeOnly::E2Only;
+  return classifyModeOnlySpelling(OpcodeName) == ModeOnly::E2Only;
 }
 
 bool llvm::isFormatEE3OnlyOpcodeName(StringRef OpcodeName) {
-  return classifyModeOnlySpelling(OpcodeName, /*StripWideForCoissue=*/true) ==
-         ModeOnly::E3Only;
+  return classifyModeOnlySpelling(OpcodeName) == ModeOnly::E3Only;
 }
 
 uint64_t llvm::residualAltCompatibleFormatMask(unsigned LogicalOpc,
                                                unsigned AltIndex) {
-  switch (classifyModeOnlySpelling(haydnOpcodeName(LogicalOpc),
-                                   /*StripWideForCoissue=*/false)) {
+  switch (classifyModeOnlySpelling(haydnOpcodeName(LogicalOpc))) {
   case ModeOnly::E2Only:
     // Golden E2-only logical (ADDI32, ...): residual occupancy above the E2
     // row's encoded entry count has no member; drop it and stamp the E2 row.

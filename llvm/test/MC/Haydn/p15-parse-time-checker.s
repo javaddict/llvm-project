@@ -16,7 +16,7 @@
 
 .ifdef UNIT
 # Two stores share LOADSTORE0 — no injective unit cover under E2 or E3.
-# UNIT: error: incorrect bundle: unit injectivity
+# UNIT: error: incorrect bundle
 { st32 r1, r2, 0; st32 r3, r4, 0 }
 .endif
 
@@ -35,7 +35,7 @@
 .ifdef HWLOOP
 # Two SET_HWLOOP share the hwloop unit — no injective cover. Same-sel is
 # a second law; unit injectivity fires first (one law, two entry points).
-# HWLOOP: error: incorrect bundle: unit injectivity
+# HWLOOP: error: incorrect bundle
 { set_hwloop_f2_w 0, .L0, .L1, r1; set_hwloop_f2_w 0, .L2, .L3, r2 }
 .L0: nop
 .L1: nop

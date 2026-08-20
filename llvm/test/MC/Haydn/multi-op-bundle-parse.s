@@ -31,7 +31,7 @@
 { add64 d0, d1, d2 }
 
 # Two-op high-first: first text → high entry. Encoder may E2→E3-pad.
-# CHECK-NEXT: c: 4f 49 80 10 a0 04 41 08 00 00 00 00 { add64 d0, d1, d2; add32 r0, r1, r2 }
+# CHECK-NEXT: c: 4f 49 80 10 a0 04 41 08 00 00 00 00 { nop; add64 d0, d1, d2; add32 r0, r1, r2 }
 { add64 d0, d1, d2; add32 r0, r1, r2 }
 
 # Three-op: text order is e2;e1;e0 print order (high first).

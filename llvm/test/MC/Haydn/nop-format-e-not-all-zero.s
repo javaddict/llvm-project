@@ -19,9 +19,9 @@
 # CHECK: { nop } // encoding: [0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 # CHECK-NOT: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 # CHECK: { nop; nop } // encoding: [0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
-# CHECK: { xor32 r0, r0, r0; nop; nop } // encoding: [0x{{[1-9a-f][0-9a-f]|[0-9a-f][1-9a-f]}},{{.*}}]
-# OBJ: 07 00 00 00 00 00 00 00 00 00 00 00 {{.*}}{ nop }
-# OBJ: 07 00 00 00 00 00 00 00 00 00 00 00 {{.*}}{ nop
+# CHECK: { xor32 r0, r0, r0; nop } // encoding: [0x{{[1-9a-f][0-9a-f]|[0-9a-f][1-9a-f]}},{{.*}}]
+# OBJ: 07 00 00 00 00 00 00 00 00 00 00 00 {{.*}}{ nop; nop }
+# OBJ: 07 00 00 00 00 00 00 00 00 00 00 00 {{.*}}{ nop; nop }
 # TD-NOT: def NOP : HaydnInst16
 # TD-NOT: Inst{15 - 0} = 0x0000
 

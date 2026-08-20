@@ -1,0 +1,94 @@
+# RUN: split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/extra-op.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=EXTRA
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/st64.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=ST64
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/move32-3op.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=MOVE32
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/typed.mir -o %t.typed.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.typed.o | FileCheck %s --check-prefix=TYPED
+# REQUIRES: haydn-registered-target
+#
+# REGRESSION: skip-Finalize compiler BUNDLE logicals must not enter MC
+# fillFormatEMemberInst DFS / bag-sort. Compiler composites serialize typed
+# (row, entry, member) as-is. Standalone DFS is as-is / positional / Imm-0
+# hole drop only (hand-asm `{ add32; xor32 }` and `{ move32 r0, r1 }` still
+# place). Dual ADD32+XOR32 is E2 e0-only — skip-Finalize cannot rebind.
+# Store-last ST64 is LOADSTORE0 e0-only — skip-Finalize cannot rebind onto
+# membership e2. Unbundled MOVE32 3-op (rd, rs1, rs2) must not reconstruct
+# the 2-op member via trailing-use drop — that keep-map is Finalize only.
+# typed: generated MOVE32_E2_E0_ALU0_R already wire-shaped.
+#
+# EXTRA: is not a generated Format E member{{.*}}refuse skip-Finalize
+# ST64: is not a generated Format E member{{.*}}refuse skip-Finalize
+# MOVE32: one-parcel placement failed{{.*}}refuse sequential E2 singleton split
+# TYPED-LABEL: <skip_finalize_move32_memberid>:
+# TYPED: move32
+# TYPED: jalr
+# TYPED-NOT: <unknown>
+
+#--- extra-op.mir
+--- |
+  define void @skip_finalize_dual_logical_dfs() { ret void }
+...
+---
+name:            skip_finalize_dual_logical_dfs
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+#--- st64.mir
+--- |
+  define void @skip_finalize_store_last_st64() { ret void }
+...
+---
+name:            skip_finalize_store_last_st64
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $r3, $r4, $r15
+    BUNDLE 1, 0, implicit-def $d1, implicit-def $d2, implicit-def dead $sfr, implicit $d1, implicit $r3, implicit $d0, implicit $r4 {
+      $d1 = SRLI64 $d1, 1, implicit-def dead $sfr
+      $d2 = SEXT_GPR32_TO_DR64 $r3, implicit-def dead $sfr
+      ST64 $d0, $r4, 16, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+#--- move32-3op.mir
+--- |
+  define void @skip_finalize_move32_trailing_rs2() { ret void }
+...
+---
+name:            skip_finalize_move32_trailing_rs2
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    $r2 = MOVE32 $r0, $r1, implicit-def dead $sfr
+    RET implicit $r15
+
+#--- typed.mir
+--- |
+  define void @skip_finalize_move32_memberid() { ret void }
+...
+---
+name:            skip_finalize_move32_memberid
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0 {
+      $r2 = MOVE32_E2_E0_ALU0_R $r0, implicit-def dead $sfr
+    }
+    RET implicit $r15

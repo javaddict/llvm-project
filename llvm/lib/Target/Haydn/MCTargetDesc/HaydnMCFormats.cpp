@@ -30,6 +30,8 @@
 
 #define GET_INSTRINFO_ENUM
 #include "HaydnGenInstrInfo.inc"
+#define GET_REGINFO_ENUM
+#include "HaydnGenRegisterInfo.inc"
 
 #include "HaydnFormat.h"
 #include "HaydnFormatERecords.h"
@@ -41,6 +43,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdint>
 #include <iterator>
@@ -70,9 +73,9 @@ extern const char HaydnInstrNameData[];
 // getAlternateInstsOpcode is occupancy + Format E members.
 
 // GET_FORMATS_PACKETS_TABLE is CONSUMED. Product composites are Format E
-// (BUNDLE_E96_*). Residual `_S*` members still contribute slot ConflictBits
-// via their InstFormat Slot tags. getPacketFormats/getIsFormatAvailable return
-// the GENERATED tables only.
+// (BUNDLE_E96_*). PacketFormats / FormatAvailable are the generated identity;
+// getPacketFormats/getIsFormatAvailable return those tables only. Residual
+// FieldSlot names are not a second slot map (AIE AIEMCFormats.cpp:61-67).
 #define GET_FORMATS_PACKETS_TABLE
 #define GET_FORMATS_SLOTS_DEFS
 #define GET_FORMATS_SLOTINFOS_MAPPING
@@ -89,6 +92,14 @@ namespace {
 
 StringRef occupancyOpcodeName(unsigned Opcode) {
   return StringRef(&HaydnInstrNameData[HaydnInstrNameIndices[Opcode]]);
+}
+
+/// Residual FieldSlot names are retired. Occupancy must not recover a
+/// logical by stripping `_S0/_S1/_S2` (AIE uses generated MultiSlot alts,
+/// AIEMCFormats.h:376-379 — no suffix table).
+bool isResidualFieldSlotName(StringRef Name) {
+  return Name.ends_with("_S0") || Name.ends_with("_S1") ||
+         Name.ends_with("_S2");
 }
 
 /// True when register-operand classes match. Immediates compare kind only
@@ -159,27 +170,49 @@ unsigned formatENopMemberAtIndex(unsigned Index) {
 /// matches the logical (NumDefs + operands). One logical can have two golden
 /// shapes at the same EntryIdx (SLT64 unary dest+src vs SFR-only 2-src;
 /// X2SLT32 is the SFR-only shape). First-match and "smallest OperandCount"
-/// pick the wrong one. No match → 0 so occupancy keeps the FieldSlot Fallback.
-/// EntryIdx is not a new SLOT bit — occupancy stays the residual mask.
+/// pick the wrong one. No match → 0 (fail closed). Residual FieldSlot
+/// names are not occupancy identity — do not peel `_S*`.
 /// Reloc `_W` logicals share the compact catalog span (ADDI32_W → ADDI32).
 unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
-  std::string Log = haydn::format_e::peelLogicalOpcodeName(
-      occupancyOpcodeName(LogicalOpc), /*StripWide=*/false);
-  if (StringRef(Log).equals_insensitive("NOP"))
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  if (LogicalOpc >= MII.getNumOpcodes())
+    return 0;
+  const StringRef Raw = occupancyOpcodeName(LogicalOpc);
+  if (isResidualFieldSlotName(Raw))
+    return 0;
+  // Exact catalog name, then reloc `_W` compact span. Do not recover a
+  // logical by stripping `_S*` (AIE MultiSlot alts, AIEMCFormats.h:376-379).
+  auto spanFor = [](StringRef Name) -> const haydn::format_e::FormatEAltSpan * {
+    std::string Key = Name.str();
+    if (const haydn::format_e::FormatEAltSpan *S =
+            haydn::format_e::findAltSpan(Key.c_str()))
+      return S;
+    if (Name.ends_with("_W")) {
+      Key = Name.drop_back(2).str();
+      return haydn::format_e::findAltSpan(Key.c_str());
+    }
+    return nullptr;
+  };
+  if (Raw.equals_insensitive("NOP"))
     return formatENopMemberAtIndex(Index);
-  const haydn::format_e::FormatEAltSpan *Span =
-      haydn::format_e::findAltSpan(Log.c_str());
-  if (!Span || Span->Count == 0) {
-    Log = haydn::format_e::peelLogicalOpcodeName(
-        occupancyOpcodeName(LogicalOpc), /*StripWide=*/true);
+  const haydn::format_e::FormatEAltSpan *Span = spanFor(Raw);
+  std::string Log = Raw.str();
+  if (!Span) {
+    // Public-logical aliases (LD32 → S_LW_WITH_IMM) share a catalog span.
+    // peelLogicalOpcodeName is alias recovery only; FieldSlots already
+    // returned 0 above.
+    Log = haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/false);
     if (StringRef(Log).equals_insensitive("NOP"))
       return formatENopMemberAtIndex(Index);
     Span = haydn::format_e::findAltSpan(Log.c_str());
+    if (!Span || Span->Count == 0) {
+      Log = haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/true);
+      if (StringRef(Log).equals_insensitive("NOP"))
+        return formatENopMemberAtIndex(Index);
+      Span = haydn::format_e::findAltSpan(Log.c_str());
+    }
   }
   if (!Span || Span->Count == 0)
-    return 0;
-  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
-  if (LogicalOpc >= MII.getNumOpcodes())
     return 0;
   const MCInstrDesc &LogDesc = MII.get(LogicalOpc);
   unsigned ExactE2 = 0;
@@ -242,9 +275,10 @@ unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
         DropE3 = Opc;
     }
   }
-  // E2/E3 is a bundle-level fact (child count). Occupancy defaults to E2
-  // when both Modes match the logical shape; E3-only entries (ALU32 e1/e2)
-  // keep the E3 member. Finalize rebinds to the committed row.
+  // Occupancy is residual slot legality, not row identity. Prefer the E2
+  // member when both Modes match the logical shape so a two-entry probe is
+  // not silently E3-stamped; E3-only entries keep the E3 member. Finalize
+  // rebinds to the committed row.
   if (ExactE2)
     return ExactE2;
   if (ExactE3)
@@ -271,21 +305,13 @@ const std::vector<unsigned> *cachedMemberAlts(unsigned Opcode) {
           continue;
         if (unsigned Mem = formatEMemberAtResidualIndex(Row.LogicalOpc, Slot))
           Cache[I][Slot] = Mem;
-        else if (Row.Fallback[Slot] != 0)
-          Cache[I][Slot] = Row.Fallback[Slot];
-        else {
-          // WFI: Mask bit 0 + Fallback {0,0,0}. A miss used to cache 0
-          // (silent skip). Fail closed — HINT members must fill the hole.
-          // Other retired families still skip (mask bit, no member).
-          const std::string Log = haydn::format_e::peelLogicalOpcodeName(
-              occupancyOpcodeName(Row.LogicalOpc));
-          if (StringRef(Log).starts_with_insensitive("WFI"))
-            report_fatal_error(
-                "Haydn: WFI occupancy hole: mask bit " + Twine(Slot) +
-                    " has no Format E HINT member and zero fallback",
-                /*GenCrashDiag=*/false);
+        else if (Row.LogicalOpc == Haydn::WFI)
+          report_fatal_error(
+              "Haydn: WFI occupancy hole: mask bit " + Twine(Slot) +
+                  " has no Format E HINT member",
+              /*GenCrashDiag=*/false);
+        else
           Cache[I][Slot] = 0;
-        }
       }
     }
   });
@@ -317,10 +343,24 @@ const std::vector<unsigned> *cachedFormatEOnlyAlts(unsigned Opcode) {
 }
 
 bool formatELogicalIsModeOnly(unsigned Opcode, uint8_t WantMode) {
-  const std::string Log = haydn::format_e::peelLogicalOpcodeName(
-      occupancyOpcodeName(Opcode));
+  const StringRef Raw = occupancyOpcodeName(Opcode);
+  if (isResidualFieldSlotName(Raw))
+    return false;
   const haydn::format_e::FormatEAltSpan *Span =
-      haydn::format_e::findAltSpan(Log.c_str());
+      haydn::format_e::findAltSpan(Raw.str().c_str());
+  if (!Span || Span->Count == 0) {
+    // Reloc `_W` compact span, then public-logical aliases. Residual `_S*`
+    // already returned false — this is catalog occupancy, not FieldSlot
+    // row recovery and not child-count identity.
+    std::string Log = Raw.str();
+    if (Raw.ends_with("_W"))
+      Log = Raw.drop_back(2).str();
+    Span = haydn::format_e::findAltSpan(Log.c_str());
+    if (!Span || Span->Count == 0) {
+      Log = haydn::format_e::peelLogicalOpcodeName(Raw);
+      Span = haydn::format_e::findAltSpan(Log.c_str());
+    }
+  }
   if (!Span || Span->Count == 0)
     return false;
   bool SawWant = false;
@@ -367,6 +407,65 @@ bool haydnFormatELogicalIsE3Only(unsigned Opcode) {
 
 bool haydnFormatELogicalIsE2Only(unsigned Opcode) {
   return formatELogicalIsModeOnly(Opcode, /*WantMode=*/0);
+}
+
+unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes) {
+  // AIE emitBundle (AIEBaseAsmParser.h:164-180) takes Format->Opcode from
+  // getFormatOrNull / PacketFormats::getFormat first-covering (smallest
+  // row that covers occupancy), not child cardinality. Haydn overlay:
+  // generated Mode-only membership + unit cover + family EntryCapacity.
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  const haydn::format_e::FamilyRecords Fam =
+      haydn::format_e::getDefaultFamilyRecords();
+  SmallVector<std::string, 3> Logs;
+  bool AnyE3Only = false;
+  bool AnyE2Only = false;
+  for (unsigned Opc : LogicalOpcodes) {
+    if (Opc == 0 || Opc == Haydn::NOP)
+      continue;
+    const StringRef Name = MII.getName(Opc);
+    if (isResidualFieldSlotName(Name) || haydnFindFormatEMemberByOpcode(Opc))
+      return 0;
+    // Catalog occupancy name for unit cover. Residual FieldSlot already
+    // returned 0 — this is not `_S*` row recovery and not child count.
+    Logs.emplace_back(haydn::format_e::peelLogicalOpcodeName(Name));
+    if (haydnFormatELogicalIsE3Only(Opc))
+      AnyE3Only = true;
+    if (haydnFormatELogicalIsE2Only(Opc))
+      AnyE2Only = true;
+  }
+  if (AnyE2Only && AnyE3Only)
+    return 0;
+  // N is generated EntryCapacity occupancy, not TWO vs THREE identity.
+  // AnyE3Only below refuses size≤1→E2 for an E3-only logical. When both
+  // Modes cover, PacketFormats first-covering (AIE getFormat) is the
+  // smaller product row.
+  const unsigned N = Logs.size();
+  if (AnyE2Only && N > Fam.E2EntryCapacity)
+    return 0;
+  if (AnyE3Only && N > Fam.E3EntryCapacity)
+    return 0;
+  const bool CoverE2 =
+      haydn::format_e::logicalsHaveUnitCoverForMode(Logs, /*Mode=*/0);
+  const bool CoverE3 =
+      haydn::format_e::logicalsHaveUnitCoverForMode(Logs, /*Mode=*/1);
+  const bool FitsE2 = !AnyE3Only && CoverE2 && N <= Fam.E2EntryCapacity;
+  const bool FitsE3 = !AnyE2Only && CoverE3 && N <= Fam.E3EntryCapacity;
+  if (AnyE3Only) {
+    if (!FitsE3)
+      return 0;
+    return Haydn::BUNDLE_E96_THREE_ENTRY;
+  }
+  if (AnyE2Only) {
+    if (!FitsE2)
+      return 0;
+    return Haydn::BUNDLE_E96_TWO_ENTRY;
+  }
+  if (FitsE2)
+    return Haydn::BUNDLE_E96_TWO_ENTRY;
+  if (FitsE3)
+    return Haydn::BUNDLE_E96_THREE_ENTRY;
+  return 0;
 }
 
 std::optional<SmallVector<unsigned, 4>>
@@ -546,6 +645,205 @@ haydnFormatEKeepOperands(
   return std::nullopt;
 }
 
+const haydn::format_e::FormatEMemberRec *
+haydnFindFormatEMemberByOpcode(unsigned Opc) {
+  if (Opc == 0 || Opc == Haydn::NOP)
+    return nullptr;
+  for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+    if (FormatEMemberOpcodes[I] != Opc)
+      continue;
+    if (I >= haydn::format_e::FormatEMemberCount)
+      return nullptr;
+    const haydn::format_e::FormatEMemberRec &M =
+        haydn::format_e::FormatEMembers[I];
+    if (M.IsNop)
+      return nullptr;
+    return &M;
+  }
+  return nullptr;
+}
+
+bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
+                                const MCInst &Logical, const MCInstrInfo &MII,
+                                const MCRegisterInfo &MRI, MCInst &Out) {
+  if (Mem.MemberId >= FormatEMemberOpcodeCount)
+    return false;
+  const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
+  if (MemberOpc == 0)
+    return false;
+
+  // Residual FieldSlots never recover occupancy here. AIE MultiSlot alts
+  // (AIEMCFormats.h:376-379) are generated; suffix peel is not a fill.
+  {
+    const StringRef LogName = MII.getName(Logical.getOpcode());
+    if (LogName.ends_with("_S0") || LogName.ends_with("_S1") ||
+        LogName.ends_with("_S2"))
+      return false;
+  }
+
+  // Typed as-is path: SubInst is already the private Format E member opcode
+  // with wire-shaped operands — copy Desc operands without bag-sort rebuild.
+  if (Logical.getOpcode() == MemberOpc) {
+    const MCInstrDesc &Desc = MII.get(MemberOpc);
+    if (Logical.getNumOperands() < Desc.getNumOperands())
+      return false;
+    Out.clear();
+    Out.setOpcode(MemberOpc);
+    for (unsigned OI = 0, OE = Desc.getNumOperands(); OI != OE; ++OI)
+      Out.addOperand(Logical.getOperand(OI));
+    return true;
+  }
+
+  // Residual positional promote: when residual/slot-member operands already
+  // match the private member Desc in count, order, and operand kind, copy
+  // without bag-sort. Shape-mismatched residual falls through to keep-map.
+  {
+    const MCInstrDesc &Desc = MII.get(MemberOpc);
+    const unsigned Need = Desc.getNumOperands();
+    if (Logical.getNumOperands() == Need) {
+      bool PosOk = true;
+      for (unsigned OI = 0; OI != Need; ++OI) {
+        const MCOperand &MO = Logical.getOperand(OI);
+        const MCOperandInfo &Info = Desc.operands()[OI];
+        const bool WantReg = Info.OperandType == MCOI::OPERAND_REGISTER ||
+                             Info.RegClass >= 0;
+        if (WantReg) {
+          if (!MO.isReg()) {
+            PosOk = false;
+            break;
+          }
+          if (Info.RegClass >= 0 && MO.getReg() != Haydn::NoRegister &&
+              !MRI.getRegClass(Info.RegClass).contains(MO.getReg())) {
+            PosOk = false;
+            break;
+          }
+        } else if (!MO.isImm() && !MO.isExpr()) {
+          PosOk = false;
+          break;
+        }
+      }
+      if (PosOk) {
+        Out.clear();
+        Out.setOpcode(MemberOpc);
+        for (unsigned OI = 0; OI != Need; ++OI)
+          Out.addOperand(Logical.getOperand(OI));
+        return true;
+      }
+    }
+  }
+
+  // Compiler extra-op cutover is Finalize keep-map, not this fill:
+  //   * MOVE32/ABS32 trailing rs2 (3-op logical vs 2-op member)
+  //   * tied MAC/MOVT acc ins when the logical carries more ops than
+  //     the generated member
+  // Hand-asm omitted rs2 is Imm 0; AR-UA POST / CB writeback change
+  // NumDefs and stay in the closed keep-map below. Peer: AIE serializes
+  // typed members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
+  {
+    const MCInstrDesc &LogDesc = MII.get(Logical.getOpcode());
+    const MCInstrDesc &MemDesc = MII.get(MemberOpc);
+    const unsigned Need = MemDesc.getNumOperands();
+    const unsigned Have = Logical.getNumOperands();
+    if (LogDesc.getNumDefs() == MemDesc.getNumDefs() && Have != Need &&
+        LogDesc.getNumOperands() > Need) {
+      bool AnyTied = false;
+      for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands();
+           ++I) {
+        if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0) {
+          AnyTied = true;
+          break;
+        }
+      }
+      bool TrailingExtraReg = false;
+      for (unsigned I = Need; I < Have; ++I) {
+        if (Logical.getOperand(I).isReg()) {
+          TrailingExtraReg = true;
+          break;
+        }
+      }
+      if (AnyTied || TrailingExtraReg)
+        return false;
+    }
+  }
+
+  // Closed keep-map (same law as Finalize fieldSlotKeepOperands):
+  // identity, tied-acc drop, trailing extra uses, dest-as-ins, CB
+  // writeback, AR-UA POST (rs2/dir_sel unencoded). Not a class bag-sort.
+  {
+    const MCInstrDesc &OldDesc = MII.get(Logical.getOpcode());
+    const MCInstrDesc &NewDesc = MII.get(MemberOpc);
+    const unsigned OldN = OldDesc.getNumOperands();
+    const unsigned NewN = NewDesc.getNumOperands();
+    const unsigned Have = Logical.getNumOperands();
+    auto kindOk = [&](unsigned OldI, unsigned NewI) -> bool {
+      if (OldI >= Have)
+        return false;
+      const MCOperand &MO = Logical.getOperand(OldI);
+      const MCOperandInfo &Info = NewDesc.operands()[NewI];
+      const bool WantReg = Info.OperandType == MCOI::OPERAND_REGISTER ||
+                           Info.RegClass >= 0;
+      if (WantReg) {
+        if (!MO.isReg())
+          return false;
+        if (Info.RegClass >= 0 && MO.getReg() != Haydn::NoRegister &&
+            !MRI.getRegClass(Info.RegClass).contains(MO.getReg()))
+          return false;
+        return true;
+      }
+      return MO.isImm() || MO.isExpr();
+    };
+    auto emitKeep = [&](ArrayRef<unsigned> Keep) -> bool {
+      if (Keep.size() != NewN)
+        return false;
+      for (unsigned NewI = 0; NewI != NewN; ++NewI)
+        if (!kindOk(Keep[NewI], NewI))
+          return false;
+      Out.clear();
+      Out.setOpcode(MemberOpc);
+      for (unsigned NewI = 0; NewI != NewN; ++NewI)
+        Out.addOperand(Logical.getOperand(Keep[NewI]));
+      return true;
+    };
+    if (OldN == 0 && NewN == 0 && Have == 0) {
+      Out.clear();
+      Out.setOpcode(MemberOpc);
+      return true;
+    }
+    // Parser may omit a tied writeback that is not in the AsmString
+    // (d_lqhwua_post $rtd, $ar_sel, $rs1, $rs2, $dir_sel has no $rs1_wb).
+    // kindOk already rejects keep indices past Have.
+    if (OldN > 0 && NewN > 0 && Have > 0) {
+      // AsmString may omit a logical ins register (LUI $rs, CSRR $rs).
+      // The parser then defaults that slot to Imm 0. Drop those holes
+      // before trailing-use so the real imm/expr is kept.
+      if (OldDesc.getNumDefs() == NewDesc.getNumDefs() && OldN > NewN) {
+        SmallVector<unsigned, 4> Keep;
+        bool DroppedHole = false;
+        for (unsigned I = 0; I != OldN; ++I) {
+          const MCOperandInfo &OldInfo = OldDesc.operands()[I];
+          const bool OldWantsReg =
+              OldInfo.OperandType == MCOI::OPERAND_REGISTER ||
+              OldInfo.RegClass >= 0;
+          if (OldWantsReg && I < Have && !Logical.getOperand(I).isReg()) {
+            DroppedHole = true;
+            continue;
+          }
+          Keep.push_back(I);
+        }
+        if (DroppedHole && emitKeep(Keep))
+          return true;
+      }
+      if (auto Keep = haydnFormatEKeepOperands(OldDesc, NewDesc, kindOk))
+        if (emitKeep(*Keep))
+          return true;
+    }
+  }
+
+  // Class-bag reconstruction is deleted. AIE serializes typed members as-is
+  // (AIEBaseMCCodeEmitter.cpp:45-68). Shape mismatch fails closed.
+  return false;
+}
+
 namespace Haydn {
 #define GET_FORMATS_FORMATS_DEFS
 #include "HaydnGenFormats.inc"
@@ -605,71 +903,26 @@ SlotBits residualSlotKindToFieldSlots(MCSlotKind Kind) {
 // member-opcode-aware helpers
 //===----------------------------------------------------------------------===//
 //
-// Base getLegalSlots only has rows for logicals; strip `_S<k>` to recover the
-// logical base before the alts query (member-aware MC / residual placement).
+// AIE AIEBaseMCFormats.cpp:67-75: post-setDesc members use generated format
+// desc slot identity, not a name suffix. Haydn overlay: Format E members
+// publish EntryIdx on FormatEMemberRec (EncodedBytes is not a slot bit).
+// Residual `_S*` FieldSlots are retired (0 defs); do not recover a slot
+// from a name suffix.
 
-namespace {
-
-// `_S<k>` name-suffix table — the slot digit is authoritative.
-constexpr StringRef HaydnMemberSlotSuffix[3] = {"_S0", "_S1", "_S2"};
-
-// \returns the slot index (0/1/2) encoded in \p Opc's `_S<k>` name
-// suffix, or -1 if \p Opc is not a format-member opcode.
-int getMemberSlotFromNameLocal(unsigned Opc, const MCInstrInfo &MII) {
-  StringRef Name = MII.getName(Opc);
-  for (int Slot = 0; Slot < 3; ++Slot) {
-    StringRef Suffix = HaydnMemberSlotSuffix[Slot];
-    if (Name.ends_with(Suffix))
-      return Slot;
-  }
+int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII) {
+  (void)MII;
+  if (const haydn::format_e::FormatEMemberRec *Mem =
+          haydnFindFormatEMemberByOpcode(Opc))
+    return static_cast<int>(Mem->EntryIdx);
   return -1;
 }
 
-// \returns the logical base opcode for \p Opc by stripping any `_S<k>`
-// suffix, or \p Opc itself if it has no suffix. Base found by NAME lookup.
-unsigned getLogicalBaseOpcode(unsigned Opc, const MCInstrInfo &MII) {
-  StringRef Name = MII.getName(Opc);
-  StringRef Base = Name;
-  bool Stripped = false;
-  for (StringRef Suf : HaydnMemberSlotSuffix) {
-    if (Base.ends_with(Suf)) {
-      Base = Base.drop_back(Suf.size());
-      Stripped = true;
-      break;
-    }
-  }
-  if (!Stripped)
-    return Opc; // already logical
-  if (Base.empty())
-    return 0;
-  unsigned Num = MII.getNumOpcodes();
-  for (unsigned Cand = 0; Cand < Num; ++Cand)
-    if (MII.getName(Cand) == Base)
-      return Cand;
-  return 0;
-}
-
-} // end anonymous namespace
-
-int getHaydnFlexSlotFromName(unsigned Opc, const MCInstrInfo &MII) {
-  return getMemberSlotFromNameLocal(Opc, MII);
-}
-
 SlotBits HaydnMCFormatsWithMII::getLegalSlots(unsigned Opc) const {
-  // Normalize a member opcode to its logical base, then consult alts-derived
-  // getLegalSlots. For a logical Opc this is a passthrough.
-  unsigned BaseOpc = getLogicalBaseOpcode(Opc, MII);
-  if (BaseOpc != 0) {
-    SlotBits Bits = HaydnMCFormats::getLegalSlots(BaseOpc);
-    if (Bits != 0)
-      return Bits;
-  }
-  // Member opcodes whose stripped base is not a live logical (or has no alt
-  // row): the `_S<k>` suffix is authoritative — that single slot is legal.
-  int Slot = getHaydnFlexSlotFromName(Opc, MII);
-  if (Slot >= 0)
-    return SlotBits(1) << Slot;
-  return 0;
+  (void)MII;
+  if (const haydn::format_e::FormatEMemberRec *Mem =
+          haydnFindFormatEMemberByOpcode(Opc))
+    return SlotBits(1) << Mem->EntryIdx;
+  return HaydnMCFormats::getLegalSlots(Opc);
 }
 
 //===----------------------------------------------------------------------===//
@@ -779,8 +1032,8 @@ const PacketFormats &HaydnMCFormats::getPacketFormats() const {
 }
 
 ArrayRef<bool> HaydnMCFormats::getIsFormatAvailable() const {
-  // Generated FormatAvailable LUT: SlotSet is available iff some product
-  // Format E packet format covers it (or is a subset with NOP underfill).
+  // Generated FormatAvailable LUT (AIE AIEMCFormats.cpp:65-67). SlotSet
+  // identity is PacketFormats, not a child-count or underfill map.
   return ArrayRef<bool>(FormatAvailable, SlotSetSize);
 }
 

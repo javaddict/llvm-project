@@ -14,11 +14,12 @@
 //      indicator/reserved/entry_num (fail-closed on true malformed); inverse-
 //      resolve each entry via FormatEInverse + FormatEMembers; emit
 //      BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY of logical children.
-//   2. Soft-NOP individual entries only for reserved E2 map=11 / zero or
-//      non-matching residual underfill — never invents logicals; never fails
-//      the whole parcel for residual pad (objdump `<unknown>` rejects sim).
-//      Non-zero unmatched payload is still a soft-NOP mnemonic, annotated
-//      `<unresolved:0x…>` on the comment stream (T-MC9 auditor honesty).
+//   2. Soft-NOP individual entries of the stamped header row only (hostile
+//      decode-or-degrade). Never invents a different row, never collapses
+//      all-NOP parcels to a singleton, never fails the whole parcel for a
+//      residual pad (objdump `<unknown>` rejects sim). Non-zero unmatched
+//      payload is still a soft-NOP mnemonic, annotated `<unresolved:0x…>`
+//      on the comment stream (T-MC9 auditor honesty).
 //   3. Short residual (< product EncodedBytes) → Fail with Size = remaining
 //      (no 2-byte NOP product path; all-zero is not Format E).
 //
@@ -34,6 +35,7 @@
 #include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "MCTargetDesc/HaydnRelocLayout.h"
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -120,8 +122,8 @@ static DecodeStatus DecodeDR64RegisterClass(MCInst &Inst, uint32_t RegNo,
 // Template parameters:
 // N = encoded field width in bits
 // Shift = left-shift applied after sign/zero-extension (2 for §5.11/5.12
-// hwloop offsets in 4-byte units, 0 for branch/JAL byte offsets;
-// the legacy Shift=1 form is retired and no live row uses it).
+// hwloop offsets in 4-byte units from RelocLayout ValueShift; 0 for
+// branch/JAL byte offsets — leftover halfword scale is not applied).
 // IsSigned = 1 => sign-extend the N-bit field; 0 => zero-extend.
 //===----------------------------------------------------------------------===//
 template <unsigned N, unsigned Shift, bool IsSigned>
@@ -310,44 +312,28 @@ static uint64_t extractFormatEBits(const APInt &Word, unsigned Lo,
   return Word.extractBitsAsZExtValue(Width, Lo);
 }
 
-/// Map a Format E logical catalog name to a live MC opcode when present.
-static unsigned lookupLogicalOpcode(const MCInstrInfo &MII, StringRef Logical) {
-  if (Logical.empty() || Logical.equals_insensitive("NOP"))
-    return Haydn::NOP;
-  // Golden catalog logicals that only exist as residual wide/S0 public names.
-  if (Logical.equals_insensitive("SET_HWLOOP_F2"))
-    return Haydn::SET_HWLOOP_F2_W;
-  if (Logical.equals_insensitive("SET_HWLOOP_REG"))
-    return Haydn::SET_HWLOOP_REG_W;
-  if (Logical.equals_insensitive("SET_HWLOOP"))
-    return Haydn::SET_HWLOOP_W;
-  for (unsigned Opc = 0, E = MII.getNumOpcodes(); Opc != E; ++Opc) {
-    if (MII.getName(Opc).equals_insensitive(Logical))
-      return Opc;
-  }
-  // Prefer wide public forms when bare name is a pseudo without encode path.
-  std::string Wide = Logical.str() + "_W";
-  for (unsigned Opc = 0, E = MII.getNumOpcodes(); Opc != E; ++Opc) {
-    if (MII.getName(Opc).equals_insensitive(Wide))
-      return Opc;
-  }
-  return 0;
-}
-
-/// GE96-03: cond-branch/JAL fields are byte PC+imm (no dump <<1).
-/// SET_HWLOOP Off1/Off2 remain word scale (<<2) for dump bytes.
-static unsigned formatEControlImmByteShift(StringRef Logical) {
-  const std::string Peeled = haydn::format_e::peelLogicalOpcodeName(Logical);
-  const StringRef Name = Peeled;
-
-  // GE96-03: cond-branches and JAL print the field as bytes (ValueShift=0).
-  // SET_HWLOOP begin/end offsets stay word scale (<<2).
-  if (Name.equals_insensitive("SET_HWLOOP") ||
-      Name.equals_insensitive("SET_HWLOOP_F2"))
-    return 2u;
-
-  // JALR and all other imms: field units == dump units (bytes / counts).
-  return 0u;
+/// Dump-byte scale from the generated member TypeName, not a logical-name
+/// peel. RelocLayout ValueShift on FormatEMembers TypeName/Opcode (emitter
+/// getMemberFixupKind peer). Only HWLRIII/HWLRIIR rows carry Off1/Off2
+/// word fields (ValueShift=2); branch/JAL stay field==byte (ValueShift=0).
+static unsigned formatEControlImmByteShift(int MemberId) {
+  using namespace haydn::format_e;
+  if (MemberId < 0 || static_cast<unsigned>(MemberId) >= FormatEMemberCount)
+    return 0;
+  const FormatEMemberRec &Mem = FormatEMembers[MemberId];
+  if (!Mem.TypeName)
+    return 0;
+  const StringRef TypeName = Mem.TypeName;
+  if (TypeName != "HWLRIII" && TypeName != "HWLRIIR")
+    return 0;
+  // Off1 is 6 bits; Off2 is 12. Both layout rows share ValueShift=2.
+  const HaydnReloc::FixupField Field{HaydnReloc::kUnspecifiedFieldLsb, 6};
+  const HaydnReloc::RelocKind R = HaydnReloc::findFixupFromFixupFields(
+      TypeName, Mem.Opcode, Field, /*FormatBytes=*/12,
+      /*IsLSUnit=*/false);
+  if (R == HaydnReloc::RelocKind::Invalid)
+    return 0;
+  return HaydnReloc::getRelocFieldInfo(R).ValueShift;
 }
 
 /// One resolved Format E entry (inverse hit or soft-NOP underfill).
@@ -491,9 +477,20 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
     return MCDisassembler::Fail;
   }
 
-  const BundleFormatRowID Row =
-      EntryNum == FormatEEntryNumThree ? BundleFormatRowID::E96ThreeEntry
-                                       : BundleFormatRowID::E96TwoEntry;
+  // Fail-closed: only entry_num ∈ {0=E2, 1=E3} is product-legal. Do not
+  // default unknown values to E2 (that is a size/bit fallback).
+  BundleFormatRowID Row;
+  unsigned CompositeOpc;
+  if (EntryNum == FormatEEntryNumTwo) {
+    Row = BundleFormatRowID::E96TwoEntry;
+    CompositeOpc = Haydn::BUNDLE_E96_TWO_ENTRY;
+  } else if (EntryNum == FormatEEntryNumThree) {
+    Row = BundleFormatRowID::E96ThreeEntry;
+    CompositeOpc = Haydn::BUNDLE_E96_THREE_ENTRY;
+  } else {
+    Instr = MCInst();
+    return MCDisassembler::Fail;
+  }
   if (!productionProfilePermitsRow(Row)) {
     Instr = MCInst();
     return MCDisassembler::Fail;
@@ -507,16 +504,8 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
   const uint8_t Mode = EntryNum == FormatEEntryNumThree ? 1 : 0;
   const unsigned EntryCount = RowDesc->EntryCount;
 
-  // Fail-closed: only entry_num ∈ {0=E2, 1=E3} is product-legal. The header
-  // field is 1 bit so other values cannot appear; keep the check explicit.
-  if (EntryNum != FormatEEntryNumTwo && EntryNum != FormatEEntryNumThree) {
-    Instr = MCInst();
-    return MCDisassembler::Fail;
-  }
-
   SmallVector<MCInst *, 3> Children;
   Children.reserve(EntryCount);
-  bool AnyReal = false;
 
   for (unsigned E = 0; E < EntryCount; ++E) {
     FormatEResolvedEntry Resolved;
@@ -576,22 +565,21 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
                                DisAsm.getSubtargetInfo());
       }
       if (DS != MCDisassembler::Fail) {
-        // Format E member DecoderMethods emit raw field units. Dump bytes:
-        //   cond-branch / JAL: field is already PC+imm bytes (GE96-03)
-        //   SET_HWLOOP / SET_HWLOOP_F2: Off1/Off2 word fields (ValueShift=2)
-        //     → <<2 on operands 1 and 2 (sel, off1, off2, cnt|rs)
-        const unsigned ByteShift = formatEControlImmByteShift(Logical);
-        if (ByteShift == 2) {
+        // Format E member DecoderMethods emit raw field units. Dump bytes
+        // follow RelocLayout ValueShift on the inverse record (hwloop
+        // Off1/Off2 word fields; branch/JAL stay field==byte).
+        const unsigned ByteShift =
+            formatEControlImmByteShift(Resolved.MemberId);
+        if (ByteShift != 0) {
           for (unsigned OI : {1u, 2u}) {
             if (OI >= Decoded.getNumOperands())
               break;
             MCOperand &T = Decoded.getOperand(OI);
             if (T.isImm())
-              T.setImm(T.getImm() << 2);
+              T.setImm(T.getImm() << ByteShift);
           }
         }
         *Child = Decoded;
-        AnyReal = true;
         Children.push_back(Child);
         continue;
       }
@@ -602,24 +590,10 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
     Children.push_back(Child);
   }
 
-  // All-NOP / zero-entry envelope is the provisional product idle parcel
-  // (header 111 + zero entries). Emit a single NOP for compact objdump lines;
-  // real composites keep BUNDLE_E96_* with children.
+  // Product composite from the header row, not child-count inference.
+  // Full-bundle idle is NOP in every stamped-row slot (not a singleton).
   Instr = MCInst();
-  if (!AnyReal) {
-    Instr.setOpcode(Haydn::NOP);
-    (void)Address;
-    return MCDisassembler::Success;
-  }
-
-  // Prefer product Format E composite when entry count matches; otherwise
-  // fall back to generic BUNDLE of logical children for printing.
-  if (EntryCount == 2)
-    Instr.setOpcode(Haydn::BUNDLE_E96_TWO_ENTRY);
-  else if (EntryCount == 3)
-    Instr.setOpcode(Haydn::BUNDLE_E96_THREE_ENTRY);
-  else
-    Instr.setOpcode(Haydn::BUNDLE);
+  Instr.setOpcode(CompositeOpc);
   for (MCInst *C : Children)
     Instr.addOperand(MCOperand::createInst(C));
 

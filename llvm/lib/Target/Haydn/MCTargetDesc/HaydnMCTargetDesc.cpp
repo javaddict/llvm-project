@@ -145,9 +145,9 @@ public:
     return MCInstrAnalysis::isTerminator(Inst);
   }
 
-  /// PC-relative call/branch target as a byte address. Disassembler members
-  /// already recover dump-byte displacements (cond-branch / JAL are PC+imm
-  /// bytes; SET_HWLOOP stays word scale). JALR is rs-relative
+  /// PC-relative call/branch target as a byte address. Members already carry
+  /// dump-byte displacements (cond-branch / JAL are PC+imm bytes, no extra
+  /// scale; SET_HWLOOP stays word scale). JALR is rs-relative
   /// (isIndirectBranch) and is not evaluated here.
   bool evaluateBranch(const MCInst &Inst, uint64_t Addr, uint64_t Size,
                       uint64_t &Target) const override {
