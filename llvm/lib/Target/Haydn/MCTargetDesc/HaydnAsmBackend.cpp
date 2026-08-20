@@ -163,15 +163,22 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
         }
         // JALR is rs+imm (not PC-relative); odd immediates are legal.
         // PC-relative B/JAL/HWLOOP displacements must be whole parcels so
-        // the resolved target is an exact code record.
+        // the resolved target is an exact code record. Align=2/4 failures
+        // share computeRelocValue's "mis-aligned relocation target" with
+        // the branch path; the parcel-grid check is only for Align-ok
+        // displacements that still miss a 12-byte record.
         if (R != HaydnReloc::RelocKind::JALRSImm12 && FI.IsPCRel &&
             Parcel > 1 &&
             (static_cast<int64_t>(Value) % static_cast<int64_t>(Parcel)) !=
                 0) {
-          getContext().reportError(
-              Fixup.getLoc(),
-              "control relocation target is not an exact Format E record");
-          return;
+          if (FI.Align <= 1 ||
+              (static_cast<int64_t>(Value) %
+               static_cast<int64_t>(FI.Align)) == 0) {
+            getContext().reportError(
+                Fixup.getLoc(),
+                "control relocation target is not an exact Format E record");
+            return;
+          }
         }
         break;
       }
@@ -180,16 +187,26 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       }
     }
     // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
-    // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI} FieldLsb is mode/entry
-    // dependent (E2 e0 table default vs E3 e0/e1/e2).
+    // Table FieldLsb (getFixupKindInfo TargetOffset) is E2 e0 only.
+    // applyFixup patches parcel-absolute bits via resolveFieldLsb — do not
+    // also shift by TargetOffset (AIE Dummy TargetOffset: AIEBaseAsmBackend.h
+    // getFixupKindInfo 56-71; AIE applyFixup shifts only generic FK_Data_*).
+    // HI12/LO20/PC_LO20/JALRSImm12 E3 e0/e1/e2 and E2 e1 windows live here.
     const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, Data);
     HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FieldLsb);
     return;
   }
 
   // Generic data fixups (FK_Data_* / FK_PCRel_*): raw little-endian byte write.
-  if (Kind >= FirstTargetFixupKind)
-    llvm_unreachable("Unknown target fixup kind!");
+  // Unknown target kinds used to llvm_unreachable, which is abort-not-diagnose
+  // and in NDEBUG fell through to the 32-bit data write — the same header
+  // clobber as an untyped FIXUP_HAYDN_32 on a Format E record. Fail closed.
+  // Peer: AIEBaseAsmBackend.cpp:21-22 llvm_unreachable; Haydn diagnoses.
+  if (Kind >= FirstTargetFixupKind) {
+    getContext().reportError(Fixup.getLoc(),
+                             "unknown Haydn target fixup kind");
+    return;
+  }
   MCFixupKindInfo Info = MCAsmBackend::getFixupKindInfo(Kind);
   unsigned NumBytes = alignTo(Info.TargetSize + Info.TargetOffset, 8) / 8;
   if (Fixup.getOffset() + NumBytes > F.getSize()) {
@@ -223,6 +240,7 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       "FIXUP_HAYDN_S0LSOff4_2",   "FIXUP_HAYDN_S0LSOff4_3",
       "FIXUP_HAYDN_S0LSOff2_0",   "FIXUP_HAYDN_S0LSOff3_0",
       "FIXUP_HAYDN_LS_IMM",       "FIXUP_HAYDN_JALRSImm12",
+      "FIXUP_HAYDN_CSR_UImm8",
   };
   static_assert(std::size(Names) == Haydn::NumTargetFixupKinds,
                 "Names[] must list every target fixup kind, in enum order");
@@ -242,6 +260,9 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
   // This LLVM tree stores PC-relativity on MCFixup::isPCRel (set by the
   // encoder), not on MCFixupKindInfo::Flags. Keep Flags=0 (matches RISCV).
+  // TargetOffset is the E2 e0 table FieldLsb (intra-parcel for the default
+  // row). applyFixup / lld relocate use resolveFieldLsb and must not shift
+  // this value a second time — TargetOffset is metadata, not a write shift.
   return MCFixupKindInfo{Names[Kind - FirstTargetFixupKind], FI.FieldLsb,
                          FI.FieldSize, 0};
 }
@@ -255,6 +276,10 @@ HaydnAsmBackend::createObjectTargetWriter() const {
 bool HaydnAsmBackend::finishLayout() const {
   if (!Asm)
     return false;
+  // Consumer identity is production ELFFlagsValue (EF_HAYDN_E96=0x1).
+  // Peer: RISCV.cpp:169 intersects object e_flags; AIE.cpp:66-71 copies the
+  // first file. Haydn refuses mixed/zero/unknown and never mints a second
+  // e_machine (official 259 is Kalray KVX).
   const uint32_t Flags =
       haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
   assert(Flags != 0 && "E96 product profile must allocate nonzero e_flags");
