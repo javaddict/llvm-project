@@ -84,7 +84,17 @@ def uimm4  : HaydnUImm<4>;
 def uimm5  : HaydnUImm<5>;
 def uimm6  : HaydnUImm<6>;
 def uimm7  : HaydnUImm<7>;
-def uimm8  : HaydnUImm<8>;
+// Unsigned 8-bit CSR address. Catalog CSRW/CSRR and generated Format E I8
+// members are the only users. EncoderMethod binds typed CSR I8 so compiler
+// MemberId composites emit FIXUP_HAYDN_CSR_UImm8 (not untyped NONE via
+// getMachineOpValue). Peer: AIE immxstep EncoderMethod
+// (AIEBaseInstrInfo.td:61-70). getSImmOpValueXStepWide prefers
+// getExprFixupKind for generated members (HaydnRelocLayout CSR_UImm8).
+def uimm8  : HaydnUImm<8> {
+  let EncoderMethod =
+      "getSImmOpValueXStepWide<8,0,/*IsSigned*/0,/*IsPCRel*/0,"
+      "Haydn::FIXUP_HAYDN_CSR_UImm8>";
+}
 def uimm10 : HaydnUImm<10>;
 def uimm12 : HaydnUImm<12>;
 def uimm16 : HaydnUImm<16>;
@@ -273,11 +283,11 @@ def simm32_drx
   let DecoderMethod = "decodeSImmOperandXStepWide<32,0,/*IsSigned*/1>";
 }
 
-// 48-bit WIDE CSR uimm8 (CSRW_W, §5.9/5.10). bits[47:40]; unsigned 8-bit.
-// Immediate and reloc addresses. Reloc CSRW_W cutovers to catalog CSRW I8
-// members; this class binds FIXUP_HAYDN_CSR_UImm8 so a residual FieldSlot
-// never emits untyped NONE / R_HAYDN_8. Peer: AIE immxstep FixupKind
-// (AIEBaseInstrInfo.td:61-70); same template as simm20_wide_abs → LO20.
+// CSRW_W logical-shell uimm8. Same typed CSR I8 kind as `uimm8` (generated
+// I8 members). CSRW_W is a HaydnInst<0> isPseudo shell; product encode is
+// Format E CSRW I8 members after MemberId cutover. EncoderMethod binds
+// FIXUP_HAYDN_CSR_UImm8 so a leftover shell never emits untyped NONE /
+// R_HAYDN_8. Peer: AIE immxstep FixupKind (AIEBaseInstrInfo.td:61-70).
 def uimm8_csr
     : Operand<i32>, ImmLeaf<i32, [{ return isUInt<8>(Imm); }]> {
   let ParserMatchClass = UImmAsmOperand<8>;

@@ -30,8 +30,9 @@ inline bool isGeneratedFormatEMemberName(StringRef Name) {
 /// True when FieldSlot/logical explicit operands have a keep-map onto
 /// \p MemberOpc (same closed drop rules as Finalize cutover).
 /// Reloc CSRW_W uses the 2-op identity/swap map; kindOk accepts a
-/// Global/Symbol on the uimm8 slot. Encode binds typed CSR I8
-/// (FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8), never untyped NONE.
+/// Global/Symbol on the uimm8 slot. Generated CSR I8 members encode that
+/// slot with FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8 (uimm8
+/// EncoderMethod), never untyped NONE.
 bool memberDescCompatible(const MachineInstr &MI, unsigned MemberOpc,
                           const TargetInstrInfo &TII);
 

@@ -446,6 +446,12 @@ bool mustResolveToFormatEMember(unsigned Opc, const TargetInstrInfo &TII) {
   if (isResidualFieldSlotOpcode(Opc, TII))
     return true;
   const std::string Log = haydn::format_e::peelLogicalOpcodeName(Name);
+  // Reloc CSRW_W peels to CSRW. Catalog CSR I8 must become a generated
+  // member so encode binds FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8
+  // (uimm8 EncoderMethod + getExprFixupKind), never untyped NONE.
+  if (StringRef(Log).equals_insensitive("CSRW") ||
+      StringRef(Log).equals_insensitive("CSRR"))
+    return true;
   return haydn::format_e::findAltSpan(Log.c_str()) != nullptr;
 }
 
