@@ -6,6 +6,8 @@
 ; RUN:   --check-prefix=SMSDEF
 ; RUN: FileCheck %s --input-file=%S/../../../../../lib/Target/Haydn/HaydnTargetMachine.h \
 ; RUN:   --check-prefix=HWDEF
+; RUN: FileCheck %s --input-file=%S/../../../../../lib/Target/Haydn/HaydnHardwareLoops.cpp \
+; RUN:   --check-prefix=HWPIN
 ; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify \
 ; RUN:   -debug-pass=Structure < %s -o /dev/null 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=PASSES
@@ -30,6 +32,9 @@ define i32 @inorder_seat(i32 %a, i32 %b) {
 ; MODEL-DAG: let CompleteModel = 0
 ; MODEL-NOT: let CompleteModel = 1
 
+; PIN: static_assert(!HaydnMultiStageSMS::productDefaultEnabled()
+; PIN: static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled()
+; PIN: static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; PIN: pinHaydnInOrderIncompleteSchedModel
 ; PIN: SM.MicroOpBufferSize != 0
 ; PIN: SM.isComplete()
@@ -38,6 +43,7 @@ define i32 @inorder_seat(i32 %a, i32 %b) {
 
 ; SMSDEF: productDefaultEnabled() { return false; }
 ; HWDEF: hardwareLoopsProductDefaultEnabled() { return false; }
+; HWPIN: static_assert(!llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 
 ; CHECK: add32
 ; CHECK-NOT: #<swps>

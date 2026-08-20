@@ -14,6 +14,7 @@
 
 #include "HaydnMachineScheduler.h"
 #include "HaydnPostRAMultiStage.h"
+#include "HaydnTargetMachine.h"
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSchedMutations.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
@@ -28,6 +29,13 @@
 #include <memory>
 
 using namespace llvm;
+
+static_assert(!HaydnMultiStageSMS::productDefaultEnabled(),
+              "multi-stage product default stays off");
+static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled(),
+              "combined hwloop+SMS is not product");
+static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
+              "hardware-loop product default stays OFF; not flipped here");
 
 /// Live tblgen SchedMachineModel pin. AIE1 is in-order
 /// (`aie1/AIE1Schedule.td:258` MicroOpBufferSize=0, CompleteModel=0).

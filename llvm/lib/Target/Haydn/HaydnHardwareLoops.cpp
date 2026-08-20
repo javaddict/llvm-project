@@ -43,6 +43,7 @@
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
+#include "HaydnTargetMachine.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -96,6 +97,9 @@ static_assert(MaxHWLoopStartOffsetBytes > 0 && MaxHWLoopEndOffsetBytes > 0,
               "hwloop offset ceilings must stay positive");
 static_assert(productParcelBytes().Value > 0,
               "product parcel EncodedBytes must be positive");
+static_assert(!llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
+              "hardware-loop product default stays OFF until independent "
+              "then combined qualification and a separate policy-only flip");
 
 using namespace llvm;
 
