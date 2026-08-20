@@ -36,6 +36,8 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsHaydn.h"
 #include "llvm/Support/CommandLine.h"
@@ -279,6 +281,59 @@ void applyDoubleNot(MachineInstr &MI, MachineRegisterInfo &MRI,
   Observer.changedInstr(MI);
 }
 
+// Recover a scalar integer constant through COPY, G_CONSTANT_FOLD_BARRIER
+// (ConstHoist), and binary ops of constants. getIConstantVRegValWithLookThrough
+// does not walk the barrier or G_ADD, so (A & MaskC) | (MaskC + Delta) from
+// ConstHoist would otherwise miss and_or_disjoint_or.
+static std::optional<APInt> evalScalarConst(Register R, MachineRegisterInfo &MRI,
+                                            unsigned Depth = 0) {
+  if (!R.isValid() || !R.isVirtual() || Depth > 6)
+    return std::nullopt;
+  if (auto V = getIConstantVRegValWithLookThrough(R, MRI))
+    return V->Value;
+  MachineInstr *Def = MRI.getVRegDef(R);
+  if (!Def)
+    return std::nullopt;
+  switch (Def->getOpcode()) {
+  case TargetOpcode::COPY:
+    return evalScalarConst(Def->getOperand(1).getReg(), MRI, Depth + 1);
+  case TargetOpcode::G_CONSTANT_FOLD_BARRIER:
+    return evalScalarConst(Def->getOperand(1).getReg(), MRI, Depth + 1);
+  case TargetOpcode::G_ADD:
+  case TargetOpcode::G_SUB:
+  case TargetOpcode::G_AND:
+  case TargetOpcode::G_OR:
+  case TargetOpcode::G_XOR: {
+    auto L = evalScalarConst(Def->getOperand(1).getReg(), MRI, Depth + 1);
+    auto Rg = evalScalarConst(Def->getOperand(2).getReg(), MRI, Depth + 1);
+    if (!L || !Rg)
+      return std::nullopt;
+    LLT Ty = MRI.getType(Def->getOperand(0).getReg());
+    if (!Ty.isScalar())
+      return std::nullopt;
+    unsigned BW = Ty.getSizeInBits();
+    APInt A = L->zextOrTrunc(BW);
+    APInt B = Rg->zextOrTrunc(BW);
+    switch (Def->getOpcode()) {
+    case TargetOpcode::G_ADD:
+      return A + B;
+    case TargetOpcode::G_SUB:
+      return A - B;
+    case TargetOpcode::G_AND:
+      return A & B;
+    case TargetOpcode::G_OR:
+      return A | B;
+    case TargetOpcode::G_XOR:
+      return A ^ B;
+    default:
+      return std::nullopt;
+    }
+  }
+  default:
+    return std::nullopt;
+  }
+}
+
 // Match AND-OR canonicalization: (A & MaskC) | SetC where MaskC and SetC
 // don't overlap (i.e., MaskC & SetC == 0). In this case the OR just sets
 // bits that are already guaranteed to be zero by the AND, so we can replace
@@ -298,46 +353,44 @@ bool matchAndOrDisjoint(MachineInstr &MI, MachineRegisterInfo &MRI,
   if (!Ty.isScalar())
     return false;
 
-  // Op2 must be a constant.
-  auto CV2 = getIConstantVRegValWithLookThrough(Op2, MRI);
-  if (!CV2)
-    return false;
-
-  // Op1 must be G_AND(x, mask).
-  auto *AndMI = getOpcodeDef(TargetOpcode::G_AND, Op1, MRI);
-  if (!AndMI)
-    return false;
-
-  Register AndOp2 = AndMI->getOperand(2).getReg();
-  auto CVAnd = getIConstantVRegValWithLookThrough(AndOp2, MRI);
-  if (!CVAnd)
-    return false;
-
   unsigned BW = Ty.getSizeInBits();
-  APInt MaskC = CVAnd->Value.zextOrTrunc(BW);
-  APInt SetC = CV2->Value.zextOrTrunc(BW);
 
-  // Check that the mask and set constants are disjoint (no overlapping bits).
-  if ((MaskC & SetC) != 0)
-    return false;
+  auto TryMatch = [&](Register AndReg, Register SetReg) -> bool {
+    auto SetCOpt = evalScalarConst(SetReg, MRI);
+    if (!SetCOpt)
+      return false;
+    auto *AndMI = getOpcodeDef(TargetOpcode::G_AND, AndReg, MRI);
+    if (!AndMI || !MRI.hasOneNonDBGUse(AndReg))
+      return false;
 
-  // Only simplify if SetC is non-zero (otherwise it's just the AND).
-  if (SetC.isZero())
-    return false;
+    Register AndOp1 = AndMI->getOperand(1).getReg();
+    Register AndOp2 = AndMI->getOperand(2).getReg();
+    auto MaskFromRhs = evalScalarConst(AndOp2, MRI);
+    auto MaskFromLhs = evalScalarConst(AndOp1, MRI);
+    Register A;
+    std::optional<APInt> MaskCOpt;
+    if (MaskFromRhs) {
+      MaskCOpt = MaskFromRhs;
+      A = AndOp1;
+    } else if (MaskFromLhs) {
+      MaskCOpt = MaskFromLhs;
+      A = AndOp2;
+    } else {
+      return false;
+    }
 
-  // Check that (MaskC | SetC) is all-ones, meaning (A & MaskC) | SetC covers
-  // all bits. In this case, the result simplifies to (A | SetC).
-  APInt AllOnes = APInt::getAllOnes(BW);
-  if ((MaskC | SetC) != AllOnes)
-    return false;
+    APInt MaskC = MaskCOpt->zextOrTrunc(BW);
+    APInt SetC = SetCOpt->zextOrTrunc(BW);
+    if (SetC.isZero() || (MaskC & SetC) != 0)
+      return false;
+    if ((MaskC | SetC) != APInt::getAllOnes(BW))
+      return false;
 
-  // Only profitable if the AND has a single use.
-  if (!MRI.hasOneNonDBGUse(Op1))
-    return false;
+    MatchInfo = {A, MaskC, SetC};
+    return true;
+  };
 
-  Register A = AndMI->getOperand(1).getReg();
-  MatchInfo = {A, MaskC, SetC};
-  return true;
+  return TryMatch(Op1, Op2) || TryMatch(Op2, Op1);
 }
 
 // Apply AND-OR disjoint simplification: (A & MaskC) | SetC -> A | SetC.
@@ -1165,9 +1218,33 @@ HaydnPostLegalizerCombinerImpl::HaydnPostLegalizerCombinerImpl(
 }
 
 bool HaydnPostLegalizerCombinerImpl::tryCombineAll(MachineInstr &MI) const {
-  // TD registry only: post generics + residual + form_agu_inc_mem.
-  // No free-form C++ opcode switch / no sanitizeCastCopies.
-  return tryCombineAllImpl(MI);
+  // TD registry first: post generics + residual + form_agu_inc_mem.
+  if (tryCombineAllImpl(MI))
+    return true;
+
+  // Same-operand G_ICMP identity. Generic icmp_to_true_false_known_bits
+  // bails when the RHS known-bits are unknown, so slt x,x on a live-in
+  // never folds. Relocated from the deleted post-RA ConditionOptimizer.
+  if (MI.getOpcode() == TargetOpcode::G_ICMP) {
+    Register LHS = MI.getOperand(2).getReg();
+    Register RHS = MI.getOperand(3).getReg();
+    Register SrcL = getSrcRegIgnoringCopies(LHS, MRI);
+    Register SrcR = getSrcRegIgnoringCopies(RHS, MRI);
+    if (SrcL != SrcR || !SrcL.isValid())
+      return false;
+    auto Pred =
+        static_cast<CmpInst::Predicate>(MI.getOperand(1).getPredicate());
+    int64_t C;
+    if (ICmpInst::isTrueWhenEqual(Pred))
+      C = 1;
+    else if (ICmpInst::isFalseWhenEqual(Pred))
+      C = 0;
+    else
+      return false;
+    Helper.replaceInstWithConstant(MI, C);
+    return true;
+  }
+  return false;
 }
 
 

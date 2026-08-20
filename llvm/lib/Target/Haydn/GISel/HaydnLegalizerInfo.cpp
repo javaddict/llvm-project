@@ -686,8 +686,10 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       })
       .unsupported();
 
-  // Sign-bit ops: use generic lower (XOR/AND/copysign graft). Same code as
-  // RISCVLegalizerInfo softfloat — no target custom needed.
+  // Sign-bit ops: generic lower (XOR/AND/copysign graft). Same as
+  // RISCVLegalizerInfo.cpp:527. Haydn has native XOR64/AND64 on DR64, so
+  // AIE's s64 unmerge+mask+merge (AIELegalizerHelper.cpp:1421) would drop
+  // a legal 64-bit xor/and and rematerialize the pair through the stack.
   getActionDefinitionsBuilder({G_FNEG, G_FABS})
       .lowerFor({S32, S64})
       .scalarize(0)

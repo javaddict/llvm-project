@@ -3,7 +3,7 @@
 
 NatureDSP product_library_pin is the only library matrix. This pin
 inventories the IntrinsicsHaydn vs lit set-difference as residual. It
-does not author a 746-name harness, empty-Semantics rows, or QUALIFY.
+does not author a 746-name harness or QUALIFY. Empty-Semantics leftover is closed.
 
 Usage:
   tdsp13_declared_vs_tested_pin.py
@@ -38,43 +38,9 @@ TESTDIR_REL = "llvm/test/CodeGen/Haydn"
 BUILTINS_REL = "clang/include/clang/Basic/BuiltinsHaydn.td"
 CLANG_PIN_REL = "clang/test/CodeGen/Haydn/tdsp13-declared-vs-tested.py"
 
-# PublicEnabled natives that still have empty Semantics. Authoring those
-# rows is leftover; this pin forbids silent growth of the hole.
-EMPTY_SEMANTICS_LEFTOVER = frozenset(
-    {
-        "ldw_brev_imm_pair",
-        "ldw_brev_reg_pair",
-        "ldw_cb_imm_pair",
-        "ldw_cb_reg_pair",
-        "lw_brev_imm_pair",
-        "lw_brev_reg_pair",
-        "mac32",
-        "macq31",
-        "maxabs32s",
-        "mulaa32s_fir_hh",
-        "mulaa32s_fir_hl",
-        "mulafq16x2_fir_1",
-        "mulafq16x2_fir_3",
-        "mul64_ss_hh",
-        "mul64_ss_hl",
-        "mulfc32x16ras_high",
-        "mulfc32x16ras_low",
-        "mulfp32x16x2ras_high",
-        "mulfp32x16x2ras_low",
-        "mulfq16x2_fir_1",
-        "mulfq16x2_fir_3",
-        "mulq31",
-        "mulq63",
-        "sdw_brev_imm",
-        "sdw_brev_reg",
-        "sdw_cb_imm",
-        "sdw_cb_reg",
-        "setcbr_begin",
-        "setcbr_end",
-        "sw_brev_imm",
-        "sw_brev_reg",
-    }
-)
+# PublicEnabled natives must publish Semantics. Empty leftover set is
+# closed; this pin forbids a new hole.
+EMPTY_SEMANTICS_LEFTOVER = frozenset()
 
 # LS pre/post-inc + saturating ALU64 families that T-DSP13 must name in
 # CodeGen/Haydn (compat/tdsp13-ls-satalu64-pin.ll). Not a 746-name harness.

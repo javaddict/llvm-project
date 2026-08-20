@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """T-DSP13 declared-vs-tested pin + PublicEnabled ⇒ Semantics publish-gate.
 
-Does not author the remaining empty-Semantics rows or a 746-name harness.
-Fails only when:
+Empty-Semantics leftovers were authored. Fails only when:
   * a PublicEnabled HaydnBuiltin/HaydnPairBuiltin gains empty Semantics
-    outside the pinned leftover set
   * IntrinsicsHaydn.td cannot be parsed (floor)
-  * the leftover set shrinks without being removed from the pin
+Does not author a 746-name harness.
 
 Usage:
   tdsp13-declared-vs-tested.py <IntrinsicsHaydn.td> <BuiltinsHaydn.td> \\
@@ -18,43 +16,9 @@ import re
 import sys
 from pathlib import Path
 
-# PublicEnabled natives that still have empty Semantics. Authoring those
-# rows is leftover; this pin forbids silent growth of the hole.
-EMPTY_SEMANTICS_LEFTOVER = frozenset(
-    {
-        "ldw_brev_imm_pair",
-        "ldw_brev_reg_pair",
-        "ldw_cb_imm_pair",
-        "ldw_cb_reg_pair",
-        "lw_brev_imm_pair",
-        "lw_brev_reg_pair",
-        "mac32",
-        "macq31",
-        "maxabs32s",
-        "mulaa32s_fir_hh",
-        "mulaa32s_fir_hl",
-        "mulafq16x2_fir_1",
-        "mulafq16x2_fir_3",
-        "mul64_ss_hh",
-        "mul64_ss_hl",
-        "mulfc32x16ras_high",
-        "mulfc32x16ras_low",
-        "mulfp32x16x2ras_high",
-        "mulfp32x16x2ras_low",
-        "mulfq16x2_fir_1",
-        "mulfq16x2_fir_3",
-        "mulq31",
-        "mulq63",
-        "sdw_brev_imm",
-        "sdw_brev_reg",
-        "sdw_cb_imm",
-        "sdw_cb_reg",
-        "setcbr_begin",
-        "setcbr_end",
-        "sw_brev_imm",
-        "sw_brev_reg",
-    }
-)
+# PublicEnabled natives must publish Semantics. Empty leftover set is
+# closed; this pin forbids a new hole.
+EMPTY_SEMANTICS_LEFTOVER = frozenset()
 
 INTRIN_FLOOR = 700
 

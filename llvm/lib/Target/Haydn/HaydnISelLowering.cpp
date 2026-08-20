@@ -13,6 +13,7 @@
 
 #include "HaydnISelLowering.h"
 #include "Haydn.h"
+#include "HaydnCallingConv.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/bit.h"
@@ -21,6 +22,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicsHaydn.h"
+#include "llvm/IR/Type.h"
 
 using namespace llvm;
 
@@ -66,8 +68,8 @@ HaydnTargetLowering::HaydnTargetLowering(const TargetMachine &TM,
   setMaxAtomicSizeInBitsSupported(0);
 
   // Enable jump tables for dense switches. The GISel pipeline handles
-  // G_JUMP_TABLE (materialize base) and G_BRJT (indirect branch) via
-  // the instruction selector. BR_JT is expanded to JALR by AsmPrinter.
+  // G_JUMP_TABLE (LOAD_ADDR of the table) and G_BRJT (scale+load+BR_JT).
+  // AsmPrinter expands BR_JT to JALR_W r0 (HaydnAsmPrinter.cpp:813).
   setMinimumJumpTableEntries(4);
 
   // Product Format E parcels use registry EncodedBytes (12). Function
@@ -87,6 +89,38 @@ HaydnTargetLowering::HaydnTargetLowering(const TargetMachine &TM,
   const Align ProductFnAlign(1u << llvm::countr_zero(ParcelBytes));
   setMinFunctionAlignment(ProductFnAlign);
   setPrefFunctionAlignment(ProductFnAlign);
+}
+
+bool HaydnTargetLowering::CanLowerReturn(
+    CallingConv::ID CallConv, MachineFunction &MF, bool IsVarArg,
+    const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context,
+    const Type *RetTy) const {
+  // Peer: HexagonISelLowering.cpp:225-234 CheckReturn(RetCC_*).
+  // Overlay: i128/half/bfloat are not RetCC types. split Outs of 2×i64
+  // is not a documented C ABI; CallLowering fail-closes on the original
+  // type before sret demotion. Do not reject interrupt/naked here —
+  // false would sret-demote (AIE1ISelLowering.cpp:964 rejects at
+  // return lowering; Haydn CallLowering matches that).
+  if (RetTy) {
+    if (const IntegerType *IT = dyn_cast<IntegerType>(RetTy)) {
+      if (IT->getBitWidth() > 64)
+        return false;
+    }
+    if (RetTy->isHalfTy() || RetTy->isBFloatTy())
+      return false;
+  }
+  for (const ISD::OutputArg &Out : Outs) {
+    if (HaydnCCAssignRejectsType(Out.VT))
+      return false;
+  }
+  SmallVector<CCValAssign, 16> RVLocs;
+  CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
+  if (!CCInfo.CheckReturn(Outs, RetCC_Haydn))
+    return false;
+  for (const CCValAssign &VA : RVLocs)
+    if (VA.isRegLoc() && HaydnLocIsReservedSoftZero(VA.getLocReg()))
+      return false;
+  return true;
 }
 
 EVT HaydnTargetLowering::getSetCCResultType(const DataLayout &DL,
@@ -146,8 +180,7 @@ bool HaydnTargetLowering::allowsMisalignedMemoryAccesses(
 }
 
 bool HaydnTargetLowering::areJTsAllowed(const Function *Fn) const {
-  // Jump tables are enabled. The GISel selector handles G_BRJT → BR_JT
-  // and AsmPrinter expands BR_JT to JALR for the indirect branch.
+  // Jump tables are enabled. Selector G_BRJT → BR_JT; printer → JALR_W r0.
   return true;
 }
 

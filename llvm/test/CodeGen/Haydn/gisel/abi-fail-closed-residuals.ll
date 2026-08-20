@@ -60,7 +60,8 @@
 ; interrupt / naked / ssp have no ISR or protector ABI.
 ; inreg / nest / swift* / byref are not Haydn seats (were silently ignored).
 ; Formal byval is the defined stack-indirect pointer path (not fail-closed).
-; musttail stays fail-closed in musttail-reject.ll.
+; legal musttail sibcall is JAL_W_MSP (musttail-reject.ll);
+; ineligible musttail stays fail-closed in tailcall-isr-fail-closed.ll.
 ; frameaddress depth 0 is FP; depth>0 and cycle/named-register I/O have
 ; no golden product (legal-then-unselectable abort closed).
 

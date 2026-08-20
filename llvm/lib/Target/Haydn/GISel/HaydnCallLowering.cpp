@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnCallLowering.h"
+#include "HaydnCallingConv.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnISelLowering.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -25,6 +26,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/RegisterBankInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Type.h"
@@ -35,11 +37,6 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "haydn-call-lowering"
-
-// Include the tablegen-generated calling convention functions (static).
-// These define CC_Haydn and RetCC_Haydn used by IncomingValueAssigner
-// OutgoingValueAssigner below.
-#include "HaydnGenCallingConv.inc"
 
 namespace {
 // The Haydn GPR argument registers, R1–R7. R0 is reserved as soft-zero and is
@@ -401,8 +398,9 @@ static bool isUnsupportedABIType(Type *Ty) {
 }
 
 // Interrupt, naked, and stack-protector have no Haydn ABI. AIE rejects
-// interrupt at return lowering (AIE1ISelLowering.cpp:964). Keep musttail
-// and these rows fail-closed until a legal JALR/frame/ISR story exists.
+// interrupt at return lowering (AIE1ISelLowering.cpp:964). ISR stays
+// fail-closed (no CC_ISR). musttail uses JAL_W_MSP / JALR_W_MSP when
+// the call is a register-only sibcall.
 static bool hasUnsupportedFnABI(const Function &F) {
   if (F.hasFnAttribute("interrupt") || F.hasFnAttribute(Attribute::Naked))
     return true;
@@ -608,8 +606,8 @@ bool HaydnCallLowering::lowerFormalArguments(
 }
 
 // AIE AIECallLowering.cpp:592. Target-independent IsTailCall plus no
-// byval formals. JALR/frame discipline still has to supply a tail opcode
-// (AIE2 PseudoJ_TCO_*; AIE1 getCallOpcode tail is unreachable).
+// byval formals. Interrupt/GHC/stack/varargs stay fail-closed.
+// JAL_W_MSP / JALR_W_MSP are the tail opcodes.
 bool HaydnCallLowering::isEligibleForTailCallOptimization(
     MachineIRBuilder &MIRBuilder, CallLoweringInfo &Info) const {
   MachineFunction &MF = MIRBuilder.getMF();
@@ -619,9 +617,10 @@ bool HaydnCallLowering::isEligibleForTailCallOptimization(
     LLVM_DEBUG(dbgs() << "Call is not marked tail/musttail\n");
     return false;
   }
-  if (any_of(CallerF.args(),
-             [](const Argument &A) { return A.hasByValAttr(); })) {
-    LLVM_DEBUG(dbgs() << "Cannot tail call from callers with byval\n");
+  if (any_of(CallerF.args(), [](const Argument &A) {
+        return A.hasByValAttr() || A.hasInRegAttr() || A.hasSwiftErrorAttr();
+      })) {
+    LLVM_DEBUG(dbgs() << "Cannot tail call from callers with byval/inreg\n");
     return false;
   }
   if (CallerF.isVarArg() || Info.IsVarArg) {
@@ -631,30 +630,111 @@ bool HaydnCallLowering::isEligibleForTailCallOptimization(
   if (!isSupportedCallingConv(Info.CallConv) ||
       !isSupportedCallingConv(CallerF.getCallingConv()))
     return false;
-  if (hasUnsupportedFnABI(CallerF) || hasUnsupportedABIArgFlags(Info.OrigArgs))
+  if (hasUnsupportedFnABI(CallerF) || hasUnsupportedABIArgFlags(Info.OrigArgs) ||
+      hasUnsupportedABIArgFlags(Info.OrigRet))
     return false;
-  for (const ArgInfo &A : Info.OrigArgs)
+  if (Info.CB)
+    if (const Function *Callee = Info.CB->getCalledFunction())
+      if (hasUnsupportedFnABI(*Callee))
+        return false;
+  if (!Info.CanLowerReturn)
+    return false;
+  if (isUnsupportedABIType(Info.OrigRet.Ty))
+    return false;
+  for (const ArgInfo &A : Info.OrigArgs) {
     if (isUnsupportedABIType(A.Ty))
       return false;
+    if (!A.Flags.empty() && A.Flags[0].isByVal())
+      return false;
+  }
+  // Direct JAL_W_MSP / indirect JALR_W_MSP use the same reloc as JAL_W /
+  // JALR_W. AIE AIECallLowering.cpp:592 has no PIC DSO-local veto; Haydn
+  // is ELF-only, so do not import AArch64 MachO's PIC restriction.
   return true;
 }
 
-// AIE AIECallLowering.cpp:622 emits TII.getCallOpcode(..., /*isTailCall*/true),
-// which is isReturn+isCall+isTerminator so PEI inserts the epilogue on that
-// block (isReturnBlock = back().isReturn()). Haydn JAL_W is isCall only;
-// JALR_W is isTerminator+isCall+isIndirectBranch but not isReturn. Emitting
-// either as a tail would skip the PEI epilogue. AIE1 has the same hole
-// (getCallOpcode tail is unreachable). Fail closed until a tail opcode
-// exists: no CALLSEQ, no callee mutation, no ordinary-call fallthrough
-// for musttail. Soft `tail` stays JAL_W + RET in lowerCall.
+// AIE AIECallLowering.cpp:622 emits TII.getCallOpcode(..., /*isTailCall*/true)
+// (AIE2InstrInfo.td:459 PseudoJ_TCO_jump_{imm,ind}). Haydn overlay:
+// JAL_W_MSP / JALR_W_MSP are isReturn+isCall+isTerminator; rt is R12 so
+// incoming LR (R15) stays live. Sibcall only: stack args would die in the
+// epilogue. Soft `tail` stays JAL_W + RET in lowerCall.
 bool HaydnCallLowering::lowerTailCall(MachineIRBuilder &MIRBuilder,
                                       CallLoweringInfo &Info) const {
   Info.LoweredTailCall = false;
   if (!isEligibleForTailCallOptimization(MIRBuilder, Info))
     return false;
-  // Eligible IR, but no product tail opcode (AIE2 PseudoJ_TCO analog).
-  LLVM_DEBUG(dbgs() << "Tail eligible but no isReturn tail opcode\n");
-  return false;
+
+  MachineFunction &MF = MIRBuilder.getMF();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const DataLayout &DL = MF.getDataLayout();
+
+  SmallVector<ArgInfo, 8> SplitArgs;
+  for (auto &OrigArg : Info.OrigArgs)
+    splitToValueTypes(OrigArg, SplitArgs, DL, Info.CallConv);
+
+  SmallVector<CCValAssign, 16> ArgLocs;
+  CallLowering::OutgoingValueAssigner Assigner(CC_Haydn);
+  {
+    CCState ArgCCInfo(Info.CallConv, Info.IsVarArg, MF, ArgLocs,
+                      MF.getFunction().getContext());
+    if (!determineAssignments(Assigner, SplitArgs, ArgCCInfo))
+      return false;
+  }
+  // Sibcall only. Stack args live in the incoming area that epilogue pops.
+  if (Assigner.StackSize != 0) {
+    LLVM_DEBUG(dbgs() << "Tail call needs stack args; not a sibcall\n");
+    return false;
+  }
+  // AArch64CallLowering.cpp:966: outgoing args in CSRs must match incoming.
+  {
+    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+    const uint32_t *CallerMask =
+        TRI->getCallPreservedMask(MF, MF.getFunction().getCallingConv());
+    if (CallerMask &&
+        !parametersInCSRMatch(MRI, CallerMask, ArgLocs, SplitArgs)) {
+      LLVM_DEBUG(dbgs() << "Tail call outgoing args clobber CSRs\n");
+      return false;
+    }
+  }
+
+  const unsigned Opc =
+      Info.Callee.isReg() ? Haydn::JALR_W_MSP : Haydn::JAL_W_MSP;
+  MachineInstrBuilder MIB = MIRBuilder.buildInstrNoInsert(Opc);
+  // Scratch link dest: must not be R15 (incoming return address).
+  MIB.addReg(Haydn::R12, RegState::Define);
+  if (Info.Callee.isReg()) {
+    Register CalleeReg = Info.Callee.getReg();
+    if (CalleeReg.isVirtual())
+      if (auto *RBI = MF.getSubtarget().getRegBankInfo())
+        RBI->constrainGenericRegister(CalleeReg, Haydn::GPR32RegClass, MRI);
+    MIB.addReg(CalleeReg);
+    MIB.addImm(0);
+  } else {
+    MIB.add(Info.Callee);
+  }
+
+  {
+    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+    const uint32_t *Mask = TRI->getCallPreservedMask(MF, Info.CallConv);
+    assert(Mask && "Missing call preserved mask for calling convention");
+    MIB.addRegMask(Mask);
+  }
+
+  {
+    HaydnOutgoingValueHandler Handler(MIRBuilder, MRI, MIB);
+    CallLowering::OutgoingValueAssigner EmitAssigner(CC_Haydn);
+    if (!determineAndHandleAssignments(Handler, EmitAssigner, SplitArgs,
+                                       MIRBuilder, Info.CallConv,
+                                       Info.IsVarArg)) {
+      MF.deleteMachineInstr(MIB);
+      return false;
+    }
+  }
+
+  MIRBuilder.insertInstr(MIB);
+  MF.getFrameInfo().setHasTailCall();
+  Info.LoweredTailCall = true;
+  return true;
 }
 
 bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
@@ -664,8 +744,9 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   const DataLayout &DL = MF.getDataLayout();
 
   // Soft `tail` is an ordinary JAL_W + RET. musttail has no fallthrough —
-  // lowerTailCall is the AIE-shaped seat and stays fail-closed until a
-  // legal tail opcode exists. Interrupt/naked/i128 stay fail-closed below.
+  // lowerTailCall emits JAL_W_MSP / JALR_W_MSP when the call is a
+  // register-only sibcall, otherwise fail closed (no ordinary-call
+  // fallthrough). Interrupt/naked/i128 stay fail-closed below.
   if (Info.IsMustTailCall)
     return lowerTailCall(MIRBuilder, Info);
   Info.IsTailCall = false;

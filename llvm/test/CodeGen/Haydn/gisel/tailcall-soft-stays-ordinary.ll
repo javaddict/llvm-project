@@ -3,8 +3,8 @@
 ; RUN:     | FileCheck %s
 ;
 ; Role: semantic — optional `tail` is an ordinary JAL_W + RET, not TCO.
-; musttail stays fail-closed (musttail-reject.ll). JAL_W is not a
-; terminator/return, so PEI would skip the epilogue of a fake tail.
+; Legal musttail sibcall is JAL_W_MSP (musttail-reject.ll). JAL_W is not
+; a terminator/return, so PEI would skip the epilogue of a fake tail.
 
 declare i32 @sink(i32)
 

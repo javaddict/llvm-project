@@ -68,6 +68,14 @@ public:
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
 
+  // Peer: HexagonISelLowering.cpp:225 CheckReturn(RetCC_*).
+  // Overlay: i128/half/bfloat are not RetCC types; R0 is never a return.
+  bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
+                      bool IsVarArg,
+                      const SmallVectorImpl<ISD::OutputArg> &Outs,
+                      LLVMContext &Context,
+                      const Type *RetTy) const override;
+
  // – / : mark public CB/BREV/Golden WITH/POST/PRE + UA
   // mem intrinsics so IRTranslator attaches MachineMemOperands (object, size,
   // align, flags). GISel select clones those MMOs onto the selected MI.

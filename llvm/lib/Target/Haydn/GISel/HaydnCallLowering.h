@@ -40,9 +40,8 @@ public:
                  CallLoweringInfo &Info) const override;
 
 private:
-  // AIE AIECallLowering.cpp:592 / :622. Emits a tail only when a
-  // isReturn+isCall+isTerminator opcode exists and the call is eligible.
-  // Haydn JAL_W / JALR_W are not that shape (PEI isReturnBlock).
+  // AIE AIECallLowering.cpp:592 / :622. JAL_W_MSP / JALR_W_MSP are the
+  // isReturn+isCall+isTerminator seats (AIE2 PseudoJ_TCO_jump_*).
   bool isEligibleForTailCallOptimization(
       MachineIRBuilder &MIRBuilder, CallLoweringInfo &Info) const;
 

@@ -5,7 +5,7 @@
 // RUN:   --self-test
 //
 // T-DSP13 declared-vs-tested inventory pin. Names LS pre/post-inc + sat
-// ALU64 residual and leftover empty-Semantics set. Does not author a
+// ALU64 residual. Empty-Semantics leftover is closed. Does not author a
 // 746-name harness or QUALIFY.
 
 void tdsp13_declared_vs_tested_pin(void) {}

@@ -1,14 +1,42 @@
-; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -o /dev/null %s 2>&1 | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:     -stop-after=instruction-select -verify-machineinstrs -o - %s \
+; RUN:     | FileCheck %s --check-prefix=ISEL
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:     -verify-machineinstrs -o - %s | FileCheck %s --check-prefix=ASM
 ;
-; Role: semantic — musttail is unsupported; fail closed before CALLSEQ/call
-; mutation (no silent ordinary-call lowering). lowerTailCall is the AIE-shaped
-; seat (AIECallLowering.cpp:622) and returns false until a tail opcode is
-; isReturn+isCall+isTerminator. Soft tail stays ordinary JAL+RET.
+; Role: semantic — register-only musttail sibcall uses JAL_W_MSP (AIE2
+; PseudoJ_TCO_jump_imm). rt is R12; incoming LR stays live. Soft tail
+; stays ordinary JAL+RET. Ineligible musttail (byval/varargs/stack)
+; stays fail-closed in tailcall-isr-fail-closed.ll.
 
 declare void @callee(i32)
-define void @caller(i32 %x) {
-  ; CHECK: unable to translate instruction: call
+define void @caller(i32 %x) nounwind {
+; ISEL-LABEL: name: caller
+; ISEL: JAL_W_MSP
+; ISEL-NOT: RET
+; ASM-LABEL: caller:
+; ASM: {{jal_w|jal}}{{.*}}r12
   musttail call void @callee(i32 %x)
   ret void
+}
+
+@fp = external global ptr
+define void @caller_indirect(i32 %x) nounwind {
+; ISEL-LABEL: name: caller_indirect
+; ISEL: JALR_W_MSP
+; ISEL-NOT: RET
+  %f = load ptr, ptr @fp
+  musttail call void (i32) %f(i32 %x)
+  ret void
+}
+
+declare i32 @callee_i32(i32)
+define i32 @caller_ret(i32 %x) nounwind {
+; ISEL-LABEL: name: caller_ret
+; ISEL: JAL_W_MSP
+; ISEL-NOT: RET
+; ASM-LABEL: caller_ret:
+; ASM: {{jal_w|jal}}{{.*}}r12
+  %r = musttail call i32 @callee_i32(i32 %x)
+  ret i32 %r
 }

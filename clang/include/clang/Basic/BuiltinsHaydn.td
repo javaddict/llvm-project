@@ -201,9 +201,11 @@ def mul64_ss_lh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"
 }
 def mul64_ss_hl : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let Mnemonic = "MUL64_HL";
+  let Semantics = "signed×signed multiply, high×low 32-bit lanes → 64-bit product";
 }
 def mul64_ss_hh : HaydnBuiltin<"int64_t(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let Mnemonic = "MUL64_HH";
+  let Semantics = "signed×signed multiply, high×high 32-bit lanes → 64-bit product";
 }
 
 // Signed-unsigned: _lul, _ulh, _uhl, _uhh
@@ -949,11 +951,13 @@ def mulfp32x16x2ras_low : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulfp32x16x2ras_low";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULFP32X16X2RAS_LOW";
+  let Semantics = "compatibility dual 32x16 fractional MAC on the low pair of 16-bit lanes. No native 32x16 cross-width MAC; selector decomposes to FMULA16 lane steps.";
 }
 def mulfp32x16x2ras_high : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulfp32x16x2ras_high";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULFP32X16X2RAS_HIGH";
+  let Semantics = "compatibility dual 32x16 fractional MAC on the high pair of 16-bit lanes. No native 32x16 cross-width MAC; selector decomposes to FMULA16 lane steps.";
 }
 def mull : HaydnBuiltin<"int(int, int)"> {
   let PublicName = "mull";
@@ -983,21 +987,25 @@ def mulq31 : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "mulq31";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "MULQ31";
+  let Semantics = "compatibility Q1.31 multiply. No golden MULQ31 opcode; lowered to MULSSH (signed high-half product). The third argument is unused.";
 }
 def macq31 : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "macq31";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "MACQ31";
+  let Semantics = "compatibility Q1.31 multiply-accumulate. No golden MACQ31 opcode; lowered to MULSSH then ADD32.";
 }
 def mulq63 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulq63";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULQ63";
+  let Semantics = "compatibility Q1.63 multiply. No golden MULQ63 opcode; lowered to MUL64_LL. The third argument is unused.";
 }
 def mac32 : HaydnBuiltin<"int(int, int, int)"> {
   let PublicName = "mac32";
   let PublicPrototype = "int(int, int, int)";
   let Mnemonic = "MAC32";
+  let Semantics = "compatibility 32-bit multiply-accumulate. No golden MAC32 opcode; lowered to MULL then ADD32.";
 }
 def x2mula32_pair : HaydnPairBuiltin<"int64_t(int64_t*, int64_t, int64_t, _ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2mula32";
@@ -1138,8 +1146,9 @@ def mulss32_hllh : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
 // Golden MAXABS32S: dual 32-bit abs+max lanes (same shape as X2 abs/max family).
 def maxabs32s : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "maxabs32s";
-  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32, haydn_x2int32)";
+  let PublicPrototype = "haydn_x2int32(haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MAXABS32S";
+  let Semantics = "per-lane saturating abs-max of two packed dual-32 values: SAT32(MAX(SAT_ABS(a), SAT_ABS(b))) on each 32-bit lane. Lowered to X2ABS32S then X2MAX32; no native fused abs-max.";
 }
 def fmul16_hs00 : HaydnBuiltin<"int64_t(_ExtVector<4, short>, _ExtVector<4, short>)"> {
   let PublicName = "fmul16_hs00";
@@ -2641,6 +2650,7 @@ def ldw_cb_imm_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int, int)",
   let PublicPrototype = "haydn_cb_ld_t(void const*, int, int)";
   let Mnemonic = "D_LDW_CB_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheckSimm8>];
+  let Semantics = "circular-buffer double-word load with immediate stride. Returns {data, updated pointer}. cbr_sel picks CBR0/CBR1 begin/end bounds.";
 }
 def ldw_cb_reg_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int, int)", "circular-buffer"> {
   let Attributes = [NoThrow];
@@ -2650,6 +2660,7 @@ def ldw_cb_reg_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int, int)",
   let Mnemonic = "D_LDW_CB_REG";
   // frexp: out*, base, cbr_sel, stride_reg — cbr_sel is encoding ImmArg.
   let ImmChecks = [ImmCheck<2, ImmCheck0_1>];
+  let Semantics = "circular-buffer double-word load with register stride. Returns {data, updated pointer}. cbr_sel picks CBR0/CBR1 begin/end bounds.";
 }
 def sdw_cb_imm : HaydnBuiltin<"void*(int64_t, void*, int, int)", "circular-buffer"> {
   let Attributes = [NoThrow];
@@ -2658,6 +2669,7 @@ def sdw_cb_imm : HaydnBuiltin<"void*(int64_t, void*, int, int)", "circular-buffe
   let PublicPrototype = "void*(int64_t, void*, int, int)";
   let Mnemonic = "D_SDW_CB_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheckSimm8>];
+  let Semantics = "circular-buffer double-word store with immediate stride. Returns the AGU-updated pointer. cbr_sel picks CBR0/CBR1 begin/end bounds.";
 }
 def sdw_cb_reg : HaydnBuiltin<"void*(int64_t, void*, int, int)", "circular-buffer"> {
   let Attributes = [NoThrow];
@@ -2667,6 +2679,7 @@ def sdw_cb_reg : HaydnBuiltin<"void*(int64_t, void*, int, int)", "circular-buffe
   let Mnemonic = "D_SDW_CB_REG";
   // data, ptr, cbr_sel, stride_reg — cbr_sel is encoding ImmArg.
   let ImmChecks = [ImmCheck<2, ImmCheck0_1>];
+  let Semantics = "circular-buffer double-word store with register stride. Returns the AGU-updated pointer. cbr_sel picks CBR0/CBR1 begin/end bounds.";
 }
 // SETCBR_* pseudos: cbr_sel is i32imm (0 or 1) selecting CBR_BEGIN/END CSR.
 // Product AE_ADDCIRC* headers only pass literal 0/1 — true ICE ImmArg.
@@ -2677,6 +2690,7 @@ def setcbr_begin : HaydnBuiltin<"void(int, int)", "circular-buffer"> {
   let PublicPrototype = "void(int, int)";
   let Mnemonic = "SETCBR_BEGIN";
   let ImmChecks = [ImmCheck<0, ImmCheck0_1>];
+  let Semantics = "write the circular-buffer begin bound CSR for the selected CBR (cbr_sel 0 or 1).";
 }
 def setcbr_end : HaydnBuiltin<"void(int, int)", "circular-buffer"> {
   let Attributes = [NoThrow];
@@ -2685,6 +2699,7 @@ def setcbr_end : HaydnBuiltin<"void(int, int)", "circular-buffer"> {
   let PublicPrototype = "void(int, int)";
   let Mnemonic = "SETCBR_END";
   let ImmChecks = [ImmCheck<0, ImmCheck0_1>];
+  let Semantics = "write the circular-buffer end bound CSR for the selected CBR (cbr_sel 0 or 1).";
 }
 // UA AR family: ar_sel and dir_sel are encoding ImmArgs — ISel requires
 // compile-time constants. Architectural AR file is AR0/AR1; ar_sel legal
@@ -2770,6 +2785,7 @@ def ldw_brev_imm_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int)", "b
   let Mnemonic = "D_LDW_BREV_IMM";
   // frexp args: out*, base, stride — ImmCheck on stride.
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "bit-reversed double-word load with immediate stride. Returns {data, updated pointer} using BREV addressing on the AGU base.";
 }
 def ldw_brev_reg_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int)", "bit-reversed"> {
   let Attributes = [NoThrow];
@@ -2777,6 +2793,7 @@ def ldw_brev_reg_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int)", "b
   let PublicName = "ldw_brev_reg";
   let PublicPrototype = "haydn_cb_ld_t(void const*, int)";
   let Mnemonic = "D_LDW_BREV_REG";
+  let Semantics = "bit-reversed double-word load with register stride. Returns {data, updated pointer} using BREV addressing on the AGU base.";
 }
 def lw_brev_imm_pair : HaydnPairBuiltin<"int(void**, void const*, int)", "bit-reversed"> {
   let Attributes = [NoThrow];
@@ -2785,6 +2802,7 @@ def lw_brev_imm_pair : HaydnPairBuiltin<"int(void**, void const*, int)", "bit-re
   let PublicPrototype = "haydn_sld_t(void const*, int)";
   let Mnemonic = "S_LW_BREV_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "bit-reversed word load with immediate stride. Returns {data, updated pointer} using BREV addressing on the AGU base.";
 }
 def lw_brev_reg_pair : HaydnPairBuiltin<"int(void**, void const*, int)", "bit-reversed"> {
   let Attributes = [NoThrow];
@@ -2792,6 +2810,7 @@ def lw_brev_reg_pair : HaydnPairBuiltin<"int(void**, void const*, int)", "bit-re
   let PublicName = "lw_brev_reg";
   let PublicPrototype = "haydn_sld_t(void const*, int)";
   let Mnemonic = "S_LW_BREV_REG";
+  let Semantics = "bit-reversed word load with register stride. Returns {data, updated pointer} using BREV addressing on the AGU base.";
 }
 // BREV stores: return AGU-updated base. D data is DR64 (i64); S data is GPR.
 def sdw_brev_imm : HaydnBuiltin<"void*(int64_t, void*, int)", "bit-reversed"> {
@@ -2801,6 +2820,7 @@ def sdw_brev_imm : HaydnBuiltin<"void*(int64_t, void*, int)", "bit-reversed"> {
   let PublicPrototype = "void*(int64_t, void*, int)";
   let Mnemonic = "D_SDW_BREV_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "bit-reversed double-word store with immediate stride. Returns the AGU-updated pointer.";
 }
 def sdw_brev_reg : HaydnBuiltin<"void*(int64_t, void*, int)", "bit-reversed"> {
   let Attributes = [NoThrow];
@@ -2808,6 +2828,7 @@ def sdw_brev_reg : HaydnBuiltin<"void*(int64_t, void*, int)", "bit-reversed"> {
   let PublicName = "sdw_brev_reg";
   let PublicPrototype = "void*(int64_t, void*, int)";
   let Mnemonic = "D_SDW_BREV_REG";
+  let Semantics = "bit-reversed double-word store with register stride. Returns the AGU-updated pointer.";
 }
 def sw_brev_imm : HaydnBuiltin<"void*(int, void*, int)", "bit-reversed"> {
   let Attributes = [NoThrow];
@@ -2816,6 +2837,7 @@ def sw_brev_imm : HaydnBuiltin<"void*(int, void*, int)", "bit-reversed"> {
   let PublicPrototype = "void*(int, void*, int)";
   let Mnemonic = "S_SW_BREV_IMM";
   let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "bit-reversed word store with immediate stride. Returns the AGU-updated pointer.";
 }
 def sw_brev_reg : HaydnBuiltin<"void*(int, void*, int)", "bit-reversed"> {
   let Attributes = [NoThrow];
@@ -2823,6 +2845,7 @@ def sw_brev_reg : HaydnBuiltin<"void*(int, void*, int)", "bit-reversed"> {
   let PublicName = "sw_brev_reg";
   let PublicPrototype = "void*(int, void*, int)";
   let Mnemonic = "S_SW_BREV_REG";
+  let Semantics = "bit-reversed word store with register stride. Returns the AGU-updated pointer.";
 }
 def x2add32 : HaydnBuiltin<"_ExtVector<2, int>(_ExtVector<2, int>, _ExtVector<2, int>)", "simd"> {
   let PublicName = "x2add32";
@@ -3223,41 +3246,49 @@ def mulfc32x16ras_low : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulfc32x16ras_low";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULFC32X16RAS_LOW";
+  let Semantics = "compatibility complex 32x16 MAC with rounding and saturation on the low twiddle pair. No native 32x16 complex MAC; C wrapper widens the 16-bit twiddle then this intrinsic selects X2FCMULA32RS. Public AE_MULFC wrappers stay SOURCE-REVALIDATE.";
 }
 def mulfc32x16ras_high : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulfc32x16ras_high";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULFC32X16RAS_HIGH";
+  let Semantics = "compatibility complex 32x16 MAC with rounding and saturation on the high twiddle pair. No native 32x16 complex MAC; C wrapper widens the 16-bit twiddle then this intrinsic selects X2FCMULA32RS. Public AE_MULFC wrappers stay SOURCE-REVALIDATE.";
 }
 def mulaa32s_fir_hh : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mulaa32s_fir_hh";
   let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULAA32S_FIR_HH";
+  let Semantics = "FIR accumulate step using FMULA32S_HH after Q1.15→Q1.31 coef widen. No native dual-output FIR MAC; FIR/FFT stay C-level compositions of golden members.";
 }
 def mulaa32s_fir_hl : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "mulaa32s_fir_hl";
   let PublicPrototype = "int64_t(int64_t, haydn_x2int32, haydn_x2int32)";
   let Mnemonic = "MULAA32S_FIR_HL";
+  let Semantics = "FIR accumulate step using FMULA32S_LH after Q1.15→Q1.31 coef widen. No native dual-output FIR MAC; FIR/FFT stay C-level compositions of golden members.";
 }
 def mulfq16x2_fir_3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulfq16x2_fir_3";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULFQ16X2_FIR_3";
+  let Semantics = "FIR dual-product overwrite of lanes 1+0 (FMULZAA16_HS_11_00). Prior accumulator is ignored. No native FIR composite ISA.";
 }
 def mulfq16x2_fir_1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulfq16x2_fir_1";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULFQ16X2_FIR_1";
+  let Semantics = "FIR dual-product overwrite of lanes 3+2 (FMULZAA16_HS_33_22). Prior accumulator is ignored. No native FIR composite ISA.";
 }
 def mulafq16x2_fir_3 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulafq16x2_fir_3";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULAFQ16X2_FIR_3";
+  let Semantics = "FIR dual-product accumulate of lanes 1+0 (FMULAA16_HS_11_00). No native FIR composite ISA.";
 }
 def mulafq16x2_fir_1 : HaydnBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulafq16x2_fir_1";
   let PublicPrototype = "int64_t(int64_t, int64_t, int64_t)";
   let Mnemonic = "MULAFQ16X2_FIR_1";
+  let Semantics = "FIR dual-product accumulate of lanes 3+2 (FMULAA16_HS_33_22). No native FIR composite ISA.";
 }
 def f2mulaa32r_hhll : HaydnBuiltin<"int64_t(int64_t, _ExtVector<2, int>, _ExtVector<2, int>)"> {
   let PublicName = "f2mulaa32r_hhll";
@@ -4207,6 +4238,7 @@ def mul16js : HaydnAeBuiltin<"int64_t(int64_t)"> {
   let Mnemonic = "MUL16JS";
   // AE_MUL16JS → X4MJSWAP16S (multiply-by-j).
   let CodeGen = "LanewiseUnary:x4mjswap16s";
+  let Semantics = "compatibility AE_MUL16JS: saturate-multiply by j via X4MJSWAP16S. Not published on haydn.h (PublicEnabled=0).";
 }
 def conj16s : HaydnAeBuiltin<"int64_t(int64_t)"> {
   let PublicName = "conj16s";
@@ -4214,6 +4246,7 @@ def conj16s : HaydnAeBuiltin<"int64_t(int64_t)"> {
   let Mnemonic = "CONJ16S";
   // AE_CONJ16S → X4CONJ16S.
   let CodeGen = "LanewiseUnary:x4conj16s";
+  let Semantics = "compatibility AE_CONJ16S: saturating conjugate via X4CONJ16S. Not published on haydn.h (PublicEnabled=0).";
 }
 def mulafc16ras : HaydnAeBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let PublicName = "mulafc16ras";
@@ -4221,6 +4254,7 @@ def mulafc16ras : HaydnAeBuiltin<"int64_t(int64_t, int64_t, int64_t)"> {
   let Mnemonic = "MULAFC16RAS";
   // AE_MULAFC16RAS → X4FCMULA16RS (true accumulate form).
   let CodeGen = "TernaryI64:x4fcmula16rs";
+  let Semantics = "compatibility AE_MULAFC16RAS: 16-bit complex MAC via X4FCMULA16RS. Public AE_MULFC wrappers stay SOURCE-REVALIDATE; this builtin is not published on haydn.h.";
 }
 def addandsubrng16ras_s0 : HaydnAeBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "addandsubrng16ras_s0";
@@ -4228,18 +4262,21 @@ def addandsubrng16ras_s0 : HaydnAeBuiltin<"int64_t(int64_t, int64_t)"> {
   let Mnemonic = "ADDANDSUBRNG16RAS_S0";
   // Slot suffix is HiFi-only; all three lower identically.
   let CodeGen = "AddAndSubRng";
+  let Semantics = "compatibility AE_ADDANDSUBRNG16RAS slot-0 spelling. HiFi slot suffix is ignored; all three lower identically. Not published on haydn.h.";
 }
 def addandsubrng16ras_s1 : HaydnAeBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "addandsubrng16ras_s1";
   let PublicPrototype = "int64_t(int64_t, int64_t)";
   let Mnemonic = "ADDANDSUBRNG16RAS_S1";
   let CodeGen = "AddAndSubRng";
+  let Semantics = "compatibility AE_ADDANDSUBRNG16RAS slot-1 spelling. HiFi slot suffix is ignored; all three lower identically. Not published on haydn.h.";
 }
 def addandsubrng16ras_s2 : HaydnAeBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "addandsubrng16ras_s2";
   let PublicPrototype = "int64_t(int64_t, int64_t)";
   let Mnemonic = "ADDANDSUBRNG16RAS_S2";
   let CodeGen = "AddAndSubRng";
+  let Semantics = "compatibility AE_ADDANDSUBRNG16RAS slot-2 spelling. HiFi slot suffix is ignored; all three lower identically. Not published on haydn.h.";
 }
 } // Attributes = [NoThrow, Const]  — Pure ALU only (SFR/State/Mem override)
 

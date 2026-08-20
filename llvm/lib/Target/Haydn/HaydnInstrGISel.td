@@ -130,3 +130,26 @@ def G_HAYDN_PREINC_STORE : HaydnGenericInstruction {
   let hasSideEffects = 0;
   let mayStore = 1;
 }
+
+// Tail-call clones of JAL_W / JALR_W. AIE2InstrInfo.td:459-464
+// PseudoJ_TCO_jump_{imm,ind} is isCall+isReturn so PEI inserts the
+// epilogue on that block and IRTranslator skips the following ret
+// (TII.isTailCall = isCall && isReturn). Haydn overlay: same flags on
+// encoded WIDE shells. rt is a call-clobbered scratch (R12 at
+// lowering), never R15, so the incoming link stays live (Uses=R15).
+// _MSP peels to catalog JAL / JALR (HaydnFormatERecords.h) so Finalize
+// does not see a new logical. isCodeGenOnly keeps the clones out of
+// the decoder; bits match JAL_W / JALR_W.
+let isCodeGenOnly = 1, isCall = 1, isTerminator = 1, isReturn = 1,
+    isBarrier = 1, Uses = [R15],
+    Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
+            D0, D1, D2, D3, D4, D5, D6, D7] in {
+def JAL_W_MSP : Fmt48_WideBR_I20<0x20, (outs GPR32:$rt),
+                                 (ins brtarget_wide_i20:$offset),
+                                 "jal_w\t$rt, $offset", []>;
+let isIndirectBranch = 1 in
+def JALR_W_MSP : Fmt48_WideBR_RI12<0x30, (outs GPR32:$rt),
+                                   (ins GPR32:$rs,
+                                        calltarget_wide_ri12:$offset),
+                                   "jalr_w\t$rt, $rs, $offset", []>;
+}

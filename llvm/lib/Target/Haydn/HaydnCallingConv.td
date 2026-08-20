@@ -43,11 +43,16 @@ def CSR_NoRegs : CalleeSavedRegs<(add)>;
 
 // Haydn calling convention: independent cursors for GPR and DR.
 // i128 and wider integers are not CC types (fail-closed before
-// splitToValueTypes invents 2×i64). inreg / nest / swift* / byref have
-// no Haydn seat (fail-closed at CallLowering / PEI). Formal byval is the
-// defined stack-indirect path. half / bfloat are storage or libcall
-// types, not CC types. No CC_ISR: interrupt stays fail-closed until a
-// legal vector story exists (RISCV CC_ISR analog).
+// splitToValueTypes invents 2×i64). TLI CanLowerReturn is the Hexagon
+// CheckReturn(RetCC_Haydn) seat and also refuses R0 / i128 / half / bfloat.
+// inreg / nest / swift* / byref have no Haydn seat (fail-closed at
+// CallLowering / PEI). Formal byval is the defined stack-indirect path.
+// half / bfloat are storage or libcall types, not CC types. No CC_ISR:
+// interrupt stays fail-closed until a legal vector story exists
+// (AIE1ISelLowering.cpp:964 / RISCV CC_ISR analog).
+// Entry=1 emits llvm::CC_Haydn (not static). Peer: PPCCallingConv.td:44
+// (let Entry = 1) / TargetCallingConv.td:215-217.
+let Entry = 1 in
 def CC_Haydn : CallingConv<[
   // Promote small integers to i32
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
@@ -77,6 +82,7 @@ def CC_Haydn : CallingConv<[
 
 // Return value convention: R1-R2 for i32/ptr (R0 is reserved soft-zero).
 // D0 for i64/SIMD.
+let Entry = 1 in
 def RetCC_Haydn : CallingConv<[
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 

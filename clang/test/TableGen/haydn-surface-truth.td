@@ -12,3 +12,9 @@
 // CHECK-DAG: ISA: X2CMUL32S — performs a saturated complex multiplication using Format-1{{.*}}SOURCE-REVALIDATE (T-DSP14)
 // CHECK-DAG: ISA: X2CMUL32_F2 — {{.*}}SOURCE-REVALIDATE (T-DSP14)
 // CHECK-DAG: ISA: X2CMUL32S_F2 — {{.*}}SOURCE-REVALIDATE (T-DSP14)
+// CHECK-DAG: ISA: MAXABS32S — per-lane saturating abs-max
+// CHECK-DAG: ISA: MUL64_HH — signed{{.*}}high{{.*}}high 32-bit lanes
+// CHECK-DAG: ISA: MAC32 — compatibility 32-bit multiply-accumulate
+// CHECK-DAG: ISA: MULAA32S_FIR_HH — FIR accumulate step{{.*}}No native dual-output FIR MAC
+// CHECK-DAG: haydn_mulfc32x16ras_low
+// CHECK-DAG: haydn_mulfc32x16ras_high

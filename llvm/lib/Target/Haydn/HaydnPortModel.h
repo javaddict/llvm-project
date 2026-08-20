@@ -643,6 +643,14 @@ haydnPortMRI(const MachineInstr &MI, const MachineRegisterInfo *MRI) {
 // occupies a write port for the cycle (the register file port is reserved
 // before liveness is considered). The previous `!MO.isDead` filter
 // undercounted writes.
+// 2b. **Undef explicit uses still charge a read port.** LLVM may mark a
+// tied dest-read (MOVT32/MOVF32 `$rd_src`, MAC acc) `<undef>` when the
+// fallthrough is poison. The encoding still samples that field: golden
+// MOVT32 `GPR_Read_Port` is rt, rs1, rs2. Skipping undef uses under-counts
+// 3R as 2R so ADD32 (2R) + MOVT32 looks like 4R and coissues; the catalog
+// charges 3R and BundleSim rejects the pack. RAW/WAW still skip undef
+// (no incoming value). Peer: AIE AIEHazardRecognizer.cpp books itinerary
+// resources with no undef-use skip; Hexagon packet walks are per operand.
 // 3. **Each explicit operand field reserves one port.** MOVE32 is modeled
 // with two source operands (`$rs1`, `$rs2`) for the R-type encoding and
 // `copyPhysReg` emits `MOVE32 rd, rs, rs`. Golden Constraints count
@@ -688,7 +696,8 @@ countGPRPorts(const MachineInstr &MI,
     if (!isHaydnGPRPortReg(Reg, MRI))
       continue;
 
-    const bool IsUse = MO.isUse() && !MO.isUndef();
+    // Undef uses still occupy the encoded read port (MOVT32 dest-read).
+    const bool IsUse = MO.isUse();
     const bool IsDef = MO.isDef();
     if (IsUse)
       ++Reads;
@@ -729,7 +738,7 @@ countDRPorts(const MachineInstr &MI,
     if (!isHaydnDRPortReg(Reg, MRI))
       continue;
 
-    const bool IsUse = MO.isUse() && !MO.isUndef();
+    const bool IsUse = MO.isUse();
     const bool IsDef = MO.isDef();
     if (IsUse)
       ++Reads;
@@ -759,7 +768,7 @@ countARPorts(const MachineInstr &MI,
     if (!isHaydnARPortReg(Reg, MRI))
       continue;
 
-    const bool IsUse = MO.isUse() && !MO.isUndef();
+    const bool IsUse = MO.isUse();
     const bool IsDef = MO.isDef();
     if (IsUse)
       ++Reads;
@@ -801,7 +810,7 @@ countSFRPorts(const MachineInstr &MI,
     Register Reg = MO.getReg();
     if (!isHaydnSFRPortReg(Reg))
       continue;
-    const bool IsUse = MO.isUse() && !MO.isUndef();
+    const bool IsUse = MO.isUse();
     const bool IsDef = MO.isDef();
     if (IsUse)
       ++Reads;

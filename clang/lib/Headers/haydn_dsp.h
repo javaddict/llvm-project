@@ -462,12 +462,19 @@ typedef long long ae_p48;
     (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); \
   } while (0)
 
-/// Load scalar 32-bit indexed with post-increment
-#define AE_L32_XP(dst, ptr, offs, inc) \
-  do { \
-    dst = *((ae_int32 *)(ptr) + ((offs) / (int)sizeof(ae_int32))); \
-    (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); \
-  } while (0)
+/// Load scalar 32-bit indexed with post-increment.
+/// 3-arg (dst, ptr, inc): load at *ptr then ptr += inc.
+/// 4-arg (dst, ptr, offs, inc): load at ptr+offs then ptr += inc.
+#define AE_L32_XP(...) __AE_L32_XP_OVERLOAD(__VA_ARGS__)
+#define __AE_L32_XP_GET(_1, _2, _3, _4, NAME, ...) NAME
+#define __AE_L32_XP_OVERLOAD(...) \
+  __AE_L32_XP_GET(__VA_ARGS__, __AE_L32_XP_4A, __AE_L32_XP_3A)(__VA_ARGS__)
+#define __AE_L32_XP_3A(dst, ptr, inc) \
+  do { (dst) = *(ae_int32 *)(ptr); \
+       (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); } while (0)
+#define __AE_L32_XP_4A(dst, ptr, offs, inc) \
+  do { (dst) = *(ae_int32 *)((char *)(ptr) + (offs)); \
+       (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); } while (0)
 
 /// Store scalar 32-bit low lane with post-increment
 #define AE_S32_L_IP(src, ptr, inc) \
@@ -4367,18 +4374,8 @@ static inline ae_int64 AE_MULZAAFD32X16_H2_L3_3A(ae_int64 acc, ae_int16x4 d,
 // haydn_* primitives or plain loads/stores already used elsewhere.         //
 //===----------------------------------------------------------------------===//
 
-//---- AE_L32_XP : 3-arg (load at ptr, advance by inc) ; 4-arg (load at ptr+offs)
-#undef  AE_L32_XP
-#define AE_L32_XP(...) __AE_L32_XP_OVERLOAD(__VA_ARGS__)
-#define __AE_L32_XP_GET(_1, _2, _3, _4, NAME, ...) NAME
-#define __AE_L32_XP_OVERLOAD(...) \
-  __AE_L32_XP_GET(__VA_ARGS__, __AE_L32_XP_4A, __AE_L32_XP_3A)(__VA_ARGS__)
-#define __AE_L32_XP_3A(dst, ptr, inc) \
-  do { (dst) = *(ae_int32 *)(ptr); \
-       (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); } while (0)
-#define __AE_L32_XP_4A(dst, ptr, offs, inc) \
-  do { (dst) = *(ae_int32 *)((char *)(ptr) + (offs)); \
-       (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); } while (0)
+// AE_L32_XP arity overload is defined once with the first LS wrappers
+// (3-arg and 4-arg). Do not #undef it again here.
 
 //---- AE_L32X2_XP / AE_L32X2F24_XP : 3-arg + 4-arg forms ----------------
 #undef  AE_L32X2_XP

@@ -137,6 +137,22 @@ def : Pat<(int_haydn_ff2mul32rs_ll DR64:$a, DR64:$b), (FF2MUL32RS_LL DR64:$a, DR
 def : Pat<(int_haydn_ff2mul32rs_lh DR64:$a, DR64:$b), (FF2MUL32RS_LH DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_ff2mul32rs_hh DR64:$a, DR64:$b), (FF2MUL32RS_HH DR64:$a, DR64:$b)>;
 
+// FF2MULA32RS / FF2MULS32RS — saturating single-product acc twins of
+// FF2MUL32RS. GISel selectAccMAC is the live path; 3-operand Pats match
+// the ff2mula32r / ff2muls32r tied-def shape (acc is $rd_in).
+def : Pat<(int_haydn_ff2mula32rs_ll DR64:$acc, DR64:$a, DR64:$b),
+          (FF2MULA32RS_LL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_ff2mula32rs_lh DR64:$acc, DR64:$a, DR64:$b),
+          (FF2MULA32RS_LH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_ff2mula32rs_hh DR64:$acc, DR64:$a, DR64:$b),
+          (FF2MULA32RS_HH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_ff2muls32rs_ll DR64:$acc, DR64:$a, DR64:$b),
+          (FF2MULS32RS_LL DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_ff2muls32rs_lh DR64:$acc, DR64:$a, DR64:$b),
+          (FF2MULS32RS_LH DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_ff2muls32rs_hh DR64:$acc, DR64:$a, DR64:$b),
+          (FF2MULS32RS_HH DR64:$acc, DR64:$a, DR64:$b)>;
+
 
 
 // FF2MUL32R — non-saturating single-product fractional multiply with rounding.
@@ -252,7 +268,9 @@ def : Pat<(int_haydn_nsaz16_l DR64:$a), (NSAZ16_L DR64:$a)>;
 def : Pat<(int_haydn_nsaz32_l DR64:$a), (NSAZ32_L DR64:$a)>;
 
 //===----------------------------------------------------------------------===//
-// MULSA32/MULSS32 — Dual 32-bit multiply-accumulate/subtract (binary DR64)
+// MULSA32/MULSS32 — Dual 32-bit multiply-add/sub, tied accumulator.
+// Golden Constraints "$rd1 = $rd1_in". GISel live path is selectAccMAC;
+// these Pats keep the three-operand acc form for the match table.
 //===----------------------------------------------------------------------===//
 
 def : Pat<(int_haydn_mulsa32_hhll DR64:$acc, DR64:$a, DR64:$b), (MULSA32_HHLL DR64:$acc, DR64:$a, DR64:$b)>;
@@ -379,9 +397,12 @@ def : Pat<(int_haydn_fmul16_ls33 DR64:$a, DR64:$b), (FMUL16_LS33 DR64:$a, DR64:$
 // Wave 4: FMULAA16 HS/LS MAC variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_haydn_fmulaa16_hs_13_02 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_HS_13_02 DR64:$acc, DR64:$a, DR64:$b)>;
 // Ternary Acc (FmtALU64Acc): GISel selectAccMAC is the live path; SDAG Pat
-// kept consistent with the tied-def shape.
+// kept consistent with the tied-def shape. HS_11_00 is the two-lane dual
+// product (lanes 1+0); default NatureDSP vec_dot16 uses dest-typed
+// X4MULA16S instead (2-dest, C++ selector only).
+def : Pat<(int_haydn_fmulaa16_hs_11_00 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_HS_11_00 DR64:$acc, DR64:$a, DR64:$b)>;
+def : Pat<(int_haydn_fmulaa16_hs_13_02 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_HS_13_02 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulaa16_hs_33_22 DR64:$acc, DR64:$a, DR64:$b),
           (FMULAA16_HS_33_22 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulaa16_ls_11_00 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_LS_11_00 DR64:$acc, DR64:$a, DR64:$b)>;
@@ -392,6 +413,7 @@ def : Pat<(int_haydn_fmulaa16_ls_33_22 DR64:$acc, DR64:$a, DR64:$b), (FMULAA16_L
 // Wave 4: FMULSS16 HS/LS MSU variants (binary DR64)
 //===----------------------------------------------------------------------===//
 
+def : Pat<(int_haydn_fmulss16_hs_11_00 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_HS_11_00 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulss16_hs_13_02 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_HS_13_02 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulss16_hs_33_22 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_HS_33_22 DR64:$acc, DR64:$a, DR64:$b)>;
 def : Pat<(int_haydn_fmulss16_ls_11_00 DR64:$acc, DR64:$a, DR64:$b), (FMULSS16_LS_11_00 DR64:$acc, DR64:$a, DR64:$b)>;

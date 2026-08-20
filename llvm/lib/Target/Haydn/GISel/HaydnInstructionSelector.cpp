@@ -677,10 +677,14 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     // → Abs = EntryVal + JTBase (REQUIRED; missing this → BAD_PC
     // on BundleSim, e.g. jalr 0xffff5494 from relative JT entries
     // in llvm-libc printf_core under -fpie)
-    // 4. BR_JT Abs → AsmPrinter expands to JALR
+    // 4. BR_JT Abs → AsmPrinter expands to JALR_W r0 (not residual JALR)
     Register JTBase = I.getOperand(0).getReg();
     unsigned JTI = I.getOperand(1).getIndex();
     Register Index = I.getOperand(2).getReg();
+    if (JTBase.isVirtual())
+      RBI.constrainGenericRegister(JTBase, Haydn::GPR32RegClass, MRI);
+    if (Index.isVirtual())
+      RBI.constrainGenericRegister(Index, Haydn::GPR32RegClass, MRI);
 
     MachineIRBuilder MIB(I);
 
@@ -728,8 +732,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       TargetAddr = AbsAddr;
     }
 
-    // Branch to the target address using BR_JT pseudo-instruction
-    // BR_JT will be expanded by the AsmPrinter to the actual JALR sequence.
+    // Branch to the target address using BR_JT. The JTI operand keeps the
+    // table live for BranchFolding; AsmPrinter expands to JALR_W r0, addr, 0.
     //
     // The JTI operand MUST be a MO_JumpTableIndex (not MO_Immediate) so that
     // BranchFolding's live-JT scan (BranchFolding.cpp:258, Op.isJTI) recognizes
@@ -4780,12 +4784,19 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_nsaz32_l: return selectUnaryR_GD(NSAZ32_L);
 
   //===-----------------------------------------------------------------===
-  // MULSA32/MULSS32 — Dual 32-bit multiply-accumulate/subtract (binary DR64)
+  // MULSA32/MULSS32 — Dual 32-bit multiply-add/sub into a tied accumulator.
+  // Golden Constraints "$rd1 = $rd1_in" (HaydnInstrInfoGolden.td.inc).
+  // Peer: AIE2PSInstructionSelector::selectBFP13_ADDMAC_CONF (acc operands
+  // are explicit, not dropped). selectBinary would omit $rd1_in.
   //===-----------------------------------------------------------------===
-  case haydn_mulsa32_hhll: return selectBinary(MULSA32_HHLL, DR64RegClass);
-  case haydn_mulsa32_hllh: return selectBinary(MULSA32_HLLH, DR64RegClass);
-  case haydn_mulss32_hhll: return selectBinary(MULSS32_HHLL, DR64RegClass);
-  case haydn_mulss32_hllh: return selectBinary(MULSS32_HLLH, DR64RegClass);
+  case haydn_mulsa32_hhll: return selectAccMAC(MULSA32_HHLL);
+  case haydn_mulsa32_hllh: return selectAccMAC(MULSA32_HLLH);
+  case haydn_mulss32_hhll: return selectAccMAC(MULSS32_HHLL);
+  case haydn_mulss32_hllh: return selectAccMAC(MULSS32_HLLH);
+  case haydn_mulsa32x16_h1_l0: return selectAccMAC(MULSA32X16_H1_L0);
+  case haydn_mulsa32x16_h3_l2: return selectAccMAC(MULSA32X16_H3_L2);
+  case haydn_mulss32x16_h1_l0: return selectAccMAC(MULSS32X16_H1_L0);
+  case haydn_mulss32x16_h3_l2: return selectAccMAC(MULSS32X16_H3_L2);
 
   // satsr64 / packsr32 / packsr32x2_* are not IR intrinsics (composites in
   // haydn_dsp.h only). Do not re-add selection cases.
@@ -5179,35 +5190,29 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_fmul16_ls33: return selectBinary(FMUL16_LS33, DR64RegClass);
 
   //===---------------------------------------------------------------===
-  // Wave 4: FMULAA16 HS/LS MAC variants (binary DR64)
-  //===---------------------------------------------------------------===
-  case haydn_fmulaa16_hs_13_02: return selectBinary(FMULAA16_HS_13_02, DR64RegClass);
-  case haydn_fmulaa16_ls_11_00: return selectBinary(FMULAA16_LS_11_00, DR64RegClass);
-  case haydn_fmulaa16_ls_13_02: return selectBinary(FMULAA16_LS_13_02, DR64RegClass);
-  case haydn_fmulaa16_ls_33_22: return selectBinary(FMULAA16_LS_33_22, DR64RegClass);
+  // Wave 4 leftover FMULAA16 / FMULSS16 / F2MULAS: same tied-acc shape as
+  // the Wave-2 hs_11_00 cases (haydn_i64_from_v4i16_mac / v2i32_mac).
+  // selectBinary drops $rd_in. Peer: AIE2PSInstructionSelector.cpp:1653
+  // (acc operands explicit). ZAA binary forms stay selectBinary below.
+  case haydn_fmulaa16_hs_13_02: return selectAccMAC(FMULAA16_HS_13_02);
+  case haydn_fmulaa16_ls_11_00: return selectAccMAC(FMULAA16_LS_11_00);
+  case haydn_fmulaa16_ls_13_02: return selectAccMAC(FMULAA16_LS_13_02);
+  case haydn_fmulaa16_ls_33_22: return selectAccMAC(FMULAA16_LS_33_22);
 
-  //===---------------------------------------------------------------===
-  // Wave 4: FMULSS16 HS/LS MSU variants (binary DR64)
-  //===---------------------------------------------------------------===
-  case haydn_fmulss16_hs_13_02: return selectBinary(FMULSS16_HS_13_02, DR64RegClass);
-  case haydn_fmulss16_hs_33_22: return selectBinary(FMULSS16_HS_33_22, DR64RegClass);
-  case haydn_fmulss16_ls_11_00: return selectBinary(FMULSS16_LS_11_00, DR64RegClass);
-  case haydn_fmulss16_ls_13_02: return selectBinary(FMULSS16_LS_13_02, DR64RegClass);
-  case haydn_fmulss16_ls_33_22: return selectBinary(FMULSS16_LS_33_22, DR64RegClass);
+  case haydn_fmulss16_hs_13_02: return selectAccMAC(FMULSS16_HS_13_02);
+  case haydn_fmulss16_hs_33_22: return selectAccMAC(FMULSS16_HS_33_22);
+  case haydn_fmulss16_ls_11_00: return selectAccMAC(FMULSS16_LS_11_00);
+  case haydn_fmulss16_ls_13_02: return selectAccMAC(FMULSS16_LS_13_02);
+  case haydn_fmulss16_ls_33_22: return selectAccMAC(FMULSS16_LS_33_22);
 
-  //===---------------------------------------------------------------===
-  // Wave 4: F2MUL zero-accumulator variants (binary DR64)
-  //===---------------------------------------------------------------===
-  // Saturating with rounding
-  case haydn_f2mulas32rs_hhll: return selectBinary(F2MULAS32RS_HHLL, DR64RegClass);
-  case haydn_f2mulas32rs_hllh: return selectBinary(F2MULAS32RS_HLLH, DR64RegClass);
-  case haydn_f2mulsa32rs_hhll: return selectBinary(F2MULSA32RS_HHLL, DR64RegClass);
-  case haydn_f2mulsa32rs_hllh: return selectBinary(F2MULSA32RS_HLLH, DR64RegClass);
-  // Non-saturating with rounding
-  case haydn_f2mulas32r_hhll: return selectBinary(F2MULAS32R_HHLL, DR64RegClass);
-  case haydn_f2mulas32r_hllh: return selectBinary(F2MULAS32R_HLLH, DR64RegClass);
-  case haydn_f2mulsa32r_hhll: return selectBinary(F2MULSA32R_HHLL, DR64RegClass);
-  case haydn_f2mulsa32r_hllh: return selectBinary(F2MULSA32R_HLLH, DR64RegClass);
+  case haydn_f2mulas32rs_hhll: return selectAccMAC(F2MULAS32RS_HHLL);
+  case haydn_f2mulas32rs_hllh: return selectAccMAC(F2MULAS32RS_HLLH);
+  case haydn_f2mulsa32rs_hhll: return selectAccMAC(F2MULSA32RS_HHLL);
+  case haydn_f2mulsa32rs_hllh: return selectAccMAC(F2MULSA32RS_HLLH);
+  case haydn_f2mulas32r_hhll: return selectAccMAC(F2MULAS32R_HHLL);
+  case haydn_f2mulas32r_hllh: return selectAccMAC(F2MULAS32R_HLLH);
+  case haydn_f2mulsa32r_hhll: return selectAccMAC(F2MULSA32R_HHLL);
+  case haydn_f2mulsa32r_hllh: return selectAccMAC(F2MULSA32R_HLLH);
 
   //===---------------------------------------------------------------===
   // Wave 4: F2MUL zero-accumulator / binary form (Z prefix).
@@ -5318,85 +5323,86 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_srl64: return selectDR64ShiftGPR32(SRL64);
 
   //===---------------------------------------------------------------===
-  // Wave 4 Tier 3: SMULA16 — Signed 16-bit MAC with lane selection
+  // Wave 4 Tier 3: SMULA16 — Signed 16-bit MAC with lane selection.
+  // Golden Constraints "$rd1 = $rd1_in" — ternary tied acc, not binary.
   //===---------------------------------------------------------------===
-  case haydn_smula16_00: return selectBinary(SMULA16_00, DR64RegClass);
-  case haydn_smula16_10: return selectBinary(SMULA16_10, DR64RegClass);
-  case haydn_smula16_11: return selectBinary(SMULA16_11, DR64RegClass);
-  case haydn_smula16_20: return selectBinary(SMULA16_20, DR64RegClass);
-  case haydn_smula16_21: return selectBinary(SMULA16_21, DR64RegClass);
-  case haydn_smula16_22: return selectBinary(SMULA16_22, DR64RegClass);
-  case haydn_smula16_30: return selectBinary(SMULA16_30, DR64RegClass);
-  case haydn_smula16_31: return selectBinary(SMULA16_31, DR64RegClass);
-  case haydn_smula16_32: return selectBinary(SMULA16_32, DR64RegClass);
-  case haydn_smula16_33: return selectBinary(SMULA16_33, DR64RegClass);
+  case haydn_smula16_00: return selectAccMAC(SMULA16_00);
+  case haydn_smula16_10: return selectAccMAC(SMULA16_10);
+  case haydn_smula16_11: return selectAccMAC(SMULA16_11);
+  case haydn_smula16_20: return selectAccMAC(SMULA16_20);
+  case haydn_smula16_21: return selectAccMAC(SMULA16_21);
+  case haydn_smula16_22: return selectAccMAC(SMULA16_22);
+  case haydn_smula16_30: return selectAccMAC(SMULA16_30);
+  case haydn_smula16_31: return selectAccMAC(SMULA16_31);
+  case haydn_smula16_32: return selectAccMAC(SMULA16_32);
+  case haydn_smula16_33: return selectAccMAC(SMULA16_33);
 
   //===---------------------------------------------------------------===
   // Wave 4 Tier 3: SMULA16S — Signed 16-bit saturating MAC
   //===---------------------------------------------------------------===
-  case haydn_smula16s_00: return selectBinary(SMULA16S_00, DR64RegClass);
-  case haydn_smula16s_10: return selectBinary(SMULA16S_10, DR64RegClass);
-  case haydn_smula16s_11: return selectBinary(SMULA16S_11, DR64RegClass);
-  case haydn_smula16s_20: return selectBinary(SMULA16S_20, DR64RegClass);
-  case haydn_smula16s_21: return selectBinary(SMULA16S_21, DR64RegClass);
-  case haydn_smula16s_22: return selectBinary(SMULA16S_22, DR64RegClass);
-  case haydn_smula16s_30: return selectBinary(SMULA16S_30, DR64RegClass);
-  case haydn_smula16s_31: return selectBinary(SMULA16S_31, DR64RegClass);
-  case haydn_smula16s_32: return selectBinary(SMULA16S_32, DR64RegClass);
-  case haydn_smula16s_33: return selectBinary(SMULA16S_33, DR64RegClass);
+  case haydn_smula16s_00: return selectAccMAC(SMULA16S_00);
+  case haydn_smula16s_10: return selectAccMAC(SMULA16S_10);
+  case haydn_smula16s_11: return selectAccMAC(SMULA16S_11);
+  case haydn_smula16s_20: return selectAccMAC(SMULA16S_20);
+  case haydn_smula16s_21: return selectAccMAC(SMULA16S_21);
+  case haydn_smula16s_22: return selectAccMAC(SMULA16S_22);
+  case haydn_smula16s_30: return selectAccMAC(SMULA16S_30);
+  case haydn_smula16s_31: return selectAccMAC(SMULA16S_31);
+  case haydn_smula16s_32: return selectAccMAC(SMULA16S_32);
+  case haydn_smula16s_33: return selectAccMAC(SMULA16S_33);
 
   //===---------------------------------------------------------------===
   // Wave 4 Tier 3: SMULS16 — Signed 16-bit multiply-subtract
   //===---------------------------------------------------------------===
-  case haydn_smuls16_00: return selectBinary(SMULS16_00, DR64RegClass);
-  case haydn_smuls16_10: return selectBinary(SMULS16_10, DR64RegClass);
-  case haydn_smuls16_11: return selectBinary(SMULS16_11, DR64RegClass);
-  case haydn_smuls16_20: return selectBinary(SMULS16_20, DR64RegClass);
-  case haydn_smuls16_21: return selectBinary(SMULS16_21, DR64RegClass);
-  case haydn_smuls16_22: return selectBinary(SMULS16_22, DR64RegClass);
-  case haydn_smuls16_30: return selectBinary(SMULS16_30, DR64RegClass);
-  case haydn_smuls16_31: return selectBinary(SMULS16_31, DR64RegClass);
-  case haydn_smuls16_32: return selectBinary(SMULS16_32, DR64RegClass);
-  case haydn_smuls16_33: return selectBinary(SMULS16_33, DR64RegClass);
+  case haydn_smuls16_00: return selectAccMAC(SMULS16_00);
+  case haydn_smuls16_10: return selectAccMAC(SMULS16_10);
+  case haydn_smuls16_11: return selectAccMAC(SMULS16_11);
+  case haydn_smuls16_20: return selectAccMAC(SMULS16_20);
+  case haydn_smuls16_21: return selectAccMAC(SMULS16_21);
+  case haydn_smuls16_22: return selectAccMAC(SMULS16_22);
+  case haydn_smuls16_30: return selectAccMAC(SMULS16_30);
+  case haydn_smuls16_31: return selectAccMAC(SMULS16_31);
+  case haydn_smuls16_32: return selectAccMAC(SMULS16_32);
+  case haydn_smuls16_33: return selectAccMAC(SMULS16_33);
 
   //===---------------------------------------------------------------===
   // Wave 4 Tier 3: SMULS16S — Signed 16-bit saturating multiply-subtract
   //===---------------------------------------------------------------===
-  case haydn_smuls16s_00: return selectBinary(SMULS16S_00, DR64RegClass);
-  case haydn_smuls16s_10: return selectBinary(SMULS16S_10, DR64RegClass);
-  case haydn_smuls16s_11: return selectBinary(SMULS16S_11, DR64RegClass);
-  case haydn_smuls16s_20: return selectBinary(SMULS16S_20, DR64RegClass);
-  case haydn_smuls16s_21: return selectBinary(SMULS16S_21, DR64RegClass);
-  case haydn_smuls16s_22: return selectBinary(SMULS16S_22, DR64RegClass);
-  case haydn_smuls16s_30: return selectBinary(SMULS16S_30, DR64RegClass);
-  case haydn_smuls16s_31: return selectBinary(SMULS16S_31, DR64RegClass);
-  case haydn_smuls16s_32: return selectBinary(SMULS16S_32, DR64RegClass);
-  case haydn_smuls16s_33: return selectBinary(SMULS16S_33, DR64RegClass);
+  case haydn_smuls16s_00: return selectAccMAC(SMULS16S_00);
+  case haydn_smuls16s_10: return selectAccMAC(SMULS16S_10);
+  case haydn_smuls16s_11: return selectAccMAC(SMULS16S_11);
+  case haydn_smuls16s_20: return selectAccMAC(SMULS16S_20);
+  case haydn_smuls16s_21: return selectAccMAC(SMULS16S_21);
+  case haydn_smuls16s_22: return selectAccMAC(SMULS16S_22);
+  case haydn_smuls16s_30: return selectAccMAC(SMULS16S_30);
+  case haydn_smuls16s_31: return selectAccMAC(SMULS16S_31);
+  case haydn_smuls16s_32: return selectAccMAC(SMULS16S_32);
+  case haydn_smuls16s_33: return selectAccMAC(SMULS16S_33);
 
   //===---------------------------------------------------------------===
   // Wave 4 Tier 3: FMULS16 — Fractional 16-bit multiply-subtract
   //===---------------------------------------------------------------===
-  case haydn_fmuls16_hs00: return selectBinary(FMULS16_HS00, DR64RegClass);
-  case haydn_fmuls16_hs01: return selectBinary(FMULS16_HS01, DR64RegClass);
-  case haydn_fmuls16_hs02: return selectBinary(FMULS16_HS02, DR64RegClass);
-  case haydn_fmuls16_hs03: return selectBinary(FMULS16_HS03, DR64RegClass);
-  case haydn_fmuls16_hs11: return selectBinary(FMULS16_HS11, DR64RegClass);
-  case haydn_fmuls16_hs12: return selectBinary(FMULS16_HS12, DR64RegClass);
-  case haydn_fmuls16_hs13: return selectBinary(FMULS16_HS13, DR64RegClass);
-  case haydn_fmuls16_hs22: return selectBinary(FMULS16_HS22, DR64RegClass);
-  case haydn_fmuls16_hs23: return selectBinary(FMULS16_HS23, DR64RegClass);
-  case haydn_fmuls16_hs33: return selectBinary(FMULS16_HS33, DR64RegClass);
+  case haydn_fmuls16_hs00: return selectAccMAC(FMULS16_HS00);
+  case haydn_fmuls16_hs01: return selectAccMAC(FMULS16_HS01);
+  case haydn_fmuls16_hs02: return selectAccMAC(FMULS16_HS02);
+  case haydn_fmuls16_hs03: return selectAccMAC(FMULS16_HS03);
+  case haydn_fmuls16_hs11: return selectAccMAC(FMULS16_HS11);
+  case haydn_fmuls16_hs12: return selectAccMAC(FMULS16_HS12);
+  case haydn_fmuls16_hs13: return selectAccMAC(FMULS16_HS13);
+  case haydn_fmuls16_hs22: return selectAccMAC(FMULS16_HS22);
+  case haydn_fmuls16_hs23: return selectAccMAC(FMULS16_HS23);
+  case haydn_fmuls16_hs33: return selectAccMAC(FMULS16_HS33);
 
-  case haydn_fmuls16_ls00: return selectBinary(FMULS16_LS00, DR64RegClass);
-  case haydn_fmuls16_ls01: return selectBinary(FMULS16_LS01, DR64RegClass);
-  case haydn_fmuls16_ls02: return selectBinary(FMULS16_LS02, DR64RegClass);
-  case haydn_fmuls16_ls03: return selectBinary(FMULS16_LS03, DR64RegClass);
-  case haydn_fmuls16_ls11: return selectBinary(FMULS16_LS11, DR64RegClass);
-  case haydn_fmuls16_ls12: return selectBinary(FMULS16_LS12, DR64RegClass);
-  case haydn_fmuls16_ls13: return selectBinary(FMULS16_LS13, DR64RegClass);
-  case haydn_fmuls16_ls22: return selectBinary(FMULS16_LS22, DR64RegClass);
-  case haydn_fmuls16_ls23: return selectBinary(FMULS16_LS23, DR64RegClass);
-  case haydn_fmuls16_ls33: return selectBinary(FMULS16_LS33, DR64RegClass);
+  case haydn_fmuls16_ls00: return selectAccMAC(FMULS16_LS00);
+  case haydn_fmuls16_ls01: return selectAccMAC(FMULS16_LS01);
+  case haydn_fmuls16_ls02: return selectAccMAC(FMULS16_LS02);
+  case haydn_fmuls16_ls03: return selectAccMAC(FMULS16_LS03);
+  case haydn_fmuls16_ls11: return selectAccMAC(FMULS16_LS11);
+  case haydn_fmuls16_ls12: return selectAccMAC(FMULS16_LS12);
+  case haydn_fmuls16_ls13: return selectAccMAC(FMULS16_LS13);
+  case haydn_fmuls16_ls22: return selectAccMAC(FMULS16_LS22);
+  case haydn_fmuls16_ls23: return selectAccMAC(FMULS16_LS23);
+  case haydn_fmuls16_ls33: return selectAccMAC(FMULS16_LS33);
 
   //===---------------------------------------------------------------===
   // Wave 4 Tier 3: FMULAS32S/FMULSA32S — Saturating fractional add-subtract

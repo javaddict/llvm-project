@@ -17,15 +17,23 @@
 
 namespace llvm {
 
-// This is used for assigning arguments to locations when making calls.
+// Entry=1 in HaydnCallingConv.td emits these in the llvm namespace
+// (PPCCallingConv.h:22 / PPCCallingConv.td:44). HaydnCallingConv.cpp is
+// the single HaydnGenCallingConv.inc owner.
+
 bool CC_Haydn(unsigned ValNo, MVT ValVT, MVT LocVT,
               CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
               Type *OrigTy, CCState &State);
 
-// This is used for assigning return values to locations when making calls.
 bool RetCC_Haydn(unsigned ValNo, MVT ValVT, MVT LocVT,
                  CCValAssign::LocInfo LocInfo, ISD::ArgFlagsTy ArgFlags,
                  Type *OrigTy, CCState &State);
+
+// R0 is reserved software zero — never an argument or return location.
+bool HaydnLocIsReservedSoftZero(unsigned Reg);
+
+// i128 / half / bfloat are not CC types (fail-closed; not a product C ABI).
+bool HaydnCCAssignRejectsType(MVT ValVT);
 
 } // end namespace llvm
 
