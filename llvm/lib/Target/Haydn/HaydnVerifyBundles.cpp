@@ -237,10 +237,10 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
         }
       }
 
-      // Product emission ownership (T-TII5): empty roots fail here; row
-      // capacity stays in verifyCommittedBundle so OVER-ISSUE FileCheck
-      // still matches. Completion is golden-row fill (unused windows are
-      // architectural NOP → AllEntriesReal), not the stamper helper.
+      // Product emission ownership: empty roots fail here; row capacity
+      // stays in verifyCommittedBundle so OVER-ISSUE FileCheck still
+      // matches. Completion is mandatory golden-row fill (unused windows
+      // are architectural NOP → AllEntriesReal), not the stamper helper.
       // Census is still collectBundleMemberOpcodes / bundleHasPadNop so a
       // hand `BUNDLE { NOP }` is product idle on both sides.
       {
@@ -259,40 +259,53 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
           OS << "\n  MI: " << MI;
           report_fatal_error(Twine(OS.str()));
         }
-        if (auto Comp = haydn::bundle::getBundleCompletionID(MI)) {
-          if (Row) {
-            haydn::bundle::CompletionStateID Expected =
-                haydn::bundle::expectedGoldenRowCompletion(
-                    static_cast<unsigned>(Members.size()), HasPadNop);
-            if (*Comp != Expected) {
-              std::string Msg;
-              raw_string_ostream OS(Msg);
-              OS << "HaydnVerifyBundles: BUNDLE root CompletionStateID does "
-                    "not match row and member count in "
-                 << MF.getName() << " BB#" << MBB.getNumber()
-                 << " (stamped completion "
-                 << haydn::bundle::completionToImm(*Comp) << ", expected "
-                 << haydn::bundle::completionToImm(Expected)
-                 << " for row member count " << Members.size() << ")";
-              if (OptNone)
-                OS << " [optnone no-reorder commit]";
-              OS << "\n  MI: " << MI;
-              report_fatal_error(Twine(OS.str()));
-            }
-          } else if (!Members.empty() &&
-                     haydn::bundle::isStubCompletion(*Comp)) {
+        auto Comp = haydn::bundle::getBundleCompletionID(MI);
+        // Row-only residual roots (product row, no completion) fail here.
+        // Missing/unknown row stays a later verifyCommittedBundle diagnostic
+        // so NO-IMM / BAD-ID FileCheck still match.
+        if (Row && !Comp) {
+          std::string Msg;
+          raw_string_ostream OS(Msg);
+          OS << "HaydnVerifyBundles: missing CompletionStateID on BUNDLE root "
+                "in "
+             << MF.getName() << " BB#" << MBB.getNumber()
+             << " (residual/private members require typed completion)";
+          if (OptNone)
+            OS << " [optnone no-reorder commit]";
+          OS << "\n  MI: " << MI;
+          report_fatal_error(Twine(OS.str()));
+        } else if (Comp && Row) {
+          haydn::bundle::CompletionStateID Expected =
+              haydn::bundle::expectedGoldenRowCompletion(
+                  static_cast<unsigned>(Members.size()), HasPadNop);
+          if (*Comp != Expected) {
             std::string Msg;
             raw_string_ostream OS(Msg);
-            OS << "HaydnVerifyBundles: unqualified stub CompletionStateID on "
-                  "non-empty BUNDLE in "
+            OS << "HaydnVerifyBundles: BUNDLE root CompletionStateID does "
+                  "not match row and member count in "
                << MF.getName() << " BB#" << MBB.getNumber()
-               << " (refuse executable singleton-stub / underfill completion; "
-                  "product requires full-slot architectural NOP pad)";
+               << " (stamped completion "
+               << haydn::bundle::completionToImm(*Comp) << ", expected "
+               << haydn::bundle::completionToImm(Expected)
+               << " for row member count " << Members.size() << ")";
             if (OptNone)
               OS << " [optnone no-reorder commit]";
             OS << "\n  MI: " << MI;
             report_fatal_error(Twine(OS.str()));
           }
+        } else if (Comp && !Members.empty() &&
+                   haydn::bundle::isStubCompletion(*Comp)) {
+          std::string Msg;
+          raw_string_ostream OS(Msg);
+          OS << "HaydnVerifyBundles: unqualified stub CompletionStateID on "
+                "non-empty BUNDLE in "
+             << MF.getName() << " BB#" << MBB.getNumber()
+             << " (refuse executable singleton-stub / underfill completion; "
+                "product requires full-slot architectural NOP pad)";
+          if (OptNone)
+            OS << " [optnone no-reorder commit]";
+          OS << "\n  MI: " << MI;
+          report_fatal_error(Twine(OS.str()));
         }
       }
 

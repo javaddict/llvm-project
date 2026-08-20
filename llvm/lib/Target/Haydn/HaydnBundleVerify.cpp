@@ -7,30 +7,36 @@
 //===----------------------------------------------------------------------===//
 //
 // Out-of-line verifyCommittedBundle / private-member lookup.
-// Peer: AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed.
+// Peer: AIEBaseInstrInfo.cpp:1595-1614 verifyInstruction fail-closed.
 //
 //===----------------------------------------------------------------------===//
 
 #include "HaydnBundleVerify.h"
 #include "Haydn.h"
 #include "HaydnBundlePortBudget.h"
-// HaydnBundleFormatSolver.h is included ONLY for haydnOpcodeName (the pure
-// generated MC name-table accessor). The independent verifier never calls
-// the forward planner (Bundle canAdd / hasValidFormat / exactTryAddProduct /
-// PacketFormats planner) — independence per the topics/encoding P7 row.
-#include "HaydnBundleFormatSolver.h"
+// haydnOpcodeName is the pure generated MC name-table accessor (solver header
+// is pulled by HaydnBundle.h). The independent verifier never calls the
+// forward planner (Bundle canAdd / hasValidFormat / exactTryAddProduct /
+// PacketFormats planner / findFormatEMember / opcodesHaveFormatEUnitCover).
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <utility>
 
 using namespace llvm;
 
 #define GET_FORMAT_E_MEMBER_OPCODES
 #include "HaydnGenFormatEMemberOpcodes.inc"
+#define GET_FORMAT_E_INVERSE_INDEX
+#include "HaydnGenFormatEInverse.inc"
 
 namespace llvm {
 namespace haydn {
@@ -59,6 +65,161 @@ const format_e::FormatEMemberRec *lookupPrivateFormatEMember(unsigned Opc) {
   if (It == Map.end())
     return nullptr;
   return It->second;
+}
+
+static bool encodeableInverseRecord(const format_e::FormatEInverseRec &R);
+
+/// Opcode → generated FormatEInverse row ids (table indices, not MemberId).
+/// Sole inverse source is HaydnGenFormatEInverse.inc / FormatEInverse.
+/// Member opcodes come from the generated MemberId→opcode column; catalog
+/// logicals from lookupGeneratedMemberToLogical; public aliases from a
+/// closed opcode→catalog extra key (AIE AIEMCFormats.h:376-379 overlay).
+/// Never Bundle.canAdd, occupancy DFS, or peelLogicalOpcodeName.
+static void collectInverseIdsForOpcode(unsigned Opc,
+                                       SmallVectorImpl<unsigned> &Ids) {
+  Ids.clear();
+  if (Opc == 0 || Opc == Haydn::NOP)
+    return;
+
+  static const DenseMap<unsigned, SmallVector<unsigned, 8>> Generated = [] {
+    DenseMap<unsigned, SmallVector<unsigned, 8>> M;
+    M.reserve(FormatEMemberOpcodeCount);
+    const unsigned InverseN =
+        sizeof(format_e::FormatEInverse) / sizeof(format_e::FormatEInverse[0]);
+    for (unsigned I = 0; I < InverseN; ++I) {
+      // Independently sorted inverse row — never FormatEInverse[MemberId].
+      const format_e::FormatEInverseRec &R = format_e::FormatEInverse[I];
+      if (!encodeableInverseRecord(R))
+        continue;
+      const unsigned Mid = R.MemberId;
+      if (Mid >= FormatEMemberOpcodeCount)
+        continue;
+      const unsigned MemberOpc = FormatEMemberOpcodes[Mid];
+      if (MemberOpc == 0 || MemberOpc == Haydn::NOP)
+        continue;
+      M[MemberOpc].push_back(I);
+      if (const unsigned Log =
+              format_e::lookupGeneratedMemberToLogical(MemberOpc)) {
+        if (Log != MemberOpc && Log != 0 && Log != Haydn::NOP)
+          M[Log].push_back(I);
+      }
+    }
+    // Extra inverse keys: public mnemonic opcode → catalog logical opcode.
+    // Opcode-keyed (not suffix peel). Catalog rows already sit in M.
+    static const std::pair<unsigned, unsigned> AliasToCatalog[] = {
+        {Haydn::LD32, Haydn::S_LW_WITH_IMM},
+        {Haydn::ST32, Haydn::S_SW_WITH_IMM},
+        {Haydn::LD64, Haydn::D_LDW_WITH_IMM},
+        {Haydn::ST64, Haydn::D_SDW_WITH_IMM},
+        {Haydn::LD8, Haydn::S_LBS_WITH_IMM},
+        {Haydn::LDU8, Haydn::S_LBU_WITH_IMM},
+        {Haydn::ST8, Haydn::S_SB_WITH_IMM},
+        {Haydn::LD16, Haydn::S_LHWS_WITH_IMM},
+        {Haydn::LDU16, Haydn::S_LHWU_WITH_IMM},
+        {Haydn::ST16, Haydn::S_SHW_WITH_IMM},
+        {Haydn::LD32_POST, Haydn::S_LW_POST_IMM},
+        {Haydn::LD32_POST_INC, Haydn::S_LW_POST_IMM},
+        {Haydn::ST32_POST, Haydn::S_SW_POST_IMM},
+        {Haydn::ST32_POST_INC, Haydn::S_SW_POST_IMM},
+        {Haydn::LD64_POST, Haydn::D_LDW_POST_IMM},
+        {Haydn::ST64_POST, Haydn::D_SDW_POST_IMM},
+        {Haydn::SEXT_GPR32_TO_DR64, Haydn::SEXT32T64},
+        {Haydn::MOV_GPR_TO_DR64, Haydn::SEXT32T64},
+    };
+    for (const auto &Pair : AliasToCatalog) {
+      if (Pair.first == Pair.second || M.count(Pair.first))
+        continue;
+      auto It = M.find(Pair.second);
+      if (It == M.end())
+        continue;
+      M[Pair.first] = It->second;
+    }
+    return M;
+  }();
+
+  if (auto It = Generated.find(Opc); It != Generated.end())
+    Ids.append(It->second.begin(), It->second.end());
+}
+
+static unsigned inverseTableCount() {
+  return static_cast<unsigned>(sizeof(format_e::FormatEInverse) /
+                               sizeof(format_e::FormatEInverse[0]));
+}
+
+/// Inverse row is encodeable when its placement key uniquely reconstructs
+/// MemberId and the generated member-opcode column is a real non-NOP opcode.
+/// FormatEInverse only — never FormatEMembers / UnitMap / name peel.
+/// Peer: inverse of AIEMCFormats::getAlternateInstsOpcode
+/// (AIEMCFormats.h:376-379; CodeGenFormat.cpp:155-163).
+static bool encodeableInverseRecord(const format_e::FormatEInverseRec &R) {
+  if (R.MemberId >= format_e::FormatEMemberCount || !R.Logical)
+    return false;
+  if (StringRef(R.Logical).equals_insensitive("NOP"))
+    return false;
+  if (!R.TypeName || StringRef(R.TypeName).empty())
+    return false;
+  if (R.MemberId >= FormatEMemberOpcodeCount)
+    return false;
+  const unsigned MemberOpc = FormatEMemberOpcodes[R.MemberId];
+  if (MemberOpc == 0 || MemberOpc == Haydn::NOP)
+    return false;
+  const int Hit = format_e::findInverseMemberId(R.Mode, R.EntryIdx, R.Unit,
+                                                R.TypeCode, R.Opcode);
+  return Hit >= 0 && static_cast<unsigned>(Hit) == R.MemberId;
+}
+
+static const format_e::FormatEInverseRec *
+haydnInverseRecordFromOpcode(unsigned Opc, uint8_t Mode, uint8_t EntryIdx,
+                             uint32_t UsedUnitMask, bool MatchEntry) {
+  SmallVector<unsigned, 8> Ids;
+  collectInverseIdsForOpcode(Opc, Ids);
+  for (unsigned I : Ids) {
+    if (I >= inverseTableCount())
+      continue;
+    const format_e::FormatEInverseRec &R = format_e::FormatEInverse[I];
+    if (R.Mode != Mode)
+      continue;
+    if (MatchEntry && R.EntryIdx != EntryIdx)
+      continue;
+    if (R.Unit < 32 && (UsedUnitMask & (1u << R.Unit)))
+      continue;
+    if (!encodeableInverseRecord(R))
+      continue;
+    return &R;
+  }
+  return nullptr;
+}
+
+static uint32_t inverseUnitMaskForOpcode(unsigned Opc, uint8_t Mode) {
+  SmallVector<unsigned, 8> Ids;
+  collectInverseIdsForOpcode(Opc, Ids);
+  uint32_t Mask = 0;
+  for (unsigned I : Ids) {
+    if (I >= inverseTableCount())
+      continue;
+    const format_e::FormatEInverseRec &R = format_e::FormatEInverse[I];
+    if (R.Mode != Mode || R.Unit >= 32)
+      continue;
+    if (!encodeableInverseRecord(R))
+      continue;
+    Mask |= 1u << R.Unit;
+  }
+  return Mask;
+}
+
+static bool inverseOpcodesHaveUnitCoverForMode(ArrayRef<unsigned> Opcodes,
+                                               uint8_t Mode) {
+  if (Opcodes.size() < 2)
+    return true;
+  SmallVector<uint32_t, 3> Masks;
+  Masks.reserve(Opcodes.size());
+  for (unsigned Opc : Opcodes) {
+    uint32_t M = inverseUnitMaskForOpcode(Opc, Mode);
+    if (M == 0)
+      return false;
+    Masks.push_back(M);
+  }
+  return inverseMasksAssignable(Masks);
 }
 
 bool isPadNopOpcode(unsigned Opc) {
@@ -100,65 +261,88 @@ bool bundleHasPadNop(const MachineInstr &BundleRoot) {
   return false;
 }
 
-/// Inverse + unit injectivity for one opcode at a known encode-dag entry.
-/// Private members use MemberId entry (child order may not match after
-/// residual rebind). Logicals use EntryIdx (membership / parse position).
+/// MemberId of a generated private Format E member opcode, or ~0u.
+/// FormatEMemberOpcodes column only — never FormatEMembers / name peel.
+static unsigned privateMemberIdForOpcode(unsigned Opc) {
+  if (Opc == 0 || Opc == Haydn::NOP)
+    return ~0u;
+  static const DenseMap<unsigned, unsigned> Map = [] {
+    DenseMap<unsigned, unsigned> M;
+    M.reserve(FormatEMemberOpcodeCount);
+    for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+      const unsigned MemberOpc = FormatEMemberOpcodes[I];
+      if (MemberOpc == 0 || MemberOpc == Haydn::NOP)
+        continue;
+      M.try_emplace(MemberOpc, I);
+    }
+    return M;
+  }();
+  auto It = Map.find(Opc);
+  return It == Map.end() ? ~0u : It->second;
+}
+
+/// Inverse + unit injectivity + encodeability for one opcode at a known
+/// encode-dag entry. Private members use inverseRecordForMemberId (child
+/// order may not match after residual rebind). Residual/logicals use
+/// membership EntryIdx against opcode-keyed FormatEInverse rows. Source is
+/// inverseRecordForMemberId / haydnInverseRecordFromOpcode only
+/// (no peelLogicalOpcodeName, no findFormatEMember / Bundle.canAdd).
 static std::optional<std::string>
 verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
                            uint8_t EntryIdx, unsigned RowEntries,
                            uint32_t &SeenUnits, uint32_t &SeenEntryBits) {
-  if (const format_e::FormatEMemberRec *Priv = lookupPrivateFormatEMember(Opc)) {
-    // Private members carry entry in the MemberId. Cutover may rebind a
-    // store onto e0 while leaving it as a later child, so membership
-    // index is not the encode-dag entry here. Parse-time uses the
-    // positional EntryIdx path below for logicals / encode-dag holes.
-    if (Priv->Mode != ExpectMode)
+  const format_e::FormatEInverseRec *Inv = nullptr;
+  const unsigned PrivId = privateMemberIdForOpcode(Opc);
+  if (PrivId != ~0u) {
+    // Private members carry entry on the inverse MemberId row. Cutover may
+    // rebind a store onto e0 while leaving it as a later child, so
+    // membership index is not the encode-dag entry here.
+    Inv = format_e::inverseRecordForMemberId(PrivId);
+    if (!Inv || Inv->MemberId != PrivId || !encodeableInverseRecord(*Inv))
       return std::string(
-          Priv->Mode == 0
-              ? "structural inverse: E2 member under E96ThreeEntry row"
-              : "structural inverse: E3 member under E96TwoEntry row");
-    if (static_cast<unsigned>(Priv->EntryIdx) >= RowEntries)
+          "structural inverse: FormatEInverse misses exact encodeable "
+          "MemberId for private member");
+  } else {
+    Inv = haydnInverseRecordFromOpcode(Opc, ExpectMode, EntryIdx, SeenUnits,
+                                       /*MatchEntry=*/true);
+    if (!Inv)
       return std::string(
-          "structural inverse: entry index exceeds stamped row capacity");
-    if (SeenEntryBits & (1u << Priv->EntryIdx))
+                 "structural inverse: committed logical has no generated "
+                 "member at its stamped entry (unknown or misplaced): ") +
+             std::string(haydnOpcodeName(Opc)) + " @mode" +
+             std::to_string(ExpectMode) + " entry " +
+             std::to_string(EntryIdx);
+    if (!encodeableInverseRecord(*Inv))
       return std::string(
-          "structural inverse: duplicate entry index among members");
-    if (!format_e::inverseCoversMember(*Priv))
+                 "structural inverse: inverse record not encodeable for "
+                 "committed logical at stamped entry: ") +
+             std::string(haydnOpcodeName(Opc)) + " @mode" +
+             std::to_string(ExpectMode) + " entry " +
+             std::to_string(EntryIdx);
+    if (Inv->EntryIdx != EntryIdx)
       return std::string(
-          "structural inverse: FormatEInverse misses exact MemberId for "
-          "private member");
-    if (Priv->Unit < 32) {
-      if (SeenUnits & (1u << Priv->Unit))
-        return std::string(
-            "structural inverse: chosen Format E members are not "
-            "unit-injective");
-      SeenUnits |= 1u << Priv->Unit;
-    }
-    SeenEntryBits |= 1u << Priv->EntryIdx;
-    return std::nullopt;
+          "structural inverse: member entry mismatch vs membership order");
   }
 
-  const std::string Log =
-      format_e::peelLogicalOpcodeName(haydnOpcodeName(Opc));
-  const format_e::FormatEMemberRec *Exact = format_e::findFormatEMember(
-      Log, ExpectMode, EntryIdx, SeenUnits);
-  if (!Exact)
+  if (static_cast<unsigned>(Inv->EntryIdx) >= RowEntries)
     return std::string(
-               "structural inverse: committed logical has no generated "
-               "member at its stamped entry (unknown or misplaced): ") +
-           Log + " @mode" + std::to_string(ExpectMode) + " entry " +
-           std::to_string(EntryIdx);
-  if (Exact->EntryIdx != EntryIdx)
-    return std::string(
-        "structural inverse: member entry mismatch vs membership order");
-  if (Exact->Unit < 32) {
-    if (SeenUnits & (1u << Exact->Unit))
+        "structural inverse: entry index exceeds stamped row capacity");
+  if (Inv->Unit < 32) {
+    if (SeenUnits & (1u << Inv->Unit))
       return std::string(
           "structural inverse: chosen Format E members are not "
-          "unit-injective");
-    SeenUnits |= 1u << Exact->Unit;
+          "unit-injective (unit injectivity)");
+    SeenUnits |= 1u << Inv->Unit;
   }
-  SeenEntryBits |= 1u << EntryIdx;
+  if (SeenEntryBits & (1u << Inv->EntryIdx))
+    return std::string(
+        "structural inverse: duplicate entry index among members");
+  if (Inv->Mode != ExpectMode)
+    return std::string(
+        Inv->Mode == 0
+            ? "structural inverse: E2 member under E96ThreeEntry row"
+            : "structural inverse: E3 member under E96TwoEntry row");
+  SeenEntryBits |= 1u << Inv->EntryIdx;
   return std::nullopt;
 }
 
@@ -173,15 +357,16 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
 ///   * known product BundleFormatRowID
 ///   * memberCount <= ISSUE_SLOT_COUNT and stamped row entry capacity
 ///   * registry product EncodedBytes agree with the product parcel
-///   * private member opcodes: exact MemberId inverse, Mode equal to the
-///     stamped row mode, entry index inside row capacity, entry- and
+///   * private member opcodes: exact encodeable MemberId inverse, Mode equal
+///     to the stamped row mode, entry index inside row capacity, entry- and
 ///     unit-injective
-///   * bare logical opcodes: peel to a golden catalog logical that has an
-///     exact generated member at the child's MEMBERSHIP ENTRY under the
-///     stamped mode with a unit unused by earlier members (Finalize
-///     leading-order law — committed child order IS the entry order; verify
-///     checks it, it never re-plans it)
-///   * anything else (unknown logical, no member at the stamped entry)
+///   * residual/logical opcodes: haydnInverseRecordFromOpcode at the child's
+///     MEMBERSHIP ENTRY under the stamped mode (FormatEInverse row ids, never
+///     MemberId-as-index). Committed child order IS the entry order; verify
+///     checks it, it never re-plans it, never findFormatEMember / name peel.
+///     The inverse row must be encodeable (placement key reconstructs
+///     MemberId; member-opcode column is a real non-NOP opcode).
+///   * anything else (unknown logical, no inverse at the stamped entry)
 ///     fails closed — the verifier must never ask the forward solver which
 ///     format fits
 ///   * OutPlan rebuilt from makeProductPlan only (registry identity)
@@ -197,19 +382,24 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
 
   // Format E unit injectivity pre-check (units ≠ encoded entry identity):
-  // pure generated-records derivation (logicalsHaveUnitCoverForMode), NOT a
-  // forward-solver call. Residual FieldSlots can look like a legal 3-entry
-  // E3 pack while two stores both require LOADSTORE0 e0. Refuse here so MC
-  // never sees the illegal BUNDLE.
-  if (!opcodesHaveFormatEUnitCover(MemberOpcodes))
+  // independently generated FormatEInverse unit bits keyed by opcode, not
+  // Bundle.canAdd / opcodesHaveFormatEUnitCover / name peel. Residual
+  // FieldSlots can look like a legal 3-entry E3 pack while two stores both
+  // require LOADSTORE0 e0. Refuse here so MC never sees the illegal BUNDLE.
+  if (!inverseOpcodesHaveUnitCoverForMode(MemberOpcodes, /*Mode=*/0) &&
+      !inverseOpcodesHaveUnitCoverForMode(MemberOpcodes, /*Mode=*/1))
     return std::string(
-        "structural inverse: Format E unit injectivity failed "
-        "(execution units are not encoded entry identity)");
+        "structural inverse: chosen Format E members are not "
+        "unit-injective (unit injectivity; execution units are not "
+        "encoded entry identity)");
 
   // One-to-one serialize: stamped row must have enough entries for every
   // real member. E96TwoEntry with 3 reals used to pass verify and then drop
   // a child at AsmPrinter (NumEntries from row imm only).
-  const unsigned RowEntries = bundleRowEntryCount(Row);
+  const unsigned RowEntries = [&] {
+    const format::BundleFormatRowDesc *Desc = format::getBundleFormatRow(Row);
+    return Desc ? Desc->EntryCount : 0u;
+  }();
   if (MemberOpcodes.size() > RowEntries)
     return std::string(
         "BUNDLE membership exceeds stamped row entry count (E2 holds 2; "
@@ -297,8 +487,67 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   return std::nullopt;
 }
 
-/// MIR entry: rebuild plan from BUNDLE root row imm + children.
-/// Fail-closed: missing/unknown row imm is an error.
+std::optional<std::string>
+verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
+                   const HaydnBaseMCFormats &Fmts, const MCInstrInfo &MII,
+                   const MCRegisterInfo *MRI) {
+  (void)Fmts;
+  if (!isProductBundleRow(Row))
+    return std::string("non-product BundleFormatRowID");
+
+  const unsigned RowEntries = [&] {
+    const format::BundleFormatRowDesc *Desc = format::getBundleFormatRow(Row);
+    return Desc ? Desc->EntryCount : 0u;
+  }();
+  if (Entries.size() > RowEntries)
+    return std::string(
+        "BUNDLE membership exceeds stamped row entry count (E2 holds 2; "
+        "three real members require E96ThreeEntry");
+
+  const uint8_t ExpectMode =
+      Row == BundleFormatRowID::E96ThreeEntry ? 1 : 0;
+  SmallVector<unsigned, 3> MemberOpcodes;
+  SmallVector<const MCInst *, 3> RealInsts;
+  for (const MCInst *Inst : Entries) {
+    if (!Inst || isPadNopOpcode(Inst->getOpcode()))
+      continue;
+    MemberOpcodes.push_back(Inst->getOpcode());
+    RealInsts.push_back(Inst);
+  }
+  if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
+    return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
+  if (!inverseOpcodesHaveUnitCoverForMode(MemberOpcodes, ExpectMode))
+    return std::string(
+        "structural inverse: chosen Format E members are not "
+        "unit-injective (unit injectivity; execution units are not "
+        "encoded entry identity)");
+
+  uint32_t SeenUnits = 0;
+  uint32_t SeenEntryBits = 0;
+  for (unsigned E = 0, EE = Entries.size(); E != EE; ++E) {
+    const MCInst *Inst = Entries[E];
+    if (!Inst || isPadNopOpcode(Inst->getOpcode()))
+      continue;
+    if (isRepresentationExpandPseudo(Inst->getOpcode())) {
+      if (MemberOpcodes.size() != 1)
+        return std::string(
+            "structural inverse: representation-expand pseudo must be a "
+            "solo committed cycle (printer expands one-to-one)");
+      continue;
+    }
+    if (auto MemErr = verifyMemberAtStampedEntry(
+            Inst->getOpcode(), ExpectMode, static_cast<uint8_t>(E), RowEntries,
+            SeenUnits, SeenEntryBits))
+      return MemErr;
+  }
+
+  if (auto RegErr = haydnCheckParsedBundleRegs(RealInsts, MII, MRI))
+    return std::string("structural inverse: ") + *RegErr;
+  return std::nullopt;
+}
+
+/// MIR entry: rebuild plan from BUNDLE root row + completion imms + children.
+/// Fail-closed: missing/unknown row imm or missing completion is an error.
 std::optional<std::string>
 verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &Fmts,
                       BundlePlan *OutPlan) {
@@ -340,22 +589,23 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &
           "cycle (shared haydnVerifyCommittedBundlePortBudget hook)");
   }
 
-  // Completion, when present, is checked against golden product-row fill
-  // independently of the stamper helper: unused entry windows are
-  // architectural NOP (AllEntriesReal). Empty membership with no pad is
-  // residual idle stub. Missing completion stays allowed on row-only
-  // stamps; multi-member hard-root verify requires it separately.
-  if (auto Comp = getBundleCompletionID(BundleRoot)) {
-    if (!isStubCompletion(*Comp) && !isProductLegalCompletion(*Comp))
-      return std::string("BUNDLE root has unknown CompletionStateID");
-    const CompletionStateID Expected = expectedGoldenRowCompletion(
-        static_cast<unsigned>(Members.size()), bundleHasPadNop(BundleRoot));
-    if (*Comp != Expected)
-      return std::string(
-          "BUNDLE root CompletionStateID does not match golden row fill");
-    if (OutPlan)
-      OutPlan->Completion = *Comp;
-  }
+  // Completion is mandatory on every residual root. Unused entry windows
+  // are architectural NOP (AllEntriesReal). Empty membership with no pad is
+  // residual idle stub. Golden-row fill, not selectCompletionForMembersAndPads.
+  auto Comp = getBundleCompletionID(BundleRoot);
+  if (!Comp)
+    return std::string(
+        "structural inverse: missing CompletionStateID on BUNDLE root "
+        "(residual/private members require typed completion)");
+  if (!isStubCompletion(*Comp) && !isProductLegalCompletion(*Comp))
+    return std::string("BUNDLE root has unknown CompletionStateID");
+  const CompletionStateID Expected = expectedGoldenRowCompletion(
+      static_cast<unsigned>(Members.size()), bundleHasPadNop(BundleRoot));
+  if (*Comp != Expected)
+    return std::string(
+        "BUNDLE root CompletionStateID does not match golden row fill");
+  if (OutPlan)
+    OutPlan->Completion = *Comp;
   return std::nullopt;
 }
 

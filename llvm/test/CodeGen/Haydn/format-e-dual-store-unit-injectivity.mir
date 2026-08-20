@@ -81,7 +81,7 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $d0, $d1, $d2, $r1, $r2, $r3, $r15
-    ; VERIFY: unit injectivity
+    ; VERIFY: unit-injective
     BUNDLE 1, 0, implicit-def $d3, implicit-def dead $sfr, implicit $d0, implicit $d1, implicit $d2, implicit $r1, implicit $r2, implicit $r3 {
       D_SW_L_WITH_IMM $d0, $r1, 0
       $d3 = OR64 $d1, $d2, implicit-def dead $sfr
