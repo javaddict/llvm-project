@@ -8,6 +8,8 @@
 # report_fatal_error(GenCrashDiag=false) is a clean exit, not abort.
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=stack-frame-layout \
 # RUN:   %t/missing_row.mir -o - 2>&1 | FileCheck %s --check-prefix=NO-ROW
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=stack-frame-layout \
+# RUN:   %t/e3_override.mir -o - 2>&1 | FileCheck %s --check-prefix=E3
 # REQUIRES: haydn-registered-target
 #
 # Compiler-origin silent repairs must fatal: missing-row E2 default,
@@ -32,5 +34,24 @@ body:             |
     ; NO-ROW: missing{{( or unknown)?}} BundleFormatRowID
     BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+#--- e3_override.mir
+--- |
+  define void @e3_override() { ret void }
+...
+---
+name:            e3_override
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    ; E3: child count exceeds stamped row{{.*}}refuse E3 override
+    BUNDLE 0, 0, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      $r3 = ADDI32_E2_E1_ALU1_RI20 $r0, 1, implicit-def dead $sfr
+      $r4 = ADD32_E3_E2_ALU2_RR $r0, $r1, implicit-def dead $sfr
     }
     RET implicit $r15

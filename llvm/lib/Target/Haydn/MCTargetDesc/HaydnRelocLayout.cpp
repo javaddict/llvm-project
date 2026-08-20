@@ -974,6 +974,12 @@ RelocKind findFixupFromFixupFields(StringRef TypeName, unsigned TypeOpcode,
   // HWLoop Off1 default when the operand index is unknown (W37/W38 keep).
   if ((TypeName == "HWLRIIR" || TypeName == "HWLRIII") && FieldSize == 0)
     FieldSize = 6;
+  // I8 CSR window is 8 bits. AIE convertFieldsLocsInFixupFields always
+  // supplies Size (AIEMCFixupKinds.cpp:21-24); Haydn callers may pass
+  // size-unknown. Default so I8 type-opcodes 4/5 (CSRR/CSRW) match the
+  // CSR_UImm8 row and NOP/ZERO_* still miss (no reloc spec).
+  if (TypeName == "I8" && FieldSize == 0)
+    FieldSize = 8;
 
   RelocKind Hit = RelocKind::Invalid;
   unsigned Hits = 0;

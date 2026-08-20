@@ -88,6 +88,7 @@
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include <iterator>
 #include <optional>
 #include <string>
@@ -606,6 +607,20 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
       for (MachineInstr *Nop : PadNops)
         Nop->eraseFromBundle();
     }
+    // Shared census after setDesc: unstamped logical packs were stamped
+    // from an empty generated-member count (idle stub). Encode refuses
+    // stub completion on non-empty bundles. AIEFinalizeBundle.cpp:49-56
+    // is identity on bundled roots; overlay restamps completion from
+    // collectBundleMemberOpcodes after MemberId rewrite.
+    if (auto RowNow = haydn::bundle::getBundleRowID(Root)) {
+      SmallVector<unsigned, 3> After =
+          haydn::bundle::collectBundleMemberOpcodes(Root);
+      const bool AfterPad = haydn::bundle::bundleHasPadNop(Root);
+      const auto Comp = haydn::bundle::selectCompletionForMembersAndPads(
+          *RowNow, After.size(), AfterPad);
+      if (haydn::bundle::isProductLegalCompletion(Comp))
+        haydn::bundle::stampBundleCommit(Root, *RowNow, Comp);
+    }
     return true;
   };
 
@@ -821,6 +836,35 @@ bool cutoverBundleFieldSlots(MachineInstr &Root, const TargetInstrInfo &TII) {
   return applyPlan(*P);
 }
 
+/// Reloc CSR I8 (CSRW/CSRR, including CSRW_W) must be a generated member
+/// before encode. Residual FieldSlot never hits findFixupFromFixupFields
+/// I8 type-opcodes 4/5 and would emit untyped NONE. AIE applyFixup is
+/// member-Desc fields (AIEMCFixupKinds.cpp:36-65); Haydn overlay is
+/// MemberId cutover first.
+void refuseResidualRelocCsrFieldSlot(MachineFunction &MF,
+                                     const TargetInstrInfo &TII) {
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB.instrs()) {
+      if (MI.isBundle() || MI.isMetaInstruction() || MI.isDebugInstr() ||
+          MI.isPosition())
+        continue;
+      const StringRef Name = TII.getName(MI.getOpcode());
+      if (isGeneratedFormatEMemberName(Name))
+        continue;
+      if (!hasRelocatableOperand(MI))
+        continue;
+      const std::string Log = haydn::format_e::peelLogicalOpcodeName(Name);
+      if (!StringRef(Log).equals_insensitive("CSRW") &&
+          !StringRef(Log).equals_insensitive("CSRR"))
+        continue;
+      report_fatal_error(
+          "Haydn FinalizeBundle: reloc CSR I8 remained FieldSlot after "
+          "MemberId cutover — refuse untyped NONE fixup",
+          /*GenCrashDiag=*/false);
+    }
+  }
+}
+
 } // namespace
 
 bool llvm::haydnRecommitLateMixedBare(MachineFunction &MF) {
@@ -920,40 +964,52 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
       const bool HasCompletion = haydn::bundle::getBundleCompletionID(MI).has_value();
       if (Row && HasCompletion)
         continue;
-      if (!Row) {
-        // Missing-row: residual `_S*` and unsuffixed catalog logicals
-        // (reloc CSRW_W) need a row so cutover can bind MemberId. Suffix
-        // digits are not Format E entries (AIE PacketFormats + InstSlot;
-        // AIEFinalizeBundle.cpp:49-56 is identity on already-bundled
-        // roots — Haydn overlay stamps so cutover can run). Pad-only idle
-        // is a legal full-bundle NOP parcel (printer !Row is fatal).
-        // selectProductRowForOpcodes uses the generated ledger, not a
-        // child-count E2 invent; cutover may rematch E2↔E3 from the same
-        // ledger after the stamp.
-        bool SawCutoverSrc = false;
-        if (const MachineBasicBlock *P = MI.getParent()) {
-          for (MachineBasicBlock::const_instr_iterator I =
-                   std::next(MI.getIterator());
-               I != P->instr_end() && I->isBundledWithPred(); ++I) {
-            // Catalog logicals (reloc CSRW_W) and residual `_S*` both
-            // resolve to generated members. Suffix digits are not entries.
-            if (mustResolveToFormatEMember(I->getOpcode(), TII)) {
-              SawCutoverSrc = true;
-              break;
-            }
-          }
+      // Logical cutover sources (reloc CSRW_W, catalog ADD32, residual
+      // `_S*`) are encode work. collectBundleMemberOpcodes sees only
+      // generated members, so an unstamped logical pack looks empty.
+      // Walk children for occupancy row select and completion; suffix
+      // digits are not Format E entries (AIE PacketFormats + InstSlot;
+      // AIEFinalizeBundle.cpp:49-56 is identity on already-bundled roots).
+      SmallVector<unsigned, 3> ChildOpcs;
+      bool SawCutoverSrc = false;
+      if (const MachineBasicBlock *P = MI.getParent()) {
+        for (MachineBasicBlock::const_instr_iterator I =
+                 std::next(MI.getIterator());
+             I != P->instr_end() && I->isBundledWithPred(); ++I) {
+          if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
+            continue;
+          if (haydn::bundle::isPadNopOpcode(I->getOpcode()))
+            continue;
+          ChildOpcs.push_back(I->getOpcode());
+          if (mustResolveToFormatEMember(I->getOpcode(), TII))
+            SawCutoverSrc = true;
         }
+      }
+      if (!Row) {
+        // Missing-row: residual logicals need a row so cutover can bind
+        // MemberId. Pad-only idle is a legal full-bundle NOP parcel
+        // (printer !Row is fatal). selectProductRowForOpcodes uses the
+        // generated unit-cover occupancy of those children, not a
+        // child-count E2 invent; cutover may rematch E2/E3 from the same
+        // ledger after the stamp.
         const bool PadOnlyIdle = Members.empty() && HasPadNop;
         if (!SawCutoverSrc && !PadOnlyIdle)
           continue;
-        Row = haydn::bundle::selectProductRowForOpcodes(Members);
+        Row = haydn::bundle::selectProductRowForOpcodes(
+            ChildOpcs.empty() ? ArrayRef<unsigned>(Members)
+                              : ArrayRef<unsigned>(ChildOpcs));
       }
-      // Row-only roots get the missing completion from the shared census.
-      // W28/CR-B3: one law with verify (collect + pad + select).
+      // Row-only / unstamped roots: generated members own the census when
+      // present; otherwise logical cutover sources are the real-member
+      // count so we never stamp idle-stub over reloc CSRW_W. Cutover
+      // restamps from collectBundleMemberOpcodes after setDesc.
+      const unsigned RealForComp =
+          !Members.empty() ? Members.size()
+                           : (SawCutoverSrc ? ChildOpcs.size() : 0);
       haydn::bundle::stampBundleCommit(
           MI, *Row,
           haydn::bundle::selectCompletionForMembersAndPads(
-              *Row, Members.size(), HasPadNop));
+              *Row, RealForComp, HasPadNop));
       Changed = true;
     }
   }
@@ -968,6 +1024,8 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
         Changed = true;
     }
   }
+  // Reloc CSRW_W/CSRR must be MemberId before encode (typed CSR I8).
+  refuseResidualRelocCsrFieldSlot(MF, TII);
 
   // Product commit tail: fill empty BUNDLE-root DebugLoc from the earliest
   // member. Generic finalizeBundle already copies loc on new wraps; this

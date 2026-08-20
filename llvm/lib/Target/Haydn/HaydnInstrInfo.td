@@ -346,8 +346,9 @@ def MOVF32 : FmtALU32<0x1E, (outs GPR32:$rd), (ins GPR32:$rd_src, GPR32:$rs1, GP
 //===----------------------------------------------------------------------===//
 // Scalar 32-bit multiply — MULL / MULSSH / MULSUH / MULUUH (MAC GRR)
 //
-// Defined in HaydnInstrInfoManual.td + HaydnFormatsMAC.td (not the retired
-// phantom MUL32). GISel: G_MUL s32 → MULL; G_SMULH/UMULH s32 → MULSSH/MULUUH
+// Matcher logicals are generated (HaydnInstrInfoGolden.td.inc). Product
+// encode is Format E members, not hypothesized Inst bits. GISel: G_MUL s32
+// → MULL; G_SMULH/UMULH s32 → MULSSH/MULUUH
 // (HaydnInstructionSelector::emitScalarMul32 and G_SMULH/G_UMULH cases).
 //===----------------------------------------------------------------------===//
 
@@ -397,12 +398,9 @@ def ASR32 : FmtALU32<0x0A, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 // `llvm-mc` would reject `sext32t64 d0, r8` with "failed to match
 // instruction in bundle" and abort the whole bundle.
 //
-// The sibling `SEXT32T64` auto-gen stub in HaydnInstrInfoManual.td has WRONG
-// operand types (`(outs GPR32:$rd)`) and no real encoding; it is kept
-// `isCodeGenOnly = 1` so it never enters the AsmParser matcher and never
-// shadows THIS real instruction on re-parse. With both the real instruction
-// parseable and the stub excluded, `sext32t64 <DR64>, <GPR32>` resolves to
-// this def unambiguously.
+// Catalog logical `SEXT32T64` is generated (HaydnAutoNoDecode, no Inst
+// bits). This def is the GISel-selected encode form (DR64 out, GPR32 in).
+// Both print `sext32t64`; members own the parcel, this opcode owns select.
 //
 // Encoding bits (FmtALU64Unary 0x67/0x197) are allocated in the 0x67
 // unary range alongside SEQ64/SLT64/SLE64/MOVT64/MOVF64/X2ABS32S. The
@@ -563,11 +561,11 @@ def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
 }
 
 // CSRW — catalog 2-op (uimm8, rs). Matcher-visible isPseudo shell; product
-// encode is Format E members. Residual CSRW_S0 until the FieldSlot hide.
-// GISel CBR setup emits CSRW_W, not this opcode. hasSideEffects=1 so a
-// dead CSRW is not DCE'd (WUR_AE_CBEGIN0/CEND0). The old 3-op FmtCSR
-// dead-$rd shape was decoder-parity only and is gone: members and CSRW_S0
-// are already 2-op.
+// encode is Format E I8 members. GISel CBR setup emits CSRW_W, which
+// Finalize cutovers to the same members (typed CSR I8 fixup, never an
+// untyped NONE FieldSlot). hasSideEffects=1 so a dead CSRW is not DCE'd
+// (WUR_AE_CBEGIN0/CEND0). The old 3-op FmtCSR dead-$rd shape was
+// decoder-parity only and is gone.
 let hasSideEffects = 1, isPseudo = 1, isCodeGenOnly = 0, Defs = [SFR],
     Itinerary = Slot0_ALU in
 def CSRW : HaydnInst<0, (outs), (ins uimm8:$csr_addr, GPR32:$rs),
@@ -1265,12 +1263,9 @@ def MOVE32_DR_H : HaydnInst<4, (outs GPR32:$rt), (ins DR64:$rsd),
 // Slot 1/2 — MAC Instructions (Multiply-Accumulate)
 //===----------------------------------------------------------------------===//
 // These instructions execute on the MAC units in slots 1 and 2.
-// 32-bit multiply instructions (MULL, MULSSH, MULSUH, MULUUH) are defined in
-// HaydnInstrInfoManual.td (hand-maintained hypothesized encodings).
-// 64-bit multiply instructions (MUL64_*) are defined in HaydnInstrInfoManual.td.
-// Multiply-Accumulate instructions (MULA64_*) are defined in HaydnInstrInfoManual.td.
-
-// SIMD MAC instructions (X2MULA32, X2MULAPL32) are defined in HaydnInstrInfoManual.td
+// 32/64-bit multiply and MULA64_* matcher logicals are generated
+// (HaydnInstrInfoGolden.td.inc). Dual-dest MAC ties (X2MULA32 and siblings)
+// stay hand-owned below without Inst bits. X2MULAPL32 is generated.
 
 // no durable MIR opcodes LD32_S1/LD64_S1. Logical loads are LD32/LD64
 // only. (The former S1 encode-only peers and their HaydnFormatsLD.td home
@@ -1338,10 +1333,9 @@ def LD32_POST : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
 // Post path in HaydnMCCodeEmitter handles both. Opcodes 0x4/0x5 in the 4-bit
 // s1 LD opcode space (loads use 0x2/0x3).
 //
-// The DB-named S_SW_POST_IMM / D_SDW_POST_IMM in HaydnInstrInfoManual.td model
-// these as Slot0_LS; the encoding hypothesis here (matching the load post-inc
-// pair) places them in the s1 FU=LD space. Both describe the same operation;
-// ST32_POST / ST64_POST are the codegen-selected forms.
+// Catalog names S_SW_POST_IMM / D_SDW_POST_IMM are generated logicals
+// (HaydnInstrInfoGolden.td.inc). ST32_POST / ST64_POST are the
+// codegen-selected forms.
 //===----------------------------------------------------------------------===//
 
 // D_SDW_POST_IMM rtd, rs, imm6 — store 64b rtd to [rs], then rs += (imm6<<3).
@@ -1361,19 +1355,25 @@ def ST32_POST : FmtLSPostInc<0x4A, (outs GPR32:$rs_wb),
 //===----------------------------------------------------------------------===//
 // Lane stores: store one 32-bit lane of a DR64 to memory.
 // These eliminate the MOVE32_DR_L/H + ST32 cross-bank round-trip (2 instrs
-// > 1). Defined via FmtLaneStore with real encoding bits.
+// > 1). Matcher-visible HaydnInst shells (no hypothesized Inst bits);
+// product encode is Format E members (same shape as generated D_SDW_WITH_IMM).
 // D_SW_L_WITH_IMM: mem32[rs + (imm6<<2)] = rtd[31:00] (low lane)
 // D_SW_H_WITH_IMM: mem32[rs + (imm6<<2)] = rtd[63:32] (high lane)
-// Spec: Database/haydn_instruction_db.json "D_SW_L_WITH_IMM" / "D_SW_H_WITH_IMM".
 //===----------------------------------------------------------------------===//
 
-def D_SW_L_WITH_IMM : FmtLaneStore<0x4B,
-    (outs), (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
-    "d_sw_l_with_imm\t$rtd, $rs, $scaled_imm", []>;
-
-def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
-    (outs), (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
-    "d_sw_h_with_imm\t$rtd, $rs, $scaled_imm", []>;
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode",
+    isAsmParserOnly = 0, mayStore = 1 in {
+def D_SW_L_WITH_IMM : HaydnInst<4, (outs),
+    (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
+    "d_sw_l_with_imm\t$rtd, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+def D_SW_H_WITH_IMM : HaydnInst<4, (outs),
+    (ins DR64:$rtd, GPR32:$rs, simm6:$scaled_imm),
+    "d_sw_h_with_imm\t$rtd, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS;
+}
+}
 
 
 //===----------------------------------------------------------------------===//
@@ -1389,7 +1389,7 @@ def D_SW_H_WITH_IMM : FmtLaneStore<0x4C,
 // Class 011 DRX: MAXI64, MINI64 + the Fmt48_WideDRX class.
 // Class 100 CTRL: CSRR_W, ZERO_GPR_W + the Fmt48_WideZeroGPR class.
 // Class 101 WIDE-LS: all 14 _WL + the Fmt48_WideLS class.
-// MOVEI_H, MOVEI_L + the Fmt48_MOVEI class (HaydnInstrInfoManual.td).
+// MOVEI_H / MOVEI_L are hand-owned logicals below (no Inst bits). Fmt48_MOVEI is retired.
 // The 21 KEPT defs below (ADDI32_W, ORI32_W, JAL_W, JALR_W, BEQ/BNE/BGE
 // BGEU/BLT/BLTU_W, BEQZ/BNEZ/BGEZ/BLTZ_W, CSRW_W, SET_HWLOOP_W
 // F2_W/REG_W, SLLI64/SRLI64/SRAI64) retain live hand-written C++ consumers
@@ -1659,7 +1659,7 @@ def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
 //===----------------------------------------------------------------------===//
 // Hand-owned logicals (formerly HaydnInstrInfoManual.td). No Inst bits —
 // product encode is Format E members. Dual-dest MAC ties stay authored
-// until the golden emitter grows dual accumulator projection.
+// (overlay); LS WITH lane stores are HaydnInst shells above.
 //===----------------------------------------------------------------------===//
 
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode" in {

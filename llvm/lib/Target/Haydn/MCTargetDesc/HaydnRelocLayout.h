@@ -17,10 +17,10 @@
 // (byte PC+imm for branches and calls; hwloop displacement <<2). FieldLsb
 // is Format E E2 e0 absolute parcel bits with r_offset = parcel origin;
 // E3 I12/RI12/I20 windows are resolved from the parcel at Loc.
-// GE96-03: no extra shift on B*/JAL. RelocTrans::Unresolved
-// remains for kinds without a published wire scale, and for unknown/
-// Invalid kinds (rowFor never falls open to None). Hwloop Off1/Off2 retain
-// ValueShift=2 from the explicit SET_HWLOOP displacement law.
+// No extra shift on B*/JAL. RelocTrans::Unresolved remains for kinds
+// without a published wire scale, and for unknown/Invalid kinds (rowFor
+// never falls open to None). Hwloop Off1/Off2 retain ValueShift=2 from
+// the explicit SET_HWLOOP displacement law.
 //
 // Lives in namespace llvm::HaydnReloc (distinct from the lld arch handler
 // `class Haydn` and from the target's llvm::Haydn register/fixup namespace, so
@@ -156,6 +156,7 @@ struct FixupField {
 /// type-opcode 1 and maps to the dedicated JALRSImm12 row (never borrow
 /// the RI12 branch row); execution stays PC = rs + imm12. I8 type-opcodes
 /// 4/5 (CSRR/CSRW) map to CSR_UImm8; other I8 opcodes have no reloc row.
+/// Unspecified I8 FieldSize defaults to 8 (AIE always supplies Size).
 /// Fields[0].Offset, when set, must be a published window for that kind
 /// (E2 e0 table FieldLsb or a typed E3/e1 member LSB) — AIE looks up by
 /// the actual FixupField Offset (AIEMCFixupKinds.cpp:36-65); Haydn keeps

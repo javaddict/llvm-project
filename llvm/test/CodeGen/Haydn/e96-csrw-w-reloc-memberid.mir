@@ -101,6 +101,7 @@ body:             |
   bb.0:
     liveins: $r1, $r15
     ; MIR-LABEL: name: csrw_w_reloc_unstamped
+    ; MIR: BUNDLE 0, 0
     ; MIR: CSRW_E2_E0_ALU0_I8
     ; MIR-NOT: CSRW_W
     BUNDLE implicit $r1, implicit-def $sfr {
@@ -116,6 +117,7 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r3, $r15
     ; MIR-LABEL: name: csrw_w_reloc_dual_unstamped
+    ; MIR: BUNDLE 1, 0
     ; MIR: ADD32_E3_E0_ALU2_RR
     ; MIR: CSRW_E3_E1_ALU1_I8
     ; MIR-NOT: CSRW_W
@@ -133,6 +135,7 @@ body:             |
   bb.0:
     liveins: $r1, $r15
     ; MIR-LABEL: name: csrw_w_reloc_bare
+    ; MIR: BUNDLE 0, 0
     ; MIR: CSRW_E2_E0_ALU0_I8
     ; MIR-NOT: CSRW_W
     CSRW_W @g, $r1, implicit-def $sfr
