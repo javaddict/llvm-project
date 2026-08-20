@@ -889,10 +889,21 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
       .clampScalar(0, S32, S64)
       .lower();
 
+  // AIE2LegalizerInfo.cpp:288-291 lowers every sat/overflow op. Haydn
+  // overlay: signed sat add/sub are golden encodings (ADD32S/SUB32S/
+  // ADD64S/SUB64S/X2ADD32S/X2SUB32S/X4ADD16S/X4SUB16S). Peer: Hexagon
+  // HexagonPatterns.td:1570 A2_addsat; RISCV RISCVInstrInfoXqci.td:1548
+  // QC_ADDSAT. Unsigned sat and sat-shift have no product encoding.
+  getActionDefinitionsBuilder({G_SADDSAT, G_SSUBSAT})
+      .legalFor({S32, S64, V2I32, V4I16})
+      .scalarizeIf(ScalarizeWideVec(0), 0)
+      .scalarize(0)
+      .lower();
+
   getActionDefinitionsBuilder({
       G_UADDO, G_USUBO,
       G_SADDO, G_SSUBO, G_UADDE, G_USUBE, G_SADDE, G_SSUBE,
-      G_UADDSAT, G_SADDSAT, G_USUBSAT, G_SSUBSAT,
+      G_UADDSAT, G_USUBSAT,
       G_USHLSAT, G_SSHLSAT,
       G_ROTL, G_ROTR,
       G_SBFX, G_UBFX,

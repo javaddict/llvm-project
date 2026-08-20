@@ -40,3 +40,16 @@ define i32 @caller_ret(i32 %x) nounwind {
   %r = musttail call i32 @callee_i32(i32 %x)
   ret i32 %r
 }
+
+define i32 @caller_with_local(i32 %x) nounwind {
+; ISEL-LABEL: name: caller_with_local
+; ISEL: JAL_W_MSP
+; ISEL-NOT: RET
+; ASM-LABEL: caller_with_local:
+; ASM: {{jal_w|jal}}{{.*}}r12
+  %p = alloca i32, align 4
+  store i32 %x, ptr %p, align 4
+  %v = load i32, ptr %p, align 4
+  %r = musttail call i32 @callee_i32(i32 %v)
+  ret i32 %r
+}

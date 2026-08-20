@@ -111,10 +111,23 @@ static Register getPEIScratchReg(MachineBasicBlock &MBB,
     return Reg == Haydn::R1 || Reg == Haydn::R2;
   };
 
+  // Sibcall outgoing args live in R1–R7 (CC_Haydn). Epilogue scratch at a
+  // JAL_W_MSP / JALR_W_MSP must not clobber them. Peer: AArch64
+  // findScratchNonCalleeSaveRegister (AArch64FrameLowering.cpp:888-929)
+  // plus HaydnOutgoingValueHandler implicit uses on the tail opcode.
+  auto isTailCallArgPhys = [](MCPhysReg Reg) {
+    return Reg == Haydn::R1 || Reg == Haydn::R2 || Reg == Haydn::R3 ||
+           Reg == Haydn::R4 || Reg == Haydn::R5 || Reg == Haydn::R6 ||
+           Reg == Haydn::R7;
+  };
+
   auto isABISafeScratch = [&](MCPhysReg Reg) {
     if (Reg == Avoid || Reg == Avoid2 || Reg == Haydn::R0 || Reg == Haydn::R14)
       return false;
     if (ProtectRetCC && isRetCCPhys(Reg))
+      return false;
+    if (ProtectRetCC && MF.getFrameInfo().hasTailCall() &&
+        isTailCallArgPhys(Reg))
       return false;
     if (MRI.isReserved(Reg))
       return false;

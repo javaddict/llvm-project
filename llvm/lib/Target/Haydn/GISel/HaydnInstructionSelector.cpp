@@ -1753,6 +1753,47 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
 
   // G_SMAX/SMIN/UMAX/UMIN: selectImpl Pats only. No C++ residual.
 
+  case TargetOpcode::G_SADDSAT:
+  case TargetOpcode::G_SSUBSAT: {
+    // AIE2LegalizerInfo.cpp:288-291 lowers these. Haydn overlay: golden
+    // signed-sat encodings. Peer: HexagonPatterns.td:1570 A2_addsat;
+    // RISCVInstrInfoXqci.td:1548 QC_ADDSAT. Unsigned sat has no ISA seat.
+    Register Dst = I.getOperand(0).getReg();
+    Register Src0 = I.getOperand(1).getReg();
+    Register Src1 = I.getOperand(2).getReg();
+    LLT Ty = MRI.getType(Dst);
+    unsigned Opc = 0;
+    const TargetRegisterClass *RC = nullptr;
+    const bool IsAdd = Opcode == TargetOpcode::G_SADDSAT;
+    if (Ty == LLT::scalar(32)) {
+      Opc = IsAdd ? Haydn::ADD32S : Haydn::SUB32S;
+      RC = &Haydn::GPR32RegClass;
+    } else if (Ty == LLT::scalar(64)) {
+      Opc = IsAdd ? Haydn::ADD64S : Haydn::SUB64S;
+      RC = &Haydn::DR64RegClass;
+    } else if (Ty == LLT::fixed_vector(2, 32)) {
+      Opc = IsAdd ? Haydn::X2ADD32S : Haydn::X2SUB32S;
+      RC = &Haydn::DR64RegClass;
+    } else if (Ty == LLT::fixed_vector(4, 16)) {
+      Opc = IsAdd ? Haydn::X4ADD16S : Haydn::X4SUB16S;
+      RC = &Haydn::DR64RegClass;
+    } else
+      return false;
+    if (Dst.isVirtual())
+      RBI.constrainGenericRegister(Dst, *RC, MRI);
+    if (Src0.isVirtual())
+      RBI.constrainGenericRegister(Src0, *RC, MRI);
+    if (Src1.isVirtual())
+      RBI.constrainGenericRegister(Src1, *RC, MRI);
+    MachineIRBuilder MIB(I);
+    MachineInstr *MI =
+        MIB.buildInstr(Opc).addDef(Dst).addReg(Src0).addReg(Src1);
+    if (!constrainSelectedInstRegOperands(*MI, TII, TRI, RBI))
+      return false;
+    I.eraseFromParent();
+    return true;
+  }
+
   case TargetOpcode::G_SHL: {
     // s32/s64 scalar: selectImpl Pats (SLL32/SLL64). Residual: SIMD only
     // (lane-0 extract is multi-instr).
