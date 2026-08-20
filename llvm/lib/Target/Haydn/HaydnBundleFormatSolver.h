@@ -326,7 +326,11 @@ inline CycleState makeProductCycleState() {
 /// strengthened to a row *mask*. Rows that cannot hold the occupancy are
 /// stripped: Format E E2 has two entries, E3 has three. Residual
 /// PlacementAlternative FieldSlots are one issue bit per member (SLOT0/1/2),
-/// so popcount(NewOcc) is the real member count on that path.
+/// so popcount(NewOcc) is the real member count on that path. FieldSlots
+/// are VIRTUAL packing fields, not entry identity: a logical seated at S2
+/// can re-seat at E2's entries 0/1, so occupancy alone never drops a row
+/// family here — committed-member row identity (Mode) clamps the frontier
+/// at appendCommittedMember, and getFormatOrNull cross-checks that frontier.
 inline uint64_t coveringFormatMaskFromPackets(const PacketFormats &Packets,
                                               SlotBits NewOcc,
                                               uint64_t AllowedMask) {
@@ -406,6 +410,12 @@ using CycleCandidateSet = SmallVector<CycleState, 8>;
 /// Architectural issue-slot universe for dominance (S0|S1|S2).
 inline constexpr SlotBits kIssueSlotUniverse =
     static_cast<SlotBits>(Haydn::SLOT_ALL);
+
+/// FieldSlots namespace mask (SLOT0|SLOT1|SLOT2). Occupancy inside this
+/// mask is VIRTUAL packing fields — members re-seat at a resolved row's
+/// real entries — unlike the residual S* SlotSet namespace (bits 32/64/128).
+inline constexpr SlotBits kIssueFieldSlotsMask =
+    static_cast<SlotBits>(Haydn::SLOT0 | Haydn::SLOT1 | Haydn::SLOT2);
 
 /// True iff every future pure slot/format packing legal under \p B is also
 /// legal under \p A (A is at least as flexible as B).

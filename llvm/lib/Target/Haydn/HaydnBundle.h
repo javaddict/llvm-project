@@ -266,15 +266,50 @@ public:
   const VLIWFormat *getFormatOrNull(unsigned Size = 0) const {
     assert(!isStandalone());
     const PacketFormats &PF = FormatInterface->getPacketFormats();
+    // Generated-member row clamp (query-time, one site): FieldSlots bits
+    // lose E2/E3 identity (SLOT0 is both E2_0 and E3_0), so occupancy alone
+    // cannot express "every committed member only has an E3 (or E2) row".
+    // The members' generated Mode records can; intersect the frontier with
+    // them here. Non-members (residual/logical fixed-slot shapes) do not
+    // constrain the row.
+    uint64_t MemberRowMask = haydn::bundle::ProductFormatMask;
+    for (const I *Inst : Instrs) {
+      if (const haydn::format_e::FormatEMemberRec *Mem =
+              haydnFindFormatEMemberByOpcode(Inst->getOpcode())) {
+        const haydn::bundle::BundleFormatRowID Row =
+            Mem->Mode == 0 ? haydn::bundle::BundleFormatRowID::E96TwoEntry
+                           : haydn::bundle::BundleFormatRowID::E96ThreeEntry;
+        MemberRowMask &= haydn::bundle::formatRowBit(Row);
+      }
+    }
     if (Size) {
-      if (const VLIWFormat *F = PF.getFormatBySize(OccupiedSlots, Size))
-        return F;
+      if (const VLIWFormat *F = PF.getFormatBySize(OccupiedSlots, Size)) {
+        const uint64_t FRow =
+            haydn::bundle::formatRowBit(
+                F == haydn::bundle::productVLIWFormatForRow(
+                        PF, haydn::bundle::BundleFormatRowID::E96ThreeEntry)
+                    ? haydn::bundle::BundleFormatRowID::E96ThreeEntry
+                    : haydn::bundle::BundleFormatRowID::E96TwoEntry);
+        if (MemberRowMask & FRow)
+          return F;
+      }
       // Size filter is exact: only resolve transitional cover when EncodedBytes
       // match the product parcel.
       if (Size != haydn::bundle::productParcelBytes().Value)
         return nullptr;
     } else if (const VLIWFormat *F = PF.getFormat(OccupiedSlots)) {
-      return F;
+      // Occupancy-only first-covering is row truth only when the committed
+      // member set still admits that row — cross-check the clamp and fall
+      // through to the mask path on disagreement.
+      const uint64_t FRow =
+          F == haydn::bundle::productVLIWFormatForRow(
+                  PF, haydn::bundle::BundleFormatRowID::E96ThreeEntry)
+              ? haydn::bundle::formatRowBit(
+                    haydn::bundle::BundleFormatRowID::E96ThreeEntry)
+              : haydn::bundle::formatRowBit(
+                    haydn::bundle::BundleFormatRowID::E96TwoEntry);
+      if (MemberRowMask & FRow)
+        return F;
     }
     if (!haydn::bundle::productCovers(PF, OccupiedSlots))
       return nullptr;
@@ -283,6 +318,11 @@ public:
     if (!PackingCandidates.empty())
       Mask = haydn::bundle::selectPreferredCandidate(PackingCandidates)
                  .FeasibleFormatMask;
+    // Query-local member clamp: the packing frontier in PackingCandidates
+    // is untouched — committed members only constrain THIS row selection.
+    Mask &= MemberRowMask;
+    if (!Mask)
+      return nullptr;
     const haydn::bundle::BundleFormatRowID Row =
         haydn::bundle::selectProductRow(Mask, size());
     const VLIWFormat *Resolved =
@@ -290,8 +330,15 @@ public:
     // productVLIWFormatForRow is PacketFormats full-cover only
     // (AIEBundle.h:150-156). Refuse the empty-cover representative if a
     // helper still returns it — never a format for transitional occupancy.
+    // FieldSlots (issue bits 1/2/4) are VIRTUAL packing fields: on a
+    // resolved row the members re-seat at that row's real entries, so the
+    // representative row is a legal stamp even when its full-cover bits
+    // differ from the occupancy. Only the residual S* SlotSet namespace
+    // (bits 32/64/128) is NOT row-resolvable and must not take the
+    // representative.
     if (Resolved && OccupiedSlots != 0 &&
-        Resolved == PF.getFormat(/*Occupied=*/0))
+        Resolved == PF.getFormat(/*Occupied=*/0) &&
+        (OccupiedSlots & ~haydn::bundle::kIssueFieldSlotsMask) != 0)
       return nullptr;
     return Resolved;
   }
