@@ -668,6 +668,9 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
 static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
                                      const MCInst &Logical,
                                      const MCInstrInfo &MII);
+static bool isSkipFinalizeFillRefuse(const FormatEMemberRec &Mem,
+                                     const MCInst &Logical,
+                                     const MCInstrInfo &MII);
 static bool fillFormatEMemberInstFromCompilerRoot(
     const FormatEMemberRec &Mem, const MCInst &Logical, const MCInstrInfo &MII,
     const MCRegisterInfo &MRI, MCInst &Out);
@@ -873,6 +876,14 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
   for (unsigned K = 0, KE = Reals.size(); K != KE; ++K)
     KidAtEntry[(*Best)[K].EntryIdx] = static_cast<int>(K);
 
+  // Skip-Finalize extra-op / FieldSlot / MemberId discard occupancy and
+  // never start fill or rebuild operands.
+  for (unsigned K = 0, KE = Reals.size(); K != KE; ++K) {
+    if (!(*Best)[K].Mem ||
+        isSkipFinalizeFillRefuse(*(*Best)[K].Mem, *Reals[K], MII))
+      return false;
+  }
+
   Storage.clear();
   Storage.reserve(EntryCount);
   for (unsigned E = 0; E < EntryCount; ++E) {
@@ -881,9 +892,12 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
       if (!(*Best)[Kid].Mem)
         return false;
       Storage.emplace_back();
-      // Compiler extra-op (MOVE32 3-op vs member 2-op; tied MAC acc),
-      // FieldSlot, and MemberId route to FromCompilerRoot (fail closed).
-      // Raw-bundle public logicals use FromRawBundle (positional / Imm-0).
+      // Skip-Finalize compiler extras / FieldSlot / MemberId never enter
+      // fill (no bag-sort, no operand rebuild). Standalone public logicals
+      // fill positional / Imm-0 / AR-UA POST / CB only.
+      // Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
+      if (isSkipFinalizeFillRefuse(*(*Best)[Kid].Mem, *Reals[Kid], MII))
+        return false;
       if (!fillFormatEMemberInst(*(*Best)[Kid].Mem, *Reals[Kid], MII, MRI,
                                  Storage.back()))
         return false;
@@ -965,6 +979,28 @@ static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
   return false;
 }
 
+/// Skip-Finalize / compiler-root shapes never enter standalone fill.
+/// FieldSlot, committed MemberId, and Finalize extra-op keep-map
+/// (MOVE32 trailing, tied MAC, LUI vestigial $rs) fail closed here so
+/// fillFormatEMemberInst is not reachable from those packets.
+/// Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is.
+static bool isSkipFinalizeFillRefuse(const FormatEMemberRec &Mem,
+                                     const MCInst &Logical,
+                                     const MCInstrInfo &MII) {
+  if (isResidualFieldSlotOpcodeName(MII.getName(Logical.getOpcode())))
+    return true;
+  if (findFormatEMemberByOpcode(Logical.getOpcode()))
+    return true;
+  if (Mem.MemberId < FormatEMemberOpcodeCount &&
+      FormatEMemberOpcodes[Mem.MemberId] != 0 &&
+      Logical.getOpcode() == FormatEMemberOpcodes[Mem.MemberId])
+    return true;
+  const MCInstrDesc &LogDesc = MII.get(Logical.getOpcode());
+  if (Logical.getNumOperands() > LogDesc.getNumOperands())
+    return true;
+  return isCompilerKeepMapExtraOp(Mem, Logical, MII);
+}
+
 /// Compiler-root fill is deleted. MemberId composites serialize as-is
 /// (trySerializeFormatECompositeAsIs / encodeInstructionFromCompilerRoot).
 /// Extra-op keep-map is Finalize. Residual FieldSlot never fills.
@@ -1000,18 +1036,9 @@ static bool fillFormatEMemberInstFromRawBundle(const FormatEMemberRec &Mem,
   const unsigned Need = MemDesc.getNumOperands();
   const unsigned Have = Logical.getNumOperands();
 
-  // Residual FieldSlots never bag-sort through this fill.
-  if (isResidualFieldSlotOpcodeName(MII.getName(Logical.getOpcode())))
-    return false;
-
-  // Committed MemberId never fills. trySerializeFormatECompositeAsIs and
-  // encodeSlotSubInst own that path. Standalone DFS only sees public logicals.
-  if (findFormatEMemberByOpcode(Logical.getOpcode()) ||
-      Logical.getOpcode() == MemberOpc)
-    return false;
-
-  // Compiler extra-op cutover is Finalize keep-map, not this fill.
-  if (isCompilerKeepMapExtraOp(Mem, Logical, MII))
+  // Residual FieldSlots, committed MemberId, compiler extra-op, and
+  // extra operands past the public logical Desc never bag-sort here.
+  if (isSkipFinalizeFillRefuse(Mem, Logical, MII))
     return false;
 
   // Positional: count and kinds already match. Hand-asm MOVE32 is 2-op
@@ -1077,10 +1104,7 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
   const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
   if (MemberOpc == 0)
     return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
-  if (isResidualFieldSlotOpcodeName(MII.getName(Logical.getOpcode())) ||
-      findFormatEMemberByOpcode(Logical.getOpcode()) ||
-      Logical.getOpcode() == MemberOpc ||
-      isCompilerKeepMapExtraOp(Mem, Logical, MII))
+  if (isSkipFinalizeFillRefuse(Mem, Logical, MII))
     return fillFormatEMemberInstFromCompilerRoot(Mem, Logical, MII, MRI, Out);
   return fillFormatEMemberInstFromRawBundle(Mem, Logical, MII, MRI, Out);
 }
