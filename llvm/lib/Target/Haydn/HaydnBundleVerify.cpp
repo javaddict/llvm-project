@@ -386,6 +386,11 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
                            uint32_t &SeenUnits, uint32_t &SeenEntryBits,
                            uint32_t *ResidualCompletedBits = nullptr,
                            unsigned ResidualBit = 0) {
+  // Pad NOP is completion fill, not a membership inverse root.
+  // Peer: AIE idle slot is an unused format entry, not an alternate opcode.
+  if (isPadNopOpcode(Opc))
+    return std::nullopt;
+
   // Unexpanded residual pseudos are not inverse keys. A catalog extra key
   // must not complete LD32_POST_INC / MOV_GPR_TO_DR64 as if they were the
   // real member (MC-pseudo sources are excluded from that extra key).
@@ -415,8 +420,8 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
                                        /*MatchEntry=*/true);
     if (!Inv)
       return std::string(
-                 "structural inverse: committed logical has no generated "
-                 "member at its stamped entry (unknown or misplaced): ") +
+                 "structural inverse: residual/logical inverse record not "
+                 "completed at membership entry (no generated member): ") +
              std::string(inverseOpcodeName(Opc)) + " @mode" +
              std::to_string(ExpectMode) + " entry " +
              std::to_string(EntryIdx);
@@ -510,11 +515,25 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   if (!isProductBundleRow(Row))
     return std::string("non-product BundleFormatRowID");
 
-  if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
+  // Pad NOP is CompletionState, not a membership entry. Opcode-only callers
+  // may still pass architectural NOP; strip it here so residual inverse
+  // roots never structurally accept a pad as a member. Peer: AIE unused
+  // format entry is idle, not an alternate opcode (AIEMCFormats.h:376-379).
+  SmallVector<unsigned, 3> Reals;
+  bool HasPadNop = false;
+  Reals.reserve(MemberOpcodes.size());
+  for (unsigned Opc : MemberOpcodes) {
+    if (isPadNopOpcode(Opc)) {
+      HasPadNop = true;
+      continue;
+    }
+    Reals.push_back(Opc);
+  }
+
+  if (Reals.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
 
-  if (auto ResidualIdsErr =
-          haydnRequireInverseIdsOnResidualRoots(MemberOpcodes))
+  if (auto ResidualIdsErr = haydnRequireInverseIdsOnResidualRoots(Reals))
     return ResidualIdsErr;
 
   // Format E unit injectivity pre-check (units ≠ encoded entry identity):
@@ -522,8 +541,8 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   // Bundle.canAdd / opcodesHaveFormatEUnitCover / name peel. Residual
   // FieldSlots can look like a legal 3-entry E3 pack while two stores both
   // require LOADSTORE0 e0. Refuse here so MC never sees the illegal BUNDLE.
-  if (!inverseOpcodesHaveUnitCoverForMode(MemberOpcodes, /*Mode=*/0) &&
-      !inverseOpcodesHaveUnitCoverForMode(MemberOpcodes, /*Mode=*/1))
+  if (!inverseOpcodesHaveUnitCoverForMode(Reals, /*Mode=*/0) &&
+      !inverseOpcodesHaveUnitCoverForMode(Reals, /*Mode=*/1))
     return std::string(
         "structural inverse: chosen Format E members are not "
         "unit-injective (unit injectivity; execution units are not "
@@ -536,7 +555,7 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     const format::BundleFormatRowDesc *Desc = format::getBundleFormatRow(Row);
     return Desc ? Desc->EntryCount : 0u;
   }();
-  if (MemberOpcodes.size() > RowEntries)
+  if (Reals.size() > RowEntries)
     return std::string(
         "BUNDLE membership exceeds stamped row entry count (E2 holds 2; "
         "three real members require E96ThreeEntry)");
@@ -551,13 +570,13 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     return std::string(
         "row EncodedBytes disagree with product registry parcel");
 
-  // Empty members: architectural idle — product geometry only (registry
-  // parcel + stub completion). No PacketFormats planner reselection.
-  if (MemberOpcodes.empty()) {
+  // Empty membership: pad-only idle is full-slot architectural NOP
+  // (AllEntriesReal). Empty with no pad stays residual idle stub.
+  // No PacketFormats planner reselection.
+  if (Reals.empty()) {
     BundlePlan Stall = makeProductPlan(/*Occupied=*/0, /*Members=*/{});
     Stall.Row = Row;
-    Stall.Completion = expectedGoldenRowCompletion(/*RealMembers=*/0,
-                                                   /*HasPadNop=*/false);
+    Stall.Completion = expectedGoldenRowCompletion(/*RealMembers=*/0, HasPadNop);
     Stall.Bytes = productParcelBytes();
     if (!Stall.isProductLegal())
       return std::string("empty cycle BundlePlan not product-legal");
@@ -583,8 +602,8 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   uint32_t SeenUnits = 0;
   uint32_t ResidualCompletedBits = 0;
 
-  for (unsigned I = 0, E = MemberOpcodes.size(); I != E; ++I) {
-    const unsigned Opc = MemberOpcodes[I];
+  for (unsigned I = 0, E = Reals.size(); I != E; ++I) {
+    const unsigned Opc = Reals[I];
 
     // Representation-expand pseudos (B / RET / BR_JT / PseudoCALLIndirect)
     // expand to a real Format E member at AsmPrinter emission. They are
@@ -592,7 +611,7 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     // entry the committed members must not already hold. Co-issue with a
     // representation expand is a corruption — fail closed.
     if (isRepresentationExpandPseudo(Opc)) {
-      if (MemberOpcodes.size() != 1)
+      if (Reals.size() != 1)
         return std::string(
             "structural inverse: representation-expand pseudo must be a "
             "solo committed cycle (printer expands one-to-one)");
@@ -610,17 +629,16 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   }
 
   if (auto ResidualErr = haydnRequireCompletedInverseOnResidualRoots(
-          MemberOpcodes, ResidualCompletedBits))
+          Reals, ResidualCompletedBits))
     return ResidualErr;
 
   // Structural inverse product plan: registry row/completion/bytes only
   // (entry occupancy from the inverse matrix, never the PacketFormats
   // planner).
   SlotBits Occupied = static_cast<SlotBits>(SeenEntryBits);
-  BundlePlan Plan = makeProductPlan(Occupied, MemberOpcodes);
+  BundlePlan Plan = makeProductPlan(Occupied, Reals);
   Plan.Row = Row;
-  Plan.Completion =
-      expectedGoldenRowCompletion(MemberOpcodes.size(), /*HasPadNop=*/false);
+  Plan.Completion = expectedGoldenRowCompletion(Reals.size(), HasPadNop);
   Plan.Bytes = productParcelBytes();
   if (Plan.Bytes != *GenBytes)
     return std::string("rebuilt plan Bytes != product EncodedBytes");

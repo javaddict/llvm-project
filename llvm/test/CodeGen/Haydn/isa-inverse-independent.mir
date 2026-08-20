@@ -40,12 +40,12 @@
 # AIE peers: AIEBaseInstrInfo.cpp:1595-1614 verifyInstruction fail-closed;
 # AIEMCFormats.h:376-379 getAlternateInstsOpcode overlay (opcode-keyed).
 
-# E2-NO-MEMBER: structural inverse: committed logical has no generated member
+# E2-NO-MEMBER: structural inverse: residual/logical inverse record not completed at membership entry (no generated member)
 # NO-COMP: missing CompletionStateID
 # DUP-UNIT: unit-injective
 # RES-NO-COMP: missing CompletionStateID
 # OPTNONE-NO-COMP: missing CompletionStateID
-# OPTNONE-NO-MEMBER: structural inverse: committed logical has no generated member
+# OPTNONE-NO-MEMBER: structural inverse: residual/logical inverse record not completed at membership entry (no generated member)
 # OPTNONE-DUP: unit-injective
 # OK-LOG-LABEL: name: legal_e2_logical
 # OK-LOG: BUNDLE 0, 0

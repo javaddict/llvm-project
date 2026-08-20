@@ -97,7 +97,30 @@ TEST(HaydnBundleVerifyTest, StallEmptyMembersOk) {
   EXPECT_FALSE(Err.has_value()) << (Err ? *Err : "");
   EXPECT_TRUE(Plan.isProductLegal());
   EXPECT_TRUE(Plan.empty());
+  EXPECT_EQ(Plan.Completion, CompletionStateID::StubIdle);
   EXPECT_EQ(Plan.Bytes.Value, productParcelBytes().Value);
+}
+
+TEST(HaydnBundleVerifyTest, FullBundleNopIdleCompletesAllEntriesReal) {
+  // Architectural NOP in every member slot of a legal format is product
+  // idle, not residual membership. Pad is CompletionState (AllEntriesReal),
+  // never an inverse-record root.
+  HaydnMCFormats Fmts;
+  BundlePlan One;
+  auto OneErr = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                      {Haydn::NOP}, Fmts, &One);
+  EXPECT_FALSE(OneErr.has_value()) << (OneErr ? *OneErr : "");
+  EXPECT_TRUE(One.isProductLegal());
+  EXPECT_TRUE(One.empty());
+  EXPECT_EQ(One.Completion, CompletionStateID::AllEntriesReal);
+
+  BundlePlan Two;
+  auto TwoErr = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                      {Haydn::NOP, Haydn::NOP}, Fmts, &Two);
+  EXPECT_FALSE(TwoErr.has_value()) << (TwoErr ? *TwoErr : "");
+  EXPECT_TRUE(Two.isProductLegal());
+  EXPECT_TRUE(Two.empty());
+  EXPECT_EQ(Two.Completion, CompletionStateID::AllEntriesReal);
 }
 
 TEST(HaydnBundleVerifyTest, RejectsFourMembers) {
@@ -143,14 +166,17 @@ TEST(HaydnBundleVerifyTest, RejectsSameSlotConflict) {
 // final real MIs before layout; printer is serialize-only.
 TEST(HaydnBundleVerifyTest, ResidualCycleFormingPseudoSet) {
   const unsigned Residuals[] = {
-      Haydn::LOADI32,       Haydn::LOAD_ADDR,   Haydn::SETCBR_BEGIN,
-      Haydn::SETCBR_END,    Haydn::LoopStart,    Haydn::LoopDec,
-      Haydn::LoopJNZ,       Haydn::SET_HWLOOP,   Haydn::SET_HWLOOP_REG,
+      Haydn::LOADI32,       Haydn::LOADI64,      Haydn::LOAD_ADDR,
+      Haydn::SETCBR_BEGIN,  Haydn::SETCBR_END,   Haydn::LoopStart,
+      Haydn::LoopDec,       Haydn::LoopJNZ,      Haydn::SET_HWLOOP,
+      Haydn::SET_HWLOOP_REG,
   };
   for (unsigned Opc : Residuals)
     EXPECT_TRUE(isResidualCycleFormingPseudo(Opc)) << "opc=" << Opc;
 
-  // Product final reals and representation expands are not residual.
+  // Product final reals, representation expands, and meta PseudoLoopEnd
+  // (printer drop; no bytes) are not residual cycle-forming encodes.
+  EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::PseudoLoopEnd));
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::CSRW_W));
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::SUBI32));
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::BNEZ_W));
@@ -166,6 +192,16 @@ TEST(HaydnBundleVerifyTest, ResidualCycleFormingPseudoSet) {
   EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::PseudoCALLIndirect));
   EXPECT_FALSE(isRepresentationExpandPseudo(Haydn::LOADI32));
   EXPECT_FALSE(isRepresentationExpandPseudo(Haydn::ADD32));
+
+  // Leftover expand-owned / remat / cross-bank copies are not inverse keys.
+  EXPECT_TRUE(isExpandOwnedSemanticPseudo(Haydn::MOV_GPR_TO_DR64));
+  EXPECT_TRUE(isExpandOwnedSemanticPseudo(Haydn::MOV_DR64_TO_GPR));
+  EXPECT_TRUE(isExpandOwnedSemanticPseudo(Haydn::LOADI32));
+  EXPECT_TRUE(isExpandOwnedSemanticPseudo(Haydn::LOADI64));
+  EXPECT_TRUE(isExpandOwnedSemanticPseudo(Haydn::LD32_POST_INC));
+  EXPECT_FALSE(isExpandOwnedSemanticPseudo(Haydn::ADD32));
+  EXPECT_FALSE(isExpandOwnedSemanticPseudo(Haydn::LD32));
+  EXPECT_FALSE(isExpandOwnedSemanticPseudo(Haydn::B));
 }
 
 TEST(HaydnBundleVerifyTest, ProductRowImmRoundTrip) {
@@ -559,6 +595,13 @@ TEST(HaydnBundleVerifyTest, ResidualLogicalRequiresCompletedInverseRecord) {
             std::string::npos)
       << *Loadi;
 
+  auto Loadi64 = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                       {Haydn::LOADI64}, Fmts);
+  ASSERT_TRUE(Loadi64.has_value());
+  EXPECT_NE(Loadi64->find("residual/logical inverse record not completed"),
+            std::string::npos)
+      << *Loadi64;
+
   auto PostInc = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
                                        {Haydn::LD32_POST_INC}, Fmts);
   ASSERT_TRUE(PostInc.has_value());
@@ -569,10 +612,16 @@ TEST(HaydnBundleVerifyTest, ResidualLogicalRequiresCompletedInverseRecord) {
   auto Mov = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
                                    {Haydn::MOV_GPR_TO_DR64}, Fmts);
   ASSERT_TRUE(Mov.has_value());
-  EXPECT_TRUE(Mov->find("residual/logical inverse record not completed") !=
-                  std::string::npos ||
-              Mov->find("no generated member") != std::string::npos)
+  EXPECT_NE(Mov->find("residual/logical inverse record not completed"),
+            std::string::npos)
       << *Mov;
+
+  auto MovDr = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                     {Haydn::MOV_DR64_TO_GPR}, Fmts);
+  ASSERT_TRUE(MovDr.has_value());
+  EXPECT_NE(MovDr->find("residual/logical inverse record not completed"),
+            std::string::npos)
+      << *MovDr;
 
   auto Copy = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
                                     {TargetOpcode::COPY}, Fmts);
@@ -616,6 +665,50 @@ TEST(HaydnBundleVerifyTest, InverseRecordMutationFailClosed) {
   Mut = *Inv;
   Mut.Mode = static_cast<uint8_t>(Mut.Mode ^ 1u);
   EXPECT_FALSE(haydn::format_e::completeInverseRecord(Mut));
+}
+
+TEST(HaydnBundleVerifyTest, ParseTimeResidualLogicalRequiresCompletedInverse) {
+  HaydnMCFormats Fmts;
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+
+  auto parseOne = [&](unsigned Opc) {
+    MCInst I;
+    I.setOpcode(Opc);
+    const MCInst *Entries[] = {&I, nullptr};
+    return verifyParsedBundle(BundleFormatRowID::E96TwoEntry, Entries, Fmts,
+                              MII, nullptr);
+  };
+
+  auto Loadi = parseOne(Haydn::LOADI32);
+  ASSERT_TRUE(Loadi.has_value());
+  EXPECT_NE(Loadi->find("residual/logical inverse record not completed"),
+            std::string::npos)
+      << *Loadi;
+
+  auto PostInc = parseOne(Haydn::LD32_POST_INC);
+  ASSERT_TRUE(PostInc.has_value());
+  EXPECT_NE(PostInc->find("residual/logical inverse record not completed"),
+            std::string::npos)
+      << *PostInc;
+
+  auto Mov = parseOne(Haydn::MOV_GPR_TO_DR64);
+  ASSERT_TRUE(Mov.has_value());
+  EXPECT_NE(Mov->find("residual/logical inverse record not completed"),
+            std::string::npos)
+      << *Mov;
+
+  auto Copy = parseOne(TargetOpcode::COPY);
+  ASSERT_TRUE(Copy.has_value());
+  EXPECT_TRUE(Copy->find("no generated member") != std::string::npos ||
+              Copy->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *Copy;
+
+  MCInst Add = mcRR(Haydn::ADD32, Haydn::R1, Haydn::R2, Haydn::R3);
+  const MCInst *Ok[] = {&Add, nullptr};
+  auto AddErr = verifyParsedBundle(BundleFormatRowID::E96TwoEntry, Ok, Fmts,
+                                   MII, nullptr);
+  EXPECT_FALSE(AddErr.has_value()) << (AddErr ? *AddErr : "");
 }
 
 TEST(HaydnBundleVerifyTest, LookupPrivateMemberUsesCompletedInverse) {

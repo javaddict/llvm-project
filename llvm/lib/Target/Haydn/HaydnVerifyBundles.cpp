@@ -41,6 +41,7 @@ namespace bundle {
 bool isResidualCycleFormingPseudo(unsigned Opc) {
   switch (Opc) {
   case Haydn::LOADI32:
+  case Haydn::LOADI64:
   case Haydn::LOAD_ADDR:
   case Haydn::SETCBR_BEGIN:
   case Haydn::SETCBR_END:
@@ -51,6 +52,8 @@ bool isResidualCycleFormingPseudo(unsigned Opc) {
   case Haydn::SET_HWLOOP_REG:
     return true;
   default:
+    // PseudoLoopEnd is isMeta=1 (latch MBB for analyzeBranch). AsmPrinter
+    // drops it with no bytes; it is not a residual cycle-forming encode.
     return false;
   }
 }
@@ -80,6 +83,8 @@ static bool isAllowedLateNoopPseudo(unsigned Opc) {
 
 bool isExpandOwnedSemanticPseudo(unsigned Opc) {
   switch (Opc) {
+  case Haydn::LOADI32:
+  case Haydn::LOADI64:
   case Haydn::LOAD_ADDR:
   case Haydn::PseudoCALL:
   case Haydn::LIBCALL_SDIV:
@@ -87,6 +92,8 @@ bool isExpandOwnedSemanticPseudo(unsigned Opc) {
   case Haydn::LIBCALL_SREM:
   case Haydn::LIBCALL_UREM:
   case Haydn::LIBCALL_MUL64:
+  case Haydn::MOV_GPR_TO_DR64:
+  case Haydn::MOV_DR64_TO_GPR:
   case Haydn::LD32_POST_INC:
   case Haydn::ST32_POST_INC:
   case Haydn::LD64_POST_INC:

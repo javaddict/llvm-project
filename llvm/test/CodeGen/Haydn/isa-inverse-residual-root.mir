@@ -4,8 +4,9 @@
 # RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   %t/expand-owned-post-inc.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=EXPAND-OWNED
-# Inverse reject on leftover copy pseudo aborts (default report_fatal_error).
-# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# Leftover MOV_GPR_TO_DR64 is expand-owned (not an inverse key). Same
+# report_fatal_error(..., GenCrashDiag=false) as post-inc.
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   %t/residual-copy-pseudo.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=NO-INV
 # REQUIRES: haydn-registered-target
@@ -19,7 +20,7 @@
 # AIEPseudoBranchExpansion.cpp:43-57 leftover expand-owned is fatal.
 
 # EXPAND-OWNED: residual expand-owned pseudo child
-# NO-INV: structural inverse:
+# NO-INV: residual expand-owned pseudo child
 
 #--- expand-owned-post-inc.mir
 --- |
