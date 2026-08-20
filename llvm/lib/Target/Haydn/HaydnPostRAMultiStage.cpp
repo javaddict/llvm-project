@@ -494,6 +494,8 @@ static_assert(!HaydnMultiStageSMS::productSWPSolverAvailable(),
               "SWPSolver lattice is not product");
 static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled(),
               "combined hwloop+SMS is not product");
+// Pipeline owner does not flip this default (HaydnTargetMachine.cpp).
+// Independent then combined qualification and a policy-only flip remain later.
 
 StringRef HaydnMultiStageSMS::productPolicyRemark() {
   return "qualify-or-cut: seated product-off host-live "

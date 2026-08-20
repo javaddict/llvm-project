@@ -934,7 +934,7 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
       return Error(NameLoc, "incorrect bundle");
     const unsigned EntryCount = Row->EntryCount;
     // Selected row capacity is a bound, not a reason to invent the other
-    // Format E row from child count.
+    // Format E row from real-child cardinality.
     if (RealPtrs.size() > EntryCount) {
       if (AnyE2Only)
         return Error(NameLoc,

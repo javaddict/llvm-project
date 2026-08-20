@@ -100,6 +100,9 @@ static_assert(productParcelBytes().Value > 0,
 static_assert(!llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
               "hardware-loop product default stays OFF until independent "
               "then combined qualification and a separate policy-only flip");
+// Inserted only when EnableHaydnHardwareLoops (product default OFF).
+// AIE inserts HardwareLoops unconditionally at O1+
+// (AIE2TargetMachine.cpp:81-82, :234-235). FeatureHWLoop is ISA only.
 
 using namespace llvm;
 
@@ -759,6 +762,9 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
 }
 
 bool HaydnHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
+  // Product insert is EnableHaydnHardwareLoops (default OFF). hasHWLoop()
+  // is ISA capability only — +hwloop does not flip product policy.
+  // Never skipFunction here: product-off is the pipeline insert gate.
   const auto &STI = MF.getSubtarget<HaydnSubtarget>();
   if (!STI.hasHWLoop())
     return false;

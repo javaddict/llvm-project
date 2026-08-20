@@ -164,6 +164,8 @@ class HaydnBuiltin<string prototype, string features = "">
 // HiFi AE_* builtins as target builtins (`__builtin_ae_*`). Composed /
 // load-store expansions live in EmitHaydnBuiltinExpr (Haydn.cpp).
 // Default PublicEnabled=0: not published on haydn.h (fail-closed).
+// Unpublished AE bag names stay off haydn.h until an independent publish
+// contract; do not flip PublicEnabled on this class.
 class HaydnAeBuiltin<string prototype, string features = "">
     : TargetBuiltin, HaydnPublicAPI {
   let Spellings = ["__builtin_ae_" # NAME];

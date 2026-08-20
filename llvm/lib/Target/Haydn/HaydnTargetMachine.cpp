@@ -89,6 +89,10 @@ static cl::opt<bool> EnableHaydnPostSelectOptimize(
 // multi-member SMS BUNDLE or force-coissue.
 // Multi-stage product default is not this flag; it lives on
 // HaydnMultiStageSMS::productDefaultEnabled() and is not flipped here.
+// Combined hwloop+SMS stays productHwloopCombinedEnabled() (false). Do not
+// add a pipeline-owner cl::init(true) for either. Stage-0 PostPipeliner /
+// InterBlock stay deleted (tombstone above). Finalize/Verify never call
+// skipFunction — do not reopen that skip.
 static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
               "hardware-loop product default stays OFF until independent "
               "then combined qualification and a separate policy-only flip");
@@ -468,6 +472,7 @@ void HaydnPassConfig::addPreSched2() {
   // stamped in HaydnPostRASchedStrategy::finalizeLegalMultiMI. Finalize and
   // Verify never call skipFunction: they are target-local no-reorder commit
   // ownership so product emission never sees uncommitted bare encode MIR.
+  // Do not reopen skipFunction on Finalize/Verify.
   // Plain O0 (no optnone) keeps any multi-MI packs from postmisched; optnone
   // is no-reorder singleton commit only. Leave only committed Format-E cycles
   // for MC (underfill/top-pad invent stays fail-closed when golden is silent).

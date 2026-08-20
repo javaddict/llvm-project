@@ -176,6 +176,12 @@ static bool expectSImm(int64_t Val, unsigned Bits, const char *What) {
   return false;
 }
 
+// Product ISel admits ar_sel {0,1} only. The wire field is 2 bits; encodings
+// 2/3 stay unmapped until golden classifies unused codes. AIE exposes PTR
+// vs GPR alternatives (AIEBaseRegisterBankInfo.cpp:108-180); Haydn has no
+// PTR bank and does not invent AR2/AR3 identity here.
+static bool admitProductArSel(uint64_t ArSel) { return ArSel <= 1; }
+
 // Register class for a vreg operand, consulting the operand's existing
 // constraint before the size-derived default (one rule for every selector
 // constrain site; GOALS W45):
@@ -6615,7 +6621,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // Product ISel admits AR0/AR1 only. Encoding 2/3 is unmapped.
     uint64_t ArSel = 0;
     Register PtrReg = I.getOperand(2).getReg();
-    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 1) {
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || !admitProductArSel(ArSel)) {
       LLVM_DEBUG(dbgs() << "PLDWWUA: ar_sel must be constant 0 or 1\n");
       return false;
     }
@@ -6638,7 +6644,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // Model Def of ARn so PostRA pack cannot co-issue two AR writers on the
     // same stream (AR WRITE_CONFLICT). Product ISel admits AR0/AR1 only.
     uint64_t ArSel = 0;
-    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 1) {
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || !admitProductArSel(ArSel)) {
       LLVM_DEBUG(dbgs() << "FLAR: ar_sel must be constant 0 or 1\n");
       return false;
     }
@@ -6657,7 +6663,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     // op(0)=id, op(1)=ar_sel, op(2)=ptr, op(3)=dir_sel
     uint64_t ArSel = 0, DirSel = 0;
     Register PtrReg = I.getOperand(2).getReg();
-    if (!getConstOpZExt(I.getOperand(1), ArSel) || ArSel > 1 ||
+    if (!getConstOpZExt(I.getOperand(1), ArSel) || !admitProductArSel(ArSel) ||
         !getConstOpZExt(I.getOperand(3), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "WBARWUA: ar_sel/dir_sel must be constant 0/1\n");
       return false;
@@ -6690,7 +6696,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     Register PtrReg = I.getOperand(2).getReg();
     Register StrideReg = I.getOperand(4).getReg();
     uint64_t ArSel = 0, DirSel = 0;
-    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 1 ||
+    if (!getConstOpZExt(I.getOperand(3), ArSel) || !admitProductArSel(ArSel) ||
         !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "D_*UA_POST load: ar_sel/dir_sel must be 0 or 1\n");
       return false;
@@ -6728,7 +6734,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     Register PtrReg = I.getOperand(2).getReg();
     Register StrideReg = I.getOperand(4).getReg();
     uint64_t ArSel = 0, DirSel = 0;
-    if (!getConstOpZExt(I.getOperand(3), ArSel) || ArSel > 1 ||
+    if (!getConstOpZExt(I.getOperand(3), ArSel) || !admitProductArSel(ArSel) ||
         !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
       LLVM_DEBUG(dbgs() << "D_*UA_POST store: ar_sel/dir_sel must be 0 or 1\n");
       return false;

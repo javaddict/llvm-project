@@ -583,6 +583,7 @@ MCDisassembler::DecodeStatus HaydnDisassembler::getInstruction(
     raw_ostream &CStream) const {
   // Product Format E decoder. Size is the registry EncodedBytes for a full
   // parcel so llvm-objdump hex tokens match BundleSim's product parser.
+  // Cursor is never a leftover halfword Size/2 or Imm/2 step.
   using namespace haydn::format;
   const unsigned ParcelBytes =
       maxEncodedBytesInProfile(ObjectEncodingProfileID::E96).Value;

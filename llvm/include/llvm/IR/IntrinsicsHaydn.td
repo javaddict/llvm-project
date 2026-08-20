@@ -609,6 +609,8 @@ def int_haydn_x4fcmula16rss : haydn_ternary_intrinsic<"haydn_x4fcmula16rss", llv
 // X2CMUL32/X2CMUL32S are TRUE 2-output (golden DR_Write_Port=[rtd1,rtd2],
 // DR_Read_Port=[rsd1,rsd2] — NO accumulator read). Real part -> rtd1,
 // imaginary part -> rtd2. Returns [i64, i64]; args (src1, src2).
+// Native ISA X2CMUL stays selectable. Public AE complex-mul wrappers stay
+// fail-closed outside this intrinsic.
 //===----------------------------------------------------------------------===//
 
 // X2CMUL32 — Dual 32-bit complex multiply (2-dest DR64)
@@ -1255,7 +1257,7 @@ def int_haydn_setcbr_end : Haydn_Intrinsic<"haydn_setcbr_end",
 //
 // Hardware funnel-shift unaligned access via AR0–AR1 (ar_sel legal domain
 // {0,1}; wire field remains 2 bits — selectors 2/3 fail-closed at product
-// surfaces until golden classifies unused codes):
+// surfaces until golden classifies unused codes; do not invent AR2/AR3):
 //   PLDWWUA       — seed AR from mem64[rs & ~7]
 //   D_LQHWUA_POST — load 4×i16 unaligned + post-inc rs1 by ±rs2
 //   D_LTWUA_POST  — load 2×i32 unaligned + post-inc
