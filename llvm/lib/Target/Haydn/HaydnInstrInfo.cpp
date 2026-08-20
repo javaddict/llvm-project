@@ -3271,6 +3271,22 @@ static void haydnLogSMSSoftExitQoR(const MachineBasicBlock &LoopBB) {
            << " exact_packable=" << (Exact ? 1 : 0) << " body_ops=" << Body.size()
            << " (metrics-only; no HANDOFF invent; RecMII is DDG)\n";
   });
+
+  // Same-artifact occupancy proxy (enc_fill / issue_width). Observation only;
+  // not a competitive IPC claim and not a densify rewrite. Issue width is
+  // Haydn::ISSUE_SLOT_COUNT (HaydnBaseInfo.h:27), matching Format E E3.
+  const unsigned IssueWidth = Haydn::ISSUE_SLOT_COUNT;
+  const double EncFill =
+      FormatII ? (static_cast<double>(Body.size()) /
+                  static_cast<double>(FormatII))
+               : 0.0;
+  const double IpcProxy =
+      IssueWidth ? (EncFill / static_cast<double>(IssueWidth)) : 0.0;
+  DEBUG_WITH_TYPE("pipeliner", {
+    dbgs() << "SMS-IPC: enc_fill=" << EncFill << " ipc_proxy=" << IpcProxy
+           << " issue_width=" << IssueWidth
+           << " (same-artifact proxy; not competitive)\n";
+  });
 }
 
 /// Qualification-kernel post-RA packability metrics (analyzeLoop). Proves

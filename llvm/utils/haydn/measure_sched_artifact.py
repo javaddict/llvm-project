@@ -38,6 +38,8 @@ from pathlib import Path
 from typing import Any
 
 PARCEL_BYTES = 12
+# Format E E3 entry capacity / Haydn::ISSUE_SLOT_COUNT (HaydnBaseInfo.h:27).
+ISSUE_WIDTH = 3
 RE_BUNDLE = re.compile(r"^\s*\{\s*(.*?)\s*\}\s*$")
 RE_SWPS = re.compile(r"#<swps>")
 RE_SWPS_STAGES = re.compile(r"#<swps>[^\n]*stages=(\d+)")
@@ -170,6 +172,10 @@ COMPETITIVE_II_DENSITY_CLAIMS = False
 M18_UNCLAIMABLE = True
 NAT_IPC_MEASURED_MISS = True
 SWPS_ASM_MEASURED_MISS = True
+MULTI_BB_ZOL_MEASURED_MISS = True
+MAP_FP_MEASURED_MISS = True
+COMPOSITE_MEASURED_MISS = True
+HDR_SPLIT_MEASURED_MISS = True
 SF1_SF3_GATES_CLOSED = False
 STAGE0_IB_PP_REVIVE = False
 THREE_ARM = "ordinary,stagecount1,multistage"
@@ -191,10 +197,64 @@ M_EVAL_ONLY = {
     "M21": True,
     "M22": True,
 }
+# Optional KPI + Goals 6/7 stay one parked cluster. Not P0 densify.
+OPTIONAL_KPI_CLUSTER = (
+    "nat_ipc",
+    "multi_bb_zol",
+    "map_fp",
+    "composite",
+    "hdr_split",
+    "swps_asm",
+)
+GOALS_67_PARKED = (
+    "backend_correctness",
+    "public_intrinsics",
+    "language_coverage",
+    "runtime_toolchain",
+    "ecosystem_consumers",
+    "library_coverage",
+    "debug_observability",
+    "test_evidence",
+)
+
+
+def ipc_proxy_from_enc_fill(enc_fill: float) -> float:
+    """Same-artifact miss proxy: enc_fill / issue_width. Not competitive IPC."""
+    if not isinstance(enc_fill, (int, float)) or ISSUE_WIDTH <= 0:
+        return 0.0
+    return round(float(enc_fill) / float(ISSUE_WIDTH), 4)
+
+
+def kpi_cluster_polarity() -> dict[str, Any]:
+    """Parked optional-KPI + Goals 6/7 cluster. Measured miss, not P0-only."""
+    optional = {
+        name: {"measured_miss": True, "parked": True, "competitive_claim": False}
+        for name in OPTIONAL_KPI_CLUSTER
+    }
+    goals_67 = {
+        name: {"parked": True, "measured_miss": True}
+        for name in GOALS_67_PARKED
+    }
+    return {
+        "clustered": True,
+        "p0_only": False,
+        "stage0_ib_pp_revive": False,
+        "competitive_claim": False,
+        "optional_kpi": optional,
+        "goals_6_7": goals_67,
+        "gisel_tblgen_ar2_parked": True,
+        "hwloop_multistage_policy_product_on": False,
+        "m3_x2cmul_fail_closed": True,
+        "m14_eflags_golden_blocked": True,
+    }
+
+
 IPC_PROXY_MEASURED_MISS = {
     "measured_miss": True,
     "competitive_claim": False,
     "same_artifact": True,
+    "proxy": "enc_fill / issue_width",
+    "issue_width": ISSUE_WIDTH,
     "reason": "ipc_proxy is same-artifact observation only; CompleteModel=0",
 }
 
@@ -299,14 +359,18 @@ def measure_asm(text: str) -> dict[str, Any]:
             else:
                 real_ops += 1
     slots = real_ops + nops
+    enc_fill = round((real_ops / bundles) if bundles else 0.0, 4)
+    occupancy = round((real_ops / slots) if slots else 0.0, 4)
     return {
         "emitted_cycles": bundles,
         "bundles": bundles,
         "real_ops": real_ops,
         "nops": nops,
         "slots_total": slots,
-        "occupancy": round((real_ops / slots) if slots else 0.0, 4),
-        "enc_fill": round((real_ops / bundles) if bundles else 0.0, 4),
+        "occupancy": occupancy,
+        "enc_fill": enc_fill,
+        "ipc_proxy": ipc_proxy_from_enc_fill(enc_fill),
+        "issue_width": ISSUE_WIDTH,
         "text_bytes_est": bundles * PARCEL_BYTES,
         "parcel_bytes": PARCEL_BYTES,
         "spill_store_lines": spill_st,
@@ -453,6 +517,7 @@ def delta(o: dict[str, Any], p: dict[str, Any]) -> dict[str, Any]:
         "nops",
         "enc_fill",
         "occupancy",
+        "ipc_proxy",
         "text_bytes_est",
         "text_bytes_obj",
         "spill_store_lines",
@@ -537,12 +602,21 @@ def product_summary_polarity() -> dict[str, Any]:
         "m18_unclaimable": M18_UNCLAIMABLE,
         "nat_ipc_measured_miss": NAT_IPC_MEASURED_MISS,
         "swps_asm_measured_miss": SWPS_ASM_MEASURED_MISS,
+        "multi_bb_zol_measured_miss": MULTI_BB_ZOL_MEASURED_MISS,
+        "map_fp_measured_miss": MAP_FP_MEASURED_MISS,
+        "composite_measured_miss": COMPOSITE_MEASURED_MISS,
+        "hdr_split_measured_miss": HDR_SPLIT_MEASURED_MISS,
         "m_eval_only": dict(M_EVAL_ONLY),
         "sf1_sf3_gates_closed": SF1_SF3_GATES_CLOSED,
         "stage0_ib_pp_revive": STAGE0_IB_PP_REVIVE,
         "three_arm": THREE_ARM,
         "object_mc_identity_only": True,
         "ipc_proxy": dict(IPC_PROXY_MEASURED_MISS),
+        "kpi_cluster": kpi_cluster_polarity(),
+        "m2_kpi_resweep": {
+            "status": "measured",
+            "competitive_claim": False,
+        },
         "t4_postra_unstuck": T4_POSTRA_UNSTUCK,
         "parcels_eq_ii_on_accept": PARCELS_EQ_II_ON_ACCEPT,
         "hwloops_off_qualify": HWLOOPS_OFF_QUALIFY,
@@ -799,9 +873,21 @@ def cmd_self_test(_args: Any = None) -> int:
     m = measure_asm("foo:\n  { add32 r1, r2, r3 }\n  { nop; nop; nop }\n")
     if m["emitted_cycles"] != 2 or m["real_ops"] != 1 or m["nops"] != 3:
         errs.append(f"measure_asm sample unexpected: {m}")
+    if m.get("enc_fill") != 0.5:
+        errs.append(f"measure_asm enc_fill unexpected: {m}")
+    if m.get("ipc_proxy") != ipc_proxy_from_enc_fill(0.5):
+        errs.append(f"measure_asm ipc_proxy unexpected: {m}")
+    if m.get("issue_width") != ISSUE_WIDTH:
+        errs.append(f"measure_asm issue_width unexpected: {m}")
+    if ipc_proxy_from_enc_fill(0.75) != 0.25:
+        errs.append("ipc_proxy_from_enc_fill(0.75) must be 0.25")
+    if ipc_proxy_from_enc_fill(0.0) != 0.0:
+        errs.append("ipc_proxy_from_enc_fill(0) must be 0")
     empty = measure_asm("empty_fn:\n  .size empty_fn, 0\n")
     if empty["emitted_cycles"] != 0:
         errs.append(f"empty asm must not invent parcels: {empty}")
+    if empty.get("ipc_proxy") not in (0, 0.0):
+        errs.append(f"empty asm must not invent ipc_proxy: {empty}")
     leak = measure_asm(
         "bar:\n  // #<swps> stages=2 ii=3\n  { xor32 r0, r0, r0 }\n"
     )
@@ -832,6 +918,10 @@ def cmd_self_test(_args: Any = None) -> int:
         ("m18_unclaimable", True),
         ("nat_ipc_measured_miss", True),
         ("swps_asm_measured_miss", True),
+        ("multi_bb_zol_measured_miss", True),
+        ("map_fp_measured_miss", True),
+        ("composite_measured_miss", True),
+        ("hdr_split_measured_miss", True),
         ("sf1_sf3_gates_closed", False),
         ("stage0_ib_pp_revive", False),
         ("three_arm", THREE_ARM),
@@ -847,6 +937,34 @@ def cmd_self_test(_args: Any = None) -> int:
         errs.append(f"ipc_proxy must stay a measured miss: {ipc}")
     if ipc.get("same_artifact") is not True:
         errs.append(f"ipc_proxy must be same-artifact: {ipc}")
+    if ipc.get("proxy") != "enc_fill / issue_width" or ipc.get("issue_width") != ISSUE_WIDTH:
+        errs.append(f"ipc_proxy formula polarity unexpected: {ipc}")
+    cluster = pol.get("kpi_cluster") or {}
+    if cluster.get("clustered") is not True or cluster.get("p0_only"):
+        errs.append(f"kpi_cluster must stay clustered, not P0-only: {cluster}")
+    if cluster.get("stage0_ib_pp_revive") or cluster.get("competitive_claim"):
+        errs.append(f"kpi_cluster must not revive Stage-0 or competitive claims: {cluster}")
+    opt_kpi = cluster.get("optional_kpi") or {}
+    for name in OPTIONAL_KPI_CLUSTER:
+        row = opt_kpi.get(name) or {}
+        if row.get("measured_miss") is not True or not row.get("parked"):
+            errs.append(f"optional KPI {name} must stay parked measured-miss: {row}")
+        if row.get("competitive_claim"):
+            errs.append(f"optional KPI {name} competitive claim opened early: {row}")
+    g67 = cluster.get("goals_6_7") or {}
+    for name in GOALS_67_PARKED:
+        row = g67.get(name) or {}
+        if not row.get("parked") or row.get("measured_miss") is not True:
+            errs.append(f"goals 6/7 {name} must stay parked: {row}")
+    if cluster.get("gisel_tblgen_ar2_parked") is not True:
+        errs.append("gisel tblgen AR2 must stay parked")
+    if cluster.get("hwloop_multistage_policy_product_on"):
+        errs.append("hwloop/multistage policy must stay product-off")
+    if cluster.get("m3_x2cmul_fail_closed") is not True:
+        errs.append("M3 X2CMUL must stay fail-closed")
+    m2 = pol.get("m2_kpi_resweep") or {}
+    if m2.get("status") != "measured" or m2.get("competitive_claim"):
+        errs.append(f"m2_kpi_resweep must be measured, not competitive: {m2}")
     mev = pol.get("m_eval_only") or {}
     for mid in ("M2", "M17", "M18", "M19", "M20", "M21", "M22"):
         if mev.get(mid) is not True:
@@ -887,6 +1005,7 @@ def cmd_self_test(_args: Any = None) -> int:
         "nops": 1,
         "enc_fill": 0.75,
         "occupancy": 0.75,
+        "ipc_proxy": 0.25,
         "text_bytes_est": 48,
         "text_bytes_obj": 48,
         "spill_store_lines": 0,
@@ -942,6 +1061,8 @@ def cmd_self_test(_args: Any = None) -> int:
         "ipc_proxy_measured_miss=true "
         "t4_postra_unstuck=true parcels_eq_ii_on_accept=true "
         "hwloops_off_qualify=true "
+        "kpi_cluster=parked p0_only=false "
+        "ipc_proxy_formula=enc_fill/issue_width issue_width=3 "
         f"semantic_drivers={len(SEMANTIC_DRIVERS)}"
     )
     return 0
@@ -1133,6 +1254,8 @@ def cmd_collect(args: argparse.Namespace) -> int:
         "product_mean_enc_fill": mean("product", "enc_fill"),
         "ordinary_mean_occupancy": mean("ordinary", "occupancy"),
         "product_mean_occupancy": mean("product", "occupancy"),
+        "ordinary_mean_ipc_proxy": mean("ordinary", "ipc_proxy"),
+        "product_mean_ipc_proxy": mean("product", "ipc_proxy"),
         "ordinary_mean_text_bytes_obj": mean("ordinary", "text_bytes_obj"),
         "product_mean_text_bytes_obj": mean("product", "text_bytes_obj"),
         "product_multistage_swps_leaks": leaks,
@@ -1160,6 +1283,21 @@ def cmd_collect(args: argparse.Namespace) -> int:
         "kernels": kernels,
     }
     summary.update(product_summary_polarity())
+    summary["ipc_proxy"] = {
+        **dict(IPC_PROXY_MEASURED_MISS),
+        "ordinary_mean": summary["ordinary_mean_ipc_proxy"],
+        "product_mean": summary["product_mean_ipc_proxy"],
+    }
+    summary["nat_ipc"] = {
+        "measured_miss": True,
+        "competitive_ipc_claim": False,
+        "same_artifact": True,
+        "stage0_ib_pp_revive": False,
+        "proxy": "enc_fill / issue_width",
+        "issue_width": ISSUE_WIDTH,
+        "ordinary_mean_ipc_proxy": summary["ordinary_mean_ipc_proxy"],
+        "product_mean_ipc_proxy": summary["product_mean_ipc_proxy"],
+    }
     if art is not None:
         summary["artifact"] = {
             "artifact_id": art.get("artifact_id"),
@@ -1213,6 +1351,20 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"product_mean_emitted_cycles: {data.get('product_mean_emitted_cycles')}")
     print(f"ordinary_mean_text_bytes_obj: {data.get('ordinary_mean_text_bytes_obj')}")
     print(f"product_mean_text_bytes_obj: {data.get('product_mean_text_bytes_obj')}")
+    print(f"ordinary_mean_ipc_proxy: {data.get('ordinary_mean_ipc_proxy')}")
+    print(f"product_mean_ipc_proxy: {data.get('product_mean_ipc_proxy')}")
+    ipc = data.get("ipc_proxy") or {}
+    print(
+        f"ipc_proxy: miss={ipc.get('measured_miss')} "
+        f"competitive={ipc.get('competitive_claim')} "
+        f"proxy={ipc.get('proxy')} issue_width={ipc.get('issue_width')}"
+    )
+    cluster = data.get("kpi_cluster") or {}
+    print(
+        f"kpi_cluster: clustered={cluster.get('clustered')} "
+        f"p0_only={cluster.get('p0_only')} "
+        f"stage0={cluster.get('stage0_ib_pp_revive')}"
+    )
     print(f"sms_stagecount1_containment_ok: {data.get('sms_stagecount1_containment_ok')}")
     print(
         f"ordinary_list_schedule_commit_baseline: "
