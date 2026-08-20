@@ -110,10 +110,82 @@ bool isGeneratedMemberName(StringRef Name) {
          Name.contains_insensitive("_E3_");
 }
 
+/// Public mnemonic → golden catalog logical. Occupancy alias only — never
+/// strips `_S0/_S1/_S2` or `_E2_/_E3_` (AIE MultiSlot alts,
+/// AIEMCFormats.h:376-379). Empty = no alias.
+std::string catalogPublicAlias(StringRef N) {
+  auto is = [&](const char *A) { return N.equals_insensitive(A); };
+  if (is("LD32") || is("LW"))
+    return "S_LW_WITH_IMM";
+  if (is("LD32_REG"))
+    return "S_LW_WITH_REG";
+  if (is("ST32") || is("SW"))
+    return "S_SW_WITH_IMM";
+  if (is("ST32_REG"))
+    return "S_SW_WITH_REG";
+  if (is("LD64"))
+    return "D_LDW_WITH_IMM";
+  if (is("LD64_REG"))
+    return "D_LDW_WITH_REG";
+  if (is("ST64"))
+    return "D_SDW_WITH_IMM";
+  if (is("ST64_REG"))
+    return "D_SDW_WITH_REG";
+  if (is("LD8") || is("LB"))
+    return "S_LBS_WITH_IMM";
+  if (is("LD8_REG"))
+    return "S_LBS_WITH_REG";
+  if (is("LDU8") || is("LBU"))
+    return "S_LBU_WITH_IMM";
+  if (is("LDU8_REG"))
+    return "S_LBU_WITH_REG";
+  if (is("ST8") || is("SB"))
+    return "S_SB_WITH_IMM";
+  if (is("ST8_REG"))
+    return "S_SB_WITH_REG";
+  if (is("LD16") || is("LH") || is("LHWS"))
+    return "S_LHWS_WITH_IMM";
+  if (is("LD16_REG"))
+    return "S_LHWS_WITH_REG";
+  if (is("LDU16") || is("LHU") || is("LHWU"))
+    return "S_LHWU_WITH_IMM";
+  if (is("LDU16_REG"))
+    return "S_LHWU_WITH_REG";
+  if (is("ST16") || is("SH") || is("SHW"))
+    return "S_SHW_WITH_IMM";
+  if (is("ST16_REG"))
+    return "S_SHW_WITH_REG";
+  if (is("LD32_POST") || is("LD32_POST_INC"))
+    return "S_LW_POST_IMM";
+  if (is("ST32_POST") || is("ST32_POST_INC"))
+    return "S_SW_POST_IMM";
+  if (is("LD32_PRE") || is("LD32_PRE_INC"))
+    return "S_LW_PRE_IMM";
+  if (is("ST32_PRE") || is("ST32_PRE_INC"))
+    return "S_SW_PRE_IMM";
+  if (is("LD64_POST"))
+    return "D_LDW_POST_IMM";
+  if (is("ST64_POST"))
+    return "D_SDW_POST_IMM";
+  if (is("SEXT_GPR32_TO_DR64") || is("SEXT32T64"))
+    return "SEXT32T64";
+  if (is("MOV_GPR_TO_DR64") || is("MOVE_GPR_TO_DR64") ||
+      is("ZEXT_GPR32_TO_DR64"))
+    return "SEXT32T64";
+  if (is("RET"))
+    return "JALR";
+  if (is("PLDWWUA"))
+    return "PLDWWUA_POST";
+  if (is("WFI") || is("WFITBDTBDTBD"))
+    return "WFI<TBD>";
+  return {};
+}
+
 /// Catalog occupancy key. Refuses residual FieldSlots and generated members
 /// (no `_S*` / `_E2_` name peel — AIE MultiSlot alts, AIEMCFormats.h:376-379).
-/// Reloc `_W` compact span, then public aliases (LD32 → S_LW_WITH_IMM).
-/// Empty = fail closed (do not invent TWO vs THREE from an unknown name).
+/// Reloc `_W` compact span, MultiSlot `_MSP` compact name, then public aliases
+/// (LD32 → S_LW_WITH_IMM). Empty = fail closed (do not invent TWO vs THREE
+/// from an unknown name).
 std::string catalogOccupancyName(StringRef Raw) {
   if (Raw.empty())
     return {};
@@ -128,12 +200,32 @@ std::string catalogOccupancyName(StringRef Raw) {
   };
   if (spanOf(Raw))
     return Raw.str();
-  if (Raw.ends_with("_W")) {
-    const StringRef Base = Raw.drop_back(2);
-    if (!isResidualFieldSlotName(Base) && !isGeneratedMemberName(Base) &&
-        spanOf(Base))
-      return Base.str();
+
+  StringRef Compact = Raw;
+  if (Compact.ends_with("_MSP"))
+    Compact = Compact.drop_back(4);
+  // Residual public LS_REG shells still carry occupancy-class `_M*S*LS`
+  // (HaydnInstrInfo.td LD32_REG_M0S0LS). That is the public matcher name,
+  // not a FieldSlot `_S0/_S1/_S2` entry certification (AIE MultiSlot alts,
+  // AIEMCFormats.h:376-379).
+  for (StringRef Suf : {"_M0S0LS", "_M0S1LS", "_M0S2LS", "_M1S0LS",
+                        "_M1S1LS", "_M1S2LS"}) {
+    if (Compact.ends_with(Suf)) {
+      Compact = Compact.drop_back(Suf.size());
+      break;
+    }
   }
+  if (Compact.ends_with("_F2_W"))
+    Compact = Compact.drop_back(2);
+  else if (Compact.ends_with("_W"))
+    Compact = Compact.drop_back(2);
+  if (Compact.size() != Raw.size()) {
+    if (isResidualFieldSlotName(Compact) || isGeneratedMemberName(Compact))
+      return {};
+    if (spanOf(Compact))
+      return Compact.str();
+  }
+
   auto acceptAlias = [&](std::string Aliased) -> std::string {
     if (Aliased.empty())
       return {};
@@ -145,12 +237,11 @@ std::string catalogOccupancyName(StringRef Raw) {
       return Aliased;
     return {};
   };
-  if (std::string A = acceptAlias(
-          haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/false));
-      !A.empty())
+  if (std::string A = acceptAlias(catalogPublicAlias(Raw)); !A.empty())
     return A;
-  return acceptAlias(
-      haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/true));
+  if (Compact.size() != Raw.size())
+    return acceptAlias(catalogPublicAlias(Compact));
+  return {};
 }
 
 /// True when register-operand classes match. Immediates compare kind only
@@ -475,6 +566,10 @@ unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes) {
   if (PlaceE3)
     return Haydn::BUNDLE_E96_THREE_ENTRY;
   return 0;
+}
+
+std::string haydnCatalogOccupancyName(StringRef Raw) {
+  return catalogOccupancyName(Raw);
 }
 
 std::optional<SmallVector<unsigned, 4>>

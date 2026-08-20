@@ -161,8 +161,8 @@ def MOV_DR64_TO_GPR : HaydnPseudo<(outs GPR32:$rd_lo, GPR32:$rd_hi), (ins DR64:$
 //===----------------------------------------------------------------------===//
 //
 // These pseudos represent the Haydn ISA's post-increment and pre-decrement
-// addressing modes. They are produced by ISel / HaydnExpandPostIncEarly
-// (LD32 + ADDI32 fold) and expanded into real instructions.
+// addressing modes. Product form is selected at InstructionSelect. Leftover
+// MIR-injected *_POST_INC expands in HaydnExpandPseudos (one helper).
 //
 // The ISA specifies:
 // S_LW_POST_IMM: rt, rs, imm6 — load word from [rs], then rs += (imm6 << 2)
@@ -199,7 +199,7 @@ def ST32_POST_INC : HaydnPseudo<(outs),
 
 // Post-increment load 64-bit double-word: load from [BaseReg + Offset]
 // then BaseReg += Stride. See LD32_POST_INC for the offset rationale.
-// Expanded to: LD64_S1 rt, BaseReg, Offset; ADDI32 BaseReg, BaseReg, Stride
+// Expanded to: LD64 rt, BaseReg, Offset; ADDI32 BaseReg, BaseReg, Stride
 let mayLoad = 1 in
 def LD64_POST_INC : HaydnPseudo<(outs DR64:$rt),
                                  (ins GPR32:$base, i32imm:$stride, i32imm:$offset),

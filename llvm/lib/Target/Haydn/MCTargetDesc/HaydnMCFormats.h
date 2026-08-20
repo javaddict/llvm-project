@@ -31,6 +31,7 @@
 #include "HaydnFormat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -42,6 +43,7 @@
 #include <cstddef>
 #include <map>
 #include <optional>
+#include <string>
 #include <unordered_map>
 
 namespace llvm {
@@ -67,6 +69,13 @@ bool haydnFormatELogicalIsE2Only(unsigned Opcode);
 /// AIEMCFormats.cpp:29-36 / AIEBaseAsmParser.h:164-180 emitBundle). Extra
 /// NOP pads are not occupancy. Returns 0 when no product row covers.
 unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes);
+
+/// Catalog occupancy key for a public opcode name. Refuses residual FieldSlot
+/// (`_S0/_S1/_S2`) and generated-member (`_E2_/_E3_`) spellings — those names
+/// do not certify a Format E entry (AIE MultiSlot alts, AIEMCFormats.h:376-379).
+/// Compact reloc `_W` / MultiSlot `_MSP` and public aliases (LD32 → S_LW_WITH_IMM)
+/// are occupancy keys, not suffix peels. Empty = fail closed.
+std::string haydnCatalogOccupancyName(StringRef Raw);
 
 /// RelocLayout ValueShift for Format E HWLR Off1/Off2 word fields.
 /// 0 when \p MemberId is not HWLRIII/HWLRIIR. Dump bytes = field << shift.

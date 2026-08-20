@@ -23,7 +23,9 @@
 // Product encode/decode uses tblgen on those members; C++ frames
 // BUNDLE_E96_* parcels and selects the member.
 //
-// Merged from HaydnFormatsE96.td + HaydnCompositeFormats.td (W56 file reshape).
+// Entry-window bases and Size=12 composites previously lived in
+// HaydnFormatsE96.td and HaydnCompositeFormats.td. Those files are
+// tombstones; do not include them.
 //
 //===----------------------------------------------------------------------===//
 

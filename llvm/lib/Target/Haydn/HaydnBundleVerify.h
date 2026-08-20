@@ -30,7 +30,6 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLEVERIFY_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLEVERIFY_H
 
-#include "HaydnBundle.h"
 #include "HaydnBundlePlan.h"
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"

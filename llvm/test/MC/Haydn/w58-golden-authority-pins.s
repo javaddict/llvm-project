@@ -11,10 +11,15 @@
 # cell-pinned, not byte-pinned. Catalog generate_catalog.py keeps its own
 # six-file ledger; unused/derived stay on this compiler pin.
 #
+# CHECK: OK matcher-root collapse
+# CHECK: OK Manual.td tombstone
+# CHECK: OK FormatsE96 tombstone
+# CHECK: OK unknown family fail-closed
 # CHECK: OK unpinned authority input fail-closed
 # CHECK: OK derived instruction_to_entry.xlsx refused
 # CHECK: OK unused authority input refused
 # CHECK: OK unpublished encoding choice fail-closed
+# CHECK: OK unpinned golden-dir file fail-closed
 # CHECK: OK catalog pin refuses retired/unused rows
 # CHECK: OK catalog pin six-file
 # CHECK: OK incomplete compiler pin fail-closed
@@ -34,5 +39,7 @@
 # CORE-DAG: matcher root includes
 # CORE-DAG: HaydnGeneric.td only
 # CORE-DAG: MF0 family must stay inert
+# CORE-DAG: HaydnFormatsE96.td must remain a 0-def tombstone
+# CORE-DAG: unknown family
 # CORE-NOT: FieldSlot
 # CORE-NOT: hypo_encoding

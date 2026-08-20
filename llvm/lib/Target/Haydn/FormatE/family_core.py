@@ -167,6 +167,10 @@ COMPILER_ONLY_PIN_NAMES = frozenset(
         "instruction_to_entry.xlsx",
     }
 )
+# Non-authority files that may sit next to the nine-file set. A new
+# .json/.xlsx/.md/.docx in the golden dir is an unpinned authority input.
+GOLDEN_DIR_TOOLING = frozenset({"generate_instruction_to_entry.py"})
+AUTHORITY_SHAPED_SUFFIXES = (".json", ".xlsx", ".md", ".docx")
 
 
 @dataclass(frozen=True)
@@ -439,6 +443,7 @@ def verify_authority_inputs(golden: Path, consumed: Iterable[object]) -> None:
             raise SystemExit(
                 f"error: {rec.filename} sha256 {got} != pinned {rec.sha256}"
             )
+    verify_golden_dir_no_unpinned(golden)
 
 
 def _matcher_include_closure(haydn_dir: Path, root: Path) -> list:
@@ -543,6 +548,10 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
         )
     if "HaydnInstrInfoManual" in format_e:
         raise SystemExit("error: HaydnFormatE.td must not include Manual.td")
+    if 'include "HaydnFormatsE96.td"' in format_e:
+        raise SystemExit(
+            "error: HaydnFormatE.td must not include HaydnFormatsE96.td"
+        )
     families = (haydn_dir / "HaydnFamilies.td").read_text(encoding="utf-8")
     found = _FAMILY_RE.findall(families)
     if found != [("E96", "0")]:
@@ -551,6 +560,40 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
         )
     if re.search(r"\bMF0\b", families) or "HaydnFamilyMF0" in families:
         raise SystemExit("error: MF0 family must stay inert")
+    if re.search(r"\bbits<", families) or re.search(r"\bInst\s*=", families):
+        raise SystemExit(
+            "error: HaydnFamilies.td must not carry encoding bits "
+            "(geometry comes from the nine-file golden set)"
+        )
+    haydn_td = (haydn_dir / "Haydn.td").read_text(encoding="utf-8")
+    if 'include "HaydnFamilies.td"' not in haydn_td:
+        raise SystemExit("error: Haydn.td must include HaydnFamilies.td")
+    if "HaydnInstrInfoManual" in haydn_td:
+        raise SystemExit("error: Haydn.td must not include Manual.td")
+    if 'include "HaydnFormatsE96.td"' in haydn_td:
+        raise SystemExit("error: Haydn.td must not include HaydnFormatsE96.td")
+    formats_e96 = haydn_dir / "HaydnFormatsE96.td"
+    e96_defs = _DEF_RE.findall(formats_e96.read_text(encoding="utf-8"))
+    if e96_defs:
+        raise SystemExit(
+            "error: HaydnFormatsE96.td must remain a 0-def tombstone, "
+            f"found {e96_defs}"
+        )
+    banned_includes = []
+    for path in sorted(haydn_dir.glob("*.td")):
+        if path.name in {"HaydnInstrInfoManual.td", "HaydnFormatsE96.td"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        includes = _INCLUDE_RE.findall(text)
+        if "HaydnInstrInfoManual.td" in includes:
+            banned_includes.append(f"{path.name}:HaydnInstrInfoManual.td")
+        if "HaydnFormatsE96.td" in includes:
+            banned_includes.append(f"{path.name}:HaydnFormatsE96.td")
+    if banned_includes:
+        raise SystemExit(
+            "error: retired td include remains in "
+            f"{banned_includes}; matcher/product roots must not pull it"
+        )
     sched = (haydn_dir / "HaydnSchedule.td").read_text(encoding="utf-8")
     if "CompleteModel = 1" in sched:
         raise SystemExit(
@@ -559,6 +602,30 @@ def check_cutover_surfaces(haydn_dir: Path) -> None:
         )
     if "CompleteModel = 0" not in sched:
         raise SystemExit("error: HaydnSchedule.td CompleteModel=0 missing")
+
+
+def verify_golden_dir_no_unpinned(golden: Path) -> None:
+    """Fail closed if the golden dir holds an unpinned authority-shaped file.
+
+    The nine-file set is the only admitted authority. Tooling next to it
+    stays on GOLDEN_DIR_TOOLING. Derived xlsx is already in AUTHORITY_FILES
+    (cell-pinned, not ZIP-byte-pinned).
+    """
+    pinned_names = {rec.filename for rec in AUTHORITY_FILES}
+    if not golden.is_dir():
+        raise SystemExit(f"error: golden directory not found: {golden}")
+    for path in sorted(golden.iterdir()):
+        if not path.is_file():
+            continue
+        name = path.name
+        refuse_unpublished_choice(name)
+        if name in GOLDEN_DIR_TOOLING or name in pinned_names:
+            continue
+        if name.endswith(AUTHORITY_SHAPED_SUFFIXES):
+            raise SystemExit(
+                f"error: unpinned authority input {name!r} "
+                f"(admitted: {', '.join(sorted(pinned_names))})"
+            )
 
 
 def golden_inputs_pin_path() -> Path:
@@ -813,6 +880,39 @@ def prove_incomplete_compiler_pin_fails() -> None:
     raise SystemExit("error: six-file compiler pin did not fail closed")
 
 
+def prove_unknown_family_fails() -> None:
+    """Only e96 is admitted; a second family name is not a generator instance."""
+    try:
+        get_family("mf0")
+    except SystemExit as exc:
+        msg = str(exc)
+        if "unknown family" in msg and "mf0" in msg:
+            print("OK unknown family fail-closed")
+            return
+        raise SystemExit(
+            f"error: unknown-family probe failed unexpectedly: {msg}"
+        ) from exc
+    raise SystemExit("error: unknown family did not fail closed")
+
+
+def prove_unpinned_golden_dir_file_fails() -> None:
+    """A new authority-shaped file next to the nine-file set is unpinned."""
+    with tempfile.TemporaryDirectory() as tmp:
+        extra = Path(tmp) / "invented_authority.json"
+        extra.write_text("{}\n", encoding="utf-8")
+        try:
+            verify_golden_dir_no_unpinned(Path(tmp))
+        except SystemExit as exc:
+            msg = str(exc)
+            if "unpinned authority input" in msg and "invented_authority.json" in msg:
+                print("OK unpinned golden-dir file fail-closed")
+                return
+            raise SystemExit(
+                f"error: unpinned-golden-dir probe failed unexpectedly: {msg}"
+            ) from exc
+    raise SystemExit("error: unpinned golden-dir file did not fail closed")
+
+
 def prove_xlsx_zip_bytes_not_authority_pin() -> None:
     """Derived xlsx must be cell-pinned; ZIP-byte filename is not admitted."""
     expected = expected_golden_inputs_pin()
@@ -918,10 +1018,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         verify_golden_inputs_pin(golden_inputs_pin_path())
         check_cutover_surfaces(args.out_dir)
         print("OK matcher-root collapse")
+        print("OK Manual.td tombstone")
+        print("OK FormatsE96 tombstone")
+        prove_unknown_family_fails()
         prove_unpinned_consumed_fails(golden)
         prove_derived_xlsx_not_authority(golden)
         prove_unused_authority_not_consumed(golden)
         prove_unpublished_choice_fails(golden)
+        prove_unpinned_golden_dir_file_fails()
         prove_catalog_pin_refuses_retired()
         prove_catalog_six_file_pin_ok()
         prove_incomplete_compiler_pin_fails()

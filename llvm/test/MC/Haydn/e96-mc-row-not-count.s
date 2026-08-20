@@ -1,9 +1,9 @@
 # REQUIRES: haydn-registered-target
-# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCChecker.cpp --check-prefix=NO-COUNT-CHECKER
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCChecker.cpp --check-prefix=NO-COUNT-CHECKER --implicit-check-not=peelLogicalOpcodeName
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnInstPrinter.cpp --check-prefix=NO-COUNT-PRINTER
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/Disassembler/HaydnDisassembler.cpp --check-prefix=NO-COUNT-DISASM --implicit-check-not=peelLogicalOpcodeName --implicit-check-not=lookupLogicalOpcode
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp --check-prefix=NO-COUNT-EMIT --implicit-check-not=tryMode
-# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.cpp --check-prefix=NO-COUNT-FILL
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.cpp --check-prefix=NO-COUNT-FILL --implicit-check-not=peelLogicalOpcodeName
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d -z --no-show-raw-insn --triple=haydn-unknown-elf %t.o | \
 # RUN:   FileCheck %s --check-prefix=OBJ
@@ -22,6 +22,7 @@
 
 # NO-COUNT-CHECKER-NOT: TextEntries >= 3
 # NO-COUNT-CHECKER-NOT: ForceE3
+# NO-COUNT-CHECKER: haydnCatalogOccupancyName
 # NO-COUNT-CHECKER: haydnFormatELogicalIsE3Only
 # NO-COUNT-CHECKER: haydnFormatELogicalIsE2Only
 # NO-COUNT-PRINTER-NOT: Children.size() > 2
@@ -36,6 +37,7 @@
 # NO-COUNT-EMIT: refuse skip-Finalize
 # NO-COUNT-FILL: haydnSelectStandaloneFormatEOpcode
 # NO-COUNT-FILL: assignFormatEMemberEntries
+# NO-COUNT-FILL: haydnCatalogOccupancyName
 # NO-COUNT-FILL-NOT: N <= Fam.E2EntryCapacity
 # NO-COUNT-FILL-NOT: N <= Fam.E3EntryCapacity
 # NO-COUNT-FILL: haydnFormatEHwloopImmFieldShift

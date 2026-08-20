@@ -148,23 +148,16 @@ std::optional<std::string> llvm::haydnCheckParsedBundle(
         Name.ends_with("_S2") || Name.contains("_E2_") ||
         Name.contains("_E3_"))
       return std::string("private placement opcode");
-    // Catalog occupancy / MemberId span (Hexagon MCChecker uses the
-    // packet's real opcodes). Not a row-identity peel and not `_S*` recovery
-    // (those names already returned above). Unknown names fail closed so
-    // unit cover cannot treat them as unconstrained and then pick a row
-    // from child count.
-    std::string Log = Name.str();
-    if (Name.ends_with("_W"))
-      Log = Name.drop_back(2).str();
-    if (!findAltSpan(Log.c_str())) {
-      Log = peelLogicalOpcodeName(Name);
-      if (StringRef(Log).ends_with("_S0") || StringRef(Log).ends_with("_S1") ||
-          StringRef(Log).ends_with("_S2") || StringRef(Log).contains("_E2_") ||
-          StringRef(Log).contains("_E3_"))
-        return std::string("private placement opcode");
-    }
-    if (!StringRef(Log).equals_insensitive("NOP") && !findAltSpan(Log.c_str()))
+    // Catalog occupancy / MemberId span (Hexagon MCChecker.cpp:692-703 uses
+    // the packet's real opcodes). Not a row-identity peel and not `_S*`
+    // recovery (those names already returned above). Unknown names fail
+    // closed so unit cover cannot treat them as unconstrained and then
+    // pick a row from child count.
+    std::string Log = haydnCatalogOccupancyName(Name);
+    if (Log.empty())
       return std::string("unknown logical occupancy");
+    if (StringRef(Log).equals_insensitive("NOP"))
+      continue;
     Logs.push_back(std::move(Log));
     if (haydnFormatELogicalIsE3Only(Opc))
       AnyE3Only = true;

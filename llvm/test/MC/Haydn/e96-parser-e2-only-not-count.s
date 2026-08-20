@@ -22,8 +22,10 @@
 # NO-PEEL: isResidualFieldSlotName
 # NO-PEEL: haydnSelectStandaloneFormatEOpcode
 # NO-PEEL: haydnFindFormatEMemberByOpcode
+# NO-PEEL: haydnCatalogOccupancyName
 # NO-PEEL-NOT: getLogicalBaseOpcode
 # NO-PEEL-NOT: HaydnMemberSlotSuffix
+# NO-PEEL-NOT: peelLogicalOpcodeName
 # NO-PARSER-PEEL: isPrivatePlacementOpcode
 # NO-PARSER-PEEL-NOT: peelLogicalOpcodeName
 # NO-PARSER-PEEL-NOT: getLogicalBaseOpcode

@@ -159,7 +159,10 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
   // A skipFunction-skipped function with a noncanonical cycle must still fail
   // here — never an MC uncommitted/unverified escape hatch.
 
-  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  // Local registry wrapper (same type as haydnDefaultMCFormats in
+  // HaydnBundleFormatSolver.h:96-99) — this pass must not include the
+  // forward solver / Bundle.canAdd.
+  const HaydnMCFormats Fmts;
   const bool OptNone = MF.getFunction().hasOptNone();
 
   // Pre-scan: any top-level BUNDLE root means commit ownership has started for
@@ -228,13 +231,24 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
       for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator()),
                                              E = MBB.instr_end();
            I != E && I->isInsideBundle(); ++I) {
-        if (haydn::bundle::isResidualCycleFormingPseudo(I->getOpcode())) {
+        const unsigned KidOpc = I->getOpcode();
+        if (haydn::bundle::isResidualCycleFormingPseudo(KidOpc)) {
           std::string Msg;
           raw_string_ostream OS(Msg);
           OS << "HaydnVerifyBundles: residual cycle-forming pseudo child in "
              << MF.getName() << " BB#" << MBB.getNumber()
              << " (one-to-one ban):\n  child: " << *I
              << "\n  root: " << MI;
+          report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+        }
+        if (haydn::bundle::isExpandOwnedSemanticPseudo(KidOpc) &&
+            !haydn::bundle::isRepresentationExpandPseudo(KidOpc)) {
+          std::string Msg;
+          raw_string_ostream OS(Msg);
+          OS << "HaydnVerifyBundles: residual expand-owned pseudo child in "
+             << MF.getName() << " BB#" << MBB.getNumber()
+             << " (inverse records require exact-committed real members):\n"
+             << "  child: " << *I << "\n  root: " << MI;
           report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
         }
       }

@@ -20,7 +20,9 @@
 // Never calls skipFunction: committed-cycle verify is product emission
 // ownership, not a quality pass. skipFunction-skipped (optnone / bisect)
 // functions cannot escape noncanonical cycles — inverse records still run.
-// Fail-closes residual cycle-forming pseudos, optnone bare encode escape,
+// Fail-closes residual cycle-forming and expand-owned children (inverse
+// records require exact-committed real members; representation-expand solo
+// cycles are the typed printer exception), optnone bare encode escape,
 // and mixed committed-BUNDLE + bare encode MIR. Does not mutate MIR.
 // report_fatal_error on violation (no silent skip).
 // No MCFlags writers. setDesc is owned by Finalize / materialize / hard-root

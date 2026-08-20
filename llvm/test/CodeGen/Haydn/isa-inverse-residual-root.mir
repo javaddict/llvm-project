@@ -1,0 +1,55 @@
+# RUN: split-file %s %t
+# Fatal seats abort; use not --crash so the diagnostic still reaches FileCheck.
+# Expand-owned children use report_fatal_error(..., GenCrashDiag=false).
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/expand-owned-post-inc.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=EXPAND-OWNED
+# Inverse reject on leftover copy pseudo aborts (default report_fatal_error).
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/residual-copy-pseudo.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-INV
+# REQUIRES: haydn-registered-target
+
+# Role: MIR — independent inverse (generated FormatEInverse records only).
+# Residual expand-owned / leftover copy pseudos must not complete an inverse
+# record via catalog alias or Bundle.canAdd. Completion on the root does not
+# make an unexpanded pseudo encodeable.
+#
+# AIE peers: AIEBaseInstrInfo.cpp:1595-1614 verifyInstruction fail-closed;
+# AIEPseudoBranchExpansion.cpp:43-57 leftover expand-owned is fatal.
+
+# EXPAND-OWNED: residual expand-owned pseudo child
+# NO-INV: structural inverse:
+
+#--- expand-owned-post-inc.mir
+--- |
+  define void @expand_owned_post_inc() { ret void }
+...
+---
+name:            expand_owned_post_inc
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit $r0 {
+      $r4 = LD32_POST_INC $r0, 4, 0
+    }
+    RET implicit $r15
+...
+#--- residual-copy-pseudo.mir
+--- |
+  define void @residual_copy_pseudo() { ret void }
+...
+---
+name:            residual_copy_pseudo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit-def $d0, implicit $r0, implicit $r1 {
+      $d0 = MOV_GPR_TO_DR64 $r0, $r1
+    }
+    RET implicit $r15
+...

@@ -4,6 +4,9 @@
 // (mode, entry, unit, type, opcode) — not by MemberId. FormatEInverse[I]
 // is therefore not the inverse of FormatEMembers[I]. This index is the
 // verifier's MemberId view of those separately generated inverse records.
+// HaydnBundleVerify consumes this index plus FormatEInverse only — never
+// FormatEMembers as an inverse row, never Bundle.canAdd / DFS / name peel.
+// Residual expand-owned and cycle-forming pseudos are not inverse keys.
 //
 // Peer: inverse of AIEMCFormats::getAlternateInstsOpcode
 // (AIEMCFormats.h:376-379; CodeGenFormat.cpp:155-163). Overlay is the

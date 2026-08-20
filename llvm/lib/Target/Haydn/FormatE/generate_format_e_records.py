@@ -2233,8 +2233,8 @@ def emit_member_opcodes_inc(cat: Catalog, member_to_logical: Dict[str, str]) -> 
 # ---------------------------------------------------------------------------
 # MC mnemonic round-trip harness (one vector per product logical)
 # Peer: llvm/test/MC/Hexagon/v67_all.s (one mnemonic × assemble+objdump).
-# Operand print order matches emit_members_td_inc AsmString, not hypothesized
-# HaydnInstrInfoManual.td (those stay isCodeGenOnly / auto-hypothesized-unencodable.s).
+# Operand print order matches emit_members_td_inc AsmString.
+# HaydnInstrInfoManual.td is a 0-def tombstone, not an encoding authority.
 # ---------------------------------------------------------------------------
 
 BRANCH_TARGET_LOGICALS = frozenset({

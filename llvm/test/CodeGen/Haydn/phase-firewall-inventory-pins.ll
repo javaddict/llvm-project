@@ -23,7 +23,8 @@
 ; Role: harness — PIPE-20 / DG0 / P19 / R15 / T7-ALIGN Goal 1 ledger + W55 inventory pins only.
 ; Inputs/ is a lit-excluded data dir; this file is the runnable owner seat.
 ; DecisionGuard product registry stays absent. SMS/hwloop defaults stay OFF.
-; Auto.td is hand-maintained. CMake golden-dir is env/-D only; skip if unset.
+; Manual.td is a tombstone (moved; do not include). CMake golden-dir is
+; env/-D only; skip if unset.
 ; Monorepo CLAUDE.md stays a symlink (R15 leftover docs stay outside this
 ; code track). Rebound: 9e5c878a is an ancestor; 28700d57 is not an ancestor.
 ; AR0 phase-firewall inventory is closed (no pre-RA identity).
@@ -52,7 +53,8 @@
 ; REBIND-DAG: ISA-64
 ; REBIND-DAG: pass-deep-review-2026-08-14
 ; REBIND-DAG: P13 source waves
-; REBIND-DAG: do not start Wave 1/2/3
+; REBIND-DAG: R13 LANDED
+; REBIND-DAG: Wave 1 unblocked
 ; REBIND-DAG: Goal 1 ledger
 ; REBIND-DAG: W55
 ; REBIND-DAG: nine-file
@@ -101,8 +103,10 @@
 ; PIN-DAG: 28700d57
 ; PIN-DAG: merge-base --is-ancestor
 
-; AUTO: hand-maintained hypothesized encodings
+; AUTO: HaydnInstrInfoManual.td - moved
+; AUTO: Former hand-maintained hypothesized encodings
 ; AUTO: generate_format_e_records.py does not emit this file
+; AUTO: Do not include it
 ; AUTO-NOT: Auto-generated from spec JSON
 
 ; GOLDENPY: HAYDN_GOLDEN_DIR
@@ -126,4 +130,5 @@
 ; ALT: Suffix name discovery is not
 ; ALT: a product alternate source
 ; PLACE: Suffix `_S*` spelling is occupancy recovery, not a
-; PLACE: product alternate source
+; PLACE: product alternate
+; PLACE: Product identity after post-RA commit is Format E BundleFormatRowID

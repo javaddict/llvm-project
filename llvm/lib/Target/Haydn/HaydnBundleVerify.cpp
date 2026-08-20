@@ -14,10 +14,12 @@
 #include "HaydnBundleVerify.h"
 #include "Haydn.h"
 #include "HaydnBundlePortBudget.h"
-// haydnOpcodeName is the pure generated MC name-table accessor (solver header
-// is pulled by HaydnBundle.h). The independent verifier never calls the
-// forward planner (Bundle canAdd / hasValidFormat / exactTryAddProduct /
-// PacketFormats planner / findFormatEMember / opcodesHaveFormatEUnitCover).
+// Opcode names come from the generated MC tables (HaydnMCTargetDesc.cpp
+// GET_INSTRINFO_MC_DESC) — same backing store as haydnOpcodeName
+// (HaydnBundleFormatSolver.h:109-111) without including that solver header
+// or HaydnBundle.h. This TU never calls Bundle canAdd / hasValidFormat /
+// exactTryAddProduct / PacketFormats planner / findFormatEMember /
+// opcodesHaveFormatEUnitCover.
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
@@ -37,8 +39,28 @@ using namespace llvm;
 #include "HaydnGenFormatEMemberOpcodes.inc"
 
 namespace llvm {
+
+// Generated MC name tables (HaydnMCTargetDesc.cpp GET_INSTRINFO_MC_DESC).
+// Local accessor so this TU never includes HaydnBundleFormatSolver.h.
+extern const unsigned HaydnInstrNameIndices[];
+extern const char HaydnInstrNameData[];
+
 namespace haydn {
 namespace bundle {
+
+static StringRef inverseOpcodeName(unsigned Opcode) {
+  return StringRef(&HaydnInstrNameData[HaydnInstrNameIndices[Opcode]]);
+}
+
+/// Expand-owned / cycle-forming leftover that must not complete an inverse
+/// record. Representation-expand solo cycles (B/RET/BR_JT/PseudoCALLIndirect)
+/// are the typed printer exception and are skipped by the caller.
+/// Peer: AIEPseudoBranchExpansion.cpp:43-57 expands named branch desc only.
+static bool isUnexpandedResidualPseudo(unsigned Opc) {
+  if (isRepresentationExpandPseudo(Opc))
+    return false;
+  return isResidualCycleFormingPseudo(Opc) || isExpandOwnedSemanticPseudo(Opc);
+}
 
 const format_e::FormatEMemberRec *lookupPrivateFormatEMember(unsigned Opc) {
   if (Opc == 0 || Opc == Haydn::NOP)
@@ -80,7 +102,7 @@ static bool encodeableInverseRecord(const format_e::FormatEInverseRec &R);
 static void collectInverseIdsForOpcode(unsigned Opc,
                                        SmallVectorImpl<unsigned> &Ids) {
   Ids.clear();
-  if (Opc == 0 || Opc == Haydn::NOP)
+  if (Opc == 0 || Opc == Haydn::NOP || isUnexpandedResidualPseudo(Opc))
     return;
 
   static const DenseMap<unsigned, SmallVector<unsigned, 8>> Generated = [] {
@@ -120,13 +142,10 @@ static void collectInverseIdsForOpcode(unsigned Opc,
         {Haydn::LDU16, Haydn::S_LHWU_WITH_IMM},
         {Haydn::ST16, Haydn::S_SHW_WITH_IMM},
         {Haydn::LD32_POST, Haydn::S_LW_POST_IMM},
-        {Haydn::LD32_POST_INC, Haydn::S_LW_POST_IMM},
         {Haydn::ST32_POST, Haydn::S_SW_POST_IMM},
-        {Haydn::ST32_POST_INC, Haydn::S_SW_POST_IMM},
         {Haydn::LD64_POST, Haydn::D_LDW_POST_IMM},
         {Haydn::ST64_POST, Haydn::D_SDW_POST_IMM},
         {Haydn::SEXT_GPR32_TO_DR64, Haydn::SEXT32T64},
-        {Haydn::MOV_GPR_TO_DR64, Haydn::SEXT32T64},
     };
     for (const auto &Pair : AliasToCatalog) {
       if (Pair.first == Pair.second || M.count(Pair.first))
@@ -287,6 +306,8 @@ static unsigned privateMemberIdForOpcode(unsigned Opc) {
 static bool haydnResidualLogicalNeedsCompletedInverse(unsigned Opc) {
   if (Opc == 0 || isPadNopOpcode(Opc) || isRepresentationExpandPseudo(Opc))
     return false;
+  if (isUnexpandedResidualPseudo(Opc))
+    return true;
   return privateMemberIdForOpcode(Opc) == ~0u;
 }
 
@@ -303,7 +324,7 @@ completeInverseRecord(const format_e::FormatEInverseRec &R, unsigned Opc,
     return std::string(
                "structural inverse: inverse record not encodeable for "
                "committed member at stamped entry: ") +
-           std::string(haydnOpcodeName(Opc)) + " @mode" +
+           std::string(inverseOpcodeName(Opc)) + " @mode" +
            std::to_string(ExpectMode) + " entry " + std::to_string(EntryIdx);
   if (R.Mode != ExpectMode)
     return std::string(
@@ -335,6 +356,17 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
                            uint32_t &SeenUnits, uint32_t &SeenEntryBits,
                            uint32_t *ResidualCompletedBits = nullptr,
                            unsigned ResidualBit = 0) {
+  // Unexpanded residual pseudos are not inverse keys. A catalog alias must
+  // not complete LD32_POST_INC / MOV_GPR_TO_DR64 as if they were the real
+  // member. Peer: AIEPseudoBranchExpansion.cpp:43-57 leftover expand-owned
+  // is fatal after the expand pass.
+  if (isUnexpandedResidualPseudo(Opc))
+    return std::string(
+               "structural inverse: residual/logical inverse record not "
+               "completed at membership entry: ") +
+           std::string(inverseOpcodeName(Opc)) + " entry " +
+           std::to_string(EntryIdx);
+
   const format_e::FormatEInverseRec *Inv = nullptr;
   const unsigned PrivId = privateMemberIdForOpcode(Opc);
   const bool ResidualLogical = PrivId == ~0u;
@@ -354,7 +386,7 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
       return std::string(
                  "structural inverse: committed logical has no generated "
                  "member at its stamped entry (unknown or misplaced): ") +
-             std::string(haydnOpcodeName(Opc)) + " @mode" +
+             std::string(inverseOpcodeName(Opc)) + " @mode" +
              std::to_string(ExpectMode) + " entry " +
              std::to_string(EntryIdx);
   }
@@ -388,7 +420,7 @@ haydnRequireCompletedInverseOnResidualRoots(ArrayRef<unsigned> MemberOpcodes,
       return std::string(
                  "structural inverse: residual/logical inverse record not "
                  "completed at membership entry: ") +
-             std::string(haydnOpcodeName(MemberOpcodes[I])) + " entry " +
+             std::string(inverseOpcodeName(MemberOpcodes[I])) + " entry " +
              std::to_string(I);
   }
   return std::nullopt;
@@ -706,7 +738,10 @@ verifyExactHardRootCommit(const MachineInstr &BundleRoot,
   // when Format E unit cover needs three-entry geometry (e.g. two ADD32).
   auto Row = getBundleRowID(BundleRoot);
   assert(Row.has_value() && "verifyCommittedBundle requires a product row");
-  const unsigned RowEntries = bundleRowEntryCount(*Row);
+  const unsigned RowEntries = [&] {
+    const format::BundleFormatRowDesc *Desc = format::getBundleFormatRow(*Row);
+    return Desc ? Desc->EntryCount : 0u;
+  }();
   if (Members.size() > RowEntries)
     return std::string(
         "hard-root verify: BundleFormatRowID entry capacity below membership");
