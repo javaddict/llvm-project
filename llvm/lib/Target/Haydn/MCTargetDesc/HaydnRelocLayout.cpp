@@ -129,8 +129,9 @@ constexpr Row Table[] = {
     // row (imm @ parcel bits[43:32], FieldLsb=32) but a distinct kind so a
     // JALR fixup never borrows the branch row. Signed 12-bit byte
     // displacement from the parcel origin (ValueShift=0, Align=2; no extra
-    // scale; execution stays PC = rs + imm12). E3 e0/e1 windows resolve via
-    // resolveFieldLsb like the branch kinds. ELF 22 (R_HAYDN_JALRSImm12).
+    // scale; execution stays PC = rs + imm12). Typed windows: E2 e0 @32,
+    // E3 e0 @23, E3 e1 @54 (resolveFieldLsb / resolveFieldLsbForMember).
+    // ELF 22 (R_HAYDN_JALRSImm12).
     // Call-indirect / JT jalr-with-zero never mint a second ELF number.
     {RelocKind::JALRSImm12, {12, 12, 32, 0, 2, true, true, RelocTrans::None}},
     // Format E CSR I8 uimm8: table FieldLsb is E2 e0 imm @ parcel
@@ -165,6 +166,88 @@ const Row &rowFor(RelocKind R) {
       return RowEntry;
   return kInvalidRow;
 }
+
+// Typed (mode, entry, unit) → parcel-absolute FieldLsb. Table FieldLsb is
+// E2 e0 only; these sites are the generated-member windows resolveFieldLsb
+// already returns from Loc. One ELF kind covers every site (Haydn overlay
+// on AIE per-format-size FixupField Offset: AIEMCFixupKinds.cpp:36-65).
+// Unit 0xff = any unit at that (mode, entry). HWLoop Off1/Off2 share
+// (mode, entry, unit) across HWLRIIR vs HWLRIII, so extra LSBs live in
+// ExtraPublishedLsb rather than a unique site.
+constexpr uint8_t kAnyUnit = 0xff;
+constexpr uint8_t kALU0 = 0;
+constexpr uint8_t kALU1 = 1;
+constexpr uint8_t kALU2 = 2;
+constexpr uint8_t kLOAD1 = 3;
+constexpr uint8_t kLS0 = 4;
+
+struct FieldLsbSite {
+  RelocKind Kind;
+  uint8_t Mode;
+  uint8_t EntryIdx;
+  uint8_t Unit;
+  uint8_t Lsb;
+};
+
+constexpr FieldLsbSite FieldLsbSites[] = {
+    // HI12 / LUI I12
+    {RelocKind::HI12, 0, 0, kAnyUnit, 32},
+    {RelocKind::HI12, 1, 0, kALU2, 21},
+    {RelocKind::HI12, 1, 0, kALU0, 23},
+    {RelocKind::HI12, 1, 1, kAnyUnit, 54},
+    {RelocKind::HI12, 1, 2, kALU2, 83},
+    {RelocKind::HI12, 1, 2, kALU0, 81},
+    // LO20 / PC_LO20 — RI20 is E2-only
+    {RelocKind::LO20, 0, 0, kALU0, 31},
+    {RelocKind::LO20, 0, 1, kALU1, 65},
+    {RelocKind::PC_LO20, 0, 0, kALU0, 31},
+    {RelocKind::PC_LO20, 0, 1, kALU1, 65},
+    // LS_IMM RI6
+    {RelocKind::LS_IMM, 0, 0, kLS0, 28},
+    {RelocKind::LS_IMM, 0, 1, kLOAD1, 72},
+    {RelocKind::LS_IMM, 1, 0, kLS0, 25},
+    {RelocKind::LS_IMM, 1, 1, kLOAD1, 54},
+    {RelocKind::LS_IMM, 1, 2, kLOAD1, 85},
+    // CSR I8
+    {RelocKind::CSR_UImm8, 0, 0, kAnyUnit, 32},
+    {RelocKind::CSR_UImm8, 1, 0, kALU2, 27},
+    {RelocKind::CSR_UImm8, 1, 0, kALU0, 23},
+    {RelocKind::CSR_UImm8, 1, 1, kAnyUnit, 54},
+    {RelocKind::CSR_UImm8, 1, 2, kAnyUnit, 85},
+    // JALR RI12 — generated members: E2 e0 / E3 e0 / E3 e1 ALU0 only
+    {RelocKind::JALRSImm12, 0, 0, kALU0, 32},
+    {RelocKind::JALRSImm12, 1, 0, kALU0, 23},
+    {RelocKind::JALRSImm12, 1, 1, kALU0, 54},
+    // I12 / RI12 cond-branch (same golden imm windows as JALR + E3 e2 I12)
+    {RelocKind::WIDE_BranchSImm12, 0, 0, kAnyUnit, 32},
+    {RelocKind::WIDE_BranchSImm12, 1, 0, kAnyUnit, 23},
+    {RelocKind::WIDE_BranchSImm12, 1, 1, kAnyUnit, 54},
+    {RelocKind::WIDE_BranchSImm12, 1, 2, kAnyUnit, 81},
+    {RelocKind::WIDE_BranchSImm12_RI, 0, 0, kAnyUnit, 32},
+    {RelocKind::WIDE_BranchSImm12_RI, 1, 0, kAnyUnit, 23},
+    {RelocKind::WIDE_BranchSImm12_RI, 1, 1, kAnyUnit, 54},
+    // JAL I20
+    {RelocKind::WIDE_CallSImm20, 0, 0, kAnyUnit, 31},
+    {RelocKind::WIDE_CallSImm20, 1, 0, kAnyUnit, 17},
+    {RelocKind::WIDE_CallSImm20, 1, 1, kAnyUnit, 48},
+    // SET_HWLOOP F2 (HWLRIIR) table windows; HWLRIII extras below
+    {RelocKind::HWLoopOff1, 0, 0, kAnyUnit, 32},
+    {RelocKind::HWLoopOff1, 1, 0, kAnyUnit, 18},
+    {RelocKind::HWLoopOff1, 1, 1, kAnyUnit, 49},
+    {RelocKind::HWLoopOff2, 0, 0, kAnyUnit, 38},
+    {RelocKind::HWLoopOff2, 1, 0, kAnyUnit, 24},
+    {RelocKind::HWLoopOff2, 1, 1, kAnyUnit, 55},
+};
+
+struct ExtraLsb {
+  RelocKind Kind;
+  uint8_t Lsb;
+};
+
+constexpr ExtraLsb ExtraPublishedLsb[] = {
+    {RelocKind::HWLoopOff1, 13}, // E2 e0 HWLRIII
+    {RelocKind::HWLoopOff2, 36}, // E2 e0 HWLRIII
+};
 
 // Shared diagnostic for kinds whose value transform is not product-closed.
 constexpr const char *kTransformNotReady =
@@ -523,6 +606,39 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   return I.FieldLsb;
 }
 
+bool isPublishedFieldLsb(RelocKind R, unsigned FieldLsb) {
+  if (FieldLsb == getRelocFieldInfo(R).FieldLsb)
+    return true;
+  for (const FieldLsbSite &S : FieldLsbSites) {
+    if (S.Kind == R && S.Lsb == FieldLsb)
+      return true;
+  }
+  for (const ExtraLsb &E : ExtraPublishedLsb) {
+    if (E.Kind == R && E.Lsb == FieldLsb)
+      return true;
+  }
+  return false;
+}
+
+unsigned resolveFieldLsbForMember(RelocKind R, unsigned Mode, unsigned EntryIdx,
+                                  unsigned Unit) {
+  const RelocFieldInfo &I = getRelocFieldInfo(R);
+  const uint8_t WantUnit =
+      (Unit > 0xffu) ? kAnyUnit : static_cast<uint8_t>(Unit);
+  const FieldLsbSite *Wildcard = nullptr;
+  for (const FieldLsbSite &S : FieldLsbSites) {
+    if (S.Kind != R || S.Mode != Mode || S.EntryIdx != EntryIdx)
+      continue;
+    if (WantUnit != kAnyUnit && S.Unit == WantUnit)
+      return S.Lsb;
+    if (S.Unit == kAnyUnit)
+      Wildcard = &S;
+  }
+  if (Wildcard)
+    return Wildcard->Lsb;
+  return I.FieldLsb;
+}
+
 RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
   const RelocFieldInfo &I = getRelocFieldInfo(R);
   RelocCompute Out;
@@ -874,7 +990,11 @@ RelocKind findFixupFromFixupFields(StringRef TypeName, unsigned TypeOpcode,
     const RelocFieldInfo &I = getRelocFieldInfo(S.Kind);
     if (I.Trans == RelocTrans::Unresolved)
       continue;
-    if (FieldLsb != kUnspecifiedFieldLsb && FieldLsb != I.FieldLsb)
+    // Typed member FieldLsb is parcel-absolute and entry-dependent. Reject
+    // only unpublished windows; E3 e0/e1 JALR (23/54) must not miss the
+    // dedicated kind and fall back to the RI12 branch row.
+    if (FieldLsb != kUnspecifiedFieldLsb &&
+        !isPublishedFieldLsb(S.Kind, FieldLsb))
       continue;
     if (FieldSize != 0 && FieldSize != I.FieldSize)
       continue;

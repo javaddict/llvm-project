@@ -1,0 +1,59 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %s -o %t.o
+# Stamp product ELFFlagsValue (e_flags=0x1). yaml2obj has no Haydn e_flags
+# bit names; LLD rejects unprofiled zero flags fail-closed.
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.o
+# RUN: llvm-readobj -r %t.o | FileCheck %s --check-prefix=OBJ
+# RUN: not ld.lld %t.o -o %t.out --section-start=.text=0x10000 2>&1 | FileCheck %s --check-prefix=ERR
+
+# R_HAYDN_GOT_HI20 must be a link error.
+#
+# Bug: getRelExpr mapped GOT_HI20 to R_GOT, so a GOT reloc allocated a GOT
+# and rewrote as R_HAYDN_32 (gotRel) with no diagnostic. Baremetal has no
+# PIC/GOT/PLT product ABI. JT/PIC label-diff is R_HAYDN_32_PCREL, not GOT.
+#
+# Fix: getRelExpr/relocate fail closed. The object keeps R_HAYDN_GOT_HI20
+# (not rewritten to R_HAYDN_32). If this regresses to R_GOT, `not ld.lld`
+# fails because the link succeeds. Type 0x8 is R_HAYDN_GOT_HI20 (Haydn.def);
+# yaml2obj has no Haydn reloc names.
+
+# OBJ: Relocations [
+# OBJ:   R_HAYDN_GOT_HI20 target
+# OBJ-NOT: R_HAYDN_32
+
+# ERR: Haydn GOT relocations are unsupported
+# ERR: refusing silent R_GOT
+# ERR-NOT: error: {{.*}}undefined
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    Content: '070000000000000000000000'
+  - Name:    .rela.text
+    Type:    SHT_RELA
+    Link:    .symtab
+    Info:    .text
+    Relocations:
+      - Offset: 0
+        Symbol: target
+        Type:   0x8
+Symbols:
+  - Name:    _start
+    Section: .text
+    Value:   0
+    Size:    12
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC
+  - Name:    target
+    Section: .text
+    Value:   12
+    Size:    0
+    Binding: STB_GLOBAL

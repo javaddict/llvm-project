@@ -610,4 +610,70 @@ TEST(HaydnRelocLayoutTest, Lo20AndLsImmFieldLsbFollowEntryWindow) {
   EXPECT_EQ(resolveFieldLsb(RelocKind::LO20, E3RI20), 31u);
 }
 
+// Typed (mode, entry, unit) FieldLsb must match the Loc-sniffing windows
+// already returned by resolveFieldLsb. findFixupFromFixupFields used to
+// require Fields[0].Offset == E2 e0 table FieldLsb, so an E3 e0/e1 JALR
+// member (LSB 23/54) missed the dedicated ELF 22 row. AIE looks up by the
+// actual FixupField Offset (AIEMCFixupKinds.cpp:36-65); Haydn keeps one
+// ELF kind per equation and accepts every published parcel-absolute LSB.
+TEST(HaydnRelocLayoutTest, PublishedMemberFieldLsbAndFixupFields) {
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::JALRSImm12, 32u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::JALRSImm12, 23u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::JALRSImm12, 54u));
+  EXPECT_FALSE(isPublishedFieldLsb(RelocKind::JALRSImm12, 81u));
+  EXPECT_FALSE(isPublishedFieldLsb(RelocKind::JALRSImm12, 99u));
+
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HI12, 32u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HI12, 21u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HI12, 23u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HI12, 54u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HI12, 81u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HI12, 83u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::PC_LO20, 31u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::PC_LO20, 65u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::LO20, 65u));
+  EXPECT_FALSE(isPublishedFieldLsb(RelocKind::PC_LO20, 23u));
+
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 0, 0), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 0, 2), 21u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 0, 0), 23u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 1), 54u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 2, 2), 83u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 2, 0), 81u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::LO20, 0, 0, 0), 31u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::LO20, 0, 1, 1), 65u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::PC_LO20, 0, 1, 1), 65u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::PC_LO20, 1, 0, 0), 31u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 0, 0, 0), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 0, 0), 23u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 1, 0), 54u);
+  // JALR has no E3 e2 member — fail closed to the E2 e0 table window.
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 2, 0), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::WIDE_BranchSImm12, 1, 2), 81u);
+
+  const FixupField JalrE3e0{23, 12};
+  const FixupField JalrE3e1{54, 12};
+  const FixupField JalrE3e2{81, 12};
+  const FixupField Hi12E3Alu2{21, 12};
+  EXPECT_EQ(findFixupFromFixupFields("RI12", 1, JalrE3e0, 12, false),
+            RelocKind::JALRSImm12);
+  EXPECT_EQ(findFixupFromFixupFields("RI12", 1, JalrE3e1, 12, false),
+            RelocKind::JALRSImm12);
+  EXPECT_EQ(findFixupFromFixupFields("RI12", 1, JalrE3e2, 12, false),
+            RelocKind::Invalid);
+  EXPECT_EQ(findFixupFromFixupFields("RI12", 2, JalrE3e0, 12, false),
+            RelocKind::WIDE_BranchSImm12_RI);
+  EXPECT_EQ(findFixupFromFixupFields("I12", 1, Hi12E3Alu2, 12, false),
+            RelocKind::HI12);
+  EXPECT_EQ(findFixupFromFixupFields("I12", 4, Hi12E3Alu2, 12, false),
+            RelocKind::Invalid);
+
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::Data32PCRel),
+            static_cast<unsigned>(ELF::R_HAYDN_32_PCREL));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::GOT_HI20),
+            static_cast<unsigned>(ELF::R_HAYDN_GOT_HI20));
+  EXPECT_NE(RelocKind::Data32PCRel, RelocKind::GOT_HI20);
+  EXPECT_NE(RelocKind::Data32PCRel, RelocKind::Data32);
+}
+
 } // namespace

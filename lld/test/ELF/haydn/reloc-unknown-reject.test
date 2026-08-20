@@ -1,0 +1,47 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %s -o %t.o
+# Stamp product ELFFlagsValue (e_flags=0x1). yaml2obj has no Haydn e_flags
+# bit names; LLD rejects unprofiled zero flags fail-closed.
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.o
+# RUN: not ld.lld %t.o -o %t.out --section-start=.text=0x10000 2>&1 | FileCheck %s
+
+# Unknown ELF reloc kinds must fail closed. Type 0x63 is outside the
+# published R_HAYDN_* range (0..23). getRelExpr used to omit getErrorLoc
+# and relocate only rejected type > R_HAYDN_CSR_UImm8 — both must diagnose.
+# If this regresses to a silent skip or R_ABS, `not ld.lld` fails.
+
+# CHECK: unknown Haydn relocation type: Unknown (99)
+# CHECK-NOT: error: {{.*}}undefined
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    Content: '070000000000000000000000'
+  - Name:    .rela.text
+    Type:    SHT_RELA
+    Link:    .symtab
+    Info:    .text
+    Relocations:
+      - Offset: 0
+        Symbol: target
+        Type:   0x63
+Symbols:
+  - Name:    _start
+    Section: .text
+    Value:   0
+    Size:    12
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC
+  - Name:    target
+    Section: .text
+    Value:   12
+    Size:    0
+    Binding: STB_GLOBAL

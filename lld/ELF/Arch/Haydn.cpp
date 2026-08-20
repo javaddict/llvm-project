@@ -37,9 +37,9 @@
 //     RI20 is E2-only — unrecognized parcels keep the table default.
 //   R_HAYDN_PC_LO20 — same RI20 windows, PC-relative (specifier %pc_lo20).
 //   R_HAYDN_32_PCREL — 32-bit data PC-rel (PIC/JT EK_LabelDifference32
-//     `.long LBB - JT`; FK_Data_4+IsPCRel).
+//     `.long LBB - JT`; FK_Data_4+IsPCRel). Data-word R_PC, not a GOT/PLT ABI.
 //   R_HAYDN_LS_IMM — Format E LS RI6 signed imm6 (not SImm16, not LO20).
-//   R_HAYDN_GOT_HI20 — GOT entry address high part.
+//   R_HAYDN_GOT_HI20 — fail-closed: no PIC/GOT/PLT product ABI (never silent R_GOT / R_ABS).
 //   R_HAYDN_TPREL_HI20/LO16 — fail-closed: golden has no TLS model, so these
 //     kinds are a link error (never silent R_ABS).
 //
@@ -144,8 +144,10 @@ public:
       // Dedicated ELF 22. Assembler symbol convention is parcel-relative
       // (same R_PC as B/JAL). Execution is rs+imm12; never the RI12 branch
       // row. ValueShift=0 lives in HaydnRelocLayout — do not remint here.
-      // Call-indirect / JT jalr-with-zero is not this kind; PIC/JT
-      // label-diff is R_HAYDN_32_PCREL (R_PC on a 32-bit data word).
+      // FieldLsb is typed per member: E2 e0 @32, E3 e0 @23, E3 e1 @54
+      // (resolveFieldLsb / resolveFieldLsbForMember). Call-indirect / JT
+      // jalr-with-zero is not this kind; PIC/JT label-diff is
+      // R_HAYDN_32_PCREL (R_PC on a 32-bit data word).
       return R_PC;
     case R_HAYDN_NONE:
       return R_NONE;
@@ -169,9 +171,16 @@ public:
                   "(no golden TLS model); refusing silent R_ABS";
       return R_NONE;
     case R_HAYDN_GOT_HI20:
-      return R_GOT;
+      // Baremetal static ABI: no PIC/GOT/PLT. Mapping to R_GOT would
+      // allocate a GOT and rewrite as R_HAYDN_32 (gotRel). Fail closed.
+      // JT/PIC label-diff stays R_HAYDN_32_PCREL (R_PC on a data word).
+      Err(ctx) << getErrorLoc(ctx, loc)
+               << "Haydn GOT relocations are unsupported "
+                  "(no PIC/GOT/PLT product ABI); refusing silent R_GOT";
+      return R_NONE;
     default:
-      Err(ctx) << "unknown Haydn relocation type: " << type;
+      Err(ctx) << getErrorLoc(ctx, loc)
+               << "unknown Haydn relocation type: " << type;
       return R_NONE;
     }
   }
@@ -276,6 +285,12 @@ public:
                   "(no golden TLS model); refusing silent R_ABS";
       return;
     }
+    if (type == R_HAYDN_GOT_HI20) {
+      Err(ctx) << getErrorLoc(ctx, loc)
+               << "Haydn GOT relocations are unsupported "
+                  "(no PIC/GOT/PLT product ABI); refusing silent R_GOT";
+      return;
+    }
     if (type > R_HAYDN_CSR_UImm8) {
       Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << type;
       return;
@@ -297,15 +312,21 @@ public:
   }
 
   uint32_t calcEFlags() const override {
-    // Product output carries production ELFFlagsValue (nonzero EF_HAYDN_E96).
+    // Product output carries production ELFFlagsValue (provisional
+    // consumer agreement; not an external e_machine allocation).
     // Every participating object must already stamp that flag — zero and
     // unknown nonzero profiles reject fail-closed (no silent upgrade).
-    // Matches BundleSim elf_validator product profile seat.
+    // ctx.objectFiles includes extracted archive members and startup
+    // objects after symbol resolution (Driver.cpp calcEFlags seat).
+    // Peer: AIE.cpp:66-70 copies the first object's flags; Haydn overlay
+    // requires exact production equality. Empty objectFiles (empty
+    // archive) still stamps the production flag — Hexagon empty-archive
+    // default analog (hexagon-eflag.s), not a new e_machine.
     //
     // EM_HAYDN=259 is the experimental producer number (ELF.h). Some ELF
     // registries assign 259 to Kalray KVX. Do not invent a replacement
-    // e_machine here. A 259 object without EF_HAYDN_E96 is rejected so a
-    // KVX-like file cannot silently link as Haydn.
+    // e_machine here. A 259 object without the production flag is rejected
+    // so a KVX-like file cannot silently link as Haydn.
     const uint32_t Expected =
         llvm::haydn::format::getProductionObjectEncodingProfile().ELFFlagsValue;
     assert(Expected != 0 && "E96 product profile must allocate nonzero e_flags");

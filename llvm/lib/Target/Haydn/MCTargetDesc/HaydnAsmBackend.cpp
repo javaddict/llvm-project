@@ -191,7 +191,9 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     // applyFixup patches parcel-absolute bits via resolveFieldLsb — do not
     // also shift by TargetOffset (AIE Dummy TargetOffset: AIEBaseAsmBackend.h
     // getFixupKindInfo 56-71; AIE applyFixup shifts only generic FK_Data_*).
-    // HI12/LO20/PC_LO20/JALRSImm12 E3 e0/e1/e2 and E2 e1 windows live here.
+    // Typed (mode, entry, unit) producers use resolveFieldLsbForMember;
+    // Loc sniffing here covers HI12/LO20/PC_LO20/JALRSImm12 E3 e0/e1/e2
+    // and E2 e1 windows.
     const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, Data);
     HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FieldLsb);
     return;

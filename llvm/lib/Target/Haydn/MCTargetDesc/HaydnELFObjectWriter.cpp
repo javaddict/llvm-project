@@ -116,7 +116,9 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_LO16;
 
   case Haydn::FIXUP_HAYDN_GOT_HI20:
-    // GOT entry high 20 bits
+    // Typed ELF 8. No PIC/GOT/PLT product ABI — keep the kind so a
+    // producer cannot alias HI20/HI12. LLD getRelExpr/relocate refuse it
+    // (same seat as TPREL). Do not rewrite as R_HAYDN_32.
     return ELF::R_HAYDN_GOT_HI20;
 
   case Haydn::FIXUP_HAYDN_TPREL_HI20:
@@ -196,13 +198,15 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
 
   case Haydn::FIXUP_HAYDN_JALRSImm12:
     // R_HAYDN_JALRSImm12 (ELF 22). Distinct from the RI12 branch row.
-    // Call-indirect / JT dispatch (jalr rd, rs, 0) bake a zero imm and
-    // never reach this mapping. PIC/JT table entries are R_HAYDN_32_PCREL
-    // (FK_Data_4 + IsPCRel), not a second JALR kind. Local targets still
-    // resolve in the AsmBackend; unresolved externals emit ELF 22.
-    // Peer: AIE dense fixup->ELF map (AIEELFObjectWriter.cpp:60-63);
-    // Haydn cannot be dense because MC-only kinds sit after the shared
-    // ELF range.
+    // Kind is selected by typed (row, entry, member) via
+    // findFixupFromFixupFields (RI12 opc 1); FieldLsb is E2 e0 @32 /
+    // E3 e0 @23 / E3 e1 @54. Call-indirect / JT dispatch (jalr rd, rs, 0)
+    // bake a zero imm and never reach this mapping. PIC/JT table entries
+    // are R_HAYDN_32_PCREL (FK_Data_4 + IsPCRel), not a second JALR kind.
+    // Local targets still resolve in the AsmBackend; unresolved externals
+    // emit ELF 22. Peer: AIE dense fixup->ELF map
+    // (AIEELFObjectWriter.cpp:60-63); Haydn cannot be dense because
+    // MC-only kinds sit after the shared ELF range.
     return ELF::R_HAYDN_JALRSImm12;
 
   case Haydn::FIXUP_HAYDN_CSR_UImm8:

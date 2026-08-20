@@ -156,9 +156,25 @@ struct FixupField {
 /// type-opcode 1 and maps to the dedicated JALRSImm12 row (never borrow
 /// the RI12 branch row); execution stays PC = rs + imm12. I8 type-opcodes
 /// 4/5 (CSRR/CSRW) map to CSR_UImm8; other I8 opcodes have no reloc row.
+/// Fields[0].Offset, when set, must be a published window for that kind
+/// (E2 e0 table FieldLsb or a typed E3/e1 member LSB) — AIE looks up by
+/// the actual FixupField Offset (AIEMCFixupKinds.cpp:36-65); Haydn keeps
+/// one ELF kind and accepts every published parcel-absolute LSB.
 RelocKind findFixupFromFixupFields(StringRef TypeName, unsigned TypeOpcode,
                                    ArrayRef<FixupField> Fields,
                                    unsigned FormatBytes, bool IsLSUnit);
+
+/// True when \p FieldLsb is the table default or a typed member window for
+/// \p R (E3 e0/e1/e2 and E2 e1). Unknown LSB values are not published.
+bool isPublishedFieldLsb(RelocKind R, unsigned FieldLsb);
+
+/// FieldLsb from typed (mode, entry, unit) membership. Mode 0=E2, 1=E3.
+/// Unit is the Format E unit index (ALU0=0, ALU1=1, ALU2=2, LOAD1=3,
+/// LOADSTORE0=4); ~0u means unknown unit. Prefers an exact unit match,
+/// then a unit-wildcard site, then the E2 e0 table default. Does not sniff
+/// Loc bytes — that remains resolveFieldLsb for MC applyFixup / lld.
+unsigned resolveFieldLsbForMember(RelocKind R, unsigned Mode, unsigned EntryIdx,
+                                  unsigned Unit = ~0u);
 
 // Read an N-byte little-endian image (N in {1,2,4,6}) as a uint64_t.
 uint64_t readImage(const uint8_t *Loc, unsigned NBytes);
@@ -178,8 +194,9 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
 // Resolve FieldLsb for kinds whose absolute parcel bit position depends on the
 // live Format E mode/entry at Loc. Table FieldLsb is E2 e0 authority:
 //   WIDE_CallSImm20 — E3 JAL I20 at e0 [17:36] or e1 [48:67]
-//   WIDE_BranchSImm12 / _RI — E3 I12/RI12 at e0 [23:34], e1 [54:65],
-//     e2 I12 [81:92] (E2 e0 stays table FieldLsb=32)
+//   WIDE_BranchSImm12 / _RI / JALRSImm12 — E3 I12/RI12 at e0 [23:34],
+//     e1 [54:65], e2 I12 [81:92] (E2 e0 stays table FieldLsb=32).
+//     JALR generated members are E2 e0 / E3 e0 / E3 e1 ALU0 only.
 //   HWLoopOff1/Off2 — E2 HWLRIII Off1/Off2 @ [13]/[36]; E3 F2 e0 @ [18]/[24],
 //     e1 @ [49]/[55] (golden absolute parcel bits; table default is E2 F2
 //     Off1@32 / Off2@38).
