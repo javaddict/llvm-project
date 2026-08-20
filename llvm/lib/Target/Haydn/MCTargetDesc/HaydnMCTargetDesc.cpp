@@ -146,9 +146,9 @@ public:
   }
 
   /// PC-relative call/branch target as a byte address. Members already carry
-  /// dump-byte displacements (cond-branch / JAL are PC+imm bytes, no extra
-  /// scale; SET_HWLOOP stays word scale). JALR is rs-relative
-  /// (isIndirectBranch) and is not evaluated here.
+  /// dump-byte displacements (cond-branch / JAL / HWLR Off1/Off2 after
+  /// RelocLayout ValueShift). Do not apply a second Imm/2 or Imm/4 scale.
+  /// JALR is rs-relative (isIndirectBranch) and is not evaluated here.
   bool evaluateBranch(const MCInst &Inst, uint64_t Addr, uint64_t Size,
                       uint64_t &Target) const override {
     if (isHaydnCompositeBundle(Inst.getOpcode())) {

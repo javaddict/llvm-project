@@ -521,13 +521,12 @@ static bool isPrivatePlacementInst(unsigned Opcode, const MCInstrInfo &MII) {
          haydnFindFormatEMemberByOpcode(Opcode);
 }
 
-/// Composite opcode from generated Mode membership + unit occupancy.
+/// Composite opcode from generated Mode membership + MemberId assignment.
 /// AIE emitBundle takes Format->Opcode from getFormatOrNull / OccupiedSlots
 /// (AIEBundle.h:150-156, AIEBaseAsmParser.h:164-180), not child cardinality.
 /// Extra NOP pads are not occupancy. Count never invents a Format E row:
 /// E2-only stays E2 (or fail); E3-only stays E3 (or fail); mixed Mode-only
-/// fails; both-legal uses first-covering occupancy that also fits generated
-/// EntryCapacity (E2 when it covers and N<=2, else E3).
+/// fails; both-legal uses PacketFormats first-covering membership.
 static unsigned selectParsedFormatEComposite(ArrayRef<unsigned> RealOpcs,
                                             const MCInstrInfo &MII) {
   for (unsigned Opc : RealOpcs) {
@@ -536,10 +535,10 @@ static unsigned selectParsedFormatEComposite(ArrayRef<unsigned> RealOpcs,
     if (isPrivatePlacementInst(Opc, MII))
       return 0;
   }
-  // Same first-covering occupancy as standalone MC, including generated
-  // EntryCapacity (AIEBaseAsmParser.h:164-180). Three dual-mode logicals
-  // that cover E2 units must not select the two-entry row and then fail
-  // as "incorrect bundle".
+  // Same first-covering membership as standalone MC
+  // (AIEBaseAsmParser.h:164-180). Three dual-mode logicals that place in
+  // E2 entries must not select the two-entry row and then fail as
+  // "incorrect bundle".
   return haydnSelectStandaloneFormatEOpcode(RealOpcs);
 }
 
@@ -1041,6 +1040,7 @@ bool HaydnAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   }
 
   case Match_MnemonicFail:
+    // Do not recover a catalog logical by stripping `_S*` / `_E2_` / `_E3_`.
     return Error(IDLoc, "invalid instruction mnemonic");
 
   default:

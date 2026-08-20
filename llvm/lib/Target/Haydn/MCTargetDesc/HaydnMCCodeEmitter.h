@@ -6,7 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the HaydnMCCodeEmitter class.
+// Haydn Format E code emitter (implementation lives in the .cpp, same
+// TU-local class shape as RISCVMCCodeEmitter.cpp:39). Isolation wall:
+//   * TargetOpcode::BUNDLE residuals with public logicals fatal in
+//     encodeBundle (skip-Finalize never DFS/fill).
+//   * Committed MemberId BUNDLE_E96_* serialize as-is
+//     (trySerializeFormatECompositeAsIs); never enter standalone DFS.
+//   * encodeSlotSubInst is serialize-only (generated members / NOP).
+//   * fillFormatEMemberInst is standalone/hand-asm only.
+// Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is;
+// HexagonMCCodeEmitter.h:34-54 keeps the emitter class in the header,
+// but Haydn's TableGen include stays in the .cpp (RISCV peer).
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,8 +28,6 @@ class MCCodeEmitter;
 class MCInstrInfo;
 class MCContext;
 
-// This is a stub declaration. The full implementation will be generated
-// by TableGen when instruction definitions are added.
 MCCodeEmitter *createHaydnMCCodeEmitter(const MCInstrInfo &MCII, MCContext &Ctx);
 
 } // namespace llvm

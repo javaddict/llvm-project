@@ -91,12 +91,9 @@ void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
   // set_hwloop_f2 sel, loop_start, loop_end, rs
   // The MCInst carries: sel(imm), loop_start(expr|imm), loop_end(expr|imm), rs(reg).
   // The expr form comes from the AsmPrinter/asm-parser path (symbolic labels);
-  // the imm form comes from the disassembler (decoded raw offset field values
-  // in WORDS — i.e. the encoded off16 field, already divided by 4 from bytes).
-  // We display both forms so the offsets are always visible for auditing. See
-  // (Bug C — previously the imm form was silently dropped because only
-  // isExpr was checked, making objdump show "set_hwloop_f2 1, r12" with no
-  // offsets, hiding the START/END correctness bug).
+  // the imm form comes from the disassembler (dump bytes after RelocLayout
+  // ValueShift on HWLR members). Display both expr and imm so offsets stay
+  // visible for auditing.
   if (MI->getOpcode() == Haydn::SET_HWLOOP_REG) {
     O << "set_hwloop_f2\t";
     if (MI->getNumOperands() > 0 && MI->getOperand(0).isImm())
@@ -109,11 +106,8 @@ void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
         O << ", ";
         MAI.printExpr(O, *Op.getExpr());
       } else if (Op.isImm()) {
-        // Disassembler path: the immediate is the encoded off16 field value
-        // (word offset). Display as "<N>w" to make clear it is a word offset
-        // and also show the byte equivalent for debugging.
-        int64_t WordOff = Op.getImm();
-        O << ", <off" << WordOff << "w=" << (WordOff * 4) << "B>";
+        // Dump bytes (RelocLayout ValueShift already applied on member decode).
+        O << ", " << Op.getImm();
       }
     };
     printOffset(1);

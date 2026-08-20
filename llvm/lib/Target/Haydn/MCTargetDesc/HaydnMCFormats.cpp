@@ -35,6 +35,7 @@
 
 #include "HaydnFormat.h"
 #include "HaydnFormatERecords.h"
+#include "HaydnRelocLayout.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -96,10 +97,60 @@ StringRef occupancyOpcodeName(unsigned Opcode) {
 
 /// Residual FieldSlot names are retired. Occupancy must not recover a
 /// logical by stripping `_S0/_S1/_S2` (AIE uses generated MultiSlot alts,
-/// AIEMCFormats.h:376-379 — no suffix table).
+/// AIEMCFormats.h:376-379 — no suffix table). A leftover `_S*` suffix must
+/// not certify a Format E entry (ABS64 has no unsuffixed FieldSlot form).
 bool isResidualFieldSlotName(StringRef Name) {
-  return Name.ends_with("_S0") || Name.ends_with("_S1") ||
-         Name.ends_with("_S2");
+  return Name.ends_with_insensitive("_S0") ||
+         Name.ends_with_insensitive("_S1") ||
+         Name.ends_with_insensitive("_S2");
+}
+
+bool isGeneratedMemberName(StringRef Name) {
+  return Name.contains_insensitive("_E2_") ||
+         Name.contains_insensitive("_E3_");
+}
+
+/// Catalog occupancy key. Refuses residual FieldSlots and generated members
+/// (no `_S*` / `_E2_` name peel — AIE MultiSlot alts, AIEMCFormats.h:376-379).
+/// Reloc `_W` compact span, then public aliases (LD32 → S_LW_WITH_IMM).
+/// Empty = fail closed (do not invent TWO vs THREE from an unknown name).
+std::string catalogOccupancyName(StringRef Raw) {
+  if (Raw.empty())
+    return {};
+  if (Raw.equals_insensitive("NOP"))
+    return "NOP";
+  if (isResidualFieldSlotName(Raw) || isGeneratedMemberName(Raw))
+    return {};
+  auto spanOf = [](StringRef N) -> const haydn::format_e::FormatEAltSpan * {
+    if (N.empty())
+      return nullptr;
+    return haydn::format_e::findAltSpan(N.str().c_str());
+  };
+  if (spanOf(Raw))
+    return Raw.str();
+  if (Raw.ends_with("_W")) {
+    const StringRef Base = Raw.drop_back(2);
+    if (!isResidualFieldSlotName(Base) && !isGeneratedMemberName(Base) &&
+        spanOf(Base))
+      return Base.str();
+  }
+  auto acceptAlias = [&](std::string Aliased) -> std::string {
+    if (Aliased.empty())
+      return {};
+    if (StringRef(Aliased).equals_insensitive("NOP"))
+      return "NOP";
+    if (isResidualFieldSlotName(Aliased) || isGeneratedMemberName(Aliased))
+      return {};
+    if (spanOf(Aliased))
+      return Aliased;
+    return {};
+  };
+  if (std::string A = acceptAlias(
+          haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/false));
+      !A.empty())
+    return A;
+  return acceptAlias(
+      haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/true));
 }
 
 /// True when register-operand classes match. Immediates compare kind only
@@ -178,40 +229,13 @@ unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
   if (LogicalOpc >= MII.getNumOpcodes())
     return 0;
   const StringRef Raw = occupancyOpcodeName(LogicalOpc);
-  if (isResidualFieldSlotName(Raw))
+  const std::string Log = catalogOccupancyName(Raw);
+  if (Log.empty())
     return 0;
-  // Exact catalog name, then reloc `_W` compact span. Do not recover a
-  // logical by stripping `_S*` (AIE MultiSlot alts, AIEMCFormats.h:376-379).
-  auto spanFor = [](StringRef Name) -> const haydn::format_e::FormatEAltSpan * {
-    std::string Key = Name.str();
-    if (const haydn::format_e::FormatEAltSpan *S =
-            haydn::format_e::findAltSpan(Key.c_str()))
-      return S;
-    if (Name.ends_with("_W")) {
-      Key = Name.drop_back(2).str();
-      return haydn::format_e::findAltSpan(Key.c_str());
-    }
-    return nullptr;
-  };
-  if (Raw.equals_insensitive("NOP"))
+  if (StringRef(Log).equals_insensitive("NOP"))
     return formatENopMemberAtIndex(Index);
-  const haydn::format_e::FormatEAltSpan *Span = spanFor(Raw);
-  std::string Log = Raw.str();
-  if (!Span) {
-    // Public-logical aliases (LD32 → S_LW_WITH_IMM) share a catalog span.
-    // peelLogicalOpcodeName is alias recovery only; FieldSlots already
-    // returned 0 above.
-    Log = haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/false);
-    if (StringRef(Log).equals_insensitive("NOP"))
-      return formatENopMemberAtIndex(Index);
-    Span = haydn::format_e::findAltSpan(Log.c_str());
-    if (!Span || Span->Count == 0) {
-      Log = haydn::format_e::peelLogicalOpcodeName(Raw, /*StripWide=*/true);
-      if (StringRef(Log).equals_insensitive("NOP"))
-        return formatENopMemberAtIndex(Index);
-      Span = haydn::format_e::findAltSpan(Log.c_str());
-    }
-  }
+  const haydn::format_e::FormatEAltSpan *Span =
+      haydn::format_e::findAltSpan(Log.c_str());
   if (!Span || Span->Count == 0)
     return 0;
   const MCInstrDesc &LogDesc = MII.get(LogicalOpc);
@@ -343,24 +367,11 @@ const std::vector<unsigned> *cachedFormatEOnlyAlts(unsigned Opcode) {
 }
 
 bool formatELogicalIsModeOnly(unsigned Opcode, uint8_t WantMode) {
-  const StringRef Raw = occupancyOpcodeName(Opcode);
-  if (isResidualFieldSlotName(Raw))
+  const std::string Log = catalogOccupancyName(occupancyOpcodeName(Opcode));
+  if (Log.empty() || StringRef(Log).equals_insensitive("NOP"))
     return false;
   const haydn::format_e::FormatEAltSpan *Span =
-      haydn::format_e::findAltSpan(Raw.str().c_str());
-  if (!Span || Span->Count == 0) {
-    // Reloc `_W` compact span, then public-logical aliases. Residual `_S*`
-    // already returned false — this is catalog occupancy, not FieldSlot
-    // row recovery and not child-count identity.
-    std::string Log = Raw.str();
-    if (Raw.ends_with("_W"))
-      Log = Raw.drop_back(2).str();
-    Span = haydn::format_e::findAltSpan(Log.c_str());
-    if (!Span || Span->Count == 0) {
-      Log = haydn::format_e::peelLogicalOpcodeName(Raw);
-      Span = haydn::format_e::findAltSpan(Log.c_str());
-    }
-  }
+      haydn::format_e::findAltSpan(Log.c_str());
   if (!Span || Span->Count == 0)
     return false;
   bool SawWant = false;
@@ -413,10 +424,9 @@ unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes) {
   // AIE emitBundle (AIEBaseAsmParser.h:164-180) takes Format->Opcode from
   // getFormatOrNull / PacketFormats::getFormat first-covering (smallest
   // row that covers occupancy), not child cardinality. Haydn overlay:
-  // generated Mode-only membership + unit cover + family EntryCapacity.
+  // generated Mode-only membership + assignFormatEMemberEntries (MemberId
+  // + EntryIdx). Extra NOP pads are not occupancy.
   const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
-  const haydn::format_e::FamilyRecords Fam =
-      haydn::format_e::getDefaultFamilyRecords();
   SmallVector<std::string, 3> Logs;
   bool AnyE3Only = false;
   bool AnyE2Only = false;
@@ -424,11 +434,18 @@ unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes) {
     if (Opc == 0 || Opc == Haydn::NOP)
       continue;
     const StringRef Name = MII.getName(Opc);
-    if (isResidualFieldSlotName(Name) || haydnFindFormatEMemberByOpcode(Opc))
+    if (isResidualFieldSlotName(Name) || isGeneratedMemberName(Name) ||
+        haydnFindFormatEMemberByOpcode(Opc))
       return 0;
-    // Catalog occupancy name for unit cover. Residual FieldSlot already
-    // returned 0 — this is not `_S*` row recovery and not child count.
-    Logs.emplace_back(haydn::format_e::peelLogicalOpcodeName(Name));
+    // Catalog occupancy / MemberId span. Empty is fail-closed — do not
+    // treat an unknown name as unconstrained and then pick TWO vs THREE
+    // from child count.
+    std::string Log = catalogOccupancyName(Name);
+    if (Log.empty())
+      return 0;
+    if (StringRef(Log).equals_insensitive("NOP"))
+      continue;
+    Logs.emplace_back(std::move(Log));
     if (haydnFormatELogicalIsE3Only(Opc))
       AnyE3Only = true;
     if (haydnFormatELogicalIsE2Only(Opc))
@@ -436,34 +453,26 @@ unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes) {
   }
   if (AnyE2Only && AnyE3Only)
     return 0;
-  // N is generated EntryCapacity occupancy, not TWO vs THREE identity.
-  // AnyE3Only below refuses size≤1→E2 for an E3-only logical. When both
-  // Modes cover, PacketFormats first-covering (AIE getFormat) is the
-  // smaller product row.
-  const unsigned N = Logs.size();
-  if (AnyE2Only && N > Fam.E2EntryCapacity)
-    return 0;
-  if (AnyE3Only && N > Fam.E3EntryCapacity)
-    return 0;
-  const bool CoverE2 =
-      haydn::format_e::logicalsHaveUnitCoverForMode(Logs, /*Mode=*/0);
-  const bool CoverE3 =
-      haydn::format_e::logicalsHaveUnitCoverForMode(Logs, /*Mode=*/1);
-  const bool FitsE2 = !AnyE3Only && CoverE2 && N <= Fam.E2EntryCapacity;
-  const bool FitsE3 = !AnyE2Only && CoverE3 && N <= Fam.E3EntryCapacity;
-  if (AnyE3Only) {
-    if (!FitsE3)
-      return 0;
-    return Haydn::BUNDLE_E96_THREE_ENTRY;
-  }
-  if (AnyE2Only) {
-    if (!FitsE2)
-      return 0;
+  // All-NOP text is the generated E2 idle cycle (NOP in every E2 entry).
+  // Not a child-count TWO vs THREE choice.
+  if (Logs.empty())
+    return haydnHasCanonicalIdleParcel() ? Haydn::BUNDLE_E96_TWO_ENTRY : 0;
+  // Membership assignment is row identity. Do not admit E2 because N<=2
+  // or E3 because N<=3 — assignFormatEMemberEntries fails closed when the
+  // generated members cannot occupy that Mode's entries.
+  const bool PlaceE2 =
+      haydn::format_e::assignFormatEMemberEntries(Logs, /*Mode=*/0).has_value();
+  const bool PlaceE3 =
+      haydn::format_e::assignFormatEMemberEntries(Logs, /*Mode=*/1).has_value();
+  if (AnyE3Only)
+    return PlaceE3 ? Haydn::BUNDLE_E96_THREE_ENTRY : 0;
+  if (AnyE2Only)
+    return PlaceE2 ? Haydn::BUNDLE_E96_TWO_ENTRY : 0;
+  // PacketFormats first-covering (AIE getFormat): smaller product row when
+  // both Modes place.
+  if (PlaceE2)
     return Haydn::BUNDLE_E96_TWO_ENTRY;
-  }
-  if (FitsE2)
-    return Haydn::BUNDLE_E96_TWO_ENTRY;
-  if (FitsE3)
+  if (PlaceE3)
     return Haydn::BUNDLE_E96_THREE_ENTRY;
   return 0;
 }
@@ -645,6 +654,49 @@ haydnFormatEKeepOperands(
   return std::nullopt;
 }
 
+unsigned haydnFormatEHwloopImmFieldShift(int MemberId) {
+  using namespace haydn::format_e;
+  if (MemberId < 0 || static_cast<unsigned>(MemberId) >= FormatEMemberCount)
+    return 0;
+  const FormatEMemberRec &Mem = FormatEMembers[MemberId];
+  if (!Mem.TypeName)
+    return 0;
+  const StringRef TypeName = Mem.TypeName;
+  if (TypeName != "HWLRIII" && TypeName != "HWLRIIR")
+    return 0;
+  // Off1 is 6 bits; Off2 is 12. Both layout rows share ValueShift=2.
+  const HaydnReloc::FixupField Field{HaydnReloc::kUnspecifiedFieldLsb, 6};
+  const HaydnReloc::RelocKind R = HaydnReloc::findFixupFromFixupFields(
+      TypeName, Mem.Opcode, Field, /*FormatBytes=*/12,
+      /*IsLSUnit=*/false);
+  if (R == HaydnReloc::RelocKind::Invalid)
+    return 0;
+  return HaydnReloc::getRelocFieldInfo(R).ValueShift;
+}
+
+/// Logical hwloop_off operands are dump bytes; generated HWLR members encode
+/// field units (uimm6/uimm12). Convert dump bytes >> ValueShift. Already-member
+/// as-is fill must not convert (fields are already units).
+static bool applyHwloopDumpBytesToMemberFields(
+    const haydn::format_e::FormatEMemberRec &Mem, MCInst &Out) {
+  const unsigned Shift = haydnFormatEHwloopImmFieldShift(Mem.MemberId);
+  if (Shift == 0)
+    return true;
+  const unsigned Align = 1u << Shift;
+  for (unsigned OI : {1u, 2u}) {
+    if (OI >= Out.getNumOperands())
+      break;
+    MCOperand &Op = Out.getOperand(OI);
+    if (!Op.isImm())
+      continue;
+    const int64_t Imm = Op.getImm();
+    if (Imm < 0 || (static_cast<uint64_t>(Imm) & (Align - 1u)))
+      return false;
+    Op.setImm(Imm >> Shift);
+  }
+  return true;
+}
+
 const haydn::format_e::FormatEMemberRec *
 haydnFindFormatEMemberByOpcode(unsigned Opc) {
   if (Opc == 0 || Opc == Haydn::NOP)
@@ -674,12 +726,12 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
 
   // Residual FieldSlots never recover occupancy here. AIE MultiSlot alts
   // (AIEMCFormats.h:376-379) are generated; suffix peel is not a fill.
-  {
-    const StringRef LogName = MII.getName(Logical.getOpcode());
-    if (LogName.ends_with("_S0") || LogName.ends_with("_S1") ||
-        LogName.ends_with("_S2"))
-      return false;
-  }
+  if (isResidualFieldSlotName(MII.getName(Logical.getOpcode())))
+    return false;
+
+  auto finishLogicalFill = [&]() -> bool {
+    return applyHwloopDumpBytesToMemberFields(Mem, Out);
+  };
 
   // Typed as-is path: SubInst is already the private Format E member opcode
   // with wire-shaped operands — copy Desc operands without bag-sort rebuild.
@@ -727,7 +779,7 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
         Out.setOpcode(MemberOpc);
         for (unsigned OI = 0; OI != Need; ++OI)
           Out.addOperand(Logical.getOperand(OI));
-        return true;
+        return finishLogicalFill();
       }
     }
   }
@@ -807,7 +859,7 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
     if (OldN == 0 && NewN == 0 && Have == 0) {
       Out.clear();
       Out.setOpcode(MemberOpc);
-      return true;
+      return finishLogicalFill();
     }
     // Parser may omit a tied writeback that is not in the AsmString
     // (d_lqhwua_post $rtd, $ar_sel, $rs1, $rs2, $dir_sel has no $rs1_wb).
@@ -831,11 +883,11 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
           Keep.push_back(I);
         }
         if (DroppedHole && emitKeep(Keep))
-          return true;
+          return finishLogicalFill();
       }
       if (auto Keep = haydnFormatEKeepOperands(OldDesc, NewDesc, kindOk))
         if (emitKeep(*Keep))
-          return true;
+          return finishLogicalFill();
     }
   }
 

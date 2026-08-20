@@ -27,16 +27,19 @@
 # NO-COUNT-PRINTER-NOT: Children.size() > 2
 # NO-COUNT-PRINTER: BUNDLE_E96_TWO_ENTRY
 # NO-COUNT-PRINTER: BUNDLE_E96_THREE_ENTRY
-# NO-COUNT-DISASM: HaydnRelocLayout.h
-# NO-COUNT-DISASM: findFixupFromFixupFields
-# NO-COUNT-DISASM: getRelocFieldInfo
 # NO-COUNT-DISASM: BUNDLE_E96_TWO_ENTRY
 # NO-COUNT-DISASM: BUNDLE_E96_THREE_ENTRY
-# NO-COUNT-DISASM-HDR: HaydnRelocLayout.h
+# NO-COUNT-DISASM: haydnFormatEHwloopImmFieldShift
+# NO-COUNT-DISASM: haydnFindFormatEMemberByOpcode
 # NO-COUNT-EMIT: haydnSelectStandaloneFormatEOpcode
 # NO-COUNT-EMIT-NOT: auto tryMode
 # NO-COUNT-EMIT: refuse skip-Finalize
 # NO-COUNT-FILL: haydnSelectStandaloneFormatEOpcode
+# NO-COUNT-FILL: assignFormatEMemberEntries
+# NO-COUNT-FILL-NOT: N <= Fam.E2EntryCapacity
+# NO-COUNT-FILL-NOT: N <= Fam.E3EntryCapacity
+# NO-COUNT-FILL: haydnFormatEHwloopImmFieldShift
+# NO-COUNT-FILL: findFixupFromFixupFields
 # NO-COUNT-FILL: haydnFillFormatEMemberInst
 # NO-COUNT-FILL: Class-bag reconstruction is deleted
 

@@ -27,6 +27,7 @@
 # NO-PARSER-PEEL: isPrivatePlacementOpcode
 # NO-PARSER-PEEL-NOT: peelLogicalOpcodeName
 # NO-PARSER-PEEL-NOT: getLogicalBaseOpcode
+# NO-PARSER-PEEL-NOT: UseE3
 # NO-PRINT-PEEL-NOT: peelLogicalOpcodeName
 # NO-PRINT-PEEL-NOT: HaydnFormatERecords.h
 

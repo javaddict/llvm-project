@@ -5,6 +5,10 @@
 # RUN:   -filetype=obj %t/st64.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=ST64
 # RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
 # RUN:   -filetype=obj %t/move32-3op.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=MOVE32
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/move32-bundle.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=MOVE32B
+# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/mixed.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=MIXED
 # RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
 # RUN:   -filetype=obj %t/typed.mir -o %t.typed.o
 # RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.typed.o | FileCheck %s --check-prefix=TYPED
@@ -18,11 +22,15 @@
 # Store-last ST64 is LOADSTORE0 e0-only — skip-Finalize cannot rebind onto
 # membership e2. Unbundled MOVE32 3-op (rd, rs1, rs2) must not reconstruct
 # the 2-op member via trailing-use drop — that keep-map is Finalize only.
-# typed: generated MOVE32_E2_E0_ALU0_R already wire-shaped.
+# Bundled MOVE32 3-op and mixed MemberId+logical are skip-Finalize leaks:
+# encodeBundle refuses DFS/fill. typed: generated MOVE32_E2_E0_ALU0_R
+# already wire-shaped. encodeSlotSubInst stays serialize-only.
 #
 # EXTRA: is not a generated Format E member{{.*}}refuse skip-Finalize
 # ST64: is not a generated Format E member{{.*}}refuse skip-Finalize
 # MOVE32: one-parcel placement failed{{.*}}refuse sequential E2 singleton split
+# MOVE32B: is not a generated Format E member{{.*}}refuse skip-Finalize
+# MIXED: is not a generated Format E member{{.*}}refuse skip-Finalize
 # TYPED-LABEL: <skip_finalize_move32_memberid>:
 # TYPED: move32
 # TYPED: jalr
@@ -75,6 +83,39 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r15
     $r2 = MOVE32 $r0, $r1, implicit-def dead $sfr
+    RET implicit $r15
+
+#--- move32-bundle.mir
+--- |
+  define void @skip_finalize_move32_bundle() { ret void }
+...
+---
+name:            skip_finalize_move32_bundle
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r2 = MOVE32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+#--- mixed.mir
+--- |
+  define void @skip_finalize_mixed_memberid_logical() { ret void }
+...
+---
+name:            skip_finalize_mixed_memberid_logical
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    }
     RET implicit $r15
 
 #--- typed.mir

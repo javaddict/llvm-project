@@ -60,12 +60,19 @@ class MCSlotInfo;
 bool haydnFormatELogicalIsE3Only(unsigned Opcode);
 bool haydnFormatELogicalIsE2Only(unsigned Opcode);
 
-/// Standalone braced-bundle composite opcode from generated membership and
-/// unit cover. PacketFormats first-covering is the smaller product row when
-/// both Modes fit (AIE PacketFormats::getFormat, AIEMCFormats.cpp:29-36 /
-/// AIEBaseAsmParser.h:164-180 emitBundle). Extra NOP pads are not occupancy.
-/// Returns 0 when no product row covers.
+/// Standalone braced-bundle composite opcode from generated membership.
+/// assignFormatEMemberEntries is row identity (MemberId + EntryIdx), not
+/// child cardinality. PacketFormats first-covering is the smaller product
+/// row when both Modes place (AIE PacketFormats::getFormat,
+/// AIEMCFormats.cpp:29-36 / AIEBaseAsmParser.h:164-180 emitBundle). Extra
+/// NOP pads are not occupancy. Returns 0 when no product row covers.
 unsigned haydnSelectStandaloneFormatEOpcode(ArrayRef<unsigned> LogicalOpcodes);
+
+/// RelocLayout ValueShift for Format E HWLR Off1/Off2 word fields.
+/// 0 when \p MemberId is not HWLRIII/HWLRIIR. Dump bytes = field << shift.
+/// AIE getSImmOpValueXStep (AIEBaseMCCodeEmitter.h:127-150) binds Shift on
+/// the operand class; Haydn members use uimm so fill/decode consume this.
+unsigned haydnFormatEHwloopImmFieldShift(int MemberId);
 
 /// Closed FieldSlot / public-logical → generated member operand keep-map.
 /// Same law for Finalize cutover and MC fill (AIE serializes typed members

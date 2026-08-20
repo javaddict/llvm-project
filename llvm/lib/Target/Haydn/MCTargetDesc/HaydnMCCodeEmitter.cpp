@@ -19,7 +19,9 @@
 //   AIEBaseMCCodeEmitter.cpp:122-184 encode nested sub-inst from member Desc
 //
 // `encodeInstruction` routing (serialize-only / fail-closed):
-//   BUNDLE_E96_* product      -> one-parcel joint place + emit; never multi-parcel
+//   BUNDLE_E96_* product:
+//     typed MemberId children -> trySerializeFormatECompositeAsIs (never DFS/fill)
+//     public logicals         -> standalone one-parcel place (hand-asm only)
 //   Haydn::BUNDLE residual     -> encodeBundle: typed members scatter by
 //                               (Mode, EntryIdx) as-is; public logicals fatal
 //   standalone real opcode    -> wrap as one Format E row (NOP in unused entries)
@@ -129,11 +131,16 @@ static bool isResidualFieldSlotOpcodeName(StringRef Name) {
 static std::string formatELogicalName(StringRef Name);
 static const FormatEMemberRec *findFormatEMemberByOpcode(unsigned Opc);
 static bool isFormatENopOpcode(unsigned Opc, const MCInstrInfo &MII);
-/// Rebuild \p In as one Format E parcel with golden entry assignment.
-/// Prefer sequential as-is serialize for committed BUNDLE_E96_* rows; residual
-/// public logicals place on haydnSelectStandaloneFormatEOpcode only (never
-/// Mode retry from child count). Returns false if no injective one-parcel
-/// assignment exists (caller must fail closed -- never multi-parcel).
+/// Compiler MemberId serialize: bind each real by generated (Mode, EntryIdx)
+/// and NOP-pad holes. Never DFS, name peel, or fillFormatEMemberInst.
+static bool trySerializeFormatECompositeAsIs(const MCInst &In,
+                                             const MCInstrInfo &MII,
+                                             const MCRegisterInfo &MRI,
+                                             MCInst &Out,
+                                             SmallVectorImpl<MCInst> &Storage);
+/// Standalone public logicals: haydnSelectStandaloneFormatEOpcode then
+/// one-parcel assign (never Mode retry from child count). False = fail
+/// closed (never multi-parcel). Committed MemberId never enters here.
 static bool buildFormatEPlacedComposite(const MCInst &In,
                                         const MCInstrInfo &MII,
                                         const MCRegisterInfo &MRI, MCInst &Out,
@@ -191,9 +198,9 @@ private:
                          APInt &Op, SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const;
 
-  // Residual TargetOpcode::BUNDLE: pack children as product Format E parcels
-  // (E2/E3 placement + registry EncodedBytes). Empty/all-NOP uses canonical
-  // idle when registered.
+  // Residual TargetOpcode::BUNDLE: typed MemberId children scatter as-is.
+  // Public logicals fatal (skip-Finalize never DFS/fill). Empty/all-NOP uses
+  // canonical idle when registered.
   void encodeBundle(const MCInst &MBI, SmallVectorImpl<char> &CB,
                     SmallVectorImpl<MCFixup> &Fixups,
                     const MCSubtargetInfo &STI) const;
@@ -290,10 +297,10 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
           /*GenCrashDiag=*/false);
     }
 
-    // One compiler cycle → one E96 parcel. Typed MemberId children serialize
-    // as-is; standalone public logicals may one-parcel DFS. Never split into
-    // sequential E2 singletons (that rewrote layout size after BranchRelaxation
-    // / FixupHwLoops).
+    // One compiler cycle → one E96 parcel. Never split into sequential E2
+    // singletons (that rewrote layout size after BranchRelaxation /
+    // FixupHwLoops). Committed MemberId children serialize as-is and never
+    // enter standalone DFS / fill. Public logicals (hand-asm) one-parcel DFS.
     SmallVector<MCInst, 4> PlaceStorage;
     MCInst Placed;
     auto emitOneComposite = [&](const MCInst &Comp) {
@@ -325,6 +332,52 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
       haydnEmitFormatEParcelLE(Word, CB);
     };
 
+    // Isolate committed MemberId as-is from standalone DFS: any private
+    // child means serialize-only (AIEBaseMCCodeEmitter.cpp:45-68). Mixed
+    // private+logical is a skip-Finalize leak — never fill/peel.
+    bool AnyPrivate = false;
+    bool AnyPublicReal = false;
+    for (unsigned I = 0, E = MI.getNumOperands(); I != E; ++I) {
+      const MCOperand &Op = MI.getOperand(I);
+      if (!Op.isInst() || !Op.getInst())
+        continue;
+      const unsigned ChildOpc = Op.getInst()->getOpcode();
+      if (isFormatENopOpcode(ChildOpc, MII))
+        continue;
+      if (isResidualFieldSlotOpcodeName(MII.getName(ChildOpc))) {
+        report_fatal_error(
+            Twine("Haydn MC: residual FieldSlot '") +
+                MII.getName(ChildOpc) +
+                "' cannot enter standalone DFS / bag-sort — refuse name peel",
+            /*GenCrashDiag=*/false);
+      }
+      if (findFormatEMemberByOpcode(ChildOpc))
+        AnyPrivate = true;
+      else
+        AnyPublicReal = true;
+    }
+    if (AnyPrivate) {
+      if (AnyPublicReal) {
+        report_fatal_error(
+            "Haydn MC: committed Format E private member cannot enter "
+            "standalone DFS re-place — refuse name recovery / row retry "
+            "(serialize-only)",
+            /*GenCrashDiag=*/false);
+      }
+      if (!trySerializeFormatECompositeAsIs(MI, MII, *Ctx.getRegisterInfo(),
+                                            Placed, PlaceStorage)) {
+        report_fatal_error(
+            "Haydn MC: committed Format E private member cannot enter "
+            "standalone DFS re-place — refuse name recovery / row retry "
+            "(serialize-only)",
+            /*GenCrashDiag=*/false);
+      }
+      emitOneComposite(Placed);
+      return;
+    }
+
+    // Standalone/hand-asm public logicals only. Compiler TargetOpcode::BUNDLE
+    // residuals never reach here (encodeBundle wall).
     if (buildFormatEPlacedComposite(MI, MII, *Ctx.getRegisterInfo(), Placed,
                                     PlaceStorage)) {
       emitOneComposite(Placed);
@@ -558,11 +611,10 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
 // AIEBaseMCCodeEmitter.cpp:134-162 encodes SubInst Desc as-is;
 // SubInstFormat/slot geometry come from SubInst.getOpcode().
 //
-// Placement (buildFormatEPlacedComposite) emits generated private members
-// or NOP. This function serializes that Desc. Bare logical children are a
-// placement bug — fail closed, no name peel or rebuild.
-// MemberId → Haydn::<E96 member opcode> (generated with live TD members).
-// File scope so typed serialize/lookup and fillFormatEMemberInst share one map.
+// Placement emits generated private members or NOP. This function serializes
+// that Desc. Bare logical children are a placement bug — fail closed, no
+// name peel or rebuild. MemberId → Haydn::<E96 member opcode>.
+// File scope so typed serialize/lookup and standalone fill share one map.
 #define GET_FORMAT_E_MEMBER_OPCODES
 #include "HaydnGenFormatEMemberOpcodes.inc"
 
@@ -612,8 +664,9 @@ static bool trySerializeFormatECompositeAsIs(const MCInst &In,
     return false;
   const uint8_t Mode = static_cast<uint8_t>(IsE3 ? 1 : 0);
   const unsigned EntryCount = Mode ? 3u : 2u;
-  if (In.getNumOperands() < EntryCount)
-    return false;
+  // Operand count is occupancy, not row width. Missing entries are
+  // encode-time CompletionState NOP (AIEBaseMCCodeEmitter.cpp:45-68
+  // serializes the packet as-is and pads empty slots).
   (void)MRI;
 
   SmallVector<const MCInst *, 3> ChildAt(EntryCount, nullptr);
@@ -681,21 +734,16 @@ static bool trySerializeFormatECompositeAsIs(const MCInst &In,
   return false;
 }
 
-/// Place real children onto Format E entries with unit injectivity.
-/// As-is first. Typed private members bind by committed EntryIdx, never DFS.
-/// Bare hand-asm is the separately typed standalone entry: row from
-/// haydnSelectStandaloneFormatEOpcode, then one-parcel assignFormatEMemberEntries.
-/// Compiler composites never re-enter this DFS (SawPrivate / encodeBundle wall).
+/// Standalone/hand-asm one-parcel DFS only. Committed MemberId composites
+/// never enter this function (encodeInstruction as-is wall + encodeBundle).
+/// Row from haydnSelectStandaloneFormatEOpcode, then assignFormatEMemberEntries.
+/// Peer: AIE emitBundle first-covering (AIEBaseAsmParser.h:164-180).
 static bool buildFormatEPlacedComposite(const MCInst &In,
                                         const MCInstrInfo &MII,
                                         const MCRegisterInfo &MRI, MCInst &Out,
                                         SmallVectorImpl<MCInst> &Storage) {
-  if (trySerializeFormatECompositeAsIs(In, MII, MRI, Out, Storage))
-    return true;
-
-  // Typed private Format E members must serialize as-is (EntryIdx bind);
-  // refuse private leakage into name-recovery DFS. Bare hand-asm may
-  // one-parcel DFS below.
+  // Defense: typed private members serialize as-is in encodeInstruction.
+  // Refuse leakage into name-recovery DFS.
   bool SawPrivate = false;
   for (unsigned I = 0, E = In.getNumOperands(); I != E; ++I) {
     const MCOperand &Op = In.getOperand(I);
@@ -800,6 +848,7 @@ static std::string formatELogicalName(StringRef Name) {
 ///   * typed members serialize as-is (trySerializeFormatECompositeAsIs)
 ///   * compiler TargetOpcode::BUNDLE residual logicals fatal in encodeBundle
 ///   * encodeSlotSubInst never calls this (serialize-only)
+///   * committed MemberId opcodes return false (never as-is copy here)
 ///   * MOVE32/ABS32 trailing extra and tied MAC extra are Finalize keep-map,
 ///     not bag-sort reconstruction
 /// Hand-asm MOVE32 AsmString is 2-op and matches positional below.
@@ -817,22 +866,15 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
   const unsigned Need = MemDesc.getNumOperands();
   const unsigned Have = Logical.getNumOperands();
 
-  // Residual FieldSlots never bag-sort through this fill. Compiler typed
-  // MemberId composites never reach this helper (trySerialize / encodeSlot).
+  // Residual FieldSlots never bag-sort through this fill.
   if (isResidualFieldSlotOpcodeName(MII.getName(Logical.getOpcode())))
     return false;
 
-  // As-is: already the private member. Compiler typed composites never
-  // reach this helper (trySerializeFormatECompositeAsIs / encodeSlotSubInst).
-  if (Logical.getOpcode() == MemberOpc) {
-    if (Have < Need)
-      return false;
-    Out.clear();
-    Out.setOpcode(MemberOpc);
-    for (unsigned I = 0; I != Need; ++I)
-      Out.addOperand(Logical.getOperand(I));
-    return true;
-  }
+  // Committed MemberId never fills. trySerializeFormatECompositeAsIs and
+  // encodeSlotSubInst own that path. Standalone DFS only sees public logicals.
+  if (findFormatEMemberByOpcode(Logical.getOpcode()) ||
+      Logical.getOpcode() == MemberOpc)
+    return false;
 
   // Positional: count and kinds already match. Hand-asm MOVE32 is 2-op
   // from AsmString ("move32 rd, rs1"); the generated member is 2-op.

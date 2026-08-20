@@ -35,7 +35,6 @@
 #include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
-#include "MCTargetDesc/HaydnRelocLayout.h"
 #include "TargetInfo/HaydnTargetInfo.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -312,30 +311,6 @@ static uint64_t extractFormatEBits(const APInt &Word, unsigned Lo,
   return Word.extractBitsAsZExtValue(Width, Lo);
 }
 
-/// Dump-byte scale from the generated member TypeName, not a logical-name
-/// peel. RelocLayout ValueShift on FormatEMembers TypeName/Opcode (emitter
-/// getMemberFixupKind peer). Only HWLRIII/HWLRIIR rows carry Off1/Off2
-/// word fields (ValueShift=2); branch/JAL stay field==byte (ValueShift=0).
-static unsigned formatEControlImmByteShift(int MemberId) {
-  using namespace haydn::format_e;
-  if (MemberId < 0 || static_cast<unsigned>(MemberId) >= FormatEMemberCount)
-    return 0;
-  const FormatEMemberRec &Mem = FormatEMembers[MemberId];
-  if (!Mem.TypeName)
-    return 0;
-  const StringRef TypeName = Mem.TypeName;
-  if (TypeName != "HWLRIII" && TypeName != "HWLRIIR")
-    return 0;
-  // Off1 is 6 bits; Off2 is 12. Both layout rows share ValueShift=2.
-  const HaydnReloc::FixupField Field{HaydnReloc::kUnspecifiedFieldLsb, 6};
-  const HaydnReloc::RelocKind R = HaydnReloc::findFixupFromFixupFields(
-      TypeName, Mem.Opcode, Field, /*FormatBytes=*/12,
-      /*IsLSUnit=*/false);
-  if (R == HaydnReloc::RelocKind::Invalid)
-    return 0;
-  return HaydnReloc::getRelocFieldInfo(R).ValueShift;
-}
-
 /// One resolved Format E entry (inverse hit or soft-NOP underfill).
 struct FormatEResolvedEntry {
   StringRef Logical;
@@ -565,12 +540,14 @@ static DecodeStatus tryDecodeFormatE(MCInst &Instr, uint64_t &Size,
                                DisAsm.getSubtargetInfo());
       }
       if (DS != MCDisassembler::Fail) {
-        // Format E member DecoderMethods emit raw field units. Dump bytes
-        // follow RelocLayout ValueShift on the inverse record (hwloop
-        // Off1/Off2 word fields; branch/JAL stay field==byte).
+        // Member uimm Off1/Off2 are field units. Logical hwloop_off already
+        // applied DecoderMethod Shift. Do not scale a logical, and do not
+        // retry Imm/2 or Imm/4. Scale is MemberId RelocLayout, not a
+        // child-count or `_S*` peel.
         const unsigned ByteShift =
-            formatEControlImmByteShift(Resolved.MemberId);
-        if (ByteShift != 0) {
+            haydnFormatEHwloopImmFieldShift(Resolved.MemberId);
+        if (ByteShift != 0 &&
+            haydnFindFormatEMemberByOpcode(Decoded.getOpcode())) {
           for (unsigned OI : {1u, 2u}) {
             if (OI >= Decoded.getNumOperands())
               break;
