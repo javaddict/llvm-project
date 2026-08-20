@@ -618,8 +618,11 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
 #define GET_FORMAT_E_MEMBER_OPCODES
 #include "HaydnGenFormatEMemberOpcodes.inc"
 
-// File-scope forward decl: standalone DFS fill (defined later in this TU).
+// File-scope forward decls: standalone DFS fill (defined later in this TU).
 // encodeSlotSubInst never calls this — placement only.
+static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
+                                     const MCInst &Logical,
+                                     const MCInstrInfo &MII);
 static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
                                   const MCInst &Logical, const MCInstrInfo &MII,
                                   const MCRegisterInfo &MRI, MCInst &Out);
@@ -816,7 +819,10 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
       if (!(*Best)[Kid].Mem)
         return false;
       Storage.emplace_back();
-      if (!fillFormatEMemberInst(*(*Best)[Kid].Mem, *Reals[Kid], MII, MRI,
+      // Compiler extra-op (MOVE32 3-op vs member 2-op; tied MAC acc) is
+      // Finalize keep-map. Never enter fill / bag-sort for that shape.
+      if (isCompilerKeepMapExtraOp(*(*Best)[Kid].Mem, *Reals[Kid], MII) ||
+          !fillFormatEMemberInst(*(*Best)[Kid].Mem, *Reals[Kid], MII, MRI,
                                  Storage.back()))
         return false;
       Out.addOperand(MCOperand::createInst(&Storage.back()));
@@ -838,10 +844,42 @@ static std::string formatELogicalName(StringRef Name) {
 }
 
 // Entry field packing is TableGen Inst{} on live Format E members
-// (HaydnFormatsE96Members.td.inc). encodeSlotSubInst fills a member MCInst
-// and calls getBinaryCodeForInstr — do not reintroduce hand field packers.
+// (HaydnFormatsE96Members.td.inc). encodeSlotSubInst serializes a placed
+// member MCInst via getBinaryCodeForInstr — do not reintroduce hand field
+// packers or fillFormatEMemberInst.
 
 } // end anonymous namespace (Format E placement helpers)
+
+/// Finalize keep-map extras: MOVE32/ABS32 trailing rs2 and tied MAC/MOVT
+/// acc. Same NumDefs, more logical ops than the generated member. AR-UA
+/// POST / CB writeback change NumDefs and stay in standalone fill. Skip-
+/// Finalize compiler extras never enter fillFormatEMemberInst bag-sort.
+/// Peer: AIE serializes typed members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
+static bool isCompilerKeepMapExtraOp(const FormatEMemberRec &Mem,
+                                     const MCInst &Logical,
+                                     const MCInstrInfo &MII) {
+  if (Mem.MemberId >= FormatEMemberOpcodeCount)
+    return false;
+  const unsigned MemberOpc = FormatEMemberOpcodes[Mem.MemberId];
+  if (MemberOpc == 0)
+    return false;
+  const MCInstrDesc &LogDesc = MII.get(Logical.getOpcode());
+  const MCInstrDesc &MemDesc = MII.get(MemberOpc);
+  const unsigned Need = MemDesc.getNumOperands();
+  const unsigned Have = Logical.getNumOperands();
+  if (LogDesc.getNumDefs() != MemDesc.getNumDefs() || Have == Need ||
+      LogDesc.getNumOperands() <= Need)
+    return false;
+  for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands(); ++I) {
+    if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0)
+      return true;
+  }
+  for (unsigned I = Need; I < Have; ++I) {
+    if (Logical.getOperand(I).isReg())
+      return true;
+  }
+  return false;
+}
 
 /// Standalone DFS fill only (hand-asm BUNDLE_E96_* logicals and bare wrap).
 /// Public-logical / private-member firewall:
@@ -850,7 +888,7 @@ static std::string formatELogicalName(StringRef Name) {
 ///   * encodeSlotSubInst never calls this (serialize-only)
 ///   * committed MemberId opcodes return false (never as-is copy here)
 ///   * MOVE32/ABS32 trailing extra and tied MAC extra are Finalize keep-map,
-///     not bag-sort reconstruction
+///     not bag-sort reconstruction — isCompilerKeepMapExtraOp refuses fill
 /// Hand-asm MOVE32 AsmString is 2-op and matches positional below.
 /// Peer: AIE serializes typed members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
 static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
@@ -874,6 +912,10 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
   // encodeSlotSubInst own that path. Standalone DFS only sees public logicals.
   if (findFormatEMemberByOpcode(Logical.getOpcode()) ||
       Logical.getOpcode() == MemberOpc)
+    return false;
+
+  // Compiler extra-op cutover is Finalize keep-map, not this fill.
+  if (isCompilerKeepMapExtraOp(Mem, Logical, MII))
     return false;
 
   // Positional: count and kinds already match. Hand-asm MOVE32 is 2-op
@@ -915,40 +957,9 @@ static bool fillFormatEMemberInst(const FormatEMemberRec &Mem,
     return true;
   }
 
-  // Compiler extra-op cutover is Finalize keep-map, not this fill:
-  //   * MOVE32/ABS32 trailing rs2 (3-op logical vs 2-op member)
-  //   * tied MAC/MOVT acc ins when the logical carries more ops than
-  //     the generated member
-  // Hand-asm omitted rs2 is Imm 0 (Convert__Reg1_0__Reg1_1__imm_95_0);
-  // that hole, AR-UA POST, CB writeback, and 0-op HINT stay in the
-  // closed standalone keep-map below. Peer: AIE serializes typed
-  // members as-is (AIEBaseMCCodeEmitter.cpp:45-68).
-  const MCInstrDesc &LogDesc = MII.get(Logical.getOpcode());
-  // Same-def extras are MOVE32/ABS32 trailing rs2 or tied MAC acc.
-  // AR-UA POST / CB writeback change NumDefs and stay in the keep-map.
-  if (LogDesc.getNumDefs() == MemDesc.getNumDefs() && Have != Need &&
-      LogDesc.getNumOperands() > Need) {
-    bool AnyTied = false;
-    for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands();
-         ++I) {
-      if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0) {
-        AnyTied = true;
-        break;
-      }
-    }
-    bool TrailingExtraReg = false;
-    for (unsigned I = Need; I < Have; ++I) {
-      if (Logical.getOperand(I).isReg()) {
-        TrailingExtraReg = true;
-        break;
-      }
-    }
-    if (AnyTied || TrailingExtraReg)
-      return false;
-  }
-
   // Standalone-only closed extra-op keep-map (AR-UA POST, CB writeback,
-  // Imm-0 hole, 0-op HINT). Not a class bag-sort.
+  // Imm-0 hole, 0-op HINT). MOVE32/ABS32 trailing extra and tied MAC extra
+  // already returned false above. Not a class bag-sort.
   return haydnFillFormatEMemberInst(Mem, Logical, MII, MRI, Out);
 }
 
