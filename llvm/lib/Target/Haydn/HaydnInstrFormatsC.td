@@ -32,7 +32,7 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 //===----------------------------------------------------------------------===//
 // 48-bit Wide-imm ALU. TableGen size-6 shell; product encode is Format E member.
 //
-// AUDIT : all 9 Fmt48_Wide* classes below are KEPT — each is
+// AUDIT : 8 Fmt48_Wide* classes below are KEPT — each is
 // the base class of >=1 live def in HaydnInstrInfo.td. No class is orphaned.
 // The live derived def(s) per class:
 // Fmt48_WideGPRImm — ADDI32_W, ORI32_W
@@ -40,13 +40,12 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 // Fmt48_WideBR_RI12 — JALR_W, BEQ/BNE/BGE/BGEU/BLT/BLTU_W (6)
 // Fmt48_WideBR_I12 — BEQZ/BNEZ/BGEZ/BLTZ_W (4)
 // Fmt48_WideDR_RI6 — SLLI64, SRLI64, SRAI64
-// Fmt48_WideCSR — CSRW_W
 // Fmt48_WideSET_HWLOOP — SET_HWLOOP_W
 // Fmt48_WideSET_HWLOOP_F2 — SET_HWLOOP_F2_W
 // Fmt48_WideSET_HWLOOP_REG— SET_HWLOOP_REG_W
-// (Verified: `grep -nE '^def [A-Z0-9_]+ +: Fmt48_' HaydnInstrInfo.td` — 21
-// live defs total.) 's "retire Fmt48_*" Cycle-B item cannot complete until
-// those 21 defs are migrated to s0/s1/s2 format classes owned by
+// (Verified: `grep -nE '^def [A-Z0-9_]+ +: Fmt48_' HaydnInstrInfo.td` — 20
+// live defs total. CSRW_W is a HaydnInst<0> shell.) 's "retire Fmt48_*" Cycle-B item cannot complete until
+// those 20 defs are migrated to s0/s1/s2 format classes owned by
 // HaydnFormats*.td no longer carries *_W_S0 projections. Occupancy peels
 // ADDI32_W/ORI32_W / far-branch `_W` to compact Format E members.
 // The legacy `_W` defs persist as selector-emitted opcodes; leaveRegion
@@ -236,28 +235,11 @@ class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
 // Class 100 — Control (§5.8-5.13). CSR + ZERO_GPR + SET_HWLOOP forms.
 //===----------------------------------------------------------------------===//
 
-// 48-bit WIDE CSR format (CSRW_W). TableGen size-6 shell; product encode is
-// Format E CSRW I8 members. Reloc CSRW_W uses the same 2-op keep-map; encode
-// binds typed CSR I8 (FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8), never an
-// untyped NONE fixup.
-// CSRW: `CSR[uimm8] = rs`. bits[47:40]=uimm8 bits[39:16]=spare(0),
-// bits[15:12]=rs, opcode=0x81.
-class Fmt48_WideCSR<bits<8> opcode, dag outs, dag ins, string asmstr,
-                    list<dag> pattern>
-    : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot0_ALU;
-  let TSFlags{2-0} = 0b001;
-  let hasSideEffects = 1;   // CSR accesses are side-effecting
-
-  bits<4> rt;             // GPR (bits[15:12]); CSRR=dest, CSRW=src
-  bits<8> uimm8;          // CSR address (bits[47:40])
-
-  let Inst{47 - 40} = uimm8;
-  let Inst{39 - 16} = 0;  // spare (24b)
-  let Inst{15 - 12} = rt;
-  let Inst{11 - 4} = opcode;
-  let Inst{3 - 0} = 0b1101;
-}
+// Fmt48_WideCSR RETIRED — CSRW_W is a HaydnInst<0> logical shell
+// (HaydnInstrInfo.td). Product encode is Format E CSRW I8 members after
+// MemberId cutover. Reloc uses typed CSR I8 (FIXUP_HAYDN_CSR_UImm8 /
+// R_HAYDN_CSR_UImm8). Peer: AIE MultiSlot_Pseudo has no Inst bits
+// (AIE2InstrFormats.td:23-31); catalog CSRW is the same HaydnInst<0> shape.
 
 // Fmt48_WideZeroGPR RETIRED — its sole def (ZERO_GPR_W)
 // had zero live C++ consumers subsequent.

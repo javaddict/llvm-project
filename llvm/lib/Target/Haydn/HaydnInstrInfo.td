@@ -1390,8 +1390,8 @@ def D_SW_H_WITH_IMM : HaydnInst<4, (outs),
 // Class 100 CTRL: CSRR_W, ZERO_GPR_W + the Fmt48_WideZeroGPR class.
 // Class 101 WIDE-LS: all 14 _WL + the Fmt48_WideLS class.
 // MOVEI_H / MOVEI_L are hand-owned logicals below (no Inst bits). Fmt48_MOVEI is retired.
-// The 21 KEPT defs below (ADDI32_W, ORI32_W, JAL_W, JALR_W, BEQ/BNE/BGE
-// BGEU/BLT/BLTU_W, BEQZ/BNEZ/BGEZ/BLTZ_W, CSRW_W, SET_HWLOOP_W
+// The 20 KEPT Fmt48 defs below (ADDI32_W, ORI32_W, JAL_W, JALR_W, BEQ/BNE/BGE
+// BGEU/BLT/BLTU_W, BEQZ/BNEZ/BGEZ/BLTZ_W, SET_HWLOOP_W
 // F2_W/REG_W, SLLI64/SRLI64/SRAI64) retain live hand-written C++ consumers
 // (Haydn:: enum refs in AsmPrinter, InstrInfo, HazardRecognizer,
 // HardwareLoops, ExpandPseudos, MatInt).
@@ -1563,18 +1563,22 @@ def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
 // case (CSRW@0x10 + SET_HWLOOP) bundles. CSRR_W reads CSR state: model via
 // Uses = [SFR].
 // CSRR_W (zero live C++ consumers) and ZERO_GPR_W (zero
-// live C++ consumers) removed; their Fmt48_WideCSR/Fmt48_WideZeroGPR classes
-// are retained (CSRW_W still uses Fmt48_WideCSR — HaydnAsmPrinter +
-// HaydnHazardRecognizer). CSRR_W's `Uses = [SFR]` comment is preserved for
-// historical context.
+// live C++ consumers) removed; Fmt48_WideCSR/Fmt48_WideZeroGPR are retired.
+// CSRR_W's `Uses = [SFR]` comment is preserved for historical context.
 // CSRW_W — GISel CBR / ExpandPseudos SETCBR form. Operand shape matches
-// catalog CSRW I8 members (uimm8, rs). Immediate and reloc addresses
-// cutover to those members (2-op identity/swap keep-map). Encode binds
-// FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8, never untyped NONE.
-let hasSideEffects = 0, Defs = [SFR] in
-def CSRW_W : Fmt48_WideCSR<0x81, (outs),
-                           (ins uimm8_csr:$uimm8, GPR32:$rt),
-                           "csrw_w\t$uimm8, $rt", []>;
+// catalog CSRW I8 members (uimm8, rs). Not a 48-bit FieldSlot encoding:
+// HaydnInst<0> logical shell like catalog CSRW (isPseudo so MC does not
+// emit a default-zero Inst). AltOccupancy mask 0x1 still places it.
+// Immediate and reloc addresses cutover to I8 members (2-op identity/swap
+// keep-map). Encode binds FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8, never
+// untyped NONE. Peer: AIE MultiSlot_Pseudo isPseudo=1 (AIE2InstrFormats.td:23-31).
+let hasSideEffects = 0, Defs = [SFR], isPseudo = 1, isCodeGenOnly = 0,
+    Itinerary = Slot0_ALU in
+def CSRW_W : HaydnInst<0, (outs),
+                       (ins uimm8_csr:$uimm8, GPR32:$rt),
+                       "csrw_w\t$uimm8, $rt", []> {
+  let TSFlags{2-0} = 0b001;
+}
 
 let hasSideEffects = 0, isNotDuplicable = 1, Defs = [SFR] in {
 def SET_HWLOOP_W : Fmt48_WideSET_HWLOOP<0x88, (outs),
