@@ -12,7 +12,9 @@
 # Dual ADD32+CSRW_W cannot bind in E2 membership order (CSRW is e0 ALU0-only
 # under E2; ADD32 also claims ALU0 at e0). assignFormatEMemberEntries rematches
 # the same two kids onto E3 (ADD32 e0 ALU2 + CSRW e1 ALU1) and restamps the
-# row. E3 singleton takes an E3 e0 CSRW I8 member.
+# row. An unstamped dual uses the generated unit-cover occupancy (not a
+# child-count E2 invent) so cutover can bind MemberId. E3 singleton takes
+# an E3 e0 CSRW I8 member. Bare CSRW_W wraps then cutovers the same I8 member.
 
 # RELOC: R_HAYDN_CSR_UImm8 g
 # RELOC-NOT: R_HAYDN_8
@@ -24,6 +26,9 @@
   define void @csrw_w_reloc_e3() { ret void }
   define void @csrw_w_reloc_extra_cbr() { ret void }
   define void @csrw_w_reloc_dual_add32() { ret void }
+  define void @csrw_w_reloc_unstamped() { ret void }
+  define void @csrw_w_reloc_dual_unstamped() { ret void }
+  define void @csrw_w_reloc_bare() { ret void }
 ...
 ---
 name:            csrw_w_reloc_memberid
@@ -86,5 +91,50 @@ body:             |
       $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
       CSRW_W @g, $r3, implicit-def $sfr
     }
+    RET implicit $r15
+...
+---
+name:            csrw_w_reloc_unstamped
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; MIR-LABEL: name: csrw_w_reloc_unstamped
+    ; MIR: CSRW_E2_E0_ALU0_I8
+    ; MIR-NOT: CSRW_W
+    BUNDLE implicit $r1, implicit-def $sfr {
+      CSRW_W @g, $r1, implicit-def $sfr
+    }
+    RET implicit $r15
+...
+---
+name:            csrw_w_reloc_dual_unstamped
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r3, $r15
+    ; MIR-LABEL: name: csrw_w_reloc_dual_unstamped
+    ; MIR: ADD32_E3_E0_ALU2_RR
+    ; MIR: CSRW_E3_E1_ALU1_I8
+    ; MIR-NOT: CSRW_W
+    BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r3 {
+      $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+      CSRW_W @g, $r3, implicit-def $sfr
+    }
+    RET implicit $r15
+...
+---
+name:            csrw_w_reloc_bare
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; MIR-LABEL: name: csrw_w_reloc_bare
+    ; MIR: CSRW_E2_E0_ALU0_I8
+    ; MIR-NOT: CSRW_W
+    CSRW_W @g, $r1, implicit-def $sfr
     RET implicit $r15
 ...

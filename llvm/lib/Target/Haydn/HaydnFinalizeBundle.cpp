@@ -921,23 +921,30 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
       if (Row && HasCompletion)
         continue;
       if (!Row) {
-        // Missing-row: FieldSlot children need a row so cutover can bind.
-        // Pad-only idle is a legal full-bundle NOP parcel (printer !Row→E2
-        // is fatal). Do not invent an E2 default from child count for
-        // mixed logicals — cutover rematches those from the ledger.
-        bool SawFieldSlot = false;
+        // Missing-row: residual `_S*` and unsuffixed catalog logicals
+        // (reloc CSRW_W) need a row so cutover can bind MemberId. Suffix
+        // digits are not Format E entries (AIE PacketFormats + InstSlot;
+        // AIEFinalizeBundle.cpp:49-56 is identity on already-bundled
+        // roots — Haydn overlay stamps so cutover can run). Pad-only idle
+        // is a legal full-bundle NOP parcel (printer !Row is fatal).
+        // selectProductRowForOpcodes uses the generated ledger, not a
+        // child-count E2 invent; cutover may rematch E2↔E3 from the same
+        // ledger after the stamp.
+        bool SawCutoverSrc = false;
         if (const MachineBasicBlock *P = MI.getParent()) {
           for (MachineBasicBlock::const_instr_iterator I =
                    std::next(MI.getIterator());
                I != P->instr_end() && I->isBundledWithPred(); ++I) {
-            if (isResidualFieldSlotOpcode(I->getOpcode(), TII)) {
-              SawFieldSlot = true;
+            // Catalog logicals (reloc CSRW_W) and residual `_S*` both
+            // resolve to generated members. Suffix digits are not entries.
+            if (mustResolveToFormatEMember(I->getOpcode(), TII)) {
+              SawCutoverSrc = true;
               break;
             }
           }
         }
         const bool PadOnlyIdle = Members.empty() && HasPadNop;
-        if (!SawFieldSlot && !PadOnlyIdle)
+        if (!SawCutoverSrc && !PadOnlyIdle)
           continue;
         Row = haydn::bundle::selectProductRowForOpcodes(Members);
       }
