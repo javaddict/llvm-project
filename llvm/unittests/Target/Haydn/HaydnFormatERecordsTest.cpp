@@ -169,16 +169,17 @@ TEST(HaydnFormatERecords, ModeOnlyNameSetsCoverExactlyGeneratedRows) {
 TEST(HaydnFormatERecords, ModeOnlyLogicalPeelSpellings) {
   // The admission surface sees peeled names, exactly like the placement
   // enumerate path (enumerateFormatEMemberAlts peels with StripWide=false).
-  // Residual/member spellings of an E2-only logical peel to that logical;
+  // Generated-member spellings of an E2-only logical peel to that logical;
+  // leftover FieldSlot `*_S<digits>` spellings are not occupancy recovery.
   // E3-bearing hwloop forms (SET_HWLOOP_F2 / SET_HWLOOP_REG are dual-mode
   // golden logicals) peel to themselves, not to bare SET_HWLOOP.
   EXPECT_EQ(peelLogicalOpcodeName("ADDI32_E2_E1_ALU1_RI20", false), "ADDI32");
   EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W", false), "ADDI32_W");
-  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W_S0", false), "ADDI32_W");
+  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W_S0", false), "ADDI32_W_S0");
   EXPECT_EQ(peelLogicalOpcodeName("SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR", false),
             "SET_HWLOOP_F2");
   EXPECT_EQ(peelLogicalOpcodeName("SET_HWLOOP_F2_W_S0", false),
-            "SET_HWLOOP_F2_W");
+            "SET_HWLOOP_F2_W_S0");
   EXPECT_EQ(peelLogicalOpcodeName("ARCTAN_E3_E0_ALU2_RI4", false), "ARCTAN");
   // The generated sets are keyed by exact golden logicals; `_W` reloc forms
   // are not members (they are residual FieldSlot rows, not catalog logicals)
@@ -377,8 +378,8 @@ TEST(HaydnFormatERecords, StoreLogicalsAreLoadStore0Only) {
   // FormatEUnit::LOADSTORE0 = 4 (not itinerary EU_LOADSTORE0 = 0).
   const uint32_t LS0 = 1u << static_cast<unsigned>(FormatEUnit::LOADSTORE0);
   EXPECT_EQ(peelLogicalOpcodeName("ST8"), "S_SB_WITH_IMM");
-  EXPECT_EQ(peelLogicalOpcodeName("ST8_S0"), "S_SB_WITH_IMM");
-  EXPECT_EQ(peelLogicalOpcodeName("D_SW_L_WITH_IMM_S2"), "D_SW_L_WITH_IMM");
+  EXPECT_EQ(peelLogicalOpcodeName("ST8_S0"), "ST8_S0");
+  EXPECT_EQ(peelLogicalOpcodeName("D_SW_L_WITH_IMM_S2"), "D_SW_L_WITH_IMM_S2");
   // Earliest mode marker: E3-e2 must not peel as LOGICAL_E3.
   EXPECT_EQ(peelLogicalOpcodeName("ADD32_E3_E2_ALU2_RR"), "ADD32");
   EXPECT_EQ(peelLogicalOpcodeName("ADD32_E2_E0_ALU0_RR"), "ADD32");
@@ -460,7 +461,7 @@ TEST(HaydnFormatERecords, MemberToLogicalGeneratedInverse) {
 }
 
 TEST(HaydnFormatERecords, AssignThreeChildStoreLastE3) {
-  EXPECT_EQ(peelLogicalOpcodeName("ST64_S0"), "D_SDW_WITH_IMM");
+  EXPECT_EQ(peelLogicalOpcodeName("ST64_S0"), "ST64_S0");
   const std::string Logs[3] = {"SRLI64", "SEXT32T64", "D_SDW_WITH_IMM"};
   auto A = assignFormatEMemberEntries(Logs, /*Mode=*/1);
   ASSERT_TRUE(A.has_value());

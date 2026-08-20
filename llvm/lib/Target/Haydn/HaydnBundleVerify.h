@@ -70,6 +70,10 @@ bool isRepresentationExpandPseudo(unsigned Opc);
 bool isExpandOwnedSemanticPseudo(unsigned Opc);
 bool isResidualExecutablePseudo(const MachineInstr &MI);
 
+/// Leftover generic COPY / subreg pseudos inside a committed BUNDLE are not
+/// FormatEInverse keys. Fail closed — never structural/forward acceptance.
+bool isLeftoverGenericResidualPseudo(unsigned Opc);
+
 /// Reverse map: live private Format E member opcode → generated member record.
 /// Source is FormatEInverse (inverseRecordForMemberId + completeInverseRecord).
 /// Residual `_S*` / bare logicals / incomplete inverse rows return nullptr.

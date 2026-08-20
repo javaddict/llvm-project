@@ -60,14 +60,29 @@ static StringRef inverseOpcodeName(unsigned Opcode) {
   return StringRef(&HaydnInstrNameData[HaydnInstrNameIndices[Opcode]]);
 }
 
-/// Expand-owned / cycle-forming leftover that must not complete an inverse
-/// record. Representation-expand solo cycles (B/RET/BR_JT/PseudoCALLIndirect)
-/// are the typed printer exception and are skipped by the caller.
+/// Expand-owned / cycle-forming / leftover generic COPY-subreg that must not
+/// complete an inverse record. Representation-expand solo cycles (B/RET/
+/// BR_JT/PseudoCALLIndirect) are the typed printer exception and are skipped
+/// by the caller.
 /// Peer: AIEPseudoBranchExpansion.cpp:43-57 expands named branch desc only.
 static bool isUnexpandedResidualPseudo(unsigned Opc) {
   if (isRepresentationExpandPseudo(Opc))
     return false;
-  return isResidualCycleFormingPseudo(Opc) || isExpandOwnedSemanticPseudo(Opc);
+  return isLeftoverGenericResidualPseudo(Opc) ||
+         isResidualCycleFormingPseudo(Opc) || isExpandOwnedSemanticPseudo(Opc);
+}
+
+bool isLeftoverGenericResidualPseudo(unsigned Opc) {
+  switch (Opc) {
+  case TargetOpcode::COPY:
+  case TargetOpcode::SUBREG_TO_REG:
+  case TargetOpcode::INSERT_SUBREG:
+  case TargetOpcode::EXTRACT_SUBREG:
+  case TargetOpcode::REG_SEQUENCE:
+    return true;
+  default:
+    return false;
+  }
 }
 
 const format_e::FormatEMemberRec *lookupPrivateFormatEMember(unsigned Opc) {
@@ -646,6 +661,9 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   // Independent inverse member matrix (no forward planner / DFS).
   static_assert(format_e::FormatEMemberCount > 0,
                 "structural inverse requires generated Format E members");
+  static_assert(FormatEMemberOpcodeCount == format_e::FormatEMemberCount,
+                "member opcode column must match independently generated "
+                "FormatEInverse");
   static_assert(format_e::FormatESetDescLedgerCount > 0,
                 "structural inverse requires setDesc ledger surface");
   (void)format_e::FormatEInverse[0];

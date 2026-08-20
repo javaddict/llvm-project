@@ -171,17 +171,28 @@ inline bool inverseCoversMember(const FormatEMemberRec &M) {
   return Hit >= 0 && static_cast<unsigned>(Hit) == M.MemberId;
 }
 
-/// Peel residual `_S*` / Format E member / public mnemonic names to the golden
-/// catalog logical used by FormatEMembers. Shared by MC encode, Bundle canAdd,
-/// HR/solver tryAdd, and commitExact unit cover — one map, not a second table.
-/// This is occupancy-name recovery, not a product alternate source: suffix
-/// `_S*` name discovery does not emit typed alternates.
+/// Occupancy-name recovery for catalog logicals used by FormatEMembers.
+/// Shared by MC encode, Bundle canAdd, HR/solver tryAdd, and commitExact
+/// unit cover — one map, not a second table. Not a product alternate source
+/// (AIE MultiSlot alts, AIEMCFormats.h:376-379): leftover FieldSlot
+/// `*_S<digits>` spellings are not recovered. Generated `_E2_` / `_E3_`
+/// members compact at the earliest mode marker.
 /// \p StripWide drops reloc `_W` / `_F2_W`. Occupancy tries the compact
 /// catalog span when the unsuffixed `_W` name has no alt row (ADDI32_W →
 /// ADDI32). CSRW_W peels to CSRW; reloc CSRW_W cutovers to the member and
 /// encode refuses an untyped CSR fixup kind.
 inline std::string peelLogicalOpcodeName(StringRef Name,
                                          bool StripWide = true) {
+  // Leftover FieldSlot `*_S<digits>` is not a catalog logical. Occupancy
+  // must not recover ST8 from ST8_S0 (AIE MultiSlot alts).
+  {
+    StringRef Rest = Name;
+    while (!Rest.empty() && Rest.back() >= '0' && Rest.back() <= '9')
+      Rest = Rest.drop_back();
+    if (Rest.size() != Name.size() && Rest.size() >= 2 &&
+        Rest.ends_with_insensitive("_S"))
+      return Name.str();
+  }
   StringRef Base = Name;
   auto peel = [&](StringRef Suf) {
     if (Base.ends_with(Suf))
@@ -199,9 +210,10 @@ inline std::string peelLogicalOpcodeName(StringRef Name,
     Base = Base.take_front(ModeAt);
   for (int Pass = 0; Pass < 3; ++Pass) {
     StringRef Before = Base;
-    for (StringRef Suf :
-         {"_S0", "_S1", "_S2", "_LD_S0", "_LD_S1", "_LD_S2", "_M0S0LS",
-          "_M0S1LS", "_M0S2LS", "_M1S0LS", "_M1S1LS", "_M1S2LS"})
+    // Public LS_REG occupancy-class matcher names (LD32_REG_M0S0LS), not
+    // leftover FieldSlot entry certification.
+    for (StringRef Suf : {"_M0S0LS", "_M0S1LS", "_M0S2LS", "_M1S0LS",
+                          "_M1S1LS", "_M1S2LS"})
       peel(Suf);
     if (Base == Before)
       break;
@@ -327,8 +339,10 @@ struct FormatEEntryAssign {
 inline std::optional<SmallVector<FormatEEntryAssign, 3>>
 assignFormatEMemberEntries(ArrayRef<std::string> Logs, uint8_t Mode) {
   const unsigned N = Logs.size();
-  const unsigned EntryCount = Mode ? 3u : 2u;
-  if (N == 0 || N > EntryCount)
+  const FamilyRecords Fam = getDefaultFamilyRecords();
+  const unsigned EntryCount =
+      Mode ? Fam.E3EntryCapacity : Fam.E2EntryCapacity;
+  if (N == 0 || EntryCount == 0 || N > EntryCount)
     return std::nullopt;
 
   SmallVector<int, 3> EntryOf(N, -1);

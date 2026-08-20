@@ -9,6 +9,14 @@
 # RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   %t/residual-copy-pseudo.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=NO-INV
+# Cycle-forming LoopStart is not an inverse key (mandatory residual root).
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/residual-loopstart.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=LOOP
+# Expand-owned LIBCALL_SDIV leftover is not an inverse key.
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/residual-libcall.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=LIBCALL
 # REQUIRES: haydn-registered-target
 
 # Role: MIR — independent inverse (generated FormatEInverse records only).
@@ -21,6 +29,8 @@
 
 # EXPAND-OWNED: residual expand-owned pseudo child
 # NO-INV: residual expand-owned pseudo child
+# LOOP: residual cycle-forming pseudo child
+# LIBCALL: residual expand-owned pseudo child
 
 #--- expand-owned-post-inc.mir
 --- |
@@ -51,6 +61,38 @@ body:             |
     liveins: $r0, $r1, $r15
     BUNDLE 0, 0, implicit-def $d0, implicit $r0, implicit $r1 {
       $d0 = MOV_GPR_TO_DR64 $r0, $r1
+    }
+    RET implicit $r15
+...
+#--- residual-loopstart.mir
+--- |
+  define void @residual_loopstart() { ret void }
+...
+---
+name:            residual_loopstart
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    BUNDLE 0, 0, implicit $r1 {
+      LoopStart $r1, -1
+    }
+    RET implicit $r15
+...
+#--- residual-libcall.mir
+--- |
+  define void @residual_libcall() { ret void }
+...
+---
+name:            residual_libcall
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r3, $r4, $r15
+    BUNDLE 0, 0, implicit-def $r1, implicit $r3, implicit $r4 {
+      $r1 = LIBCALL_SDIV $r3, $r4, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit-def $r15
     }
     RET implicit $r15
 ...

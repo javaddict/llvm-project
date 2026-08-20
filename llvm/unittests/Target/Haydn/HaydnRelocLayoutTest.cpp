@@ -25,6 +25,9 @@ using namespace llvm::HaydnReloc;
 
 namespace {
 
+#define GET_FORMAT_E_GOLDEN_PINS
+#include "HaydnGenFormatERecords.inc"
+
 static bool ok(RelocKind K, int64_t ByteOffset) {
   return computeRelocValue(K, static_cast<uint64_t>(ByteOffset)).OK;
 }
@@ -44,7 +47,7 @@ static uint64_t field(RelocKind K, int64_t ByteOffset) {
 //   I12/RI12 branch imm12 @32 (bits[32:43]); NBytes=12 (E3 e1/e2 past bit 48)
 //   WIDE_Call table FieldLsb=31 (E2 e0); NBytes=12 (E3 e1 imm may reach bit 67)
 //   LO20 / PC_LO20 @31 (bits[31:50]); LUI HI12 @32; NBytes=12
-// WIDE_Call is byte PC-relative (ValueShift=0); branches are also byte (GE96-03).
+// WIDE_Call is byte PC-relative (ValueShift=0); branches are also byte.
 // E3 call windows are resolved dynamically via resolveFieldLsb(Loc).
 TEST(HaydnRelocLayoutTest, FormatEE2E0FieldLsbParcelOrigin) {
   EXPECT_EQ(getRelocFieldInfo(RelocKind::WIDE_BranchSImm12).FieldLsb, 32u);
@@ -418,10 +421,9 @@ TEST(HaydnRelocLayoutTest, Hi12FieldLsbFollowsCommittedLuiWindow) {
 // JALRSImm12 (RI12 type-opcode 1): dedicated row for the JALR symbolic
 // imm12. Same golden E2 e0 field numbers as the RI12 branch row (imm12 @
 // bits[43:32], signed byte displacement from parcel origin, Align=2) but a
-// DISTINCT kind so a JALR fixup can never borrow the branch row (W27 —
-// that aliasing was the original two-inconsistent-PCRel-kinds bug).
+// DISTINCT kind so a JALR fixup can never borrow the branch row.
 // findFixupFromFixupFields must route RI12 opc 1 here and opc 2..7 to the
-// branch row. Pinned byte-displacement semantics: branch-all.s 0x114 →
+// branch row. Pinned byte-displacement semantics: branch-all.s 0x114 ->
 // target1@0 = -276 = 0xEEC in the imm12 field.
 TEST(HaydnRelocLayoutTest, JalrSImm12DedicatedRowNotBranchAlias) {
   const RelocKind K = RelocKind::JALRSImm12;
@@ -432,7 +434,7 @@ TEST(HaydnRelocLayoutTest, JalrSImm12DedicatedRowNotBranchAlias) {
   EXPECT_EQ(FI.FieldLsb, Br.FieldLsb);
   EXPECT_EQ(FI.FieldSize, 12u);
   EXPECT_EQ(FI.NBytes, 12u);
-  EXPECT_EQ(FI.ValueShift, 0u); // GE96-03: byte displacement, no scale
+  EXPECT_EQ(FI.ValueShift, 0u); // byte displacement, no extra scale
   EXPECT_EQ(FI.Align, 2u);
   EXPECT_TRUE(FI.IsSigned);
   EXPECT_TRUE(FI.IsPCRel);
@@ -674,6 +676,110 @@ TEST(HaydnRelocLayoutTest, PublishedMemberFieldLsbAndFixupFields) {
             static_cast<unsigned>(ELF::R_HAYDN_GOT_HI20));
   EXPECT_NE(RelocKind::Data32PCRel, RelocKind::GOT_HI20);
   EXPECT_NE(RelocKind::Data32PCRel, RelocKind::Data32);
+}
+
+// Shared ELF 0..23 coverage: RelocKind values are the ELF R_HAYDN_* numbers.
+// Symbolic JALR stays ELF 22; do not remint or alias the RI12 branch row or
+// PIC/JT label-diff. CSR_UImm8 (ELF 23) is owned elsewhere.
+TEST(HaydnRelocLayoutTest, SharedRelocKindMatchesElfCoverage) {
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::None), unsigned(ELF::R_HAYDN_NONE));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::Data32), unsigned(ELF::R_HAYDN_32));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::SImm16),
+            unsigned(ELF::R_HAYDN_SImm16));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::BranchSImm16),
+            unsigned(ELF::R_HAYDN_BranchSImm16));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::CallSImm20),
+            unsigned(ELF::R_HAYDN_CallSImm20));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::HI20), unsigned(ELF::R_HAYDN_HI20));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::LO16), unsigned(ELF::R_HAYDN_LO16));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::Data32PCRel),
+            unsigned(ELF::R_HAYDN_32_PCREL));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::GOT_HI20),
+            unsigned(ELF::R_HAYDN_GOT_HI20));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::TPREL_HI20),
+            unsigned(ELF::R_HAYDN_TPREL_HI20));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::TPREL_LO16),
+            unsigned(ELF::R_HAYDN_TPREL_LO16));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::Data8), unsigned(ELF::R_HAYDN_8));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::Data16), unsigned(ELF::R_HAYDN_16));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::HI12), unsigned(ELF::R_HAYDN_HI12));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::LO20), unsigned(ELF::R_HAYDN_LO20));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::PC_LO20),
+            unsigned(ELF::R_HAYDN_PC_LO20));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::HWLoopOff1),
+            unsigned(ELF::R_HAYDN_HWLoopOff1));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::HWLoopOff2),
+            unsigned(ELF::R_HAYDN_HWLoopOff2));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::WIDE_BranchSImm12),
+            unsigned(ELF::R_HAYDN_WIDE_BranchSImm12));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::WIDE_CallSImm20),
+            unsigned(ELF::R_HAYDN_WIDE_CallSImm20));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::WIDE_BranchSImm12_RI),
+            unsigned(ELF::R_HAYDN_WIDE_BranchSImm12_RI));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::LS_IMM),
+            unsigned(ELF::R_HAYDN_LS_IMM));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::JALRSImm12),
+            unsigned(ELF::R_HAYDN_JALRSImm12));
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::CSR_UImm8),
+            unsigned(ELF::R_HAYDN_CSR_UImm8));
+
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::JALRSImm12), 22u);
+  EXPECT_EQ(static_cast<unsigned>(ELF::R_HAYDN_JALRSImm12), 22u);
+  EXPECT_NE(RelocKind::JALRSImm12, RelocKind::WIDE_BranchSImm12_RI);
+  EXPECT_NE(RelocKind::JALRSImm12, RelocKind::WIDE_BranchSImm12);
+  EXPECT_NE(RelocKind::JALRSImm12, RelocKind::Data32PCRel);
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::Data32PCRel), 7u);
+  EXPECT_EQ(static_cast<unsigned>(RelocKind::CSR_UImm8), 23u);
+  // MC-only kinds sit after the shared ELF range.
+  EXPECT_GT(static_cast<unsigned>(RelocKind::C_BranchSImm4), 23u);
+}
+
+// Nine-file layout authority for JALR FieldLsb windows + provisional object
+// identity. Hashes match FormatE/GOLDEN_INPUTS.sha256 / STATUS. EM_HAYDN=259
+// collides with Kalray KVX; distinguisher stays EF_HAYDN_E96=0x1.
+TEST(HaydnRelocLayoutTest, NineFileHashAndProvisionalObjectIdentity) {
+  EXPECT_STREQ(FormatEXLSXSHA256,
+               "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f");
+  EXPECT_STREQ(FormatEJSONSHA256,
+               "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a");
+  static constexpr const char *kNineFile[][2] = {
+      {"format_e_bit_layout_v2_1.xlsx",
+       "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f"},
+      {"format_e_bit_layout_v2_1.json",
+       "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a"},
+      {"format_e_canonical_vectors_v1.json",
+       "741f5b4141990dc27dc217d2b0c0d7ab57240e08ef31c34bc036f11bbda1938e"},
+      {"instruction_type_index.json",
+       "7a13453ad934d6be9a303b51fcaeb6e908d97015b3e75db7d76fa13cb7a6dede"},
+      {"operands_info.md",
+       "e4b61bf5b5be2634b1665474bf4906db0df017a939289a49d40e82bc2121fb12"},
+      {"instruction_type_operands.json",
+       "0f97fdf5ecf56172190fa21aeb22049a0a0cace28640314e3209623a167413e7"},
+      {"instruction_to_entry.xlsx#cells",
+       "6b084277e2b92a5166feb06cad7050651f2b06cf99138c885ce9e9da9e7cdb6c"},
+      {"VLIW_Engine_Compiler_Constraints.md",
+       "e0d7f7f0e7ce06622f4ae90dc9366caf16da48993c7f803c02d460473fd9b56a"},
+      {"VLIW_Engine_Reference_Manual.docx",
+       "550dac0c82c160397c510bd403116056e046a43d8df41cd34d81ab678cd9b49b"},
+  };
+  EXPECT_EQ(sizeof(kNineFile) / sizeof(kNineFile[0]), 9u);
+  EXPECT_STREQ(kNineFile[0][1], FormatEXLSXSHA256);
+  EXPECT_STREQ(kNineFile[1][1], FormatEJSONSHA256);
+  EXPECT_EQ(ELF::EM_HAYDN, 259u);
+  EXPECT_EQ(ELF::EF_HAYDN_E96, 0x1u);
+  EXPECT_NE(ELF::EM_HAYDN, 0u);
+  EXPECT_NE(ELF::EF_HAYDN_E96, 0u);
+
+  const RelocFieldInfo &Jalr = getRelocFieldInfo(RelocKind::JALRSImm12);
+  EXPECT_EQ(Jalr.ValueShift, 0u);
+  EXPECT_EQ(Jalr.FieldSize, 12u);
+  EXPECT_EQ(Jalr.FieldLsb, 32u);
+  EXPECT_EQ(Jalr.Align, 2u);
+  EXPECT_TRUE(Jalr.IsSigned);
+  EXPECT_TRUE(Jalr.IsPCRel);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 0, 0, 0), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 0, 0), 23u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 1, 0), 54u);
 }
 
 } // namespace

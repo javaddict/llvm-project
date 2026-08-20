@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnFixupKinds.h"
+#include "HaydnRelocLayout.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
@@ -24,6 +25,15 @@ static_assert(ELF::EM_HAYDN == 259,
               "EM_HAYDN stays 259; do not invent a replacement (KVX collision)");
 static_assert(ELF::EF_HAYDN_E96 == 0x1u,
               "EF_HAYDN_E96 stays 0x1; do not invent e_flags image-versioning");
+static_assert(ELF::R_HAYDN_JALRSImm12 == 22,
+              "do not remint R_HAYDN_JALRSImm12");
+static_assert(static_cast<unsigned>(HaydnReloc::RelocKind::JALRSImm12) ==
+                  ELF::R_HAYDN_JALRSImm12,
+              "JALRSImm12 RelocKind must match ELF R_HAYDN_JALRSImm12");
+static_assert(ELF::R_HAYDN_JALRSImm12 != ELF::R_HAYDN_WIDE_BranchSImm12_RI,
+              "symbolic JALR must not alias the RI12 branch row");
+static_assert(ELF::R_HAYDN_JALRSImm12 != ELF::R_HAYDN_32_PCREL,
+              "symbolic JALR must not alias PIC/JT label-diff");
 
 namespace {
 

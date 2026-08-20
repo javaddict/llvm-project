@@ -21,9 +21,10 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   -verify-machineinstrs %t/pad-only-idle.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=OK-IDLE
-# COPY is not expand-owned / cycle-forming; inverse completion must still
-# fail closed (no generated FormatEInverse key, no structural accept).
-# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# COPY is leftover generic residual (not expand-owned / cycle-forming).
+# Inverse completion must still fail closed (no generated FormatEInverse
+# key, no structural accept). GenCrashDiag=false like expand-owned.
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   %t/residual-copy.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=COPY-RES
 # REQUIRES: haydn-registered-target

@@ -4,6 +4,7 @@
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/Disassembler/HaydnDisassembler.cpp --check-prefix=NO-COUNT-DISASM --implicit-check-not=peelLogicalOpcodeName --implicit-check-not=lookupLogicalOpcode
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCCodeEmitter.cpp --check-prefix=NO-COUNT-EMIT --implicit-check-not=tryMode
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/MCTargetDesc/HaydnMCFormats.cpp --check-prefix=NO-COUNT-FILL --implicit-check-not=peelLogicalOpcodeName
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFormatERecords.h --check-prefix=NO-COUNT-RECORDS
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnBundleMaterialize.h --check-prefix=NO-COUNT-OPC --implicit-check-not=selectProductRowForMemberCount
 # RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/AsmParser/HaydnAsmParser.cpp --check-prefix=NO-COUNT-PARSER --implicit-check-not=selectProductRowForMemberCount
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o
@@ -48,6 +49,13 @@
 # NO-COUNT-FILL: haydnCatalogOccupancyName
 # NO-COUNT-FILL-NOT: N <= Fam.E2EntryCapacity
 # NO-COUNT-FILL-NOT: N <= Fam.E3EntryCapacity
+# Leftover FieldSlot `*_S<digits>` is not occupancy recovery. Assignment
+# capacity is the family handle, not a hardcoded TWO vs THREE map.
+# NO-COUNT-RECORDS: E2EntryCapacity
+# NO-COUNT-RECORDS: E3EntryCapacity
+# NO-COUNT-RECORDS: getDefaultFamilyRecords
+# NO-COUNT-RECORDS-NOT: {"_S0"
+# NO-COUNT-RECORDS-NOT: "_LD_S0"
 # NO-COUNT-FILL: haydnFormatEHwloopImmFieldShift
 # NO-COUNT-FILL: findFixupFromFixupFields
 # NO-COUNT-FILL: haydnFillFormatEMemberInst

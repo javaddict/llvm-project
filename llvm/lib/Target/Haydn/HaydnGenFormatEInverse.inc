@@ -79,13 +79,24 @@ inline void inverseIdsForLogical(StringRef Logical,
 /// Membership + encodeability for one independently generated inverse row.
 /// Unit injectivity is a multi-member property (verifyCommittedBundle).
 /// Placement key reconstructs MemberId via findInverseMemberId (sorted
-/// inverse table, not FormatEMembers / UnitMap / name peel).
+/// inverse table). FormatEMembers is the membership/encodeability witness
+/// for that row — never an inverse selection source (no UnitMap / name peel).
+/// Peer: AIE getAlternateInstsOpcode returns generated table entries
+/// (CodeGenFormat.cpp:155-163; AIEMCFormats.h:376-379).
 inline bool completeInverseRecord(const FormatEInverseRec &R) {
   if (R.MemberId >= FormatEMemberCount || !R.Logical)
     return false;
   if (StringRef(R.Logical).equals_insensitive("NOP"))
     return false;
   if (!R.TypeName || StringRef(R.TypeName).empty())
+    return false;
+  const FormatEMemberRec &M = FormatEMembers[R.MemberId];
+  if (M.IsNop || M.MemberId != R.MemberId)
+    return false;
+  if (M.Mode != R.Mode || M.EntryIdx != R.EntryIdx || M.Unit != R.Unit ||
+      M.TypeCode != R.TypeCode || M.Opcode != R.Opcode)
+    return false;
+  if (!M.Logical || StringRef(M.Logical) != StringRef(R.Logical))
     return false;
   const FormatEInverseRec *ById = inverseRecordForMemberId(R.MemberId);
   if (!ById || ById->MemberId != R.MemberId)

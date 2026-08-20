@@ -68,6 +68,25 @@ using namespace llvm::ELF;
 using namespace lld;
 using namespace lld::elf;
 
+// Object identity stays fail-closed: experimental EM_HAYDN=259 collides with
+// the published Kalray KVX allocation; distinguisher is EF_HAYDN_E96=0x1.
+// Symbolic JALR is ELF 22 only — do not remint the kind.
+static_assert(ELF::EM_HAYDN == 259,
+              "EM_HAYDN stays 259; do not invent a replacement (KVX collision)");
+static_assert(ELF::EF_HAYDN_E96 == 0x1u,
+              "EF_HAYDN_E96 stays 0x1; do not invent e_flags image-versioning");
+static_assert(ELF::EF_HAYDN_E96 == llvm::haydn::format::EF_HAYDN_E96,
+              "ELF and format-registry EF_HAYDN_E96 must stay identical");
+static_assert(ELF::R_HAYDN_JALRSImm12 == 22,
+              "do not remint R_HAYDN_JALRSImm12");
+static_assert(static_cast<unsigned>(llvm::HaydnReloc::RelocKind::JALRSImm12) ==
+                  ELF::R_HAYDN_JALRSImm12,
+              "JALRSImm12 RelocKind must match ELF R_HAYDN_JALRSImm12");
+static_assert(ELF::R_HAYDN_JALRSImm12 != ELF::R_HAYDN_WIDE_BranchSImm12_RI,
+              "symbolic JALR must not alias the RI12 branch row");
+static_assert(ELF::R_HAYDN_JALRSImm12 != ELF::R_HAYDN_32_PCREL,
+              "symbolic JALR must not alias PIC/JT label-diff");
+
 namespace {
 
 /// Production parcel EncodedBytes (sole active profile: Format E / 12).

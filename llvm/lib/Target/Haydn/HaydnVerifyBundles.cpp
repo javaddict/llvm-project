@@ -268,6 +268,16 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
              << "  child: " << *I << "\n  root: " << MI;
           report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
         }
+        if (haydn::bundle::isLeftoverGenericResidualPseudo(KidOpc)) {
+          std::string Msg;
+          raw_string_ostream OS(Msg);
+          OS << "HaydnVerifyBundles: residual/logical inverse record not "
+                "completed at membership entry in "
+             << MF.getName() << " BB#" << MBB.getNumber()
+             << " (leftover generic residual is not an inverse key):\n"
+             << "  child: " << *I << "\n  root: " << MI;
+          report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+        }
       }
 
       // Product emission ownership: empty roots fail here; row capacity
