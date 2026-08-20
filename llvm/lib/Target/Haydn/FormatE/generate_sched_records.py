@@ -48,6 +48,7 @@ from family_core import (
     get_family,
     resolve_golden_dir,
     sha256_file,
+    verify_authority_inputs,
 )
 
 # Unreferenced 5-cycle AccLat classes of unknown provenance. Must not emit.
@@ -294,6 +295,22 @@ def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
     )
     banner = "\n".join(generated_banner(
         generator=SCHED_GENERATOR, family=get_family("e96")))
+    units = ",\n".join(f'    "{u}"' for u in (
+        "LOADSTORE0", "LOAD1", "ALU0", "ALU1", "ALU2", "MAC0", "MAC1"))
+    family_block = (
+        "#ifdef GET_HAYDN_FAMILY_SCHED\n"
+        "// Family-scoped slot/coissue law (E96). Shared Unit order matches\n"
+        "// Constraints.md and HaydnItineraries FuncUnits. Entry capacities\n"
+        "// are the same FormatEE2/E3 facts as HaydnGenSchedRecords.inc.\n"
+        "// Included from llvm::haydn::format_e in HaydnFormatERecords.h.\n"
+        "inline constexpr unsigned GeneratedFamilyE2EntryCapacity = 2;\n"
+        "inline constexpr unsigned GeneratedFamilyE3EntryCapacity = 3;\n"
+        "inline constexpr const char *GeneratedFamilySharedUnits[] = {\n"
+        f"{units}\n"
+        "};\n"
+        "#undef GET_HAYDN_FAMILY_SCHED\n"
+        "#endif\n"
+    )
     return (
         "//===-- HaydnGenMemoryCycles.inc - MemoryCycle lookup "
         "-*- C++ -*-===//\n"
@@ -308,6 +325,7 @@ def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
         "//\n"
         "//===----------------------------------------------------------------------===//\n"
         "\n"
+        "#ifndef GET_HAYDN_FAMILY_SCHED\n"
         "std::optional<int>\n"
         "HaydnInstrInfo::getFirstMemoryCycle(unsigned SchedClass) const {\n"
         "  switch (SchedClass) {\n"
@@ -339,6 +357,9 @@ def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
         "int HaydnInstrInfo::getMaxLastMemoryCycle() const {\n"
         f"  return {max(lasts)};\n"
         "}\n"
+        "#endif // GET_HAYDN_FAMILY_SCHED\n"
+        "\n"
+        f"{family_block}"
     )
 
 
@@ -351,13 +372,34 @@ def prove_no_dead_classes(content: str) -> None:
 
 
 def prove_generated_entry_capacities(content: str) -> None:
-    """W51: one generated E2=2 / E3=3 fact. CompleteModel stays 0."""
+    """One generated E2=2 / E3=3 fact. CompleteModel stays 0."""
     if "defvar FormatEE2EntryCapacity = 2;" not in content:
         raise SystemExit("error: generated E2 entry capacity missing")
     if "defvar FormatEE3EntryCapacity = 3;" not in content:
         raise SystemExit("error: generated E3 entry capacity missing")
     if "CompleteModel = 1" in content:
         raise SystemExit("error: generated records must not set CompleteModel=1")
+
+
+def prove_family_sched_records(content: str) -> None:
+    """Family-scoped slot law is generated, not a second handwritten table."""
+    if "GeneratedFamilyE2EntryCapacity = 2;" not in content:
+        raise SystemExit("error: family-scoped E2 capacity missing")
+    if "GeneratedFamilyE3EntryCapacity = 3;" not in content:
+        raise SystemExit("error: family-scoped E3 capacity missing")
+    for unit in (
+        "LOADSTORE0",
+        "LOAD1",
+        "ALU0",
+        "ALU1",
+        "ALU2",
+        "MAC0",
+        "MAC1",
+    ):
+        if f'"{unit}"' not in content:
+            raise SystemExit(f"error: family-scoped unit {unit} missing")
+    if "GET_HAYDN_FAMILY_SCHED" not in content:
+        raise SystemExit("error: family-sched include guard missing")
 
 
 def diff_generated_targets(
@@ -431,7 +473,22 @@ def prove_source_mutation_not_silent(
     print("OK P19 sched source-mutation + determinism")
 
 
-def verify_golden_hashes(json_path: Path, xlsx_path: Path, canonical_path: Path) -> None:
+def verify_golden_hashes(
+    golden: Path,
+    json_path: Path,
+    xlsx_path: Path,
+    canonical_path: Path,
+    constraints_path: Path,
+) -> None:
+    verify_authority_inputs(
+        golden,
+        [
+            json_path.name,
+            xlsx_path.name,
+            canonical_path.name,
+            constraints_path.name,
+        ],
+    )
     json_sha = sha256_file(json_path)
     if json_sha != PINNED_JSON_SHA256:
         raise SystemExit(
@@ -496,7 +553,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 2
 
     try:
-        verify_golden_hashes(json_path, xlsx_path, canonical_path)
+        verify_golden_hashes(
+            golden, json_path, xlsx_path, canonical_path, constraints_path
+        )
         surf = parse_constraints(constraints_path)
         rows = published_itineraries(surf)
         validate_published(rows, surf)
@@ -505,6 +564,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         prove_no_dead_classes(content)
         prove_no_dead_classes(mem_content)
         prove_generated_entry_capacities(content)
+        prove_family_sched_records(mem_content)
     except SystemExit as exc:
         msg = str(exc)
         if msg:

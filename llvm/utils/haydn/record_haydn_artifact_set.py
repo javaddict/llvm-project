@@ -14,10 +14,9 @@ sibling is present. This file always owns:
   * `--restamp` refreshes identity after a toolchain rebuild
   * `--install-product-ld` / `--attach-owned` bind haydn.ld and stamp
     product_ld+library onto an existing ARTIFACT.json
-  * consumer install_haydn_sysroot.sh working-tree bind is the impl-track
-    land (--require-consumer-install fail-closes on that script).
-    Committed checkout remains residual OPEN until the consumer identity
-    matches; do not treat HEAD-unbound as a working-tree failure.
+  * consumer install_haydn_sysroot.sh bind is landed (BundleSim edbb813).
+    --require-consumer-install fail-closes on the working-tree script,
+    the committed checkout identity, and --self-test.
   * live ARTIFACT.product_ld null is fail-closed when ARTIFACT.json exists
   * post-wave rebind refuses llvm_src.git_commit=28700d57; the live
     commit must be a repo-object ancestor (pin 9e5c878a)
@@ -685,9 +684,9 @@ def _self_test() -> int:
             encoding="utf-8",
         )
         assert not check_install_script(root)
-        # No git tree here: committed identity is residual, not a crash.
+        # No git tree here: committed identity is unread (residual INFO path).
         assert check_install_script(root, committed=True)
-        # --require-consumer-install pins the working-tree script only.
+        # --require-consumer-install fail-closes on working-tree + committed.
 
         libdir = sysroot / "lib"
         (libdir / "libc.a").write_bytes(b"libc")
@@ -832,15 +831,18 @@ def main(argv: List[str]) -> int:
         consumer_errs = check_install_script(bundlesim)
         committed_errs = check_install_script(bundlesim, committed=True)
         if args.require_consumer_install:
-            # Fail-close on the owned working-tree script. Committed HEAD
-            # stays residual OPEN until the consumer checkout lands.
+            # T7-RT LANDED (edbb813): working-tree + committed HEAD + self-test.
             errs.extend(consumer_errs)
+            errs.extend(committed_errs)
             errs.extend(run_consumer_install_self_test(bundlesim))
-            for e in committed_errs:
-                print(f"  INFO: T7-RT residual (committed checkout OPEN): {e}")
+            if not committed_errs:
+                print("  PASS: T7-RT committed install binds haydn-rt/haydn.ld")
         else:
-            for e in committed_errs:
-                print(f"  INFO: T7-RT residual (committed checkout OPEN): {e}")
+            if committed_errs:
+                for e in committed_errs:
+                    print(f"  INFO: T7-RT residual (committed checkout OPEN): {e}")
+            else:
+                print("  PASS: T7-RT committed install binds haydn-rt/haydn.ld")
             for e in consumer_errs:
                 if e not in committed_errs:
                     print(f"  INFO: consumer-install working-tree: {e}")

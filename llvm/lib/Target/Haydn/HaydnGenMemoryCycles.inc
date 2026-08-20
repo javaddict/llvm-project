@@ -17,6 +17,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef GET_HAYDN_FAMILY_SCHED
 std::optional<int>
 HaydnInstrInfo::getFirstMemoryCycle(unsigned SchedClass) const {
   switch (SchedClass) {
@@ -54,3 +55,23 @@ int HaydnInstrInfo::getMinLastMemoryCycle() const {
 int HaydnInstrInfo::getMaxLastMemoryCycle() const {
   return 1;
 }
+#endif // GET_HAYDN_FAMILY_SCHED
+
+#ifdef GET_HAYDN_FAMILY_SCHED
+// Family-scoped slot/coissue law (E96). Shared Unit order matches
+// Constraints.md and HaydnItineraries FuncUnits. Entry capacities
+// are the same FormatEE2/E3 facts as HaydnGenSchedRecords.inc.
+// Included from llvm::haydn::format_e in HaydnFormatERecords.h.
+inline constexpr unsigned GeneratedFamilyE2EntryCapacity = 2;
+inline constexpr unsigned GeneratedFamilyE3EntryCapacity = 3;
+inline constexpr const char *GeneratedFamilySharedUnits[] = {
+    "LOADSTORE0",
+    "LOAD1",
+    "ALU0",
+    "ALU1",
+    "ALU2",
+    "MAC0",
+    "MAC1"
+};
+#undef GET_HAYDN_FAMILY_SCHED
+#endif

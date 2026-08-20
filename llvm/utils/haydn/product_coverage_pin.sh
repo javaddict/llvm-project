@@ -107,7 +107,10 @@ if [[ -f "$SCRIPT_DIR/record_haydn_artifact_set.py" ]]; then
        >/tmp/haydn-product-coverage-recorder-ld.log 2>&1; then
     echo "  PASS: product-ld same-artifact bind (haydn-rt/haydn.ld)"
     if grep -q 'T7-RT residual' /tmp/haydn-product-coverage-recorder-ld.log; then
-      echo "  INFO: T7-RT committed consumer install still OPEN"
+      echo "  FAIL: T7-RT committed consumer install unbound" >&2
+      fail=1
+    elif grep -q 'T7-RT committed install binds' /tmp/haydn-product-coverage-recorder-ld.log; then
+      echo "  PASS: T7-RT committed product-ld bind (edbb813)"
     fi
   else
     echo "  FAIL: product-ld same-artifact bind" >&2

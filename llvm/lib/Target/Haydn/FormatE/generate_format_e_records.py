@@ -44,10 +44,18 @@ from family_core import (
     RECORDS_GENERATOR,
     SCHEMA_VERSION,
     add_family_argument,
+    check_cutover_surfaces,
     generated_banner,
     get_family,
+    golden_inputs_pin_path,
+    prove_derived_xlsx_not_authority,
+    prove_unpublished_choice_fails,
+    prove_unpinned_consumed_fails,
+    prove_unused_authority_not_consumed,
     resolve_golden_dir,
     sha256_file,
+    verify_authority_inputs,
+    verify_golden_inputs_pin,
 )
 
 SSML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -1220,10 +1228,9 @@ DEST_REG_LOGICALS = frozenset(
         "MOVESFR2GPR",
     }
 )
-# GE96-03: compact and `_W` share byte PC+imm. Generated members must use
-# the WIDE PCRel operand class so reloc-bearing `_W_S0` can cut over
-# without a CHECK-only mnemonic rewrite. AsmString stays the golden name
-# (`jal`); llc after cutover matches objdump.
+# Compact and `_W` share byte PC+imm. Generated members use the WIDE
+# PCRel operand class so reloc-bearing `_W` forms cut over. AsmString stays
+# the golden name (`jal`); llc after cutover matches objdump.
 PCREL_OPERAND_TD = {
     "JAL": "brtarget_wide_i20",
     "JALR": "calltarget_wide_ri12",
@@ -1238,7 +1245,7 @@ PCREL_OPERAND_TD = {
     "BLT": "brtarget_wide_ri12",
     "BLTU": "brtarget_wide_ri12",
 }
-# GE96: compact and `_W` share the Format E RI20 field. Generated members
+# Compact and `_W` share the Format E RI20 field. Generated members
 # use the WIDE absolute class so reloc-bearing `ADDI32_W`/`ORI32_W` can
 # cut over. AsmString stays the golden name (`addi32`/`ori32`).
 # SET_HWLOOP Off1/Off2 stay uimm6/uimm12: getExprFixupKind maps OpNo 1/2
@@ -1254,7 +1261,7 @@ LS_UNITS = frozenset({"LOADSTORE0", "LOAD1"})
 # Catalog WITH_IMM logical → user-facing matcher/print mnemonic. Inverse of
 # peelLogicalOpcodeName for the RI6 signed-offset forms. Word/dword WITH_REG
 # uses the documented 3-GPR user names. Byte/half `ld8_reg`/`ld16_reg` stay
-# catalog: those user spellings are simm16 FieldSlots, not 3-GPR members.
+# catalog: those user spellings are not 3-GPR members.
 LS_USER_MNEMONIC = {
     "S_LW_WITH_IMM": "ld32",
     "S_LW_WITH_REG": "ld32_reg",
@@ -1418,7 +1425,7 @@ def load_accumulator_ties(index_path: Path) -> Dict[str, Tuple[str, ...]]:
 
 
 def ls_has_tied_base_writeback(logical: str) -> bool:
-    """POST/PRE/BREV update the encoded dest2 base (FieldSlot `$rs = $rs_wb`)."""
+    """POST/PRE/BREV update the encoded dest2 base (`$rs = $rs_wb`)."""
     key = _logical_key(logical)
     return any(tag in key for tag in ("_POST_", "_PRE_", "_BREV_"))
 
@@ -1523,8 +1530,8 @@ def classify_member_flags(
     elif key in ("MOVEGPR2SFR", "MOVESFR2GPR"):
         side = True
     elif is_branch or is_call or is_indirect:
-        # Match residual `_S*` CFG format classes (HaydnFormatsALU32.td
-        # HaydnFU_ALU32_S0_RI12/I12_ONE/I20 hasSideEffects=1).
+        # Match residual CFG format classes (HaydnFormatsALU32.td
+        # ALU32 RI12/I12_ONE/I20 hasSideEffects=1).
         side = True
     elif rec.unit in LS_UNITS and not is_load and not is_store:
         side = True
@@ -1887,7 +1894,7 @@ def emit_members_td_inc(
         # use, store dest* are uses. Catalog role `reg` (rt) is a def for
         # JALR link and DEST_REG_LOGICALS. POST/PRE/BREV add a synthetic
         # tied GPR writeback (`dest2_wb`) so NumDefs/NumOperands match
-        # FieldSlot `$rs = $rs_wb`.
+        # `$rs = $rs_wb`.
         is_ls = rec.unit in LS_UNITS
         out_frags: List[str] = []
         in_frags: List[str] = []
@@ -2073,7 +2080,7 @@ IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def parse_logical_materialize(path: Path) -> List[Tuple[str, str]]:
-    """Parse residual `_S*` member → logical pairs from LogicalMaterialize.
+    """Parse residual member → logical pairs from LogicalMaterialize.
 
     AIE peer: CodeGenFormat.cpp:146-163 emits AlternateInsts[] plus
     getAlternateInstsOpcode switch (logical → members). This is the inverse
@@ -2087,8 +2094,8 @@ def parse_logical_materialize(path: Path) -> List[Tuple[str, str]]:
             if member == logical:
                 continue
             pairs.append((member, logical))
-    # Empty is the R13 end state: every residual FieldSlot retired, so
-    # member→logical comes only from generated Format E members.
+    # Empty is the retirement end state: member→logical comes only from
+    # generated Format E members.
     return pairs
 
 
@@ -2108,7 +2115,7 @@ def collect_td_def_names(out_dir: Path) -> set:
 def collect_member_to_logical(cat: Catalog, td_path: Path) -> Dict[str, str]:
     """Dense member-opcode-name → logical-opcode-name map.
 
-    Sources: LogicalMaterialize residual `_S*` plus Format E member_symbol.
+    Sources: LogicalMaterialize residual plus Format E member_symbol.
     Format E members whose catalog logical is not a TableGen opcode are
     omitted (fail-closed: lookup returns 0, never the member itself).
     Fail-closed on a member claiming two logicals.
@@ -2121,7 +2128,7 @@ def collect_member_to_logical(cat: Catalog, td_path: Path) -> Dict[str, str]:
             return
         if not IDENT_RE.fullmatch(member) or not IDENT_RE.fullmatch(logical):
             raise SystemExit(f"non-ident member→logical {member!r} → {logical!r}")
-        # Retired FieldSlots must not emit Haydn:: cases.
+        # Retired slot members must not emit Haydn:: cases.
         if member not in known:
             return
         prev = mapping.get(member)
@@ -2189,7 +2196,7 @@ def emit_member_opcodes_inc(cat: Catalog, member_to_logical: Dict[str, str]) -> 
     # AIE peer: inverse of AIEMCFormats::getAlternateInstsOpcode
     # (AIEMCFormats.h:376-379; CodeGenFormat.cpp:155-163 generated switch).
     # Hexagon packet children keep the architectural opcode (HexagonInstrInfo.cpp:390-397
-    # bundle walk); Haydn residual `_S*` / Format E members need this overlay.
+    # bundle walk); Haydn residual / Format E members need this overlay.
     by_logical: Dict[str, List[str]] = defaultdict(list)
     for member, logical in member_to_logical.items():
         by_logical[logical].append(member)
@@ -2264,27 +2271,41 @@ def assembler_mnemonic(logical: str, unit: str) -> str:
     return mnem
 
 
-# Documented matcher packets that differ from Format E member AsmString
+# Documented matcher insns that differ from Format E member AsmString
 # operand count/order. Still the same logical mnemonic (or a known _w alias
 # that objdump prints as the logical). No hypothesized Auto.td encodings.
-_SPECIAL_PACKETS = {
-    "SET_HWLOOP": "{ set_hwloop_w 0, 16, 32, 4; nop; nop }",
-    "SET_HWLOOP_F2": "{ set_hwloop_f2_w 0, 16, 32, r1; nop; nop }",
-    "SET_HWLOOP_REG": "{ set_hwloop_reg_w 0, r1, r2, r3; nop; nop }",
-    "D_LQHWUA_POST": "{ d_lqhwua_post d0, 0, r1, r2, 0; nop; nop }",
-    "D_LTWUA_POST": "{ d_ltwua_post d0, 0, r1, r2, 0; nop; nop }",
-    "D_SQHWUA_POST": "{ d_sqhwua_post d0, 0, r1, r2, 0; nop; nop }",
-    "D_STWUA_POST": "{ d_stwua_post d0, 0, r1, r2, 0; nop; nop }",
-    "PLDWWUA_POST": "{ pldwwua 0, r1; nop; nop }",
-    "WBARWUA": "{ wbarwua 0, r1, 0; nop; nop }",
-    "MULL": "{ mull r1, r2, r1; nop; nop }",
+# Packed by pack_full_bundle_text from the first generated member's Mode/
+# EntryIdx — not a fixed 3-slot `{ insn; nop; nop }` occupancy bag.
+_SPECIAL_INSNS = {
+    "SET_HWLOOP": "set_hwloop_w 0, 16, 32, 4",
+    "SET_HWLOOP_F2": "set_hwloop_f2_w 0, 16, 32, r1",
+    "SET_HWLOOP_REG": "set_hwloop_reg_w 0, r1, r2, r3",
+    "D_LQHWUA_POST": "d_lqhwua_post d0, 0, r1, r2, 0",
+    "D_LTWUA_POST": "d_ltwua_post d0, 0, r1, r2, 0",
+    "D_SQHWUA_POST": "d_sqhwua_post d0, 0, r1, r2, 0",
+    "D_STWUA_POST": "d_stwua_post d0, 0, r1, r2, 0",
+    "PLDWWUA_POST": "pldwwua 0, r1",
+    "WBARWUA": "wbarwua 0, r1, 0",
+    "MULL": "mull r1, r2, r1",
 }
 
 # Product logicals whose matcher/placement cannot form a Format E parcel.
 # Do not invent encoding. Coverage still pins the name via # MNEM:.
 _UNENCODABLE_LOGICALS = frozenset({
-    "WFI<TBD>",  # serialize-only WFI_S0 refuses a complete parcel
+    "WFI<TBD>",  # serialize-only WFI refuses a complete parcel
 })
+
+
+def dis_check_line(logical: str, print_m: str, cov_m: str) -> str:
+    """Objdump token in the T-MC6 harness-readable DIS form.
+
+    check_mc_s_vs_obj_parity.py reads
+    ``# DIS: {{[ \\t]}}NAME{{[ \\t,;]}}`` (print mnemonic), not a FileCheck
+    alternation. Objdump prints the logical/print mnemonic after MemberId
+    packing (`set_hwloop`, not the matcher `_w` alias used to assemble).
+    """
+    tok = print_m or cov_m or logical_print_mnemonic(logical)
+    return "# DIS: {{[ \\t]}}" + tok + "{{[ \\t,;]}}"
 
 
 def mnemonic_roundtrip_path(out_dir: Path, basename: str) -> Path:
@@ -2360,14 +2381,68 @@ def _fill_asm_token(
     return "1"
 
 
+def check_memberid_packet_packing(cat: Catalog) -> None:
+    """Packets follow first-member Mode/EntryIdx; unused slots are NOP."""
+    e2_only, e3_only = mode_only_name_sets(cat)
+    e2_only_s, e3_only_s = set(e2_only), set(e3_only)
+    for logical, mids in cat.alternatives.items():
+        packet = asm_packet_for_logical(cat, logical)
+        if packet is None:
+            continue
+        if not (packet.startswith("{ ") and packet.endswith(" }")):
+            raise SystemExit(f"packet not braced: {logical} {packet}")
+        parts = [p.strip() for p in packet[2:-2].split(";")]
+        if not parts or any(p == "" for p in parts):
+            raise SystemExit(f"empty slot in {logical}: {packet}")
+        rec = cat.members[mids[0]]
+        width = 3 if rec.mode == "E3" else 2
+        if len(parts) != width:
+            raise SystemExit(
+                f"packet width {len(parts)} != {rec.mode} width {width} "
+                f"for {logical} {packet}"
+            )
+        if logical in e2_only_s and width != 2:
+            raise SystemExit(f"E2-only {logical} packed as {packet}")
+        if logical in e3_only_s and width != 3:
+            raise SystemExit(f"E3-only {logical} packed as {packet}")
+        want_insn_at = width - 1 - rec.entry_idx
+        if parts[want_insn_at] == "nop":
+            raise SystemExit(
+                f"insn not at entry {rec.entry_idx} for {logical}: {packet}"
+            )
+        for i, part in enumerate(parts):
+            if i != want_insn_at and part != "nop":
+                raise SystemExit(
+                    f"non-NOP pad at slot {i} for {logical}: {packet}"
+                )
+    print("OK MemberId full-bundle packing")
+
+
+def pack_full_bundle_text(rec: MemberRecord, insn: str) -> str:
+    """Full-bundle TEXT from MemberId (mode, entry). High entry first.
+
+    Unused entries are the architectural NOP. Not a singleton/underfill
+    packet. E2 width 2 (`{ e1; e0 }`); E3 width 3 (`{ e2; e1; e0 }`).
+    """
+    width = 3 if rec.mode == "E3" else 2
+    if rec.entry_idx < 0 or rec.entry_idx >= width:
+        raise SystemExit(
+            f"member {rec.member_symbol} entry {rec.entry_idx} "
+            f"out of {rec.mode} width {width}"
+        )
+    slots = ["nop"] * width
+    slots[rec.entry_idx] = insn
+    return "{ " + "; ".join(reversed(slots)) + " }"
+
+
 def asm_packet_for_logical(cat: Catalog, logical: str) -> Optional[str]:
-    """One complete `{ insn; nop; nop }` packet, or None if unencodable."""
+    """One complete full-bundle packet, or None if unencodable."""
     if logical in _UNENCODABLE_LOGICALS:
         return None
-    if logical in _SPECIAL_PACKETS:
-        return _SPECIAL_PACKETS[logical]
     mids = cat.alternatives[logical]
     rec = cat.members[mids[0]]
+    if logical in _SPECIAL_INSNS:
+        return pack_full_bundle_text(rec, _SPECIAL_INSNS[logical])
     lay = cat.layouts[rec.layout_id]
     ops = _member_print_ops(rec, lay)
     gpr_i = [0]
@@ -2400,7 +2475,7 @@ def asm_packet_for_logical(cat: Catalog, logical: str) -> Optional[str]:
         insn = mnem + " " + ", ".join(toks)
     else:
         insn = mnem
-    return "{ " + insn + "; nop; nop }"
+    return pack_full_bundle_text(rec, insn)
 
 
 def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
@@ -2433,10 +2508,22 @@ def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
         "# One Format E packet per product non-NOP logical from the golden"
     )
     lines.append(
-        "# member table. Packet form: { insn; nop; nop }. Bare nop is covered"
+        "# member table. Packet form follows the first generated member's"
     )
     lines.append(
-        "# in nop-format-e-not-all-zero.s. Hypothesized Auto.td encodings are"
+        "# Mode and EntryIdx (high-entry-first TEXT). Unused entries are"
+    )
+    lines.append(
+        "# architectural NOP: E2 e0 is `{ nop; insn }`, E3 e0 is"
+    )
+    lines.append(
+        "# `{ nop; nop; insn }`. Never a singleton/underfill packet."
+    )
+    lines.append(
+        "# Bare nop is covered in nop-format-e-not-all-zero.s. Hypothesized"
+    )
+    lines.append(
+        "# Auto.td encodings are"
     )
     lines.append(
         "# isCodeGenOnly and live in auto-hypothesized-unencodable.s, not here."
@@ -2470,7 +2557,12 @@ def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
         print_m = assembler_mnemonic(logical, unit)
         label = "rt_" + re.sub(r"[^A-Za-z0-9_]", "_", print_m)
         packet = asm_packet_for_logical(cat, logical)
-        lines.append(f"# MNEM: {cov_m}")
+        # T-MC6 parity harness uses # MNEM: as the objdump token. Emit the
+        # matcher/print spelling so encoding==obj DIS matches the packet.
+        # Keep the catalog logical as a coverage pin when it differs.
+        lines.append(f"# MNEM: {print_m}")
+        if print_m != cov_m:
+            lines.append(f"# LOGICAL: {cov_m}")
         if packet is None:
             lines.append(
                 f"# UNENCODABLE: {logical} ({cov_m}) — no invented encoding"
@@ -2480,7 +2572,7 @@ def emit_mnemonic_roundtrip_s(cat: Catalog) -> str:
         lines.append(f"{label}:")
         lines.append(packet)
         lines.append(f"# DIS-LABEL: <{label}>:")
-        lines.append("# DIS: {{[ \\t]}}" + print_m + "{{[ \\t,;}]}}")
+        lines.append(dis_check_line(logical, print_m, cov_m))
         lines.append("")
     if unenc:
         lines.append("# UNENCODABLE product logicals (real matcher/placement gap):")
@@ -2671,7 +2763,7 @@ def emit_logical_defs_td_inc(
         if _logical_key(logical) in hand_logicals:
             continue
         # Golden placeholder rows (e.g. WFI<TBD>) are not td identifiers;
-        # their mnemonics parse via hand FieldSlot defs (ALU32 WFI).
+        # their mnemonics parse via hand defs (ALU32 WFI).
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", logical):
             continue
         mids = cat.alternatives[logical]
@@ -3540,6 +3632,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"error: golden JSON not found: {json_path}", file=sys.stderr)
         return 2
 
+    try:
+        verify_authority_inputs(
+            golden,
+            [
+                json_path.name,
+                xlsx_path.name,
+                family.index_filename,
+                family.canonical_filename,
+                family.constraints_filename,
+            ],
+        )
+        verify_golden_inputs_pin(golden_inputs_pin_path())
+        check_cutover_surfaces(args.out_dir)
+    except SystemExit as exc:
+        msg = str(exc)
+        if msg:
+            print(msg, file=sys.stderr)
+        return 2 if msg else 0
+
     json_sha = sha256_file(json_path)
     if json_sha != PINNED_JSON_SHA256:
         print(
@@ -3679,6 +3790,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(
                 f"OK member encode→decode round-trip members={len(cat.members)}"
             )
+            check_memberid_packet_packing(cat)
             prove_ownership_fail_closed(
                 cat,
                 hand_logicals,
@@ -3689,6 +3801,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             prove_source_mutation_not_silent(
                 cat, family, json_sha, xlsx_sha, out_dir / family.records_inc
             )
+            prove_unpinned_consumed_fails(golden)
+            prove_derived_xlsx_not_authority(golden)
+            prove_unused_authority_not_consumed(golden)
+            prove_unpublished_choice_fails(golden)
             if not canonical_path.is_file():
                 raise SystemExit(
                     f"canonical-vector ledger not found: {canonical_path}"

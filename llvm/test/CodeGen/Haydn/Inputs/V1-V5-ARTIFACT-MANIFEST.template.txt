@@ -46,9 +46,10 @@ golden_operands_info_sha256:  # operands_info.md
 golden_constraints_sha256:    # VLIW_Engine_Compiler_Constraints.md
 golden_manual_sha256:         # VLIW_Engine_Reference_Manual.docx
 # Consumer catalog provenance (retired 7-slot JSON + 17-file ledger forbidden)
-# Catalog still consumes the five layout/constraints/manual files only.
+# Catalog pin is six consumed files; FILE sha256 is the product stamp.
+# Header comments on that pin file are content drift.
 catalog_authority: five-file
-catalog_golden_inputs_pin_sha256:   # BundleSim .../generated/GOLDEN_INPUTS.sha256
+catalog_golden_inputs_pin_sha256: 02b5bed3c7d5030eca4451491b60e88ee2ad6caae6c5ebdeac3685a1c0aaeba3
 catalog_generated_inc_sha256:       # .../instruction_catalog_generated.inc
 catalog_retired_inputs_consumed: false
 # Same-artifact consumer / decode evidence
@@ -106,7 +107,7 @@ No golden invent (GE96-01/02/03/04/07/08/09).
 EF_HAYDN_E96 is provisional consumer agreement, not external allocation.
 DG0 DecisionGuard product registry remains absent by design
 (Inputs/* + product_coverage_pin only; no G-DECISION-GUARD revive).
-P19 leftover: Auto.td hand-maintained; CMake banned plans-tree path gone; $HOME/haydn leftover.
+P19 leftover: Manual.td tombstone; CMake banned plans-tree path gone; $HOME/haydn leftover.
 R15 leftover: orphan pass-deep-review archived; CLAUDE.md is a symlink.
 PIPE-30 skipFunction closed. Schema surface closed. MF0 INERT. No second format pipeline.
 38bd405 G_ANYEXT / hasFP adjustsStack / MaxParcels pins: phase-firewall-*.ll.

@@ -1,21 +1,11 @@
 #!/usr/bin/env python3
 """Normalize the Haydn format E instruction encoding.
 
-`format_e_bit_layout_v2_1.json` is the ISA database's bit layout for the 96-bit
-format E bundle. It describes, for every entry position of every bundle form,
-every hardware unit that entry can name, and every instruction type that unit
-can issue, the exact bit placement of each field and the constant values that
-select it. This script turns that into one flat, downstream-agnostic table.
-
-Why this exists: the encodings currently in `HaydnInstrInfoManual.td` are
-hypothesized -- the file says so in its own header -- and were never derived
-from the database. Format E supersedes them wholesale rather than adjusting
-them, because the entry windows (31/31/27 bits for three entries, 45/41 for
-two) are far narrower than the retired Bundle128 slot windows (48/40/40), so no
-existing per-slot encoding fits.
-
-Step 1 of the migration: emit and validate the table, and report the distance
-from the current .td. Nothing consumes the output yet.
+`format_e_bit_layout_v2_1.json` and `instruction_type_index.json` are the
+pinned layout and instruction-index inputs. This script flattens the layout
+into one downstream-agnostic table and checks the database against itself.
+Live TableGen members come from FormatE/generate_format_e_records.py.
+HaydnInstrInfoManual.td is a tombstone and is not an encoding authority.
 
   haydn_encoding.py --database DIR --emit table  -o encoding.json
   haydn_encoding.py --database DIR --emit report [--target-dir DIR]
@@ -420,11 +410,10 @@ def inherited_operand_class(classes: dict, logical: str, alias: str,
 # format E class that carries the same encoder.
 #
 # These cannot go through inherited_operand_class: they are Operand<OtherVT>
-# with no width to check a field against. But their encoders are exactly what a
-# member needs -- getBranchTargetOpValue does the section 5.14 D1 divide-by-two
-# and dispatches the fixup kind on the opcode -- and a plain simmN gets
-# neither, so a literal branch offset was stored raw while the same distance
-# written as a symbol was scaled by the relocation (section 6.10).
+# with no width to check a field against. Branch/call scale, signedness, and
+# PC-base equations are unpublished; this map only selects the already-declared
+# width-matched class for the member field. Do not treat a historical
+# divide-by-two encoder as product law.
 BRANCH_CLASS_FOR_WIDTH = {
     ("brtarget", 12): "brtarget_e12",
     ("calltarget", 20): "calltarget_e20",
@@ -1806,30 +1795,22 @@ def report(geometry: dict, placements: list[dict], target_dir: Path | None) -> s
     if target_dir is not None:
         defined = current_td_instructions(target_dir)
         real = {name.upper() for name in instructions}
-        slot_member = re.compile(r"_S[012]$")
-        members = {d for d in defined if slot_member.search(d)}
-        rest = defined - members
         lines.append("against the current TableGen definitions")
         lines.append("-" * 66)
         lines.append(f"  `def` lines in *.td            : {len(defined)}")
-        lines.append(f"    of which _S0/_S1/_S2 members : {len(members)}")
-        lines.append(f"    remaining                    : {len(rest)}")
         lines.append(f"  in the database, no `def` line : "
                      f"{len(real - {d.upper() for d in defined})}")
         lines.append("")
         lines.append("  Read these as orders of magnitude, not a diff:")
         lines.append("")
-        lines.append("  - The _S0/_S1/_S2 members are the slot model's")
-        lines.append("    scaffolding. Format E replaces them with (entry, unit)")
-        lines.append("    placements, so they are retired rather than missing.")
+        lines.append("  - Generated members live in HaydnFormatsE96Members.td.inc.")
+        lines.append("    Occupancy-suffix names are not product identity.")
         lines.append("  - Instructions produced by a multiclass have no literal")
         lines.append("    `def NAME :` line, so the database-side shortfall is an")
         lines.append("    upper bound, not a list of gaps.")
-        lines.append("  - Above all, HaydnInstrInfoManual.td says in its own header")
-        lines.append("    that its binary encodings are hypothesized. A matching")
-        lines.append("    name says nothing about the bits agreeing, so every one")
-        lines.append("    of the placements above has to be re-derived from the")
-        lines.append("    database regardless of what the name comparison shows.")
+        lines.append("  - Authored logicals live in HaydnInstrInfo.td.")
+        lines.append("    HaydnInstrInfoManual.td is a 0-def tombstone.")
+        lines.append("    Placement bits come only from the pinned layout JSON.")
     return "\n".join(lines) + "\n"
 
 
@@ -1955,10 +1936,8 @@ def fix_read_ports(database: Path, write: bool) -> str:
         report += f"  {name:20} {key} += {operand}\n"
     if write:
         path.write_bytes(b"\n".join(lines))
-        report += ("\nRe-pin the database: the sha256 in\n"
-                   "  simulator/bundlesim/isa/database/generated/"
-                   "GOLDEN_INPUTS.sha256\n"
-                   "now names the uncorrected file (§ 5.3).\n")
+        report += ("\nRe-pin the database: GOLDEN_INPUTS.sha256 still names "
+                   "the uncorrected file.\n")
     return report
 
 
@@ -2123,6 +2102,16 @@ def main() -> int:
         print(fix_read_ports(args.database, args.write))
         return 0
 
+    _format_e = Path(__file__).resolve().parent.parent / "FormatE"
+    if str(_format_e) not in sys.path:
+        sys.path.insert(0, str(_format_e))
+    from family_core import verify_authority_inputs
+
+    verify_authority_inputs(
+        args.database,
+        [FORMAT_E_LAYOUT, INSTRUCTION_INDEX],
+    )
+
     # 0 unless a CHECK mode says otherwise. Generation modes either produce
     # their file or raise; only roundtrip and operand-agreement have a verdict.
     status = 0
@@ -2134,7 +2123,7 @@ def main() -> int:
         print(f"format E: {len(placements)} placements over "
               f"{len({(p['entry_count'], p['entry_index'], p['unit'], p['type']) for p in placements})}"
               f" (entry, unit, type) shapes — layout is self-consistent")
-        return
+        return 0
 
     if args.emit == "roundtrip":
         text, status = roundtrip(geometry, placements)

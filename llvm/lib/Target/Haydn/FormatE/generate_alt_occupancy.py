@@ -2,7 +2,7 @@
 """Emit HaydnGenAltOccupancy.inc from CodeGenFormat AlternateInsts.
 
 Occupancy is residual LogicalMaterialize / MultiSlot_Pseudo holes
-(index == SLOT bit). Opcode IDs in Fallback[] are FieldSlots used only
+(index == SLOT bit). Opcode IDs in Fallback[] are residual occupancy opcodes used only
 when no Format E member exists at that residual index. Do not derive
 Mask from Format E EntryIdx (ADD64/X4CMUL16/LD32 would gain e0/e2).
 
@@ -78,7 +78,7 @@ def main() -> None:
         "// HaydnGenFormats.inc AlternateInsts (LogicalMaterialize +",
         "// MultiSlot_Pseudo holes). DO NOT EDIT.",
         "// Mask bit i = residual occupancy class i (SLOT0/1/2).",
-        "// Fallback[i] is the residual FieldSlot, or 0 for a hole.",
+        "// Fallback[i] is the residual occupancy opcode, or 0 for a hole.",
         "#ifdef GET_HAYDN_ALT_OCCUPANCY",
         "#undef GET_HAYDN_ALT_OCCUPANCY",
         "",
