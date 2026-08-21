@@ -1,3 +1,8 @@
+# CB-161 rebaseline (2026-08-21): dropped legacy "implicit-def dead $sfr" operands. Live codegen
+# emits none (the every-ALU-writes-SFR modeling is gone), and golden Constraints
+# §Registers allows ONE SFR writer per bundle, so a finalize-stamped member pack
+# carrying two such operands fails the SFR 1W port law at verify. The bundles were
+# illegal under golden all along; the fixtures now mirror real committed MIR.
 # RUN: llc -mtriple=haydn-unknown-elf -x mir \
 # RUN:   -start-before=haydn-finalize-mi-bundles -filetype=obj %s -o %t.o
 # RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
@@ -23,9 +28,9 @@ body:             |
     ; CHECK-LABEL: <residual_e2_fullpack>:
     ; CHECK-DAG: add32
     ; CHECK-DAG: xor32
-    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = XOR32 $r2, $r3
     }
     BUNDLE 0 {
       $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

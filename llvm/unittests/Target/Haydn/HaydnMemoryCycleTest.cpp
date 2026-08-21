@@ -121,7 +121,9 @@ TEST_F(HaydnMemoryCycleTest, FirstLastMemoryCycleTables) {
   using namespace Haydn::Sched;
   const HaydnInstrInfo &II = TII();
 
-  for (unsigned SC : {Slot0_LS, Slot1_LD, Slot01_LD, Slot2_LS}) {
+  // 2026-08-21 itinerary re-map: Slot2_LS retired (golden re-mapped its last
+  // user D_LQHWUA_POST to Slot01_LD); published memory set is three.
+  for (unsigned SC : {Slot0_LS, Slot1_LD, Slot01_LD}) {
     auto First = II.getFirstMemoryCycle(SC);
     auto Last = II.getLastMemoryCycle(SC);
     ASSERT_TRUE(First.has_value()) << "SC=" << SC;
@@ -130,9 +132,10 @@ TEST_F(HaydnMemoryCycleTest, FirstLastMemoryCycleTables) {
     EXPECT_EQ(*Last, 1);
   }
 
-  // Non-memory classes never invent a memory cycle.
+  // Non-memory classes never invent a memory cycle. Slot12_ALU retired
+  // with the 2026-08-21 re-map (X2/X4 shells now book Slot012_ALU).
   for (unsigned SC : {NoInstrModel, Slot012_ALU, Slot0_ALU, Slot1_ALU,
-                      Slot2_ALU, Slot12_ALU}) {
+                      Slot2_ALU, Slot12_ALU_DspLat, Slot012_ALU_CsrLat}) {
     EXPECT_FALSE(II.getFirstMemoryCycle(SC).has_value()) << "SC=" << SC;
     EXPECT_FALSE(II.getLastMemoryCycle(SC).has_value()) << "SC=" << SC;
   }
@@ -155,8 +158,10 @@ TEST_F(HaydnMemoryCycleTest, OpcodeSchedClassesAreMemoryItineraries) {
   EXPECT_EQ(II.get(Haydn::S_LW_WITH_IMM_E2_E1_LOAD1_RI6).getSchedClass(),
             static_cast<unsigned>(Slot1_LD));
   EXPECT_EQ(II.get(Haydn::LD64).getSchedClass(), static_cast<unsigned>(Slot01_LD));
+  // 2026-08-21 re-map: D_LQHWUA_POST golden Available = LOAD1|LOADSTORE0 —
+  // Slot01_LD, not the retired Slot2_LS.
   EXPECT_EQ(II.get(Haydn::D_LQHWUA_POST).getSchedClass(),
-            static_cast<unsigned>(Slot2_LS));
+            static_cast<unsigned>(Slot01_LD));
 }
 
 // Soak-off path: class-agnostic latency 1 for every src/dst pair.
@@ -165,7 +170,7 @@ TEST_F(HaydnMemoryCycleTest, SoakOffGetMemoryLatencyAlwaysOne) {
   const HaydnInstrInfo &II = TII();
   setAccurateMemoryLatency(false);
 
-  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD, Slot2_LS};
+  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD};
   const unsigned NonMem[] = {Slot0_ALU, Slot012_ALU};
 
   for (unsigned Src : Mem) {
@@ -188,13 +193,13 @@ TEST_F(HaydnMemoryCycleTest, SoakOffGetMemoryLatencyAlwaysOne) {
 
 // Product architectural path: max(1, Last-First+1)=2 for memory pairs;
 // nullopt else (MemoryEdges fatals only when a published class is missing
-// its First/Last row — Slot2_LS is published).
+// its First/Last row).
 TEST_F(HaydnMemoryCycleTest, AccurateGetMemoryLatencyFromTables) {
   using namespace Haydn::Sched;
   const HaydnInstrInfo &II = TII();
   setAccurateMemoryLatency(true);
 
-  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD, Slot2_LS};
+  const unsigned Mem[] = {Slot0_LS, Slot1_LD, Slot01_LD};
   for (unsigned Src : Mem) {
     for (unsigned Dst : Mem) {
       auto Lat = II.getMemoryLatency(Src, Dst);
@@ -203,9 +208,9 @@ TEST_F(HaydnMemoryCycleTest, AccurateGetMemoryLatencyFromTables) {
     }
   }
 
-  EXPECT_TRUE(HaydnInstrInfo::isPublishedMemoryItinerary(Slot2_LS));
-  EXPECT_TRUE(II.getLastMemoryCycle(Slot2_LS).has_value());
-  EXPECT_TRUE(II.getFirstMemoryCycle(Slot2_LS).has_value());
+  EXPECT_TRUE(HaydnInstrInfo::isPublishedMemoryItinerary(Slot01_LD));
+  EXPECT_TRUE(II.getLastMemoryCycle(Slot01_LD).has_value());
+  EXPECT_TRUE(II.getFirstMemoryCycle(Slot01_LD).has_value());
 
   // Unknown cycle → nullopt (non-published class is not table-driven).
   EXPECT_FALSE(II.getMemoryLatency(Slot0_LS, Slot0_ALU).has_value());

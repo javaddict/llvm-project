@@ -245,6 +245,12 @@ TEST(HaydnPlacementAlternativeTest, OccupancyMatchesLogicalDesc_SLT64) {
 
 TEST(HaydnPlacementAlternativeTest, OccupancyMatchesLogicalDesc_X2SLT32) {
   // X2SLT32 ISel is SFR-only (outs empty, 2 src). Do not pick unary ALU0.
+  // GE96-11 (2026-08-21): the X2*/X4* ALU occupancy flip (0x6 → 0x7 from
+  // golden Available = {ALU0,ALU1,ALU2}) now offers pair members at residual
+  // slots 0 AND 2 — both are the SFR-only ALU2 shape; the unary ALU0 rows
+  // (1 def + 1 src) stay rejected by the desc filter below. Members >= 2
+  // pins that the flip widened residual occupancy without letting the
+  // wrong-shape unary form in.
   HaydnMCFormats Fmts;
   const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
   const MCInstrDesc &Log = MII.get(Haydn::X2SLT32);

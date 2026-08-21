@@ -1,3 +1,8 @@
+# CB-161 rebaseline (2026-08-21): dropped legacy "implicit-def dead $sfr" operands. Live codegen
+# emits none (the every-ALU-writes-SFR modeling is gone), and golden Constraints
+# §Registers allows ONE SFR writer per bundle, so a finalize-stamped member pack
+# carrying two such operands fails the SFR 1W port law at verify. The bundles were
+# illegal under golden all along; the fixtures now mirror real committed MIR.
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 # REQUIRES: haydn-registered-target
@@ -35,9 +40,9 @@ body:             |
     ; CHECK: BUNDLE 1, 0
     ; CHECK: ADD32
     ; CHECK: XOR32
-    BUNDLE 1, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
-      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE 1, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = XOR32 $r2, $r3
     }
     RET implicit $r15
 
@@ -60,10 +65,10 @@ body:             |
     ; CHECK: LD32
     ; CHECK: LD64
     ; CHECK: ADD32
-    BUNDLE 1, 0, implicit-def $r5, implicit-def $d0, implicit-def $r6, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4 {
-      $r5 = LD32 $r0, 0, implicit-def dead $sfr
-      $d0 = LD64 $r1, 0, implicit-def dead $sfr
-      $r6 = ADD32 $r2, $r3, implicit-def dead $sfr
+    BUNDLE 1, 0, implicit-def $r5, implicit-def $d0, implicit-def $r6, implicit $r0, implicit $r1, implicit $r2, implicit $r3, implicit $r4 {
+      $r5 = LD32 $r0, 0
+      $d0 = LD64 $r1, 0
+      $r6 = ADD32 $r2, $r3
     }
     RET implicit $r15
 
@@ -79,9 +84,9 @@ body:             |
     ; CHECK: BUNDLE 0, 0
     ; CHECK: ADD32_E2_E0_ALU0_RR
     ; CHECK: ADDI32_E2_E1_ALU1_RI20
-    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
-      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
-      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
+      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1
     }
     RET implicit $r15
 
@@ -97,8 +102,8 @@ body:             |
     ; CHECK: BUNDLE 0, 0
     ; CHECK: ADD32_E2_E0_ALU0_RR
     ; CHECK: ADDI32_E2_E1_ALU1_RI20
-    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
-      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
-      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
+      $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1
     }
     RET implicit $r15

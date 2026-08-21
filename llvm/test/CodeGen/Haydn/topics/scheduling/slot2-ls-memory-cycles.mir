@@ -5,23 +5,24 @@
 # REQUIRES: asserts
 # REQUIRES: haydn-registered-target
 #
-# Role: MIR — Slot2_LS publishes First/LastMemoryCycle. Live S2 load
-# (logical D_LQHWUA_POST; store S2 FieldSlots retired) → load is
-# Latency=2, not a silent 1. A published Slot*_LS class with no table
-# row fatals (ExactLatencies). Do not invent a latency.
+# Role: MIR — published memory classes cover every live memory op.
+# 2026-08-21 itinerary re-map: golden D_LQHWUA_POST Available =
+# LOAD1|LOADSTORE0, so the logical books Slot01_LD; Slot2_LS is retired
+# (zero users; orphaned InstrItinClass drops out of the Sched enum). The
+# load keeps Latency=2 product edges; a published Slot*_LS class with no
+# table row still fatals (ExactLatencies). Do not invent a latency.
 #
 # MEM: DO NOT EDIT
 # MEM: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
+# MEM-NOT: Slot2_LS
 # MEM: HaydnInstrInfo::getFirstMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
 # MEM: case Haydn::Sched::Slot01_LD: return 0; // Slot01_LD
-# MEM: case Haydn::Sched::Slot2_LS: return 0; // Slot2_LS
 # MEM: HaydnInstrInfo::getLastMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 1; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 1; // Slot1_LD
 # MEM: case Haydn::Sched::Slot01_LD: return 1; // Slot01_LD
-# MEM: case Haydn::Sched::Slot2_LS: return 1; // Slot2_LS
 
 --- |
   define i32 @slot2_ls_store_then_load(ptr %p, i64 %v) {

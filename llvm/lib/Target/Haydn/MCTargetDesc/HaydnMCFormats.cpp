@@ -651,19 +651,49 @@ haydnFormatEKeepOperands(
       return Keep;
   }
 
-  // AR unaligned POST load: [rtd, wb, rs1, rs2, ar_sel, dir_sel] →
-  // [dest1, ar_sel, dest2]. Golden AR window has dest/ar_sel/rs only.
-  if (OldDefs == 2 && NewDefs == 1 && OldN == 6 && NewN == 3) {
-    SmallVector<unsigned, 4> K{0, 4, 2};
+  // AR unaligned POST load (2026-08-21 tied members): [rtd, rs1_wb, rs1,
+  // rs2, ar_sel, dir_sel] → [dest1, dest2_wb, ar_sel, dest2]. The member
+  // now declares the golden rs writeback (dest2_wb tied to dest2), so the
+  // unencoded rs2/dir_sel drop keeps NumDefs aligned.
+  if (OldDefs == 2 && NewDefs == 2 && OldN == 6 && NewN == 4) {
+    SmallVector<unsigned, 4> K{0, 1, 4, 2};
     if (accept(K))
       return K;
   }
-  // AR unaligned POST store: [wb, rtd, rs1, rs2, ar_sel, dir_sel] →
-  // [ar_sel, dest1, dest2].
-  if (OldDefs == 1 && NewDefs == 0 && OldN == 6 && NewN == 3) {
-    SmallVector<unsigned, 4> K{4, 1, 2};
+  // AR unaligned POST store (tied members): [rs1_wb, rtd, rs1, rs2,
+  // ar_sel, dir_sel] → [dest2_wb, ar_sel, dest1, dest2].
+  if (OldDefs == 1 && NewDefs == 1 && OldN == 6 && NewN == 4) {
+    SmallVector<unsigned, 4> K{0, 4, 1, 2};
     if (accept(K))
       return K;
+  }
+  // Hand CB load imm swap (tied members): hand D_LDW_CB_IMM lists
+  // [rtd, rs_wb, rs, cbr_sel, imm] while the tied member lists
+  // [dest1, dest2_wb, cbr_sel, dest2, imm] — same classes, positions 2/3
+  // swapped. Generated CB logicals match their members positionally and
+  // never reach here.
+  if (OldDefs == 2 && NewDefs == 2 && OldN == 5 && NewN == 5) {
+    SmallVector<unsigned, 4> K{0, 1, 3, 2, 4};
+    if (accept(K))
+      return K;
+  }
+  // Hand shell omits a tied writeback the member declares (PLDWWUA vs
+  // tied PLDWWUA_POST member): [ar_sel, rs] → [dest2_wb, ar_sel, dest2].
+  // The member's tied use names the logical operand that also feeds the
+  // synthetic wb def, so both map to the same old index.
+  if (NewN == OldN + 1 && NewDefs == OldDefs + 1) {
+    for (unsigned NewI = NewDefs; NewI != NewN; ++NewI) {
+      const int Tie = NewDesc.getOperandConstraint(NewI, MCOI::TIED_TO);
+      if (Tie < 0 || static_cast<unsigned>(Tie) >= NewDefs)
+        continue;
+      SmallVector<unsigned, 4> Keep(NewN, 0);
+      unsigned OldUse = OldDefs;
+      for (unsigned J = NewDefs; J != NewN; ++J)
+        Keep[J] = OldUse++;
+      Keep[static_cast<unsigned>(Tie)] = Keep[NewI];
+      if (accept(Keep))
+        return Keep;
+    }
   }
   // WBARWUA: [rs, ar_sel, dir_sel] → [ar_sel, dest2].
   if (OldDefs == 0 && NewDefs == 0 && OldN == 3 && NewN == 2) {
@@ -674,6 +704,10 @@ haydnFormatEKeepOperands(
 
   // CB load extra writeback: [dest, wb, base, sel, imm|rs] →
   // [dest, sel, base, imm|rs].
+  // 2026-08-21: inert after the golden base-writeback tie cutover —
+  // CB members now declare dest2_wb (defs align with their logicals and
+  // the Exact/prefix paths bind them). Kept fail-closed for any future
+  // no-wb member shape; no family currently matches.
   if (OldDefs == NewDefs + 1 && NewDefs == 1 && OldN == NewN + 1 &&
       NewN >= 3) {
     SmallVector<unsigned, 4> Keep{0, 3, 2};
@@ -867,9 +901,24 @@ bool haydnIsCompilerKeepMapExtraOp(
 
   if (LogDesc.getNumDefs() != MemDesc.getNumDefs())
     return false;
-  for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands(); ++I) {
-    if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0)
-      return true;
+  // 2026-08-21: a tied logical ins is only a compiler extra when the member
+  // does NOT model the same tie. Since the golden base-writeback cutover
+  // (UA `_POST` suffix + CB families), members declare dest2_wb tied to
+  // dest2 exactly like their logicals; those fills belong to the standalone
+  // keep-map, not to Finalize.
+  bool MemberModelsAnyTie = false;
+  for (unsigned I = MemDesc.getNumDefs(); I != MemDesc.getNumOperands(); ++I) {
+    if (MemDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0) {
+      MemberModelsAnyTie = true;
+      break;
+    }
+  }
+  if (!MemberModelsAnyTie) {
+    for (unsigned I = LogDesc.getNumDefs(); I != LogDesc.getNumOperands();
+         ++I) {
+      if (LogDesc.getOperandConstraint(I, MCOI::TIED_TO) >= 0)
+        return true;
+    }
   }
   for (unsigned I = Need; I < Have; ++I) {
     if (Logical.getOperand(I).isReg())
@@ -1017,6 +1066,9 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
     }
     // Parser may omit a tied writeback that is not in the AsmString
     // (d_lqhwua_post $rtd, $ar_sel, $rs1, $rs2, $dir_sel has no $rs1_wb).
+    // 2026-08-21: members now model the golden rs writeback (dest2_wb
+    // tied to dest2, incl. UA `_POST` suffix + CB families); the keep-map
+    // branches in haydnFormatEKeepOperands reconstruct them.
     // kindOk already rejects keep indices past Have.
     if (OldN > 0 && NewN > 0 && Have > 0) {
       // AsmString may omit a logical ins register (LUI $rs, CSRR $rs).

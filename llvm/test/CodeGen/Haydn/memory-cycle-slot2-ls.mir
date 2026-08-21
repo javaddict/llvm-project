@@ -8,36 +8,36 @@
 # REQUIRES: asserts
 # REQUIRES: haydn-registered-target
 #
-# REGRESSION TEST: Slot2_LS must publish First/LastMemoryCycle.
+# REGRESSION TEST: published memory classes must cover every memory op.
 #
-# Bug: HaydnGenMemoryCycles.inc listed only Slot0_LS / Slot1_LD / Slot01_LD.
-# Slot2_LS is the itinerary on remaining S2 memory FieldSlots (CB/UA; ALU2,
-# OperandCycles [2]). Generic D_SW_*_S2 forms were retired (no e1/e2 span).
-# Without a MemoryCycle row, getMemoryLatency returned nullopt and
-# MemoryEdges invented Latency=1 on a no-interlock machine — silent silicon
-# hazard. One mechanism: MEMORY_ITIN_NAMES includes Slot2_LS; generator
-# emits first=0 / last=1 like the other LS classes. Product MemoryEdges
-# fatals if a Slot*_LS / Slot*_LD class still has no First/Last (AIE
-# ExactLatencies). Do not invent a latency.
-# Live producer is logical D_LQHWUA_POST (mayLoad + Slot2_LS). Store S2
-# FieldSlots retired; no e2 store member (reject-not-migrate).
-# If this regresses: Slot2_LS drops out of the generated table, or S2
-# memory→memory falls back to Latency=1 / fatals on a published class.
+# Bug history: HaydnGenMemoryCycles.inc once listed only three classes while
+# logical D_LQHWUA_POST carried Slot2_LS — getMemoryLatency returned nullopt
+# and MemoryEdges invented Latency=1 on a no-interlock machine (silent
+# silicon hazard). One mechanism: MEMORY_ITIN_NAMES names the published set;
+# the generator emits first=0 / last=1 for each; MemoryEdges fatals if a
+# published class has no First/Last (AIE ExactLatencies). Do not invent a
+# latency.
 #
-# Role: semantic — Slot2_LS MemoryCycle product pin.
+# 2026-08-21 itinerary re-map update: golden Available = LOAD1|LOADSTORE0
+# for D_LQHWUA_POST, so the logical now books Slot01_LD and Slot2_LS is
+# RETIRED (zero users; an orphaned InstrItinClass drops out of the tblgen
+# Sched enum, so C++ cannot reference it). The invariant this test pins is
+# unchanged: every memory itinerary in MEMORY_ITIN_NAMES publishes rows,
+# and the live producer keeps Latency=2 product edges below.
+#
+# Role: semantic — published MemoryCycle set + product latency pin.
 #
 # MEM: DO NOT EDIT
 # MEM: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
+# MEM-NOT: Slot2_LS
 # MEM: HaydnInstrInfo::getFirstMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
 # MEM: case Haydn::Sched::Slot01_LD: return 0; // Slot01_LD
-# MEM: case Haydn::Sched::Slot2_LS: return 0; // Slot2_LS
 # MEM: HaydnInstrInfo::getLastMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 1; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 1; // Slot1_LD
 # MEM: case Haydn::Sched::Slot01_LD: return 1; // Slot01_LD
-# MEM: case Haydn::Sched::Slot2_LS: return 1; // Slot2_LS
 
 --- |
   define i32 @slot2_ls_store_then_load(ptr %p, i64 %v) {

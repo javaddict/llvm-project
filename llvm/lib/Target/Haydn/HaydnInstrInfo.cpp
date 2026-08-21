@@ -2340,11 +2340,12 @@ bool HaydnInstrInfo::isPublishedMemoryItinerary(unsigned SchedClass) {
   // class in this set; a memory-class miss against getFirst/LastMemoryCycle
   // is therefore a generator hole, not an unmodeled op (W21 / AIE
   // ExactLatencies fatality).
+  // 2026-08-21 itinerary re-map: Slot2_LS retired (golden assigns every
+  // former S2 memory row to LOADSTORE0/LOAD1); the published set is three.
   switch (SchedClass) {
   case Haydn::Sched::Slot0_LS:
   case Haydn::Sched::Slot1_LD:
   case Haydn::Sched::Slot01_LD:
-  case Haydn::Sched::Slot2_LS:
     return true;
   default:
     return false;

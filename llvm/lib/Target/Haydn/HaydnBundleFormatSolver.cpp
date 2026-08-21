@@ -308,6 +308,51 @@ bool productResMIIFailsQualification(ArrayRef<unsigned> Opcodes) {
 #include "HaydnGenFormatEMemberOpcodes.inc"
 
 namespace llvm {
+namespace haydn {
+namespace bundle {
+
+unsigned formatEUnitTwinMember(unsigned Opc, uint32_t UsedUnits) {
+  // GE96-11 (2026-08-21) commit-site twin rematch: golden unit-twin of \p Opc.
+  // Same Logical + Mode + EntryIdx as \p Opc's own member record, Unit
+  // disjoint from \p UsedUnits, lowest UnitMap first (the same deterministic
+  // order assignFormatEMemberEntries uses). Fail closed (0): no twin → the
+  // commit site keeps the residual pick and lets packing/verify reject.
+  // NOTE: same-entry golden rows can carry different operand shapes
+  // (X2SLT32@e0 ALU2 is SFR-only 2-src while ALU0 is unary dest+src), and
+  // TypeCode is a unit-layout key (ALU1/ALU2 vs ALU0), NOT a shape oracle.
+  // The caller gates every twin on memberDescCompatible before stamping.
+  namespace fe = haydn::format_e;
+  const fe::FormatEMemberRec *Self = nullptr;
+  const fe::FormatEMemberRec *Best = nullptr;
+  for (unsigned I = 0; I < fe::FormatEMemberCount; ++I) {
+    const fe::FormatEMemberRec &M = fe::FormatEMembers[I];
+    if (M.IsNop || M.Unit >= 32)
+      continue;
+    if (!Self) {
+      if (M.MemberId < FormatEMemberOpcodeCount &&
+          FormatEMemberOpcodes[M.MemberId] == Opc)
+        Self = &M;
+      continue;
+    }
+    if (StringRef(M.Logical) != StringRef(Self->Logical))
+      continue;
+    if (M.Mode != Self->Mode || M.EntryIdx != Self->EntryIdx)
+      continue;
+    if (UsedUnits & (1u << M.Unit))
+      continue;
+    if (!Best || M.UnitMap < Best->UnitMap)
+      Best = &M;
+  }
+  if (!Self || !Best || Best->MemberId >= FormatEMemberOpcodeCount)
+    return 0;
+  return FormatEMemberOpcodes[Best->MemberId];
+}
+
+} // namespace bundle
+} // namespace haydn
+} // namespace llvm
+
+namespace llvm {
 namespace {
 
 /// Format E members for setDesc; FieldSlots stay residual AlternateInsts
@@ -514,13 +559,16 @@ bool llvm::haydn::bundle::cycleMembersRespectPortBudgets(
     ARw += AW2;
     // SFR: count LIVE writes only. countSFRPorts charges every def "dead
     // or live" (PackLegality rule 3), but the golden entry menus seat two
-    // or three ALU ops — each an implicit dead $sfr writer — in one
-    // bundle, and the product emits and executes such bundles (dual-ADDI32
-    // pairs all over the corpus). Dead flag defs are not exclusive-port
-    // traffic; a live SFR write (CSRW, a consumed compare) still is. The
-    // HR-side counter still applies rule 3 to dead defs — that asymmetry
-    // is part of the CB-153b co-issue story and stays flagged for the
-    // owner.
+    // or three ALU ops in one bundle and the product emits such bundles
+    // (dual-ADDI32 pairs all over the corpus) — current members carry NO
+    // $sfr operand at all (the old implicit dead $sfr modeling is gone;
+    // CB-161 2026-08-21 audit), so this liveness carve-out no longer
+    // gates any live corpus pack. A live SFR write (CSRW, a consumed
+    // compare) still is exclusive-port traffic, and countSFRPorts now
+    // also charges member-shape anonymous $sfr operands (their generated
+    // descs dropped the logical's Uses/Defs=[SFR] naming). The HR-side
+    // counter still applies rule 3 to dead defs — that asymmetry is part
+    // of the CB-153b co-issue story and stays flagged for the owner.
     auto [SR2, SW2] = countSFRPorts(*MI);
     SR += SR2;
     unsigned LiveSFRWrites = 0;

@@ -210,7 +210,9 @@ class Fmt48_WideBR_I12<bits<8> opcode, dag outs, dag ins, string asmstr,
 class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden SLLI64/SRLI64/SRAI64 Available =
+  // ALU0|ALU1|ALU2 (was Slot12_ALU).
+  let Itinerary = Slot012_ALU;
   let TSFlags{2-0} = 0b110;
 
   bits<4> rtd;            // DR64 destination (bits[15:12]); rsd tied

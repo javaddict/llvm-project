@@ -46,8 +46,10 @@ struct HaydnCyclePortDemandV {
 };
 
 /// Sum per-member port demand via the shared PortModel (MI operand facts).
-/// SFR uses countSFRPorts so leftover implicit-def $sfr on ordinary ALU
-/// is not a second 1W ceiling next to HR.
+/// SFR uses countSFRPorts: descriptor-named SFR traffic AND private Format E
+/// members' anonymous implicit(-def) $sfr operands charge (CB-161, 2026-08-21)
+/// — member descs are generated geometry and may drop the logical's
+/// Uses/Defs=[SFR] naming, so the operand set is the port truth.
 inline HaydnCyclePortDemandV
 haydnSumCyclePortDemand(ArrayRef<MachineInstr *> Instrs) {
   HaydnCyclePortDemandV D;
@@ -75,12 +77,15 @@ haydnSumCyclePortDemand(ArrayRef<MachineInstr *> Instrs) {
 /// Consumed by commit (P4) and by the independent verifier (P7) — never
 /// fork a second port check beside this one.
 ///
-/// SFR 2R/1W charges only descriptor-named SFR traffic (SET_HWLOOP / CSR
-/// / flag-setters). Ordinary ALU has no SFR operand — extra implicit-def
-/// $sfr on ADD32/XOR32 is leftover modeling and must not exhaust the 1W
-/// ceiling (legal two-ALU / pad packs). Two desc-named SFR writers still
-/// fail the shared WAW law; the port ceiling independently re-checks that
-/// pack so commit/verify cannot accept a pack the HR would have refused.
+/// SFR 2R/1W charges descriptor-named SFR traffic (SET_HWLOOP / CSR
+/// / flag-setters) and, since CB-161 (2026-08-21), every implicit(-def)
+/// $sfr operand on private Format E members: their generated descs can
+/// drop the logical's Uses/Defs=[SFR] naming, and the operand set is the
+/// port truth. Ordinary non-member ALU has no SFR operand in current MIR
+/// (verified on committed ADD32_E3_* members), so no legal two-ALU / pad
+/// pack exhausts the ceiling. Two SFR writers still fail the shared WAW
+/// law; the port ceiling independently re-checks that pack so commit
+/// /verify cannot accept a pack the HR would have refused.
 inline bool
 haydnCycleMembersExceedPortBudget(ArrayRef<MachineInstr *> Instrs) {
   const HaydnCyclePortDemandV D = haydnSumCyclePortDemand(Instrs);

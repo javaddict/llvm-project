@@ -1770,9 +1770,17 @@ TEST(HaydnHazardRecognizerTest, VF22_SelectedMemberSingleSlotVsMultiBit) {
 }
 
 TEST(HaydnHazardRecognizerTest, MultiFieldLogicalStoreVsSlot0WideAdd) {
-  // Product law: after ADDI32 rematches to exclusive SLOT0, a still-logical
-  // multi-field store (D_SW_L_WITH_IMM alts S0|S1|S2) must use multi-bit
-  // FieldSlots so it packs on S1/S2. ST32 stays single-field Slot0.
+  // GE96-11 (2026-08-21) rebase: golden instruction_type_index.json pins
+  // D_SW_L_WITH_IMM Available = LOADSTORE0 (the sole unit; e0-only golden
+  // member rows). The prior multi-field wording (alts S0|S1|S2 so a store
+  // packs beside an ADDI32 at SLOT0) predates the X2*/X4* ALU 0x6→0x7
+  // occupancy flip and understated the store's exclusivity: residual
+  // occupancy is now the golden LOADSTORE0-only truth — D_SW_L_WITH_IMM is
+  // SINGLE-FIELD SLOT0 exactly like ST32, and a wide ADDI32 already rematched
+  // to exclusive SLOT0 conflicts with it (Req/Req on the same bit) so the
+  // pair serializes instead of packing. Unit injectivity at the GE96-11
+  // commit site (HaydnHazardRecognizer commitPlacementForEmit twin rematch)
+  // owns the same-unit law for remap; this pins the wrapper/occupancy half.
   HaydnMCFormats Fmts;
   SmallVector<PlacementAlternative, 4> DSwAlts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::D_SW_L_WITH_IMM,
@@ -1780,14 +1788,15 @@ TEST(HaydnHazardRecognizerTest, MultiFieldLogicalStoreVsSlot0WideAdd) {
   SlotBits DSwFields = 0;
   for (const PlacementAlternative &A : DSwAlts)
     DSwFields |= A.FieldSlots;
-  EXPECT_GT(llvm::popcount(DSwFields), 1);
+  EXPECT_EQ(llvm::popcount(DSwFields), 1u);
+  EXPECT_EQ(DSwFields, SlotBits(Haydn::SLOT0));
 
   SmallVector<PlacementAlternative, 4> StAlts;
   ASSERT_TRUE(enumeratePlacementAlternatives(Fmts, Haydn::ST32, StAlts));
   SlotBits StFields = 0;
   for (const PlacementAlternative &A : StAlts)
     StFields |= A.FieldSlots;
-  EXPECT_EQ(llvm::popcount(StFields), 1);
+  EXPECT_EQ(llvm::popcount(StFields), 1u);
   EXPECT_EQ(StFields, SlotBits(Haydn::SLOT0));
 
   SlotSet DSwSlots;
@@ -1797,8 +1806,8 @@ TEST(HaydnHazardRecognizerTest, MultiFieldLogicalStoreVsSlot0WideAdd) {
   HaydnFuncUnitWrapper DSw(DSwSlots);
   DSw.setIssueCountOne();
   HaydnFuncUnitWrapper AddiS0 = singleIssueInSlot(0);
-  EXPECT_FALSE(DSw.conflict(AddiS0));
-  EXPECT_FALSE(AddiS0.conflict(DSw));
+  EXPECT_TRUE(DSw.conflict(AddiS0));
+  EXPECT_TRUE(AddiS0.conflict(DSw));
 
   HaydnFuncUnitWrapper StS0 = singleIssueInSlot(0);
   EXPECT_TRUE(StS0.conflict(AddiS0));

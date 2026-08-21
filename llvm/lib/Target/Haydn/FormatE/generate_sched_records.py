@@ -10,7 +10,7 @@ published live classes (unit mapping + latency 1/2 scaffolds + conservative
 SIN_COS/ARCTAN dest bound) plus generated Format E entry capacities
 (E2=2 / E3=3). Also emits HaydnGenMemoryCycles.inc: C++
 getFirst/LastMemoryCycle lookup for the published Slot0_LS / Slot1_LD /
-Slot01_LD / Slot2_LS latency-2 scaffold (AIE MemInstrItinData +
+Slot01_LD latency-2 scaffold (AIE MemInstrItinData +
 AIEMemoryCyclesEmitter peer). Does not import per-operation
 port/latency/pipeline tables and does not set CompleteModel.
 Emits generated Format E entry capacities (E2=2 / E3=3) so
@@ -58,20 +58,36 @@ from family_core import (
 DEAD_ACC_LAT_CLASS_NAMES = (
     "Slot12_ALU_AccLat",
     "Slot2_ALU_AccLat",
+    # 2026-08-21 itinerary re-map retirees: golden Available re-mapped every
+    # former user (X2/X4 ALU shells -> Slot012_ALU/DspLat; MAC multiplies ->
+    # Slot12_MAC; D_LQHWUA_POST -> Slot01_LD). Orphaned classes drop out of
+    # the tblgen Sched enum, so no row may reference them.
+    "Slot12_ALU",
+    "Slot2_LS",
 )
 
 # uimm4 is a 4-bit unsigned immediate (operand name in Constraints).
 # Conservative dest bound = uimm4_max + 2 = 15 + 2. Not a new latency invent.
 UIMM4_BITS = 4
 
+# Fixed Data_Latency = 2 DSP-unary / CSR-read surface (2026-08-21 latency
+# P0/P1, audit_latencies.md): golden instruction_type_index Pipeline_Info
+# pins Data_Latency=2 for LOG2/EXP2/RECIP/SQRT (Available ALU1|ALU2) and
+# CSRR (Available ALU0|ALU1|ALU2). Same published latency-2 number the
+# memory scaffold uses; not a new latency invent.
+DSPLY2_LOGICALS = frozenset({"LOG2", "EXP2", "RECIP", "SQRT"})
+CSR_LY2_LOGICALS = frozenset({"CSRR"})
+
 # Published load/store itineraries that report a memory-access cycle.
-# Matches the product First/LastMemoryCycle surface, including Slot2_LS
-# (S2 memory forms, `HaydnFormatsLS.td` Slot2_LS rows): every Slot*_LS /
+# Matches the product First/LastMemoryCycle surface: every Slot*_LS /
 # Slot*_LD itinerary must publish a MemoryCycle pair, else post-RA
 # MemoryEdges fatals on the missing row (W21 / scheduling F1; silent
 # latency-1 fallback on a no-interlock machine is a silicon hazard).
 # first=0 (issue), last=Data_Latency-1 from the latency-2 scaffold.
-MEMORY_ITIN_NAMES = ("Slot0_LS", "Slot1_LD", "Slot01_LD", "Slot2_LS")
+# 2026-08-21 itinerary re-map: Slot2_LS retired — golden assigns every
+# former S2 memory row to LOADSTORE0/LOAD1 units (Slot0_LS/Slot01_LD), so
+# no instruction books it and the class left the Sched enum.
+MEMORY_ITIN_NAMES = ("Slot0_LS", "Slot1_LD", "Slot01_LD")
 
 
 @dataclass(frozen=True)
@@ -161,8 +177,20 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
         PublishedItin(
             "Slot0_LS", (u["LOADSTORE0"],), (l2,), mem_first, mem_last
         ),
-        PublishedItin("Slot12_ALU", (u["ALU1"], u["ALU2"]), (l1,)),
         PublishedItin("Slot12_ALU_SinCosLat", (u["ALU1"], u["ALU2"]), (l17,)),
+        # Fixed Data_Latency=2 DSP unary (LOG2/EXP2/RECIP/SQRT) on their
+        # golden ALU1|ALU2 menu, and per-slot member rows mirroring the
+        # SinCosLat pattern (members pin one unit; latency stays 2).
+        PublishedItin("Slot12_ALU_DspLat", (u["ALU1"], u["ALU2"]), (l2,)),
+        PublishedItin("Slot1_ALU_DspLat", (u["ALU1"],), (l2,)),
+        PublishedItin("Slot2_ALU_DspLat", (u["ALU2"],), (l2,)),
+        # Fixed Data_Latency=2 CSR read (CSRR) on its golden ALU0|ALU1|ALU2
+        # menu + per-slot member rows (CSRW's SFR-domain dest has no HR dest
+        # window; documented P2 residual, not covered here).
+        PublishedItin("Slot012_ALU_CsrLat", (u["ALU0"], u["ALU1"], u["ALU2"]), (l2,)),
+        PublishedItin("Slot0_ALU_CsrLat", (u["ALU0"],), (l2,)),
+        PublishedItin("Slot1_ALU_CsrLat", (u["ALU1"],), (l2,)),
+        PublishedItin("Slot2_ALU_CsrLat", (u["ALU2"],), (l2,)),
         PublishedItin("Slot012_ALU", (u["ALU0"], u["ALU1"], u["ALU2"]), (l1,)),
         PublishedItin("Slot1_LD", (u["LOAD1"],), (l2,), mem_first, mem_last),
         PublishedItin(
@@ -174,7 +202,6 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
         PublishedItin("Slot12_MAC_AccFirst", (u["MAC0"], u["MAC1"]), mac_acc),
         PublishedItin("Slot1_MAC", (u["MAC0"],), mac_wb),
         PublishedItin("Slot2_ALU", (u["ALU2"],), (l1,)),
-        PublishedItin("Slot2_LS", (u["ALU2"],), (l2,), mem_first, mem_last),
         PublishedItin("Slot2_ALU_SinCosLat", (u["ALU2"],), (l17,)),
         PublishedItin("Slot2_MAC", (u["MAC1"],), mac_wb),
         # Per-slot AccFirst (CB-152c): committed members of FmtALU64Acc
@@ -271,6 +298,15 @@ def emit_sched_records_inc(
         "// Per-slot AccFirst for committed accumulator members (CB-152c).\n"
         "def Slot1_MAC_AccFirst : InstrItinClass;\n"
         "def Slot2_MAC_AccFirst : InstrItinClass;\n"
+        "// Fixed Data_Latency=2 classes (2026-08-21 latency P0/P1): logical\n"
+        "// menus + per-slot member rows, SinCosLat pattern with latency 2.\n"
+        "def Slot12_ALU_DspLat : InstrItinClass;\n"
+        "def Slot1_ALU_DspLat : InstrItinClass;\n"
+        "def Slot2_ALU_DspLat : InstrItinClass;\n"
+        "def Slot012_ALU_CsrLat : InstrItinClass;\n"
+        "def Slot0_ALU_CsrLat : InstrItinClass;\n"
+        "def Slot1_ALU_CsrLat : InstrItinClass;\n"
+        "def Slot2_ALU_CsrLat : InstrItinClass;\n"
         "\n"
         f"def HaydnItineraries : ProcessorItineraries<\n"
         f"  [{fu}],\n"
@@ -322,7 +358,7 @@ def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
         "//\n"
         "// Overlay of AIE MemInstrItinData (AIETarget.td:22-47) and\n"
         "// AIEMemoryCyclesEmitter.cpp:123-157 / AIE2InstrInfo.cpp:53.\n"
-        "// Published Slot0_LS / Slot1_LD / Slot01_LD / Slot2_LS. first=0\n"
+        "// Published Slot0_LS / Slot1_LD / Slot01_LD. first=0\n"
         "// (issue), last=Data_Latency-1 from the latency-2 scaffold. Not a\n"
         "// per-op invent.\n"
         "//\n"
@@ -368,7 +404,9 @@ def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
 
 def prove_no_dead_classes(content: str) -> None:
     for name in DEAD_ACC_LAT_CLASS_NAMES:
-        if name in content:
+        # Word-boundary match: "Slot12_ALU" must not fire on the live
+        # "Slot12_ALU_DspLat" / "Slot12_ALU_SinCosLat" names.
+        if re.search(rf"\b{re.escape(name)}\b(?![\w])", content):
             raise SystemExit(f"error: generated output contains dead class {name}")
     if "[5, 1, 1, 5]" in content:
         raise SystemExit("error: generated output contains 5-cycle AccLat data")

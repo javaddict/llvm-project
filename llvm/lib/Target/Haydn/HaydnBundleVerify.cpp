@@ -14,6 +14,7 @@
 #include "HaydnBundleVerify.h"
 #include "Haydn.h"
 #include "HaydnBundlePortBudget.h"
+#include "HaydnPortModel.h"
 // Opcode names come from the generated MC tables (HaydnMCTargetDesc.cpp
 // GET_INSTRINFO_MC_DESC) — same backing store as haydnOpcodeName
 // (HaydnBundleFormatSolver.h:109-111) without including that solver header
@@ -113,6 +114,22 @@ const format_e::FormatEMemberRec *lookupPrivateFormatEMember(unsigned Opc) {
     return nullptr;
   return &format_e::FormatEMembers[It->second];
 }
+
+} // namespace bundle
+} // namespace haydn
+
+// CB-161 (2026-08-21): countSFRPorts's member classification. Lives beside
+// the inverse-table map it reuses (one classification site, no second
+// opcode set); defined outside the haydn::bundle block because PortModel.h
+// declares it directly in namespace llvm. True only for complete-inverse
+// generated members — the same population D493 lets appear in MIR after
+// the exact post-RA commit.
+bool haydnIsPrivateFormatEMemberOpcode(unsigned Opcode) {
+  return haydn::bundle::lookupPrivateFormatEMember(Opcode) != nullptr;
+}
+
+namespace haydn {
+namespace bundle {
 
 static bool encodeableInverseRecord(const format_e::FormatEInverseRec &R);
 

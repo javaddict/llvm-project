@@ -661,7 +661,10 @@ class FmtALU64<bits<8> opcode, bits<10> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map (audit_itinerary.md stale-too-narrow set):
+  // golden Available for every FmtALU64 logical (ADD64/X2ADD32/X4ADD16/...)
+  // is ALU0|ALU1|ALU2 — ALU0 is bookable, not slot-1/2-only.
+  let Itinerary = Slot012_ALU;
 
   bits<4> rd;
   bits<4> rs1;
@@ -690,7 +693,9 @@ class FmtALU64_2Dest<bits<8> opcode, bits<6> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: both users (X2MUL32/X4MUL16) are golden
+  // MAC0|MAC1 and override per-def; default books the MAC family, not ALUs.
+  let Itinerary = Slot12_MAC;
 
   bits<4> rd;       // destination 1 (DR64, encoded @ Inst{21-18})
   bits<4> rtd2;     // destination 2 (DR64, encoded @ Inst{9-6}, legacy-only)
@@ -762,7 +767,9 @@ class FmtALU64Unary<bits<8> opcode, bits<10> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden SEXT32T64 (this class's only user)
+  // Available = ALU0|ALU1|ALU2.
+  let Itinerary = Slot012_ALU;
 
   bits<4> rd;
   bits<4> rs1;
@@ -784,7 +791,9 @@ class FmtALU64Binary<bits<8> opcode, bits<10> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden Available for the X2/X4 compare +
+  // cmov families this class documents is ALU0|ALU1|ALU2.
+  let Itinerary = Slot012_ALU;
 
   bits<4> rd;
   bits<4> rs1;
@@ -807,7 +816,8 @@ class FmtALU64SelImm<bits<8> opcode, bits<6> funct, dag outs, dag ins,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden X4SELI16 Available = ALU0|ALU1|ALU2.
+  let Itinerary = Slot012_ALU;
 
   bits<4> rd;
   bits<4> rs1;
@@ -844,7 +854,9 @@ class FmtALU64ShiftImm<bits<8> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b110;   // slots 1+2
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden Available for all eight shift-imm
+  // logicals (X2SLLI32..X4SRLI16) is ALU0|ALU1|ALU2.
+  let Itinerary = Slot012_ALU;
 
   bits<4> rd;
   bits<4> rs1;
@@ -1030,7 +1042,10 @@ class FmtCSR<bits<6> opcode, dag outs, dag ins, string asmstr,
     : HaydnInst<4, outs, ins, asmstr, pattern> {
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot0_ALU;
+  // 2026-08-21 itinerary re-map: golden CSRR Available = ALU0|ALU1|ALU2
+  // (was Slot0_ALU). The latency-2 truth is carried by the CsrLat classes
+  // on members + the hand CSRR def, not this class.
+  let Itinerary = Slot012_ALU;
 
   bits<4> rd;
   bits<8> csr_addr;

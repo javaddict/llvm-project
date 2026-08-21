@@ -173,8 +173,18 @@ fieldSlotKeepOperands(const MachineInstr &MI, const MCInstrDesc &NewDesc) {
         return false;
       const int OldTie =
           OldDesc.getOperandConstraint(Keep[NewI], MCOI::TIED_TO);
-      if (OldTie != static_cast<int>(Keep[NewTie]))
-        return false;
+      if (OldTie == static_cast<int>(Keep[NewTie]))
+        continue;
+      // 2026-08-21 synthetic member writeback: a member whose golden rs
+      // writeback the logical does not model (public pre-lowering shell
+      // PLDWWUA vs tied PLDWWUA_POST member) maps the wb DEF and the tied
+      // USE onto the SAME old operand — the tie is reconstructible without
+      // an old-side constraint. gaps/audit_shapes.md class (d').
+      if (OldTie == -1 &&
+          Keep[NewI] == Keep[static_cast<unsigned>(NewTie)] &&
+          static_cast<unsigned>(NewTie) < NewDesc.getNumDefs())
+        continue;
+      return false;
     }
     return true;
   };
@@ -225,18 +235,54 @@ void llvm::rewriteFieldSlotToMember(MachineInstr &MI, unsigned MemberOpc,
     ImplicitTail.push_back(MI.getOperand(I - 1));
 
   SmallVector<unsigned, 4> DropTies;
+  // Def indices (member operand order) needing a synthetic use→def flip.
+  SmallVector<unsigned, 4> AddTies;
   for (unsigned NewI = 0; NewI != NewN; ++NewI) {
     const unsigned OldI = (*Keep)[NewI];
     if (OldDesc.getOperandConstraint(OldI, MCOI::TIED_TO) != -1 &&
         NewDesc.getOperandConstraint(NewI, MCOI::TIED_TO) == -1)
       DropTies.push_back(NewI);
+    // 2026-08-21 synthetic member writeback: the member declares a tie the
+    // old side does not (public shell PLDWWUA → tied PLDWWUA_POST member).
+    // Register the tie and mark the synthetic wb operand as a def so the
+    // machine verifier sees def/use tied exactly as the member Desc demands
+    // (gaps/audit_shapes.md class (d')).
+    const int NewTie = NewDesc.getOperandConstraint(NewI, MCOI::TIED_TO);
+    if (NewTie != -1 && OldDesc.getOperandConstraint(OldI, MCOI::TIED_TO) == -1)
+      AddTies.push_back(static_cast<unsigned>(NewTie));
   }
 
+  // Def indices whose member Desc declares a tie the old side does not
+  // (public shell PLDWWUA → tied PLDWWUA_POST member): the keep map maps
+  // the wb DEF and the tied USE onto the same old operand, so the copied
+  // wb operand must flip use→def. Flip it on the LIVE re-added operand,
+  // never on the detached Kept copy: MachineOperand copies carry ParentMI
+  // (MachineOperand.h clearParent contract) and setIsDef is out-of-line
+  // precisely because it moves the operand across MRI def/use lists via
+  // that parent — on a stack copy it would splice stack memory into the
+  // register's use list and leave a dangling pointer when Kept dies
+  // (2026-08-21 synthetic member writeback, gaps/audit_shapes.md class
+  // (d'); verifyUseList segfault on ar-unaligned-intrinsics.ll).
+  //
+  // Sequencing: MC explicit operands list defs before uses, and each def
+  // index is flipped BEFORE its own operand is added, so the tied use
+  // added later finds a def where addOperand's auto-tie (TIED_TO →
+  // tieOperands asserts DefMO.isDef) expects one. A copied use may carry
+  // kill; clear it on the live operand before the flip (setIsDef refuses
+  // to flip under DeadOrKill).
   while (MI.getNumOperands())
     MI.removeOperand(MI.getNumOperands() - 1);
   MI.setDesc(NewDesc);
-  for (const MachineOperand &MO : Kept)
-    MI.addOperand(*MF, MO);
+  for (unsigned NewI = 0; NewI != NewN; ++NewI) {
+    MI.addOperand(*MF, Kept[NewI]);
+    if (llvm::is_contained(AddTies, NewI)) {
+      MachineOperand &Wb = MI.getOperand(NewI);
+      if (Wb.isUse() && Wb.isKill())
+        Wb.setIsKill(false);
+      if (Wb.isUse())
+        Wb.setIsDef(true);
+    }
+  }
   for (unsigned I = ImplicitTail.size(); I > 0; --I)
     MI.addOperand(*MF, ImplicitTail[I - 1]);
   for (unsigned OpI : DropTies)

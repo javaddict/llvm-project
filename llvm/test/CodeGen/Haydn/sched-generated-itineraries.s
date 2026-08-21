@@ -36,11 +36,18 @@
 # SCHED: let CompleteModel = 0
 # SCHED-NOT: let CompleteModel = 1
 #
+# 2026-08-21 itinerary re-map: Slot12_ALU / Slot2_LS rows retired (golden
+# re-mapped every former user; see audit_itinerary.md) and fixed
+# Data_Latency=2 DspLat/CsrLat rows added for LOG2/EXP2/RECIP/SQRT + CSRR.
+#
 # GEN: DO NOT EDIT
 # GEN: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
 # GEN: ProcessorItineraries
 # GEN: InstrItinData<Slot0_ALU
-# GEN: InstrItinData<Slot2_LS
+# GEN: InstrItinData<Slot12_ALU_DspLat, [InstrStage<1, [ALU1, ALU2]>], [2]>
+# GEN: InstrItinData<Slot012_ALU_CsrLat, [InstrStage<1, [ALU0, ALU1, ALU2]>], [2]>
+# GEN-NOT: InstrItinData<Slot12_ALU,
+# GEN-NOT: InstrItinData<Slot2_LS,
 # GEN-NOT: Slot12_ALU_AccLat
 # GEN-NOT: Slot2_ALU_AccLat
 # GEN-NOT: [5, 1, 1, 5]

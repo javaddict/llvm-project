@@ -52,21 +52,30 @@ def MAC1       : FuncUnit;
 
 def Slot0_ALU    : InstrItinClass;  // control / scalar ALU scaffold → ALU0
 def Slot0_LS     : InstrItinClass;  // load/store → LOADSTORE0
-def Slot12_ALU   : InstrItinClass;  // wide ALU → ALU1|ALU2
+// Slot12_ALU / Slot2_LS RETIRED 2026-08-21 (itinerary re-map): golden
+// Available re-mapped every former user (X2/X4 ALU shells → Slot012_ALU /
+// DspLat; MAC multiplies → Slot12_MAC; D_LQHWUA_POST → Slot01_LD). An
+// InstrItinClass with zero instruction users drops out of the generated
+// Sched enum, so C++ may not reference them; no ItinData row is emitted.
 // SIN_COS / ARCTAN: Constraints Data_Latency = uimm4+2. uimm4 is 4-bit, so
 // the conservative bound is 15+2 = 17. InstrStage stays 1 cycle
 // (ProductMaxInstrStageCycles=1 / SMS class-3 off). The HR books the
 // operand-dependent occupancy as Reserved on the selected unit.
 def Slot12_ALU_SinCosLat : InstrItinClass; // logical SIN_COS/ARCTAN → ALU1|ALU2
+// Fixed Data_Latency = 2 (golden instruction_type_index Pipeline_Info,
+// 2026-08-21 latency P0/P1): LOG2/EXP2/RECIP/SQRT (golden ALU1|ALU2) and
+// CSRR (golden ALU0|ALU1|ALU2). The class declarations AND the
+// InstrItinData rows (OperandCycles [2]) are generated in
+// HaydnGenSchedRecords.inc below (same ownership split as the per-slot
+// AccFirst classes); per-slot member rows mirror the SinCosLat split.
+// CSRW's SFR-domain dest has no HR dest window — documented P2 residual,
+// deliberately not covered by a class.
 def Slot012_ALU  : InstrItinClass;  // any ALU → ALU0|ALU1|ALU2
 def Slot1_LD     : InstrItinClass;  // load unit → LOAD1
 def Slot01_LD    : InstrItinClass;  // dual-load menu → LOADSTORE0|LOAD1
 def Slot1_ALU    : InstrItinClass;  // → ALU1
 def Slot1_ALU_SinCosLat : InstrItinClass; // SIN_COS_S1 / ARCTAN_S1 → ALU1
 def Slot2_ALU    : InstrItinClass;  // → ALU2
-// Slot 2 memory forms: Data_Latency 2. Must NOT borrow Slot2_ALU (latency 1).
-// Haydn has no interlock — wrong latency here is a silent silicon hazard.
-def Slot2_LS     : InstrItinClass;  // → ALU2 (S2 pack seat), mem Data_Latency 2
 def Slot2_MAC    : InstrItinClass;  // → MAC1
 def Slot2_ALU_SinCosLat : InstrItinClass; // SIN_COS_S2 / ARCTAN_S2 → ALU2
 def Slot12_MAC   : InstrItinClass;  // → MAC0|MAC1

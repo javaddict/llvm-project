@@ -247,7 +247,13 @@ def BR_JT : HaydnPseudo<(outs), (ins GPR32:$addr, i32imm:$jt),
                           "br_jt\t$addr, $jt",
                           []>;
 
-let hasSideEffects = 1, isNotDuplicable = 1, Defs = [SFR] in {
+// 2026-08-21 itinerary re-map: golden SET_HWLOOP / SET_HWLOOP_REG
+// Available = ALU0 (previously NoItinerary — no unit reservation). The
+// pseudos expand before placement, but the post-RA solver books them at
+// prologue density until then; ALU0-only matches the committed HWLRIIR
+// member rows (SET_HWLOOP_F2 generated logical flips with them).
+let hasSideEffects = 1, isNotDuplicable = 1, Defs = [SFR],
+    Itinerary = Slot0_ALU in {
 def SET_HWLOOP : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, uimm16:$cnt),
                                "set_hwloop\t$sel, $loop_start, $loop_end, $cnt", []>;
 def SET_HWLOOP_REG : HaydnPseudo<(outs), (ins uimm5:$sel, brtarget:$loop_start, brtarget:$loop_end, GPR32:$rs),

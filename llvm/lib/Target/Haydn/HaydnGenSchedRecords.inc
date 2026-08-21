@@ -30,6 +30,15 @@ def Slot12_MAC_AccFirst : InstrItinClass;
 // Per-slot AccFirst for committed accumulator members (CB-152c).
 def Slot1_MAC_AccFirst : InstrItinClass;
 def Slot2_MAC_AccFirst : InstrItinClass;
+// Fixed Data_Latency=2 classes (2026-08-21 latency P0/P1): logical
+// menus + per-slot member rows, SinCosLat pattern with latency 2.
+def Slot12_ALU_DspLat : InstrItinClass;
+def Slot1_ALU_DspLat : InstrItinClass;
+def Slot2_ALU_DspLat : InstrItinClass;
+def Slot012_ALU_CsrLat : InstrItinClass;
+def Slot0_ALU_CsrLat : InstrItinClass;
+def Slot1_ALU_CsrLat : InstrItinClass;
+def Slot2_ALU_CsrLat : InstrItinClass;
 
 def HaydnItineraries : ProcessorItineraries<
   [LOADSTORE0, LOAD1, ALU0, ALU1, ALU2, MAC0, MAC1],
@@ -37,8 +46,14 @@ def HaydnItineraries : ProcessorItineraries<
   [
     InstrItinData<Slot0_ALU, [InstrStage<1, [ALU0]>], [1]>,
     InstrItinData<Slot0_LS, [InstrStage<1, [LOADSTORE0]>], [2]>,
-    InstrItinData<Slot12_ALU, [InstrStage<1, [ALU1, ALU2]>], [1]>,
     InstrItinData<Slot12_ALU_SinCosLat, [InstrStage<1, [ALU1, ALU2]>], [17]>,
+    InstrItinData<Slot12_ALU_DspLat, [InstrStage<1, [ALU1, ALU2]>], [2]>,
+    InstrItinData<Slot1_ALU_DspLat, [InstrStage<1, [ALU1]>], [2]>,
+    InstrItinData<Slot2_ALU_DspLat, [InstrStage<1, [ALU2]>], [2]>,
+    InstrItinData<Slot012_ALU_CsrLat, [InstrStage<1, [ALU0, ALU1, ALU2]>], [2]>,
+    InstrItinData<Slot0_ALU_CsrLat, [InstrStage<1, [ALU0]>], [2]>,
+    InstrItinData<Slot1_ALU_CsrLat, [InstrStage<1, [ALU1]>], [2]>,
+    InstrItinData<Slot2_ALU_CsrLat, [InstrStage<1, [ALU2]>], [2]>,
     InstrItinData<Slot012_ALU, [InstrStage<1, [ALU0, ALU1, ALU2]>], [1]>,
     InstrItinData<Slot1_LD, [InstrStage<1, [LOAD1]>], [2]>,
     InstrItinData<Slot01_LD, [InstrStage<1, [LOADSTORE0, LOAD1]>], [2]>,
@@ -48,7 +63,6 @@ def HaydnItineraries : ProcessorItineraries<
     InstrItinData<Slot12_MAC_AccFirst, [InstrStage<1, [MAC0, MAC1]>], [2, 2, 1, 1]>,
     InstrItinData<Slot1_MAC, [InstrStage<1, [MAC0]>], [2, 1, 1, 2]>,
     InstrItinData<Slot2_ALU, [InstrStage<1, [ALU2]>], [1]>,
-    InstrItinData<Slot2_LS, [InstrStage<1, [ALU2]>], [2]>,
     InstrItinData<Slot2_ALU_SinCosLat, [InstrStage<1, [ALU2]>], [17]>,
     InstrItinData<Slot2_MAC, [InstrStage<1, [MAC1]>], [2, 1, 1, 2]>,
     InstrItinData<Slot1_MAC_AccFirst, [InstrStage<1, [MAC0]>], [2, 2, 1, 1]>,

@@ -550,9 +550,13 @@ def WFI : HaydnInst<0, (outs), (ins), "wfi", []> {
 // CSRR — hasSideEffects=1 matches Format E members and RISCV Zicsr.
 // Without it a dead CSRR is DCE'd (HaydnInst default 0) and a later
 // CSRW can hoist across a missing read.
+// 2026-08-21 latency P0/P1: golden CSRR Available = ALU0|ALU1|ALU2 AND
+// Pipeline_Info Data_Latency = 2 — Slot012_ALU_CsrLat carries both (the
+// FmtCSR class default was also re-mapped to Slot012_ALU).
 let hasSideEffects = 1 in
 def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
                "csrr\t$rd, $csr_addr", []> {
+  let Itinerary = Slot012_ALU_CsrLat;
   let TSFlags{2-0} = 0b001;
   // $rs is not a real input for CSRR (DB reads only the CSR); it exists for
   // MC operand-count parity with the shared FmtCSR decoder (case 25 decodes
@@ -567,7 +571,8 @@ def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
 // (WUR_AE_CBEGIN0/CEND0). The old 3-op FmtCSR dead-$rd shape was
 // decoder-parity only and is gone.
 let hasSideEffects = 1, isPseudo = 1, isCodeGenOnly = 0, Defs = [SFR],
-    Itinerary = Slot0_ALU in
+    // 2026-08-21 itinerary re-map: golden CSRW Available = ALU0|ALU1|ALU2.
+    Itinerary = Slot012_ALU in
 def CSRW : HaydnInst<0, (outs), (ins uimm8:$csr_addr, GPR32:$rs),
                     "csrw\t$csr_addr, $rs", []> {
   let TSFlags{2-0} = 0b001;
@@ -755,7 +760,11 @@ def X2SUB32 : FmtALU64<0x59, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
 def X2MUL32 : FmtALU64_2Dest<0x5A, 0x00,
                              (outs DR64:$rd, DR64:$rtd2), (ins DR64:$rs1, DR64:$rs2),
                              "x2mul32\t$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden X2MUL32
+  // Available = MAC0|MAC1 (was Slot1_ALU — the DB "slot 1 only" note is
+  // entry geometry, not a unit menu; unit-injectivity booking must reserve
+  // the MAC family).
+  let Itinerary = Slot12_MAC;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -775,7 +784,9 @@ def X4ADD16 : FmtALU64<0x5B, 0x000, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rs2),
 def X4MUL16 : FmtALU64_2Dest<0x5C, 0x00,
                              (outs DR64:$rd, DR64:$rtd2), (ins DR64:$rs1, DR64:$rs2),
                              "x4mul16\t$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden X4MUL16
+  // Available = MAC0|MAC1 — books MAC units, not ALU1|ALU2.
+  let Itinerary = Slot12_MAC;
   let TSFlags{2-0} = 0b110; // slots 1+2 (was 0b010 slot1-only; golden has both)
 }
 
@@ -827,8 +838,9 @@ def X2SRA32 : FmtALU64<0x66, 0x000, (outs DR64:$rd), (ins DR64:$rs1, GPR32:$rs2)
 // (hasSideEffects=1 would serialize loads/stores as Ord Barrier).
 // Matcher-visible (isCodeGenOnly=0): public `seq64`/`slt64`/`sle64` must
 // not depend on residual `_S*` FieldSlots. isPseudo: non-encoding shell.
+// 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2.
 let hasSideEffects = 0, Defs = [SFR], isCodeGenOnly = 0, isPseudo = 1,
-    Itinerary = Slot12_ALU in {
+    Itinerary = Slot012_ALU in {
 def SEQ64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
                       "seq64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
@@ -847,8 +859,9 @@ def SLE64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
 }  // hasSideEffects = 0, Defs = [SFR]
 
 // Scalar 64-bit SFR conditional move (unary DR64 → reads SFR, sets dst).
+// 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2.
 let hasSideEffects = 0, Uses = [SFR], isCodeGenOnly = 0, isPseudo = 1,
-    Itinerary = Slot12_ALU in {
+    Itinerary = Slot012_ALU in {
 def MOVT64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
                        "movt64\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
@@ -864,7 +877,11 @@ def MOVF64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
 // Unary ALU64 logicals — non-encoding shells; private peers in FormatsALU64.
 // Matcher-visible (NOP pattern): isCodeGenOnly hid ABS64 so `{ abs64 … }`
 // matched only ABS64_S1/S2. FieldSlot hide requires these in the matcher.
-let isCodeGenOnly = 0, isPseudo = 1, Itinerary = Slot12_ALU in {
+// 2026-08-21 itinerary re-map: golden Available for this whole shell block
+// is ALU0|ALU1|ALU2 (was Slot12_ALU) — except the four DSP-unary
+// LOG2/EXP2/RECIP/SQRT below, which golden pins to ALU1|ALU2 with fixed
+// Data_Latency=2 (Slot12_ALU_DspLat, audit_itinerary.md + latency P0).
+let isCodeGenOnly = 0, isPseudo = 1, Itinerary = Slot012_ALU in {
 def X2ABS32S : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
                          "x2abs32s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b110;
@@ -997,31 +1014,41 @@ def X4HMIN16 : HaydnInst<0, (outs GPR32:$rd), (ins DR64:$rs1),
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
+// DSP unary LUT family — golden Available = ALU1|ALU2 AND fixed
+// Pipeline_Info Data_Latency = 2 (2026-08-21 latency P0): dest
+// OperandCycle 2, not the block's latency-1 default.
 def LOG2 : HaydnInst<0, (outs GPR32:$rd), (ins GPR32:$rs1),
                      "log2\t$rd, $rs1", []> {
+  let Itinerary = Slot12_ALU_DspLat;
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
 def EXP2 : HaydnInst<0, (outs GPR32:$rd), (ins GPR32:$rs1),
                      "exp2\t$rd, $rs1", []> {
+  let Itinerary = Slot12_ALU_DspLat;
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
 def RECIP : HaydnInst<0, (outs GPR32:$rd), (ins GPR32:$rs1),
                       "recip\t$rd, $rs1", []> {
+  let Itinerary = Slot12_ALU_DspLat;
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
 def SQRT : HaydnInst<0, (outs GPR32:$rd), (ins GPR32:$rs1),
                      "sqrt\t$rd, $rs1", []> {
+  let Itinerary = Slot12_ALU_DspLat;
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-} // isPseudo / Slot12_ALU logical unary shells (matcher-visible)
+} // isPseudo / Slot012_ALU logical unary shells (matcher-visible)
 
 // X2 SIMD compare → SFR only. Golden/ISA: "X2SEQ32 rsd1, rsd2" (2 ops).
 // No DR dest write; selector COPY-passthroughs rs1 for the C return value.
-let Defs = [SFR] in {
+// 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2 for the
+// X2/X4 compare + cmov shells below (previously NoItinerary — no unit
+// reservation at all).
+let Defs = [SFR], Itinerary = Slot012_ALU in {
 def X2SEQ32 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
                         "x2seq32\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
@@ -1041,7 +1068,7 @@ def X2SLE32 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
 
 // X2 SIMD conditional move. Golden/ISA: "X2MOVT32 rtd, rsd" (2 ops, RMW).
 // Two-address seed: $rd = $rs1 (false lanes); $rsd is true-path source.
-let Uses = [SFR] in {
+let Uses = [SFR], Itinerary = Slot012_ALU in {
 def X2MOVF32 : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
                          "x2movf32\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
@@ -1057,7 +1084,7 @@ def X2MOVT32 : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
 }  // Uses = [SFR]
 
 // X4 SIMD compare → SFR only (same 2-op golden shape as X2).
-let Defs = [SFR] in {
+let Defs = [SFR], Itinerary = Slot012_ALU in {
 def X4SEQ16 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
                         "x4seq16\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
@@ -1076,7 +1103,7 @@ def X4SLE16 : HaydnInst<4, (outs), (ins DR64:$rs1, DR64:$rs2),
 }  // Defs = [SFR]
 
 // X4 SIMD conditional move (same RMW 2-op shape as X2MOVT32).
-let Uses = [SFR] in {
+let Uses = [SFR], Itinerary = Slot012_ALU in {
 def X4MOVF16 : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rs1, DR64:$rsd),
                          "x4movf16\t$rd, $rsd", []> {
   let Constraints = "$rd = $rs1";
@@ -1157,7 +1184,8 @@ def MOVESFR2GPR : HaydnInst<4, (outs GPR32:$rd), (ins),
                             "movesfr2gpr\t$rd", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2.
+  let Itinerary = Slot012_ALU;
   bits<4> rd;
   let Inst{31, 30} = 0b01;
   let Inst{29 - 22} = 0x67;
@@ -1172,7 +1200,8 @@ def MOVEGPR2SFR : HaydnInst<4, (outs), (ins GPR32:$rs),
                             "movegpr2sfr\t$rs", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2.
+  let Itinerary = Slot012_ALU;
   bits<4> rs;
   let Inst{31, 30} = 0b01;
   let Inst{29 - 22} = 0x67;
@@ -1185,7 +1214,8 @@ def ZERO_SFR : HaydnInst<4, (outs), (ins),
                          "zero_sfr", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot12_ALU;
+  // 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2.
+  let Itinerary = Slot012_ALU;
   let Inst{31, 30} = 0b01;
   let Inst{29 - 22} = 0x67;
   let Inst{21 - 18} = 0;
@@ -1219,7 +1249,9 @@ def MOVE32_DR_L : HaydnInst<4, (outs GPR32:$rt), (ins DR64:$rsd),
     "move32_dr_l\t$rt, $rsd", []> {
   let TSFlags{2-0} = 0b001;   // Slot 0 ALU
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot0_ALU;
+  // 2026-08-21 itinerary re-map: golden MOVE32_DR_L Available =
+  // ALU0|ALU1|ALU2 (was Slot0_ALU).
+  let Itinerary = Slot012_ALU;
   bits<4> rt;
   bits<4> rsd;
   let Inst{31, 30} = 0b01;
@@ -1234,7 +1266,9 @@ def MOVE32_DR_H : HaydnInst<4, (outs GPR32:$rt), (ins DR64:$rsd),
     "move32_dr_h\t$rt, $rsd", []> {
   let TSFlags{2-0} = 0b001;   // Slot 0 ALU
   let TSFlags{4-3} = 0b01;    // 32-bit width
-  let Itinerary = Slot0_ALU;
+  // 2026-08-21 itinerary re-map: golden MOVE32_DR_H Available =
+  // ALU0|ALU1|ALU2 (was Slot0_ALU).
+  let Itinerary = Slot012_ALU;
   bits<4> rt;
   bits<4> rsd;
   let Inst{31, 30} = 0b01;
@@ -1573,7 +1607,10 @@ def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
 // keep-map). Encode binds FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8, never
 // untyped NONE. Peer: AIE MultiSlot_Pseudo isPseudo=1 (AIE2InstrFormats.td:23-31).
 let hasSideEffects = 0, Defs = [SFR], isPseudo = 1, isCodeGenOnly = 0,
-    Itinerary = Slot0_ALU in
+    // 2026-08-21 itinerary re-map: golden CSRW Available = ALU0|ALU1|ALU2
+    // (CSRW_W cutovers to the same I8 members; dest is SFR-domain so no
+    // CsrLat dest window applies — documented P2 residual).
+    Itinerary = Slot012_ALU in
 def CSRW_W : HaydnInst<0, (outs),
                        (ins uimm8_csr:$uimm8, GPR32:$rt),
                        "csrw_w\t$uimm8, $rt", []> {
@@ -1622,7 +1659,10 @@ def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
     (ins GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
     "d_lqhwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
   let Constraints = "$rs1 = $rs1_wb";
-  let Itinerary = Slot2_LS;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
+  // LOAD1|LOADSTORE0 (was Slot2_LS = ALU2 seat). Slot01_LD is a published
+  // memory itinerary, so the published Data_Latency=2 memory row is kept.
+  let Itinerary = Slot01_LD;
 }
 
 let mayLoad = 1, hasSideEffects = 1 in
@@ -1630,18 +1670,24 @@ def D_LTWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
     (ins GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
     "d_ltwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
   let Constraints = "$rs1 = $rs1_wb";
-  let Itinerary = Slot012_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
+  // LOAD1|LOADSTORE0 (was Slot012_ALU, which falsely contended all ALUs).
+  let Itinerary = Slot01_LD;
 }
 
 let hasSideEffects = 1 in
 def FLAR : HaydnInst<4, (outs), (ins uimm2:$ar_sel), "flar\t$ar_sel", []> {
-  let Itinerary = Slot012_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
+  // LOAD1|LOADSTORE0 (was Slot012_ALU).
+  let Itinerary = Slot01_LD;
 }
 
 let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
 def WBARWUA : HaydnInst<4, (outs), (ins GPR32:$rs, uimm2:$ar_sel, uimm1:$dir_sel),
                         "wbarwua\t$ar_sel, $rs, $dir_sel", []> {
-  let Itinerary = Slot012_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
+  // LOADSTORE0 (was Slot012_ALU).
+  let Itinerary = Slot0_LS;
 }
 
 let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
@@ -1649,7 +1695,9 @@ def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
     "d_sqhwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
   let Constraints = "$rs1 = $rs1_wb";
-  let Itinerary = Slot012_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
+  // LOADSTORE0 (was Slot012_ALU).
+  let Itinerary = Slot0_LS;
 }
 
 let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
@@ -1657,7 +1705,9 @@ def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
     (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
     "d_stwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
   let Constraints = "$rs1 = $rs1_wb";
-  let Itinerary = Slot012_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
+  // LOADSTORE0 (was Slot012_ALU).
+  let Itinerary = Slot0_LS;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1739,7 +1789,10 @@ def X2CMUL32S_F2 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
 def X2CMUL32_F2 : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
     (ins DR64:$rs1, DR64:$rs2),
     "x2cmul32.f2\t$rd, $rtd2, $rs1, $rs2", []> {
-  let Itinerary = Slot1_ALU;
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden X2CMUL32_F2
+  // Available = MAC0|MAC1 (was Slot1_ALU). Non-F2 X2CMUL32 siblings
+  // already book Slot12_MAC.
+  let Itinerary = Slot12_MAC;
   let TSFlags{2-0} = 0b010;
 }
 def X4FF2MUL16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
@@ -1749,14 +1802,16 @@ def X4FF2MUL16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
   let TSFlags{2-0} = 0b010;
 }
 
-let TSFlags = 14 in {
+// 2026-08-21 itinerary re-map: golden MOVEI_H/MOVEI_L/ZERO_DR Available =
+// ALU0|ALU1|ALU2 (previously NoItinerary — no unit reservation).
+let TSFlags = 14, Itinerary = Slot012_ALU in {
 def MOVEI_H : HaydnInst<4, (outs DR64:$rd),
     (ins simm32_movei:$imm32), "movei_h\t$rd, $imm32", []>;
 def MOVEI_L : HaydnInst<4, (outs DR64:$rd),
     (ins simm32_movei:$imm32), "movei_l\t$rd, $imm32", []>;
 }
 
-let isPseudo = 0, TSFlags = 14 in
+let isPseudo = 0, TSFlags = 14, Itinerary = Slot012_ALU in
 def ZERO_DR : HaydnInst<4, (outs DR64:$rd), (ins), "zero_dr\t$rd", []>;
 
 let TSFlags = 14, Itinerary = Slot12_ALU_SinCosLat in {
@@ -1776,5 +1831,8 @@ def D_LDW_CB_IMM : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
   let Constraints = "$rs = $rs_wb";
   let TSFlags{2-0} = 0b001;
   let TSFlags{4-3} = 0b01;
-  let Itinerary = Slot01_LD;
+  // 2026-08-21 itinerary re-map (over-broad fix): golden D_LDW_CB_IMM
+  // Available = LOADSTORE0 only (was Slot01_LD). The _REG sibling and all
+  // other CB rows are LOADSTORE0-only in golden too.
+  let Itinerary = Slot0_LS;
 }

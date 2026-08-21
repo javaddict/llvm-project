@@ -23,6 +23,7 @@
 #include "HaydnInstrInfo.h"
 #include "HaydnIntraCycleRAW.h"
 #include "HaydnIntraCycleWAW.h"
+#include "HaydnMemberSetDesc.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
 #include "HaydnResourceRestrictionClasses.h"
@@ -1137,17 +1138,84 @@ void HaydnHazardRecognizer::commitPlacementForEmit(MachineInstr *MI) {
     return;
   const CycleState &Pref = selectPreferredCandidate(CurrentCycleCandidates);
   unsigned MemberIdx = 0;
+  // GE96-11 (2026-08-21) commit-site unit law: no two members stamped into
+  // one issue cycle may share a golden execution unit (units ≠ encoded
+  // entries; the structural inverse verifier rejects a non-injective stamp
+  // with a fatal). The residual picks in Pref.Members are chosen per-field
+  // for slot occupancy and can duplicate a unit (X4MOVF16_E3_E2_ALU2 beside
+  // X2SLT32_E3_E0_ALU2). At this ONE stamp site, make the pick walk
+  // unit-injective: when the member about to be stamped duplicates a
+  // sibling's already-stamped unit, rematch EITHER op to its golden
+  // unit-twin (same Logical / Mode / EntryIdx / TypeCode, different Unit —
+  // formatEUnitTwinMember), current op first, then the earlier conflicting
+  // sibling. Twins are gated on memberDescCompatible: golden rows at one
+  // entry can carry different operand shapes (X2SLT32@e0 ALU2 is SFR-only
+  // 2-src while its ALU0 row is unary dest+src — not a legal swap; the
+  // earlier X4MOVF16@e2 ALU2→ALU0 twin IS shape-equal). Fail closed: no
+  // compatible twin → keep the residual pick and let the packing/verify
+  // layers reject (next cycle / sequentialize), never a silently
+  // non-injective stamp. Solver candidate-set semantics are untouched (the
+  // two failed GE96-11 designs changed them; this is a commit-site remap
+  // only).
+  struct StampedPick {
+    MachineInstr *Placed;
+    unsigned Member;
+  };
+  SmallVector<StampedPick, 3> Picks;
+  uint32_t StampedUnits = 0;
+  auto unitOf = [](unsigned Member) -> int {
+    const haydn::format_e::FormatEMemberRec *Rec =
+        haydn::bundle::lookupPrivateFormatEMember(Member);
+    return (Rec && Rec->Unit < 32) ? static_cast<int>(Rec->Unit) : -1;
+  };
+  auto compatibleTwin = [this](MachineInstr *Placed, unsigned Member,
+                               uint32_t Used) -> unsigned {
+    unsigned Twin = haydn::bundle::formatEUnitTwinMember(Member, Used);
+    if (Twin && TII && memberDescCompatible(*Placed, Twin, *TII))
+      return Twin;
+    return 0;
+  };
   for (MachineInstr *Placed : CurrentCyclePlacedMIs) {
     if (!hasPlacementAlternatives(Fmts, Placed->getOpcode()))
       continue;
     assert(MemberIdx < Pref.Members.size());
-    // AIE AIEHazardRecognizer.cpp:389 — record selected member opcode for
-    // leaveRegion setDesc materialize (AIEAlternateDescriptors.h:39-44).
-    AltDescs->setAlternateDescriptor(Placed, Pref.Members[MemberIdx].MemberOpcode,
-                                     *TII);
+    unsigned Member = Pref.Members[MemberIdx].MemberOpcode;
+    const int Unit = unitOf(Member);
+    if (Unit >= 0 && (StampedUnits & (1u << Unit))) {
+      // (a) rematch the current op onto its shape-equal twin.
+      unsigned Twin = compatibleTwin(Placed, Member, StampedUnits);
+      // (b) else rematch the earlier sibling that owns the conflicting unit.
+      if (!Twin) {
+        for (StampedPick &Earlier : Picks) {
+          if (unitOf(Earlier.Member) != Unit)
+            continue;
+          unsigned EarlierTwin = compatibleTwin(Earlier.Placed, Earlier.Member,
+                                                StampedUnits & ~(1u << Unit));
+          if (EarlierTwin) {
+            StampedUnits &= ~(1u << Unit);
+            Earlier.Member = EarlierTwin;
+            const int NewUnit = unitOf(EarlierTwin);
+            if (NewUnit >= 0)
+              StampedUnits |= 1u << NewUnit;
+            break;
+          }
+        }
+      } else {
+        Member = Twin;
+      }
+    }
+    const int FinalUnit = unitOf(Member);
+    if (FinalUnit >= 0)
+      StampedUnits |= 1u << FinalUnit;
+    Picks.push_back({Placed, Member});
     ++MemberIdx;
   }
   assert(MemberIdx == Pref.Members.size());
+  for (const StampedPick &Pick : Picks) {
+    // AIE AIEHazardRecognizer.cpp:389 — record selected member opcode for
+    // leaveRegion setDesc materialize (AIEAlternateDescriptors.h:39-44).
+    AltDescs->setAlternateDescriptor(Pick.Placed, Pick.Member, *TII);
+  }
 }
 
 ScheduleHazardRecognizer::HazardType

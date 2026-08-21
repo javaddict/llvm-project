@@ -265,6 +265,20 @@ inline unsigned moduloPrimarySlotII(ArrayRef<unsigned> Opcodes) {
 bool opcodesHaveFormatEUnitCoverForMode(ArrayRef<unsigned> Opcodes,
                                                uint8_t Mode);
 
+/// GE96-11 (2026-08-21) commit-site twin rematch: golden unit-twin of \p Opc.
+/// A twin is a Format E member record with the same Logical, same Mode, and
+/// same EntryIdx as \p Opc's own record but a Unit disjoint from \p UsedUnits
+/// (lowest UnitMap first — the same deterministic order the golden DFS
+/// assignFormatEMemberEntries uses). X2*/X4* ALU rows offer ALU0/ALU1/ALU2 at
+/// every entry, so a residual pick that duplicates a sibling's unit has a
+/// twin; LOADSTORE0-only rows have none (fail closed = next cycle / reject,
+/// never a non-injective stamp). 0 when \p Opc is not a generated member or no
+/// twin exists. Out-of-line: needs the per-TU member-opcode table (same
+/// contract as assignMemberOpcodesForSettledRow). Pure table walk over
+/// FormatEMembers — no solver state, no candidate-set semantics (the two
+/// failed GE96-11 designs changed candidate sets; this does not).
+unsigned formatEUnitTwinMember(unsigned Opc, uint32_t UsedUnits);
+
 
 /// True when \p Opcodes have injective Format E units under E2 or E3.
 /// One mechanism used by Bundle.canAdd, exactTryAddProduct, commitExact, and

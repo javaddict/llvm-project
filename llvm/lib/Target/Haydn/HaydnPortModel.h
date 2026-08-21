@@ -786,21 +786,45 @@ countARPorts(const MachineInstr &MI,
 }
 
 // True when the descriptor names SFR as an implicit def or use.
-// Extra implicit-def $sfr on ordinary ALU MIR is leftover modeling, not
-// a named SFR port. Peer: AIE AIEPseudoBranchExpansion.cpp:85
-// (hasImplicitDefOfPhysReg / hasImplicitUseOfPhysReg). SET_HWLOOP / CSR
-// / flag-setters list SFR on the desc and still charge.
+// Peer: AIE AIEPseudoBranchExpansion.cpp:85
+// (hasImplicitDefOfPhysReg / hasImplicitUseOfPhysReg). SET_HWLOOP / CSR /
+// flag-setters list SFR on the desc and charge.
 inline bool haydnDescNamesSfrPort(const MachineInstr &MI) {
   const MCInstrDesc &D = MI.getDesc();
   return D.hasImplicitDefOfPhysReg(Haydn::SFR) ||
          D.hasImplicitUseOfPhysReg(Haydn::SFR);
 }
 
+// True when \p Opcode is a generated private Format E member (a committed
+// row×entry×unit×type stamp, per D493). Members appear in MIR only after the
+// exact post-RA commit; their descriptors are generated geometry (fields,
+// itinerary, Constraints) and may drop the SFR Uses/Defs naming their
+// authored logical shells carry (X2MOVT32_E3_*_R has no Uses=[SFR] while
+// X2MOVT32 does). One classification site — the inverse-table map lookup
+// (haydn::bundle::lookupPrivateFormatEMember, out-of-line in
+// HaydnBundleVerify.cpp); never a name peel or a second opcode set.
+bool haydnIsPrivateFormatEMemberOpcode(unsigned Opcode);
+
 // Count SFR read and write port usage for an instruction.
-// Spec budget is 2R1W. Descriptor-named SFR traffic (SET_HWLOOP / CSR /
-// flag-setters) charges every SFR operand, including desc implicits.
-// Leftover implicit-def $sfr on ordinary ALU is not RF-port traffic;
-// dual leftover implicits stay a WAW-law question, not a 1W ceiling.
+// Spec budget is 2R1W (golden VLIW_Engine_Compiler_Constraints.md
+// §Registers: "Only one instruction per bundle is allowed to write to an
+// SFR"; total read ports SFR : 2).
+//
+// CB-161 law (2026-08-21): SFR port demand is an OPERAND fact, charged for
+// (a) descriptor-named SFR traffic (SET_HWLOOP / CSR / flag-setters —
+// logical shells) and (b) private Format E members, whose anonymous
+// implicit(-def) $sfr operands survive setAlternateDescriptor onto
+// geometry-only member descs that dropped the logical's Uses/Defs=[SFR]
+// naming. Skipping class (b) left the SFR 2R read ceiling unenforced for
+// every committed member (MOVESFR2GPR_E3_*_SFR / X2MOVT32_E3_*_R carry
+// implicit $sfr reads their descs never name).
+//
+// Ordinary (non-member) MIs with a silent desc keep the historical skip:
+// current codegen no longer adds leftover implicit-def $sfr to ordinary ALU
+// (verified: committed ADD32_E3_* members carry no $sfr operand), so no
+// legal pack relies on it; if such an operand reappears it is unattributed
+// traffic and stays a WAW-law question, not this ceiling.
+//
 // HR, commit, and verify all call this — do not fork a second SFR count.
 // \returns {Reads, Writes}.
 inline std::pair<unsigned, unsigned>
@@ -808,7 +832,9 @@ countSFRPorts(const MachineInstr &MI,
               const MachineRegisterInfo *MRI = nullptr) {
   (void)MRI;
   unsigned Reads = 0, Writes = 0;
-  const bool ChargeImplicits = haydnDescNamesSfrPort(MI);
+  const bool ChargeImplicits =
+      haydnDescNamesSfrPort(MI) ||
+      haydnIsPrivateFormatEMemberOpcode(MI.getOpcode());
   for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg())
       continue;
