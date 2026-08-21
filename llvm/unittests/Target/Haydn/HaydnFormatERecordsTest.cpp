@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnFormatERecords.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include "gtest/gtest.h"
 #include <optional>
 #include <set>
@@ -23,6 +25,8 @@
 
 #define GET_INSTRINFO_ENUM
 #include "HaydnGenInstrInfo.inc"
+#define GET_REGINFO_ENUM
+#include "HaydnGenRegisterInfo.inc"
 
 namespace {
 namespace mode_only_detail {
@@ -498,3 +502,85 @@ TEST(HaydnFormatERecords, AssignTwoStoresRejected) {
 }
 
 } // namespace
+
+// REGRESSION TEST (golden member-shape cutover, 2026-08-21):
+//
+// Bug (gaps/audit_shapes.md classes (d') and (b)-real+(d)): the generator's
+// base-writeback predicate keyed on the INFIX tags _POST_/_PRE_/_BREV_, so
+// the AR-ua families (suffix `_POST` — tag never matches a trailing token)
+// and the untagged CB families modeled their golden rs writeback on NO
+// member: dest2 stayed a plain input and pointer liveness was wrong at
+// member level. Separately, all 11 golden SFR writers (9 compares +
+// MOVEGPR2SFR + ZERO_SFR) declared their ONLY semantic output to nobody
+// (no Defs = [SFR] anywhere in the members file), weakening the SFR
+// single-writer bundle law at the committed-MIR layer.
+//
+// Fix: generate_format_e_records.py derives both laws from golden ports —
+// GPR Write∩Read tie drives the synthetic dest2_wb OUT (Constraints
+// "$dest2_<i> = $dest2_wb") on every UA/CB member, and SFR_Write_Port
+// drives implicit Defs = [SFR] on every member of an SFR-writing logical.
+// If either regresses, these pins break at the Desc level (tie count /
+// implicit SFR def), not just in the generator's own --check.
+//
+// What breaks if the bug returns: members lose the tie or the SFR def;
+// haydnFormatEKeepOperands' tied-member branches stop firing (fill fails
+// closed in MC), and countSFRPorts stops charging compare members, so two
+// SFR writers can silently co-issue.
+namespace llvm {
+const MCInstrInfo &getHaydnSharedMCInstrInfo();
+}
+
+TEST(HaydnFormatERecords, UAAndCBMembersCarryTiedDest2Writeback) {
+  // One member per family, spanning AR-ua suffix loads/stores and both CB
+  // spellings. The law is golden-derived (Write∩Read), so the pins assert
+  // SHAPE (a tied GPR use whose TIED_TO lands on a def named by the
+  // member's outs), not member-symbol magic lists.
+  const unsigned Members[] = {
+      Haydn::D_LQHWUA_POST_E2_E0_LOADSTORE0_AR,
+      Haydn::D_LTWUA_POST_E2_E1_LOAD1_AR,
+      Haydn::D_SQHWUA_POST_E3_E0_LOADSTORE0_AR,
+      Haydn::D_STWUA_POST_E3_E0_LOADSTORE0_AR,
+      Haydn::PLDWWUA_POST_E2_E0_LOADSTORE0_AR,
+      Haydn::D_LDW_CB_IMM_E2_E0_LOADSTORE0_CBRI,
+      Haydn::D_LDW_CB_REG_E2_E0_LOADSTORE0_CBRR,
+      Haydn::D_SDW_CB_IMM_E2_E0_LOADSTORE0_CBRI,
+      Haydn::D_SDW_CB_REG_E2_E0_LOADSTORE0_CBRR,
+  };
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  for (unsigned Opc : Members) {
+    const MCInstrDesc &D = MII.get(Opc);
+    const unsigned Defs = D.getNumDefs();
+    ASSERT_GT(Defs, 0u) << Opc;
+    bool HasTiedBase = false;
+    for (unsigned I = Defs; I < D.getNumOperands(); ++I) {
+      const int Tie = D.getOperandConstraint(I, MCOI::TIED_TO);
+      if (Tie < 0 || static_cast<unsigned>(Tie) >= Defs)
+        continue;
+      // The tied use must be GPR-class (base pointer), tied to a def.
+      EXPECT_GE(D.operands()[I].RegClass, 0) << Opc;
+      HasTiedBase = true;
+    }
+    EXPECT_TRUE(HasTiedBase) << "member lost golden rs writeback: " << Opc;
+  }
+}
+
+TEST(HaydnFormatERecords, SFRWriterMembersDeclareImplicitSFRDef) {
+  // Golden SFR writers (instruction_type_index SFR_Write_Port): the nine
+  // compares plus MOVEGPR2SFR / ZERO_SFR. Every member of each logical
+  // must name SFR as an implicit def so countSFRPorts charges the 1W
+  // budget at the committed-MIR layer.
+  const unsigned SfrWriterMembers[] = {
+      Haydn::SEQ64_E2_E0_ALU0_R,   Haydn::SLE64_E2_E0_ALU0_R,
+      Haydn::SLT64_E2_E0_ALU0_R,   Haydn::X2SEQ32_E2_E0_ALU0_R,
+      Haydn::X2SLE32_E2_E0_ALU0_R, Haydn::X2SLT32_E2_E0_ALU0_R,
+      Haydn::X4SEQ16_E2_E0_ALU0_R, Haydn::X4SLE16_E2_E0_ALU0_R,
+      Haydn::X4SLT16_E2_E0_ALU0_R, Haydn::MOVEGPR2SFR_E2_E0_ALU0_SFR,
+      Haydn::ZERO_SFR_E2_E0_ALU0_I8,
+  };
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  for (unsigned Opc : SfrWriterMembers) {
+    const MCInstrDesc &D = MII.get(Opc);
+    EXPECT_TRUE(D.hasImplicitDefOfPhysReg(Haydn::SFR))
+        << "member lost implicit SFR def: " << Opc;
+  }
+}

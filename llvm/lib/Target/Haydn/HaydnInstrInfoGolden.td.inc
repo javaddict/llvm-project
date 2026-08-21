@@ -3303,7 +3303,7 @@ let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly =
 def SET_HWLOOP_F2 : HaydnInst<4, (outs),
     (ins uimm1:$hwlr_sel_0, uimm6:$imm1_0, uimm12:$imm2_0, GPR32:$rs1),
     "set_hwloop_f2	$hwlr_sel_0, $imm1_0, $imm2_0, $rs1", []> {
-  let Itinerary = Slot012_ALU;
+  let Itinerary = Slot0_ALU;
 }
 }
 

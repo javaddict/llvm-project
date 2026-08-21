@@ -1201,6 +1201,22 @@ SINCOS_ITINERARY = {
     "ALU1": "Slot1_ALU_SinCosLat",
     "ALU2": "Slot2_ALU_SinCosLat",
 }
+DSPLY2_LOGICALS = frozenset({"LOG2", "EXP2", "RECIP", "SQRT"})
+
+# Fixed Data_Latency = 2 logicals (2026-08-21 latency P0/P1,
+# golden instruction_type_index Pipeline_Info): the four DSP-unary
+# LUT-interpolation ops and the CSR read. Members pin one unit; the
+# per-slot DspLat/CsrLat classes keep OperandCycles [2] so a consumer in
+# the next cycle reads stale data on this no-interlock machine.
+DSPLY2_ITINERARY = {
+    "ALU1": "Slot1_ALU_DspLat",
+    "ALU2": "Slot2_ALU_DspLat",
+}
+CSR_LY2_ITINERARY = {
+    "ALU0": "Slot0_ALU_CsrLat",
+    "ALU1": "Slot1_ALU_CsrLat",
+    "ALU2": "Slot2_ALU_CsrLat",
+}
 
 BRANCH_LOGICALS = frozenset(
     {
@@ -1305,6 +1321,12 @@ class MemberEmitFlags:
     is_call: int
     is_indirect_branch: int
     has_side_effects: int
+    # 2026-08-21 (gaps/audit_shapes.md): compare logicals write SFR as
+    # their ONLY semantic output; members must declare the implicit def
+    # (Defs = [SFR]) like the authored logicals (HaydnInstrInfo.td
+    # SEQ64/X2SEQ32... `let Defs = [SFR]`), keeping hasSideEffects = 0 so
+    # SMS does not serialize them as memory barriers.
+    implicit_defs: Tuple[str, ...] = ()
 
     def let_line(self) -> str:
         parts = [
@@ -1326,6 +1348,10 @@ class MemberEmitFlags:
                 'AsmVariantName = "e96member"',
             ]
         )
+        if self.implicit_defs:
+            parts.append(
+                "Defs = [" + ", ".join(self.implicit_defs) + "]"
+            )
         return "let " + ", ".join(parts) + " in {"
 
 
@@ -1426,9 +1452,29 @@ def load_accumulator_ties(index_path: Path) -> Dict[str, Tuple[str, ...]]:
     return ties
 
 
-def ls_has_tied_base_writeback(logical: str) -> bool:
-    """POST/PRE/BREV update the encoded dest2 base (`$rs = $rs_wb`)."""
+def ls_has_tied_base_writeback(
+    logical: str, gpr_ties: Optional[Tuple[str, ...]] = None
+) -> bool:
+    """LS base registers that this logical writes back (`$rs = $rs_wb`).
+
+    Law (2026-08-21, golden GPR Write∩Read port tie, gaps/audit_shapes.md
+    class (d')): an LS logical whose golden GPR_Write_Port alias is also in
+    GPR_Read_Port updates its encoded dest2 base — the synthetic tied OUT
+    `dest2_wb` must exist on every member. That single predicate covers
+    all four spellings the name-tag form missed:
+      - infix tags `_POST_`/`_PRE_`/`_BREV_` (70 sibling logicals)
+      - suffix `_POST` (AR-ua families D_LQHWUA_POST etc. — the tag
+        `_POST_` never matches a trailing `_POST`)
+      - untagged CB families (D_LDW_CB_IMM/REG, D_SDW_CB_IMM/REG —
+        circular-buffer base wrap has no POST/PRE/BREV token at all)
+    `gpr_ties` is the golden-derived tie tuple from
+    load_accumulator_ties (GPR bank only). When absent the historical
+    name-tag check is kept as a fallback so probe/pin paths that call
+    without the index still behave.
+    """
     key = _logical_key(logical)
+    if gpr_ties is not None:
+        return any(a.startswith("rs") for a in gpr_ties)
     return any(tag in key for tag in ("_POST_", "_PRE_", "_BREV_"))
 
 
@@ -1470,8 +1516,29 @@ MAC_ACCFIRST_ITINERARY = {
 }
 
 
+def load_sfr_writers(index_path: Path) -> set:
+    """Golden SFR-writer law: logicals whose SFR_Write_Port is non-empty
+    declare an implicit SFR def on every member (2026-08-21,
+    gaps/audit_shapes.md). Derived from instruction_type_index.json — no
+    hand list. Census: the 9 compares (SEQ64/SLE64/SLT64, X2SEQ/SLE/LT32,
+    X4SEQ/SLE/LT16) plus MOVEGPR2SFR and ZERO_SFR (whose types SFR/I8
+    already carry hasSideEffects=1; the implicit def is added anyway —
+    an explicit def keeps the SFR single-writer bundle law checkable at
+    member level for them too)."""
+    idx = json.loads(index_path.read_text(encoding="utf-8"))
+    writers: set = set()
+    for type_recs in idx.values():
+        for rec in type_recs:
+            name = rec.get("Instruction")
+            if name and (rec.get("SFR_Write_Port") or []):
+                writers.add(_logical_key(name))
+    return writers
+
+
 def classify_member_flags(
-    rec: MemberRecord, accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None
+    rec: MemberRecord,
+    accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None,
+    sfr_writers: Optional[set] = None,
 ) -> MemberEmitFlags:
     """Map unit/type/logical onto a published itinerary and closed flags.
 
@@ -1487,6 +1554,20 @@ def classify_member_flags(
             raise SystemExit(
                 f"error: {rec.member_symbol}: {key} unit {rec.unit} has no "
                 "published SinCosLat itinerary"
+            )
+    elif key in DSPLY2_LOGICALS:
+        itinerary = DSPLY2_ITINERARY.get(rec.unit)
+        if itinerary is None:
+            raise SystemExit(
+                f"error: {rec.member_symbol}: {key} unit {rec.unit} has no "
+                "published DspLat itinerary"
+            )
+    elif key == "CSRR":
+        itinerary = CSR_LY2_ITINERARY.get(rec.unit)
+        if itinerary is None:
+            raise SystemExit(
+                f"error: {rec.member_symbol}: {key} unit {rec.unit} has no "
+                "published CsrLat itinerary"
             )
     elif (
         accum_ties is not None
@@ -1547,6 +1628,9 @@ def classify_member_flags(
         is_call=1 if is_call else 0,
         is_indirect_branch=1 if is_indirect else 0,
         has_side_effects=1 if side else 0,
+        implicit_defs=("SFR",)
+        if sfr_writers and key in sfr_writers
+        else (),
     )
 
 
@@ -1756,6 +1840,7 @@ def emit_members_td_inc(
     cat: Catalog,
     family,
     accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None,
+    sfr_writers: Optional[set] = None,
 ) -> str:
     """LIVE TableGen format-member Inst defs — included by HaydnFormatE.td.
 
@@ -1957,7 +2042,16 @@ def emit_members_td_inc(
             in_frags = acc_ins + in_frags
             accum_tied_members.append(rec.member_symbol)
         constraints: Optional[str] = None
-        if is_ls and ls_has_tied_base_writeback(rec.logical):
+        # 2026-08-21 (gaps/audit_shapes.md class (d')): the writeback law is
+        # golden-derived (GPR Write∩Read port tie), so UA-suffix `_POST` and
+        # untagged CB families now tie dest2 the same way the 70 infix-tag
+        # POST/PRE/BREV siblings always have.
+        gpr_tie = tuple(
+            a
+            for a in (accum_ties or {}).get(_logical_key(rec.logical), ())
+            if a.startswith("rs")
+        )
+        if is_ls and ls_has_tied_base_writeback(rec.logical, gpr_tie):
             dest2_ins = []
             for frag in in_frags:
                 dollar = frag.find("$")
@@ -1966,7 +2060,7 @@ def emit_members_td_inc(
                     dest2_ins.append(frag)
             if len(dest2_ins) != 1:
                 raise SystemExit(
-                    f"error: {rec.member_symbol} POST/PRE/BREV needs exactly "
+                    f"error: {rec.member_symbol} base-writeback needs exactly "
                     f"one dest2 use, got {len(dest2_ins)}"
                 )
             dest2_frag = dest2_ins[0]
@@ -1988,7 +2082,7 @@ def emit_members_td_inc(
         outs_dag = f"(outs {outs})" if outs else "(outs)"
         ins_dag = f"(ins {ins})" if ins else "(ins)"
 
-        flags = classify_member_flags(rec, accum_ties)
+        flags = classify_member_flags(rec, accum_ties, sfr_writers)
         let = flags.let_line()
         if constraints:
             if not let.endswith(" in {"):
@@ -2066,6 +2160,56 @@ def emit_members_td_inc(
         ):
             raise SystemExit(
                 "error: X2MULA32 member missing dual accumulator Constraints"
+            )
+    # 2026-08-21 base-writeback + SFR-def pins (gaps/audit_shapes.md
+    # classes (d') and (b)-real+(d)): measured, not assumed. The UA-suffix
+    # _POST and untagged CB families are pinned by member symbol; the
+    # compare SFR def is pinned by text shape. A DB regen that changes
+    # these sets must be re-audited (logical Constraints arity /
+    # SFR_Write_Port coverage) before the pins move.
+    if accum_ties is not None:
+        text_so_far = "\n".join(lines)
+        pin_wb = (
+            "def D_LQHWUA_POST_E2_E0_LOADSTORE0_AR : HaydnEntryE2E0<"
+            "(outs DR64:$dest1_1, GPR32:$dest2_wb), "
+            '(ins uimm2:$ar_sel_0, GPR32:$dest2_2), "d_lqhwua_post'
+        )
+        if pin_wb not in text_so_far:
+            raise SystemExit(
+                "error: D_LQHWUA_POST member (AR-ua suffix family) must "
+                "carry the tied dest2_wb OUT + Constraints like its 70 "
+                "infix-tag POST/PRE/BREV siblings"
+            )
+        pin_cb = (
+            "def D_LDW_CB_IMM_E2_E0_LOADSTORE0_CBRI : HaydnEntryE2E0<"
+            "(outs DR64:$dest1_1, GPR32:$dest2_wb), "
+            '(ins uimm1:$cbr_sel_0, GPR32:$dest2_2, simm8:$imm_3), '
+            '"d_ldw_cb_imm'
+        )
+        if pin_cb not in text_so_far:
+            raise SystemExit(
+                "error: D_LDW_CB_IMM member (untagged CB family) must "
+                "carry the tied dest2_wb OUT + Constraints (circular-"
+                "buffer base wrap is a golden GPR Write∩Read tie)"
+            )
+        if "PLDWWUA_POST_E2_E0_LOADSTORE0_AR" not in text_so_far:
+            raise SystemExit(
+                "error: PLDWWUA_POST member missing from emission"
+            )
+    if sfr_writers is not None:
+        text_so_far = "\n".join(lines)
+        pin_sfr = (
+            "def SEQ64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), "
+            "(ins DR64:$src_1"
+        )
+        if "Defs = [SFR]" not in text_so_far:
+            raise SystemExit(
+                "error: compare members must declare implicit "
+                "Defs = [SFR] (golden SFR_Write_Port; only semantic output)"
+            )
+        if pin_sfr not in text_so_far:
+            raise SystemExit(
+                "error: SEQ64 member missing from emission"
             )
     lines.append(
         "// Members emitted in canonical alias order (same-class permutation "
@@ -2913,6 +3057,11 @@ def emit_logical_defs_td_inc(
             itin = "Slot1_LD"
         elif "LOADSTORE0" in uset:
             itin = "Slot0_LS"
+        elif uset == {"ALU0"}:
+            # Golden Available = ALU0 only (e.g. SET_HWLOOP_F2 HWLRIIR):
+            # do not book ALU1/ALU2 the op cannot occupy (2026-08-21
+            # itinerary re-map, audit_itinerary.md over-broad table).
+            itin = "Slot0_ALU"
         else:
             itin = "Slot012_ALU"
         props = [f"isCodeGenOnly = 0", "DecoderNamespace = \"HaydnAutoNoDecode\"", "isAsmParserOnly = 0"]
@@ -3793,7 +3942,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "
             "member arity vs the logicals (CB ledger: unmodeled dest reads)"
         )
-    members_td = emit_members_td_inc(cat, family, accum_ties)
+    # 2026-08-21: golden SFR-writer set (compares + MOVEGPR2SFR/ZERO_SFR)
+    # drives implicit Defs = [SFR] on members. Measured pin below.
+    sfr_writers = load_sfr_writers(index_path)
+    expected_sfr_writers = {
+        "SEQ64", "SLE64", "SLT64",
+        "X2SEQ32", "X2SLE32", "X2SLT32",
+        "X4SEQ16", "X4SLE16", "X4SLT16",
+        "MOVEGPR2SFR", "ZERO_SFR",
+    }
+    if sfr_writers != expected_sfr_writers:
+        raise SystemExit(
+            "error: golden SFR-writer set changed "
+            f"({sorted(sfr_writers)}) — re-audit implicit Defs = [SFR] "
+            "coverage (gaps/audit_shapes.md class (b)-real+(d))"
+        )
+    members_td = emit_members_td_inc(cat, family, accum_ties, sfr_writers)
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical, family)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat, family)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir, family.mnemonic_roundtrip_s)

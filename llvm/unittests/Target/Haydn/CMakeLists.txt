@@ -38,6 +38,7 @@ add_llvm_target_unittest(HaydnTests
   HaydnMaterializeMultiOpcodeTest.cpp
   HaydnMemoryCycleTest.cpp
   HaydnPlacementAlternativeTest.cpp
+  HaydnPortModelSFRMemberTest.cpp
   HaydnRegisterBankInfoTest.cpp
   HaydnRegisterInfoTest.cpp
   HaydnRelocLayoutTest.cpp
