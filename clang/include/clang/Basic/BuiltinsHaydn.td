@@ -2701,7 +2701,14 @@ def setcbr_end : HaydnBuiltin<"void(int, int)", "circular-buffer"> {
   let PublicPrototype = "void(int, int)";
   let Mnemonic = "SETCBR_END";
   let ImmChecks = [ImmCheck<0, ImmCheck0_1>];
-  let Semantics = "write the circular-buffer end bound CSR for the selected CBR (cbr_sel 0 or 1).";
+  // GE96 CB-161-followup 2026-08-21: golden Constraints §Circular Buffer
+  // requires the end bound to be the address of the LAST BYTE of the last
+  // element (buf + nbytes - 1), not the start of the last element. A
+  // mis-programmed end still wraps golden-faithfully but leaves rs
+  // misaligned (mod 8) after wrap and the runtime Required_Alignment
+  // check traps as ISSUE_CONFLICT. State the convention here so raw
+  // intrinsic users cannot repeat the off-by-convention error.
+  let Semantics = "write the circular-buffer end bound CSR for the selected CBR (cbr_sel 0 or 1). The value must be the address of the LAST BYTE of the last element (buf + nbytes - 1), per Constraints §Circular Buffer; the compat macro WUR_AE_CBEGIN/CEND converts an exclusive end for you.";
 }
 // UA AR family: ar_sel and dir_sel are encoding ImmArgs — ISel requires
 // compile-time constants. Architectural AR file is AR0/AR1; ar_sel legal

@@ -935,6 +935,14 @@ static inline void AE_S32RA64S_IP(ae_int64 acc, ae_int32 *ptr, int shift,
 /// Write circular buffer 0 end. NatureDSP WUR_AE_CEND is exclusive one-past;
 /// Haydn CBR_END is inclusive (size = END−BEGIN+1). Convert here so LA_IC wrap
 /// and D_*_CB see the same ring.
+// CB end bound convention (golden Constraints §Circular Buffer): CBR_END
+// takes the address of the LAST BYTE of the last element, NOT the start of
+// the last element. The exclusive-end value users naturally compute
+// (buf + nbytes) is converted below (val - 1). Raw haydn_setcbr_end callers
+// must apply the convention themselves — a mis-programmed end wraps
+// golden-faithfully but leaves the walk pointer misaligned after wrap and
+// traps the runtime 8-byte Required_Alignment check (2026-08-21 probe
+// falsified the earlier spacing-4 hypothesis; see GOALS 14(c)).
 #define WUR_AE_CEND0(val)                                                      \
   do {                                                                         \
     uintptr_t __ex = (uintptr_t)(val);                                         \
