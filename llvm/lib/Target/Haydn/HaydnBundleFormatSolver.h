@@ -561,7 +561,7 @@ assignMemberOpcodesForSettledRow(ArrayRef<unsigned> LogicalOpcodes,
                                  uint8_t Mode);
 
 /// Golden register-file port budgets over one candidate cycle (4R2W GPR,
-/// 7R3W DR, 2R2W AR, 2R1W SFR; HaydnPortModel counters). Out-of-line so the
+/// 8R3W DR, 2R2W AR, 2R1W SFR; HaydnPortModel counters). Out-of-line so the
 /// header consumers do not inherit the port model's enum includes.
 bool cycleMembersRespectPortBudgets(ArrayRef<class MachineInstr *> Instrs);
 

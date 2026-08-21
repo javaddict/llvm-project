@@ -870,7 +870,7 @@ inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
 }
 
 /// Register-file port budgets for one candidate cycle (golden 4R2W GPR,
-/// 7R3W DR, 2R2W AR, 2R1W SFR — the same counters the hazard recognizer
+/// 8R3W DR, 2R2W AR, 2R1W SFR — the same counters the hazard recognizer
 /// charges per issue cycle). The HR enforces these while SCHEDULING; the
 /// hard-root recommit and leaveMBB commit surfaces bypass the HR, and the
 /// gap was masked by the solver's formerly incoherent member output (mixed

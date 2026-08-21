@@ -159,7 +159,8 @@ def AR : RegisterClass<"Haydn",
   >;
 }
 
-// Low GPR subset for compressed 16-bit instructions (3-bit register encoding).
+// Low GPR subset for soft-RA register ordering hints over the 4-bit Format E
+// product encoding (no compressed 3-bit form exists — never-reintroduce list).
 // Only R0-R7 are eligible for compressed forms.
 //
 // soft RA hints (-haydn-ra-compact-hints): getRegAllocationHints may prefer

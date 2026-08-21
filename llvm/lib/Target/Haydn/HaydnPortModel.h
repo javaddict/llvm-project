@@ -10,8 +10,9 @@
 //
 // Pooled per-cycle budgets across the seven Format E execution units
 // (constraints §Registers / port table):
-// * GPR32 — 4 read / 2 write (compiler view; 5R3W physical with AGU bypass).
-// * DR64 — 7 read / 3 write.
+// * GPR32 — 4 read / 2 write (golden Constraints §Registers; no golden
+// source publishes a 5R3W physical or AGU-bypass figure — old folklore).
+// * DR64 — 8 read / 3 write (stated twice in golden Constraints; GE96-10).
 // * AR — 2 read / 2 write.
 // * SFR — 2 read / 1 write (and at most one SFR writer per bundle).
 //
@@ -81,8 +82,9 @@
 
 namespace llvm {
 
-// GPR port budget constants (CLAUDE.md "Slot architecture"; compiler view
-// 5R3W physical incl. AGU bypass).
+// GPR port budget constants — golden VLIW_Engine_Compiler_Constraints.md
+// §Registers ("4 read ports and 2 write ports"); no golden source publishes
+// a 5R3W physical or AGU-bypass figure (old folklore, comment-only).
 inline constexpr unsigned HAYDN_GPR_READ_PORTS = 4;
 inline constexpr unsigned HAYDN_GPR_WRITE_PORTS = 2;
 
@@ -713,7 +715,7 @@ countGPRPorts(const MachineInstr &MI,
 }
 
 // Count DR64 read and write port usage for an instruction. DR64 is a separate
-// register file from GPR32 with its own 7R3W port budget (see file header).
+// register file from GPR32 with its own 8R3W port budget (see file header).
 // Accounting mirrors countGPRPorts (read/write counted independently, dead
 // defs still occupy a write port, each explicit operand field one port)
 // with two differences:

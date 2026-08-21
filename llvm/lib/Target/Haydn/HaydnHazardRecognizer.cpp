@@ -250,7 +250,7 @@ bool HaydnFuncUnitWrapper::conflict(const HaydnFuncUnitWrapper &Other) const {
   if (GPRWrites + Other.GPRWrites > HAYDN_GPR_WRITE_PORTS)
     return true;
 
-  // DR64 7R3W register-file port budget.
+  // DR64 8R3W register-file port budget (golden Constraints; GE96-10).
   if (DRReads + Other.DRReads > HAYDN_DR_READ_PORTS)
     return true;
   if (DRWrites + Other.DRWrites > HAYDN_DR_WRITE_PORTS)

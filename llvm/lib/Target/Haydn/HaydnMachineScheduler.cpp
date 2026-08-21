@@ -96,7 +96,7 @@ void HaydnScheduleDAGMI::exitRegion() {
 
 // Create the post-RA scheduler DAG: HaydnScheduleDAGMI driven by
 // HaydnPostRASchedStrategy (which carries HaydnHazardRecognizer for slot +
-// GPR 4R2W + DR64 7R3W resource checks, and forms bundles in leaveRegion).
+// GPR 4R2W + DR64 8R3W resource checks, and forms bundles in leaveRegion).
 // This replaces the B1 path (createSchedPostRA<HaydnPostRASchedStrategy>
 // which used the base ScheduleDAGMI with no leaveRegion hook and left bundle
 // formation to the now-retired HaydnVLIWPacketizer). It also retires the
