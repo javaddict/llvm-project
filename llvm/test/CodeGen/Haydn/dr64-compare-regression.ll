@@ -40,7 +40,7 @@
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (setDesc members; AIEBaseAsmPrinter field order); .file skipped
 
 
-declare i64 @llvm.haydn.slt64(i64)
+declare i64 @llvm.haydn.slt64(i64, i64)
 declare i64 @llvm.haydn.movt64(i64)
 
 define dso_local i64 @test_slt64_movt64(i64 %a) {
@@ -54,7 +54,7 @@ define dso_local i64 @test_slt64_movt64(i64 %a) {
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
+  %cmp = call i64 @llvm.haydn.slt64(i64 %a, i64 %a)
   %r = call i64 @llvm.haydn.movt64(i64 %cmp)
   ret i64 %r
 }
@@ -63,7 +63,7 @@ define dso_local i64 @test_slt64_movt64(i64 %a) {
 ; SLE64 + MOVF64 chain
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.sle64(i64)
+declare i64 @llvm.haydn.sle64(i64, i64)
 declare i64 @llvm.haydn.movf64(i64)
 
 define dso_local i64 @test_sle64_movf64(i64 %a) {
@@ -77,7 +77,7 @@ define dso_local i64 @test_sle64_movf64(i64 %a) {
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
-  %cmp = call i64 @llvm.haydn.sle64(i64 %a)
+  %cmp = call i64 @llvm.haydn.sle64(i64 %a, i64 %a)
   %r = call i64 @llvm.haydn.movf64(i64 %cmp)
   ret i64 %r
 }
@@ -86,7 +86,7 @@ define dso_local i64 @test_sle64_movf64(i64 %a) {
 ; SEQ64 standalone (sets SFR, returns passthrough)
 ;===----------------------------------------------------------------------===;
 
-declare i64 @llvm.haydn.seq64(i64)
+declare i64 @llvm.haydn.seq64(i64, i64)
 
 define dso_local i64 @test_seq64(i64 %a) {
 ; CHECK-LABEL: test_seq64:
@@ -98,7 +98,7 @@ define dso_local i64 @test_seq64(i64 %a) {
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
-  %r = call i64 @llvm.haydn.seq64(i64 %a)
+  %r = call i64 @llvm.haydn.seq64(i64 %a, i64 %a)
   ret i64 %r
 }
 

@@ -5349,7 +5349,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===---------------------------------------------------------------===
   // Unary DR64
   case haydn_not64: return selectUnary(NOT64, DR64RegClass);
-  case haydn_seq64: return selectUnary(SEQ64, DR64RegClass);
+  // haydn_seq64: pair path (see the SFR-compare block below) — 2026-08-21.
 
   // Binary DR64
   case haydn_max64:   return selectBinary(MAX64,   DR64RegClass);
@@ -5471,10 +5471,33 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_sra64r: return selectDR64ShiftGPR32(SRA64R);
 
   //===---------------------------------------------------------------===
-  // Wave 5: Scalar 64-bit SFR Compare (unary DR64, like SEQ64)
+  // Scalar 64-bit SFR Compare — 2026-08-21 pair rework (audit_shapes
+  // "Scalar trio"): golden "SLT64 rsd1, rsd2" two-source, SFR-only write,
+  // intrinsic returns rs1 passthrough — same contract as the X2 compares.
   //===---------------------------------------------------------------===
-  case haydn_slt64: return selectUnary(SLT64, DR64RegClass);
-  case haydn_sle64: return selectUnary(SLE64, DR64RegClass);
+  case haydn_seq64:
+  case haydn_slt64:
+  case haydn_sle64: {
+    unsigned Opc = IntrID == haydn_seq64 ? SEQ64
+                   : IntrID == haydn_slt64 ? SLT64
+                                           : SLE64;
+    Register A = I.getOperand(2).getReg();
+    Register B = I.getOperand(3).getReg();
+    if (A.isVirtual())
+      RBI.constrainGenericRegister(A, DR64RegClass, MRI);
+    if (B.isVirtual())
+      RBI.constrainGenericRegister(B, DR64RegClass, MRI);
+    // Hardware writes SFR only (no DR dest).
+    MachineInstr *CmpMI = MIB.buildInstr(Opc).addReg(A).addReg(B);
+    if (!constrainSelectedInstRegOperands(*CmpMI, TII, TRI, RBI))
+      return false;
+    // C intrinsic still has a return value: passthrough rs1 (not on the wire).
+    if (DstReg.isVirtual())
+      RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
+    MIB.buildCopy(DstReg, A);
+    I.eraseFromParent();
+    return true;
+  }
 
   //===---------------------------------------------------------------===
   // Wave 5: Scalar 64-bit SFR Conditional Move (unary DR64)

@@ -19,22 +19,22 @@
 
 
 define i64 @seq64_test(i64 %a) nounwind {
-  %r = call i64 @llvm.haydn.seq64(i64 %a)
+  %r = call i64 @llvm.haydn.seq64(i64 %a, i64 %a)
   ret i64 %r
 }
-declare i64 @llvm.haydn.seq64(i64)
+declare i64 @llvm.haydn.seq64(i64, i64)
 
 define i64 @slt64_test(i64 %a) nounwind {
-  %r = call i64 @llvm.haydn.slt64(i64 %a)
+  %r = call i64 @llvm.haydn.slt64(i64 %a, i64 %a)
   ret i64 %r
 }
-declare i64 @llvm.haydn.slt64(i64)
+declare i64 @llvm.haydn.slt64(i64, i64)
 
 define i64 @sle64_test(i64 %a) nounwind {
-  %r = call i64 @llvm.haydn.sle64(i64 %a)
+  %r = call i64 @llvm.haydn.sle64(i64 %a, i64 %a)
   ret i64 %r
 }
-declare i64 @llvm.haydn.sle64(i64)
+declare i64 @llvm.haydn.sle64(i64, i64)
 
 define i64 @add64s_test(i64 %a, i64 %b) nounwind {
   %r = add i64 %a, %b

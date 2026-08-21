@@ -2022,12 +2022,12 @@ int test_recip(int a0) {
 }
 
 long long test_seq64(long long a0) {
-  long long r = __builtin_haydn_seq64(a0);
+  long long r = __builtin_haydn_seq64(a0, a0);
   sink_ll = (long long)r;
 }
 
 long long test_sle64(long long a0) {
-  long long r = __builtin_haydn_sle64(a0);
+  long long r = __builtin_haydn_sle64(a0, a0);
   sink_ll = (long long)r;
 }
 
@@ -2037,7 +2037,7 @@ long long test_sll64(long long a0, int a1) {
 }
 
 long long test_slt64(long long a0) {
-  long long r = __builtin_haydn_slt64(a0);
+  long long r = __builtin_haydn_slt64(a0, a0);
   sink_ll = (long long)r;
 }
 

@@ -2485,27 +2485,33 @@ def x4cmpsel16 : HaydnBuiltin<"_ExtVector<4, short>(_ExtVector<4, short>, _ExtVe
   let Semantics = "Fused compare-select: quad 16-bit (a < b) ? t : f per lane. Args (a, b, true_val, false_val). Expand X4SLT16+X4MOVT16; SFR local to expansion.";
 }
 
-def slt64 : HaydnBuiltin<"int64_t(int64_t)"> {
+// 2026-08-21 pair rework: golden "SLT64 rsd1, rsd2" two-source.
+def slt64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "slt64";
-  let PublicPrototype = "int64_t(int64_t)";
+  // 2026-08-21 pair rework: golden two-source public signature.
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
   let Mnemonic = "SLT64";
   let Semantics = "performs a 64-bit signed comparison. If rsd1 is less than rsd2, SFR is set to 4'b1111; otherwise SFR is set to 4'b0000.";
 }
-def sle64 : HaydnBuiltin<"int64_t(int64_t)"> {
+// 2026-08-21 pair rework: golden "SLE64 rsd1, rsd2" two-source.
+def sle64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "sle64";
-  let PublicPrototype = "int64_t(int64_t)";
+  // 2026-08-21 pair rework: golden two-source public signature.
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
   let Mnemonic = "SLE64";
   let Semantics = "performs a 64-bit signed comparison. If rsd1 is less than or equal to rsd2, SFR is set to 4'b1111; otherwise SFR is set to 4'b0000.";
 }
-def seq64 : HaydnBuiltin<"int64_t(int64_t)"> {
+// 2026-08-21 pair rework: golden "SEQ64 rsd1, rsd2" two-source.
+def seq64 : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let Attributes = [NoThrow];
   let Effect = "SFR";
   let PublicName = "seq64";
-  let PublicPrototype = "int64_t(int64_t)";
+  // 2026-08-21 pair rework: golden two-source public signature.
+  let PublicPrototype = "int64_t(int64_t, int64_t)";
   let Mnemonic = "SEQ64";
   let Semantics = "performs a 64-bit equality comparison. If rsd1 is equal to rsd2, SFR is set to 4'b1111; otherwise SFR is set to 4'b0000.";
 }

@@ -43,6 +43,11 @@
 # RUN:   %t/vaarg_i32_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=VAARG32
 # RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
 # RUN:   %t/vaarg_i64_ok.mir -o - 2>&1 | FileCheck %s --check-prefix=VAARG64
+# 2026-08-21 (audit_shapes "Scalar trio" rework): SEQ64/SLT64/SLE64
+# sections REMOVED — they are now selectable two-source instructions
+# (golden Syntax "SLT64 rsd1, rsd2"), not residual pseudos; their former
+# "must ban" premise is obsolete. Coverage lives in
+# dr64-compare-intrinsics.ll (ISel pair + passthrough COPY).
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_abs64.mir -o - 2>&1 | FileCheck %s --check-prefix=ABS64BAN
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
@@ -60,8 +65,6 @@
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_nsa64.mir -o - 2>&1 | FileCheck %s --check-prefix=NSA64BAN
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
-# RUN:   %t/residual_seq64.mir -o - 2>&1 | FileCheck %s --check-prefix=SEQ64BAN
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_neg64s.mir -o - 2>&1 | FileCheck %s --check-prefix=NEG64SBAN
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_x2neg32s.mir -o - 2>&1 | FileCheck %s --check-prefix=X2NEG32SBAN
@@ -75,10 +78,6 @@
 # RUN:   %t/residual_log2.mir -o - 2>&1 | FileCheck %s --check-prefix=LOG2BAN
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_popcount64.mir -o - 2>&1 | FileCheck %s --check-prefix=POPCOUNT64BAN
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
-# RUN:   %t/residual_slt64.mir -o - 2>&1 | FileCheck %s --check-prefix=SLT64BAN
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
-# RUN:   %t/residual_sle64.mir -o - 2>&1 | FileCheck %s --check-prefix=SLE64BAN
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_movf64.mir -o - 2>&1 | FileCheck %s --check-prefix=MOVF64BAN
 # RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
@@ -660,22 +659,6 @@ body:             |
     $r1 = NSA64 $d0
     RET implicit $r15
 
-#--- residual_seq64.mir
---- |
-  define i64 @residual_seq64_logical(i64 %a) {
-    ret i64 %a
-  }
-...
----
-name:            residual_seq64_logical
-tracksRegLiveness: true
-body:             |
-  bb.0:
-    liveins: $d0, $r15
-    ; SEQ64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
-    $d0 = SEQ64 $d0, implicit-def $sfr
-    RET implicit $r15
-
 #--- residual_neg64s.mir
 --- |
   define i64 @residual_neg64s_logical(i64 %a) {
@@ -786,38 +769,6 @@ body:             |
     liveins: $d0, $r15
     ; POPCOUNT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
     $r1 = POPCOUNT64 $d0
-    RET implicit $r15
-
-#--- residual_slt64.mir
---- |
-  define i64 @residual_slt64_logical(i64 %a) {
-    ret i64 %a
-  }
-...
----
-name:            residual_slt64_logical
-tracksRegLiveness: true
-body:             |
-  bb.0:
-    liveins: $d0, $r15
-    ; SLT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
-    $d0 = SLT64 $d0, implicit-def $sfr
-    RET implicit $r15
-
-#--- residual_sle64.mir
---- |
-  define i64 @residual_sle64_logical(i64 %a) {
-    ret i64 %a
-  }
-...
----
-name:            residual_sle64_logical
-tracksRegLiveness: true
-body:             |
-  bb.0:
-    liveins: $d0, $r15
-    ; SLE64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
-    $d0 = SLE64 $d0, implicit-def $sfr
     RET implicit $r15
 
 #--- residual_movf64.mir

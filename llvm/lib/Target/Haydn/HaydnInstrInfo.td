@@ -829,30 +829,32 @@ def X2SRA32 : FmtALU64<0x66, 0x000, (outs DR64:$rd), (ins DR64:$rs1, GPR32:$rs2)
 // so SMS does not treat them as global memory barriers.
 //===----------------------------------------------------------------------===//
 
-// Scalar 64-bit SFR compare (unary DR64 → sets SFR).
-// Per spec, these set SFR = (condition) ? 4'b1111 : 4'b0000. The DR64 dst
-// is the passthrough operand (intrinsic returns the input so the chain
-// isn't DCE'd — see dr64-compare-intrinsics.ll).
+// Scalar 64-bit SFR compare — TWO-SOURCE pair shape.
+// 2026-08-21 (gaps/audit_shapes.md "Scalar trio", 4-layer rework): golden
+// Syntax "`SLT64 rsd1, rsd2`", Behavior SFR = (rsd1 < rsd2) ? 4'b1111
+// : 4'b0000, DR ports rsd1+rsd2 read / write = SFR only. The prior unary
+// (outs DR64:$rd), (ins DR64:$rs1) shape was wrong at this layer too —
+// the intrinsic returns rs1 via COPY passthrough (X2SLT32 contract).
 //
 // Explicit SFR Defs/Uses keep cmp→cmov RAW correct without memory barriers
 // (hasSideEffects=1 would serialize loads/stores as Ord Barrier).
 // Matcher-visible (isCodeGenOnly=0): public `seq64`/`slt64`/`sle64` must
 // not depend on residual `_S*` FieldSlots. isPseudo: non-encoding shell.
-// 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2.
+// Itinerary: golden Available = ALU0|ALU1|ALU2.
 let hasSideEffects = 0, Defs = [SFR], isCodeGenOnly = 0, isPseudo = 1,
     Itinerary = Slot012_ALU in {
-def SEQ64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
-                      "seq64\t$rd, $rs1", []> {
+def SEQ64 : HaydnInst<0, (outs), (ins DR64:$rs1, DR64:$rs2),
+                      "seq64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def SLT64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
-                      "slt64\t$rd, $rs1", []> {
+def SLT64 : HaydnInst<0, (outs), (ins DR64:$rs1, DR64:$rs2),
+                      "slt64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def SLE64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
-                      "sle64\t$rd, $rs1", []> {
+def SLE64 : HaydnInst<0, (outs), (ins DR64:$rs1, DR64:$rs2),
+                      "sle64\t$rs1, $rs2", []> {
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }

@@ -1494,15 +1494,29 @@ def ls_dest_is_ssa_def(logical: str, role: str) -> bool:
     return role == "dest1"
 
 
-def member_gpr_is_ssa_def(logical: str, role: str, is_ls: bool) -> bool:
+def member_gpr_is_ssa_def(
+    logical: str,
+    role: str,
+    is_ls: bool,
+    dr_readonly: Optional[set] = None,
+) -> bool:
     """Whether a generated member GPR/DR wire is an LLVM SSA def.
 
     ALU/MAC dest* are defs. LS dest* follow ls_dest_is_ssa_def. Catalog
     role `reg` (alias rt) is a def for JALR (link) and DEST_REG_LOGICALS
     (LUI/ZERO_GPR/ZERO_DR/CSRR/MOVESFR2GPR). Do not treat branch `reg`
     (rs), CSRW, or MOVEGPR2SFR as a def.
+
+    2026-08-21 (gaps/audit_shapes.md "Scalar trio"): a logical whose
+    golden DR_Write_Port is empty writes no DR at all — its dest-spelled
+    layout roles (the R sheet spells rsd1 `dest`) are DR READS like the
+    ALU2 src1/src2 spellings. Covers the nine SFR compares' ALU0/ALU1
+    unary members; `dr_readonly` is the golden-derived law (see
+    load_dr_readonly_logicals), no hand list.
     """
     if role.startswith("dest"):
+        if dr_readonly is not None and _logical_key(logical) in dr_readonly:
+            return False
         return (not is_ls) or ls_dest_is_ssa_def(logical, role)
     if role != "reg":
         return False
@@ -1514,6 +1528,31 @@ MAC_ACCFIRST_ITINERARY = {
     "MAC0": "Slot1_MAC_AccFirst",
     "MAC1": "Slot2_MAC_AccFirst",
 }
+
+
+def load_dr_readonly_logicals(index_path: Path) -> set:
+    """Golden SFR-compare law: a logical whose SFR_Write_Port is non-empty
+    and DR_Write_Port is empty writes NO data register — its only semantic
+    output is SFR, so every DR wire (including the R-sheet `dest`-spelled
+    rsd1) is a READ (2026-08-21, gaps/audit_shapes.md "Scalar trio").
+    Derived from instruction_type_index.json — no hand list. Census: the
+    9 SFR compares (SEQ64/SLE64/SLT64, X2SEQ/SLE/LT32, X4SEQ/SLE/LT16)
+    plus MOVEGPR2SFR / ZERO_SFR (no DR wires at all — membership is a
+    pin, not a behavior change for them). Store/NSA/POPCOUNT families
+    are also DR-read-only but spell their DR roles `src`/data uses
+    already; they are excluded because they do not write SFR."""
+    idx = json.loads(index_path.read_text(encoding="utf-8"))
+    readonly: set = set()
+    for type_recs in idx.values():
+        for rec in type_recs:
+            name = rec.get("Instruction")
+            if not name:
+                continue
+            if (rec.get("SFR_Write_Port") or []) and not (
+                rec.get("DR_Write_Port") or []
+            ):
+                readonly.add(_logical_key(name))
+    return readonly
 
 
 def load_sfr_writers(index_path: Path) -> set:
@@ -1841,6 +1880,7 @@ def emit_members_td_inc(
     family,
     accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None,
     sfr_writers: Optional[set] = None,
+    dr_readonly: Optional[set] = None,
 ) -> str:
     """LIVE TableGen format-member Inst defs — included by HaydnFormatE.td.
 
@@ -1993,7 +2033,9 @@ def emit_members_td_inc(
             dollar = frag.find("$")
             name = frag[dollar + 1 :] if dollar >= 0 else ""
             role = name.split("_")[0].lower() if name else ""
-            if member_gpr_is_ssa_def(rec.logical, role, is_ls):
+            if member_gpr_is_ssa_def(
+                rec.logical, role, is_ls, dr_readonly
+            ):
                 out_frags.append(frag)
             else:
                 in_frags.append(frag)
@@ -2198,9 +2240,11 @@ def emit_members_td_inc(
             )
     if sfr_writers is not None:
         text_so_far = "\n".join(lines)
+        # 2026-08-21 pair rework: golden SEQ64 is "SEQ64 rsd1, rsd2" —
+        # SFR-only 2-src on EVERY row incl. the dest/src-spelled R sheet.
         pin_sfr = (
-            "def SEQ64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), "
-            "(ins DR64:$src_1"
+            "def SEQ64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), "
+            "(ins DR64:$dest_0, DR64:$src_1"
         )
         if "Defs = [SFR]" not in text_so_far:
             raise SystemExit(
@@ -2209,7 +2253,8 @@ def emit_members_td_inc(
             )
         if pin_sfr not in text_so_far:
             raise SystemExit(
-                "error: SEQ64 member missing from emission"
+                "error: SEQ64 member missing from emission (or lost the "
+                "SFR-only pair shape — golden Syntax 'SEQ64 rsd1, rsd2')"
             )
     lines.append(
         "// Members emitted in canonical alias order (same-class permutation "
@@ -3957,7 +4002,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"({sorted(sfr_writers)}) — re-audit implicit Defs = [SFR] "
             "coverage (gaps/audit_shapes.md class (b)-real+(d))"
         )
-    members_td = emit_members_td_inc(cat, family, accum_ties, sfr_writers)
+    # 2026-08-21 scalar-trio pair rework: SFR-compare logicals (SFR
+    # write + no DR write) turn dest-spelled DR wires into reads.
+    dr_readonly = load_dr_readonly_logicals(index_path)
+    expected_dr_readonly = expected_sfr_writers
+    if dr_readonly != expected_dr_readonly:
+        raise SystemExit(
+            "error: golden DR read-only set changed "
+            f"({sorted(dr_readonly)}) — re-audit member DR-wire "
+            "direction (gaps/audit_shapes.md Scalar trio)"
+        )
+    members_td = emit_members_td_inc(
+        cat, family, accum_ties, sfr_writers, dr_readonly
+    )
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical, family)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat, family)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir, family.mnemonic_roundtrip_s)

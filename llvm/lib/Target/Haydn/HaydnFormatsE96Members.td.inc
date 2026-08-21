@@ -345,7 +345,7 @@ def POPCOUNT32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs GPR32:$dest_0), (ins GPR32:$s
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLT64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
+def SLT64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -358,7 +358,7 @@ def SLT64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLE64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
+def SLE64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -371,7 +371,7 @@ def SLE64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SEQ64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
+def SEQ64_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -839,7 +839,7 @@ def X2MJSWAP32S_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$sr
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLT32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
+def X2SLT32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -852,7 +852,7 @@ def X2SLT32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLE32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
+def X2SLE32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -865,7 +865,7 @@ def X2SLE32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SEQ32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
+def X2SEQ32_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -1073,7 +1073,7 @@ def X4NEG16S_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLT16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
+def X4SLT16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -1086,7 +1086,7 @@ def X4SLT16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLE16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
+def X4SLE16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -1099,7 +1099,7 @@ def X4SLE16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SEQ16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
+def X4SEQ16_E2_E0_ALU0_R : HaydnEntryE2E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<23> c0 = 0x0;
@@ -29272,7 +29272,7 @@ def POPCOUNT32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs GPR32:$dest_0), (ins GPR32:$s
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLT64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
+def SLT64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -29285,7 +29285,7 @@ def SLT64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLE64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
+def SLE64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -29298,7 +29298,7 @@ def SLE64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SEQ64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
+def SEQ64_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -29766,7 +29766,7 @@ def X2MJSWAP32S_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$sr
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLT32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
+def X2SLT32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -29779,7 +29779,7 @@ def X2SLT32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLE32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
+def X2SLE32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -29792,7 +29792,7 @@ def X2SLE32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SEQ32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
+def X2SEQ32_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -30000,7 +30000,7 @@ def X4NEG16S_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLT16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
+def X4SLT16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -30013,7 +30013,7 @@ def X4SLT16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLE16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
+def X4SLE16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -30026,7 +30026,7 @@ def X4SLE16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SEQ16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs DR64:$dest_0), (ins DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
+def X4SEQ16_E3_E0_ALU0_R : HaydnEntryE3E0<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -40274,7 +40274,7 @@ def POPCOUNT32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs GPR32:$dest_0), (ins GPR32:$s
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLT64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
+def SLT64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -40287,7 +40287,7 @@ def SLT64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLE64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
+def SLE64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -40300,7 +40300,7 @@ def SLE64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SEQ64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
+def SEQ64_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -40768,7 +40768,7 @@ def X2MJSWAP32S_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$sr
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLT32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
+def X2SLT32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -40781,7 +40781,7 @@ def X2SLT32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLE32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
+def X2SLE32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -40794,7 +40794,7 @@ def X2SLE32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SEQ32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
+def X2SEQ32_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -41002,7 +41002,7 @@ def X4NEG16S_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLT16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
+def X4SLT16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -41015,7 +41015,7 @@ def X4SLT16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLE16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
+def X4SLE16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -41028,7 +41028,7 @@ def X4SLE16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot1_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SEQ16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
+def X4SEQ16_E3_E1_ALU1_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43001,7 +43001,7 @@ def POPCOUNT32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs GPR32:$dest_0), (ins GPR32:$s
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLT64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
+def SLT64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43014,7 +43014,7 @@ def SLT64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLE64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
+def SLE64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43027,7 +43027,7 @@ def SLE64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SEQ64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
+def SEQ64_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43495,7 +43495,7 @@ def X2MJSWAP32S_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$sr
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLT32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
+def X2SLT32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43508,7 +43508,7 @@ def X2SLT32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLE32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
+def X2SLE32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43521,7 +43521,7 @@ def X2SLE32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SEQ32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
+def X2SEQ32_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43729,7 +43729,7 @@ def X4NEG16S_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLT16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
+def X4SLT16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43742,7 +43742,7 @@ def X4SLT16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLE16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
+def X4SLE16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -43755,7 +43755,7 @@ def X4SLE16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SEQ16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs DR64:$dest_0), (ins DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
+def X4SEQ16_E3_E1_ALU0_R : HaydnEntryE3E1<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<10> c0 = 0x0;
@@ -55981,7 +55981,7 @@ def POPCOUNT32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs GPR32:$dest_0), (ins GPR32:$s
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLT64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
+def SLT64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "slt64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -55994,7 +55994,7 @@ def SLT64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SLE64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
+def SLE64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "sle64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -56007,7 +56007,7 @@ def SLE64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), 
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def SEQ64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
+def SEQ64_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "seq64\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -56475,7 +56475,7 @@ def X2MJSWAP32S_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$sr
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLT32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
+def X2SLT32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2slt32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -56488,7 +56488,7 @@ def X2SLT32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SLE32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
+def X2SLE32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2sle32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -56501,7 +56501,7 @@ def X2SLE32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X2SEQ32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
+def X2SEQ32_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "x2seq32\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -56709,7 +56709,7 @@ def X4NEG16S_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLT16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
+def X4SLT16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4slt16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -56722,7 +56722,7 @@ def X4SLT16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SLE16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
+def X4SLE16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4sle16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;
@@ -56735,7 +56735,7 @@ def X4SLE16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1)
 }
 
 let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 0, hasSideEffects = 0, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member", Defs = [SFR] in {
-def X4SEQ16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs DR64:$dest_0), (ins DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
+def X4SEQ16_E3_E2_ALU0_R : HaydnEntryE3E2<(outs), (ins DR64:$dest_0, DR64:$src_1), "x4seq16\t$dest_0, $src_1", []> {
   bits<4> dest_0;
   bits<4> src_1;
   bits<6> c0 = 0x0;

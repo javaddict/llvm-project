@@ -102,7 +102,7 @@ define <4 x i16> @test_x4sle_then_movt(<4 x i16> %a, <4 x i16> %b, <4 x i16> %fa
 ; CHECK: SEQ64
 ; CHECK: MOVT64
 define i64 @test_scalar_seq_movt(i64 %a) {
-  %cmp = call i64 @llvm.haydn.seq64(i64 %a)
+  %cmp = call i64 @llvm.haydn.seq64(i64 %a, i64 %a)
   %result = call i64 @llvm.haydn.movt64(i64 %cmp)
   ret i64 %result
 }
@@ -113,7 +113,7 @@ define i64 @test_scalar_seq_movt(i64 %a) {
 ; CHECK: SLT64
 ; CHECK: MOVF64
 define i64 @test_scalar_slt_movf(i64 %a) {
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
+  %cmp = call i64 @llvm.haydn.slt64(i64 %a, i64 %a)
   %result = call i64 @llvm.haydn.movf64(i64 %cmp)
   ret i64 %result
 }
@@ -124,7 +124,7 @@ define i64 @test_scalar_slt_movf(i64 %a) {
 ; CHECK: SLE64
 ; CHECK: MOVT64
 define i64 @test_scalar_sle_movt(i64 %a) {
-  %cmp = call i64 @llvm.haydn.sle64(i64 %a)
+  %cmp = call i64 @llvm.haydn.sle64(i64 %a, i64 %a)
   %result = call i64 @llvm.haydn.movt64(i64 %cmp)
   ret i64 %result
 }
@@ -144,7 +144,7 @@ define i64 @test_scalar_sle_movt(i64 %a) {
 ; CHECK: SLT64
 ; CHECK: MOVT64
 define i64 @test_scalar_max_pattern(i64 %a) {
-  %cmp = call i64 @llvm.haydn.slt64(i64 %a)
+  %cmp = call i64 @llvm.haydn.slt64(i64 %a, i64 %a)
   %sel = call i64 @llvm.haydn.movt64(i64 %cmp)
   ret i64 %sel
 }
@@ -173,7 +173,7 @@ define <2 x i32> @test_x2_conditional_select(<2 x i32> %a, <2 x i32> %b, <2 x i3
 ; CHECK: MOVEGPR2SFR
 define i64 @test_sfr_save_around_predication(i64 %a, i32 %saved_flags) {
   %saved = call i32 @llvm.haydn.movesfr2gpr()
-  %cmp = call i64 @llvm.haydn.seq64(i64 %a)
+  %cmp = call i64 @llvm.haydn.seq64(i64 %a, i64 %a)
   %result = call i64 @llvm.haydn.movt64(i64 %cmp)
   call void @llvm.haydn.movegpr2sfr(i32 %saved)
   ret i64 %result
@@ -192,9 +192,9 @@ define i64 @test_sfr_save_around_predication(i64 %a, i32 %saved_flags) {
 ; CHECK: SLT64
 ; CHECK: SLE64
 define i64 @test_all_scalar_compares(i64 %a) {
-  %c1 = call i64 @llvm.haydn.seq64(i64 %a)
-  %c2 = call i64 @llvm.haydn.slt64(i64 %a)
-  %c3 = call i64 @llvm.haydn.sle64(i64 %a)
+  %c1 = call i64 @llvm.haydn.seq64(i64 %a, i64 %a)
+  %c2 = call i64 @llvm.haydn.slt64(i64 %a, i64 %a)
+  %c3 = call i64 @llvm.haydn.sle64(i64 %a, i64 %a)
   %r1 = call i64 @llvm.haydn.movt64(i64 %c1)
   %r2 = call i64 @llvm.haydn.movt64(i64 %c2)
   %r3 = call i64 @llvm.haydn.movt64(i64 %c3)
@@ -242,9 +242,9 @@ define <4 x i16> @test_all_x4_compares(<4 x i16> %a, <4 x i16> %b) {
 ;Intrinsic declarations
 
 ; Scalar SFR
-declare i64 @llvm.haydn.seq64(i64)
-declare i64 @llvm.haydn.slt64(i64)
-declare i64 @llvm.haydn.sle64(i64)
+declare i64 @llvm.haydn.seq64(i64, i64)
+declare i64 @llvm.haydn.slt64(i64, i64)
+declare i64 @llvm.haydn.sle64(i64, i64)
 declare i64 @llvm.haydn.movt64(i64)
 declare i64 @llvm.haydn.movf64(i64)
 

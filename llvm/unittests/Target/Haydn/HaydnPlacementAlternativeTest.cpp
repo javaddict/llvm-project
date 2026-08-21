@@ -222,12 +222,15 @@ TEST(HaydnPlacementAlternativeTest, LegalSlotsEqualsOROfFieldSlots) {
 }
 
 TEST(HaydnPlacementAlternativeTest, OccupancyMatchesLogicalDesc_SLT64) {
-  // SLT64 ISel is unary dest+src. Golden also has SFR-only 2-src at the
-  // same EntryIdx. Occupancy must not first-match the 0-def form.
+  // REBASED 2026-08-21 (audit_shapes "Scalar trio" 4-layer rework):
+  // golden Syntax "SLT64 rsd1, rsd2" — SFR-only two-source compare; the
+  // logical + intrinsic + ISel now carry the pair shape (was unary
+  // dest+src, non-golden asm "slt64 rd, rs1"). Members>=2 pair rows
+  // offered across residual slots.
   HaydnMCFormats Fmts;
   const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
   const MCInstrDesc &Log = MII.get(Haydn::SLT64);
-  ASSERT_EQ(Log.getNumDefs(), 1u);
+  ASSERT_EQ(Log.getNumDefs(), 0u);
   ASSERT_EQ(Log.getNumOperands(), 2u);
   const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(Haydn::SLT64);
   ASSERT_NE(Alts, nullptr);

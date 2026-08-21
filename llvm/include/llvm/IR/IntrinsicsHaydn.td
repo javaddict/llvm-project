@@ -925,8 +925,10 @@ def int_haydn_x4cjmula16s_l : Haydn_Intrinsic<"haydn_x4cjmula16s_l", [llvm_v2i32
 
 // Unary DR64: i64 -> i64
 def int_haydn_not64 : haydn_unary_intrinsic<"haydn_not64", llvm_i64_ty, llvm_i64_ty>;
+// 2026-08-21 pair rework (audit_shapes "Scalar trio"): golden
+// "SEQ64 rsd1, rsd2" — two-source SFR compare, returns rs1 passthrough.
 def int_haydn_seq64 : Haydn_Intrinsic<"haydn_seq64",
-    [llvm_i64_ty], [llvm_i64_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty],
     [IntrHasSideEffects]>;
 
 // Binary DR64: i64, i64 -> i64
@@ -1084,15 +1086,15 @@ def int_haydn_sra64r : Haydn_Intrinsic<"haydn_sra64r",
 // SLT64: SFR = (rsd1 < rsd2) ? 4'b1111 : 4'b0000
 // SLE64: SFR = (rsd1 <= rsd2) ? 4'b1111 : 4'b0000
 // SEQ64: already defined above (Wave 4 Tier 2).
-// They return the operand as passthrough (like SEQ64 pattern).
-// Unary DR64 matching the instruction defs: (outs DR64:$rd), (ins DR64:$rs)
+// They return rs1 as passthrough (like SEQ64 pattern).
+// 2026-08-21 pair rework: golden two-source shape (i64, i64) -> i64.
 //===----------------------------------------------------------------------===//
 
 def int_haydn_slt64 : Haydn_Intrinsic<"haydn_slt64",
-    [llvm_i64_ty], [llvm_i64_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty],
     [IntrHasSideEffects]>;
 def int_haydn_sle64 : Haydn_Intrinsic<"haydn_sle64",
-    [llvm_i64_ty], [llvm_i64_ty],
+    [llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty],
     [IntrHasSideEffects]>;
 
 //===----------------------------------------------------------------------===//

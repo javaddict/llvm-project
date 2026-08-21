@@ -19,10 +19,11 @@ registers:
 body:             |
   bb.0.entry:
     %0 = IMPLICIT_DEF
-    %0 = SLT64 %0, implicit-def $sfr
+    SLT64 %0, %0, implicit-def $sfr
     RET implicit $r0, implicit $r15
 ...
 
+# 2026-08-21 pair rework (audit_shapes "Scalar trio"): golden two-source.
 # CHECK-LABEL: name: test_slt64_unary_setdesc_shape
-# CHECK: SLT64 %{{[0-9]+}}{{(:dr64)?}}, implicit-def $sfr
+# CHECK: SLT64 %{{[0-9]+}}{{(:dr64)?}}, %{{[0-9]+}}{{(:dr64)?}}, implicit-def $sfr
 # CHECK-NOT: Explicit operand marked as def
