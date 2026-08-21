@@ -52,8 +52,8 @@ _RE_GIT_COMMIT = re.compile(
 STALE_FULL_GATE_COMMIT = "28700d57"
 # new_gerrit rebound: TD reshape / 0 `_S*` defs (T7-ALIGN 38bd4059 is not
 # an ancestor of this lineage).
-REBIND_ANCESTOR = "9e5c878a03921a31f76b1c251954cd14d9fcfd72"
-REBIND_SHORT = "9e5c878a"
+REBIND_ANCESTOR = "98890c529be92fa35b3a1bc39270bf919eee395e"
+REBIND_SHORT = "98890c529be9"
 
 
 def parse_git_commit(text: str) -> Optional[str]:

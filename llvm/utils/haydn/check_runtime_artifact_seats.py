@@ -120,7 +120,7 @@ HAYDN_RT_SNIPPETS = {
         "va-arg-2.c",
         "CODE_IMAGE_REJECT",
         "direct control target is not an exact code record",
-        "9e5c878a",
+        "98890c529be9",
         "28700d57",
         "T-ABI4",
         "T-ABI6",
@@ -213,7 +213,7 @@ LIBRARY_TORTURE_SEATS = (
     "va-arg-2.c",
 )
 STALE_FULL_GATE_COMMIT = "28700d57"
-REBIND_ANCESTOR = "9e5c878a"
+REBIND_ANCESTOR = "98890c529be9"
 IMAGE_REJECT_NEEDLE = "CODE_IMAGE_REJECT"
 IMAGE_REJECT_MSG = "direct control target is not an exact code record"
 LLD_HAYDN = "lld/ELF/Arch/Haydn.cpp"
@@ -1642,7 +1642,7 @@ def _self_test() -> int:
                     },
                     "semantic_qualify": False,
                     "llvm_src": {
-                        "git_commit": "9e5c878a03921a31f76b1c251954cd14d9fcfd72"
+                        "git_commit": "98890c529be92fa35b3a1bc39270bf919eee395e"
                     },
                 }
             ),
@@ -1699,7 +1699,7 @@ def _self_test() -> int:
             "user-printf.c memset-2.c builtin-bitops-1.c strlen-5.c "
             "va-arg-1.c va-arg-2.c CODE_IMAGE_REJECT "
             "direct control target is not an exact code record "
-            "9e5c878a 28700d57 T-ABI4 T-ABI6 T-ABI11 T-ABI12 i128 "
+            "98890c529be9 28700d57 T-ABI4 T-ABI6 T-ABI11 T-ABI12 i128 "
             "G-ECOSYSTEM-CONSUMERS G-LIBRARY-COVERAGE "
             "G-DEBUG-OBSERVABILITY G-TEST-EVIDENCE "
             "not a product C ABI\n",
@@ -2026,7 +2026,7 @@ def _self_test() -> int:
             assert rc == 1 and any("coverage.missing" in e for e in rep["errors"]), rep
             (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
 
-            # Stale 28700d57 full-gate commit is fail-closed (rebind 9e5c878a).
+            # Stale 28700d57 full-gate commit is fail-closed (rebind 98890c529be9).
             llvm_ok = dict(doc.get("llvm_src") or {})
             doc["llvm_src"] = {
                 "git_commit": "28700d57366a35a7d04e8adfbdf782743ec847e0"
@@ -2042,7 +2042,7 @@ def _self_test() -> int:
             doc["llvm_src"] = llvm_ok
             (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
 
-            # Live monorepo: 9e5c878a is an ancestor; a missing object is not.
+            # Live monorepo: 98890c529be9 is an ancestor; a missing object is not.
             live_repo = Path("/ssd/mhyang/llvm/llvm-head")
             if _git_work_tree(live_repo):
                 assert git_commit_is_repo_resident(live_repo, REBIND_ANCESTOR), (

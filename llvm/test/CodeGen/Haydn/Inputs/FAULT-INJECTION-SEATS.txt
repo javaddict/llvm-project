@@ -1,7 +1,7 @@
 Haydn all-seat fault injection inventory (policy + QUALIFY seats / T8-HYGIENE)
 =================================================================================
 Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual is docs/hygiene only;
-  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 9e5c878a;
+  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 98890c529be9;
   T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed;
   W54 D1000 and W55 nine-file stay LANDED; P13 waves stay gated on R13;
   Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
@@ -18,7 +18,7 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    inventories pinned; combined dual-ON QUALIFY waits for T2+T4; no PRODUCT_ON;
    hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are live XFAIL;
    no DecisionGuard revive; no second format pipeline)
-Audited backend baseline: 9e5c878a03921a31f76b1c251954cd14d9fcfd72
+Audited backend baseline: 98890c529be92fa35b3a1bc39270bf919eee395e
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
 
 R15 provenance: the previous inventory baseline ff42d9ad (`working`) and the eight

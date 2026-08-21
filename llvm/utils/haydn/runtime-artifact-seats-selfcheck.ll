@@ -12,7 +12,7 @@
 ; RUN: %python %S/record_haydn_artifact_set.py --check-library --llvm-src %S/../../..
 ; RUN: %python %S/write_ci_verdict.py --self-test
 ; RUN: %S/run_abi_conformance_matrix.sh %t.abi
-; RUN: %python -c "from pathlib import Path; p=Path(r'%S/../../lib/Target/Haydn/haydn-rt/PRODUCT-IDENTITY.txt').read_text(); assert 'user-printf.c' in p and 'memset-2.c' in p and 'builtin-bitops-1.c' in p and 'strlen-5.c' in p and 'CODE_IMAGE_REJECT' in p and '9e5c878a' in p and '28700d57' in p and 'T-ABI4' in p and 'T-ABI6' in p and 'T-ABI11' in p and 'T-ABI12' in p and 'G-ECOSYSTEM-CONSUMERS' in p and 'G-LIBRARY-COVERAGE' in p and 'G-DEBUG-OBSERVABILITY' in p and 'G-TEST-EVIDENCE' in p; s=Path(r'%S/../../lib/Target/Haydn/haydn-rt/SOFTFLOAT-CONTRACT.txt').read_text(); assert 'T-SF10' in s and 'yarpgen' in s and '.bak' in s and '28700d57' in s; w=Path(r'%S/../../lib/Target/Haydn/MCTargetDesc/HaydnELFObjectWriter.cpp').read_text(); assert 'static_assert(ELF::EM_HAYDN == 259' in w and 'KVX' in w and 'do not invent' in w.lower(); t=Path(r'%S/../../lib/Target/Haydn/TargetInfo/HaydnTargetInfo.cpp').read_text(); assert 'EM_HAYDN=259' in t and 'KVX' in t"
+; RUN: %python -c "from pathlib import Path; p=Path(r'%S/../../lib/Target/Haydn/haydn-rt/PRODUCT-IDENTITY.txt').read_text(); assert 'user-printf.c' in p and 'memset-2.c' in p and 'builtin-bitops-1.c' in p and 'strlen-5.c' in p and 'CODE_IMAGE_REJECT' in p and '98890c529be9' in p and '28700d57' in p and 'T-ABI4' in p and 'T-ABI6' in p and 'T-ABI11' in p and 'T-ABI12' in p and 'G-ECOSYSTEM-CONSUMERS' in p and 'G-LIBRARY-COVERAGE' in p and 'G-DEBUG-OBSERVABILITY' in p and 'G-TEST-EVIDENCE' in p; s=Path(r'%S/../../lib/Target/Haydn/haydn-rt/SOFTFLOAT-CONTRACT.txt').read_text(); assert 'T-SF10' in s and 'yarpgen' in s and '.bak' in s and '28700d57' in s; w=Path(r'%S/../../lib/Target/Haydn/MCTargetDesc/HaydnELFObjectWriter.cpp').read_text(); assert 'static_assert(ELF::EM_HAYDN == 259' in w and 'KVX' in w and 'do not invent' in w.lower(); t=Path(r'%S/../../lib/Target/Haydn/TargetInfo/HaydnTargetInfo.cpp').read_text(); assert 'EM_HAYDN=259' in t and 'KVX' in t"
 ; REQUIRES: haydn-registered-target
 
 ; Role: harness — T-RT same-artifact residual seats.
@@ -21,7 +21,7 @@
 ; helpers owned by llvm/utils/haydn, including product-ld bind
 ; (haydn-rt/haydn.ld + .bak/.broken refuse + ARTIFACT.product_ld),
 ; user-printf.c + memset-2.c + builtin-bitops-1.c + strlen-5.c
-; classified library seats, torture CODE_IMAGE_REJECT residual, 9e5c878a
+; classified library seats, torture CODE_IMAGE_REJECT residual, 98890c529be9
 ; post-wave rebind (28700d57 refused), T-SF10 hygiene + frozen yarpgen,
 ; T-SF4 FP-in-gate compiler-rt symbols, and M5 T-ABI4/6/11/12 residual
 ; classification (no i128 / ISR-R0 / 'd' invent). Does not run BundleSim

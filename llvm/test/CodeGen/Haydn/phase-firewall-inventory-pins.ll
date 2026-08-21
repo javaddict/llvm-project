@@ -13,7 +13,7 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnAlternateDescriptors.h --check-prefix=ALT
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPlacementAlternative.h --check-prefix=PLACE
 ; RUN: test -f %S/../../../utils/haydn/product_coverage_pin.sh
-; RUN: git -C %S/../../../.. merge-base --is-ancestor 9e5c878a03921a31f76b1c251954cd14d9fcfd72 HEAD
+; RUN: git -C %S/../../../.. merge-base --is-ancestor 98890c529be92fa35b3a1bc39270bf919eee395e HEAD
 ; RUN: not git -C %S/../../../.. merge-base --is-ancestor 28700d57366a35a7d04e8adfbdf782743ec847e0 HEAD
 ; RUN: %python %S/../../../utils/haydn/parse_lit_summary.py --self-test
 ; RUN: %python %S/../../../utils/haydn/check_xfail_ledger.py --inventory-pin --llvm-src %S/../../../..
@@ -26,7 +26,7 @@
 ; Manual.td is a tombstone (moved; do not include). CMake golden-dir is
 ; env/-D only; skip if unset.
 ; Monorepo CLAUDE.md stays a symlink (R15 leftover docs stay outside this
-; code track). Rebound: 9e5c878a is an ancestor; 28700d57 is not an ancestor.
+; code track). Rebound: 98890c529be9 is an ancestor; 28700d57 is not an ancestor.
 ; AR0 phase-firewall inventory is closed (no pre-RA identity).
 
 ; PIPE20-DAG: Phase-firewall inventory (PIPE-20
@@ -42,7 +42,7 @@
 ; DG0-DAG: product_coverage_pin
 ; DG0-NOT: DecisionGuardRegistry
 
-; REBIND-DAG: 9e5c878a
+; REBIND-DAG: 98890c529be9
 ; REBIND-DAG: 28700d57
 ; REBIND-DAG: not an ancestor
 ; REBIND-DAG: G_ANYEXT

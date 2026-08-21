@@ -1,7 +1,7 @@
 Haydn source / golden authority anchor inventory (G-SOURCE-ALIGNMENT / T1-ALIGN)
 ==========================================================================================
 Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual is docs/hygiene only;
-  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 9e5c878a;
+  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 98890c529be9;
   T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed;
   W54 D1000 and W55 nine-file stay LANDED; P13 Wave 1 unblocked (R13 LANDED);
   Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
@@ -28,7 +28,7 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    SF1-SF3 (no coverage-fuzzer / perf-baseline invent);
    no pre-RA BUNDLE / private member / setDesc;
    no DecisionGuard revive; no PRODUCT_ON; no second format pipeline)
-Audited backend baseline: 9e5c878a03921a31f76b1c251954cd14d9fcfd72
+Audited backend baseline: 98890c529be92fa35b3a1bc39270bf919eee395e
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
 R15 provenance: ff42d9ad (`working`) is not an ancestor of this HEAD;
   1139639c5574, 1851c7541ab1, 2a82c904c023, 59b03784ebc7,
@@ -64,7 +64,7 @@ Pipeline ownership anchors (current implementation)
 | VerifyBundles NO skipFunction (emission gate) | HaydnVerifyBundles.cpp::runOnMachineFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT |
 | PIPE-30 skipFunction closed | Finalize + Verify never call skipFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT; contracts/pipeline.md |
 | T1-ALIGN schema surface closed | one PacketFormats + FeasibleMask getFormatOrNull; refuse empty-cover representative | HaydnBundle.h getFormatOrNull; no second format pipeline |
-| Goal 1 ledger (T7-ALIGN) | contracts/pipeline.md + GOALS.md §1 closed at 9e5c878a | phase-firewall-inventory-pins.ll + this file |
+| Goal 1 ledger (T7-ALIGN) | contracts/pipeline.md + GOALS.md §1 closed at 98890c529be9 | phase-firewall-inventory-pins.ll + this file |
 | T7-ALIGN residual hygiene | R15 leftover (orphan pass-deep-review + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed; W54/W55 stay LANDED; MF0 INERT; no DG0 | llc-pipeline-haydn.ll AUTO/CMAKE/ISANEXT |
 | W55 nine-file golden pin | llvm-claude.md table; hashes only in STATUS.md; GOALS row LANDED | Inputs nine-file pin; do not reopen |
 | T7-ALIGN schema tip-reconcile | productVLIWFormatForRow PacketFormats full-cover only; no empty-cover / cross-row; no suffix discovery | HaydnBundlePlan.h; HaydnBundle.h getFormatOrNull |
@@ -100,7 +100,7 @@ Pipeline ownership anchors (current implementation)
 
 Phase-firewall inventory (PIPE-20; no issue-cycle/format identity crosses RA)
 -----------------------------------------------------------------------------
-CLOSED 2026-08-18 T1-ALIGN at 9e5c878afbb4 (D1000 HC#0 ledger). Structural
+CLOSED 2026-08-18 T1-ALIGN at 98890c529be9 (D1000 HC#0 ledger). Structural
 barrier (primary): zero pre-RA BuildMI(BUNDLE)/MIBundleBuilder; no pre-RA
 BUNDLE / private member / setDesc / row identity; all finalizeBundle +
 stampBundleCommit seats are post-PostMachineScheduler only; pre-RA HR cannot
@@ -124,7 +124,7 @@ Live supplementary pins (not a permanent sole barrier):
 | s96 G_ANYEXT legalizer loop (COPY walk + AND/OR/XOR/SELECT rebuild) | HaydnLegalizerInfo.cpp; phase-firewall-s96-anyext.ll |
 | hasFP adjustsStack is not sufficient (AIE/RISCV peer; getCallFrameSPAdj) | HaydnFrameLowering.cpp; phase-firewall-hasfp-adjusts-stack.ll |
 | emitCodeAlignment MaxParcels = Align/gcd idle parcels | HaydnMCELFStreamer.cpp; phase-firewall-align-maxparcels.ll |
-| Post-wave rebound: 9e5c878a in-repo; 28700d57 is not an ancestor | ARTIFACT llvm_src.git_commit + product_coverage_pin ancestor check |
+| Post-wave rebound: 98890c529be9 in-repo; 28700d57 is not an ancestor | ARTIFACT llvm_src.git_commit + product_coverage_pin ancestor check |
 | Folded same-artifact residual IDs (G-RUNTIME-TOOLCHAIN) | G-ECOSYSTEM-CONSUMERS / G-LIBRARY-COVERAGE / G-DEBUG-OBSERVABILITY / G-TEST-EVIDENCE | PRODUCT-IDENTITY.txt + product_coverage_pin (inventory; not QUALIFY) |
 
 DG-OPTNONE residual (correctness passes must not skip)
@@ -278,7 +278,7 @@ Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN /
 | AR0 phase-firewall inventory | CLOSED (T1-ALIGN) | no pre-RA BUNDLE / member / setDesc / row; not a product registry |
 | AR0 leftover residual-pseudo matrix | CLOSED | Expand/Verify fatal SET_HWLOOP/SETCBR/LOOPCTL/LOAD_ADDR/bundled-child; vf5-residual-*.mir |
 | Authority inventory leftover (T8-EVID) | G-TEST-EVIDENCE T8-EVID | keep stamps/IDs synchronized; lifecycle pins only; no second format pipeline; no policy default ON; no DecisionGuard revive |
-| 9e5c878a rebound (in-repo ancestor) | $sysroot/ARTIFACT.json llvm_src.git_commit | product_coverage_pin.sh ancestor check; 28700d57 is not an ancestor |
+| 98890c529be9 rebound (in-repo ancestor) | $sysroot/ARTIFACT.json llvm_src.git_commit | product_coverage_pin.sh ancestor check; 28700d57 is not an ancestor |
 | Historical 08-17 full-gate manifest | /tmp/bundlesim-672/full-gate-20260817_093415 git_commit=28700d57 | provenance only; haydn_lit_ok=n/a; do not re-bind |
 | Full Haydn lit + run_full_gate.sh | wave-close product gate | this track pins rebound identity only; does not run the product gate |
 | haydn-rt contract pins | llvm/lib/Target/Haydn/haydn-rt/{SOFTFLOAT-CONTRACT,NATUREDSP-CANARY-PIN,PRODUCT-IDENTITY}.txt | check_xfail_ledger.py --runtime-pin |

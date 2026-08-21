@@ -1,7 +1,7 @@
 Haydn exact V1-V5 artifact manifest template (G-TEST-EVIDENCE / T8-DEBUG-EVIDENCE)
 ====================================================================
 Stamp: 2026-08-18 T7-ARTIFACT (nine-file golden + five-file catalog + decode/FM + debugger/loader + M10 never-qualified + product_ld bind)
-  Rebound llvm_git_sha must be an in-repo ancestor (9e5c878a). Historical
+  Rebound llvm_git_sha must be an in-repo ancestor (98890c529be9). Historical
   full-gate manifest git_commit=28700d57 is not an ancestor — do not re-bind.
 
 Fill one immutable record per qualification attempt. Broad gate greens without
@@ -111,4 +111,4 @@ P19 leftover: Manual.td tombstone; CMake banned plans-tree path gone; $HOME/hayd
 R15 leftover: orphan pass-deep-review archived; CLAUDE.md is a symlink.
 PIPE-30 skipFunction closed. Schema surface closed. MF0 INERT. No second format pipeline.
 38bd405 G_ANYEXT / hasFP adjustsStack / MaxParcels pins: phase-firewall-*.ll.
-Post-wave rebound: 9e5c878a; 28700d57 is not an ancestor.
+Post-wave rebound: 98890c529be9; 28700d57 is not an ancestor.
