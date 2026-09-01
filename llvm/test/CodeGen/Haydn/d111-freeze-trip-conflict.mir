@@ -1,0 +1,58 @@
+# RUN: split-file %s %t
+# D1.11 freeze/verify seat: the ONE hwloop trip-conflict predicate
+# (haydnCycleMembersHaveHwloopTripConflict, HaydnPortModel.h — numeric
+# classifier over generated logicalOpcodeOrSelf) must catch at
+# haydn-verify-bundles the same SET_HWLOOP member + same-cycle producer
+# shape the bake seat catches (d14-bake-leftover-hazards.mir TRIP arm) and
+# the freeze seat catches loosely (d14-freeze-hazard-predicates.mir TRIP
+# arm). This pin asserts the exact wall string verbatim on the generated
+# member form (SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR inverts to
+# SET_HWLOOP_F2_W — classifier-admitted), so any future seat split
+# (name-peel vs classifier) changes the diagnostic or the verdict here.
+# Fatal seat aborts; use not --crash so the diagnostic reaches FileCheck.
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/trip.mir -o - 2>&1 | FileCheck %s --check-prefix=TRIP
+# Negative control: disjoint producer register — the trip predicate does
+# not refuse; the committed generated-member bundle survives verify.
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %t/disjoint.mir -o - | FileCheck %s --check-prefix=OK
+# REQUIRES: haydn-registered-target
+
+# TRIP: structural inverse: hwloop trip/Off vs same-cycle producer
+# OK-LABEL: name: disjoint_producer
+# OK: SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR
+# OK: ADD32_E3_E1_ALU1_RR
+
+#--- trip.mir
+--- |
+  define void @hwloop_trip_conflict() { ret void }
+...
+---
+name:            hwloop_trip_conflict
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r6
+    BUNDLE 1, 0, implicit-def $r6, implicit $r0, implicit $r1, implicit $r6 {
+      SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR 0, 4, 8, $r6
+      $r6 = ADD32_E3_E1_ALU1_RR $r0, $r1
+    }
+    RET implicit $r15
+
+#--- disjoint.mir
+--- |
+  define void @disjoint_producer() { ret void }
+...
+---
+name:            disjoint_producer
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r6, $r7
+    BUNDLE 1, 0, implicit-def $r7, implicit $r0, implicit $r1, implicit $r6 {
+      SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR 0, 4, 8, $r6
+      $r7 = ADD32_E3_E1_ALU1_RR $r0, $r1
+    }
+    RET implicit $r15

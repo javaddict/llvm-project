@@ -532,7 +532,9 @@ void HaydnPassConfig::addPreSched2() {
   // (AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction peer; AIE finalize
   // commit surface AIEHazardRecognizer.cpp:278-312 under test). Also refuses
   // optnone bare-encode escape and mixed committed+bare encode residual.
-  addPass(createHaydnVerifyBundlesPass());
+  // Invariant-only seat (D1.13): freeze identity is bound by registration
+  // argument at the addPreEmitPass2 seat, never by instance count.
+  addPass(createHaydnVerifyBundlesPass(/*IsFreezeSeat=*/false));
 }
 
 void HaydnPassConfig::addBlockPlacement() {
@@ -577,7 +579,8 @@ void HaydnPassConfig::addPreEmitPass() {
   // (AArch64TargetMachine.cpp:883-891); AIE2 PreEmit is empty
   // (AIE2TargetMachine.cpp:90).
   addPass(createHaydnFinalizeBundlePass());
-  addPass(createHaydnVerifyBundlesPass());
+  // Invariant-only seat (D1.13): explicit non-freeze registration.
+  addPass(createHaydnVerifyBundlesPass(/*IsFreezeSeat=*/false));
 }
 
 void HaydnPassConfig::addPostBBSections() {
@@ -612,7 +615,9 @@ void HaydnPassConfig::addPostBBSections() {
   if (TargetPassConfig::hasLimitedCodeGenPipeline())
     return;
   addPass(createHaydnFinalizeBundlePass());
-  addPass(createHaydnVerifyBundlesPass());
+  // Invariant-only seat (D1.13): the freeze verifier is the later
+  // addPreEmitPass2 registration, not this closure Verify.
+  addPass(createHaydnVerifyBundlesPass(/*IsFreezeSeat=*/false));
   // W70.2 function-alignment writer (GOALS/contract: "AIE MachineAlignment
   // seat after first Finalize and after S2 closure: pad with a legal
   // generated idle row. Delete printer emitFunctionEntryLabel growth.
@@ -639,9 +644,19 @@ void HaydnPassConfig::addPreEmitPass2() {
   // owned addPostBBSections; anything bare at this seat is a pipeline
   // contract violation the verifier reports.
   //
+  // D1.13 closed invariant: freeze identity is pinned HERE, by the
+  // IsFreezeSeat=true registration argument — the only such instance in
+  // the pipeline. The three earlier Verify seats (addPreSched2,
+  // addPreEmitPass, addPostBBSections) are invariant-only by explicit
+  // false; no instance-count heuristic and no cross-instance global
+  // exists, so neither pipeline census drift nor per-thread pass cloning
+  // under parallel codegen can silently move or disable a freeze wall.
+  // The factory takes no default argument: any future seat must state
+  // its identity at the call site (compile error otherwise).
+  //
   // Same limited-pipeline probe carve-out as addPostBBSections: the
   // freeze is a property of the COMPLETE pipeline only.
   if (TargetPassConfig::hasLimitedCodeGenPipeline())
     return;
-  addPass(createHaydnVerifyBundlesPass());
+  addPass(createHaydnVerifyBundlesPass(/*IsFreezeSeat=*/true));
 }

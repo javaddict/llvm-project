@@ -500,6 +500,8 @@ def main(argv: list[str]) -> int:
                 errors.append(f"{helper} silent-aliases forward IC (dir=0)")
 
     # AE_LA32X2F24_RIC is a direct macro (no __AE_ helper); pin reverse body.
+    # D1.15: also owes the haydn_ae_f32x2_mem_to_reg swap — its own comment
+    # says "same path as AE_LA32X2_RIC", which swaps.
     f24_ric = macros.get("AE_LA32X2F24_RIC", "")
     # parse_public_ae_macros may only keep first line of multi-line body;
     # fall back to a source window when the single-line body is incomplete.
@@ -508,7 +510,13 @@ def main(argv: list[str]) -> int:
     if not f24_ric:
         errors.append("missing AE_LA32X2F24_RIC reverse residual body")
     else:
-        for tok in ("haydn_ae_la64_step", ", 1)", "haydn_cbr_step", "-8"):
+        for tok in (
+            "haydn_ae_la64_step",
+            ", 1)",
+            "haydn_cbr_step",
+            "-8",
+            "haydn_ae_f32x2_mem_to_reg",
+        ):
             if tok not in f24_ric:
                 errors.append(
                     f"AE_LA32X2F24_RIC body must contain reverse token {tok!r}"
@@ -516,33 +524,37 @@ def main(argv: list[str]) -> int:
         if re.search(r"haydn_ae_la64_step\([^;]*,\s*0\s*\)", f24_ric):
             errors.append("AE_LA32X2F24_RIC silent-aliases forward IC (dir=0)")
 
-    # Dual-24 unaligned circular residual: late helpers must use AR step +
-    # soft CBR wrap (forward dir=0). Never plain mem or aligned D_LDW_CB only.
+    # Forward unaligned circular (2026-08-28 WUA-CB remap): late helpers
+    # MUST lower onto the hardware AR_CBR path (haydn_ae_cb_ld_tw /
+    # haydn_ae_cb_st dispatch over pltwwua/plqhwua/ltwua/lqhwua/stwua/
+    # sqhwua_cb_post) and take the WRAPPED new_ptr as the cursor. Never the
+    # old linear-step + soft haydn_cbr_step pair (dual cursor bookkeeping),
+    # never plain mem, never aligned-only D_LDW_CB.
     for helper, must_have in (
         (
             "__AE_LA32X2F24_IC_4A",
-            ("haydn_ae_la64_step", ", 0)", "haydn_cbr_step"),
+            ("haydn_ae_cb_ld_tw", "new_ptr"),
         ),
         (
             "__AE_SA32X2F24_IC_4A",
-            ("haydn_ae_sa64_step", ", 0)", "haydn_cbr_step"),
+            ("haydn_ae_cb_st", "__np"),
         ),
-        # Base unaligned circular residual peers (non-F24).
+        # Base unaligned circular peers (non-F24).
         (
             "__AE_LA16X4_IC_4A",
-            ("haydn_ae_la16x4_step", ", 0)", "haydn_cbr_step"),
+            ("haydn_ae_cb_ld_tw", "new_ptr"),
         ),
         (
             "__AE_LA32X2_IC_4A",
-            ("haydn_ae_la64_step", ", 0)", "haydn_cbr_step"),
+            ("haydn_ae_cb_ld_tw", "new_ptr"),
         ),
         (
             "__AE_SA16X4_IC_4A",
-            ("haydn_ae_sa16x4_step", ", 0)", "haydn_cbr_step"),
+            ("haydn_ae_cb_st", "__np"),
         ),
         (
             "__AE_SA32X2_IC_4A",
-            ("haydn_ae_sa64_step", ", 0)", "haydn_cbr_step"),
+            ("haydn_ae_cb_st", "__np"),
         ),
     ):
         win = helper_window(helper, 420)
@@ -565,6 +577,31 @@ def main(argv: list[str]) -> int:
             errors.append(f"missing dual-24 IC alias helper {helper}")
         elif peer not in win:
             errors.append(f"{helper} must route via {peer}")
+
+    # Scalar circular-width law (2026-08-28): the only HW circular memory ops
+    # are 64-bit (D_LDW_CB/D_SDW_CB family). Scalar XC must never call them —
+    # a zero-extended 16/32b payload overwrites ring neighbours and the
+    # offs>>3 scale is 8-byte granular. Every scalar XC body is plain-width
+    # access + haydn_cbr_step(byte offs) (AE_L16_XC law).
+    for helper in (
+        "__AE_L16_XC_4A",
+        "__AE_L32_XC_4A",
+        "__AE_L32F24_XC_4A",
+        "__AE_S16_0_XC_4A",
+        "__AE_S32_L_XC_4A",
+        "__AE_S32F24_L_XC_4A",
+    ):
+        win = helper_window(helper, 300)
+        if not win:
+            errors.append(f"missing scalar XC helper {helper}")
+            continue
+        if "haydn_ldw_cb_imm" in win or "haydn_sdw_cb_imm" in win:
+            errors.append(
+                f"{helper} must not use the 64-bit HW circular instr under a "
+                "scalar name (width/scale law)"
+            )
+        if "haydn_cbr_step" not in win:
+            errors.append(f"{helper} must advance the cursor via haydn_cbr_step")
 
     # Width-mismatch / silent-scalar residual: apply to every tier, not only
     # EXACT. SRAS32-class holes were untagged *or* mis-tagged EMULATED with a
@@ -905,10 +942,17 @@ def main(argv: list[str]) -> int:
     # Reverse unaligned RIP residual helpers must use dir=1 UA steps, never
     # silent-alias forward IP (dir=0). Scan late overload helpers (public
     # AE_*_RIP may be an overload wrapper whose body only names the helper).
+    # D1.15 lane law: golden D_LTWUA_POST/D_STWUA_POST have no dir operand —
+    # data word order is direction-independent — so every 32x2-shaped RIP
+    # load owes the same haydn_ae_f32x2_mem_to_reg swap as IP/IC/RIC, and
+    # every 32x2-shaped RIP store swaps src before the UA step (16x4 stays
+    # raw: its lanes are type-level only).
     for helper, must_have in (
         ("__AE_LA16X4_RIP_4A", ("haydn_ae_la16x4_step", ", 1)")),
-        ("__AE_LA32X2_RIP_4A", ("haydn_ae_la64_step", ", 1)")),
-        ("__AE_LA32X2F24_RIP_4A", ("haydn_ae_la64_step", ", 1)")),
+        ("__AE_LA32X2_RIP_3A", ("haydn_ae_la64_step", ", 1)", "haydn_ae_f32x2_mem_to_reg")),
+        ("__AE_LA32X2_RIP_4A", ("haydn_ae_la64_step", ", 1)", "haydn_ae_f32x2_mem_to_reg")),
+        ("__AE_LA32X2F24_RIP_3A", ("haydn_ae_la64_step", ", 1)", "haydn_ae_f32x2_mem_to_reg")),
+        ("__AE_LA32X2F24_RIP_4A", ("haydn_ae_la64_step", ", 1)", "haydn_ae_f32x2_mem_to_reg")),
         ("__AE_SA16X4_RIP_4A", ("haydn_ae_sa16x4_step", ", 1)")),
     ):
         win = helper_window(helper, 360)
@@ -930,10 +974,12 @@ def main(argv: list[str]) -> int:
         )
     # Dual-24 reverse/forward residual: late public bodies (last effective
     # #define) must name UA step + dir ImmArg. Overload wrappers fall back to
-    # the peer helper path above.
+    # the peer helper path above. D1.15: the RIP stores additionally swap src
+    # through haydn_ae_f32x2_mem_to_reg before the UA step (golden
+    # D_STWUA_POST concat {rtd[31:0],ar[31:0]} — addressed word from rtd).
     for sym, toks in (
-        ("AE_SA32X2F24_RIP", ("haydn_ae_sa64_step", ", 1)")),
-        ("AE_SA32X2_RIP", ("haydn_ae_sa64_step", ", 1)")),
+        ("AE_SA32X2F24_RIP", ("haydn_ae_sa64_step", ", 1)", "haydn_ae_f32x2_mem_to_reg")),
+        ("AE_SA32X2_RIP", ("haydn_ae_sa64_step", ", 1)", "haydn_ae_f32x2_mem_to_reg")),
         ("AE_LA32X2F24_IP", ("haydn_ae_la64_step", ", 0)")),
         ("AE_SA32X2F24_IP", ("haydn_ae_sa64_step", ", 0)")),
     ):

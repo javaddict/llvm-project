@@ -16,6 +16,7 @@
 
 #include "HaydnInterBlockScheduling.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnSchedMutations.h"
 #include "llvm/ADT/STLExtras.h"
 #include "HaydnSubtarget.h"
 #include "HaydnTargetMachine.h"
@@ -25,6 +26,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/LLVMContext.h"
@@ -82,6 +84,7 @@ protected:
     ST = std::make_unique<HaydnSubtarget>(TM->getTargetTriple(), "generic",
                                           "generic", "", *TM);
     MF = std::make_unique<MachineFunction>(*F, *TM, *ST, MMI->getContext(), 0);
+    MF->initTargetMachineFunctionInfo(*ST);
     MC.MF = MF.get();
     Pred = MF->CreateMachineBasicBlock();
     Succ = MF->CreateMachineBasicBlock();
@@ -96,6 +99,14 @@ protected:
     return *BuildMI(*BB, BB->end(), DebugLoc(), TII().get(Haydn::ADD32), Rd)
                 .addReg(Rs)
                 .addReg(Rt);
+  }
+
+  // Intra-graph latency edge. addPred wires both Preds and Succs so a
+  // height walk (Succs) and a depth walk (Preds) disagree on a chain.
+  static void addLatEdge(SUnit &PredSU, SUnit &SuccSU, unsigned Latency) {
+    SDep Dep(&PredSU, SDep::Artificial);
+    Dep.setLatency(Latency);
+    SuccSU.addPred(Dep);
   }
 };
 
@@ -288,6 +299,173 @@ TEST_F(HaydnInterBlockEdgesTest, OccupancyInheritAndStaleKeepsFullLatency) {
   S0.eraseFromParent();
   EXPECT_FALSE(S2.successorOccupancyIsLive());
   EXPECT_FALSE(S2.canReplaySuccessorOccupancy());
+}
+
+// Earliest-execution depth is longest-upward over post-boundary Preds
+// (ScheduleDAG ComputeDepth), not height over Succs. A two-node chain
+// S0 -lat3-> S1 is Depth(S0)=0, Depth(S1)=3; height is the swap.
+// Pre-boundary preds (P1 -lat9-> S0) must not inflate the fill, and
+// recomputePostDepths must reuse that fill rather than SU.getDepth().
+TEST_F(HaydnInterBlockEdgesTest, PostBoundaryChainIsDepthNotHeight) {
+  MachineInstr &P1 = add32(Pred, Haydn::R1, Haydn::R2, Haydn::R3);
+  MachineInstr &S0 = add32(Succ, Haydn::R4, Haydn::R1, Haydn::R5);
+  MachineInstr &S1 = add32(Succ, Haydn::R6, Haydn::R4, Haydn::R7);
+  HaydnInterBlockEdges DDG(MC, Pred, Succ);
+  DDG.reserveForBlocks(*Pred, *Succ);
+  DDG.addNode(&P1);
+  DDG.markBoundary();
+  DDG.addNode(&S0);
+  DDG.addNode(&S1);
+  ASSERT_EQ(DDG.SUnits.size(), 3u);
+  addLatEdge(DDG.SUnits[0], DDG.SUnits[1], 9); // pre -> post, ignored by fill
+  addLatEdge(DDG.SUnits[1], DDG.SUnits[2], 3); // post -> post
+
+  DDG.recomputePostDepthsFromEdges(&DDG.getSchedModelRef(), &TII());
+  EXPECT_EQ(DDG.getPostDepth(DDG.SUnits[1]), 0);
+  EXPECT_EQ(DDG.getPostDepth(DDG.SUnits[2]), 3);
+  EXPECT_EQ(DDG.getPostRegionMaxDepth(), 3);
+  // Height of the same chain would stamp S0=3, S1=0.
+  EXPECT_NE(DDG.getPostDepth(DDG.SUnits[1]), 3);
+  EXPECT_NE(DDG.getPostDepth(DDG.SUnits[2]), 0);
+
+  EXPECT_EQ(DDG.SUnits[1].getDepth(), 9u);
+  EXPECT_EQ(DDG.SUnits[2].getDepth(), 12u);
+  DDG.recomputePostDepths();
+  EXPECT_EQ(DDG.getPostDepth(DDG.SUnits[1]), 0)
+      << "skipped-region fill must not stamp generic SU.getDepth()";
+  EXPECT_EQ(DDG.getPostDepth(DDG.SUnits[2]), 3);
+}
+
+// Unrecorded / no-post-pred depth is 0, never PostRegionMaxDepth. The
+// remaining-latency cut is Remaining = EdgeLat - getPostDepthOr(Dst, 0);
+// a max-cut fallback over-cuts early consumers.
+TEST_F(HaydnInterBlockEdgesTest, MissingDepthDefaultsToZeroNotRegionMax) {
+  MachineInstr &P1 = add32(Pred, Haydn::R1, Haydn::R2, Haydn::R3);
+  MachineInstr &S0 = add32(Succ, Haydn::R4, Haydn::R1, Haydn::R5);
+  MachineInstr &S1 = add32(Succ, Haydn::R6, Haydn::R4, Haydn::R7);
+  MachineInstr &Iso = add32(Succ, Haydn::R8, Haydn::R9, Haydn::R10);
+  HaydnInterBlockEdges DDG(MC, Pred, Succ);
+  DDG.reserveForBlocks(*Pred, *Succ);
+  DDG.addNode(&P1);
+  DDG.markBoundary();
+  DDG.addNode(&S0);
+  DDG.addNode(&S1);
+  DDG.addNode(&Iso);
+  addLatEdge(DDG.SUnits[1], DDG.SUnits[2], 4);
+
+  DDG.recomputePostDepthsFromEdges(&DDG.getSchedModelRef(), &TII());
+  EXPECT_EQ(DDG.getPostDepth(DDG.SUnits[1]), 0);
+  EXPECT_EQ(DDG.getPostDepth(DDG.SUnits[2]), 4);
+  EXPECT_EQ(DDG.getPostDepth(DDG.SUnits[3]), 0);
+  EXPECT_EQ(DDG.getPostRegionMaxDepth(), 4);
+  EXPECT_EQ(DDG.getPostDepthOr(&DDG.SUnits[3], 0), 0);
+  EXPECT_NE(DDG.getPostDepthOr(&DDG.SUnits[3], 0),
+            DDG.getPostRegionMaxDepth());
+
+  // Record only S1: Iso is missing from PostDepths → default 0, not max.
+  HaydnInterBlockEdges Partial(MC, Pred, Succ);
+  Partial.reserveForBlocks(*Pred, *Succ);
+  Partial.addNode(&P1);
+  Partial.markBoundary();
+  Partial.addNode(&S0);
+  Partial.addNode(&S1);
+  Partial.addNode(&Iso);
+  Partial.recordPostDepth(&S1, 7);
+  EXPECT_EQ(Partial.getPostRegionMaxDepth(), 7);
+  EXPECT_EQ(Partial.getPostDepth(*Partial.getPostBoundaryNode(&S1)), 7);
+  EXPECT_EQ(Partial.getPostDepth(*Partial.getPostBoundaryNode(&Iso)), -1);
+  EXPECT_EQ(Partial.getPostDepthOr(Partial.getPostBoundaryNode(&Iso), 0), 0);
+  EXPECT_NE(Partial.getPostDepthOr(Partial.getPostBoundaryNode(&Iso), 0),
+            Partial.getPostRegionMaxDepth());
+}
+
+// S2 gather may already have DepthsAreScheduled from BUNDLE-root seeding;
+// per-MI depths still inherit from S1. An MI whose parent is not Succ is
+// skipped (stale after splice/erase).
+TEST_F(HaydnInterBlockEdgesTest, DepthInheritDespiteScheduledSkipsForeignParent) {
+  MachineInstr &P1 = add32(Pred, Haydn::R1, Haydn::R2, Haydn::R3);
+  MachineInstr &SKeep = add32(Succ, Haydn::R4, Haydn::R1, Haydn::R5);
+  MachineInstr &SForeign = add32(Succ, Haydn::R6, Haydn::R4, Haydn::R7);
+  HaydnInterBlockEdges S1(MC, Pred, Succ);
+  S1.reserveForBlocks(*Pred, *Succ);
+  S1.addNode(&P1);
+  S1.markBoundary();
+  S1.addNode(&SKeep);
+  S1.addNode(&SForeign);
+  S1.recordPostDepth(&SKeep, 5);
+  S1.recordPostDepth(&SForeign, 6);
+  ASSERT_TRUE(S1.hasRecordedPostDepths());
+
+  MachineInstr *BundleRoot =
+      BuildMI(*Succ, Succ->end(), DebugLoc(), TII().get(TargetOpcode::BUNDLE))
+          .getInstr();
+  HaydnInterBlockEdges S2(MC, Pred, Succ);
+  S2.reserveForBlocks(*Pred, *Succ);
+  S2.addNode(&P1);
+  S2.markBoundary();
+  S2.addNode(&SKeep);
+  S2.addNode(&SForeign);
+  S2.recordPostDepth(BundleRoot, 0);
+  EXPECT_TRUE(S2.hasRecordedPostDepths());
+  EXPECT_EQ(S2.getPostDepth(*S2.getPostBoundaryNode(&SKeep)), -1);
+
+  MachineBasicBlock *Other = MF->CreateMachineBasicBlock();
+  MF->push_back(Other);
+  Other->splice(Other->end(), Succ, SForeign.getIterator());
+  EXPECT_NE(SForeign.getParent(), Succ);
+
+  S2.inheritRecordedPostDepths(S1);
+  EXPECT_EQ(S2.getPostDepth(*S2.getPostBoundaryNode(&SKeep)), 5);
+  EXPECT_EQ(S2.getPostDepth(*S2.getPostBoundaryNode(&SForeign)), -1)
+      << "MI whose parent is not Succ must not inherit a depth";
+  EXPECT_TRUE(S2.hasScheduledSuccessorOccupancy());
+  ASSERT_FALSE(S2.getSuccessorOccupancy().empty());
+  EXPECT_TRUE(is_contained(S2.getSuccessorOccupancy()[5], &SKeep));
+}
+
+// Re-publish for the same (Pred, Succ) keeps the newest graph (S2 after
+// inherit), not the first/oldest S1 record.
+TEST_F(HaydnInterBlockEdgesTest, RegistrySupersedeKeepsNewestGraph) {
+  MachineInstr &P1 = add32(Pred, Haydn::R1, Haydn::R2, Haydn::R3);
+  MachineInstr &S0 = add32(Succ, Haydn::R4, Haydn::R1, Haydn::R5);
+  MachineInstr &Extra = add32(Succ, Haydn::R6, Haydn::R4, Haydn::R7);
+
+  auto MakeS1 = [&]() {
+    auto G = std::make_unique<HaydnInterBlockEdges>(MC, Pred, Succ);
+    G->reserveForBlocks(*Pred, *Succ);
+    G->addNode(&P1);
+    G->markBoundary();
+    G->addNode(&S0);
+    G->recordPostDepth(&S0, 1);
+    return G;
+  };
+  auto MakeS2 = [&]() {
+    auto G = std::make_unique<HaydnInterBlockEdges>(MC, Pred, Succ);
+    G->reserveForBlocks(*Pred, *Succ);
+    G->addNode(&P1);
+    G->markBoundary();
+    G->addNode(&S0);
+    G->addNode(&Extra);
+    G->recordPostDepth(&Extra, 9);
+    return G;
+  };
+
+  HaydnIBEdgesByPredMap First;
+  First[Pred].push_back(MakeS1());
+  setHaydnInterBlockEdgesForFunction(*MF, &First);
+  HaydnIBEdgesByPredMap Second;
+  Second[Pred].push_back(MakeS2());
+  setHaydnInterBlockEdgesForFunction(*MF, &Second);
+
+  HaydnIBEdgesByPredMap *Reg = haydnGetInterBlockEdgesRegistry(*MF);
+  ASSERT_NE(Reg, nullptr);
+  auto It = Reg->find(Pred);
+  ASSERT_NE(It, Reg->end());
+  ASSERT_EQ(It->second.size(), 1u);
+  EXPECT_EQ(It->second[0]->getSucc(), Succ);
+  EXPECT_EQ(It->second[0]->SUnits.size(), 3u)
+      << "supersede must keep the newest graph, not the oldest";
+  EXPECT_NE(It->second[0]->getPostBoundaryNode(&Extra), nullptr);
 }
 
 } // namespace

@@ -60,7 +60,8 @@
 // Off1 = uimm6×4 ≤ 252 B (safety margin → MaxOff1BytesSafe).
 // Off2 = uimm12×4 ≤ 16380 B. Distance is measured forward in layout
 // from the SET cycle's parcel base — the same PC anchor the encoder uses
-// (HaydnAsmBackend::evaluateFixup % Parcel seeding; CB-164). If Header is
+// (the MC emitter re-bases every member fixup to ParcelBase, so the fixup's
+// recorded offset IS the parcel origin; CB-164). If Header is
 // not after SET in layout, Off is unknown → treat as range-bad.
 //
 // 3. Recoverability ladder (correctness only; peer-aligned 2026-08-22)
@@ -355,9 +356,10 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
   StartOff = estimateMBBDistance(*MF, Pre, AfterSet, StartMBB, TII);
   EndOff = estimateMBBDistance(*MF, Pre, AfterSet, EndMBB, TII);
   // CB-164: MC anchors HWLoopOff1/Off2 at the SET parcel base, not after
-  // the SET cycle. HaydnAsmBackend::evaluateFixup seeds Value = Abs % Parcel
-  // so MCAssembler's PC-rel subtract lands on align_down(fixup_loc, Parcel)
-  // — the parcel the SET member encodes in. Charge the SET cycle's committed
+  // the SET cycle. The MC emitter (emitFormatEParcel) re-bases every member
+  // fixup to ParcelBase = Abs - Abs % Parcel, so the fixup's recorded offset
+  // IS the parcel origin — the parcel the SET member encodes in. Charge the
+  // SET cycle's committed
   // EncodedBytes so the accepted value IS the encoded displacement (measured-
   // after-SET accepted a 252 B Off1 that encoded as 264 B → uimm66 > 63).
   // Child-in-bundle has size 0 and the root is the SET cycle: topLevelForLayout
@@ -779,7 +781,7 @@ static bool sequentializeIllegalHwloopTripCoissue(MachineFunction &MF,
     SmallVector<MachineInstr *, 3> Kids = haydn::bundle::members(*Root);
     if (Kids.size() < 2)
       continue;
-    if (!haydn::bundle::cycleMembersHaveHwloopTripConflict(Kids, TII, TRI))
+    if (!haydn::bundle::cycleMembersHaveHwloopTripConflict(Kids, TRI))
       continue;
 
     LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: sequentialize SET trip/Off "

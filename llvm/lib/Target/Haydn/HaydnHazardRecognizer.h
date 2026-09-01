@@ -74,6 +74,7 @@
 
 namespace llvm {
 
+class AAResults;
 class MachineInstr;
 class MachineFunction;
 class SUnit;
@@ -397,9 +398,15 @@ public:
   // \p AltDescs is the function-lifetime alt-descriptor side map (owned by
   // HaydnMachineFunctionInfo). Null for pre-RA / tests — post-RA only stamps
   // MemberOpcode for leaveRegion materialize.
+  // \p AA is post-RA ScheduleDAGMI AA (AIE Context->AA overlay via
+  // HaydnScheduleDAGMI::getAliasAnalysis). getHazardType applies the
+  // store/load overlap law only post-RA at Delta=0. Null post-RA AA is
+  // fail-closed for unproven overlap; TII same-base non-overlap still packs.
+  // Pre-RA does not install AA and must not fail-closed sequentialize.
   HaydnHazardRecognizer(const TargetInstrInfo *TII,
                         const InstrItineraryData *ItinData, bool IsPreRA,
-                        HaydnAlternateDescriptors *AltDescs = nullptr);
+                        HaydnAlternateDescriptors *AltDescs = nullptr,
+                        AAResults *AA = nullptr);
 
   // ScheduleHazardRecognizer interface.
 
@@ -434,9 +441,29 @@ public:
   /// are alternative execution paths: at most one runs, so per-cycle demand
   /// is the max over successors, never the sum. operator|='s additive
   /// IssueCount/port sums are for same-cycle co-issue, not alternates.
+  /// Dest remaining is the same exclusive-path law: max per register, never
+  /// summed (a later successor must not drop or inflate a prior remaining).
   void maxMergeSB(const HaydnHazardRecognizer &Other, int Low, int High) {
     for (int C = Low; C <= High; ++C)
       Scoreboard[C].maxWith(Other.Scoreboard[C]);
+    auto mergeDest = [](DenseMap<Register, unsigned> &Dst,
+                        const DenseMap<Register, unsigned> &Src) {
+      for (const auto &KV : Src) {
+        unsigned &Remain = Dst[KV.first];
+        Remain = std::max(Remain, KV.second);
+      }
+    };
+    mergeDest(DestReadPending, Other.DestReadPending);
+    mergeDest(DestWritePending, Other.DestWritePending);
+  }
+  /// AIEHazardRecognizer.cpp:439-443. Shift the resource ring without
+  /// ticking dest remaining. Bot successor replay uses this for
+  /// AlignScoreboardToCycleOne; RecedeCycle still expires dest windows
+  /// during actual bottom-up scheduling.
+  void recedeScoreboard(int N) {
+    while (N--)
+      Scoreboard.recede();
+    captureCycleStartScoreboard();
   }
   /// AIEHazardRecognizer.cpp:718-720. Distance at which two issued
   /// instructions can still share occupancy. Floor 1 so an empty itinerary
@@ -488,6 +515,13 @@ public:
   /// Live nondominated set for the current issue cycle (tests / debug).
   const haydn::bundle::CycleCandidateSet &getCurrentCycleCandidates() const {
     return CurrentCycleCandidates;
+  }
+
+  /// MIs already issued this cycle. Ranking uses this to prefer a second
+  /// pure load (LOADSTORE0+LOAD1) over ALU/store; dual-load is not the
+  /// store/load overlap law.
+  const SmallVector<MachineInstr *, 3> &getCurrentCyclePlacedMIs() const {
+    return CurrentCyclePlacedMIs;
   }
 
   /// SF1 (Band 2S): format-aware placement oracle for the post-RA
@@ -553,6 +587,30 @@ public:
   unsigned destWindowStallNeed(const MachineInstr &MI) const;
   unsigned destWindowExitLeak() const;
 
+  // D1.16 loop back-edge wrap law — same arithmetic, named seat. Golden
+  // Constraints ("no instruction in bundles t+1..t+N-1 may read A's
+  // destination") applied across the HWLR_END -> HWLR_BEGIN wrap (HW Loop
+  // section: END = last body bundle; execution wraps from END straight back
+  // to BEGIN). For a latch MBB whose cycles c0..c(N-1) re-execute after the
+  // last cycle, the pads required so every pending dest window at block end
+  // is expired before the same block's cycle 0 re-runs is exactly the max
+  // remaining at end — the same value destWindowExitLeak returns. The two
+  // laws differ only in INSERTION POINT (WRAP pads inside the executed body
+  // before the END-anchored parcel / before the backedge branch; EXIT pads
+  // before the terminators), never in arithmetic: a block that both wraps
+  // and exits takes one max at a shared anchor, never two insertions.
+  unsigned destWindowWrapPadNeed() const;
+
+  /// Pin (a) of the wrap law: for a linear cycle list c0..c(N-1), pads
+  /// inserted before END (delaying the wrap by P cycles past the last def)
+  /// and pads inserted after START (delaying cycle 0 by P cycles) yield the
+  /// same wrap distance. Pure helper on the pending-window arithmetic —
+  /// used by unit tests to pin the equivalence; emission implements only
+  /// pad-before-END (pad-after-START would also delay iteration-0 reads).
+  static unsigned wrapPadBeforeEndEqualsAfterStart(
+      ArrayRef<std::pair<unsigned, unsigned>> DefCycleAndLatency,
+      unsigned NumCycles);
+
   // PostPipeliner / external scoreboard helpers. Issue-cycle footprint is
   // ports + issue + stage-0 FUs; multi-cycle stages are booked via
   // checkConflict/enterResources (AIE anyStage peer).
@@ -595,6 +653,10 @@ public:
   HaydnAlternateDescriptors *getAlternateDescriptors() const {
     return AltDescs;
   }
+  /// AIE `Context->AA` overlay (AIEMachineScheduler.cpp:1792). Null when the
+  /// factory had no DAG (tests / limited -run-pass).
+  AAResults *getAliasAnalysis() const { return AA; }
+  void setAliasAnalysis(AAResults *A) { AA = A; }
   /// Off-side replay MRI context. Port counters (countGPRPorts & friends)
   /// resolve an instruction's MachineFunction through MI.getParent() to get
   /// the MRI; ClonedMachineInstrs checked BEFORE insertion into an MBB have
@@ -624,6 +686,9 @@ private:
   // slice 2a: function alt-descriptor side-map (non-owning). Null in
   // tests / when no MF context.
   HaydnAlternateDescriptors *AltDescs = nullptr;
+  // ScheduleDAGMI AA (HaydnScheduleDAGMI::getAliasAnalysis). Null = fail-closed
+  // for heap pairs; TII areMemAccessesTriviallyDisjoint still proves same-base.
+  AAResults *AA = nullptr;
   mutable MemoryObjectEnumerator ObjectEnumerator;
 
   ResourceScoreboard<HaydnFuncUnitWrapper> Scoreboard;
@@ -646,9 +711,10 @@ private:
   // loads are real write-port consumers.
   SmallSet<Register, 8> CurrentCycleDefs;
   // LIVE destination registers written this cycle (defs whose result is
-  // consumed, i.e. NOT dead). Used by hasSameBundleRAW. A same-bundle read+write
-  // of one register is only a real RAW hazard when the write has a consumer
-  // (the reader consumes its value); if the write is DEAD the reader correctly
+  // consumed, i.e. NOT dead), including live SFR. Used by hasSameBundleRAW.
+  // A same-bundle read+write of one register is only a real RAW hazard when
+  // the write has a consumer (the reader consumes its value); if the write is
+  // DEAD the reader correctly
   // observes the OLD value (WAR-style) and the bundle is legal. The dead flag
   // is precisely the scheduling-DAG/liveness verdict on "does this def have a
   // consumer" — so checking it here is equivalent to consulting the SDag for a
@@ -730,18 +796,20 @@ private:
   bool hasSameBundleWAW(const MachineInstr &MI) const;
 
   // true iff MI reads a register that an instruction already issued in
-  // the current cycle writes (CurrentCycleDefs). Haydn spec §Constraints:
+  // the current cycle writes as LIVE (CurrentCycleLiveDefs, including live
+  // SFR). Haydn spec §Constraints:
   // "All instructions within the same bundle read their source registers
   // simultaneously" — there is NO intra-bundle forwarding, so a reader placed
   // in the same cycle as its writer observes the OLD value. The scheduler
   // issues writers before their RAW readers (dataflow/topological order), so
   // when the reader is the candidate the writer is already in
-  // CurrentCycleDefs and this trips. WAR (reader-issued-before-writer) does
+  // CurrentCycleLiveDefs and this trips. WAR (reader-issued-before-writer) does
   // NOT trip: the reader correctly observes the old value, which is what WAR
   // semantics require — so this check never false-positives on a legal bundle.
   bool hasSameBundleRAW(const MachineInstr &MI) const;
 
-  // record MI's destination registers into CurrentCycleDefs.
+  // record MI's destination registers into CurrentCycleDefs (WAW, all defs
+  // including SFR) and live defs including live SFR into CurrentCycleLiveDefs.
   void appendDefs(const MachineInstr &MI);
 
   // true iff MI's opcode or selected AltDesc member is a SIN_COS/ARCTAN
@@ -752,6 +820,9 @@ private:
   // Book uimm4+2 Reserved occupancy on the selected unit and dest-writer lock.
   // No-op on the pre-RA bottom-up HR (DAG SDep carries latency).
   void bookSinCosWindow(const MachineInstr &MI);
+  // Dest-writer remaining only (occupancy-1). Unit Reserved lives on the
+  // scoreboard ring via bookSinCosWindow / emitInScoreboard.
+  void bookSinCosDestRemaining(const MachineInstr &MI);
   // Publish dest-read remaining cycles for every def (post-RA only).
   void bookDestReadWindow(const MachineInstr &MI);
   // Expire dest-window remaining counts. Both Advance and Recede expire

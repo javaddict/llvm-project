@@ -16,7 +16,13 @@
 // peel, DFS/mode retry, keep-map rewrite, or late setDesc.
 //
 // Mixed-stream code-bearing inline asm is fail-closed. Mixed MemberId +
-// leftover FieldSlot is fail-closed.
+// leftover FieldSlot is fail-closed. Leftover multi-member logicals refuse
+// RAW/WAW/named/trip/may-alias store-load before exactSolve (AA via
+// getAnalysisIfAvailable<AAResultsWrapperPass>; missing AA stays
+// fail-closed). Finalize does not sequentialize or peel. Unattributed leftover
+// implicit-def $sfr is not WAW when the descriptor does not name SFR
+// (PackLegality rule 3). Named-SFR writers and GPR dual-write still refuse.
+// Reloc leftover CSR stays FieldSlot.
 //
 // Never calls skipFunction: target-local no-reorder commit for remaining
 // bare MIs (including when PostMachineScheduler quality-skips optnone).

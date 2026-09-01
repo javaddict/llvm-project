@@ -25,7 +25,7 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; beqz r0, .LBB0_1 }
 ; CHECK-NEXT:  .LBB0_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d0, sp, 2; ld64 d1, sp, 1 } // 16-byte Folded Reload
+; CHECK-NEXT:    { ld64 d1, sp, 1; ld64 d0, sp, 2 } // 16-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32_dr_h r1, d1; move32_dr_l r2, d1 }
@@ -78,7 +78,7 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; beqz r0, .LBB1_1 }
 ; CHECK-NEXT:  .LBB1_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d0, sp, 2; ld64 d1, sp, 1 } // 16-byte Folded Reload
+; CHECK-NEXT:    { ld64 d1, sp, 1; ld64 d0, sp, 2 } // 16-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32_dr_h r3, d1; move32_dr_l r2, d1 }
@@ -132,7 +132,7 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; beqz r0, .LBB2_1 }
 ; CHECK-NEXT:  .LBB2_1: // %while.cond
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld64 d0, sp, 2; ld64 d1, sp, 1 } // 16-byte Folded Reload
+; CHECK-NEXT:    { ld64 d1, sp, 1; ld64 d0, sp, 2 } // 16-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; move32_dr_h r1, d0; move32_dr_h r5, d1 }

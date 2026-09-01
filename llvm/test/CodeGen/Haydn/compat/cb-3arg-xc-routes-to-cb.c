@@ -107,9 +107,14 @@ void cb_store_16x4_3arg(ae_int16x4 *p, ae_int16x4 v) {
 }
 
 //scalar 32 family: AE_L32_XC / AE_S32_L_XC
+// EMULATED (2026-08-28 scalar-width law): the only HW circular memory ops are
+// 64-bit; a scalar payload under D_*_CB overwrote ring neighbours and the
+// offs>>3 scale was 8-byte granular. Scalar XC is native-width access +
+// header haydn_cbr_step — never D_LDW_CB/D_SDW_CB.
 
 // ASM-LABEL: name: cb_load_s32_3arg
-// ASM: {{D_LDW_CB_IMM|LDW_CB}}
+// ASM: {{LD32|LDW}}
+// ASM-NOT: {{D_LDW_CB_IMM|D_SDW_CB_IMM}}
 ae_int32 cb_load_s32_3arg(ae_int32 *p) {
   ae_int32 t;
   AE_L32_XC(t, p, +4);
@@ -118,14 +123,15 @@ ae_int32 cb_load_s32_3arg(ae_int32 *p) {
 }
 
 // ASM-LABEL: name: cb_store_s32_3arg
-// ASM: {{D_SDW_CB_IMM|SDW_CB}}
+// ASM: {{ST32|STW}}
+// ASM-NOT: {{D_LDW_CB_IMM|D_SDW_CB_IMM}}
 void cb_store_s32_3arg(ae_int32 *p, ae_int32 v) {
   AE_S32_L_XC(v, p, +4);
   g_ptr_sink = (uintptr_t)p;
 }
 
 //scalar 16 family: AE_L16_XC / AE_S16_0_XC
-// AE_L16_XC is permanently EMULATED (ld16 + haydn_cbr_step); AE_S16_0_XC is CB.
+// Both scalar-16 XC ops are permanently EMULATED (width law, same as scalar-32).
 
 // ASM-LABEL: name: cb_load_s16_3arg
 // ASM: {{LD16|LHW|S_LHW|LH}}
@@ -137,7 +143,8 @@ ae_int16 cb_load_s16_3arg(ae_int16 *p) {
 }
 
 // ASM-LABEL: name: cb_store_s16_3arg
-// ASM: {{D_SDW_CB_IMM|SDW_CB}}
+// ASM: {{ST16|STH|S_SHW}}
+// ASM-NOT: {{D_LDW_CB_IMM|D_SDW_CB_IMM}}
 void cb_store_s16_3arg(ae_int16 *p, ae_int16 v) {
   AE_S16_0_XC(v, p, +2);
   g_ptr_sink = (uintptr_t)p;

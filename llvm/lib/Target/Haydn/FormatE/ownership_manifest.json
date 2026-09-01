@@ -17,7 +17,16 @@
         "llvm/lib/Target/Haydn/HaydnFormatsE96Members.td.inc",
         "llvm/lib/Target/Haydn/HaydnInstrInfoGolden.td.inc",
         "llvm/lib/Target/Haydn/HaydnGenFormatEMemberOpcodes.inc",
+        "llvm/lib/Target/Haydn/HaydnGenRelocFieldLsb.inc",
         "llvm/test/MC/Haydn/format-e-mnemonic-roundtrip.s"
+      ]
+    },
+    {
+      "path": "llvm/lib/Target/Haydn/FormatE/generate_alt_occupancy.py",
+      "family": "e96",
+      "check": "python3 llvm/lib/Target/Haydn/FormatE/generate_alt_occupancy.py --check --family e96",
+      "outputs": [
+        "llvm/lib/Target/Haydn/HaydnGenAltOccupancy.inc"
       ]
     },
     {

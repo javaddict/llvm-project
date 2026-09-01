@@ -161,6 +161,10 @@ static Kind classify(StringRef Name, StringRef Proto) {
   if (Name.ends_with("_pair")) {
     if (Name.starts_with("ldw_cb_"))
       return Kind::PairCbLoad;
+    // WUA-CB loads: frexp {data, new_ptr} with (ptr, ar_sel, cbr_sel) —
+    // same emit shape as ldw_cb (single ret + stored new_ptr).
+    if (Name.starts_with("ltwua_cb_post") || Name.starts_with("lqhwua_cb_post"))
+      return Kind::PairCbLoad;
     // BREV loads: frexp {data, new_ptr} without cbr_sel (ptr, stride).
     if (Name.starts_with("ldw_brev_") || Name.starts_with("lw_brev_"))
       return Kind::PairBrevLoad;
@@ -2046,6 +2050,23 @@ static void emitSpecials(raw_ostream &OS) {
         "  __extension__ ({ haydn_cb_ld_t __haydn_frexp; \\\n"
         "     __haydn_frexp.data = __builtin_haydn_ldw_cb_reg_pair("
         "&__haydn_frexp.new_ptr, (base), (cbr_sel), (stride)); \\\n"
+        "     __haydn_frexp; })\n\n";
+
+  // WUA-CB loads — frexp {data, wrapped new_ptr}; stride-free +8 HW step.
+  // ImmArgs: ar_sel [0,1], cbr_sel [0,1] at call site.
+  OS << "/// ISA: D_LTWUA_CB_POST — 2-word unaligned AR window load with\n"
+        "/// circular post step. ImmArg: ar_sel [0,1], cbr_sel [0,1].\n"
+        "#define haydn_ltwua_cb_post(base, ar_sel, cbr_sel) \\\n"
+        "  __extension__ ({ haydn_cb_ld_t __haydn_frexp; \\\n"
+        "     __haydn_frexp.data = __builtin_haydn_ltwua_cb_post_pair("
+        "&__haydn_frexp.new_ptr, (base), (ar_sel), (cbr_sel)); \\\n"
+        "     __haydn_frexp; })\n\n";
+  OS << "/// ISA: D_LQHWUA_CB_POST — 4-halfword unaligned AR window load with\n"
+        "/// circular post step. ImmArg: ar_sel [0,1], cbr_sel [0,1].\n"
+        "#define haydn_lqhwua_cb_post(base, ar_sel, cbr_sel) \\\n"
+        "  __extension__ ({ haydn_cb_ld_t __haydn_frexp; \\\n"
+        "     __haydn_frexp.data = __builtin_haydn_lqhwua_cb_post_pair("
+        "&__haydn_frexp.new_ptr, (base), (ar_sel), (cbr_sel)); \\\n"
         "     __haydn_frexp; })\n\n";
 
   // BREV loads — frexp {data, new_ptr}; IMM stride is ImmArg (simm6).

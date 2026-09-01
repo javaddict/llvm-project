@@ -12,10 +12,10 @@
 //   * snapshot + new object (CreateStackObject) -> violation names objects
 //   * snapshot + stack-size change -> violation names stack
 //   * earliest-wins: a second take keeps the first values
+//   * equal-size offset swap (count+size unchanged) is a violation
 //
-// MachineFrameInfo has no upstream "finalized" flag; NumObjects is strictly
-// monotone under Create* and StackSize is written once by PEI, so the pair
-// detects every post-snapshot frame mutation.
+// Live-FI offset/size vectors sit on HaydnMachineFunctionInfo (no snapshot
+// type; AIE has none). Dead FIs are skipped (getObjectOffset asserts).
 //
 //===----------------------------------------------------------------------===//
 
@@ -118,6 +118,34 @@ TEST_F(HaydnFrameFreezeTest, EarliestSnapshotWins) {
   Info().takeFrameFreezeSnapshot(Frame());
   const std::string V = Info().frameFreezeViolation(Frame());
   EXPECT_FALSE(V.empty()) << "second take must keep the earliest values";
+}
+
+TEST_F(HaydnFrameFreezeTest, EqualSizeOffsetSwapIsAViolation) {
+  const int A = Frame().CreateStackObject(/*Size=*/8, /*Alignment=*/Align(8),
+                                          /*SpillSlot=*/true);
+  const int B = Frame().CreateStackObject(/*Size=*/8, /*Alignment=*/Align(8),
+                                          /*SpillSlot=*/true);
+  const int Dead =
+      Frame().CreateStackObject(/*Size=*/8, /*Alignment=*/Align(8),
+                                /*SpillSlot=*/true);
+  Frame().RemoveStackObject(Dead);
+  Frame().setObjectOffset(A, -8);
+  Frame().setObjectOffset(B, -16);
+  Frame().setStackSize(16);
+
+  Info().takeFrameFreezeSnapshot(Frame());
+  ASSERT_TRUE(Info().frameFreezeViolation(Frame()).empty());
+
+  const int64_t OffA = Frame().getObjectOffset(A);
+  Frame().setObjectOffset(A, Frame().getObjectOffset(B));
+  Frame().setObjectOffset(B, OffA);
+
+  EXPECT_EQ(Frame().getNumObjects(), 3u);
+  EXPECT_EQ(Frame().getStackSize(), 16u);
+
+  const std::string V = Info().frameFreezeViolation(Frame());
+  EXPECT_FALSE(V.empty()) << "equal-size offset swap must be a violation";
+  EXPECT_NE(V.find("offset"), std::string::npos) << V;
 }
 
 } // namespace

@@ -200,3 +200,62 @@ ae_int32x2 la32x2_ric_known_dir1(ae_int32x2 *p) {
   AE_LA32X2_RIC(d, al, p, 0);
   return d;
 }
+
+//===----------------------------------------------------------------------===//
+// D1.15: AE_LA32X2_RIP / AE_SA32X2_RIP — reverse UA lane law
+//===----------------------------------------------------------------------===//
+// Host oracle (golden instruction_type_index.json type AR):
+//   D_LTWUA_POST: temp=mem64[rs&~7]; window={temp,ar};
+//   rtd=(rs[2]==0)?window[63:00]:window[95:32]; ar=temp; rs=rs+8 — NO dir
+//   operand: direction only steps the pointer, data word order is
+//   direction-independent. D_STWUA_POST: rs[2]==0 → mem64=rtd;
+//   rs[2]==1 → mem64={rtd[31:00],ar[31:00]}, ar[31:00]=rtd[63:32].
+// Therefore RIP owes the same H-first presentation as IP/IC/RIC: the raw
+// LE window goes through haydn_ae_f32x2_mem_to_reg ((u>>32)|(u<<32));
+// stores swap src before haydn_ae_sa64_step. At O2 the swap lowers to
+// llvm.fshl.i64(x, x, 32); at O0 the concrete helper calls remain.
+
+// IR-LABEL: @la32x2_rip_known_dir1_swap
+// IR: call {{.*}}@llvm.haydn.d.ltwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 1
+// IR: call {{.*}}@llvm.fshl.i64({{.*}}i64 32)
+// O0-LABEL: @la32x2_rip_known_dir1_swap
+// O0: call {{.*}}@haydn_ae_la64_step({{.*}}i32 noundef 8, i32 noundef 1)
+// O0: call {{.*}}@haydn_ae_f32x2_mem_to_reg
+// ASM-LABEL: la32x2_rip_known_dir1_swap
+// ASM: d_ltwua_post
+ae_int32x2 la32x2_rip_known_dir1_swap(ae_int32x2 *p) {
+  ae_int32x2 d = {0};
+  ae_valign al = AE_ZALIGN64();
+  AE_LA32X2_RIP(d, al, p);
+  return d;
+}
+
+// IR-LABEL: @la32x2f24_rip_known_dir1_swap
+// Dual-24 reverse UA load: same dir=1 + swap (keeps ae_f24x2 cast).
+// IR: call {{.*}}@llvm.haydn.d.ltwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 1
+// IR: call {{.*}}@llvm.fshl.i64({{.*}}i64 32)
+// ASM-LABEL: la32x2f24_rip_known_dir1_swap
+// ASM: d_ltwua_post
+ae_f24x2 la32x2f24_rip_known_dir1_swap(ae_f24x2 *p) {
+  ae_f24x2 d = (ae_f24x2)0;
+  ae_valign al = AE_ZALIGN64();
+  AE_LA32X2F24_RIP(d, al, p, 8);
+  return d;
+}
+
+// O0-LABEL: @sa32x2_rip_known_swap_before_step
+// Store arm: src is swapped BEFORE the UA step; dir stays 1.
+// O0: call {{.*}}@haydn_ae_f32x2_mem_to_reg
+// O0: call {{.*}}@haydn_ae_sa64_step({{.*}}i32 noundef 8, i32 noundef 1)
+// IR-LABEL: @sa32x2_rip_known_swap_before_step
+// Constant {0x200000001-ish} pair folds through the swap: {1,2} bag
+// 0x0000000200000001 → swapped 0x0000000100000002 = 4294967298.
+// IR: call {{.*}}@llvm.haydn.d.stwua.post(i64 4294967298,{{.*}}i32 {{[0-3]}}, i32 8, i32 1)
+// ASM-LABEL: sa32x2_rip_known_swap_before_step
+// ASM: d_stwua_post
+ae_int32x2 *sa32x2_rip_known_swap_before_step(ae_int32x2 *p) {
+  ae_int32x2 v = {1, 2};
+  ae_valign al = AE_ZALIGN64();
+  AE_SA32X2_RIP(v, al, p);
+  return p;
+}

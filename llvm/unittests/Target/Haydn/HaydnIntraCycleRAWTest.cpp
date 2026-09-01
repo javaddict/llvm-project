@@ -17,7 +17,10 @@
 //     read-vs-live-def mechanism, both orders) — not a pack-reject.
 //   * haydnLiveDefsWalkHidesLaterDef is true iff the incremental walk hid
 //     that later-def / earlier-read shape.
-//   * Dead defs and SFR are not live-def RAW; R0 is a real register.
+//   * Dead defs (including leftover unnamed implicit-def dead $sfr) are
+//     not live-def RAW. Live SFR is true RAW — same-cycle write then
+//     anonymous implicit $sfr read is illegal (no intra-bundle forwarding).
+//     R0 is a real register.
 //
 // What breaks if this regresses: a LiveDefs walk can again miss a later
 // writer against an earlier reader with no pair/hide detector.
@@ -108,6 +111,26 @@ protected:
                 .addReg(Rs)
                 .addReg(Rt);
   }
+
+  /// Product-shape SFR writer: X2SLT32_E3_E0_ALU0_R on ALU0 with desc
+  /// Defs=[SFR]. BuildMI materializes the implicit-def automatically.
+  MachineInstr &x2slt32E3E0Alu0(Register Rs1, Register Rs2) {
+    return *BuildMI(*MBB, MBB->end(), DebugLoc(),
+                    TII().get(Haydn::X2SLT32_E3_E0_ALU0_R))
+                .addReg(Rs1)
+                .addReg(Rs2);
+  }
+
+  /// Product-shape SFR reader: X2MOVT32_E3_E1_ALU1_R on ALU1 (distinct
+  /// unit from ALU0). Generated member desc dropped Uses=[SFR]; the
+  /// anonymous implicit $sfr use is the operand truth.
+  MachineInstr &x2movt32E3E1Alu1(Register Rd, Register Src) {
+    return *BuildMI(*MBB, MBB->end(), DebugLoc(),
+                    TII().get(Haydn::X2MOVT32_E3_E1_ALU1_R), Rd)
+                .addReg(Rd)
+                .addReg(Src)
+                .addReg(Haydn::SFR, RegState::Implicit);
+  }
 };
 
 // Writer-then-reader: incremental LiveDefs walk trips (true RAW).
@@ -189,19 +212,73 @@ TEST_F(HaydnIntraCycleRAWTest, DeadDefIsNotLiveRAW) {
   EXPECT_FALSE(haydnPairHasIntraCycleRAW(Writer, Reader, TRI()));
 }
 
-// SFR is excluded from the live-def RAW set (WAW/ports own one-SFR-writer).
-TEST_F(HaydnIntraCycleRAWTest, SFRDefExcludedFromLiveRAW) {
+// Live SFR is true RAW. Product-shape writer-then-reader on distinct
+// units (ALU0 then ALU1): X2SLT32_E3_E0_ALU0_R implicit-def $sfr, then
+// X2MOVT32_E3_E1_ALU1_R anonymous implicit $sfr use (desc dropped
+// Uses=[SFR]). Incremental haydnHasIntraCycleRAW and cycle-list
+// haydnCycleMembersHaveTrueRAW must agree. Reverse order is legal WAR.
+TEST_F(HaydnIntraCycleRAWTest, LiveSFRIsTrueRAW) {
+  MachineInstr &Writer = x2slt32E3E0Alu0(Haydn::D0, Haydn::D1);
+  MachineInstr &Reader = x2movt32E3E1Alu1(Haydn::D2, Haydn::D3);
+
+  bool LiveSfrDef = false;
+  for (const MachineOperand &MO : Writer.operands()) {
+    if (MO.isReg() && MO.getReg() == Haydn::SFR && MO.isDef() && !MO.isDead())
+      LiveSfrDef = true;
+  }
+  ASSERT_TRUE(LiveSfrDef) << "X2SLT32_E3_E0_ALU0_R must carry live implicit-def $sfr";
+
+  bool AnonSfrUse = false;
+  for (const MachineOperand &MO : Reader.operands()) {
+    if (MO.isReg() && MO.getReg() == Haydn::SFR && MO.isUse() && MO.isImplicit())
+      AnonSfrUse = true;
+  }
+  ASSERT_TRUE(AnonSfrUse)
+      << "X2MOVT32_E3_E1_ALU1_R must carry anonymous implicit $sfr use";
+
+  SmallSet<Register, 8> LiveDefs;
+  EXPECT_FALSE(haydnHasIntraCycleRAW(Writer, LiveDefs, TRI()));
+  haydnAppendLiveDefs(Writer, LiveDefs);
+  EXPECT_TRUE(LiveDefs.contains(Haydn::SFR));
+  EXPECT_TRUE(haydnRegOverlapsLiveSet(Haydn::SFR, LiveDefs, TRI()));
+  const bool IncrementalRAW = haydnHasIntraCycleRAW(Reader, LiveDefs, TRI());
+  const MachineInstr *WriterFirst[] = {&Writer, &Reader};
+  const bool CycleListRAW = haydnCycleMembersHaveTrueRAW(WriterFirst, TRI());
+  EXPECT_TRUE(IncrementalRAW);
+  EXPECT_TRUE(CycleListRAW);
+  EXPECT_EQ(IncrementalRAW, CycleListRAW)
+      << "incremental HR/SMS and cycle-list commit/freeze/bake must agree";
+
+  MachineInstr &WarReader = x2movt32E3E1Alu1(Haydn::D4, Haydn::D5);
+  MachineInstr &WarWriter = x2slt32E3E0Alu0(Haydn::D6, Haydn::D7);
+  SmallSet<Register, 8> WarLive;
+  EXPECT_FALSE(haydnHasIntraCycleRAW(WarReader, WarLive, TRI()));
+  haydnAppendLiveDefs(WarReader, WarLive);
+  EXPECT_FALSE(WarLive.contains(Haydn::SFR));
+  EXPECT_FALSE(haydnHasIntraCycleRAW(WarWriter, WarLive, TRI()));
+  const MachineInstr *ReaderFirst[] = {&WarReader, &WarWriter};
+  EXPECT_FALSE(haydnCycleMembersHaveTrueRAW(ReaderFirst, TRI()))
+      << "use-before-def SFR snapshot is legal WAR, not true RAW";
+}
+
+// Leftover unnamed implicit-def dead $sfr is not live-def RAW (isDead skip).
+// Do not retarget HaydnPortModelSFRMemberTest or d14 leftover-dead-$sfr WAW.
+TEST_F(HaydnIntraCycleRAWTest, DeadLeftoverSFRIsNotLiveRAW) {
   MachineInstr &Writer = add32(Haydn::R1, Haydn::R2, Haydn::R3);
-  Writer.addOperand(MachineOperand::CreateReg(Haydn::SFR, /*isDef=*/true));
-  MachineInstr &SFRReader = add32(Haydn::R4, Haydn::R5, Haydn::R6);
-  SFRReader.addOperand(MachineOperand::CreateReg(Haydn::SFR, /*isDef=*/false));
+  Writer.addOperand(MachineOperand::CreateReg(
+      Haydn::SFR, /*isDef=*/true, /*isImp=*/true, /*isKill=*/false,
+      /*isDead=*/true));
+  MachineInstr &Reader = add32(Haydn::R4, Haydn::R5, Haydn::R6);
+  Reader.addOperand(MachineOperand::CreateReg(
+      Haydn::SFR, /*isDef=*/false, /*isImp=*/true));
 
   SmallSet<Register, 8> LiveDefs;
   haydnAppendLiveDefs(Writer, LiveDefs);
   EXPECT_TRUE(LiveDefs.contains(Haydn::R1));
   EXPECT_FALSE(LiveDefs.contains(Haydn::SFR));
-  EXPECT_FALSE(haydnHasIntraCycleRAW(SFRReader, LiveDefs, TRI()));
-  EXPECT_FALSE(haydnRegOverlapsLiveSet(Haydn::SFR, LiveDefs, TRI()));
+  EXPECT_FALSE(haydnHasIntraCycleRAW(Reader, LiveDefs, TRI()));
+  const MachineInstr *Order[] = {&Writer, &Reader};
+  EXPECT_FALSE(haydnCycleMembersHaveTrueRAW(Order, TRI()));
 }
 
 // R0 is a real register (soft-zero); a live R0 def vs a same-cycle reader

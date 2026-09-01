@@ -18,6 +18,12 @@
 # Constant %hi12(0xa2004) pins MC applyFixup; the linked symbol pins lld
 # relocate. Both share resolveFieldLsb. HI12 = (0xa2004 + 0x80000) >> 20 = 1.
 # Wrong LSB → executed imm 0x800 = 2048.
+#
+# D1.17: NOP-only siblings keep these parcels on the E2 e0 ALU0 member
+# (header 0x07; base kind R_HAYDN_HI12, default window 32). The E3
+# qualified twins (E3E0_ALU2/E3E1/E3E2_*) need a real non-NOP neighbor —
+# pinned in d117-hi12-mixed-parcel-typed-window.s; the opc-pinned sniff
+# arms are pinned in HaydnRelocLayoutTest.
 
 # RELOCS:      Relocations [
 # RELOCS-COUNT-3: R_HAYDN_HI12 high_sym

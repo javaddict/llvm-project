@@ -1,0 +1,172 @@
+# RUN: split-file %s %t
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   %t/raw.mir -o - 2>&1 | FileCheck %s --check-prefix=RAW
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %t/war.mir -o - | FileCheck %s --check-prefix=WAR
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   %t/waw.mir -o - 2>&1 | FileCheck %s --check-prefix=WAW
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   %t/csrw.mir -o - 2>&1 | FileCheck %s --check-prefix=CSRW
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   %t/lui.mir -o - 2>&1 | FileCheck %s --check-prefix=LUI
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   %t/trip.mir -o - 2>&1 | FileCheck %s --check-prefix=TRIP
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %t/dead.mir -o - | FileCheck %s --check-prefix=DEAD
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %t/sfr.mir -o - | FileCheck %s --check-prefix=SFR
+# REQUIRES: haydn-registered-target
+
+# Leftover logical multi-member BUNDLEs (hand MIR / limited pipeline) must
+# refuse illegal coissue at haydn-finalize-mi-bundles before exactSolve/stamp.
+# Legal WAR and dead-def+sibling-use still bake. Catalog ALU/LS leftover
+# implicit-def dead $sfr is unattributed (descs do not name SFR) and must
+# not refuse bake; named-SFR writers and GPR dual-write still refuse.
+
+# RAW: leftover multi-member BUNDLE has intra-cycle RAW
+# WAR: XOR32_E{{[23]}}_
+# WAR: ADD32_E{{[23]}}_
+# WAW: leftover multi-member BUNDLE has intra-cycle WAW
+# CSRW: {{named same-cycle|intra-cycle WAW}}
+# LUI: leftover multi-member BUNDLE violates named same-cycle laws
+# TRIP: leftover multi-member BUNDLE has hwloop trip/Off conflict
+# DEAD: ADD32_E{{[23]}}_
+# DEAD: XOR32_E{{[23]}}_
+# SFR: XOR32_E{{[23]}}_
+# SFR: ADD32_E{{[23]}}_
+
+#--- raw.mir
+--- |
+  define void @leftover_raw() { ret void }
+...
+---
+name:            leftover_raw
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r4, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r4 {
+      $r4 = ADD32 $r0, $r1
+      $r5 = XOR32 $r4, $r2
+    }
+    RET implicit $r15
+
+#--- war.mir
+--- |
+  define void @leftover_war() { ret void }
+...
+---
+name:            leftover_war
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r4, $r15
+    BUNDLE 0, 0, implicit-def $r5, implicit-def $r4, implicit $r4, implicit $r2, implicit $r0, implicit $r1 {
+      $r5 = XOR32 $r4, $r2
+      $r4 = ADD32 $r0, $r1
+    }
+    RET implicit $r15
+
+#--- waw.mir
+--- |
+  define void @leftover_waw() { ret void }
+...
+---
+name:            leftover_waw
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r4 = XOR32 $r2, $r3, implicit-def dead $sfr
+    }
+    RET implicit $r15
+
+#--- csrw.mir
+--- |
+  define void @leftover_csrw_hwlr() { ret void }
+...
+---
+name:            leftover_csrw_hwlr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r4, $r5, $r6, $r15
+    BUNDLE 0, 0, implicit-def $sfr, implicit $r1, implicit $r4, implicit $r5, implicit $r6 {
+      CSRW_W 32, $r1, implicit-def $sfr
+      SET_HWLOOP_REG_W 0, $r4, $r5, $r6, implicit-def $sfr
+    }
+    RET implicit $r15
+
+#--- lui.mir
+--- |
+  define void @leftover_lui_alu() { ret void }
+...
+---
+name:            leftover_lui_alu
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3, $r15
+    BUNDLE 0, 0, implicit-def $r1, implicit-def $r4, implicit $r2, implicit $r3 {
+      $r1 = LUI 1
+      $r4 = ADD32 $r2, $r3
+    }
+    RET implicit $r15
+
+#--- trip.mir
+--- |
+  define void @leftover_hwloop_trip() { ret void }
+...
+---
+name:            leftover_hwloop_trip
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r4, $r5, $r6, $r15
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $sfr, implicit $r0, implicit $r1, implicit $r4, implicit $r5, implicit $r6 {
+      SET_HWLOOP_REG_W 0, $r4, $r5, $r6, implicit-def $sfr
+      $r4 = ADD32 $r0, $r1
+    }
+    RET implicit $r15
+
+#--- dead.mir
+--- |
+  define void @leftover_dead_def() { ret void }
+...
+---
+name:            leftover_dead_def
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r4, $r15
+    BUNDLE 0, 0, implicit-def dead $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r4 {
+      dead $r4 = ADD32 $r0, $r1
+      $r5 = XOR32 $r4, $r2
+    }
+    RET implicit $r15
+
+#--- sfr.mir
+--- |
+  define void @leftover_alu_sfr() { ret void }
+...
+---
+name:            leftover_alu_sfr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r4, $r15
+    BUNDLE 0, 0, implicit-def $r5, implicit-def $r4, implicit-def dead $sfr, implicit $r4, implicit $r2, implicit $r0, implicit $r1 {
+      $r5 = XOR32 $r4, $r2, implicit-def dead $sfr
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    RET implicit $r15

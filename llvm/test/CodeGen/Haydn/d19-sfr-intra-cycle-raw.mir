@@ -1,0 +1,52 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# Live SFR is same-cycle true RAW (Constraints simultaneous-read;
+# Data_Latency=1; no SFR forwarding exception). Freeze fatals the
+# product-shape writer-then-reader parcel and accepts the WAR reverse
+# (e0 reader then e1 writer). Generated members so freeze residual-logical
+# does not fire first. Do not retarget d14 leftover-dead-$sfr WAW pins.
+#
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/raw-sfr-def-then-use.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=RAW
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/war-sfr-use-then-def.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=WAR
+#
+# RAW: intra-cycle RAW
+# WAR: X2MOVT32_E3_E0_ALU0_R
+# WAR: X2SLT32_E3_E1_ALU1_R
+
+#--- raw-sfr-def-then-use.mir
+--- |
+  define void @raw_sfr_def_then_use() { ret void }
+...
+---
+name:            raw_sfr_def_then_use
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3
+    BUNDLE 1, 0, implicit-def $sfr, implicit-def $d2, implicit $d0, implicit $d1, implicit $d2, implicit $d3, implicit $sfr {
+      X2SLT32_E3_E0_ALU0_R $d0, $d1, implicit-def $sfr
+      $d2 = X2MOVT32_E3_E1_ALU1_R $d2, $d3, implicit $sfr
+    }
+...
+#--- war-sfr-use-then-def.mir
+--- |
+  define void @war_sfr_use_then_def() { ret void }
+...
+---
+name:            war_sfr_use_then_def
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3, $sfr
+    BUNDLE 1, 0, implicit-def $sfr, implicit-def $d2, implicit $d0, implicit $d1, implicit $d2, implicit $d3, implicit $sfr {
+      $d2 = X2MOVT32_E3_E0_ALU0_R $d2, $d3, implicit $sfr
+      X2SLT32_E3_E1_ALU1_R $d0, $d1, implicit-def $sfr
+    }
+...

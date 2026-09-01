@@ -388,6 +388,8 @@ TEST(HaydnBundleVerifyTest, E2TwoAlu32FailClosedIndependence) {
   EXPECT_NE(E2->find("no generated member"), std::string::npos) << *E2;
 
   // Same members under E3 (e0/ALU2 + e1/ALU1) verify — Finalize restamps.
+  // Opcode-only path cannot see leftover implicit-def $sfr; the MI-overload
+  // skip is llvm/test/CodeGen/Haydn/d14-freeze-hazard-predicates.mir SFR.
   BundlePlan Plan;
   auto E3 = verifyCommittedBundle(BundleFormatRowID::E96ThreeEntry,
                                   {Haydn::ADD32, Haydn::XOR32}, Fmts, &Plan);
@@ -834,6 +836,89 @@ TEST(HaydnBundleVerifyTest, FreezeRejectsResidualLogicalAcceptsPrivate) {
       &PrivPlan, /*Freeze=*/true);
   EXPECT_FALSE(FreezePriv.has_value()) << (FreezePriv ? *FreezePriv : "");
   EXPECT_TRUE(PrivPlan.isProductLegal());
+}
+
+//===----------------------------------------------------------------------===//
+// `_MSP` encode clones traverse the structural inverse matrix (D1.18)
+//===----------------------------------------------------------------------===//
+
+TEST(HaydnBundleVerifyTest, CloneOnlyBundleVerifiesStructurally) {
+  // A clone-only bundle is NOT a vacuous idle plan: the clone is a Real, so
+  // the walk runs, Occupied comes from SeenEntryBits (bit set), and
+  // Completion is golden-row fill over the real member count. Before D1.18
+  // the clone skip emptied Reals and this exact committed shape returned
+  // Occupied=0/StubIdle from the idle-plan early return.
+  HaydnMCFormats Fmts;
+  BundlePlan Plan;
+  auto Err = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                   {Haydn::JAL_W_MSP}, Fmts, &Plan);
+  EXPECT_FALSE(Err.has_value()) << (Err ? *Err : "");
+  EXPECT_TRUE(Plan.isProductLegal());
+  EXPECT_EQ(Plan.memberCount(), 1u);
+  EXPECT_NE(Plan.OccupiedSlots, 0u) << "clone-only plan must not be idle";
+  EXPECT_EQ(Plan.Completion, CompletionStateID::AllEntriesReal);
+  EXPECT_EQ(Plan.Completion, expectedGoldenRowCompletion(1, false));
+
+  // Same law for the uncond-barrier clone at its stamped E2 entry 0.
+  BundlePlan BrPlan;
+  auto BrErr = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                     {Haydn::BEQZ_W_MSP}, Fmts, &BrPlan);
+  EXPECT_FALSE(BrErr.has_value()) << (BrErr ? *BrErr : "");
+  EXPECT_TRUE(BrPlan.isProductLegal());
+  EXPECT_EQ(BrPlan.memberCount(), 1u);
+  EXPECT_NE(BrPlan.OccupiedSlots, 0u);
+  EXPECT_EQ(BrPlan.Completion, CompletionStateID::AllEntriesReal);
+
+  // Freeze admission is unchanged (clones admitted) but now structurally
+  // verified: freeze on a clone-only bundle still succeeds.
+  BundlePlan FreezePlan;
+  auto FreezeErr =
+      verifyCommittedBundle(BundleFormatRowID::E96TwoEntry, {Haydn::JAL_W_MSP},
+                            Fmts, &FreezePlan, /*Freeze=*/true);
+  EXPECT_FALSE(FreezeErr.has_value()) << (FreezeErr ? *FreezeErr : "");
+  EXPECT_TRUE(FreezePlan.isProductLegal());
+}
+
+TEST(HaydnBundleVerifyTest, CloneOnlyBundleMemberlessEntryFails) {
+  // JAL's golden span is E2 e0 / E3 e0 / E3 e1 — entry 2 has no member.
+  // Two pad NOPs put the clone at membership entry 2 of an E3 row; pads are
+  // unused windows (never compacted), so the walk must fail closed at the
+  // stamped entry. This exact bundle was silently accepted before D1.18.
+  HaydnMCFormats Fmts;
+  auto Err = verifyCommittedBundle(
+      BundleFormatRowID::E96ThreeEntry,
+      {Haydn::NOP, Haydn::NOP, Haydn::JAL_W_MSP}, Fmts);
+  ASSERT_TRUE(Err.has_value()) << "memberless clone entry must fail";
+  EXPECT_NE(Err->find("no generated member"), std::string::npos) << *Err;
+  EXPECT_NE(Err->find("JAL_W_MSP"), std::string::npos) << *Err;
+}
+
+TEST(HaydnBundleVerifyTest, CloneAtE2Entry1Fails) {
+  // BEQZ has no mode-0 entry-1 member (E2 span is e0 only; the E3 cover
+  // keeps the unit-cover pre-check quiet), so the failure comes from the
+  // walk's mode/entry match — the walk diagnostic, not "unit-injective".
+  HaydnMCFormats Fmts;
+  auto Err = verifyCommittedBundle(
+      BundleFormatRowID::E96TwoEntry, {Haydn::ADD32, Haydn::BEQZ_W_MSP},
+      Fmts);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_NE(Err->find("no generated member"), std::string::npos) << *Err;
+  EXPECT_NE(Err->find("BEQZ_W_MSP"), std::string::npos) << *Err;
+}
+
+TEST(HaydnBundleVerifyTest, UnmappedMspFailsClosed) {
+  // ADD32_MSP is `_MSP`-named with no catalog mapping: it has no inverse
+  // ids, so its unit mask is 0 and the unit-cover pre-check refuses it as
+  // a mask-0 singleton ("Unknown opcodes have mask 0 and must not pass —
+  // even as a singleton") BEFORE the walk. Fail-closed either way;
+  // materialize/leaveRegion setDesc baking is the only legal way such
+  // pseudos reach commit (postmisched-msp-pack-reconstruct.mir asserts
+  // zero residual ADD32_MSP).
+  HaydnMCFormats Fmts;
+  auto Err = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                   {Haydn::ADD32_MSP}, Fmts);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_NE(Err->find("unit-injective"), std::string::npos) << *Err;
 }
 
 } // namespace

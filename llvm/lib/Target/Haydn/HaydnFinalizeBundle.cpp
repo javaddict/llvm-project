@@ -18,6 +18,11 @@
 //   * Mixed-stream code-bearing inline asm is fail-closed. Mixed generated
 //     MemberId + leftover FieldSlot/logical is fail-closed. Reloc CSR I8
 //     that is still a catalog FieldSlot is fail-closed (untyped NONE).
+//   * Leftover multi-member logical BUNDLEs run the shared RAW/WAW/named/
+//     trip/may-alias store-load predicates before exactSolve/stamp; a hit
+//     is fatal (no sequentialize, no peel). AA is
+//     getAnalysisIfAvailable<AAResultsWrapperPass>; missing AA stays
+//     fail-closed. Not a second pack authority.
 //
 // This pass does not choose: no singleton row resettle, no name peel, no
 // member/entry DFS or E2/E3 retry, no keep-map rewrite, no late setDesc.
@@ -38,19 +43,24 @@
 #include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMemberSetDesc.h"
+#include "HaydnPackLegality.h"
+#include "HaydnPortModel.h"
 #include "llvm/ADT/STLExtras.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -319,12 +329,103 @@ bool stampUnstampedBundledRoots(MachineFunction &MF) {
   return Changed;
 }
 
+/// Leftover implicit-def $sfr is unattributed on ordinary ALU/LS (descriptor
+/// does not name SFR — haydnDescNamesSfrPort / PackLegality rule 3). Reloc
+/// leftover CSR I8 is owned by refuseResidualRelocCsrFieldSlot, not WAW.
+bool skipLeftoverSfrDefForBakeWAW(const MachineInstr &MI,
+                                  const MachineOperand &MO,
+                                  const TargetInstrInfo &TII) {
+  if (!MO.isReg() || !MO.isDef() || !MO.isImplicit())
+    return false;
+  if (MO.getReg() != Haydn::SFR)
+    return false;
+  if (!haydnDescNamesSfrPort(MI))
+    return true;
+  if (!hasRelocatableOperand(MI))
+    return false;
+  const StringRef Name = TII.getName(MI.getOpcode());
+  return Name.equals_insensitive("CSRW") ||
+         Name.equals_insensitive("CSRW_W") ||
+         Name.equals_insensitive("CSRR") ||
+         Name.equals_insensitive("CSRR_W");
+}
+
+/// Same no-dual-write walk as haydnCycleMembersHaveWAW, minus leftover
+/// unattributed $sfr. Named-SFR writers and GPR dual-write still collide.
+bool leftoverCycleMembersHaveWAW(ArrayRef<MachineInstr *> Reals,
+                                 const TargetInstrInfo &TII,
+                                 const TargetRegisterInfo *TRI) {
+  SmallSet<Register, 8> Defs;
+  for (const MachineInstr *MI : Reals) {
+    if (!MI)
+      continue;
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || !MO.isDef())
+        continue;
+      if (skipLeftoverSfrDefForBakeWAW(*MI, MO, TII))
+        continue;
+      if (haydnRegOverlapsDefSet(MO.getReg(), Defs, TRI))
+        return true;
+    }
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || !MO.isDef())
+        continue;
+      if (skipLeftoverSfrDefForBakeWAW(*MI, MO, TII))
+        continue;
+      Register Reg = MO.getReg();
+      if (!Reg)
+        continue;
+      if (!Reg.isPhysical() && !Reg.isVirtual())
+        continue;
+      Defs.insert(Reg);
+    }
+  }
+  return false;
+}
+
+/// Shared commit predicates at leftover-bake (AIEFinalizeBundle.cpp:40-59
+/// identity wrap then verify; HexagonMCChecker.cpp:213-236 FullCheck).
+/// Multi-member leftover Reals refuse illegal coissue before exactSolve/
+/// stamp (RAW/WAW/named/trip/may-alias store-load). AA is
+/// getAnalysisIfAvailable; missing AA stays fail-closed via mayAlias.
+/// Finalize stays non-chooser: no sequentialize, no peel repair.
+void refuseLeftoverBakeHazards(ArrayRef<MachineInstr *> Reals,
+                               const TargetInstrInfo &TII,
+                               const TargetRegisterInfo *TRI, AAResults *AA) {
+  if (haydn::bundle::cycleMembersHaveTrueRAW(Reals, TRI))
+    report_fatal_error(
+        "Haydn FinalizeBundle: leftover multi-member BUNDLE has intra-cycle "
+        "RAW — refuse bake",
+        /*GenCrashDiag=*/false);
+  if (leftoverCycleMembersHaveWAW(Reals, TII, TRI))
+    report_fatal_error(
+        "Haydn FinalizeBundle: leftover multi-member BUNDLE has intra-cycle "
+        "WAW — refuse bake",
+        /*GenCrashDiag=*/false);
+  if (haydn::bundle::cycleViolatesNamedSameCycleLaws(Reals))
+    report_fatal_error(
+        "Haydn FinalizeBundle: leftover multi-member BUNDLE violates named "
+        "same-cycle laws — refuse bake",
+        /*GenCrashDiag=*/false);
+  if (haydn::bundle::cycleMembersHaveHwloopTripConflict(Reals, TRI))
+    report_fatal_error(
+        "Haydn FinalizeBundle: leftover multi-member BUNDLE has hwloop "
+        "trip/Off conflict — refuse bake",
+        /*GenCrashDiag=*/false);
+  SmallVector<const MachineInstr *, 3> ConstReals(Reals.begin(), Reals.end());
+  if (haydn::pack::cycleHasMayAliasStoreLoad(ConstReals, AA))
+    report_fatal_error(
+        "Haydn FinalizeBundle: leftover multi-member BUNDLE has may-alias "
+        "store/load — refuse bake",
+        /*GenCrashDiag=*/false);
+}
+
 /// Leftover public logicals inside an already-formed BUNDLE (hand MIR /
 /// limited -run-pass / BR insert) take the one materialize bake site.
 /// Singleton leftovers prefer ProductDefaultRowID E2. Multi-member leftovers
-/// use commitExactHardRootProductCycle (exactSolveProductOpcodes). Not a
+/// use exactSolveProductOpcodes after the shared hazard refuse. Not a
 /// Finalize DFS / name-peel / keep-map chooser.
-bool bakeLeftoverLogicalBundles(MachineFunction &MF) {
+bool bakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA) {
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   bool Changed = false;
@@ -391,6 +492,10 @@ bool bakeLeftoverLogicalBundles(MachineFunction &MF) {
             /*GenCrashDiag=*/false);
       }
       if (Reals.size() >= 2) {
+        // Same RAW/WAW/named/trip predicates as commit/freeze. Hit is
+        // fatal: leftover bake must not stamp illegal coissue.
+        refuseLeftoverBakeHazards(
+            Reals, TII, MF.getSubtarget().getRegisterInfo(), AA);
         SmallVector<unsigned, 3> Ops;
         Ops.reserve(Reals.size());
         for (MachineInstr *K : Reals)
@@ -598,7 +703,12 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
     Changed = true;
   if (wrapBareAndStamp(MF))
     Changed = true;
-  if (bakeLeftoverLogicalBundles(MF))
+  // HexagonVLIWPacketizer.cpp:90/205 addRequired AA; leftover-bake uses
+  // getAnalysisIfAvailable so limited -run-pass stays fail-closed.
+  AAResults *AA = nullptr;
+  if (auto *AAR = getAnalysisIfAvailable<AAResultsWrapperPass>())
+    AA = &AAR->getAAResults();
+  if (bakeLeftoverLogicalBundles(MF, AA))
     Changed = true;
   if (stampUnstampedBundledRoots(MF))
     Changed = true;
@@ -626,6 +736,9 @@ HaydnFinalizeBundle::HaydnFinalizeBundle() : MachineFunctionPass(ID) {
 }
 
 void HaydnFinalizeBundle::getAnalysisUsage(AnalysisUsage &AU) const {
+  // AMDGPU SIInsertWaitcnts.cpp:963/3232: used-if-available, not required.
+  AU.addUsedIfAvailable<AAResultsWrapperPass>();
+  AU.addPreserved<AAResultsWrapperPass>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 

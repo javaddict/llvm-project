@@ -311,9 +311,10 @@ static_assert(MinSetupIssueBytes == MinSetupBytes + ProductParcelBytes,
               "issue PC delta = intervening span + one parcel (the SET cycle)");
 
 /// CB-164 anchor law: MC anchors HWLoopOff1/Off2 at the SET parcel base.
-/// HaydnAsmBackend::evaluateFixup seeds Value = Abs % Parcel so
-/// MCAssembler's PC-rel subtract lands on align_down(fixup_loc, Parcel) —
-/// the parcel the SET member encodes in. A layout walk that measures
+/// The MC emitter (emitFormatEParcel) re-bases every member fixup to
+/// ParcelBase = Abs - Abs % Parcel, so the fixup's recorded offset IS
+/// the parcel origin — the parcel the SET member encodes in. A layout walk
+/// that measures
 /// after the SET cycle under-charges one parcel: convert such an
 /// after-SET span into the encoded (SET-anchored) displacement by adding
 /// the SET cycle's committed EncodedBytes. Inverse of the subtract above;

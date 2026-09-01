@@ -80,10 +80,13 @@ enum class RelocKind : uint16_t {
   // resolveFieldLsb. Reloc CSRW_W uses this kind so the encoder does not
   // emit an untyped NONE fixup. Unresolved externals emit R_HAYDN_CSR_UImm8.
   CSR_UImm8 = 23,
-  // Entry-qualified kinds (shared with ELF R_HAYDN_* 24..33). Same value
+  // Entry-qualified kinds (shared with ELF R_HAYDN_* 24..42). Same value
   // transform/scale/size as the base kind; FieldLsb is the typed window
   // (never sniffed). Emitted when a symbolic member's committed entry is
-  // not the base kind's default window.
+  // not the base kind's default window. D1.17 twins: HI12/CSR_UImm8 E3
+  // e0/e1/e2 — map/type alone is not member-unique on those sites, so the
+  // producer emits the typed kind and the sniff stays an opc-pinned
+  // fallback only.
   LO20_E1 = 24,
   PC_LO20_E1 = 25,
   WIDE_CallSImm20_E3E1 = 26,
@@ -94,17 +97,26 @@ enum class RelocKind : uint16_t {
   WIDE_BranchSImm12_RI_E3E1 = 31,
   JALRSImm12_E3E0 = 32,
   JALRSImm12_E3E1 = 33,
+  HI12_E3E0_ALU2 = 34,
+  HI12_E3E0_ALU0 = 35,
+  HI12_E3E1 = 36,
+  HI12_E3E2_ALU2 = 37,
+  HI12_E3E2_ALU0 = 38,
+  CSR_UImm8_E3E0_ALU2 = 39,
+  CSR_UImm8_E3E0_ALU0 = 40,
+  CSR_UImm8_E3E1 = 41,
+  CSR_UImm8_E3E2 = 42,
   // MC-only fixups (never become ELF relocs)
-  C_BranchSImm4 = 34,
-  C_UImm4 = 35,
-  C_BranchSImm10 = 36,
-  HWLoopOffset = 37, // legacy placeholder (WIDE path uses HWLoopOff1/2)
-  LongBranchSImm20 = 38,
+  C_BranchSImm4 = 43,
+  C_UImm4 = 44,
+  C_BranchSImm10 = 45,
+  HWLoopOffset = 46, // legacy placeholder (WIDE path uses HWLoopOff1/2)
+  LongBranchSImm20 = 47,
   // s0 LS scaled-imm fields (MC-only — FI spill offsets are local).
-  S0LSOff4_2 = 39, // LD32/ST32 word offset (÷4)
-  S0LSOff4_3 = 40, // LD64/ST64 doubleword offset (÷8)
-  S0LSOff2_0 = 41, // LD16/LDU16/LD8/LDU8 (unscaled)
-  S0LSOff3_0 = 42, // ST16/ST8 (unscaled)
+  S0LSOff4_2 = 48, // LD32/ST32 word offset (÷4)
+  S0LSOff4_3 = 49, // LD64/ST64 doubleword offset (÷8)
+  S0LSOff2_0 = 50, // LD16/LDU16/LD8/LDU8 (unscaled)
+  S0LSOff3_0 = 51, // ST16/ST8 (unscaled)
   Invalid = 0xFFFF,
 };
 
@@ -128,14 +140,25 @@ constexpr RelocKind baseKindFor(RelocKind R) {
   case RelocKind::JALRSImm12_E3E0:
   case RelocKind::JALRSImm12_E3E1:
     return RelocKind::JALRSImm12;
+  case RelocKind::HI12_E3E0_ALU2:
+  case RelocKind::HI12_E3E0_ALU0:
+  case RelocKind::HI12_E3E1:
+  case RelocKind::HI12_E3E2_ALU2:
+  case RelocKind::HI12_E3E2_ALU0:
+    return RelocKind::HI12;
+  case RelocKind::CSR_UImm8_E3E0_ALU2:
+  case RelocKind::CSR_UImm8_E3E0_ALU0:
+  case RelocKind::CSR_UImm8_E3E1:
+  case RelocKind::CSR_UImm8_E3E2:
+    return RelocKind::CSR_UImm8;
   default:
     return R;
   }
 }
 
-/// True when \p R is one of the entry-qualified kinds (24..33).
+/// True when \p R is one of the entry-qualified kinds (24..42).
 constexpr bool isEntryQualifiedKind(RelocKind R) {
-  return R >= RelocKind::LO20_E1 && R <= RelocKind::JALRSImm12_E3E1;
+  return R >= RelocKind::LO20_E1 && R <= RelocKind::CSR_UImm8_E3E2;
 }
 
 // Value transform applied before the field bits are selected. Mirrors the
@@ -211,6 +234,8 @@ RelocKind findFixupFromFixupFields(StringRef TypeName, unsigned TypeOpcode,
 
 /// True when \p FieldLsb is the table default or a typed member window for
 /// \p R (E3 e0/e1/e2 and E2 e1). Unknown LSB values are not published.
+/// Typed windows are generated FieldLsbSites / ExtraPublishedLsb
+/// (HaydnGenRelocFieldLsb.inc); Loc sniffing stays resolveFieldLsb.
 bool isPublishedFieldLsb(RelocKind R, unsigned FieldLsb);
 
 /// FieldLsb from typed (mode, entry, unit) membership. Mode 0=E2, 1=E3.
@@ -251,6 +276,12 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
 //     E3 e0 LOADSTORE0 @25; E3 e1 LOAD1 @54; E3 e2 LOAD1 @85.
 //   CSR_UImm8 — I8 uimm8: E2 e0 @32 (table default); E3 e0 ALU2 @27 /
 //     ALU0 @23; E3 e1 @54; E3 e2 @85.
+// HI12 / CSR_UImm8 sniff arms additionally pin the member OPCODE: I12
+// shares LUI(1) with BEQZ..BLTZ(4..7) at E3 e1/e2 ALU0 (and E2 e0), I8
+// shares CSRR(4)/CSRW(5) with ZERO_*(1..3), so map/type alone is not
+// member-unique (D1.17). Producer emission routes through
+// resolveFieldLsbForMember and emits entry-qualified kinds; this sniff is
+// the lld/consumer fallback and base-window site path only.
 // Returns the table default when Loc is not a recognizable Format E site.
 unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc);
 

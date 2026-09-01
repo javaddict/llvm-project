@@ -72,19 +72,6 @@ static bool cycleHasMixedFormatEModes(ArrayRef<MachineInstr *> Instrs) {
   return AnyE2 && AnyE3;
 }
 
-static bool cycleViolatesNamedSameCycleLaws(ArrayRef<MachineInstr *> Instrs) {
-  SmallVector<const MachineInstr *, 4> Occupied;
-  Occupied.reserve(Instrs.size());
-  for (MachineInstr *MI : Instrs) {
-    if (!MI)
-      continue;
-    if (pack::cycleViolatesNamedSameCycleLaws(*MI, Occupied))
-      return true;
-    Occupied.push_back(MI);
-  }
-  return false;
-}
-
 static bool allGeneratedProductMembers(ArrayRef<MachineInstr *> Instrs) {
   for (MachineInstr *MI : Instrs) {
     if (!MI)
@@ -97,15 +84,27 @@ static bool allGeneratedProductMembers(ArrayRef<MachineInstr *> Instrs) {
   return true;
 }
 
+/// Convert schedule-order MIs for cycleHasMayAliasStoreLoad, which takes
+/// ArrayRef<const MachineInstr *> (SmallVector<MachineInstr *> does not
+/// convert). Dual-load is not this law.
+static bool cycleHasUnprovenStoreLoad(ArrayRef<MachineInstr *> Instrs,
+                                      AAResults *AA) {
+  SmallVector<const MachineInstr *, 4> ConstInstrs(Instrs.begin(), Instrs.end());
+  return pack::cycleHasMayAliasStoreLoad(ConstInstrs, AA);
+}
+
 /// AIE applyBundles (AIEHazardRecognizer.cpp:326-352) packs already-setDesc
 /// members by getSlotKind. Probe only — no MIR mutation.
 static bool asIsGeneratedMembersFormLegalCycle(
-    ArrayRef<MachineInstr *> Instrs, const TargetRegisterInfo *TRI) {
+    ArrayRef<MachineInstr *> Instrs, const TargetRegisterInfo *TRI,
+    AAResults *AA) {
   if (!allGeneratedProductMembers(Instrs))
     return false;
   if (cycleMembersHaveTrueRAW(Instrs, TRI) || cycleMembersHaveWAW(Instrs, TRI))
     return false;
   if (cycleMembersExceedPortBudget(Instrs))
+    return false;
+  if (cycleHasUnprovenStoreLoad(Instrs, AA))
     return false;
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   Haydn::MachineBundle Bundle(&Fmts);
@@ -125,7 +124,7 @@ static bool asIsGeneratedMembersFormLegalCycle(
          !cycleMembersHaveWAW(FieldOrdered, TRI);
 }
 
-bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
+bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs, AAResults *AA) {
   if (Instrs.size() < 2 || Instrs.size() > Haydn::ISSUE_SLOT_COUNT)
     return false;
   for (MachineInstr *MI : Instrs) {
@@ -151,7 +150,7 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
 
   // SET_HWLOOP must not share a cycle with a producer of its trip/Off regs
   // (snapshot no-forwarding: WAR samples stale trip; RAW needs forwarding).
-  if (cycleMembersHaveHwloopTripConflict(Instrs, TII, TRI))
+  if (cycleMembersHaveHwloopTripConflict(Instrs, TRI))
     return false;
 
   // Format E E2-only logicals cannot form a 3-wide E3 parcel.
@@ -167,9 +166,16 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
   if (cycleMembersExceedPortBudget(Instrs))
     return false;
 
+  // Store/load same-cycle overlap. Null AA fail-closed (missing MMO /
+  // unproven heap). Hexagon HexagonVLIWPacketizer.cpp:1544 store-then-load
+  // alias(J,I) is sequential; Haydn LOADSTORE0+LOAD1 is legal when proven
+  // disjoint (TII same-base or AA NoAlias). Dual-load is not this law.
+  if (cycleHasUnprovenStoreLoad(Instrs, AA))
+    return false;
+
   // Already-baked members: keep HR's slot assignment when it is one
   // legal cycle (AIE applyBundles). Rematch can flip a legal WAR.
-  if (asIsGeneratedMembersFormLegalCycle(Instrs, TRI))
+  if (asIsGeneratedMembersFormLegalCycle(Instrs, TRI, AA))
     return true;
 
 
@@ -260,7 +266,8 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
   return !FieldRAW && !FieldWAW;
 }
 
-bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
+bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
+                                    AAResults *AA) {
   if (Instrs.size() < 2)
     return false;
 
@@ -306,11 +313,11 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
     return false;
   // SET_HWLOOP trip/Off sample cannot coissue with a producer of those regs
   // (WAR would sample stale trip under snapshot no-forwarding).
-  if (cycleMembersHaveHwloopTripConflict(Instrs, TII, TRI))
+  if (cycleMembersHaveHwloopTripConflict(Instrs, TRI))
     return false;
 
   // AIE applyBundles: already-setDesc members pack by slot, no rematch.
-  if (asIsGeneratedMembersFormLegalCycle(Instrs, TRI)) {
+  if (asIsGeneratedMembersFormLegalCycle(Instrs, TRI, AA)) {
     const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
     Haydn::MachineBundle Bundle(&Fmts);
     for (MachineInstr *MI : Instrs) {
@@ -485,14 +492,14 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
   return true;
 }
 
-bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs) {
-  if (!canCoissueProductCycle(Instrs))
+bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs, AAResults *AA) {
+  if (!canCoissueProductCycle(Instrs, AA))
     return false;
-  return commitExactMultiMIProductCycle(Instrs);
+  return commitExactMultiMIProductCycle(Instrs, AA);
 }
 
 bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
-                                     const MCInstrInfo &MII) {
+                                     const MCInstrInfo &MII, AAResults *AA) {
   (void)MII;
   if (!BundleRoot.isBundle() || !BundleRoot.getParent())
     return false;
@@ -516,7 +523,7 @@ bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
   // finish. AIE applyBundles (AIEHazardRecognizer.cpp:326-352) erases the
   // old root then re-finalizes; Haydn overlay is the same funnel as free
   // multi-MI: commitOneProductCycle (probe + exact bake).
-  if (!canCoissueProductCycle(Kids))
+  if (!canCoissueProductCycle(Kids, AA))
     return false;
 
   for (MachineInstr *K : Kids) {
@@ -531,7 +538,7 @@ bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
   }
   BundleRoot.eraseFromParent();
 
-  if (!commitOneProductCycle(Kids))
+  if (!commitOneProductCycle(Kids, AA))
     report_fatal_error(
         "commitExactHardRootProductCycle: probe accepted but bake failed",
         /*GenCrashDiag=*/false);

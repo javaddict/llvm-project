@@ -38,8 +38,10 @@ FunctionPass *createHaydnFixupHwLoopsPass();
 FunctionPass *createHaydnEnsureTerminatorsPass();
 // AIE createAIEFinalizeBundle peer (AIEFinalizeBundle.h / AIE2TargetMachine:244).
 FunctionPass *createHaydnFinalizeBundlePass();
-// fail-closed committed-bundle verifier (after FinalizeBundle).
-FunctionPass *createHaydnVerifyBundlesPass();
+// fail-closed committed-bundle verifier (after FinalizeBundle). The
+// IsFreezeSeat argument pins seat identity at the call site: only the
+// addPreEmitPass2 adder passes true (D1.13; no default argument).
+FunctionPass *createHaydnVerifyBundlesPass(bool IsFreezeSeat);
 // Exposed-pipeline Data_Latency stall insert (pre-emit; every opt level).
 FunctionPass *createHaydnLatencyStallsPass();
 // W68.3R bounded late repair loop (S2 -> stalls -> HWLoop validate ->

@@ -10,7 +10,8 @@
 // haydn::bundle::verifyCommittedBundle (late firewall). The last instance
 // in a complete pipeline is the addPreEmitPass2 freeze gate: one concrete
 // generated-member BUNDLE, no representation-expand carve-out, no leftover
-// alternate-map / DDG transients.
+// alternate-map / DDG transients, and a dest-window seam walk
+// (verifyMBBDestWindowSeams; not verifyCommittedBundle).
 //
 // AIE peers:
 //   AIEBaseInstrInfo.cpp:1616-1635 verifyInstruction fail-closed pattern
@@ -28,6 +29,7 @@
 #include "HaydnMachineFunctionInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -53,14 +55,9 @@ using namespace llvm;
 static cl::opt<bool> HaydnFreezeVerify(
     "haydn-freeze-verify", cl::Hidden,
     cl::desc("Force HaydnVerifyBundles freeze-gate checks (residual "
-             "representation/logical/mixed children and surviving "
-             "alternate-map/DDG transients)"),
+             "representation/logical/mixed children, surviving "
+             "alternate-map/DDG transients, and dest-window seams)"),
     cl::init(false));
-
-namespace {
-llvm::HaydnVerifyBundles *LatestVerifier = nullptr;
-unsigned LiveVerifiers = 0;
-} // namespace
 
 namespace llvm {
 namespace haydn {
@@ -206,15 +203,32 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
   // A skipFunction-skipped function with a noncanonical cycle must still fail
   // here — never an MC uncommitted/unverified escape hatch.
 
-  // Freeze seat: last constructed instance in a complete pipeline
-  // (addPreEmitPass2 after CFIFixup / stack-frame-layout). -run-pass
-  // constructs one instance (LiveVerifiers==1) and stays an invariant
-  // check, not the freeze gate, unless -haydn-freeze-verify is set.
+  // HexagonVLIWPacketizer.cpp:90/205 addRequired AA; AMDGPU
+  // SIInsertWaitcnts.cpp:963/3232 used-if-available. Limited -run-pass
+  // has no AA (fail-closed via mayAlias). Full pipeline AA lets verify
+  // accept the same proven-disjoint store/load packs HR/materialize did.
+  AAResults *AA = nullptr;
+  if (auto *AAR = getAnalysisIfAvailable<AAResultsWrapperPass>())
+    AA = &AAR->getAAResults();
+
+  // Freeze seat law (D1.13): freeze identity is bound by REGISTRATION,
+  // never by instance order or count. The only instance constructed with
+  // IsFreezeSeat=true is the one added at the addPreEmitPass2 seat
+  // (HaydnTargetMachine.cpp addPreEmitPass2); the three earlier Verify
+  // seats (addPreSched2, addPreEmitPass, addPostBBSections) pass explicit
+  // false and are invariant-only by construction. The legacy
+  // default-constructed instance (-run-pass=haydn-verify-bundles) is
+  // likewise invariant-only. -haydn-freeze-verify forces freeze on ANY
+  // instance. No process-global state participates: neither pipeline
+  // census drift nor per-thread pass cloning under parallel codegen can
+  // silently move or disable a freeze wall.
   // Peer: AIE leaveRegion clears AltDescs (AIEMachineScheduler.cpp:1081-1082;
   // AIEAlternateDescriptors.h:74) before the next region; Haydn freeze
   // requires the same empty transients after closure.
-  const bool Freeze =
-      HaydnFreezeVerify || (this == LatestVerifier && LiveVerifiers >= 4);
+  LLVM_DEBUG(dbgs() << "HaydnVerifyBundles seat="
+                    << (FreezeSeat ? "freeze" : "invariant") << " on "
+                    << MF.getName() << '\n');
+  const bool Freeze = HaydnFreezeVerify || FreezeSeat;
 
   if (Freeze) {
     const HaydnMachineFunctionInfo *MFI =
@@ -443,7 +457,7 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
       }
 
       if (auto Err = haydn::bundle::verifyCommittedBundle(MI, Fmts, nullptr,
-                                                          Freeze)) {
+                                                          Freeze, AA)) {
         // Unexpanded representation pseudos fail as ordinary diagnostics
         // (exit 1): MC-encode refuse class, same policy as the printer.
         // Every other structural corruption aborts (--crash fixtures).
@@ -455,6 +469,21 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
            << MBB.getNumber() << ": " << *Err << "\n  MI: " << MI;
         report_fatal_error(Twine(OS.str()),
                            /*GenCrashDiag=*/!ReprOnly);
+      }
+    }
+  }
+
+  // Freeze-only dest-window seam wall. Intermediate Verify seats stay
+  // silent (pre-stall false positives). Do not call from
+  // verifyCommittedBundle (intra-cycle by D1.4 law).
+  if (Freeze) {
+    for (const MachineBasicBlock &SeamMBB : MF) {
+      if (auto Err = haydn::bundle::verifyMBBDestWindowSeams(SeamMBB)) {
+        std::string Msg;
+        raw_string_ostream OS(Msg);
+        OS << "HaydnVerifyBundles: dest-window seam in " << MF.getName()
+           << " BB#" << SeamMBB.getNumber() << ": " << *Err;
+        report_fatal_error(Twine(OS.str()));
       }
     }
   }
@@ -474,24 +503,30 @@ char HaydnVerifyBundles::ID = 0;
 INITIALIZE_PASS(HaydnVerifyBundles, DEBUG_TYPE, "Haydn Bundle Invariant Verifier",
                 false, false)
 
-HaydnVerifyBundles::HaydnVerifyBundles() : MachineFunctionPass(ID) {
+// Seat identity is bound at construction (D1.13): the addPreEmitPass2
+// adder passes IsFreezeSeat=true; every other seat and the legacy
+// -run-pass default construction pass false. No instance-count heuristic
+// and no cross-instance globals remain.
+HaydnVerifyBundles::HaydnVerifyBundles(bool IsFreezeSeat)
+    : MachineFunctionPass(ID), FreezeSeat(IsFreezeSeat) {
   initializeHaydnVerifyBundlesPass(*PassRegistry::getPassRegistry());
-  ++LiveVerifiers;
-  LatestVerifier = this;
 }
 
-HaydnVerifyBundles::~HaydnVerifyBundles() {
-  if (LatestVerifier == this)
-    LatestVerifier = nullptr;
-  if (LiveVerifiers)
-    --LiveVerifiers;
-}
+// Legacy default: REQUIRED for RegisterPass / INITIALIZE_PASS -run-pass
+// construction; that instance is invariant-only by explicit construction.
+HaydnVerifyBundles::HaydnVerifyBundles() : HaydnVerifyBundles(false) {}
 
 void HaydnVerifyBundles::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
+  // Used-if-available, not required: limited -run-pass has no AA.
+  // Peer: AMDGPU SIInsertWaitcnts.cpp:963. Hexagon packetizer is addRequired.
+  AU.addUsedIfAvailable<AAResultsWrapperPass>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
-FunctionPass *llvm::createHaydnVerifyBundlesPass() {
-  return new HaydnVerifyBundles();
+// No default argument: every seat must state its freeze identity at the
+// call site, so any future seat addition is a compile-time decision, never
+// a silent census drift.
+FunctionPass *llvm::createHaydnVerifyBundlesPass(bool IsFreezeSeat) {
+  return new HaydnVerifyBundles(IsFreezeSeat);
 }

@@ -4211,7 +4211,7 @@ def TRANSF64_L : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
-let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1 in {
 def WBARWUA_CB : HaydnInst<4, (outs),
     (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, GPR32:$rs1),
     "wbarwua_cb	$ar_sel_0, $cbr_sel_0, $rs1", []> {

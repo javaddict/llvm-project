@@ -1,0 +1,127 @@
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-postra-memory-edges=0 \
+# RUN:   -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — store/load same-cycle overlap with MemoryEdges forced off.
+# Product MemoryEdges stays default ON; this pin proves the pack predicate
+# (HR Delta=0 / canCoissue / leftover-bake / verify) is the gate for
+# Order-latency-0 store+load. Hexagon HexagonVLIWPacketizer.cpp: store then
+# load with alias(J,I) is sequential. Haydn store+LOAD1 is legal when
+# proven disjoint (same-base non-overlapping widths). Dual-load is not
+# this law.
+
+--- |
+  define void @same_addr_store_load(ptr %p, i32 %v) {
+    store i32 %v, ptr %p, align 4
+    %t = load i32, ptr %p, align 4
+    ret void
+  }
+  define void @disjoint_store_load1(ptr %p, i32 %v) {
+    store i32 %v, ptr %p, align 4
+    %p1 = getelementptr i32, ptr %p, i32 1
+    %t = load i32, ptr %p1, align 4
+    ret void
+  }
+  define i32 @dual_load(ptr %p) {
+    %v0 = load i32, ptr %p, align 4
+    %p1 = getelementptr i32, ptr %p, i32 1
+    %v1 = load i32, ptr %p1, align 4
+    %s = add i32 %v0, %v1
+    ret i32 %s
+  }
+...
+---
+name:            same_addr_store_load
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; Same-address st32+ld32 must not coissue (may-alias, AA=nullptr).
+    ; CHECK-LABEL: name: same_addr_store_load
+    ; CHECK-NOT: BUNDLE
+    ; CHECK: {{ST32|S_SW}}{{.*}}$r2, $r1, 0
+    ; CHECK-NEXT: $r3 = {{LD32|S_LW}}{{.*}}$r1, 0
+    ST32 $r2, $r1, 0 :: (store (s32) into %ir.p)
+    $r3 = LD32 $r1, 0 :: (load (s32) from %ir.p)
+    $r0 = COPY $r3
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            disjoint_store_load1
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; Proven-disjoint store + LOAD1: same IR object, 4-byte gap (imm 0 vs 1).
+    ; Same-Value MMOs so null AA still proves non-overlap.
+    ; CHECK-LABEL: name: disjoint_store_load1
+    ; CHECK: BUNDLE{{.*}}{
+    ; CHECK-DAG: {{ST32|S_SW}}{{.*}}$r2{{.*}}$r1, 0
+    ; CHECK-DAG: $r3 = {{LD32|S_LW}}{{.*}}$r1, 1
+    ; CHECK: }
+    ST32 $r2, $r1, 0 :: (store (s32) into %ir.p)
+    $r3 = LD32 $r1, 1 :: (load (s32) from %ir.p + 4)
+    $r0 = COPY $r3
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            dual_load
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1
+
+    ; Dual-load stays legal (no store; not the store/load overlap law).
+    ; CHECK-LABEL: name: dual_load
+    ; CHECK: BUNDLE{{.*}}{
+    ; CHECK-DAG: $r2 = {{LD32|S_LW}}{{.*}}$r1, 0
+    ; CHECK-DAG: $r3 = {{LD32|S_LW}}{{.*}}$r1, 1
+    ; CHECK: }
+    $r2 = LD32 $r1, 0 :: (load (s32) from %ir.p)
+    $r3 = LD32 $r1, 1 :: (load (s32) from %ir.p1)
+    $r0 = ADD32 $r2, $r3, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

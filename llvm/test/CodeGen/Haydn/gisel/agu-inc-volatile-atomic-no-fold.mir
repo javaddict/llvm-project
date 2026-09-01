@@ -1,0 +1,106 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COMBINE
+
+# Role: MIR — D1.27: AGU PRE/POST-inc fusion refuses volatile/atomic MMOs at
+# the one shared seat (memAccessInfo, callee of both matchPostIncMem and
+# matchPreIncMem). Golden RI6 PRE/POST members are one plain access + AGU
+# writeback with no ordering facility, so a volatile/atomic access must keep
+# the unfused G_LOAD/G_STORE + G_PTR_ADD shape. The plain-MMO positive
+# controls in this file share the exact matcher shape minus the flag, proving
+# the flag (not an accidental matcher miss) is what blocks fusion.
+
+---
+name:            postinc_volatile_load_no_fold
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0
+    ; COMBINE-LABEL: name: postinc_volatile_load_no_fold
+    ; COMBINE: G_LOAD
+    ; COMBINE: G_PTR_ADD
+    ; COMBINE-NOT: G_HAYDN_POSTINC_LOAD
+    %base:_(p0) = COPY $r0
+    %val:_(s32) = G_LOAD %base(p0) :: (volatile load (s32))
+    %c4:_(s32) = G_CONSTANT i32 4
+    %new:_(p0) = G_PTR_ADD %base, %c4(s32)
+    $r0 = COPY %val
+    $r1 = COPY %new
+...
+
+---
+name:            preinc_volatile_store_no_fold
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0, $r2
+    ; COMBINE-LABEL: name: preinc_volatile_store_no_fold
+    ; COMBINE: G_PTR_ADD
+    ; COMBINE: G_STORE
+    ; COMBINE-NOT: G_HAYDN_PREINC_STORE
+    %base:_(p0) = COPY $r0
+    %data:_(s32) = COPY $r2
+    %c4:_(s32) = G_CONSTANT i32 4
+    %new:_(p0) = G_PTR_ADD %base, %c4(s32)
+    G_STORE %data(s32), %new(p0) :: (volatile store (s32))
+    $r1 = COPY %new
+...
+
+---
+name:            postinc_atomic_load_no_fold
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0
+    ; COMBINE-LABEL: name: postinc_atomic_load_no_fold
+    ; COMBINE: G_LOAD
+    ; COMBINE: G_PTR_ADD
+    ; COMBINE-NOT: G_HAYDN_POSTINC_LOAD
+    %base:_(p0) = COPY $r0
+    %val:_(s32) = G_LOAD %base(p0) :: (load seq_cst (s32))
+    %c4:_(s32) = G_CONSTANT i32 4
+    %new:_(p0) = G_PTR_ADD %base, %c4(s32)
+    $r0 = COPY %val
+    $r1 = COPY %new
+...
+
+# Positive controls: identical matcher shapes with plain MMOs DO fuse.
+---
+name:            postinc_plain_load_fuse_control
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0
+    ; COMBINE-LABEL: name: postinc_plain_load_fuse_control
+    ; COMBINE: G_HAYDN_POSTINC_LOAD
+    ; COMBINE-NOT: G_LOAD
+    ; COMBINE-NOT: G_PTR_ADD
+    %base:_(p0) = COPY $r0
+    %val:_(s32) = G_LOAD %base(p0) :: (load (s32))
+    %c4:_(s32) = G_CONSTANT i32 4
+    %new:_(p0) = G_PTR_ADD %base, %c4(s32)
+    $r0 = COPY %val
+    $r1 = COPY %new
+...
+
+---
+name:            preinc_plain_store_fuse_control
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r0, $r2
+    ; COMBINE-LABEL: name: preinc_plain_store_fuse_control
+    ; COMBINE: G_HAYDN_PREINC_STORE
+    ; COMBINE-NOT: G_STORE
+    ; COMBINE-NOT: G_PTR_ADD
+    %base:_(p0) = COPY $r0
+    %data:_(s32) = COPY $r2
+    %c4:_(s32) = G_CONSTANT i32 4
+    %new:_(p0) = G_PTR_ADD %base, %c4(s32)
+    G_STORE %data(s32), %new(p0) :: (store (s32))
+    $r1 = COPY %new
+...

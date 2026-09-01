@@ -343,7 +343,10 @@ public:
       int64_t &Offset, bool &OffsetIsScalable, LocationSize &Width,
       const TargetRegisterInfo *TRI) const override;
 
-  /// Same-base accesses whose byte ranges [off, off+width) do not overlap.
+  /// Same-object non-overlapping accesses. Update-AM writeback is never
+  /// disjoint. Distinct GEP Values use AIE SameValue MMOs
+  /// (AIEBaseInstrInfo.cpp:2083-2109); unknown-address same-base falls back
+  /// to the RISCV operand oracle (RISCVInstrInfo.cpp:3522-3552).
   bool areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
                                        const MachineInstr &MIb) const override;
 };

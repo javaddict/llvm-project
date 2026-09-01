@@ -167,67 +167,66 @@ ae_f32x2 f32x2_slais_soft_sat(ae_f32x2 v) {
 }
 
 // IR-LABEL: @la32x2f24_ic_ar_cbr
-// Dual-24 unaligned circular load: AR UA post with forward dir=0.
-// Must not silent-alias reverse RIC (dir=1) or aligned D_LDW_CB alone.
-// Soft CBR wrap is header-owned (haydn_cbr_step); may fold when CBR globals
-// are zero and the updated ptr is dead — pin the UA residual here.
-// IR: call {{.*}}@llvm.haydn.d.ltwua.post({{.*}}i32 8, i32 0)
+// Dual-24 unaligned circular load: hardware AR_CBR path (2026-08-28 remap).
+// The wrapped cursor is live (funnel selector is rs[2] of the wrapped value);
+// must not silent-alias reverse RIC or the aligned D_LDW_CB.
+// IR: call {{.*}}@llvm.haydn.ltwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.ldw.cb.imm
 void la32x2f24_ic_ar_cbr(ae_f24x2 *dst, ae_valign *al, ae_f24x2 *ptr) {
   AE_LA32X2F24_IC(*dst, *al, ptr, 0);
 }
 
 // IR-LABEL: @la24x2_ic_alias_ar_cbr
-// LA24X2_IC is the dual-24 alias of LA32X2F24_IC (same AR path, dir=0).
-// IR: call {{.*}}@llvm.haydn.d.ltwua.post({{.*}}i32 8, i32 0)
+// LA24X2_IC is the dual-24 alias of LA32X2F24_IC (same hardware path).
+// IR: call {{.*}}@llvm.haydn.ltwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.ldw.cb.imm
 void la24x2_ic_alias_ar_cbr(ae_f24x2 *dst, ae_valign *al, ae_f24x2 *ptr) {
   AE_LA24X2_IC(*dst, *al, ptr, 0);
 }
 
 // IR-LABEL: @sa32x2f24_ic_ar_cbr
-// Dual-24 unaligned circular store: AR UA post with forward dir=0.
-// IR: call {{.*}}@llvm.haydn.d.stwua.post({{.*}}i32 8, i32 0)
+// Dual-24 unaligned circular store: hardware AR_CBR path; live wrapped cursor.
+// IR: call {{.*}}@llvm.haydn.stwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.sdw.cb.imm
 void sa32x2f24_ic_ar_cbr(ae_f24x2 src, ae_valign *al, ae_f24x2 *ptr) {
   AE_SA32X2F24_IC(src, *al, ptr, 0);
 }
 
 // IR-LABEL: @sa24x2_ic_alias_ar_cbr
-// IR: call {{.*}}@llvm.haydn.d.stwua.post({{.*}}i32 8, i32 0)
+// IR: call {{.*}}@llvm.haydn.stwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.sdw.cb.imm
 void sa24x2_ic_alias_ar_cbr(ae_f24x2 src, ae_valign *al, ae_f24x2 *ptr) {
   AE_SA24X2_IC(src, *al, ptr, 0);
 }
 
 // IR-LABEL: @la32x2_ic_ar_cbr
-// Base dual-32 unaligned circular load residual (peer of dual-24 F24 IC).
-// Must not silent-alias reverse RIC (dir=1) or aligned D_LDW_CB alone.
-// IR: call {{.*}}@llvm.haydn.d.ltwua.post({{.*}}i32 8, i32 0)
+// Base dual-32 unaligned circular load: hardware AR_CBR path.
+// Must not silent-alias reverse RIC or the aligned D_LDW_CB alone.
+// IR: call {{.*}}@llvm.haydn.ltwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.ldw.cb.imm
 void la32x2_ic_ar_cbr(ae_int32x2 *dst, ae_valign *al, ae_int32x2 *ptr) {
   AE_LA32X2_IC(*dst, *al, ptr, 0);
 }
 
 // IR-LABEL: @sa32x2_ic_ar_cbr
-// Base dual-32 unaligned circular store residual.
-// IR: call {{.*}}@llvm.haydn.d.stwua.post({{.*}}i32 8, i32 0)
+// Base dual-32 unaligned circular store: hardware AR_CBR path.
+// IR: call {{.*}}@llvm.haydn.stwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.sdw.cb.imm
 void sa32x2_ic_ar_cbr(ae_int32x2 src, ae_valign *al, ae_int32x2 *ptr) {
   AE_SA32X2_IC(src, *al, ptr, 0);
 }
 
 // IR-LABEL: @la16x4_ic_ar_cbr
-// Base quad-16 unaligned circular load residual.
-// IR: call {{.*}}@llvm.haydn.d.{{ltwua|lqhwua}}.post({{.*}}i32 8, i32 0)
+// Base quad-16 unaligned circular load: hardware AR_CBR path.
+// IR: call {{.*}}@llvm.haydn.lqhwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.ldw.cb.imm
 void la16x4_ic_ar_cbr(ae_int16x4 *dst, ae_valign *al, ae_int16x4 *ptr) {
   AE_LA16X4_IC(*dst, *al, ptr, 0);
 }
 
 // IR-LABEL: @sa16x4_ic_ar_cbr
-// Base quad-16 unaligned circular store residual.
-// IR: call {{.*}}@llvm.haydn.d.{{stwua|sqhwua}}.post({{.*}}i32 8, i32 0)
+// Base quad-16 unaligned circular store: hardware AR_CBR path.
+// IR: call {{.*}}@llvm.haydn.sqhwua.cb.post({{.*}}i32 0, i32 0)
 // IR-NOT: call {{.*}}@llvm.haydn.sdw.cb.imm
 void sa16x4_ic_ar_cbr(ae_int16x4 src, ae_valign *al, ae_int16x4 *ptr) {
   AE_SA16X4_IC(src, *al, ptr, 0);

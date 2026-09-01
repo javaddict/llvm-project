@@ -597,21 +597,18 @@ static unsigned computeEffectiveLatencyFor(const MaxLatencyFinder &,
         E->getPreBoundaryNode(const_cast<MachineInstr *>(&MI));
     if (!Pre)
       continue;
-    // Cross-boundary edges only: the cut prices how much of the edge's
-    // latency remains unservable inside the successor. Intra-block
-    // successors of the same node carry no post-boundary depth and would
-    // fall to PostRegionMaxDepth, yielding a negative Remaining that loses
-    // the max without ever being the binding edge.
+    // Cross-boundary edges only: Remaining = EdgeLat - Depth(Succ).
+    // Missing post-depth defaults to 0 (AIE getPostDepthOr(Succ, 0));
+    // never invent a cut from PostRegionMaxDepth. Remaining <= 0 is a
+    // skip (caller `if (unsigned Eff)`), not a min-clamp to 1.
     for (const SDep *Dep : E->getCrossBoundaryEdges(*Pre)) {
       const SUnit *Dst = Dep->getSUnit();
-      int Depth = E->getPostDepth(*Dst);
-      if (Depth < 0)
-        Depth = E->getPostRegionMaxDepth();
+      int Depth = E->getPostDepthOr(Dst, 0);
       int Remaining = (int)Dep->getLatency() - Depth;
       Best = std::max(Best, Remaining);
     }
   }
-  return Best > 0 ? (unsigned)Best : 1;
+  return Best > 0 ? (unsigned)Best : 0;
 }
 
 // Conservative intra-region maxLatency (AIE maxLatency at
@@ -937,15 +934,21 @@ void setHaydnInterBlockEdgesForFunction(MachineFunction &MF,
       Owned[KV.first].push_back(std::move(E));
     }
   // Superseded graphs for the same edge (S1's originals after S2 inherits)
-  // are dropped: keep the newest per (pred,succ).
+  // are dropped: keep the newest per (pred,succ). Publish appends the
+  // inherited S2 graph after S1, so a first-match filter would keep the
+  // oldest record instead of the one that received inherit.
   for (auto &KV : Owned) {
     SmallVector<std::unique_ptr<HaydnInterBlockEdges>, 2> Keep;
-    for (auto &E : KV.second)
-      if (Keep.empty() ||
-          none_of(Keep, [&](const std::unique_ptr<HaydnInterBlockEdges> &K) {
+    for (auto &E : KV.second) {
+      auto Found =
+          find_if(Keep, [&](const std::unique_ptr<HaydnInterBlockEdges> &K) {
             return K->getSucc() == E->getSucc();
-          }))
+          });
+      if (Found == Keep.end())
         Keep.push_back(std::move(E));
+      else
+        *Found = std::move(E);
+    }
     KV.second = std::move(Keep);
   }
 }

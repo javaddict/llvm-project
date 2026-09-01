@@ -339,4 +339,131 @@ TEST_F(HaydnHWLoopDemoteTest, PlacementWrapperPureCountdownIsPreheaderSave) {
             K::PreheaderSave);
 }
 
+// --- D1.19 stack-counter demote admission: the closed case matrix ---
+//
+// The gtest seam for the stack-counter arm's admission law (the gate in
+// demoteHardwareLoopToSoftware only translates this decision into a
+// refuse). Inputs are the resolved facts at the gate: latch scratch
+// validity, imm-trip form, preheader scratch validity, nonzero LoopStart
+// adjust, latch scratch identity. Exhaustive cross product so a future
+// scratch fact that reopens a hole fails a named cell here first.
+
+// Hand-derived expectation for the full matrix (see demoteStackCounter
+// Admissible declaration for the lettered cells):
+//  (a) !LatchScrValid                  -> refuse, everything else moot.
+//  (f) HasImm                          -> PreheaderScrValid decides.
+//  (b) !AdjNonZero (reg-trip, Adj==0)  -> admissible: remaining trip IS N,
+//      Prefer stored directly.
+//  (e) AdjNonZero, !PreheaderScrValid, LatchScrIsPrefer -> REFUSE (D1.19:
+//      ADDI dest must differ from Prefer; storing Prefer stores full N).
+//  (c)/(d) AdjNonZero otherwise        -> admissible (probed PreheaderScr
+//      or the LatchScr!=Prefer copy fallback).
+static bool expectStackCounterAdmissible(bool LatchScrValid, bool HasImm,
+                                         bool PreheaderScrValid,
+                                         bool AdjNonZero,
+                                         bool LatchScrIsPrefer) {
+  if (!LatchScrValid)
+    return false;
+  if (HasImm)
+    return PreheaderScrValid;
+  if (!AdjNonZero)
+    return true;
+  return PreheaderScrValid || !LatchScrIsPrefer;
+}
+
+TEST(HaydnHWLoopDemotePlacementTest, StackCounterDemoteAdmissibleFullMatrix) {
+  unsigned Checked = 0;
+  for (bool LatchScrValid : {false, true}) {
+    for (bool HasImm : {false, true}) {
+      for (bool PreheaderScrValid : {false, true}) {
+        for (bool AdjNonZero : {false, true}) {
+          for (bool LatchScrIsPrefer : {false, true}) {
+            ASSERT_EQ(haydn::hwloop::demoteStackCounterAdmissible(
+                          LatchScrValid, HasImm, PreheaderScrValid,
+                          AdjNonZero, LatchScrIsPrefer),
+                      expectStackCounterAdmissible(LatchScrValid, HasImm,
+                                                   PreheaderScrValid,
+                                                   AdjNonZero,
+                                                   LatchScrIsPrefer))
+                << "cell (LatchScrValid=" << LatchScrValid
+                << ", HasImm=" << HasImm
+                << ", PreheaderScrValid=" << PreheaderScrValid
+                << ", AdjNonZero=" << AdjNonZero
+                << ", LatchScrIsPrefer=" << LatchScrIsPrefer << ")";
+            ++Checked;
+          }
+        }
+      }
+    }
+  }
+  EXPECT_EQ(Checked, 32u); // exhaustive 2^5 cross product, no hole
+}
+
+// The load-bearing named cells, pinned independently of the derived
+// expectation so a rewrite of the reference above cannot hide them:
+
+// Cell (e) — the D1.19 defect: Adj!=0, no PreheaderScr, LatchScr==Prefer.
+// The only sound store of the remaining trip Prefer+Adj needs an ADDI
+// dest != Prefer; with none, ST32 Prefer would store the FULL trip N.
+TEST(HaydnHWLoopDemotePlacementTest,
+     StackCounterAdjNoPreheaderLatchIsPreferRefuses) {
+  EXPECT_FALSE(haydn::hwloop::demoteStackCounterAdmissible(
+      /*LatchScrValid=*/true, /*HasImm=*/false,
+      /*PreheaderScrValid=*/false, /*AdjNonZero=*/true,
+      /*LatchScrIsPrefer=*/true));
+}
+
+// Cell (c) — same shape but a probed PreheaderScr exists: ADDI scratch,
+// Prefer, -S; ST32 scratch (the cb166 stack arm). Admissible.
+TEST(HaydnHWLoopDemotePlacementTest,
+     StackCounterAdjWithPreheaderScratchAdmits) {
+  EXPECT_TRUE(haydn::hwloop::demoteStackCounterAdmissible(
+      /*LatchScrValid=*/true, /*HasImm=*/false,
+      /*PreheaderScrValid=*/true, /*AdjNonZero=*/true,
+      /*LatchScrIsPrefer=*/true));
+}
+
+// Cell (d) — copy fallback: no PreheaderScr but LatchScr != Prefer.
+TEST(HaydnHWLoopDemotePlacementTest,
+     StackCounterAdjCopyFallbackLatchNotPreferAdmits) {
+  EXPECT_TRUE(haydn::hwloop::demoteStackCounterAdmissible(
+      /*LatchScrValid=*/true, /*HasImm=*/false,
+      /*PreheaderScrValid=*/false, /*AdjNonZero=*/true,
+      /*LatchScrIsPrefer=*/false));
+}
+
+// Cell (b) — Adj==0 with LatchScr==Prefer: remaining trip IS the full
+// trip; Prefer stored directly. The refuse must be scoped to Adj!=0.
+TEST(HaydnHWLoopDemotePlacementTest,
+     StackCounterAdjZeroLatchIsPreferAdmits) {
+  EXPECT_TRUE(haydn::hwloop::demoteStackCounterAdmissible(
+      /*LatchScrValid=*/true, /*HasImm=*/false,
+      /*PreheaderScrValid=*/false, /*AdjNonZero=*/false,
+      /*LatchScrIsPrefer=*/true));
+}
+
+// Cell (a) — no latch scratch at all: refuse regardless of everything else.
+TEST(HaydnHWLoopDemotePlacementTest, StackCounterNoLatchScratchRefuses) {
+  for (bool HasImm : {false, true})
+    for (bool PreheaderScrValid : {false, true})
+      for (bool AdjNonZero : {false, true})
+        for (bool LatchScrIsPrefer : {false, true})
+          EXPECT_FALSE(haydn::hwloop::demoteStackCounterAdmissible(
+              /*LatchScrValid=*/false, HasImm, PreheaderScrValid, AdjNonZero,
+              LatchScrIsPrefer));
+}
+
+// Cell (f) — imm trip: admission is exactly PreheaderScrValid (the imm
+// materialize window); Adj cannot be nonzero on this form.
+TEST(HaydnHWLoopDemotePlacementTest, StackCounterImmTripNeedsPreheaderScratch) {
+  EXPECT_TRUE(haydn::hwloop::demoteStackCounterAdmissible(
+      /*LatchScrValid=*/true, /*HasImm=*/true,
+      /*PreheaderScrValid=*/true, /*AdjNonZero=*/false,
+      /*LatchScrIsPrefer=*/false));
+  EXPECT_FALSE(haydn::hwloop::demoteStackCounterAdmissible(
+      /*LatchScrValid=*/true, /*HasImm=*/true,
+      /*PreheaderScrValid=*/false, /*AdjNonZero=*/false,
+      /*LatchScrIsPrefer=*/false));
+}
+
 } // namespace

@@ -3130,6 +3130,14 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     case Intrinsic::haydn_ldw_cb_reg:
     case Intrinsic::haydn_sdw_cb_imm:
     case Intrinsic::haydn_sdw_cb_reg:
+    // WUA-CB (AR_CBR): unaligned AR window + hardware circular post step.
+    case Intrinsic::haydn_pltwwua_cb_post:
+    case Intrinsic::haydn_plqhwua_cb_post:
+    case Intrinsic::haydn_ltwua_cb_post:
+    case Intrinsic::haydn_lqhwua_cb_post:
+    case Intrinsic::haydn_stwua_cb_post:
+    case Intrinsic::haydn_sqhwua_cb_post:
+    case Intrinsic::haydn_wbarwua_cb:
     // CBR-setup intrinsics (setcbr_begin/end) write CSRs — side-effecting
     // so they arrive as G_INTRINSIC_W_SIDE_EFFECTS.
     case Intrinsic::haydn_setcbr_begin:
@@ -6006,6 +6014,153 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
       return false;
     addCircularBufferUse(MI, CbrSel);
+    I.eraseFromParent();
+    return true;
+  }
+
+  //===---------------------------------------------------------------===
+  // WUA-CB (golden AR_CBR family): unaligned AR window access whose post
+  // step is the hardware circular wrap (rs += 8 against CBR_BEGIN/END).
+  // Unlike the linear UA family (dead writeback, C owns the cursor), the
+  // CB_POST writeback is LIVE — loads return {data, wrapped_ptr}, primes/
+  // stores return wrapped_ptr — because the next op's funnel selector is
+  // rs[2] / rs[2:1] of the wrapped value. ar_sel admits {0,1}; cbr_sel is
+  // the uimm1 CBR set (addCircularBufferUse for the SETCBR ordering edge).
+  // Logical dag is the member wire shape; occupancy binds positionally.
+  //===---------------------------------------------------------------===
+  case haydn_pltwwua_cb_post:
+  case haydn_plqhwua_cb_post: {
+    Register WbReg = I.getOperand(0).getReg();
+    uint64_t ArSel = 0, CbrSel = 0;
+    if (!getConstOpZExt(I.getOperand(2), ArSel) || !admitProductArSel(ArSel) ||
+        !getConstOpZExt(I.getOperand(3), CbrSel) ||
+        !expectUImm(static_cast<int64_t>(CbrSel), 1, "PL*_CB_POST cbr_sel")) {
+      LLVM_DEBUG(dbgs() << "PL*_CB_POST: ar_sel/cbr_sel must be constant 0/1\n");
+      return false;
+    }
+    Register PtrReg = I.getOperand(4).getReg();
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
+    if (PtrReg.isVirtual())
+      RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
+    unsigned Opc = (IntrID == haydn_pltwwua_cb_post) ? PLTWWUA_CB_POST
+                                                     : PLQHWUA_CB_POST;
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    MachineInstr *MI = MIB.buildInstr(Opc)
+                           .addDef(WbReg)
+                           .addImm(static_cast<int64_t>(ArSel))
+                           .addImm(CbrSel)
+                           .addReg(PtrReg)
+                           .addDef(ArRegs[ArSel], RegState::Implicit);
+    if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
+      return false;
+    addCircularBufferUse(MI, CbrSel);
+    I.eraseFromParent();
+    return true;
+  }
+  case haydn_ltwua_cb_post:
+  case haydn_lqhwua_cb_post: {
+    Register DataReg = I.getOperand(0).getReg();
+    Register WbReg = I.getOperand(1).getReg();
+    Register PtrReg = I.getOperand(3).getReg();
+    uint64_t ArSel = 0, CbrSel = 0;
+    if (!getConstOpZExt(I.getOperand(4), ArSel) || !admitProductArSel(ArSel) ||
+        !getConstOpZExt(I.getOperand(5), CbrSel) ||
+        !expectUImm(static_cast<int64_t>(CbrSel), 1, "D_L*UA_CB_POST cbr_sel")) {
+      LLVM_DEBUG(dbgs() << "D_L*UA_CB_POST: ar_sel/cbr_sel must be 0/1\n");
+      return false;
+    }
+    if (DataReg.isVirtual())
+      RBI.constrainGenericRegister(DataReg, DR64RegClass, MRI);
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
+    if (PtrReg.isVirtual())
+      RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
+    unsigned Opc = (IntrID == haydn_ltwua_cb_post) ? D_LTWUA_CB_POST
+                                                   : D_LQHWUA_CB_POST;
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    MachineInstr *MI = MIB.buildInstr(Opc)
+                           .addDef(DataReg)
+                           .addDef(WbReg)
+                           .addImm(static_cast<int64_t>(ArSel))
+                           .addImm(CbrSel)
+                           .addReg(PtrReg)
+                           .addDef(ArRegs[ArSel], RegState::Implicit)
+                           .addUse(ArRegs[ArSel],
+                                   RegState::Implicit | RegState::Undef);
+    if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
+      return false;
+    addCircularBufferUse(MI, CbrSel);
+    I.eraseFromParent();
+    return true;
+  }
+  case haydn_stwua_cb_post:
+  case haydn_sqhwua_cb_post: {
+    Register WbReg = I.getOperand(0).getReg();
+    Register DataReg = I.getOperand(2).getReg();
+    Register PtrReg = I.getOperand(3).getReg();
+    uint64_t ArSel = 0, CbrSel = 0;
+    if (!getConstOpZExt(I.getOperand(4), ArSel) || !admitProductArSel(ArSel) ||
+        !getConstOpZExt(I.getOperand(5), CbrSel) ||
+        !expectUImm(static_cast<int64_t>(CbrSel), 1, "D_S*UA_CB_POST cbr_sel")) {
+      LLVM_DEBUG(dbgs() << "D_S*UA_CB_POST: ar_sel/cbr_sel must be 0/1\n");
+      return false;
+    }
+    if (DataReg.isVirtual())
+      RBI.constrainGenericRegister(DataReg, DR64RegClass, MRI);
+    if (PtrReg.isVirtual())
+      RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
+    unsigned Opc = (IntrID == haydn_stwua_cb_post) ? D_STWUA_CB_POST
+                                                   : D_SQHWUA_CB_POST;
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    MachineInstr *MI = MIB.buildInstr(Opc)
+                           .addDef(WbReg)
+                           .addImm(static_cast<int64_t>(ArSel))
+                           .addImm(CbrSel)
+                           .addReg(DataReg)
+                           .addReg(PtrReg)
+                           .addDef(ArRegs[ArSel], RegState::Implicit)
+                           .addUse(ArRegs[ArSel],
+                                   RegState::Implicit | RegState::Undef);
+    if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
+      return false;
+    addCircularBufferUse(MI, CbrSel);
+    I.eraseFromParent();
+    return true;
+  }
+  case haydn_wbarwua_cb: {
+    // Golden WBARWUA_CB has NO rs writeback field ((outs) empty) — do not
+    // fabricate a def on the instruction. Copy the unchanged cursor into
+    // the intrinsic result instead.
+    Register WbReg = I.getOperand(0).getReg();
+    uint64_t ArSel = 0, CbrSel = 0;
+    if (!getConstOpZExt(I.getOperand(2), ArSel) || !admitProductArSel(ArSel) ||
+        !getConstOpZExt(I.getOperand(3), CbrSel) ||
+        !expectUImm(static_cast<int64_t>(CbrSel), 1, "WBARWUA_CB cbr_sel")) {
+      LLVM_DEBUG(dbgs() << "WBARWUA_CB: ar_sel/cbr_sel must be constant 0/1\n");
+      return false;
+    }
+    Register PtrReg = I.getOperand(4).getReg();
+    if (WbReg.isVirtual())
+      RBI.constrainGenericRegister(WbReg, GPR32RegClass, MRI);
+    if (PtrReg.isVirtual())
+      RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
+    static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    MachineInstr *MI = MIB.buildInstr(WBARWUA_CB)
+                           .addImm(static_cast<int64_t>(ArSel))
+                           .addImm(CbrSel)
+                           .addReg(PtrReg)
+                           .addDef(ArRegs[ArSel], RegState::Implicit)
+                           .addUse(ArRegs[ArSel],
+                                   RegState::Implicit | RegState::Undef);
+    if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
+      return false;
+    addCircularBufferUse(MI, CbrSel);
+    // rs is architecturally unchanged by WBARWUA_CB: materialize the
+    // intrinsic's ptr result as a copy of the input cursor.
+    MIB.buildCopy(WbReg, PtrReg);
     I.eraseFromParent();
     return true;
   }

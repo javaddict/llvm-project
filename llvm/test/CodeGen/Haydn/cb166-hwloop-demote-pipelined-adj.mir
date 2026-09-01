@@ -1,0 +1,153 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+
+# Role: MIR — CB-166-F demote of pipelined LoopStart $trip, -S must install
+# remaining kernel trip Prefer+Adj, not restart full N after an SMS peel.
+#
+# haydn-hwloops demotes a body-resolvable preflight fail before Role-A Adj
+# remat, so LoopStart op1 still holds the signed peel addend. Remaining
+# software-loop trip is Prefer+Adj (AIE SetLoopCount LC, src, adj).
+#
+#   * cond early-exit: GPR countdown — Adj!=0 ADDI dest!=Prefer (copy or
+#     scratch), then SUBI32/BNEZ. CountReg==Prefer is Adj==0 only.
+#   * body call: stack-counter — ADDI scratch, Prefer, -S stored;
+#     Prefer left intact (never $r2 = ADDI $r2).
+#   * adj=0 sibling: no extra ADDI ..., -S.
+# Oversize geometry shares the same helper; this pin does not invent a
+# 16kB NOP body.
+
+--- |
+  define dso_local void @demote_adj_gpr_countdown(ptr %p, i32 %c) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br i1 undef, label %exit, label %body
+  exit:
+    ret void
+  }
+
+  define dso_local void @demote_adj0_gpr_countdown(ptr %p, i32 %c) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %p
+    br i1 undef, label %exit, label %body
+  exit:
+    ret void
+  }
+
+  define dso_local void @demote_adj_stack_counter(ptr %p) {
+  entry:
+    br label %body
+  body:
+    call void @ext(ptr %p)
+    br label %exit
+  exit:
+    ret void
+  }
+  declare void @ext(ptr)
+...
+
+---
+name:            demote_adj_gpr_countdown
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, -1
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ST32 $r0, $r1, 0
+    BNEZ_W $r2, %bb.2
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+# CHECK-LABEL: name: demote_adj_gpr_countdown
+# Remaining trip Prefer+Adj. Adj!=0 ADDI dest!=Prefer, src=Prefer (AIE
+# LC-vs-src). Member name is ADDI32{{[^ ]*}}, not ADDI32_E2. Dest regex
+# excludes $r3 so FileCheck cannot match an in-place -S ADDI as this CHECK.
+# CHECK-NOT: $r3 = ADDI32{{[^ ]*}} $r3
+# CHECK: $r{{[012]|[4-9]|1[0-5]}} = ADDI32{{[^ ]*}} $r3, -1
+# CHECK: SUBI32{{.*}}, 1
+# CHECK: BNEZ
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopStart
+# CHECK-NOT: PseudoLoopEnd
+
+---
+name:            demote_adj0_gpr_countdown
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r3 = ADDI32_W $r0, 8
+    LoopStart $r3, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ST32 $r0, $r1, 0
+    BNEZ_W $r2, %bb.2
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+# CHECK-LABEL: name: demote_adj0_gpr_countdown
+# Adj==0: CountReg==Prefer is legal; no extra ADDI ..., -S.
+# CHECK-NOT: ADDI32{{[^ ]*}} {{.*}}, -1
+# CHECK: SUBI32{{.*}}, 1
+# CHECK: BNEZ
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopStart
+# CHECK-NOT: PseudoLoopEnd
+
+---
+name:            demote_adj_stack_counter
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, -1
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    $r15 = JAL_W @ext, csr_haydn, implicit-def $r1, implicit $r1, implicit-def $r15
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r15
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+# CHECK-LABEL: name: demote_adj_stack_counter
+# Stack arm must ADDI into scratch from Prefer, not clobber $r2 in-place.
+# CHECK-NOT: $r2 = ADDI32{{[^ ]*}} $r2
+# CHECK: ADDI32{{[^ ]*}} $r2, -1
+# CHECK: SUBI32{{.*}}, 1
+# CHECK: BNEZ
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopStart
+# CHECK-NOT: PseudoLoopEnd

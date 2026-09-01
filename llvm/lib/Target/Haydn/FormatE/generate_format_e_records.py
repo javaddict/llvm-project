@@ -3,6 +3,7 @@
 
 Emits HaydnGenFormatERecords.inc, HaydnGenFormatESetDescLedger.inc,
 HaydnFormatsE96Members.td.inc (LIVE Inst{}), HaydnGenFormatEMemberOpcodes.inc,
+HaydnGenRelocFieldLsb.inc (FieldLsbSites + ExtraPublishedLsb),
 and the MC mnemonic round-trip harness (test/MC/Haydn/format-e-mnemonic-roundtrip.s).
 Product encode/decode: BUNDLE_E96 framing + tblgen on these members.
 
@@ -14,7 +15,7 @@ Usage:
 
 --check regenerates into memory and diffs against the committed files, then
 fail-closes on XLSX↔JSON layout parity, td-vs-golden imm width/signedness,
-and canonical-vector ledger round-trip.
+canonical-vector ledger round-trip, and reloc FieldLsb site drift.
 It does not write, and it does not drive llvm-mc (ledger may_drive_llvm_mc_encode
 is false). Peer: BundleSim generate_catalog.py --check
 (bundlesim/isa/database/generate_catalog.py:483-485).
@@ -33,7 +34,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from family_core import (
     AUTHORED_OVERLAY_PATH,
@@ -874,6 +875,516 @@ def emit_records_inc(
     lines.append("#endif // GET_FORMAT_E_UNIT_INJECTIVITY")
     lines.append("")
 
+    return "\n".join(lines) + "\n"
+
+
+# Reloc FieldLsbSites / ExtraPublishedLsb. Parcel-absolute imm LSBs from
+# generated members. RelocKind / scale / ELF rows stay hand-authored in
+# HaydnRelocLayout.cpp; Loc sniffing stays resolveFieldLsb.
+RELOC_FIELD_LSB_INC = "HaydnGenRelocFieldLsb.inc"
+# Same unit numbers as HaydnRelocLayout (ALU0=0 … LOADSTORE0=4).
+_RELOC_UNIT_INDEX = {
+    "ALU0": 0,
+    "ALU1": 1,
+    "ALU2": 2,
+    "LOAD1": 3,
+    "LOADSTORE0": 4,
+}
+_RELOC_UNIT_TOKEN = {
+    0xFF: "kAnyUnit",
+    0: "kALU0",
+    1: "kALU1",
+    2: "kALU2",
+    3: "kLOAD1",
+    4: "kLS0",
+}
+_RELOC_LS_UNITS = frozenset({"LOADSTORE0", "LOAD1"})
+# Type+opcode → RelocKind, mirroring HaydnRelocLayout TypeFixupSpecs.
+# RI20 also twins to PC_LO20 (same windows, PC-rel kind overlay).
+_RELOC_TYPE_SPECS: Tuple[Tuple[str, int, int, str, int, bool], ...] = (
+    ("I12", 1, 1, "HI12", 12, False),
+    ("I12", 4, 7, "WIDE_BranchSImm12", 12, False),
+    ("RI12", 1, 1, "JALRSImm12", 12, False),
+    ("RI12", 2, 7, "WIDE_BranchSImm12_RI", 12, False),
+    ("I20", 1, 1, "WIDE_CallSImm20", 20, False),
+    ("RI20", 1, 7, "LO20", 20, False),
+    ("RI6", 0, 255, "LS_IMM", 6, True),
+    ("I8", 4, 5, "CSR_UImm8", 8, False),
+)
+_RELOC_KIND_ORDER = (
+    "HI12",
+    "LO20",
+    "PC_LO20",
+    "LS_IMM",
+    "CSR_UImm8",
+    "JALRSImm12",
+    "WIDE_BranchSImm12",
+    "WIDE_BranchSImm12_RI",
+    "WIDE_CallSImm20",
+    "HWLoopOff1",
+    "HWLoopOff2",
+)
+_RELOC_KIND_COMMENT = {
+    "HI12": "HI12 / LUI I12",
+    "LO20": "LO20 / PC_LO20 — RI20 is E2-only",
+    "LS_IMM": "LS_IMM RI6",
+    "CSR_UImm8": "CSR I8",
+    "JALRSImm12": "JALR RI12",
+    "WIDE_BranchSImm12": "I12 / RI12 cond-branch",
+    "WIDE_CallSImm20": "JAL I20",
+    "HWLoopOff1": "SET_HWLOOP F2 (HWLRIIR); HWLRIII extras below",
+}
+# E2 e0 RelocFieldInfo defaults (hand table in HaydnRelocLayout.cpp).
+_RELOC_TABLE_LSB = {
+    "HI12": 32,
+    "LO20": 31,
+    "PC_LO20": 31,
+    "LS_IMM": 28,
+    "CSR_UImm8": 32,
+    "JALRSImm12": 32,
+    "WIDE_BranchSImm12": 32,
+    "WIDE_BranchSImm12_RI": 32,
+    "WIDE_CallSImm20": 31,
+    "HWLoopOff1": 32,
+    "HWLoopOff2": 38,
+}
+# RelocLayoutTest PublishedMemberFieldLsbAndFixupFields windows. Do not
+# invent LSBs; fail generation if a committed test window drops or an
+# unpublished window appears.
+_RELOC_TEST_PUBLISHED = (
+    ("JALRSImm12", 32),
+    ("JALRSImm12", 23),
+    ("JALRSImm12", 54),
+    ("HI12", 32),
+    ("HI12", 21),
+    ("HI12", 23),
+    ("HI12", 54),
+    ("HI12", 81),
+    ("HI12", 83),
+    ("PC_LO20", 31),
+    ("PC_LO20", 65),
+    ("LO20", 65),
+    ("LS_IMM", 28),
+    ("LS_IMM", 72),
+    ("LS_IMM", 25),
+    ("LS_IMM", 54),
+    ("LS_IMM", 85),
+    ("WIDE_CallSImm20", 31),
+    ("WIDE_CallSImm20", 17),
+    ("WIDE_CallSImm20", 48),
+    ("WIDE_BranchSImm12", 32),
+    ("WIDE_BranchSImm12", 23),
+    ("WIDE_BranchSImm12", 54),
+    ("WIDE_BranchSImm12", 81),
+    ("CSR_UImm8", 32),
+    ("CSR_UImm8", 27),
+    ("CSR_UImm8", 23),
+    ("CSR_UImm8", 54),
+    ("CSR_UImm8", 85),
+    ("HWLoopOff1", 32),
+    ("HWLoopOff1", 13),
+    ("HWLoopOff2", 38),
+    ("HWLoopOff2", 36),
+)
+_RELOC_TEST_UNPUBLISHED = (
+    ("JALRSImm12", 81),
+    ("JALRSImm12", 99),
+    ("PC_LO20", 23),
+    # E2 e1 has no I12/I8 member at golden v2_2 — no such window exists.
+    ("HI12", 65),
+    ("CSR_UImm8", 65),
+)
+# resolveFieldLsbForMember(kind, mode, entry, unit|None) → lsb
+_RELOC_TEST_MEMBER = (
+    ("HI12", 0, 0, None, 32),
+    ("HI12", 1, 0, 2, 21),
+    ("HI12", 1, 0, 0, 23),
+    ("HI12", 1, 1, None, 54),
+    ("HI12", 1, 2, 2, 83),
+    ("HI12", 1, 2, 0, 81),
+    ("HI12", 1, 0, 0, 23),
+    ("HI12", 1, 1, 0, 54),
+    ("HI12", 1, 1, 1, 54),
+    ("LO20", 0, 0, 0, 31),
+    ("LO20", 0, 1, 1, 65),
+    ("PC_LO20", 0, 1, 1, 65),
+    ("PC_LO20", 1, 0, 0, 31),
+    ("JALRSImm12", 0, 0, 0, 32),
+    ("JALRSImm12", 1, 0, 0, 23),
+    ("JALRSImm12", 1, 1, 0, 54),
+    ("JALRSImm12", 1, 2, 0, 32),
+    ("WIDE_BranchSImm12", 1, 2, None, 81),
+    ("CSR_UImm8", 0, 0, None, 32),
+    ("CSR_UImm8", 1, 0, 2, 27),
+    ("CSR_UImm8", 1, 0, 0, 23),
+    ("CSR_UImm8", 1, 1, 0, 54),
+    ("CSR_UImm8", 1, 1, 1, 54),
+    ("CSR_UImm8", 1, 2, 2, 85),
+    ("CSR_UImm8", 1, 2, 0, 85),
+    ("CSR_UImm8", 1, 2, None, 85),
+    # E2 e1: no I12/I8 member exists — both kinds fail closed to the E2
+    # e0 table default (D1.24 structural law; no E2-e1 window is minted).
+    ("HI12", 0, 1, 1, 32),
+    ("CSR_UImm8", 0, 1, 1, 32),
+)
+# D1.17 sniff-pin cross-validation: (kind, mode, entry, unit) → the
+# member-opcode set the C++ Loc-sniff pins must accept. Derived from the
+# golden mapping tables; --check additionally asserts that members of
+# OTHER units at the same (mode, entry) sharing (map, type) have opcodes
+# DISJOINT from the kind range — the generated proof that the opc pin
+# separates members (this is exactly what failed for D1.17: a BEQZ at
+# E3 e1 ALU0 satisfied the LUI (map,type) predicate).
+_RELOC_SNIFF_PIN = (
+    # HI12: LUI opcode 1 at every generated site.
+    ("HI12", 0, 0, 0, (1,)),
+    ("HI12", 1, 0, 0, (1,)),
+    ("HI12", 1, 0, 2, (1,)),
+    ("HI12", 1, 1, 0, (1,)),
+    ("HI12", 1, 1, 1, (1,)),
+    ("HI12", 1, 2, 0, (1,)),
+    ("HI12", 1, 2, 2, (1,)),
+    # CSR_UImm8: CSRR 4 / CSRW 5 at every generated site.
+    ("CSR_UImm8", 0, 0, 0, (4, 5)),
+    ("CSR_UImm8", 1, 0, 0, (4, 5)),
+    ("CSR_UImm8", 1, 0, 2, (4, 5)),
+    ("CSR_UImm8", 1, 1, 0, (4, 5)),
+    ("CSR_UImm8", 1, 1, 1, (4, 5)),
+    ("CSR_UImm8", 1, 2, 0, (4, 5)),
+    ("CSR_UImm8", 1, 2, 2, (4, 5)),
+)
+# Kinds whose non-default windows got D1.17 entry-qualified ELF twins.
+# (kind, mode, entry, unit|None, qualified-enum-value) mirroring
+# HaydnRelocLayout RelocKind 34..42. None unit == both units share it.
+_RELOC_QUALIFIED_KINDS = (
+    ("HI12", 1, 0, 2, "HI12_E3E0_ALU2", 34, 21),
+    ("HI12", 1, 0, 0, "HI12_E3E0_ALU0", 35, 23),
+    ("HI12", 1, 1, None, "HI12_E3E1", 36, 54),
+    ("HI12", 1, 2, 2, "HI12_E3E2_ALU2", 37, 83),
+    ("HI12", 1, 2, 0, "HI12_E3E2_ALU0", 38, 81),
+    ("CSR_UImm8", 1, 0, 2, "CSR_UImm8_E3E0_ALU2", 39, 27),
+    ("CSR_UImm8", 1, 0, 0, "CSR_UImm8_E3E0_ALU0", 40, 23),
+    ("CSR_UImm8", 1, 1, None, "CSR_UImm8_E3E1", 41, 54),
+    ("CSR_UImm8", 1, 2, None, "CSR_UImm8_E3E2", 42, 85),
+)
+
+
+def _reloc_imm_lsb(lay: TypeLayout, width: int, role: Optional[str] = None) -> int:
+    hits: List[int] = []
+    want = (role or "").lower()
+    for of in lay.operand_fields:
+        if of.bits.width != width:
+            continue
+        r = of.role.lower()
+        aliases = ",".join(a.lower() for a in of.aliases)
+        if want:
+            if r == want or r.startswith(want):
+                hits.append(of.bits.lo)
+            continue
+        if "imm" in r or "off" in r or "imm" in aliases or "off" in aliases:
+            hits.append(of.bits.lo)
+    if len(hits) != 1:
+        raise SystemExit(
+            f"reloc FieldLsb: {lay.mode} e{lay.entry_idx} {lay.unit} "
+            f"{lay.type_name} width={width} role={role!r} hits={hits}"
+        )
+    return hits[0]
+
+
+def _collect_reloc_field_lsb(
+    cat: Catalog,
+) -> Tuple[List[Tuple[str, int, int, int, int]], List[Tuple[str, int]]]:
+    """Return (FieldLsbSites, ExtraPublishedLsb) from generated members.
+
+    HWLRIIR is the unique (kind, mode, entry) site; HWLRIII LSBs that share
+    that key go to ExtraPublishedLsb (E2 e0 Off1@13 / Off2@36). Unique LSB
+    at a (kind, mode, entry) collapses to kAnyUnit=0xff so a unit-omitted
+    resolveFieldLsbForMember query still hits the typed window.
+    """
+    layouts = {l.layout_id: l for l in cat.layouts}
+    # (kind, mode, entry, unit) -> set of LSBs
+    raw: Dict[Tuple[str, int, int, int], set] = defaultdict(set)
+
+    def add_site(kind: str, rec: MemberRecord, lsb: int) -> None:
+        unit = _RELOC_UNIT_INDEX.get(rec.unit)
+        if unit is None:
+            raise SystemExit(
+                f"reloc FieldLsb: unknown unit {rec.unit!r} on {rec.member_symbol}"
+            )
+        mode = 0 if rec.mode == "E2" else 1
+        raw[(kind, mode, rec.entry_idx, unit)].add(lsb)
+
+    for rec in cat.members:
+        if rec.is_nop:
+            continue
+        lay = layouts[rec.layout_id]
+        if rec.type_name == "HWLRIIR":
+            add_site("HWLoopOff1", rec, _reloc_imm_lsb(lay, 6, "imm1"))
+            add_site("HWLoopOff2", rec, _reloc_imm_lsb(lay, 12, "imm2"))
+            continue
+        if rec.type_name == "HWLRIII":
+            # Colliding extras are applied after HWLRIIR unique sites.
+            continue
+        for type_name, opc_lo, opc_hi, kind, width, require_ls in _RELOC_TYPE_SPECS:
+            if rec.type_name != type_name:
+                continue
+            if rec.opcode < opc_lo or rec.opcode > opc_hi:
+                continue
+            if require_ls and rec.unit not in _RELOC_LS_UNITS:
+                continue
+            add_site(kind, rec, _reloc_imm_lsb(lay, width))
+            if kind == "LO20":
+                add_site("PC_LO20", rec, _reloc_imm_lsb(lay, width))
+
+    # Unique site per (kind, mode, entry, unit). Multiple LSBs here are a
+    # generator bug (HWLRIII collision is handled separately).
+    unique: Dict[Tuple[str, int, int, int], int] = {}
+    for key, lsbs in raw.items():
+        if len(lsbs) != 1:
+            raise SystemExit(f"reloc FieldLsb collision at {key}: {sorted(lsbs)}")
+        unique[key] = next(iter(lsbs))
+
+    extras: Dict[Tuple[str, int], None] = {}
+    for rec in cat.members:
+        if rec.is_nop or rec.type_name != "HWLRIII":
+            continue
+        lay = layouts[rec.layout_id]
+        unit = _RELOC_UNIT_INDEX.get(rec.unit)
+        if unit is None:
+            raise SystemExit(
+                f"reloc FieldLsb: unknown unit {rec.unit!r} on {rec.member_symbol}"
+            )
+        mode = 0 if rec.mode == "E2" else 1
+        for kind, width, role in (
+            ("HWLoopOff1", 6, "imm1"),
+            ("HWLoopOff2", 12, "imm2"),
+        ):
+            lsb = _reloc_imm_lsb(lay, width, role)
+            taken = [
+                v
+                for (k, m, e, _u), v in unique.items()
+                if k == kind and m == mode and e == rec.entry_idx
+            ]
+            if taken and lsb not in taken:
+                extras[(kind, lsb)] = None
+            elif not taken:
+                unique[(kind, mode, rec.entry_idx, unit)] = lsb
+
+    # Collapse (kind, mode, entry) to kAnyUnit when every unit shares one LSB.
+    collapsed: Dict[Tuple[str, int, int, int], int] = {}
+    by_entry: Dict[Tuple[str, int, int], Dict[int, int]] = defaultdict(dict)
+    for (kind, mode, entry, unit), lsb in unique.items():
+        by_entry[(kind, mode, entry)][unit] = lsb
+    for (kind, mode, entry), unit_lsbs in by_entry.items():
+        lsb_vals = set(unit_lsbs.values())
+        if len(lsb_vals) == 1:
+            collapsed[(kind, mode, entry, 0xFF)] = next(iter(lsb_vals))
+        else:
+            for unit, lsb in unit_lsbs.items():
+                collapsed[(kind, mode, entry, unit)] = lsb
+
+    def site_key(row: Tuple[str, int, int, int, int]) -> Tuple:
+        kind, mode, entry, unit, lsb = row
+        kind_i = _RELOC_KIND_ORDER.index(kind)
+        any_flag = 0 if unit == 0xFF else 1
+        unit_desc = 0 if unit == 0xFF else -unit
+        return (kind_i, mode, entry, any_flag, unit_desc, lsb)
+
+    sites = [
+        (kind, mode, entry, unit, lsb)
+        for (kind, mode, entry, unit), lsb in collapsed.items()
+    ]
+    sites.sort(key=site_key)
+    extra_rows = sorted(
+        extras,
+        key=lambda kv: (_RELOC_KIND_ORDER.index(kv[0]), kv[1]),
+    )
+    return sites, extra_rows
+
+
+def _reloc_resolve_for_member(
+    sites: Sequence[Tuple[str, int, int, int, int]],
+    kind: str,
+    mode: int,
+    entry: int,
+    unit: Optional[int],
+) -> int:
+    want = 0xFF if unit is None else unit
+    wildcard: Optional[int] = None
+    for k, m, e, u, lsb in sites:
+        if k != kind or m != mode or e != entry:
+            continue
+        if want != 0xFF and u == want:
+            return lsb
+        if u == 0xFF:
+            wildcard = lsb
+    if wildcard is not None:
+        return wildcard
+    return _RELOC_TABLE_LSB[kind]
+
+
+def _check_reloc_test_windows(
+    sites: Sequence[Tuple[str, int, int, int, int]],
+    extras: Sequence[Tuple[str, int]],
+) -> None:
+    published = {(k, lsb) for k, _m, _e, _u, lsb in sites}
+    published.update(extras)
+    for kind, lsb in _RELOC_TEST_PUBLISHED:
+        table = _RELOC_TABLE_LSB[kind]
+        if (kind, lsb) not in published and lsb != table:
+            raise SystemExit(
+                f"reloc FieldLsb: dropped RelocLayoutTest window {kind}@{lsb}"
+            )
+    for kind, lsb in _RELOC_TEST_UNPUBLISHED:
+        table = _RELOC_TABLE_LSB[kind]
+        if (kind, lsb) in published or lsb == table:
+            raise SystemExit(
+                f"reloc FieldLsb: unpublished RelocLayoutTest window {kind}@{lsb} "
+                "became published"
+            )
+    for kind, mode, entry, unit, expect in _RELOC_TEST_MEMBER:
+        got = _reloc_resolve_for_member(sites, kind, mode, entry, unit)
+        if got != expect:
+            raise SystemExit(
+                f"reloc FieldLsb: resolveFieldLsbForMember({kind}, {mode}, "
+                f"{entry}, {unit}) = {got} want {expect}"
+            )
+    # D1.17 qualified-kind ratchet: every (kind, mode, entry, unit) site
+    # whose typed window differs from the base row must resolve to exactly
+    # the minted qualified row's window, and no extra non-default site may
+    # appear (a new golden admission fails here until a twin is minted).
+    covered: Set[Tuple[str, int, int]] = set()
+    for kind, mode, entry, unit, _name, _val, want_lsb in _RELOC_QUALIFIED_KINDS:
+        got = _reloc_resolve_for_member(sites, kind, mode, entry, unit)
+        if got != want_lsb or got == _RELOC_TABLE_LSB[kind]:
+            raise SystemExit(
+                f"reloc FieldLsb: qualified twin {kind}@({mode},{entry},"
+                f"{unit}) resolves {got}, want the typed window {want_lsb} "
+                "(non-default)"
+            )
+        covered.add((kind, mode, entry))
+    for kind, mode, entry, unit, lsb in sites:
+        if kind not in ("HI12", "CSR_UImm8"):
+            continue
+        if lsb == _RELOC_TABLE_LSB[kind] or (kind, mode, entry) in covered:
+            continue
+        raise SystemExit(
+            f"reloc FieldLsb: non-default {kind}@({mode},{entry},{unit})"
+            f"={lsb} has no entry-qualified ELF twin — mint one or drop "
+            "the site"
+        )
+
+
+def _check_reloc_sniff_pins(cat: Catalog) -> None:
+    """D1.17 generator ratchet: the C++ Loc-sniff opc pins separate members.
+
+    For every (kind, mode, entry, unit) sniff site: the golden mapping at
+    that site must host the pinned opcode(s), and every OTHER golden
+    member at the same (mode, entry) sharing (map, type_code) — the
+    predicate the pre-D1.17 sniff used alone — must have an opcode
+    DISJOINT from the pin set. That is the generated proof the opc pin
+    removes the D1.17 wrong-window ambiguity (BEQZ at E3 e1 ALU0 satisfied
+    the LUI (map,type); ZERO_GPR at E3 e0 ALU0 satisfied the CSR
+    (map,type)). ALU0 sites (and E2 e0) MUST have non-empty sharing —
+    that golden fact is why the pins exist; if a future golden revision
+    drops the sharing the pin becomes vacuous and this ratchet says so.
+    """
+    for kind, mode, entry, unit, pins in _RELOC_SNIFF_PIN:
+        type_name = "I12" if kind == "HI12" else "I8"
+        mode_s = "E3" if mode else "E2"
+        site = None
+        for rec in cat.members:
+            if rec.is_nop or rec.mode != mode_s:
+                continue
+            if rec.entry_idx != entry or rec.type_name != type_name:
+                continue
+            if _RELOC_UNIT_INDEX.get(rec.unit) != unit:
+                continue
+            if rec.opcode in pins:
+                site = rec
+                break
+        if site is None:
+            raise SystemExit(
+                f"reloc sniff pin: no {kind} member at ({mode},{entry},"
+                f"{unit}) with opcode in {pins}"
+            )
+        sharing: Set[int] = set()
+        for rec in cat.members:
+            if rec.is_nop or rec.mode != mode_s:
+                continue
+            if rec.entry_idx != entry:
+                continue
+            if rec.unit_map != site.unit_map or rec.type_code != site.type_code:
+                continue
+            if rec.opcode in pins:
+                continue
+            sharing.add(rec.opcode)
+        if sharing & set(pins):
+            raise SystemExit(
+                f"reloc sniff pin: {kind}@({mode},{entry},{unit}) pin set "
+                f"{pins} collides with sharing opcodes {sorted(sharing)}"
+            )
+        # ALU0 I12/I8 sites (and E2 e0) host the branch/ZERO_* sharing in
+        # golden v2_2 — the ambiguity the pin removes. Fail if it vanishes
+        # so the pin's reason is re-audited rather than silently vacuous.
+        if unit == 0 and not sharing:
+            raise SystemExit(
+                f"reloc sniff pin: {kind}@({mode},{entry},ALU0) expected "
+                "non-empty (map,type) sharing (branches/ZERO_*); opc pin "
+                "would be vacuous — re-audit golden"
+            )
+
+
+def emit_reloc_field_lsb_inc(cat: Catalog, json_sha: str, xlsx_sha: str, family) -> str:
+    sites, extras = _collect_reloc_field_lsb(cat)
+    _check_reloc_test_windows(sites, extras)
+    _check_reloc_sniff_pins(cat)
+    if not extras:
+        raise SystemExit(
+            "reloc FieldLsb: ExtraPublishedLsb empty (HWLRIII Off1/Off2 missing)"
+        )
+    lines: List[str] = []
+    lines.append(
+        "//===-- HaydnGenRelocFieldLsb.inc - reloc FieldLsb sites -*- C++ -*-===//"
+    )
+    lines.append("//")
+    lines.extend(
+        generated_banner(
+            generator=RECORDS_GENERATOR,
+            family=family,
+            json_sha=json_sha,
+            xlsx_sha=xlsx_sha,
+        )
+    )
+    lines.append("//")
+    lines.append("// Parcel-absolute FieldLsb from generated Format E members.")
+    lines.append("// RelocKind / scale / ELF rows stay in HaydnRelocLayout.cpp.")
+    lines.append("//===----------------------------------------------------------------------===//")
+    lines.append("")
+    lines.append("#ifdef GET_HAYDN_RELOC_FIELD_LSB")
+    lines.append("#undef GET_HAYDN_RELOC_FIELD_LSB")
+    lines.append("constexpr FieldLsbSite FieldLsbSites[] = {")
+    last_kind = None
+    for kind, mode, entry, unit, lsb in sites:
+        comment = _RELOC_KIND_COMMENT.get(kind)
+        if comment and kind != last_kind:
+            lines.append(f"    // {comment}")
+            last_kind = kind
+        elif kind != last_kind:
+            last_kind = kind
+        tok = _RELOC_UNIT_TOKEN.get(unit)
+        if tok is None:
+            raise SystemExit(f"reloc FieldLsb: no token for unit {unit}")
+        lines.append(
+            f"    {{RelocKind::{kind}, {mode}, {entry}, {tok}, {lsb}}},"
+        )
+    lines.append("};")
+    lines.append("")
+    lines.append("constexpr ExtraLsb ExtraPublishedLsb[] = {")
+    for kind, lsb in extras:
+        lines.append(f"    {{RelocKind::{kind}, {lsb}}},")
+    lines.append("};")
+    lines.append("#endif // GET_HAYDN_RELOC_FIELD_LSB")
+    lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -3628,7 +4139,14 @@ def emit_logical_defs_td_inc(
         # Loads may wrap the mem read in a conversion (ZEXT8->32(mem8[..]),
         # SEXT16->32(...)); match '=' then any cast prefix then mem[..].
         may_load = 1 if re.search(r"=\s*[\w>\-]*\s*\(?\s*mem\w*\[", beh) else 0
-        may_store = 1 if re.search(r"mem\w*\[[^]]*\]\s*=", beh) else 0
+        # Stores may bit-select the mem64 line (`mem64[..][15:00] = ...`,
+        # WBARWUA_CB partial residual write) — allow one [..] index before
+        # the closing '=' (2026-08-28: golden v2_2 AR_CBR WBARWUA_CB).
+        may_store = (
+            1
+            if re.search(r"mem\w*\[[^]]*\](?:\[[^]]*\])?\s*=", beh)
+            else 0
+        )
         # Def AsmString: user-mnemonic LS aliases (ld32/st32/...) are OWNED
         # by the canonical defs in HaydnInstrInfo.td (LD32 etc.); emitting
         # them here would duplicate the mnemonic and fail the match closed.
@@ -4572,6 +5090,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     records = emit_records_inc(cat, json_sha, xlsx_sha, family)
+    reloc_lsb = emit_reloc_field_lsb_inc(cat, json_sha, xlsx_sha, family)
     ledger = emit_setdesc_ledger_inc(cat, family)
     index_path = golden / family.index_filename
     if not index_path.is_file():
@@ -4745,6 +5264,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     targets = {
         out_dir / family.records_inc: records,
+        out_dir / RELOC_FIELD_LSB_INC: reloc_lsb,
         out_dir / family.setdesc_ledger_inc: ledger,
         out_dir / family.members_td_inc: members_td,
         out_dir / family.logical_defs_td_inc: logical_defs_td,

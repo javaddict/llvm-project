@@ -174,9 +174,9 @@ define i32 @test_forces_callee_saved() nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r3, sp, 2 } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r3 }

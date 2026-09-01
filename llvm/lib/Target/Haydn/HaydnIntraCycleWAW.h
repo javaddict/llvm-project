@@ -35,8 +35,9 @@
 //
 // Register identity rule (same as the RAW law): virtual registers (pre-RA)
 // match by Register identity; physical registers use TRI::regsOverlap for
-// alias/subreg overlap. SFR is a physreg and is deliberately INCLUDED (unlike
-// the RAW law, which excludes it); R0 is included. A null TRI disables
+// alias/subreg overlap. SFR is a physreg and is deliberately INCLUDED (live
+// SFR is also in the RAW live-def set; leftover unnamed dead $sfr stays
+// RAW-legal via isDead). R0 is included. A null TRI disables
 // physreg alias checks only — vreg identity checks still work.
 //
 //===----------------------------------------------------------------------===//

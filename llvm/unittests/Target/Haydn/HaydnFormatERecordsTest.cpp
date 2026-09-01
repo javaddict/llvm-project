@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnFormatERecords.h"
+#include "HaydnBundlePlan.h"
+#include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "gtest/gtest.h"
@@ -371,12 +373,40 @@ TEST(HaydnFormatERecords, SetDescLedgerStarted) {
 }
 
 TEST(HaydnFormatERecords, GeometryMatchesRegistryProductParcel) {
-  // Generated Format E EncodedBytes is the product parcel width authority for
-  // record tables; registry E96 rows share the same typed size surface.
+  // Generated Format E EncodedBytes is the product parcel width authority.
+  // ProductRows EncodedBytes/Bits are driven from GET_FORMAT_E_GOLDEN_PINS,
+  // not a parallel E96ParcelBytes{12} literal. FE8: that width is 12.
+  EXPECT_EQ(FormatEEncodedBytes, 12u);
+  EXPECT_EQ(FormatEBundleBits, 96u);
   EXPECT_EQ(FormatEEncodedBytes, (FormatEBundleBits + 7u) / 8u);
   EXPECT_EQ(FormatEBundleBits, FormatEEncodedBytes * 8u);
   EXPECT_NE(FormatEMemberCount, 0u);
   EXPECT_NE(findAltSpan("ADD32"), nullptr);
+
+  using llvm::haydn::format::BundleFormatRowID;
+  using llvm::haydn::format::encodedBytesOrDie;
+  using llvm::haydn::format::getProductBundleFormatRows;
+  using llvm::haydn::format::maxEncodedBytesInProfile;
+  using llvm::haydn::format::ObjectEncodingProfileID;
+  auto Rows = getProductBundleFormatRows();
+  ASSERT_EQ(Rows.size(), 2u);
+  bool SawE2 = false;
+  bool SawE3 = false;
+  for (const auto &R : Rows) {
+    EXPECT_TRUE(R.IsProduct) << R.Name;
+    EXPECT_EQ(R.Bytes.Value, FormatEEncodedBytes) << R.Name;
+    EXPECT_EQ(R.Bits.Value, FormatEBundleBits) << R.Name;
+    EXPECT_EQ(encodedBytesOrDie(R.Row).Value, FormatEEncodedBytes) << R.Name;
+    SawE2 |= R.Row == BundleFormatRowID::E96TwoEntry;
+    SawE3 |= R.Row == BundleFormatRowID::E96ThreeEntry;
+  }
+  EXPECT_TRUE(SawE2);
+  EXPECT_TRUE(SawE3);
+  EXPECT_EQ(maxEncodedBytesInProfile(ObjectEncodingProfileID::E96).Value,
+            FormatEEncodedBytes);
+  EXPECT_EQ(llvm::haydn::bundle::productParcelBytes().Value,
+            FormatEEncodedBytes);
+  EXPECT_EQ(llvm::haydn::bundle::ProductEncodedBytesValue, FormatEEncodedBytes);
 }
 
 TEST(HaydnFormatERecords, StoreLogicalsAreLoadStore0Only) {

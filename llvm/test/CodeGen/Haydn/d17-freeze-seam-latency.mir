@@ -1,0 +1,69 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# Freeze dest-window seam wall. Generated-member Data_Latency=2 load then
+# next-cycle use without NOP is fatal at haydn-verify-bundles
+# -haydn-freeze-verify. Intermediate Verify seats stay silent (pre-stall).
+# Intervening architectural NOP passes. ALU-only is latency 1 and is not
+# this pin; a true load/MAC seam is a real under-stall, not a BR-LAST
+# carve-out. No bare JALR: freeze treats mixed committed BUNDLE + bare
+# encode as fatal. Peer: AIE verifyInstruction is per-MI (no cross-bundle
+# latency); Hexagon calcStall is previous-packet QoR.
+#
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-verify-bundles %t/load-then-use.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=INTERMEDIATE
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/load-then-use.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SEAM
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/load-nop-use.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=NOP
+#
+# INTERMEDIATE: S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6
+# INTERMEDIATE: ADD32_E2_E0_ALU0_RR
+# SEAM: dest-window seam
+# NOP: S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6
+# NOP: NOP
+# NOP: ADD32_E2_E0_ALU0_RR
+
+#--- load-then-use.mir
+--- |
+  define void @load_then_use() { ret void }
+...
+---
+name:            load_then_use
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1
+    BUNDLE 0, 0, implicit-def $r2, implicit $r1 {
+      $r2 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, 0
+    }
+    BUNDLE 0, 0, implicit-def $r3, implicit $r2 {
+      $r3 = ADD32_E2_E0_ALU0_RR $r2, $r2
+    }
+...
+#--- load-nop-use.mir
+--- |
+  define void @load_nop_use() { ret void }
+...
+---
+name:            load_nop_use
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1
+    BUNDLE 0, 0, implicit-def $r2, implicit $r1 {
+      $r2 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, 0
+    }
+    BUNDLE 0, 0 {
+      NOP
+      NOP
+    }
+    BUNDLE 0, 0, implicit-def $r3, implicit $r2 {
+      $r3 = ADD32_E2_E0_ALU0_RR $r2, $r2
+    }
+...

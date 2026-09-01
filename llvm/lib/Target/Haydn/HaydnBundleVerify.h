@@ -19,7 +19,14 @@
 // and checks invariants (row mode, entry capacity/order, unit injectivity,
 // inverse encodeability, mandatory completion, RF port budgets via the
 // shared port-budget predicate HaydnBundlePortBudget.h — one predicate with
-// commit). Unknown or misplaced committed state fails closed.
+// commit, and — on the MI overload, after that port re-check — intra-cycle
+// RAW/WAW (leftover implicit-def $sfr skipped when the descriptor does not
+// name SFR; CSRW/SET/flag-setters and GPR dual-write still fail), named
+// same-cycle laws, SET_HWLOOP trip/Off vs a same-cycle producer, and
+// unproven store/load overlap (AA when present; nullptr fail-closed;
+// TII same-base non-overlap and AA NoAlias still pack; missing MMOs
+// refuse; dual-load is not this law).
+// Unknown or misplaced committed state fails closed.
 //
 // SMS post-RA contract: multi-member hard roots are exact-committed inside
 // the frozen group only; verifyCommittedBundle is the post-commit certificate
@@ -50,6 +57,9 @@
 #include <string>
 
 namespace llvm {
+
+class AAResults;
+
 namespace haydn {
 namespace bundle {
 
@@ -300,10 +310,20 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
 
 /// MIR entry: rebuild plan from BUNDLE root row + completion imms + children.
 /// Fail-closed: missing/unknown row imm or missing completion is an error.
+/// After the shared port-budget re-check, also fail-closed on intra-cycle
+/// RAW (live def-then-use; legal WAR and dead-def read-old pass),
+/// WAW (HaydnIntraCycleWAW; leftover implicit-def $sfr ignored when
+/// !haydnDescNamesSfrPort), named same-cycle laws, hwloop-trip, and
+/// unproven store/load overlap. \p AA is AAResultsWrapperPass when
+/// present (HexagonVLIWPacketizer.cpp:90/205; AMDGPU SIInsertWaitcnts
+/// getAnalysisIfAvailable). Nullptr (limited -run-pass) is fail-closed
+/// except TII areMemAccessesTriviallyDisjoint. Proven disjoint packs
+/// from HR/materialize must not fatal here.
 std::optional<std::string>
 verifyCommittedBundle(const MachineInstr &BundleRoot,
                       const HaydnBaseMCFormats &Fmts,
-                      BundlePlan *OutPlan = nullptr, bool Freeze = false);
+                      BundlePlan *OutPlan = nullptr, bool Freeze = false,
+                      AAResults *AA = nullptr);
 
 /// Post-RA hard-root / SMS commit-inside-group certificate.
 /// Requires multi-member membership (hard root shape) and a product Format E
@@ -313,6 +333,19 @@ std::optional<std::string>
 verifyExactHardRootCommit(const MachineInstr &BundleRoot,
                           const HaydnBaseMCFormats &Fmts,
                           BundlePlan *OutPlan = nullptr);
+
+/// Consecutive-cycle dest-window seam check (Haydn has no interlock).
+/// One DestHR walk: destWindowStallNeed, then advanceDestWindows, then
+/// emitForDestWindow — the same predicate as HaydnLatencyStalls. Empty
+/// itinerary skips. Does not replay FU occupancy, walk latches, or extend
+/// verifyCommittedBundle. Freeze callers fatal on a nonempty result;
+/// intermediate Verify seats stay silent. Defined in
+/// HaydnHazardRecognizer.cpp (dest-window owner) so VerifyBundles can
+/// include this header without HaydnBundle.h.
+/// \returns nullopt on success; reason when destWindowStallNeed > 0 at a
+/// consecutive-cycle seam.
+std::optional<std::string>
+verifyMBBDestWindowSeams(const MachineBasicBlock &MBB);
 
 /// Parse-time bundle legality (Hexagon MCChecker; AIE AIEBaseAsmParser.h:192
 /// is the structural peer — Haydn overlay is FormatEInverse, never Bundle.canAdd).

@@ -26,11 +26,12 @@ public:
 
   MCFixupKindInfo getFixupKindInfo(MCFixupKind Kind) const override;
 
-  // Format E: PC is the parcel base, not a mid-parcel field byte offset.
-  // Entry fields may sit at byte 6+; default MC P = frag+fixup_off mis-aligns
-  // hwloop ÷4 and byte branch checks. Compensate like Xtensa l32r.
-  std::optional<bool> evaluateFixup(const MCFragment &, MCFixup &, MCValue &,
-                                    uint64_t &Value) override;
+  // evaluateFixup is deliberately NOT overridden (D1.28): the MC emitter is
+  // the one parcel-origin authority (member fixups are re-based to ParcelBase
+  // at emission), so default MC evaluation is correct for every kind. A
+  // backend-wide PC-rel seeding hook would be a parallel mechanism that
+  // silently perturbs any PCRel-flagged data word (R_HAYDN_32_PCREL,
+  // S+A-P at any fragment offset). See HaydnAsmBackend.cpp.
 
   // Check whether the given instruction may need relaxation.
   bool mayNeedRelaxation(unsigned Opcode, ArrayRef<MCOperand> Operands,

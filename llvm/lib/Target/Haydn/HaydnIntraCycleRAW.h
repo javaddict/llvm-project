@@ -33,6 +33,21 @@
 // Data latency >= 1 keeps a true-RAW producer/consumer out of one ReadyCycle,
 // so the incremental walk is safe for HR/RC.
 //
+// Cycle-list pack-reject (haydnCycleMembersHaveTrueRAW) is the same
+// no-forwarding law on a whole candidate cycle in schedule order: live
+// def-before-use trips; InternalRead-hidden uses still trip (readsReg()
+// would hide them); dead-def read-old is excluded; legal WAR
+// (use-before-def) does not trip. Bundle.h-free so the freeze verifier can
+// call it without HaydnBundle.h / HaydnBundleFormatSolver.h. The Materialize
+// wrapper cycleMembersHaveTrueRAW is an alias of this body.
+//
+// The SET_HWLOOP trip/Off vs same-cycle-producer overlay is NOT defined
+// here (D1.11): its single body is haydnCycleMembersHaveHwloopTripConflict
+// in HaydnPortModel.h, whose membership is derived only from
+// haydnClassifyHwloopSetupOpcode over generated logicalOpcodeOrSelf —
+// never from a TII name peel. Freeze/verify, commit, bake, free-pack, and
+// repair all route through that one body.
+//
 // F49: a later live def vs an earlier read in the same LiveDefs walk is a
 // silent miss of the incremental predicate. Closed both-direction
 // (haydnPairHasIntraCycleRAW) applies the SAME read-vs-live-def check in
@@ -40,11 +55,13 @@
 // and is NOT a pack-reject (cycleMembersHaveTrueRAW already rejected that
 // conflation). haydnLiveDefsWalkHidesLaterDef / haydnAssertWriterFirstLiveDefsWalk
 // make the miss unsilenceable on any walk that claims writer-first order.
-// SFR is excluded from the live-def RAW set (dead flag side-effects have no
-// consumer; one SFR writer is enforced by WAW/ports, not this RAW predicate);
-// R0 is NOT excluded (soft-zero is a real register — a same-bundle reader of
-// a live R0 write would observe the OLD value). Virtual registers (pre-RA)
-// match by Register identity; physical registers use TRI::regsOverlap for
+// Live SFR is included in the live-def RAW set (same-cycle true RAW is
+// illegal: Constraints simultaneous-read, Data_Latency=1, no SFR
+// forwarding exception). Leftover unnamed implicit-def dead $sfr stays
+// RAW-legal via !MO.isDead(), not via Haydn::SFR identity. R0 is NOT
+// excluded (soft-zero is a real register — a same-bundle reader of a live
+// R0 write would observe the OLD value). Virtual registers (pre-RA) match
+// by Register identity; physical registers use TRI::regsOverlap for
 // alias/subreg overlap.
 //
 //===----------------------------------------------------------------------===//
@@ -52,7 +69,6 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNINTRACYCLERAW_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNINTRACYCLERAW_H
 
-#include "MCTargetDesc/HaydnMCTargetDesc.h" // Haydn::SFR
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -65,9 +81,9 @@ namespace llvm {
 
 /// True iff \p Reg overlaps a member of \p LiveRegs under the intra-cycle
 /// RAW identity rule: virtual registers match by Register identity; physical
-/// registers use TRI::regsOverlap; SFR and a null TRI (phys) do not match.
-/// This is the ONE overlap used by the incremental walk and the closed
-/// both-direction pair check.
+/// registers use TRI::regsOverlap (live SFR included); a null TRI (phys)
+/// does not match. This is the ONE overlap used by the incremental walk
+/// and the closed both-direction pair check.
 template <typename LiveRegSet>
 bool haydnRegOverlapsLiveSet(Register Reg, const LiveRegSet &LiveRegs,
                              const TargetRegisterInfo *TRI) {
@@ -75,7 +91,7 @@ bool haydnRegOverlapsLiveSet(Register Reg, const LiveRegSet &LiveRegs,
     return false;
   if (Reg.isVirtual())
     return LiveRegs.contains(Reg);
-  if (!Reg.isPhysical() || Reg == Haydn::SFR || !TRI)
+  if (!Reg.isPhysical() || !TRI)
     return false;
   for (Register D : LiveRegs)
     if (D.isPhysical() && TRI->regsOverlap(Reg, D))
@@ -84,11 +100,12 @@ bool haydnRegOverlapsLiveSet(Register Reg, const LiveRegSet &LiveRegs,
 }
 
 /// True iff \p MI reads a register that an instruction already issued in the
-/// CURRENT cycle/bundle defines as LIVE (non-dead, non-SFR). This is the
-/// no-forwarding intra-bundle RAW law (Haydn spec §Constraints). \p LiveDefs is
-/// the set of live defs accumulated for the current cycle; \p TRI is required
-/// only for physical-register alias checks (may be null before the first emit
-/// when only virtual registers are in play, mirroring the HR predicate).
+/// CURRENT cycle/bundle defines as LIVE (non-dead, including live SFR). This
+/// is the no-forwarding intra-bundle RAW law (Haydn spec §Constraints).
+/// \p LiveDefs is the set of live defs accumulated for the current cycle;
+/// \p TRI is required only for physical-register alias checks (may be null
+/// before the first emit when only virtual registers are in play, mirroring
+/// the HR predicate).
 /// Works with any set-like container exposing `contains()` and iteration
 /// (`SmallSet<Register, N>`, `SmallSetVector<Register, N>`, ...).
 ///
@@ -108,13 +125,15 @@ bool haydnHasIntraCycleRAW(const MachineInstr &MI, const LiveDefSet &LiveDefs,
   return false;
 }
 
-/// Record \p MI's LIVE destination registers (non-dead, non-SFR) into
-/// \p LiveDefs — the dual of haydnHasIntraCycleRAW. Every non-SFR def is a
+/// Record \p MI's LIVE destination registers (non-dead, including live SFR)
+/// into \p LiveDefs — the dual of haydnHasIntraCycleRAW. Every def is a
 /// candidate live def; the DEAD flag is the scheduling-DAG/liveness verdict on
 /// "does this def have a consumer" — dead writes have no consumer and a
 /// same-bundle reader correctly observes the OLD value, so they are NOT
-/// inserted (true-RAW-only). Virtual defs (pre-RA) are tracked by Register
-/// identity. Works with any set-like container exposing `insert()`.
+/// inserted (true-RAW-only). Leftover unnamed implicit-def dead $sfr stays
+/// out via isDead, not register identity. Virtual defs (pre-RA) are tracked
+/// by Register identity. Works with any set-like container exposing
+/// `insert()`.
 template <typename LiveDefSet>
 void haydnAppendLiveDefs(const MachineInstr &MI, LiveDefSet &LiveDefs) {
   for (const MachineOperand &MO : MI.operands()) {
@@ -124,8 +143,6 @@ void haydnAppendLiveDefs(const MachineInstr &MI, LiveDefSet &LiveDefs) {
     if (!Reg)
       continue;
     if (!Reg.isPhysical() && !Reg.isVirtual())
-      continue;
-    if (Reg == Haydn::SFR)
       continue;
     if (!MO.isDead())
       LiveDefs.insert(Reg);
@@ -188,6 +205,77 @@ void haydnAssertWriterFirstLiveDefsWalk(const MIRange &MIs,
            "haydnHasIntraCycleRAW LiveDefs walk hid a later live def vs an "
            "earlier read (writer-first contract; F49)");
   }
+}
+
+/// **Available-cycle detect** (and no-forwarding RAW): true iff \p MIs in
+/// schedule/issue order have a **live** def of R by an EARLIER member and a
+/// use of R by a LATER member. That shape must not share one ReadyCycle.
+///
+/// Order-sensitive, matching HaydnHazardRecognizer::hasSameBundleRAW (which
+/// tracks CurrentCycleLiveDefs incrementally as members append in issue
+/// order).
+///
+/// A LATER member's live def read by an EARLIER member is WAR/snapshot: the
+/// earlier reader correctly observes the pre-cycle (OLD) value — legal.
+/// haydnPairHasIntraCycleRAW does not distinguish that shape and is NOT a
+/// pack-reject.
+///
+///   * **Read vs dead def** of the same physreg: legal — a dead write has no
+///     consumer of the new value (dead defs are not live defs).
+///   * Same-MI use+def (tied / normal overwrite): legal (not cross-member).
+///
+/// Uses are detected via isUse() / partial-def subreg reads, not only
+/// MachineOperand::readsReg() (InternalRead would hide a true dep).
+inline bool haydnCycleMembersHaveTrueRAW(ArrayRef<const MachineInstr *> Instrs,
+                                         const TargetRegisterInfo *TRI) {
+  if (Instrs.size() < 2)
+    return false;
+
+  auto overlaps = [&](Register A, Register B) -> bool {
+    if (A == B)
+      return true;
+    if (!TRI || !A.isPhysical() || !B.isPhysical())
+      return false;
+    return TRI->regsOverlap(A, B);
+  };
+
+  SmallVector<Register, 4> PriorLiveDefs;
+  for (const MachineInstr *MI : Instrs) {
+    if (!MI)
+      continue;
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || MO.isUndef() || !MO.getReg())
+        continue;
+      bool IsRead = MO.isUse() || (MO.isDef() && MO.getSubReg());
+      if (!IsRead)
+        continue;
+      Register Reg = MO.getReg();
+      if (!(Reg.isPhysical() || Reg.isVirtual()))
+        continue;
+      for (Register D : PriorLiveDefs)
+        if (overlaps(Reg, D))
+          return true;
+    }
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || !MO.getReg() || !MO.isDef() || MO.isDead())
+        continue;
+      Register Reg = MO.getReg();
+      if (Reg.isPhysical() || Reg.isVirtual())
+        PriorLiveDefs.push_back(Reg);
+    }
+  }
+  return false;
+}
+
+template <typename MIRange>
+bool haydnCycleMembersHaveTrueRAW(const MIRange &MIs,
+                                  const TargetRegisterInfo *TRI) {
+  SmallVector<const MachineInstr *, 8> Instrs;
+  for (auto *MI : MIs)
+    if (MI)
+      Instrs.push_back(MI);
+  return haydnCycleMembersHaveTrueRAW(
+      ArrayRef<const MachineInstr *>(Instrs), TRI);
 }
 
 } // namespace llvm

@@ -15,7 +15,6 @@
 
 #include "HaydnInterBlockScheduling.h"
 #include "HaydnResourceRestrictionClasses.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/MemoryLocation.h"
@@ -246,29 +245,30 @@ void HaydnInterBlockEdges::recomputePostDepthsFromEdges(
   PostRegionMaxDepth = 0;
   DepthsAreScheduled = false;
   clearSuccessorOccupancy();
-  // Longest-path depth from each post-boundary node downward through its
-  // post-boundary successors (edges into pre-boundary nodes do not extend
-  // the in-block path).
-  SmallDenseMap<unsigned, int, 16> Depth;
+  // AIE InterBlockScheduling.cpp:1069-1087 unscheduled fill: earliest-cycle
+  // depth = max over post-boundary Preds of latency+getPostDepthOr(Pred,0);
+  // no such pred => 0. Memoized so visit order is not a hidden topo walk
+  // (ScheduleDAG.cpp ComputeDepth walks Preds; ComputeHeight walks Succs).
   std::function<int(const SUnit &)> DepthOf = [&](const SUnit &SU) -> int {
-    auto It = Depth.find(SU.NodeNum);
-    if (It != Depth.end())
-      return It->second;
+    const int Have = getPostDepth(SU);
+    if (Have >= 0)
+      return Have;
+    PostDepths[SU.NodeNum] = 0;
     int Best = 0;
-    for (const SDep &Dep : SU.Succs) {
-      const SUnit *Dst = Dep.getSUnit();
-      if (Dst->isBoundaryNode() || !isPostBoundaryNode(Dst))
+    for (const SDep &Dep : SU.Preds) {
+      const SUnit *Src = Dep.getSUnit();
+      if (!Src || Src->isBoundaryNode() || !isPostBoundaryNode(Src))
         continue;
-      Best = std::max(Best, DepthOf(*Dst) + (int)Dep.getLatency());
+      (void)DepthOf(*Src);
+      Best = std::max(Best, (int)Dep.getLatency() + getPostDepthOr(Src, 0));
     }
-    Depth[SU.NodeNum] = Best;
+    PostDepths[SU.NodeNum] = Best;
     return Best;
   };
   for (const SUnit &SU : SUnits) {
     if (!isPostBoundaryNode(&SU) || SU.isBoundaryNode())
       continue;
     int D = DepthOf(SU);
-    PostDepths[SU.NodeNum] = D;
     PostRegionMaxDepth = std::max(PostRegionMaxDepth, D);
   }
 }
@@ -300,19 +300,10 @@ int HaydnInterBlockEdges::getPostDepthOr(const SUnit *SU, int Default) const {
 }
 
 void HaydnInterBlockEdges::recomputePostDepths() {
-  PostDepths.clear();
-  PostRegionMaxDepth = 0;
-  clearSuccessorOccupancy();
-  // Top-down earliest-cycle over the post-boundary sub-DAG (AIE depth
-  // convention: SU.getDepth() as maintained by ComputeDepth for the whole
-  // graph; post-boundary depths read straight off it).
-  for (const SUnit &SU : SUnits) {
-    if (!isPostBoundaryNode(&SU))
-      continue;
-    PostDepths[SU.NodeNum] = static_cast<int>(SU.getDepth());
-    PostRegionMaxDepth =
-        std::max(PostRegionMaxDepth, static_cast<int>(SU.getDepth()));
-  }
+  // Skipped-region / unscheduled successor: same Pred-based fill as the
+  // DDG constructor. Do not stamp generic SU.getDepth() (that is a whole-
+  // graph value, not a post-boundary earliest cycle).
+  recomputePostDepthsFromEdges(&getSchedModelRef(), nullptr);
 }
 
 SmallVector<const SDep *, 4>
@@ -349,12 +340,16 @@ void HaydnInterBlockEdges::inheritRecordedPostDepths(
       }
     }
   }
-  if (!S1.DepthsAreScheduled || DepthsAreScheduled)
+  // Copy S1 per-MI depths even if S2 already has DepthsAreScheduled from
+  // BUNDLE-root seeding (that path does not publish per-MI PostDepths).
+  if (!S1.DepthsAreScheduled)
     return;
   for (const SUnit &SU : SUnits) {
     if (!isPostBoundaryNode(&SU) || SU.isBoundaryNode())
       continue;
     MachineInstr *MI = SU.getInstr();
+    if (!MI || MI->getParent() != Succ)
+      continue;
     if (const SUnit *Old = S1.getPostBoundaryNode(MI)) {
       auto It = S1.PostDepths.find(Old->NodeNum);
       if (It == S1.PostDepths.end())

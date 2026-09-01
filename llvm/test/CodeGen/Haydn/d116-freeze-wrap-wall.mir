@@ -1,0 +1,128 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# D1.16 freeze wrap wall. A latch (self-successor MBB) whose committed
+# cycles leave a dest window still pending at the last body cycle — a
+# Data_Latency=2 load def at the END parcel whose data dest and base
+# writeback the next iteration's first cycle reads — is fatal at
+# haydn-verify-bundles -haydn-freeze-verify with the exact wall string
+# 'dest-window wrap: destWindowWrapPadNeed='. Pads present → silent
+# (negative control). Mirrors the d17-freeze-seam-latency shape; this
+# closes the "freeze gate blind to the wrap" class (CB-167 lesson).
+#
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/wrap-violation.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=WALL
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/wrap-padded.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=OK
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/no-self-edge.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=NOLATCH
+#
+# WALL: dest-window wrap: destWindowWrapPadNeed=1
+# OK: body:
+# NOLATCH: body:
+
+#--- wrap-violation.mir
+--- |
+  define void @wrap_violation() { ret void }
+...
+---
+name:            wrap_violation
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    BUNDLE 0, 0, implicit-def $sfr, implicit $r2 {
+      SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR 0, %bb.1, %bb.1, killed $r2, implicit-def $sfr
+      NOP
+    }
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r3, $r4
+    BUNDLE 1, 0, implicit-def $r2, implicit killed $r4 {
+      $r2 = MOVE32_E3_E2_ALU2_R killed $r4
+      NOP
+    }
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r1, implicit killed $r1 {
+      $r4, $r1 = S_LW_POST_IMM_E2_E1_LOAD1_RI6 killed $r1, 1
+    }
+    PseudoLoopEnd %bb.1
+
+  bb.2:
+    liveins: $r2, $r3, $r15
+    BUNDLE 0, 0, implicit-def $r9, implicit killed $r2, implicit killed $r3 {
+      $r9 = ADD32_E2_E0_ALU0_RR killed $r2, killed $r3
+    }
+    RET implicit $r15, implicit $r9
+...
+
+#--- wrap-padded.mir
+--- |
+  define void @wrap_padded() { ret void }
+...
+---
+name:            wrap_padded
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    BUNDLE 0, 0, implicit-def $sfr, implicit $r2 {
+      SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR 0, %bb.1, %bb.1, killed $r2, implicit-def $sfr
+      NOP
+    }
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r3, $r4
+    BUNDLE 1, 0, implicit-def $r2, implicit killed $r4 {
+      $r2 = MOVE32_E3_E2_ALU2_R killed $r4
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r1, implicit killed $r1 {
+      $r4, $r1 = S_LW_POST_IMM_E2_E1_LOAD1_RI6 killed $r1, 1
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    PseudoLoopEnd %bb.1
+
+  bb.2:
+    liveins: $r2, $r3, $r15
+    BUNDLE 0, 0, implicit-def $r9, implicit killed $r2, implicit killed $r3 {
+      $r9 = ADD32_E2_E0_ALU0_RR killed $r2, killed $r3
+    }
+    RET implicit $r15, implicit $r9
+...
+
+#--- no-self-edge.mir
+--- |
+  define void @no_self_edge() { ret void }
+...
+---
+name:            no_self_edge
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit $r1 {
+      $r2 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, 0
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0, implicit-def $r3, implicit $r2 {
+      $r3 = ADD32_E2_E0_ALU0_RR $r2, $r2
+    }
+    RET implicit $r15, implicit $r3
+...

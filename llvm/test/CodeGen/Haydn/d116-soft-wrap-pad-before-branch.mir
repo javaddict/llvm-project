@@ -1,0 +1,96 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-latency-stalls \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+#
+# D1.16 soft-latch form: bb.1 is its own successor with an ordinary
+# backedge-branch terminator (no PseudoLoopEnd). The soft latch's wrap
+# point IS the backedge branch, which also sits on the exit path — the
+# wrap pads go before it, and the block must insert ONCE at that shared
+# anchor (never one wrap pad + one exit pad at the same point).
+#
+# Semantics pin: the branch parcel ITSELF is a real wrap-path cycle — a
+# Data_Latency-2 load directly before the branch is already covered
+# (distance 2). The true soft violation needs a window LONGER than the
+# single trailing branch cycle: ARCTAN (uimm4+2 occupancy 6 → dest-write
+# remaining 5) leaves 5-1(branch cycle) = 4 pads owed at the wrap.
+
+---
+name:            soft_wrap_arctan_tail
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $r3
+    successors: %bb.1(0x80000000)
+
+    $r5 = ADDI32_E2_E0_ALU0_RI20 $r3, 0
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $d0, $r3, $r5
+
+    ; ARCTAN (occupancy 6, dest-write remaining 5) then the backedge
+    ; branch. The branch retires one window cycle; 4 remain owed across
+    ; the wrap → exactly 4 pads before the branch, inserted once.
+    ; CHECK-LABEL: bb.1:
+    ; CHECK: $r4 = ARCTAN_E3_E2_ALU2_RI4 $d0, 4
+    ; CHECK-COUNT-4: nomerge NOP
+    ; CHECK-NEXT: BNEZ_E2_E0_ALU0_I12 killed $r5, %bb.1
+    ; CHECK-NOT: nomerge NOP
+    $r4 = ARCTAN_E3_E2_ALU2_RI4 $d0, 4
+    BNEZ_E2_E0_ALU0_I12 killed $r5, %bb.1
+
+  bb.2:
+    liveins: $r4, $r15
+
+    BUNDLE 0, 0, implicit-def $r9, implicit $r4 {
+      $r9 = ADD32_E2_E0_ALU0_RR $r4, $r4
+    }
+    RET implicit $r15, implicit $r9
+...
+---
+name:            soft_wrap_lat2_covered
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r3
+    successors: %bb.1(0x80000000)
+
+    $r4 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r1, 1 :: (load (s32))
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $r1, $r3, $r4
+
+    ; Negative control: a latency-2 load directly before the backedge
+    ; branch is COVERED — the branch parcel is a real wrap-path cycle
+    ; (distance load→branch→wrap→c0 = 2). No pads in the LATCH (bb.1);
+    ; bb.0's exit pad is the pre-existing exit-seam law, not a wrap pad.
+    ; CHECK-LABEL: name: soft_wrap_lat2_covered
+    ; CHECK: bb.1:
+    ; CHECK-NOT: nomerge NOP
+    ; CHECK: $r4, $r1 = S_LW_POST_IMM_E2_E1_LOAD1_RI6 killed $r1, 1 :: (load (s32))
+    ; CHECK-NEXT: BNEZ_E2_E0_ALU0_I12 killed $r3, %bb.1
+    $r4, $r1 = S_LW_POST_IMM_E2_E1_LOAD1_RI6 killed $r1, 1 :: (load (s32))
+    BNEZ_E2_E0_ALU0_I12 killed $r3, %bb.1
+
+  bb.2:
+    liveins: $r4, $r15
+
+    BUNDLE 0, 0, implicit-def $r9, implicit $r4 {
+      $r9 = ADD32_E2_E0_ALU0_RR $r4, $r4
+    }
+    RET implicit $r15, implicit $r9
+...

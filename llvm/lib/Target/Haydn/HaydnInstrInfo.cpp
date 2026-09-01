@@ -20,6 +20,7 @@
 #include "HaydnHWLoopContracts.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnMachineFunctionInfo.h"
+#include "HaydnMachineScheduler.h"
 #include "HaydnPortModel.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnResourceCycle.h"
@@ -35,6 +36,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -239,17 +241,42 @@ void haydnPreserveLongFormJumpState(MachineBasicBlock &Trampoline,
 // createTripCountGreaterCondition) is complete and AIE-faithful. The prior
 // single-stage +358-bloat regression feared is now gated inside
 // shouldUseSchedule. Declared non-static so
-// HaydnSubtarget::enableWindowScheduler can read it (the WindowScheduler
-// crashes on PseudoLoopEnd, so SMS must be the sole pipeliner when ZOL
-// pipelining is on).
+// HaydnSubtarget::enableWindowScheduler can read it (that override is the
+// sole layer keeping the WindowScheduler off ZOL loops — see
+// HaydnSubtarget.cpp for the D1.29-verified mechanism; SMS is the sole
+// pipeliner while ZOL pipelining is on).
 // SMS of ZOL-form loops (default ON). When off, SMS skips ZOL loops — they
 // still form hwloops via IR HardwareLoops, just without software pipelining.
 //
-// NOTE: multi-stage SMS on some ZOL byte-mem loops (e.g. libc memcpy @ -O3)
-// has been seen to misplace prolog/kernel/epilog vs HWLOOP BEGIN/END. That is
-// an expander/schedule bug for those kernels — not a reason to disable ZOL
-// SMS globally. Prefer fixing shouldUseSchedule / ModuloScheduleExpander for
-// the bad case; keep this flag for emergency disable only.
+// D1.29 CLOSE (2026-08-30) — the former NOTE here (admitted 2026-07-27 in
+// 7ef07decdc32, pre-W68, with no reproducer and no tracker) claimed
+// multi-stage SMS "has been seen to misplace prolog/kernel/epilog vs HWLOOP
+// BEGIN/END" on some ZOL byte-mem loops (e.g. libc memcpy @ -O3). CLOSED by
+// mechanism + corpus, no reproducer exists on the current artifact:
+//
+//  - Mechanism: the W68.1 edn fatal root-caused the one real misplacement
+//    class of this shape — the pipelined ZOL body (preheader LoopStart ->
+//    prologue -> kernel(self-latch PLE)) becoming invisible to body
+//    resolution. It is fixed by the pure-CFG guarded-chain proof
+//    (HaydnHWLoopDemote.cpp resolveBodyMBBCore / prologueChainReachesKernel)
+//    with fail-closed rejection in HaydnFixupHwLoops on any unproven body;
+//    CB-166 dynamic-guard chains (033372428db8) and the D1.6 pipelined
+//    LoopStart demote Prefer+Adj law (1288c452f1a2) cover the runtime-trip
+//    and demote siblings. Placement is proven by CFG, never layout; any
+//    unprovable shape demotes or fatals — it cannot silently misbind.
+//  - Corpus (D1.29 sweep, artifact of record cf28e436c7c8): byte-mem i8
+//    copy loops — constant trip 8/16/64, runtime trip, and store-only fill —
+//    compiled -O2/-O3 all accept multi-stage (stages=2, II=2,
+//    "Schedule Found? 1"); the committed HWLOOP windows bracket exactly the
+//    self-latched kernel (prologue peel before START, epilog drain after
+//    inclusive END) and the same artifacts execute clean in BundleSim ISS
+//    (GUEST_EXIT 0, value/memory equal).
+//  - Pin: llvm/test/CodeGen/Haydn/d129-zol-bytemem-multistage-memcpy.ll
+//    checks the accept + the prologue/kernel/epilog-vs-BEGIN/END structure
+//    so the class stays testably closed.
+// If a byte-mem misplacement ever reappears, fix it at shouldUseSchedule
+// (fail-closed shape reject) or in the CFG proof — never by layout, and
+// never by disabling ZOL SMS; this flag stays emergency-disable only.
 cl::opt<bool> EnableZOLPipelining(
     "haydn-zol-pipelining", cl::Hidden, cl::init(true),
     cl::desc("Enable SMS pipelining of ZOL-form loops (default on)"));
@@ -1219,6 +1246,40 @@ bool HaydnInstrInfo::reverseBranchCondition(
   return false; // Successfully reversed
 }
 
+/// True when expandPostRAPseudo packs LOADI64 / MOV_GPR_TO_DR64 through
+/// DR64PackFI. determineCalleeSaves uses this same predicate so a
+/// reservation-scan miss cannot silently CreateStackObject after PEI
+/// (generic ExpandPostRAPseudos at TargetPassConfig.cpp:1192 is after PEI
+/// and before the freeze snapshot). Probe gate is CSI-valid, not a named
+/// probe function. RISC-V getMoveF64FrameIndex is ISel-time
+/// (RISCVMachineFunctionInfo.h) and is declined as a post-RA pattern.
+namespace llvm {
+bool haydnInstrNeedsDR64PackSlot(const MachineInstr &MI) {
+  switch (MI.getOpcode()) {
+  case Haydn::LOADI64:
+    // Register-only: Hi==0 zero-extend, Hi==-1&&Lo<0 sign-extend.
+    // Non-immediate (relocatable) LOADI64 is rare but conservatively packed.
+    if (MI.getNumOperands() < 2 || !MI.getOperand(1).isImm())
+      return true;
+    {
+      uint64_t V = static_cast<uint64_t>(MI.getOperand(1).getImm());
+      int32_t Lo = static_cast<int32_t>(V & 0xFFFFFFFFu);
+      int32_t Hi = static_cast<int32_t>((V >> 32) & 0xFFFFFFFFu);
+      return Hi != 0 && !(Hi == -1 && Lo < 0);
+    }
+  case Haydn::MOV_GPR_TO_DR64:
+    // R0-half packs take the stackless shift path; only two live GPRs pack.
+    if (MI.getNumOperands() <= 2 || !MI.getOperand(1).isReg() ||
+        !MI.getOperand(2).isReg())
+      return false;
+    return MI.getOperand(1).getReg() != Haydn::R0 &&
+           MI.getOperand(2).getReg() != Haydn::R0;
+  default:
+    return false;
+  }
+}
+} // namespace llvm
+
 namespace {
 
 /// DR64PackSlotRef — resolved addressing for the per-function DR64 pack slot
@@ -1241,17 +1302,35 @@ struct DR64PackSlotRef {
   bool UseShortForm = true;
 };
 
+/// Unset FI after PEI (CSI valid) is reservation-scan drift. Generic
+/// ExpandPostRAPseudos runs after PEI but before the earliest freeze snapshot,
+/// so CreateStackObject here would grow the frame invisibly. Probe MIR that
+/// bypasses PEI (`-run-pass=postrapseudos`) keeps CSI invalid and may still
+/// CreateStackObject. RISC-V getMoveF64FrameIndex lazy create is ISel-time
+/// (RISCVMachineFunctionInfo.h); declined as a post-RA pattern.
+static int ensureDR64PackSlotFI(MachineFunction &MF, int FI, unsigned Size,
+                                Align Alignment, const char *SlotName) {
+  if (FI >= 0)
+    return FI;
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (MFI.isCalleeSavedInfoValid())
+    report_fatal_error(Twine("Haydn: lazy ") + SlotName +
+                           " CreateStackObject after PEI",
+                       /*GenCrashDiag=*/false);
+  return MFI.CreateStackObject(Size, Alignment, /*SpillSlot=*/true);
+}
+
 /// Resolve the DR64 pack slot to a stable (FrameReg, element-index) triple
 /// when the offset fits scaled simm6; otherwise mark for the scavenged-base
-/// fallback. The canonical reservation is in determineCalleeSaves (its scan
-/// predicate is identical to the expansion branch, so every pack that reaches
-/// here is already reserved in the real pipeline). The lazy CreateStackObject
-/// below only fires for `-run-pass=postrapseudos` MIR tests that bypass PEI
-/// (the fresh object has default offset 0 → a deterministic FrameReg+0 slot);
-/// it is dead in the real pipeline. The slot is Align(8) → Off and Off+4 are
-/// width-aligned. Never emits a dynamic SP adjust — the fallback materialises
-/// a plain GPR base (FrameReg + Off) and addresses the slot at element 0/1/0,
-/// which is always short-form-legal.
+/// fallback. The canonical reservation is in determineCalleeSaves (it calls
+/// haydnInstrNeedsDR64PackSlot — the same predicate as the expansion branch —
+/// so every pack that reaches here is already reserved in the real pipeline).
+/// If FI is still unset after PEI (CSI valid), fail closed. Probe MIR never
+/// ran PEI, so CSI is invalid and the lazy CreateStackObject remains (default
+/// offset 0). The slot is
+/// Align(8) → Off and Off+4 are width-aligned. Never emits a dynamic SP
+/// adjust — the fallback materialises a plain GPR base (FrameReg + Off) and
+/// addresses the slot at element 0/1/0, which is always short-form-legal.
 DR64PackSlotRef resolveDR64PackSlot(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator I,
                                     const HaydnFrameLowering &TFL) {
@@ -1259,8 +1338,7 @@ DR64PackSlotRef resolveDR64PackSlot(MachineBasicBlock &MBB,
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
   int FI = FuncInfo->getDR64PackFI();
   if (FI < 0) {
-    FI = MF.getFrameInfo().CreateStackObject(/*Size=*/8, /*Alignment=*/Align(8),
-                                             /*SpillSlot=*/true);
+    FI = ensureDR64PackSlotFI(MF, FI, /*Size=*/8, Align(8), "DR64PackFI");
     FuncInfo->setDR64PackFI(FI);
   }
   DR64PackSlotRef R;
@@ -1312,11 +1390,10 @@ static void emitDR64PackBaseSpill(MachineBasicBlock &MBB,
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
   int FI = FuncInfo->getDR64PackBaseSpillFI();
   if (FI < 0) {
-    // MIR tests bypassing determineCalleeSaves: lazily reserve. The fresh FI
-    // has default offset 0 → deterministic FrameReg+0 slot. Dead in the real
-    // pipeline (DR64PackBaseSpillFI is reserved alongside DR64PackFI).
-    FI = MF.getFrameInfo().CreateStackObject(/*Size=*/4, /*Alignment=*/Align(4),
-                                             /*SpillSlot=*/true);
+    // Same CSI-valid gate as resolveDR64PackSlot. Probe MIR that bypasses
+    // PEI keeps CSI invalid and may still lazily reserve (default offset 0).
+    FI = ensureDR64PackSlotFI(MF, FI, /*Size=*/4, Align(4),
+                              "DR64PackBaseSpillFI");
     FuncInfo->setDR64PackBaseSpillFI(FI);
   }
   const HaydnFrameLowering *TFL = ST.getFrameLowering();
@@ -1665,9 +1742,13 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     int32_t Lo = static_cast<int32_t>(Val & 0xFFFFFFFFu);
     int32_t Hi = static_cast<int32_t>((Val >> 32) & 0xFFFFFFFFu);
     const bool HiIsZero = (Hi == 0);
-    const bool HiIsSignExtOfLo = (Hi == -1 && Lo < 0);
     const HaydnSubtarget &ST =
         MBB.getParent()->getSubtarget<HaydnSubtarget>();
+    // Pack vs register-only is haydnInstrNeedsDR64PackSlot — the same
+    // predicate determineCalleeSaves uses to reserve DR64PackFI.
+    assert(haydnInstrNeedsDR64PackSlot(MI) ==
+               !(HiIsZero || (Hi == -1 && Lo < 0)) &&
+           "LOADI64 pack predicate drifted from determineCalleeSaves");
 
     // emitConst32 seeds Cur=R0. Restore only on a proven dirty def so a
     // fallthrough from a clean predecessor does not grow a second XOR.
@@ -1691,7 +1772,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       }
     };
 
-    if (HiIsZero || HiIsSignExtOfLo) {
+    if (!haydnInstrNeedsDR64PackSlot(MI)) {
       // REGISTER-ONLY: no memory, no SP motion.
       withPostRAScratch(
           MBB, MBBI, DL, *this, ST, /*PreferNotR12=*/true,
@@ -1778,39 +1859,45 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     bool LoKill = MI.getOperand(1).isKill();
     bool HiKill = MI.getOperand(2).isKill();
 
-    // Stackless when a half is the soft-zero *operand* (no R0 read)
-    if (SrcLo == Haydn::R0 && SrcHi == Haydn::R0) {
-      // Zero DR64 without reading R0 (soft-zero may be stale after JALR→R0).
-      BuildMI(MBB, MBBI, DL, get(Haydn::XOR64), DstReg)
-          .addReg(DstReg, RegState::Undef)
-          .addReg(DstReg, RegState::Undef);
-      MI.eraseFromParent();
-      return true;
-    }
-    if (SrcLo == Haydn::R0) {
-      // rd = (uint64_t)rs_hi << 32 — hi in [63:32], zero in [31:0].
-      // Zero low half comes from the shift, not from reading R0.
-      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
-          .addReg(SrcHi, getKillRegState(HiKill));
-      BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
-          .addReg(DstReg)
-          .addImm(32);
-      MI.eraseFromParent();
-      return true;
-    }
-    if (SrcHi == Haydn::R0) {
-      // rd = zero_extend(rs_lo) — lo in [31:0], zero in [63:32].
-      // Zero high half from (<<32)>>32; do not read R0.
-      BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
-          .addReg(SrcLo, getKillRegState(LoKill));
-      BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
-          .addReg(DstReg)
-          .addImm(32);
-      BuildMI(MBB, MBBI, DL, get(Haydn::SRLI64), DstReg)
-          .addReg(DstReg)
-          .addImm(32);
-      MI.eraseFromParent();
-      return true;
+    // Stackless when a half is the soft-zero *operand* (no R0 read).
+    // haydnInstrNeedsDR64PackSlot is the same predicate determineCalleeSaves
+    // uses; a drift here is a reservation-scan miss after PEI.
+    if (!haydnInstrNeedsDR64PackSlot(MI)) {
+      if (SrcLo == Haydn::R0 && SrcHi == Haydn::R0) {
+        // Zero DR64 without reading R0 (soft-zero may be stale after JALR→R0).
+        BuildMI(MBB, MBBI, DL, get(Haydn::XOR64), DstReg)
+            .addReg(DstReg, RegState::Undef)
+            .addReg(DstReg, RegState::Undef);
+        MI.eraseFromParent();
+        return true;
+      }
+      if (SrcLo == Haydn::R0) {
+        // rd = (uint64_t)rs_hi << 32 — hi in [63:32], zero in [31:0].
+        // Zero low half comes from the shift, not from reading R0.
+        BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+            .addReg(SrcHi, getKillRegState(HiKill));
+        BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
+            .addReg(DstReg)
+            .addImm(32);
+        MI.eraseFromParent();
+        return true;
+      }
+      if (SrcHi == Haydn::R0) {
+        // rd = zero_extend(rs_lo) — lo in [31:0], zero in [63:32].
+        // Zero high half from (<<32)>>32; do not read R0.
+        BuildMI(MBB, MBBI, DL, get(Haydn::SEXT_GPR32_TO_DR64), DstReg)
+            .addReg(SrcLo, getKillRegState(LoKill));
+        BuildMI(MBB, MBBI, DL, get(Haydn::SLLI64), DstReg)
+            .addReg(DstReg)
+            .addImm(32);
+        BuildMI(MBB, MBBI, DL, get(Haydn::SRLI64), DstReg)
+            .addReg(DstReg)
+            .addImm(32);
+        MI.eraseFromParent();
+        return true;
+      }
+      llvm_unreachable(
+          "MOV_GPR_TO_DR64: pack predicate drifted from R0-half paths");
     }
 
     // General (both halves live GPRs): pack via the per-function fixed
@@ -1937,7 +2024,9 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
   // scheduling region around SET. Format HR decides solo vs coissue. Data
   // edges keep remat Dest→SET ordered. Product coissue still refuses a
   // same-cycle producer of SET's trip/Off GPRs (snapshot no-forwarding —
-  // see cycleMembersHaveHwloopTripConflict).
+  // the one shared body is haydnCycleMembersHaveHwloopTripConflict in
+  // HaydnPortModel.h, numeric classifier over generated
+  // logicalOpcodeOrSelf).
 
   // Every standard TargetOpcode::BUNDLE root is an atomic scheduling
   // boundary. HaydnHazardRecognizer returns NoHazard for isBundle() roots
@@ -2770,9 +2859,16 @@ ScheduleHazardRecognizer *HaydnInstrInfo::CreateTargetMIHazardRecognizer(
   // PreRASchedStrategy::productExactCanPackSequence pins the polarity surface.
   const bool IsPreRA = DAG && DAG->hasVRegLiveness();
   HaydnAlternateDescriptors *AltDescs = nullptr;
-  if (DAG && !IsPreRA)
+  AAResults *AA = nullptr;
+  if (DAG && !IsPreRA) {
     AltDescs = &DAG->MF.getInfo<HaydnMachineFunctionInfo>()->getAltDescs();
-  return new HaydnHazardRecognizer(this, ItinData, IsPreRA, AltDescs);
+    // AIE2InstrInfo.cpp:1153-1158 installs HR from the DAG.
+    // AIEMachineScheduler.cpp:1792 passes Context->AA into buildEdges.
+    // HaydnScheduleDAGMI::getAliasAnalysis is that overlay; post-RA factory
+    // is always HaydnScheduleDAGMI (createHaydnPostRAScheduler).
+    AA = static_cast<const HaydnScheduleDAGMI *>(DAG)->getAliasAnalysis();
+  }
+  return new HaydnHazardRecognizer(this, ItinData, IsPreRA, AltDescs, AA);
 }
 
 //===----------------------------------------------------------------------===//
@@ -4052,9 +4148,12 @@ HaydnUpdateAM classifyUpdateAM(const TargetInstrInfo &TII, unsigned Opc) {
 /// scaled immediates are element indices (EA = base + imm * width) except
 /// FrameIndex extras and *_POST_INC pseudos, which are already bytes.
 /// D_LW is a 32-bit DR access and D_LHW is 16-bit (HaydnISelLowering
-/// mem-intrinsic sizes); they are not 64-bit. Member `_S*` opcodes are not
-/// listed — use the logical root, or fail closed.
+/// mem-intrinsic sizes); they are not 64-bit. Generated Format E members
+/// peel to the catalog logical via logicalOpcodeOrSelf (AIE inverse of
+/// AIEMCFormats::getAlternateInstsOpcode). Residual `_S*` names stay
+/// fail-closed.
 unsigned haydnMemAccessWidthBytes(unsigned Opc) {
+  Opc = haydn::format_e::logicalOpcodeOrSelf(Opc);
   switch (Opc) {
   case Haydn::LD8:
   case Haydn::LDU8:
@@ -4313,12 +4412,17 @@ bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
     const TargetRegisterInfo * /*TRI*/) const {
   BaseOps.clear();
   OffsetIsScalable = false;
-  unsigned Opc = MI.getOpcode();
+  // Classify AM on the raw opcode so generated *_PRE_IMM_* / *_POST_* keep
+  // writeback AM (peeled PRE must not look like AM=None ST32). Peel is width
+  // + AM=None WITH_IMM catalog only (leaveMBB setDesc). Disjoint is AIE
+  // SameValue MMO, not this oracle (RISCVInstrInfo.cpp:3522-3552 clustering).
+  unsigned RawOpc = MI.getOpcode();
+  unsigned Opc = haydn::format_e::logicalOpcodeOrSelf(RawOpc);
   unsigned WidthBytes = haydnMemAccessWidthBytes(Opc);
   if (WidthBytes == 0)
     return false;
   Width = LocationSize::precise(WidthBytes);
-  HaydnUpdateAM AM = classifyUpdateAM(*this, Opc);
+  HaydnUpdateAM AM = classifyUpdateAM(*this, RawOpc);
 
   auto dumpOracle = [&]() {
     LLVM_DEBUG(dbgs() << "Haydn mem oracle: " << getName(Opc)
@@ -4373,8 +4477,11 @@ bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
     return true;
   }
 
-  // Plain logical LS: (ins … base, imm). Base may be FI (byte extra) or a
-  // register (element index, ISel and post-PEI).
+  // Plain logical LS and post-setDesc WITH_IMM catalog members (AM=None):
+  // (ins … base, imm). Base may be FI (byte extra) or a register (element
+  // index, ISel and post-PEI). Generated S_LW/S_SW members peel to these
+  // cases for SMS clustering. BREV is not linear EA; WITH_REG offset is
+  // not Imm — keep both fail-closed.
   switch (Opc) {
   case Haydn::LD8:
   case Haydn::LDU8:
@@ -4386,6 +4493,21 @@ bool HaydnInstrInfo::getMemOperandsWithOffsetWidth(
   case Haydn::ST16:
   case Haydn::ST32:
   case Haydn::ST64:
+  case Haydn::S_LBS_WITH_IMM:
+  case Haydn::S_LBU_WITH_IMM:
+  case Haydn::S_LHWS_WITH_IMM:
+  case Haydn::S_LHWU_WITH_IMM:
+  case Haydn::S_LW_WITH_IMM:
+  case Haydn::D_LHW_WITH_IMM:
+  case Haydn::D_LW_WITH_IMM:
+  case Haydn::D_LDW_WITH_IMM:
+  case Haydn::S_SB_WITH_IMM:
+  case Haydn::S_SHW_WITH_IMM:
+  case Haydn::S_SW_WITH_IMM:
+  case Haydn::D_SHW_WITH_IMM:
+  case Haydn::D_SW_L_WITH_IMM:
+  case Haydn::D_SW_H_WITH_IMM:
+  case Haydn::D_SDW_WITH_IMM:
     if (MI.getNumOperands() < 3)
       return false;
     {
@@ -4412,6 +4534,84 @@ bool HaydnInstrInfo::areMemAccessesTriviallyDisjoint(
       MIa.hasOrderedMemoryRef() || MIb.hasOrderedMemoryRef())
     return false;
 
+  // Update-AM writeback: EA is [rs] after pre-update. Operand base identity
+  // is the pre-update register, so a later [rs],0 looks disjoint from
+  // [rs+imm] while they are the same object.
+  if (classifyUpdateAM(*this, MIa.getOpcode()) != HaydnUpdateAM::None ||
+      classifyUpdateAM(*this, MIb.getOpcode()) != HaydnUpdateAM::None)
+    return false;
+
+  // AIE AIEBaseInstrInfo.cpp:2085-2109 SameValue / same-PSV + MMO
+  // offset+width. Distinct GEP Values that share a GPR (%p vs %q) must not
+  // use operand identity: that dropped DAG store-store/store-load edges
+  // MemoryEdges restamps. Unknown-address MMOs (va_list fields) have no
+  // IR Value; fall through to the RISCV operand oracle.
+  if (MIa.hasOneMemOperand() && MIb.hasOneMemOperand()) {
+    const MachineMemOperand *MMOa = *MIa.memoperands_begin();
+    const MachineMemOperand *MMOb = *MIb.memoperands_begin();
+    auto CheckOverlapping = [=](int64_t OffsetA, int64_t OffsetB) {
+      const LocationSize WidthA = MMOa->getSize(), WidthB = MMOb->getSize();
+      const int64_t LowOffset = OffsetA < OffsetB ? OffsetA : OffsetB;
+      const int64_t HighOffset = OffsetA < OffsetB ? OffsetB : OffsetA;
+      const LocationSize LowWidth = (LowOffset == OffsetA) ? WidthA : WidthB;
+      return LowWidth.hasValue() &&
+             LowOffset + static_cast<int64_t>(LowWidth.getValue()) <=
+                 HighOffset;
+    };
+    const int64_t MMOOffsetA = MMOa->getOffset();
+    const int64_t MMOOffsetB = MMOb->getOffset();
+    const Value *VALa = MMOa->getValue();
+    const Value *VALb = MMOb->getValue();
+    if (VALa && VALb && VALa == VALb)
+      return CheckOverlapping(MMOOffsetA, MMOOffsetB);
+    // Distinct GEP Values of one object (%p vs gep %p, 1). AIE SameValue is
+    // pointer equality (AIEBaseInstrInfo.cpp:2105-2109); Haydn GISel keeps
+    // the GEP as the MMO Value with extra offset 0. ISel LD32/ST32 accumulate
+    // constant GEP offsets (RISCVInstrInfo.cpp:3455-3461) so p[0] vs p[1] is
+    // SameValue and RA does not coalesce the later load dest into the
+    // pointer. Catalog S_*_WITH_IMM / generated members keep pointer
+    // equality — post-setDesc MemoryEdges still lengthens the chain.
+    auto isGISelLogicalMemOp = [](unsigned Opc) {
+      switch (Opc) {
+      case Haydn::LD8:
+      case Haydn::LDU8:
+      case Haydn::LD16:
+      case Haydn::LDU16:
+      case Haydn::LD32:
+      case Haydn::LD64:
+      case Haydn::ST8:
+      case Haydn::ST16:
+      case Haydn::ST32:
+      case Haydn::ST64:
+        return true;
+      default:
+        return false;
+      }
+    };
+    if (VALa && VALb && isGISelLogicalMemOp(MIa.getOpcode()) &&
+        isGISelLogicalMemOp(MIb.getOpcode())) {
+      const DataLayout &DL = MIa.getMF()->getDataLayout();
+      int64_t GepOffA = 0, GepOffB = 0;
+      const Value *BaseA =
+          GetPointerBaseWithConstantOffset(VALa, GepOffA, DL);
+      const Value *BaseB =
+          GetPointerBaseWithConstantOffset(VALb, GepOffB, DL);
+      if (BaseA && BaseB && BaseA == BaseB)
+        return CheckOverlapping(MMOOffsetA + GepOffA, MMOOffsetB + GepOffB);
+    }
+    const PseudoSourceValue *PSVa = MMOa->getPseudoValue();
+    const PseudoSourceValue *PSVb = MMOb->getPseudoValue();
+    if (PSVa && PSVb && PSVa == PSVb)
+      return CheckOverlapping(MMOOffsetA, MMOOffsetB);
+    // Distinct IR/PSV objects: operand same-base is not SameValue.
+    if (VALa || VALb || PSVa || PSVb)
+      return false;
+  } else {
+    return false;
+  }
+
+  // Both MMOs are unknown-address (no Value, no PSV). RISCVInstrInfo.cpp:3522-3552
+  // same-base offset+width for va_list field spills.
   const TargetRegisterInfo *TRI = &getRegisterInfo();
   SmallVector<const MachineOperand *, 2> BaseOpsA, BaseOpsB;
   int64_t OffsetA = 0, OffsetB = 0;

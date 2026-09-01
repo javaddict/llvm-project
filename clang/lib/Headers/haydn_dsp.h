@@ -670,6 +670,55 @@ static inline uintptr_t haydn_cbr_step(uintptr_t p, intptr_t offs, int sel)
 // runtime ae_valign must switch-literal dispatch so Sema sees ICE 0..1 / 0..1
 // at the haydn_* ImmArg surface (never pass ar&=1 as a non-ICE builtin arg).
 
+/* WUA-CB switch-literal dispatch (ar_sel, cbr_sel both ImmArg 0..1). The
+ * returned cursor is the HW-wrapped pointer and MUST feed the next op in
+ * the stream (funnel selector is rs[2] / rs[2:1] of the wrapped value).
+ * Golden AR_CBR family; ISA-66 documents that reverse unaligned CB has no
+ * hardware row, so reverse streams keep the haydn_cbr_step software path. */
+static inline void *haydn_ae_cb_prime(int ar, int sel, const void *p,
+                                      int pltw)
+{
+  ar &= 1; sel &= 1;
+  switch ((ar << 1) | sel) {
+  case 0: return pltw ? haydn_pltwwua_cb_post(0, 0, p)
+                      : haydn_plqhwua_cb_post(0, 0, p);
+  case 1: return pltw ? haydn_pltwwua_cb_post(0, 1, p)
+                      : haydn_plqhwua_cb_post(0, 1, p);
+  case 2: return pltw ? haydn_pltwwua_cb_post(1, 0, p)
+                      : haydn_plqhwua_cb_post(1, 0, p);
+  default: return pltw ? haydn_pltwwua_cb_post(1, 1, p)
+                       : haydn_plqhwua_cb_post(1, 1, p);
+  }
+}
+static inline haydn_cb_ld_t haydn_ae_cb_ld_tw(int ar, int sel, const void *p,
+                                              int lq)
+{
+  haydn_cb_ld_t r;
+  ar &= 1; sel &= 1;
+  switch ((ar << 1) | sel) {
+  case 0: r = lq ? haydn_lqhwua_cb_post(p, 0, 0) : haydn_ltwua_cb_post(p, 0, 0); break;
+  case 1: r = lq ? haydn_lqhwua_cb_post(p, 0, 1) : haydn_ltwua_cb_post(p, 0, 1); break;
+  case 2: r = lq ? haydn_lqhwua_cb_post(p, 1, 0) : haydn_ltwua_cb_post(p, 1, 0); break;
+  default: r = lq ? haydn_lqhwua_cb_post(p, 1, 1) : haydn_ltwua_cb_post(p, 1, 1); break;
+  }
+  return r;
+}
+static inline void *haydn_ae_cb_st(int ar, int sel, void *p,
+                                   haydn_dr64_t data, int sq)
+{
+  ar &= 1; sel &= 1;
+  switch ((ar << 1) | sel) {
+  case 0: return sq ? haydn_sqhwua_cb_post(data, p, 0, 0)
+                    : haydn_stwua_cb_post(data, p, 0, 0);
+  case 1: return sq ? haydn_sqhwua_cb_post(data, p, 0, 1)
+                    : haydn_stwua_cb_post(data, p, 0, 1);
+  case 2: return sq ? haydn_sqhwua_cb_post(data, p, 1, 0)
+                    : haydn_stwua_cb_post(data, p, 1, 0);
+  default: return sq ? haydn_sqhwua_cb_post(data, p, 1, 1)
+                     : haydn_stwua_cb_post(data, p, 1, 1);
+  }
+}
+
 /// Seed AR from ptr. `ar` is 0..1 (masked); ImmArg via switch literals.
 static inline ae_valign haydn_ae_la64_pp_ar(int ar, const void *ptr) {
   const void *p = ptr;
@@ -2548,13 +2597,15 @@ static inline float int32_rtor_ae_f32(ae_int32 v) {
     (dst) = (ae_f24x2)__le; \
     (ptr) = (ae_f24x2 *)((char *)(ptr) - __s); \
   } while (0)
-/* Reverse unaligned + circular wrap (same path as AE_LA32X2_RIC). */
+/* Reverse unaligned + circular wrap (same path — and same H-first lane law
+ * (D1.15): D_LTWUA_POST word order is direction-independent — as
+ * AE_LA32X2_RIC). */
 #define AE_LA32X2F24_RIC(dst, align, ptr, cbr_sel) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
     haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 1); \
-    (dst) = (ae_f24x2)__le; \
+    (dst) = (ae_f24x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (__typeof__(ptr))haydn_cbr_step( \
         (uintptr_t)(ptr), -8, (int)(cbr_sel)); \
   } while (0)
@@ -2836,7 +2887,11 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 #define __AE_S16_0_XC_3A(src, ptr, offs) \
   __AE_S16_0_XC_4A(src, ptr, offs, 0)
 #define __AE_S16_0_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int16)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    *(ae_int16 *)(void *)(ptr) = (ae_int16)(src); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
+  } while (0)
 
 //---- Scalar 32-bit loads/stores (additional spellings) ----------------
 // AE_L32_I has two HiFi3 forms:
@@ -2872,10 +2927,9 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
   __AE_L32_XC_4A(dst, ptr, offs, 0)
 #define __AE_L32_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
-                                           (offs) >> 3); \
-    (dst) = (ae_int32)((int)(haydn_dr64_t)__r.data & 0xFFFFFFFF); \
-    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+    (dst) = *(ae_int32 *)(void *)(ptr); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
   } while (0)
 
 #define AE_S32_L_I(src, ptr, inc) \
@@ -2891,7 +2945,11 @@ static inline void AE_MULFD24X2_FIR_H(ae_int64 *q0, ae_int64 *q1,
 #define __AE_S32_L_XC_3A(src, ptr, offs) \
   __AE_S32_L_XC_4A(src, ptr, offs, 0)
 #define __AE_S32_L_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    *(ae_int32 *)(void *)(ptr) = (ae_int32)(src); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
+  } while (0)
 #define AE_S32_L_XP(src, ptr, offs, inc) \
   do { *((ae_int32 *)(ptr) + (offs)) = (ae_int32)(src); (ptr) = (ae_int32 *)((char *)(ptr) + (inc)); } while (0)
 
@@ -3869,9 +3927,10 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    (dst) = (ae_int16x4)haydn_ae_la16x4_step(__ar, __p, 8, 0); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
+    haydn_cb_ld_t __r = haydn_ae_cb_ld_tw(__ar, (int)(cbr_sel), __p, 1); \
+    (dst) = (ae_int16x4)__r.data; \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+    (void)(align); \
   } while (0)
 
 #undef  AE_LA32X2_IC
@@ -3885,10 +3944,10 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 0); \
-    (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
+    haydn_cb_ld_t __r = haydn_ae_cb_ld_tw(__ar, (int)(cbr_sel), __p, 0); \
+    (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__r.data); \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+    (void)(align); \
   } while (0)
 
 //---- AE_SA16X4_IC / AE_SA32X2_IC — AR residual store + CBR cursor wrap ----
@@ -3903,9 +3962,10 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa16x4_step((ae_int16x4)(src), __ar, __p, 8, 0); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
+    haydn_dr64_t __s = (haydn_dr64_t)__haydn_v4_as_i64((haydn_x4int16)(src)); \
+    void *__np = haydn_ae_cb_st(__ar, (int)(cbr_sel), __p, __s, 1); \
+    (ptr) = (__typeof__(ptr))__np; \
+    (void)(align); \
   } while (0)
 
 #undef  AE_SA32X2_IC
@@ -3920,9 +3980,9 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
     haydn_dr64_t __s = haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)(src)); \
-    haydn_ae_sa64_step(__AE_AS_V2(__s), __ar, __p, 8, 0); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
+    void *__np = haydn_ae_cb_st(__ar, (int)(cbr_sel), __p, __s, 0); \
+    (ptr) = (__typeof__(ptr))__np; \
+    (void)(align); \
   } while (0)
 
 //---- AE_S32X2F24_XC / AE_L32X2F24_XC 3-arg overload ---------------------
@@ -4055,6 +4115,14 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
     (ptr) = (ae_int16x4 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
   } while (0)
 
+/* Reverse dual-32 UA (dir=1). Lane law (D1.15 golden adjudication):
+ * D_LTWUA_POST (instruction_type_index.json type AR) has NO dir operand —
+ * `temp=mem64[rs&~7]; window={temp,ar}; rtd=(rs[2]==0)?window[63:00]:
+ * window[95:32]; ar=temp; rs=rs+8` — direction only steps the pointer, never
+ * reorders data words. Every 32x2-shaped UA/CB load therefore owes the same
+ * H-first presentation as AE_LA32X2_IP/IC/RIC: route the raw LE window
+ * through haydn_ae_f32x2_mem_to_reg so the first (lowest-address) word of
+ * the logical object lands in the H lane. */
 #undef  AE_LA32X2_RIP
 #define AE_LA32X2_RIP(...) __AE_LA32X2_RIP_OVERLOAD(__VA_ARGS__)
 #define __AE_LA32X2_RIP_GET(_1, _2, _3, _4, NAME, ...) NAME
@@ -4064,7 +4132,8 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    (dst) = (ae_int32x2)haydn_ae_la64_step(__ar, __p, 8, 1); \
+    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 1); \
+    (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) - 8); \
   } while (0)
 #define __AE_LA32X2_RIP_4A(dst, align, ptr, inc) \
@@ -4074,7 +4143,8 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
-    (dst) = (ae_int32x2)haydn_ae_la64_step(__ar, __p, __s, 1); \
+    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, __s, 1); \
+    (dst) = (ae_int32x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (ae_int32x2 *)((char *)(ptr) - ((inc) ? (inc) : 8)); \
   } while (0)
 
@@ -4083,13 +4153,16 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
 #define __AE_LA32X2F24_RIP_GET(_1, _2, _3, _4, NAME, ...) NAME
 #define __AE_LA32X2F24_RIP_OVERLOAD(...) \
   __AE_LA32X2F24_RIP_GET(__VA_ARGS__, __AE_LA32X2F24_RIP_4A, __AE_LA32X2F24_RIP_3A)(__VA_ARGS__)
-/* Dual-24 reverse UA residual: same dir=1 path as LA32X2_RIP, but keep
- * ae_f24x2 / pointer typeof (never force ae_int32x2 assignment). */
+/* Dual-24 reverse UA residual: same dir=1 path and the same H-first lane
+ * law as LA32X2_RIP (golden: D_LTWUA_POST is direction-neutral on word
+ * order), but keep ae_f24x2 / pointer typeof (never force ae_int32x2
+ * assignment). */
 #define __AE_LA32X2F24_RIP_3A(dst, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    (dst) = (ae_f24x2)(haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 1); \
+    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 1); \
+    (dst) = (ae_f24x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
   } while (0)
 #define __AE_LA32X2F24_RIP_4A(dst, align, ptr, inc) \
@@ -4099,7 +4172,8 @@ static inline void AE_MULAFD24X2_FIR_H_4A(ae_int64 *q0, ae_int64 *q1,
     int __s = (int)(inc); \
     if (__s < 0) __s = -__s; \
     if (__s == 0) __s = 8; \
-    (dst) = (ae_f24x2)(haydn_dr64_t)haydn_ae_la64_step(__ar, __p, __s, 1); \
+    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, __s, 1); \
+    (dst) = (ae_f24x2)haydn_ae_f32x2_mem_to_reg(__le); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - ((inc) ? (inc) : 8)); \
   } while (0)
 
@@ -4426,10 +4500,9 @@ static inline ae_int64 AE_MULZAAFD32X16_H2_L3_3A(ae_int64 acc, ae_int16x4 d,
   __AE_L32_XC_4A(dst, ptr, offs, 0)
 #define __AE_L32_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
-                                           (offs) >> 3); \
-    (dst) = (ae_int32)((int)(haydn_dr64_t)__r.data & 0xFFFFFFFF); \
-    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+    (dst) = *(ae_int32 *)(void *)(ptr); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
   } while (0)
 
 //---- AE_L32F24_XC : 3-arg (implicit CBR0) ; 4-arg -------------------------
@@ -4442,10 +4515,9 @@ static inline ae_int64 AE_MULZAAFD32X16_H2_L3_3A(ae_int64 acc, ae_int16x4 d,
   __AE_L32F24_XC_4A(dst, ptr, offs, 0)
 #define __AE_L32F24_XC_4A(dst, ptr, offs, cbr_sel) \
   do { \
-    haydn_cb_ld_t __r = haydn_ldw_cb_imm((ptr), (cbr_sel), \
-                                           (offs) >> 3); \
-    (dst) = (ae_f24)((int)(haydn_dr64_t)__r.data & 0xFFFFFFFF); \
-    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+    (dst) = *(ae_f24 *)(void *)(ptr); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
   } while (0)
 
 //---- AE_LA24X2_IC : 3-arg (dst, align, ptr) ; 4-arg (with cbr_sel) -----
@@ -4474,10 +4546,10 @@ static inline ae_int64 AE_MULZAAFD32X16_H2_L3_3A(ae_int64 acc, ae_int16x4 d,
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_dr64_t __le = (haydn_dr64_t)haydn_ae_la64_step(__ar, __p, 8, 0); \
-    (dst) = (ae_f24x2)haydn_ae_f32x2_mem_to_reg(__le); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
+    haydn_cb_ld_t __r = haydn_ae_cb_ld_tw(__ar, (int)(cbr_sel), __p, 0); \
+    (dst) = (ae_f24x2)haydn_ae_f32x2_mem_to_reg(__r.data); \
+    (ptr) = (__typeof__(ptr))__r.new_ptr; \
+    (void)(align); \
   } while (0)
 
 //---- AE_L16X2M_X : 2-arg returning (ptr, offs) ; 3-arg statement -------
@@ -4677,7 +4749,11 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_S32F24_L_XC_3A(src, ptr, offs) \
   __AE_S32F24_L_XC_4A(src, ptr, offs, 0)
 #define __AE_S32F24_L_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    *(ae_f24 *)(void *)(ptr) = (ae_f24)(src); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
+  } while (0)
 
 //---- AE_MULZAAFD24_HL_LH 2-arg overload (a, b; zero-init accumulator) --
 #undef  AE_MULZAAFD24_HL_LH
@@ -4786,7 +4862,11 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_S32_L_XC_3A(src, ptr, offs) \
   __AE_S32_L_XC_4A(src, ptr, offs, 0)
 #define __AE_S32_L_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int32)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    *(ae_int32 *)(void *)(ptr) = (ae_int32)(src); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
+  } while (0)
 
 //---- AE_L32X2F24_RIP overload (2-arg: dst, ptr; inc implicit 8) --------
 /* Reverse linear load (not forward IP). Late body owns public arity. */
@@ -4817,9 +4897,9 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
     haydn_dr64_t __s = haydn_ae_f32x2_mem_to_reg((haydn_dr64_t)(src)); \
-    haydn_ae_sa64_step(__AE_AS_V2(__s), __ar, __p, 8, 0); \
-    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
-        (uintptr_t)(ptr), 8, (int)(cbr_sel)); \
+    void *__np = haydn_ae_cb_st(__ar, (int)(cbr_sel), __p, __s, 0); \
+    (ptr) = (__typeof__(ptr))__np; \
+    (void)(align); \
   } while (0)
 
 #undef  AE_SA16X4_RIP
@@ -4884,7 +4964,11 @@ static inline ae_int64 AE_MULZAAFD32X16_H3_L2_3A(ae_int64 acc, ae_int16x4 d,
 #define __AE_S16_0_XC_3A(src, ptr, offs) \
   __AE_S16_0_XC_4A(src, ptr, offs, 0)
 #define __AE_S16_0_XC_4A(src, ptr, offs, cbr_sel) \
-  do { haydn_sdw_cb_imm((haydn_dr64_t)(ae_int16)(src), (ptr), (cbr_sel), (offs) >> 3); } while (0)
+  do { \
+    *(ae_int16 *)(void *)(ptr) = (ae_int16)(src); \
+    (ptr) = (__typeof__(ptr))haydn_cbr_step( \
+        (uintptr_t)(ptr), (intptr_t)(offs), (int)(cbr_sel)); \
+  } while (0)
 
 //---- AE_MULZASFD24_HH_LL 2-arg overload (a, b; zero-init accumulator) --
 #undef  AE_MULZASFD24_HH_LL
@@ -7451,13 +7535,23 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
 // (src, align, ptr) where `align` is the ae_valign handle and `ptr` is the
 // data pointer. The "RIP" = reverse-increment: store 8 bytes at *ptr, then
 // ptr -= 8. (align is ignored on Haydn.)
+//
+// Store lane law (D1.15 golden adjudication): D_STWUA_POST
+// (instruction_type_index.json type AR) is direction-neutral on data word
+// order — `rs[2]==0 → mem64=rtd; rs[2]==1 → mem64={rtd[31:00],ar[31:00]},
+// ar[31:00]=rtd[63:32]` — the addressed (first) word always comes from
+// rtd[31:0]. The H-first compat convention therefore requires converting
+// src through haydn_ae_f32x2_mem_to_reg BEFORE the UA step, mirroring
+// AE_SA32X2_IC / AE_S32X2_XC / AE_SA32X2F24_XC. Without it a RIP
+// load→store round-trip reverses memory word order.
 // ---------------------------------------------------------------------------
 #undef  AE_SA32X2F24_RIP
 #define AE_SA32X2F24_RIP(src, align, ptr) \
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 1); \
+    haydn_ae_sa64_step(__AE_AS_V2(haydn_ae_f32x2_mem_to_reg( \
+                           (haydn_dr64_t)(src))), __ar, __p, 8, 1); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
   } while (0)
 #undef  AE_SA32X2_RIP
@@ -7465,7 +7559,8 @@ uint32_t AE_TRUNCA16P24S_H(ae_f24x2 x) {
   do { \
     int __ar = __HAYDN_AR_SEL(align); \
     void *__p = (ptr); \
-    haydn_ae_sa64_step(__AE_AS_V2(src), __ar, __p, 8, 1); \
+    haydn_ae_sa64_step(__AE_AS_V2(haydn_ae_f32x2_mem_to_reg( \
+                           (haydn_dr64_t)(src))), __ar, __p, 8, 1); \
     (ptr) = (__typeof__(ptr))((char *)(ptr) - 8); \
   } while (0)
 

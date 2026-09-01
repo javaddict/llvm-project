@@ -36,6 +36,17 @@
 // optimization level in addPreSched2, after pack and before the first
 // Finalize, so BranchRelaxation / Fixup absorb any size growth.
 //
+// D1.16 loop back-edge wrap law (this pass is the always-on emission net):
+// a latch MBB (self-successor) re-executes its own cycle 0 immediately
+// after its last body cycle — across the HWLR_END -> HWLR_BEGIN wrap for
+// ZOL loops, across the backedge branch for soft loops. The required pad
+// is the same max-remaining value the exit seam computes
+// (HaydnHazardRecognizer::destWindowWrapPadNeed == destWindowExitLeak);
+// only the INSERTION POINT differs. ZOL pads go before the END-anchored
+// parcel so they execute INSIDE [BEGIN,END] (parcels after END execute
+// only on loop exit); soft pads go before the backedge branch, which also
+// covers the exit path — a soft latch inserts once, never twice.
+//
 // Regeneration pin (late repair loop): each invocation strips stall parcels
 // this pass previously inserted, then re-inserts the dest-window need of the
 // current inventory. Padding is never accumulated across mutating iterations.

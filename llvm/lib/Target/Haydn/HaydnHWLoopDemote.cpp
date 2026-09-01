@@ -651,6 +651,42 @@ haydn::hwloop::demoteSavePlacement(Register Prefer, Register LatchScr,
                              regClobberedNonCountdownIn(Prefer, Blocks));
 }
 
+// D1.19 admission law for the stack-counter demote arm — the closed case
+// matrix is documented at the declaration in HaydnHWLoopDemote.h. The one
+// non-obvious cell is (e): Adj!=0 with no PreheaderScr and LatchScr==Prefer.
+// The remaining kernel trip is Prefer+Adj, and the only register that could
+// hold it for the ST32 is Prefer itself — but the ADDI addend dest must
+// never be Prefer (an in-place ADDI destroys the trip value Prefer still
+// carries across the loop; same LC-vs-src law that forbids CountReg==Prefer
+// when Adj!=0). Storing Prefer unchanged stores the FULL trip N while the
+// kernel must run N-S, so the S peeled iterations re-execute (duplicated
+// side effects / wrong exit). Refuse; the caller's fail-closed ladders own
+// the fatal. Every other cell either has a proved-sound emission above or
+// was already refused: (a)/(f) latch/imm-trip scratch laws are unchanged,
+// (b) stores Prefer directly (Adj==0: remaining trip IS N), (c) ADDI into
+// the probed PreheaderScr != Prefer, (d) copy fallback PreheaderScr=
+// LatchScr != Prefer.
+bool haydn::hwloop::demoteStackCounterAdmissible(bool LatchScrValid,
+                                                 bool HasImm,
+                                                 bool PreheaderScrValid,
+                                                 bool AdjNonZero,
+                                                 bool LatchScrIsPrefer) {
+  // (a) No spill-free non-R0 latch scratch -> no sound latch window.
+  if (!LatchScrValid)
+    return false;
+  // (f) Imm-trip materialize needs its own preheader scratch; HasImm never
+  // carries an Adj (SET_* rematted the addend at Role-A expand).
+  if (HasImm)
+    return PreheaderScrValid;
+  // (b) Adj==0: remaining trip == full trip; store Prefer directly.
+  if (!AdjNonZero)
+    return true;
+  // (e) Adj!=0 with no PreheaderScr and LatchScr==Prefer: no sound store
+  // window (ADDI dest must differ from Prefer). (c)/(d) any other
+  // PreheaderScr — probed or copied-from-LatchScr(!=Prefer) — is sound.
+  return PreheaderScrValid || !LatchScrIsPrefer;
+}
+
 // A demote counter's live range: the loop blocks (every one lies on a
 // def->latch-BNEZ path — collectLoopBlocks is reverse-reachable from the
 // latch) plus the preheader tail from the materialize point.
@@ -781,6 +817,24 @@ void haydn::hwloop::stripResidualCountdown(const LoopBlockSet &Blocks,
     eraseInstrSafe(MI);
 }
 
+void haydn::hwloop::computeBlockLiveIns(LivePhysRegs &Live,
+                                        const MachineBasicBlock &MBB) {
+  // Generic llvm::computeLiveIns is the same walk with addLiveOutsNoPristines.
+  // addLiveOuts includes pristines so unused CSRs stay fail-closed occupied.
+  const MachineFunction &MF = *MBB.getParent();
+  Live.init(*MF.getRegInfo().getTargetRegisterInfo());
+  Live.addLiveOuts(MBB);
+  for (const MachineInstr &MI : llvm::reverse(MBB))
+    Live.stepBackward(MI);
+}
+
+bool haydn::hwloop::blockLiveInContains(const MachineBasicBlock &MBB,
+                                        MCPhysReg Reg) {
+  LivePhysRegs Live;
+  computeBlockLiveIns(Live, MBB);
+  return Live.contains(Reg);
+}
+
 Register haydn::hwloop::pickCounterReg(
     const LoopBlockSet &Blocks, Register Prefer, const HaydnSubtarget &ST,
     MachineBasicBlock &Preheader, MachineBasicBlock::iterator InsertPt,
@@ -809,17 +863,6 @@ Register haydn::hwloop::pickCounterReg(
     LPR.stepBackward(*II);
   }
 
-  // Live-in of a loop-exit successor, derived from its live-out stepped
-  // backward over its instructions (MBB live-in lists alone are stale this
-  // late; the backward walk is the same authority LivePhysRegs uses).
-  auto liveInContains = [&](const MachineBasicBlock &S, MCPhysReg R) -> bool {
-    LivePhysRegs SuccLPR(TRI);
-    SuccLPR.addLiveOuts(S);
-    for (const MachineInstr &MI : llvm::reverse(S))
-      SuccLPR.stepBackward(MI);
-    return SuccLPR.contains(R);
-  };
-
   auto isUsable = [&](Register R) -> bool {
     if (!R.isPhysical() || R == Haydn::R0 || R == Haydn::R13 || R == Haydn::R15)
       return false;
@@ -833,7 +876,7 @@ Register haydn::hwloop::pickCounterReg(
       for (const MachineBasicBlock *S : B->successors()) {
         if (Blocks.contains(S))
           continue;
-        if (liveInContains(*S, R.asMCReg())) {
+        if (blockLiveInContains(*S, R.asMCReg())) {
           LLVM_DEBUG(dbgs()
                      << DebugPrefix << ": pickCounterReg reject "
                      << printReg(R, &TRI) << " live after loop exit ("

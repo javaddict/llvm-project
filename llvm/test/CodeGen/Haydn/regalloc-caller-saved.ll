@@ -127,9 +127,9 @@ define i32 @test_all_gpr_caller_saved(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; move32 r8, r6 }
 ; CHECK-NEXT:    { nop; jal lr, clobber_gpr }
-; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r3, sp, 2 } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r9 }

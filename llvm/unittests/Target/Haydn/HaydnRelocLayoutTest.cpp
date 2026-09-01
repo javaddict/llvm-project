@@ -380,39 +380,41 @@ TEST(HaydnRelocLayoutTest, Hi12FieldLsbFollowsCommittedLuiWindow) {
   patchField(E3Alu0, 1, HI.NBytes, HI.FieldSize, 23u);
   EXPECT_EQ(readField(E3Alu0, HI.NBytes, HI.FieldSize, 23u), 1u);
 
-  // E3 e1 ALU1 LUI: map=1 type=4 at entry 37 → imm abs 54.
+  // E3 e1 ALU1 LUI: map=1 type=4 opc=1(bit49) at entry 37 → imm abs 54.
   uint8_t E3e1Alu1[12] = {};
   E3e1Alu1[0] = 0x0f;
   E3e1Alu1[4] = 0x20; // map LSB at bit 37
   E3e1Alu1[5] = 0x02; // type=4 at bits [39:42]
+  E3e1Alu1[6] = 0x02; // opc=1 at bit 49 (D1.17 pin)
   EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e1Alu1), 54u);
   patchField(E3e1Alu1, 1, HI.NBytes, HI.FieldSize, 54u);
   EXPECT_EQ(readField(E3e1Alu1, HI.NBytes, HI.FieldSize, 54u), 1u);
   // e1 map/type live in bits [37:42], which overlap the E2 LSB=32 window;
   // do not require that window to read 0.
 
-  // E3 e1 ALU0 LUI: map=2 type=0xa at entry 37 → imm abs 54.
+  // E3 e1 ALU0 LUI: map=2 type=0xa opc=1(bit47) at entry 37 → imm abs 54.
   uint8_t E3e1Alu0[12] = {};
   E3e1Alu0[0] = 0x0f;
-  E3e1Alu0[4] = 0x40; // map=2 at bits [37:38]
-  E3e1Alu0[5] = 0x05; // type=0xa at bits [39:42]
+  E3e1Alu0[4] = 0x40; // map=2 at bits [38:37]
+  E3e1Alu0[5] = 0x05; // type=0xa at [42:39]
+  E3e1Alu0[5] = 0x85; // + opc=1 at bit 47 (D1.17 pin)
   EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e1Alu0), 54u);
 
-  // E3 e2 ALU2 LUI: map=1 type=4 at entry 68 → imm abs 83.
+  // E3 e2 ALU2 LUI: map=1 type=4 opc=1(bit74) at entry 68 → imm abs 83.
   uint8_t E3e2Alu2[12] = {};
   E3e2Alu2[0] = 0x0f;
   E3e2Alu2[8] = 0x10; // map LSB at bit 68
-  E3e2Alu2[9] = 0x01; // type=4 at bits [70:73]
+  E3e2Alu2[9] = 0x05; // type=4 @ bit72 + opc=1 @ bit 74 (D1.17 pin)
   EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e2Alu2), 83u);
   patchField(E3e2Alu2, 1, HI.NBytes, HI.FieldSize, 83u);
   EXPECT_EQ(readField(E3e2Alu2, HI.NBytes, HI.FieldSize, 83u), 1u);
   EXPECT_EQ(readField(E3e2Alu2, HI.NBytes, HI.FieldSize, 32u), 0u);
 
-  // E3 e2 ALU0 LUI: map=2 type=0xa at entry 68 → imm abs 81.
+  // E3 e2 ALU0 LUI: map=2 type=0xa opc=1(bit74) at entry 68 → imm abs 81.
   uint8_t E3e2Alu0[12] = {};
   E3e2Alu0[0] = 0x0f;
-  E3e2Alu0[8] = 0xa0; // map=2 + type bit1 at [68:71]
-  E3e2Alu0[9] = 0x02; // type bit3 at bit 73
+  E3e2Alu0[8] = 0xa0; // map=2 @ bit69 + type bit @71
+  E3e2Alu0[9] = 0x06; // type bit3 @73 + opc=1 @ bit74 (D1.17 pin)
   EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E3e2Alu0), 81u);
   patchField(E3e2Alu0, 1, HI.NBytes, HI.FieldSize, 81u);
   EXPECT_EQ(readField(E3e2Alu0, HI.NBytes, HI.FieldSize, 81u), 1u);
@@ -513,18 +515,23 @@ TEST(HaydnRelocLayoutTest, CsrUImm8TypedRowNotData8) {
             Haydn::FIXUP_HAYDN_CSR_UImm8);
   EXPECT_EQ(mapFixupKind(Haydn::FIXUP_HAYDN_CSR_UImm8), RelocKind::CSR_UImm8);
 
-  // E3 e0 ALU0 I8: map=2, type=3 → imm abs 23.
+  // E3 e0 ALU0 I8 CSRR: map=2, type=3, opc=4 (D1.17 pin) → imm abs 23.
   uint8_t E3Alu0[12] = {};
   E3Alu0[0] = 0x8f; // indicator 111, entry_num=1, map=2 at bits[6:7]
   E3Alu0[1] = 0x03; // type=3 at bits[8:11]
+  E3Alu0[2] = 0x01; // opc=1 at bit 16 → ZERO_GPR: pin refuses
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E3Alu0),
+            getRelocFieldInfo(RelocKind::CSR_UImm8).FieldLsb);
+  E3Alu0[2] = 0x04; // opc=4 (CSRR) at bits[18:16]
   EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E3Alu0), 23u);
   patchField(E3Alu0, 10, FI.NBytes, FI.FieldSize, 23u);
   EXPECT_EQ(readRelocAddend(RelocKind::CSR_UImm8, E3Alu0), 10);
 
-  // E3 e0 ALU2 I8: map=1, type=1 → imm abs 27.
+  // E3 e0 ALU2 I8 CSRW: map=1, type=1, opc=5 (D1.17 pin) → imm abs 27.
   uint8_t E3Alu2[12] = {};
   E3Alu2[0] = 0x4f; // indicator 111, entry_num=1, map=1 at bits[6:7]
   E3Alu2[1] = 0x01; // type=1 at bits[8:11]
+  E3Alu2[2] = 0x05; // opc=5 (CSRW) at bits[18:16]
   EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E3Alu2), 27u);
   patchField(E3Alu2, 10, FI.NBytes, FI.FieldSize, 27u);
   EXPECT_EQ(readRelocAddend(RelocKind::CSR_UImm8, E3Alu2), 10);
@@ -613,9 +620,11 @@ TEST(HaydnRelocLayoutTest, Lo20AndLsImmFieldLsbFollowEntryWindow) {
 }
 
 // Typed (mode, entry, unit) FieldLsb must match the Loc-sniffing windows
-// already returned by resolveFieldLsb. findFixupFromFixupFields used to
-// require Fields[0].Offset == E2 e0 table FieldLsb, so an E3 e0/e1 JALR
-// member (LSB 23/54) missed the dedicated ELF 22 row. AIE looks up by the
+// already returned by resolveFieldLsb. FieldLsbSites / ExtraPublishedLsb
+// are generated (HaydnGenRelocFieldLsb.inc); these windows are the
+// generator --check ratchet. findFixupFromFixupFields used to require
+// Fields[0].Offset == E2 e0 table FieldLsb, so an E3 e0/e1 JALR member
+// (LSB 23/54) missed the dedicated ELF 22 row. AIE looks up by the
 // actual FixupField Offset (AIEMCFixupKinds.cpp:36-65); Haydn keeps one
 // ELF kind per equation and accepts every published parcel-absolute LSB.
 TEST(HaydnRelocLayoutTest, PublishedMemberFieldLsbAndFixupFields) {
@@ -635,6 +644,12 @@ TEST(HaydnRelocLayoutTest, PublishedMemberFieldLsbAndFixupFields) {
   EXPECT_TRUE(isPublishedFieldLsb(RelocKind::PC_LO20, 65u));
   EXPECT_TRUE(isPublishedFieldLsb(RelocKind::LO20, 65u));
   EXPECT_FALSE(isPublishedFieldLsb(RelocKind::PC_LO20, 23u));
+  // ExtraPublishedLsb: HWLRIII shares (mode, entry) with HWLRIIR (F2).
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HWLoopOff1, 32u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HWLoopOff1, 13u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HWLoopOff2, 38u));
+  EXPECT_TRUE(isPublishedFieldLsb(RelocKind::HWLoopOff2, 36u));
+  EXPECT_FALSE(isPublishedFieldLsb(RelocKind::HWLoopOff1, 99u));
 
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 0, 0), 32u);
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 0, 2), 21u);
@@ -676,6 +691,84 @@ TEST(HaydnRelocLayoutTest, PublishedMemberFieldLsbAndFixupFields) {
             static_cast<unsigned>(ELF::R_HAYDN_GOT_HI20));
   EXPECT_NE(RelocKind::Data32PCRel, RelocKind::GOT_HI20);
   EXPECT_NE(RelocKind::Data32PCRel, RelocKind::Data32);
+}
+
+// D1.12: pin the E2 HWLRIII (non-F2 SET_HWLOOP) branch of the
+// resolveFieldLsb Loc sniff (HaydnRelocLayout.cpp E2 e0 Type==0x10 →
+// Off1@13 / Off2@36). Before this pin the branch was traversed only
+// incidentally by the lld arm of hwloop-offset-reloc-shift.s; nothing
+// named it, and the MC assemble-time (applyFixup) path had zero
+// coverage (d486/cb90 are F2/0x0c only). Golden:
+// format_e_bit_layout_v2_2.json entry_num_0.entry0.ALU0.HWLRIII —
+// type_code_bin 10000, imm1(uimm6_offset1) bit[18:13],
+// imm2(uimm12_offset2) bit[47:36].
+//
+// Buffers are hand-built headers, not transcripts: byte0 bit3 is
+// entry_num (0=E2), byte1 bits[4:0] is the 5-bit entry type at parcel
+// bits[12:8]. A sniff regression that falls back to the F2 default
+// would return 32/38 here — these EXPECT_EQs fail loudly instead.
+TEST(HaydnRelocLayoutTest, HWLoopOffFieldLsbE2HWLRIIIBranch) {
+  const RelocFieldInfo &O1 = getRelocFieldInfo(RelocKind::HWLoopOff1);
+  const RelocFieldInfo &O2 = getRelocFieldInfo(RelocKind::HWLoopOff2);
+
+  // E2 e0 HWLRIII: header 0x07 (indicator 111, entry_num=0), Type=0x10
+  // at bits[12:8] → byte1 = 0x10.
+  uint8_t HWLRIII[12] = {};
+  HWLRIII[0] = 0x07;
+  HWLRIII[1] = 0x10;
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff1, HWLRIII), 13u);
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff2, HWLRIII), 36u);
+  // The two windows are distinct: 36-13 >= 12 so Off2 clears Off1.
+  EXPECT_GE(36u - 13u, O1.FieldSize);
+
+  // E2 e0 HWLRIIR (F2, Type=0x0c): table default windows 32/38.
+  uint8_t HWLRIIR[12] = {};
+  HWLRIIR[0] = 0x07;
+  HWLRIIR[1] = 0x0c;
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff1, HWLRIIR), 32u);
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff2, HWLRIIR), 38u);
+
+  // Round-trip on a live 0x10 parcel: patch 3/6 (12/24 bytes after ÷4
+  // scale) then read the addend back through ValueShift=2.
+  patchField(HWLRIII, 3, O1.NBytes, O1.FieldSize, 13u);
+  patchField(HWLRIII, 6, O2.NBytes, O2.FieldSize, 36u);
+  EXPECT_EQ(readField(HWLRIII, O1.NBytes, O1.FieldSize, 13u), 3u);
+  EXPECT_EQ(readField(HWLRIII, O2.NBytes, O2.FieldSize, 36u), 6u);
+  EXPECT_EQ(readRelocAddend(RelocKind::HWLoopOff1, HWLRIII), 12); // ×4
+  EXPECT_EQ(readRelocAddend(RelocKind::HWLoopOff2, HWLRIII), 24); // ×4
+  // The non-overlapping part of the F2-default Off1 window (bits[35:32];
+  // bits 36-37 belong to the HWLRIII Off2 field) must stay clear — a sniff
+  // regression that patched 32/38 writes imm3/cnt bits instead.
+  EXPECT_EQ(readField(HWLRIII, O1.NBytes, 4u, 32u), 0u);
+
+  // Generated member windows (HaydnGenRelocFieldLsb.inc): E3 F2 e0/e1
+  // and E2 e0 F2 defaults. resolveFieldLsbForMember is the typed-API
+  // twin of the sniff — pin both so the D1.17 producer-side switch to
+  // the typed API cannot drift from the Loc windows.
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff1, 0, 0), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff2, 0, 0), 38u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff1, 1, 0), 18u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff2, 1, 0), 24u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff1, 1, 1), 49u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff2, 1, 1), 55u);
+  // No E3 e2 site: fail closed to the E2 e0 table window.
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff1, 1, 2), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HWLoopOff2, 1, 2), 38u);
+
+  // E3 F2 sniff sites match the typed rows: map=2 @ entry+0 (2b),
+  // type=0xc @ entry+2 (4b). e0 entry lo = abs bit 6; e1 = abs bit 37.
+  uint8_t E3F2e0[12] = {};
+  E3F2e0[0] = 0x8f;  // indicator 111, entry_num=1, map[7:6]=2
+  E3F2e0[1] = 0x0c;  // type=0xc at bits[11:8]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff1, E3F2e0), 18u);
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff2, E3F2e0), 24u);
+
+  uint8_t E3F2e1[12] = {};
+  E3F2e1[0] = 0x0f;  // indicator 111, entry_num=1
+  E3F2e1[4] = 0x40;  // map=2 at bits[38:37]
+  E3F2e1[5] = 0x06;  // type=0xc at bits[42:39]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff1, E3F2e1), 49u);
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HWLoopOff2, E3F2e1), 55u);
 }
 
 // Shared ELF 0..23 coverage: RelocKind values are the ELF R_HAYDN_* numbers.
@@ -780,6 +873,245 @@ TEST(HaydnRelocLayoutTest, NineFileHashAndProvisionalObjectIdentity) {
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 0, 0, 0), 32u);
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 0, 0), 23u);
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 1, 0), 54u);
+}
+
+// D1.17: HI12 Loc-sniff opc pins. Map/type alone is NOT member-unique on
+// the ALU0 I12 sites (LUI opc=1 shares with BEQZ..BLTZ opc=4..7; layout
+// 123 at E3 e2 carries the same sharing) — the pre-fix sniff matched a
+// BRANCH member and returned the branch window while the symbolic LUI sat
+// at another entry. Buffers are hand-built headers: byte0 bit3 entry_num,
+// map/type at each entry's absolute base (e0:6, e1:37, e2:68).
+TEST(HaydnRelocLayoutTest, Hi12MixedParcelSniffOpcPins) {
+  const RelocFieldInfo &HI = getRelocFieldInfo(RelocKind::HI12);
+
+  // E3 parcel with a BEQZ-opc member at e1 ALU0 (map=2 type=0xa opc=4)
+  // and a LUI at e2 (map=2 type=0xa opc=1): the HI12 sniff must NOT match
+  // the e1 branch arm — pre-fix it returned 54; post-pin it matches the
+  // e2 ALU0 LUI and returns 81.
+  uint8_t MixedBranchE1LuiE2[12] = {};
+  MixedBranchE1LuiE2[0] = 0x0f; // indicator 111 (bits[2:0]) + entry_num=1
+  MixedBranchE1LuiE2[4] = 0x40; // e1 map=2 @ [38:37]
+  MixedBranchE1LuiE2[5] = 0x05; // e1 type=0xa @ [42:39]
+  MixedBranchE1LuiE2[6] = 0x02; // e1 opc=4 @ [49:47]
+  MixedBranchE1LuiE2[8] = 0xa0; // e2 map=2 @ [69:68] + type bit
+  MixedBranchE1LuiE2[9] = 0x06; // e2 type=0xa bit3 @73 + opc=1 @ [76:74]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, MixedBranchE1LuiE2), 81u);
+
+  // Same parcel shape with the LUI at e2 ALU2 (map=1 type=4 opc=1 @74):
+  // window 83, never the e1 branch's 54.
+  uint8_t MixedBranchE1LuiE2Alu2[12] = {};
+  MixedBranchE1LuiE2Alu2[0] = 0x0f;
+  MixedBranchE1LuiE2Alu2[4] = 0x40;
+  MixedBranchE1LuiE2Alu2[5] = 0x05;
+  MixedBranchE1LuiE2Alu2[6] = 0x02; // e1 BEQZ opc=4
+  MixedBranchE1LuiE2Alu2[8] = 0x10; // e2 map=1 @68
+  MixedBranchE1LuiE2Alu2[9] = 0x05; // e2 type=4 + opc=1 @74
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, MixedBranchE1LuiE2Alu2), 83u);
+
+  // Reverse mix: LUI at e1 ALU0 (opc=1), branch at e2 (opc=4): 54.
+  uint8_t MixedLuiE1BranchE2[12] = {};
+  MixedLuiE1BranchE2[0] = 0x0f;
+  MixedLuiE1BranchE2[4] = 0x40; // map=2
+  MixedLuiE1BranchE2[5] = 0x85; // type=0xa + opc=1 @47
+  MixedLuiE1BranchE2[8] = 0xa0;
+  MixedLuiE1BranchE2[9] = 0x12; // type bit3 + opc=4 @ [76:74]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, MixedLuiE1BranchE2), 54u);
+  patchField(MixedLuiE1BranchE2, 1, HI.NBytes, HI.FieldSize, 54u);
+  EXPECT_EQ(readField(MixedLuiE1BranchE2, HI.NBytes, HI.FieldSize, 54u), 1u);
+
+  // NOP-opc(0) members never satisfy a pinned arm: an E3 parcel whose
+  // only I12-shaped entries are NOPs falls to the table default (E2 e0
+  // geometry) — the documented fail-through.
+  uint8_t AllNopOpc[12] = {};
+  AllNopOpc[0] = 0x0f;
+  AllNopOpc[4] = 0x40; // map=2 @37
+  AllNopOpc[5] = 0x05; // type=0xa @39 (opc @47..49 = 0 → NOP)
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, AllNopOpc),
+            getRelocFieldInfo(RelocKind::HI12).FieldLsb);
+}
+
+// D1.24/D1.17 E2 arm pin: the HI12 E2 e0 sniff requires the LUI member
+// (map=0, 5-bit type @8 = 0x0a, opc @17..19 == 1). A parcel whose e0 is
+// NOT the LUI (opc fabricated != 1) must fall through to the table
+// default — never patch the e0 tail bits[43:32] for an LUI elsewhere.
+TEST(HaydnRelocLayoutTest, Hi12E2ArmLuiOpcPin) {
+  uint8_t E2Lui[12] = {};
+  E2Lui[0] = 0x07;              // indicator 111, entry_num=0
+  E2Lui[1] = 0x0a;              // 5-bit type @8 = 0x0a (map @6..7 = 0)
+  E2Lui[2] = 0x02;              // opc=1 @ bits[19:17]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E2Lui), 32u);
+  patchField(E2Lui, 1, 12, 12, 32u);
+  EXPECT_EQ(readField(E2Lui, 12, 12, 32u), 1u);
+
+  // opc=4 (BEQZ shape at E2 e0): pin refuses — table default fall-through
+  // (a symbolic HI12 whose parcel's e0 is a branch must never patch the
+  // e0 tail bits[43:32]; the producer emits a qualified twin instead).
+  uint8_t E2Branch[12] = {};
+  E2Branch[0] = 0x07;
+  E2Branch[1] = 0x0a;
+  E2Branch[2] = 0x08; // opc=4
+  EXPECT_EQ(resolveFieldLsb(RelocKind::HI12, E2Branch),
+            getRelocFieldInfo(RelocKind::HI12).FieldLsb);
+}
+
+// D1.17: CSR_UImm8 Loc-sniff opc pins. I8 hosts NOP(0) and
+// ZERO_GPR(1)/ZERO_DR(2)/ZERO_SFR(3) alongside CSRR(4)/CSRW(5) at every
+// site — the pre-fix sniff matched ZERO_* and returned the wrong window
+// (`{ nop; csrr; zero_gpr }` returned 23 from the e0 ZERO_GPR while the
+// CSR sat at e1 window 54).
+TEST(HaydnRelocLayoutTest, CsrMixedParcelSniffOpcPins) {
+  const RelocFieldInfo &CI = getRelocFieldInfo(RelocKind::CSR_UImm8);
+
+  // E3 parcel with ZERO_GPR-opc(1) at e0 ALU0 (map=2 type=3 opc=1) and
+  // CSRR(4) at e1 (map=2 type=3 opc=4): pre-fix returned 23 (the e0 arm
+  // matched ZERO_GPR); post-pin the e0 arm refuses and e1 matches CSRR.
+  uint8_t MixedZeroE0CsrrE1[12] = {};
+  MixedZeroE0CsrrE1[0] = 0x8f; // indicator 111, entry_num=1, map=2 @6..7
+  MixedZeroE0CsrrE1[1] = 0x03; // type=3 @8..11
+  MixedZeroE0CsrrE1[2] = 0x01; // opc=1 (ZERO_GPR) @16..18
+  // e1 ALU0 CSRR: map=2 @37, type=3 @39, opc=4 @47..49.
+  MixedZeroE0CsrrE1[4] = 0xc0; // map=2 @ [38:37]
+  MixedZeroE0CsrrE1[5] = 0x01; // type=3 @ [42:39]
+  MixedZeroE0CsrrE1[6] = 0x02; // opc=4 @ [49:47]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, MixedZeroE0CsrrE1), 54u);
+  patchField(MixedZeroE0CsrrE1, 10, CI.NBytes, CI.FieldSize, 54u);
+  EXPECT_EQ(readRelocAddend(RelocKind::CSR_UImm8, MixedZeroE0CsrrE1), 10);
+
+  // ZERO_GPR alone at e0: refused (opc 1 not in {4,5}) — fail-through to
+  // the table default, never the e0 window 23.
+  uint8_t ZeroAlone[12] = {};
+  ZeroAlone[0] = 0x8f;
+  ZeroAlone[1] = 0x03;
+  ZeroAlone[2] = 0x01;
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, ZeroAlone),
+            getRelocFieldInfo(RelocKind::CSR_UImm8).FieldLsb);
+
+  // e2 CSRW (opc=5) at both units: ALU2 (map=1 type=1 opc @74) and ALU0
+  // (map=2 type=3 opc @78) both resolve 85.
+  uint8_t E2Alu2Csrw[12] = {};
+  E2Alu2Csrw[0] = 0x0f; // indicator 111 + entry_num=1
+  E2Alu2Csrw[8] = 0x50; // map=1 @68 + opc bit74
+  E2Alu2Csrw[9] = 0x14; // type=1 @70 + opc bit76
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E2Alu2Csrw), 85u);
+
+  uint8_t E2Alu0Csrw[12] = {};
+  E2Alu0Csrw[0] = 0x0f;
+  E2Alu0Csrw[8] = 0xe0; // map=2 @ [69:68] + type bit @71
+  E2Alu0Csrw[9] = 0x40; // type=3 bit3 @73
+  E2Alu0Csrw[10] = 0x01; // opc=5 @ [80:78]
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E2Alu0Csrw), 85u);
+
+  // E2 e0 arm pin: CSRR (map=0, 5-bit type @8=3, opc @17=4) → 32; a
+  // ZERO_* opc(1) at E2 e0 falls through to the table default.
+  uint8_t E2Csrr[12] = {};
+  E2Csrr[0] = 0x07;
+  E2Csrr[1] = 0x03;   // type=3 @8..12 (map @6..7 = 0)
+  E2Csrr[2] = 0x08;   // opc=4 @19..17
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E2Csrr), 32u);
+  uint8_t E2Zero[12] = {};
+  E2Zero[0] = 0x07;
+  E2Zero[1] = 0x03;
+  E2Zero[2] = 0x02; // opc=1 (ZERO_GPR)
+  EXPECT_EQ(resolveFieldLsb(RelocKind::CSR_UImm8, E2Zero),
+            getRelocFieldInfo(RelocKind::CSR_UImm8).FieldLsb);
+}
+
+// D1.17: the nine HI12/CSR entry-qualified rows (ELF 34..42) mirror the
+// base geometry except FieldLsb; mapFixupKind / mapRelocKindToFixup
+// round-trip; resolveFieldLsb early-returns the typed row (no sniff) for
+// every qualified kind; baseKindFor folds each twin back to its base.
+TEST(HaydnRelocLayoutTest, QualifiedHi12CsrKindRows) {
+  struct Row {
+    RelocKind K;
+    RelocKind Base;
+    unsigned FieldLsb;
+    unsigned ElfVal;
+    unsigned Fixup;
+  };
+  const Row Rows[] = {
+      {RelocKind::HI12_E3E0_ALU2, RelocKind::HI12, 21,
+       ELF::R_HAYDN_HI12_E3E0_ALU2, Haydn::FIXUP_HAYDN_HI12_E3E0_ALU2},
+      {RelocKind::HI12_E3E0_ALU0, RelocKind::HI12, 23,
+       ELF::R_HAYDN_HI12_E3E0_ALU0, Haydn::FIXUP_HAYDN_HI12_E3E0_ALU0},
+      {RelocKind::HI12_E3E1, RelocKind::HI12, 54, ELF::R_HAYDN_HI12_E3E1,
+       Haydn::FIXUP_HAYDN_HI12_E3E1},
+      {RelocKind::HI12_E3E2_ALU2, RelocKind::HI12, 83,
+       ELF::R_HAYDN_HI12_E3E2_ALU2, Haydn::FIXUP_HAYDN_HI12_E3E2_ALU2},
+      {RelocKind::HI12_E3E2_ALU0, RelocKind::HI12, 81,
+       ELF::R_HAYDN_HI12_E3E2_ALU0, Haydn::FIXUP_HAYDN_HI12_E3E2_ALU0},
+      {RelocKind::CSR_UImm8_E3E0_ALU2, RelocKind::CSR_UImm8, 27,
+       ELF::R_HAYDN_CSR_UImm8_E3E0_ALU2,
+       Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU2},
+      {RelocKind::CSR_UImm8_E3E0_ALU0, RelocKind::CSR_UImm8, 23,
+       ELF::R_HAYDN_CSR_UImm8_E3E0_ALU0,
+       Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU0},
+      {RelocKind::CSR_UImm8_E3E1, RelocKind::CSR_UImm8, 54,
+       ELF::R_HAYDN_CSR_UImm8_E3E1, Haydn::FIXUP_HAYDN_CSR_UImm8_E3E1},
+      {RelocKind::CSR_UImm8_E3E2, RelocKind::CSR_UImm8, 85,
+       ELF::R_HAYDN_CSR_UImm8_E3E2, Haydn::FIXUP_HAYDN_CSR_UImm8_E3E2},
+  };
+  for (const Row &R : Rows) {
+    const RelocFieldInfo &Q = getRelocFieldInfo(R.K);
+    const RelocFieldInfo &B = getRelocFieldInfo(R.Base);
+    EXPECT_EQ(Q.NBytes, B.NBytes);
+    EXPECT_EQ(Q.FieldSize, B.FieldSize);
+    EXPECT_EQ(Q.ValueShift, B.ValueShift);
+    EXPECT_EQ(Q.Align, B.Align);
+    EXPECT_EQ(Q.IsSigned, B.IsSigned);
+    EXPECT_EQ(Q.IsPCRel, B.IsPCRel);
+    EXPECT_EQ(Q.Trans, B.Trans);
+    EXPECT_EQ(Q.FieldLsb, R.FieldLsb);
+    EXPECT_NE(Q.FieldLsb, B.FieldLsb);
+    EXPECT_EQ(static_cast<unsigned>(R.K), R.ElfVal);
+    EXPECT_TRUE(isEntryQualifiedKind(R.K));
+    EXPECT_EQ(baseKindFor(R.K), R.Base);
+    EXPECT_EQ(mapFixupKind(R.Fixup), R.K);
+    EXPECT_EQ(mapRelocKindToFixup(R.K), R.Fixup);
+    EXPECT_TRUE(isRelocTransformReady(R.K));
+    // The early-return: even on a Loc buffer that would sniff a DIFFERENT
+    // window (E2 header), the qualified kind patches its typed row.
+    uint8_t E2Buf[12] = {};
+    E2Buf[0] = 0x07;
+    EXPECT_EQ(resolveFieldLsb(R.K, E2Buf), R.FieldLsb);
+  }
+  // Base kinds are not entry-qualified; MC-only kinds still sit past the
+  // shared range.
+  EXPECT_FALSE(isEntryQualifiedKind(RelocKind::HI12));
+  EXPECT_FALSE(isEntryQualifiedKind(RelocKind::CSR_UImm8));
+  EXPECT_GT(static_cast<unsigned>(RelocKind::C_BranchSImm4), 42u);
+  EXPECT_EQ(baseKindFor(RelocKind::HI12), RelocKind::HI12);
+  // Value equality with the base transform: HI12 twins keep Hi12; CSR
+  // twins keep the unsigned 8-bit None transform.
+  EXPECT_EQ(getRelocFieldInfo(RelocKind::HI12_E3E1).Trans, RelocTrans::Hi12);
+  EXPECT_EQ(getRelocFieldInfo(RelocKind::CSR_UImm8_E3E2).Trans,
+            RelocTrans::None);
+}
+
+// D1.17 producer-API pin: resolveFieldLsbForMember unit splits (HI12
+// 21/23 at E3 e0, 81/83 at E3 e2; CSR 27/23 at E3 e0) — the tuple the
+// emitter already holds at encode time. E2 e1 has no I12/I8 member: both
+// kinds fail closed to the E2 e0 table default (D1.24 structural law).
+TEST(HaydnRelocLayoutTest, ResolveFieldLsbForMemberHi12CsrUnitSplits) {
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 0, 2), 21u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 0, 0), 23u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 0, 1), 32u); // no ALU1 site
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 1, 0), 54u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 1, 1), 54u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 2, 0), 81u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 1, 2, 2), 83u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::HI12, 0, 1, 1), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 0, 2), 27u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 0, 0), 23u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 0, 1), 32u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 1, 0), 54u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 1, 1), 54u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 2, 0), 85u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 2, 2), 85u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 1, 2), 85u);
+  EXPECT_EQ(resolveFieldLsbForMember(RelocKind::CSR_UImm8, 0, 1, 1), 32u);
+  // No E2-e1 window is published for either kind.
+  EXPECT_FALSE(isPublishedFieldLsb(RelocKind::HI12, 65u));
+  EXPECT_FALSE(isPublishedFieldLsb(RelocKind::CSR_UImm8, 65u));
 }
 
 } // namespace

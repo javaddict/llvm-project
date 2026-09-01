@@ -660,10 +660,29 @@ static bool strideFitsScaledImm6(int64_t Bytes, unsigned ScaleShift) {
 }
 
 // Access size + scale from MMO (preferred) or data LLT. Covers i8/i16/i32/i64.
+//
+// One law, one seat: this is the only shared callee of matchPostIncMem and
+// matchPreIncMem, so the volatile/atomic refusal below covers BOTH PRE- and
+// POST-inc fusion paths. Every G_HAYDN_{PRE,POST}INC_{LOAD,STORE} this pass
+// creates carries only plain MMOs. Golden basis (instruction_type_index.json
+// RI6 rows, e.g. S_LW_POST_IMM/S_LW_PRE_IMM Behavior `rt = mem32[rs];
+// rs = rs + (imm6 << 2);`): a PRE/POST member is one plain access plus AGU
+// register writeback and provides no ordering facility — the golden ISA has
+// no FENCE/SYNC/LOCK row — so volatile/atomic ordering cannot be preserved by
+// the fused member. Selection may further split or reposition the fused op
+// (HaydnInstructionSelector align-split arms), so ordering must not depend on
+// the fuse. Same law the sibling seats of this file already state
+// (matchLaneStore, matchPairLoadWord) and HaydnPostSelectOptimize.cpp
+// (lane-store fold). Refusal is fail-closed: the mem op keeps the legal
+// unfused G_LOAD/G_STORE + G_PTR_ADD shape. MMO-less ops are unchanged
+// (vacuous loop below falls through to the LLT size fallback).
 static bool memAccessInfo(const MachineInstr &MemI, MachineRegisterInfo &MRI,
                           unsigned &MemBytes, unsigned &ScaleShift,
                           bool &IsSExtLoad) {
   IsSExtLoad = MemI.getOpcode() == TargetOpcode::G_SEXTLOAD;
+  for (MachineMemOperand *MMO : MemI.memoperands())
+    if (MMO->isVolatile() || MMO->isAtomic())
+      return false;
   uint64_t Sz = 0;
   if (!MemI.memoperands_empty()) {
     auto SzOpt = (*MemI.memoperands_begin())->getSize();

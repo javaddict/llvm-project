@@ -14,6 +14,9 @@
 #include "HaydnBundleVerify.h"
 #include "Haydn.h"
 #include "HaydnBundlePortBudget.h"
+#include "HaydnIntraCycleRAW.h"
+#include "HaydnIntraCycleWAW.h"
+#include "HaydnPackLegality.h"
 #include "HaydnPortModel.h"
 // Opcode names come from the generated MC tables (HaydnMCTargetDesc.cpp
 // GET_INSTRINFO_MC_DESC) — same backing store as haydnOpcodeName
@@ -24,10 +27,15 @@
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
@@ -40,6 +48,12 @@
 #if defined(LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLEFORMATSOLVER_H)
 #error \
     "HaydnBundleVerify.cpp must not include HaydnBundleFormatSolver.h (no forward solver)"
+#endif
+// PackLegality is included above for cycleHasMayAliasStoreLoad. It must
+// not pull HaydnHazardRecognizer.h / HaydnBundle.h (walls below).
+#if defined(LLVM_LIB_TARGET_HAYDN_HAYDNBUNDLEMATERIALIZE_H)
+#error \
+    "HaydnBundleVerify.cpp must not include HaydnBundleMaterialize.h (no Bundle.canAdd)"
 #endif
 
 using namespace llvm;
@@ -131,6 +145,7 @@ namespace haydn {
 namespace bundle {
 
 static bool encodeableInverseRecord(const format_e::FormatEInverseRec &R);
+static unsigned haydnMspCloneInverseLookupOpcode(unsigned Opc);
 
 /// Opcode → generated FormatEInverse row ids (table indices, not MemberId).
 /// Sole inverse source is HaydnGenFormatEInverse.inc / FormatEInverse.
@@ -229,6 +244,19 @@ static void collectInverseIdsForOpcode(unsigned Opc,
 
   if (auto It = Generated.find(Opc); It != Generated.end()) {
     Ids.append(It->second.begin(), It->second.end());
+    return;
+  }
+  // `_MSP` encode clones share the catalog logical's inverse span through
+  // the same opcode-keyed mapping the stamped-entry walk uses
+  // (haydnMspCloneInverseLookupOpcode; serializer-identical families).
+  // This feeds haydnInverseRecordFromOpcode, inverseUnitMaskForOpcode, and
+  // the unit-cover pre-check — without it a legal solo clone dies as
+  // mask-0 "not unit-injective". Unmapped `_MSP` opcodes fall through to
+  // logicalOpcodeOrSelf / exact-key lookup below and end with empty Ids,
+  // so the walk fails closed on them.
+  if (const unsigned CloneLog = haydnMspCloneInverseLookupOpcode(Opc)) {
+    if (auto It = Generated.find(CloneLog); It != Generated.end())
+      Ids.append(It->second.begin(), It->second.end());
     return;
   }
   // Compiler `_MSP` / `_W` clones share the catalog logical's inverse span
@@ -407,6 +435,32 @@ static bool haydnIsMspEncodeClone(unsigned Opc) {
   return inverseOpcodeName(Opc).ends_with("_MSP");
 }
 
+/// Sole `_MSP` clone → catalog-logical opcode mapping for the structural
+/// inverse walk. Opcode-keyed (never peelLogicalOpcodeName / forward
+/// solver) and byte-identical to the serializer's own logical families in
+/// haydnMemberOpcodeForMspClone (HaydnMCInstLower.cpp:67) so verify checks
+/// the exact member family MC encode selects. The generated member tables
+/// key Logical as "BEQZ"/"JAL"/"JALR" — the catalog _W names
+/// (BEQZ_W/JAL_W/JALR_W) have no FormatEInverse rows of their own, so the
+/// former in-walk chain that targeted them was dead for three of four
+/// clones. An `_MSP`-named opcode without a mapping here (ADD32_MSP)
+/// returns 0 and the walk fails closed ("no generated member"):
+/// materialize/leaveRegion setDesc baking is the only legal way such
+/// pseudos reach commit.
+static unsigned haydnMspCloneInverseLookupOpcode(unsigned Opc) {
+  switch (Opc) {
+  case Haydn::BEQZ_W_MSP:
+    return Haydn::BEQZ;
+  case Haydn::JALR_MSP:
+  case Haydn::JALR_W_MSP:
+    return Haydn::JALR;
+  case Haydn::JAL_W_MSP:
+    return Haydn::JAL;
+  default:
+    return 0;
+  }
+}
+
 static bool haydnResidualLogicalNeedsCompletedInverse(unsigned Opc) {
   if (Opc == 0 || isPadNopOpcode(Opc))
     return false;
@@ -510,17 +564,16 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
           "structural inverse: FormatEInverse misses exact encodeable "
           "MemberId for private member");
   } else {
-    // `_MSP` flag clones encode as the catalog logical (encoder peels).
-    // BEQZ_W_MSP is the uncond barrier overlay of BEQZ_W.
-    unsigned LookupOpc = Opc;
-    if (Opc == Haydn::BEQZ_W_MSP)
-      LookupOpc = Haydn::BEQZ_W;
-    else if (Opc == Haydn::JALR_MSP)
-      LookupOpc = Haydn::JALR;
-    else if (Opc == Haydn::JAL_W_MSP)
-      LookupOpc = Haydn::JAL_W;
-    else if (Opc == Haydn::JALR_W_MSP)
-      LookupOpc = Haydn::JALR_W;
+    // `_MSP` encode clones complete an inverse record for the CATALOG
+    // LOGICAL the serializer also selects (haydnMemberOpcodeForMspClone
+    // families) at the stamped (mode, membership entry) — MatchEntry stays
+    // true so a clone at an entry with no complete inverse under the
+    // stamped mode fails closed. Unmapped `_MSP` opcodes (ADD32_MSP) have
+    // no catalog logical and fail as "no generated member";
+    // materialize/setDesc baking is the only legal commit path for them.
+    unsigned LookupOpc = haydnMspCloneInverseLookupOpcode(Opc);
+    if (!LookupOpc)
+      LookupOpc = Opc;
     Inv = haydnInverseRecordFromOpcode(LookupOpc, ExpectMode, EntryIdx,
                                        SeenUnits, /*MatchEntry=*/true);
     if (!Inv)
@@ -674,7 +727,13 @@ haydnRejectFreezeResidualLogical(ArrayRef<unsigned> MemberOpcodes) {
 ///     including pad NOP as unused windows; verify checks it, it never
 ///     compact-replans pads onto earlier entries, never findFormatEMember /
 ///     name peel. Completion of the inverse record is mandatory on every
-///     residual root — never structural/forward acceptance.
+///     residual root — never structural/forward acceptance. Compiler `_MSP`
+///     encode clones verify through the catalog logical the serializer also
+///     selects (haydnMspCloneInverseLookupOpcode) at the stamped entry; a
+///     clone at an entry with no complete inverse under the stamped mode, or
+///     an `_MSP` opcode with no catalog mapping, fails closed — no member
+///     class is structurally unverifiable and no clone-only bundle takes the
+///     idle-plan early return.
 ///   * anything else (unknown logical, no inverse at the stamped entry)
 ///     fails closed — the verifier must never ask the forward solver which
 ///     format fits
@@ -695,6 +754,10 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   // Do not compact pads: compacting would re-plan later residual/logicals
   // onto earlier entries (structural acceptance). Peer: AIE unused format
   // entry is idle, not an alternate opcode (AIEMCFormats.h:376-379).
+  // `_MSP` encode clones are Reals: every real member — clone-only bundles
+  // included — traverses the inverse matrix below, so the Reals.empty()
+  // idle-plan early return is reachable only for genuine pad-only idle (or
+  // the non-freeze representation-expand shells, which fail their own wall).
   SmallVector<unsigned, 3> Reals;
   bool HasPadNop = false;
   Reals.reserve(MemberOpcodes.size());
@@ -704,8 +767,6 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
       continue;
     }
     if (!Freeze && isRepresentationExpandPseudo(Opc))
-      continue;
-    if (haydnIsMspEncodeClone(Opc))
       continue;
     Reals.push_back(Opc);
   }
@@ -795,14 +856,14 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
       continue;
     if (!Freeze && isRepresentationExpandPseudo(Opc))
       continue;
-    if (haydnIsMspEncodeClone(Opc))
-      continue;
 
     // Shared inverse: committed child order is the encode-dag entry
     // (leading order, including pad holes; suffix digits never pin
     // entries). Parse-time uses the same helper at the textual entry.
-    // Residual/logical members complete an independently generated inverse
-    // record here — never compact pads onto earlier entries.
+    // Residual/logical members — `_MSP` encode clones included, through
+    // the catalog logical at the stamped entry — complete an independently
+    // generated inverse record here; never compact pads onto earlier
+    // entries. Unmapped `_MSP` opcodes fail closed in the walk.
     if (auto MemErr = verifyMemberAtStampedEntry(
             Opc, ExpectMode, static_cast<uint8_t>(E), RowEntries, SeenUnits,
             SeenEntryBits, ResidualCompletedBits, E))
@@ -907,11 +968,56 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
   return std::nullopt;
 }
 
+/// Leftover catalog ALU/LS may carry implicit-def $sfr the descriptor does
+/// not name (haydnDescNamesSfrPort; PackLegality rule 3). Named SFR writers
+/// (CSRW/SET_HWLOOP/flag-setters) still collide. HR/SMS/commit keep the
+/// strict HaydnIntraCycleWAW.h law.
+static bool haydnIsLeftoverUnnamedSfrDef(const MachineInstr &MI,
+                                         const MachineOperand &MO) {
+  if (!MO.isReg() || !MO.isDef())
+    return false;
+  if (!isHaydnSFRPortReg(MO.getReg()))
+    return false;
+  return !haydnDescNamesSfrPort(MI);
+}
+
+/// haydnCycleMembersHaveWAW with leftover unnamed $sfr defs ignored.
+static bool
+haydnCycleMembersHaveWAWSkipLeftoverSfr(ArrayRef<MachineInstr *> Kids,
+                                        const TargetRegisterInfo *TRI) {
+  SmallSet<Register, 8> Defs;
+  for (MachineInstr *MI : Kids) {
+    if (!MI)
+      continue;
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || !MO.isDef())
+        continue;
+      if (haydnIsLeftoverUnnamedSfrDef(*MI, MO))
+        continue;
+      if (haydnRegOverlapsDefSet(MO.getReg(), Defs, TRI))
+        return true;
+    }
+    for (const MachineOperand &MO : MI->operands()) {
+      if (!MO.isReg() || !MO.isDef())
+        continue;
+      if (haydnIsLeftoverUnnamedSfrDef(*MI, MO))
+        continue;
+      Register Reg = MO.getReg();
+      if (!Reg)
+        continue;
+      if (!Reg.isPhysical() && !Reg.isVirtual())
+        continue;
+      Defs.insert(Reg);
+    }
+  }
+  return false;
+}
+
 /// MIR entry: rebuild plan from BUNDLE root row + completion imms + children.
 /// Fail-closed: missing/unknown row imm or missing completion is an error.
 std::optional<std::string>
 verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &Fmts,
-                      BundlePlan *OutPlan, bool Freeze) {
+                      BundlePlan *OutPlan, bool Freeze, AAResults *AA) {
   if (!BundleRoot.isBundle())
     return std::string("not a BUNDLE root");
 
@@ -960,6 +1066,37 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &
       return std::string(
           "structural inverse: cycle RF port demand exceeds one issue "
           "cycle (shared haydnVerifyCommittedBundlePortBudget hook)");
+    // Shared commit hazard predicates (one MI-overload hook covers all
+    // four Verify seats). Legal WAR/use-before-def and dead-def read-old
+    // pass; live RAW, dual WAW, named same-cycle, SET trip/Off vs a
+    // same-cycle producer, and unproven store/load overlap fail closed.
+    // No vreg/FI or range walls here.
+    if (Kids.size() >= 2) {
+      const MachineFunction *MF = BundleRoot.getMF();
+      const TargetRegisterInfo *TRI =
+          MF ? MF->getSubtarget().getRegisterInfo() : nullptr;
+      SmallVector<const MachineInstr *, 3> ConstKids(Kids.begin(), Kids.end());
+      if (haydnCycleMembersHaveTrueRAW(
+              ArrayRef<const MachineInstr *>(ConstKids), TRI))
+        return std::string(
+            "structural inverse: intra-cycle RAW (no-forwarding live "
+            "def-then-use)");
+      if (haydnCycleMembersHaveWAWSkipLeftoverSfr(Kids, TRI))
+        return std::string(
+            "structural inverse: intra-cycle WAW (no dual write)");
+      if (haydnCycleViolatesNamedSameCycleLaws(Kids))
+        return std::string(
+            "structural inverse: named same-cycle law (CSRW-HWLR, "
+            "LUI/ADDI32_W e0-alone, or SIN_COS/ARCTAN alone)");
+      if (haydnCycleMembersHaveHwloopTripConflict(Kids, TRI))
+        return std::string(
+            "structural inverse: hwloop trip/Off vs same-cycle producer");
+      // Hexagon DFAPacketizer.cpp:252-283 alias uses AA; empty MMO=alias.
+      // ConstKids: cycleHasMayAliasStoreLoad takes ArrayRef<const MI *>.
+      if (pack::cycleHasMayAliasStoreLoad(ConstKids, AA))
+        return std::string(
+            "structural inverse: store/load pair is not proven disjoint");
+    }
   }
 
   // Completion is mandatory on every residual root. Unused entry windows

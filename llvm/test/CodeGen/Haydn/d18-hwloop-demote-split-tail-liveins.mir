@@ -1,0 +1,140 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+
+# Role: MIR — D1.8 p7-F1 split-tail liveins. Stack-counter demote LatchScr
+# must not clobber an exit-only live-through PostRAScratchPriority GPR when
+# the Exit block's stored live-in list is empty.
+#
+# Shape from hwloop-demote-stackcounter-freescratch.mir: imm SET_HWLOOP_W
+# + spacer forces range demote; every pickCounterReg GPR except the
+# exit-only live-through is mentioned in the loop so the counter goes to
+# the stack FI; $r7 is mentioned early but dead at the latch end, so the
+# latch window still probes it spill-free.
+#
+# Hole this pins: findPostRAScratchNoSpill used to seed latch live-outs
+# from Succ->liveins(). A BR split-tail Exit with empty stored live-ins
+# made every exit-only live-through GPR look free; LD32/SUBI32/ST32 then
+# clobbered it (save/restore only runs when LatchScr==Prefer). $r1 is a
+# PostRAScratchPriority GPR used after the loop and is not a Header
+# live-in. The seed is the computed live-ins of each effective successor
+# (one-block backward LivePhysRegs walk: addLiveOuts then reverse
+# stepBackward, same helper as CB-162), so $r1 stays live-out of the latch
+# and $r7 remains the spill-free scratch.
+#
+# CFG: bb.3 is the BR split-tail / trampoline (empty stored liveins, only
+# B to the real post-loop user). Demote Exit is that tail. $r1 is used in
+# bb.4; computeBlockLiveIns(bb.3) sees it via addLiveOuts. Adjacent
+# regression (not this pin): cb162-hwloop-demote-liveout-tripreg.ll.
+# Existing stackcounter pin still owns "$r7 when dead at latch end".
+
+--- |
+  define dso_local void @demote_split_tail_liveins(ptr nocapture writeonly %out, i32 %keep) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %split_tail
+  split_tail:
+    br label %exit
+  exit:
+    store i32 %keep, ptr %out, align 4
+    ret void
+  }
+
+...
+---
+name:            demote_split_tail_liveins
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; $r1 is not mentioned here and is not a Header live-in: it is live-
+  ; through to the post-loop user only. $r7 is mentioned then dead at
+  ; latch end. pickCounterReg still refuses $r1 via the Exit walk.
+  bb.2.body:
+    liveins: $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    $r7 = XOR32 $r2, $r3, implicit-def dead $sfr
+    ST32 $r7, $r2, 0
+    $r2 = XOR32 $r2, $r2
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    ST32 $r2, $r3, 0
+    NOP
+    NOP
+    NOP
+
+  ; BR split-tail residue: empty stored liveins. Demote Exit is this
+  ; block. $r1 is used in the successor, not listed here.
+  bb.3.split_tail:
+    successors: %bb.4
+    B %bb.4
+
+  bb.4.exit:
+    liveins: $r1, $r15
+    ST32 $r1, $r13, 0
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: demote_split_tail_liveins
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopDec
+# CHECK-NOT: LoopJNZ
+#
+# CHECK-LABEL: bb.2.body:
+# Closed window on the spill-free scratch that is dead at latch end ($r7),
+# not on the exit-only live-through ($r1). Member mnemonics after exact
+# commit (same as hwloop-demote-stackcounter-freescratch.mir).
+# CHECK: $r7 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r7 = SUBI32{{.*}}$r7, 1
+# CHECK: S_SW_WITH_IMM{{.*}}$r7, $r13
+# CHECK: BNEZ{{.*}}$r7
+# CHECK-NOT: $r1 = S_LW
+# CHECK-NOT: $r1 = SUBI32
+# CHECK-NOT: $r1 = LD32
+# CHECK-NOT: S_SW_WITH_IMM{{.*}}$r1
+# CHECK-LABEL: bb.3.split_tail:
+# CHECK-LABEL: bb.4.exit:
+# CHECK: ST32 $r1

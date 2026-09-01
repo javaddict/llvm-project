@@ -215,8 +215,9 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_HWLoopOff2;
 
   case Haydn::FIXUP_HAYDN_HI12:
-    // Wide-imm pair: LUI I12 (absolute). FieldLsb is E2 e0 @32; E3 e0/e1/e2
-    // via resolveFieldLsb. Specifier %hi12 selects this kind.
+    // Wide-imm pair: LUI I12 (absolute). Base window E2 e0 @32. D1.17:
+    // non-default E3 sites emit the qualified twins below (typed window);
+    // this row stays the default-window kind.
     return ELF::R_HAYDN_HI12;
 
   case Haydn::FIXUP_HAYDN_LO20:
@@ -282,11 +283,30 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_JALRSImm12_E3E0;
   case Haydn::FIXUP_HAYDN_JALRSImm12_E3E1:
     return ELF::R_HAYDN_JALRSImm12_E3E1;
+  case Haydn::FIXUP_HAYDN_HI12_E3E0_ALU2:
+    return ELF::R_HAYDN_HI12_E3E0_ALU2;
+  case Haydn::FIXUP_HAYDN_HI12_E3E0_ALU0:
+    return ELF::R_HAYDN_HI12_E3E0_ALU0;
+  case Haydn::FIXUP_HAYDN_HI12_E3E1:
+    return ELF::R_HAYDN_HI12_E3E1;
+  case Haydn::FIXUP_HAYDN_HI12_E3E2_ALU2:
+    return ELF::R_HAYDN_HI12_E3E2_ALU2;
+  case Haydn::FIXUP_HAYDN_HI12_E3E2_ALU0:
+    return ELF::R_HAYDN_HI12_E3E2_ALU0;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU2:
+    return ELF::R_HAYDN_CSR_UImm8_E3E0_ALU2;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU0:
+    return ELF::R_HAYDN_CSR_UImm8_E3E0_ALU0;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E1:
+    return ELF::R_HAYDN_CSR_UImm8_E3E1;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E2:
+    return ELF::R_HAYDN_CSR_UImm8_E3E2;
   case Haydn::FIXUP_HAYDN_CSR_UImm8:
     // R_HAYDN_CSR_UImm8 (ELF 23). Format E I8 uimm8 CSR address.
     // Distinct from R_HAYDN_8 (data-section 1-byte write). Local
     // constants still resolve in the AsmBackend; unresolved externals
     // emit this kind so reloc CSRW_W is not an untyped NONE fixup.
+    // D1.17: non-default E3 sites emit the qualified twins above.
     return ELF::R_HAYDN_CSR_UImm8;
   }
 }

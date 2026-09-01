@@ -53,6 +53,7 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnBundleVerify.h" // shared members/pad/member-lookup laws
 #include "HaydnFormatERecords.h"
+#include "HaydnIntraCycleRAW.h" // shared no-forwarding RAW law (hard #7)
 #include "HaydnIntraCycleWAW.h" // shared no-dual-write WAW law (hard #7)
 #include "HaydnMemberSetDesc.h"
 #include "HaydnPortModel.h"
@@ -83,6 +84,8 @@
 #include <vector>
 
 namespace llvm {
+
+class AAResults;
 
 // Defined in HaydnHazardRecognizer.cpp (AIE applyFormatOrdering peer).
 // Forward-declared so the shared MIR commit surface does not pull the HR.
@@ -613,50 +616,11 @@ inline bool opcodesFormOneLegalCycle(ArrayRef<unsigned> Opcodes,
 ///
 /// Uses are detected via isUse() / partial-def subreg reads, not only
 /// MachineOperand::readsReg() (InternalRead would hide a true dep).
+/// Alias of haydnCycleMembersHaveTrueRAW (HaydnIntraCycleRAW.h) so the
+/// freeze verifier can share the body without this header / Bundle.h.
 inline bool cycleMembersHaveTrueRAW(ArrayRef<MachineInstr *> Instrs,
                                     const TargetRegisterInfo *TRI) {
-  if (Instrs.size() < 2)
-    return false;
-
-  auto overlaps = [&](Register A, Register B) -> bool {
-    if (A == B)
-      return true;
-    if (!TRI || !A.isPhysical() || !B.isPhysical())
-      return false;
-    return TRI->regsOverlap(A, B);
-  };
-
-  // Walk members in schedule order, accumulating earlier members' live defs.
-  // A later member's read overlapping any earlier live def is a true-RAW
-  // hazard (no intra-bundle forwarding). Mirrors HR's CurrentCycleLiveDefs.
-  SmallVector<Register, 4> PriorLiveDefs;
-  for (unsigned J = 0, E = Instrs.size(); J != E; ++J) {
-    MachineInstr *MI = Instrs[J];
-    if (!MI)
-      continue;
-    for (const MachineOperand &MO : MI->operands()) {
-      if (!MO.isReg() || MO.isUndef() || !MO.getReg())
-        continue;
-      // Source use, or partial redef that reads the old full register.
-      bool IsRead = MO.isUse() || (MO.isDef() && MO.getSubReg());
-      if (!IsRead)
-        continue;
-      Register Reg = MO.getReg();
-      if (!(Reg.isPhysical() || Reg.isVirtual()))
-        continue;
-      for (Register D : PriorLiveDefs)
-        if (overlaps(Reg, D))
-          return true;
-    }
-    for (const MachineOperand &MO : MI->operands()) {
-      if (!MO.isReg() || !MO.getReg() || !MO.isDef() || MO.isDead())
-        continue;
-      Register Reg = MO.getReg();
-      if (Reg.isPhysical() || Reg.isVirtual())
-        PriorLiveDefs.push_back(Reg);
-    }
-  }
-  return false;
+  return haydnCycleMembersHaveTrueRAW(Instrs, TRI);
 }
 
 /// True when pooled RF demand of \p Instrs exceeds one issue cycle
@@ -685,62 +649,22 @@ inline bool cycleMembersHaveWAW(ArrayRef<MachineInstr *> Instrs,
   return haydnCycleMembersHaveWAW(Instrs, TRI);
 }
 
-/// Opcode check for product SET_HWLOOP / LoopStart forms.
-/// True when MI is any product SET_HWLOOP / LoopStart form (logical, wide,
-/// _S0, Format E member). Name peel so Format E private members match without
-/// requiring every member enum in this TU's include set.
-inline bool isProductHwloopSetupOpcodeName(StringRef Name) {
-  std::string Logical = peelFormatELogicalOpcodeName(Name);
-  return StringRef(Logical).starts_with_insensitive("SET_HWLOOP") ||
-         StringRef(Logical).equals_insensitive("LoopStart");
-}
-
 /// SET_HWLOOP samples trip/Off GPRs under snapshot no-forwarding: refuse
 /// coissue with any same-cycle producer of those regs (RAW needs forwarding;
 /// WAR samples stale trip — post-pipeliner peel ADDI+SET).
-inline bool cycleMembersHaveHwloopTripConflict(
-    ArrayRef<MachineInstr *> Instrs, const TargetInstrInfo &TII,
-    const TargetRegisterInfo *TRI) {
-  if (Instrs.size() < 2)
-    return false;
-  auto overlaps = [&](Register A, Register B) -> bool {
-    if (A == B)
-      return true;
-    if (!TRI || !A.isPhysical() || !B.isPhysical())
-      return false;
-    return TRI->regsOverlap(A, B);
-  };
-  for (MachineInstr *SetMI : Instrs) {
-    if (!SetMI)
-      continue;
-    if (!isProductHwloopSetupOpcodeName(TII.getName(SetMI->getOpcode())))
-      continue;
-    SmallVector<Register, 4> SetUses;
-    for (const MachineOperand &MO : SetMI->operands()) {
-      if (!MO.isReg() || !MO.getReg() || MO.isDef() || MO.isUndef())
-        continue;
-      Register R = MO.getReg();
-      if (R.isPhysical() || R.isVirtual())
-        SetUses.push_back(R);
-    }
-    if (SetUses.empty())
-      continue;
-    for (MachineInstr *Other : Instrs) {
-      if (!Other || Other == SetMI)
-        continue;
-      for (const MachineOperand &MO : Other->operands()) {
-        if (!MO.isReg() || !MO.getReg() || !MO.isDef())
-          continue;
-        Register D = MO.getReg();
-        if (!(D.isPhysical() || D.isVirtual()))
-          continue;
-        for (Register U : SetUses)
-          if (overlaps(D, U))
-            return true;
-      }
-    }
-  }
-  return false;
+/// Alias of haydnCycleMembersHaveHwloopTripConflict (HaydnPortModel.h) —
+/// the ONE trip-conflict body (D1.11), whose SET_HWLOOP membership is the
+/// numeric classifier haydnClassifyHwloopSetupOpcode over generated
+/// logicalOpcodeOrSelf, never a TII name peel. Kept as a bundle-namespace
+/// alias so commit/bake/free-pack/repair share the freeze verifier's body.
+inline bool
+cycleMembersHaveHwloopTripConflict(ArrayRef<MachineInstr *> Instrs,
+                                   const TargetRegisterInfo *TRI) {
+  return haydnCycleMembersHaveHwloopTripConflict(Instrs, TRI);
+}
+
+inline bool cycleViolatesNamedSameCycleLaws(ArrayRef<MachineInstr *> Instrs) {
+  return haydnCycleViolatesNamedSameCycleLaws(Instrs);
 }
 
 
@@ -881,7 +805,7 @@ inline bool instrsFormOneLegalCycle(ArrayRef<MachineInstr *> Instrs,
       return false;
     // SET_HWLOOP trip/Off sample cannot share a cycle with a producer of
     // those regs (snapshot no-forwarding — remat ADDI+SET peel).
-    if (TII && cycleMembersHaveHwloopTripConflict(Instrs, *TII, TRI))
+    if (cycleMembersHaveHwloopTripConflict(Instrs, TRI))
       return false;
   }
 
@@ -919,11 +843,17 @@ resolveMixedMemberCycleOnce(ArrayRef<MachineInstr *> Instrs,
 /// pre-RA SMS handoff can probe without freezing illegal hard roots.
 ///
 /// Alias kept for existing call sites: \p instrsCanExactCommitProductCycle.
-bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs);
+/// \p AA is ScheduleDAGMI AA (HaydnScheduleDAGMI::getAliasAnalysis, AIE
+/// Context->AA overlay). Default nullptr is fail-closed so HR / residual
+/// callers can omit it; proven disjoint (TII same-base or AA NoAlias)
+/// still packs. Dual-load is not this law.
+bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs,
+                            AAResults *AA = nullptr);
 
 /// Historical name — prefer \p canCoissueProductCycle.
-inline bool instrsCanExactCommitProductCycle(ArrayRef<MachineInstr *> Instrs) {
-  return canCoissueProductCycle(Instrs);
+inline bool instrsCanExactCommitProductCycle(ArrayRef<MachineInstr *> Instrs,
+                                             AAResults *AA = nullptr) {
+  return canCoissueProductCycle(Instrs, AA);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1247,15 +1177,20 @@ auctionFocusFillScoreOnly(ArrayRef<unsigned> BaseOpcodes,
 /// This is the bake half of the one production commit site. Ordinary
 /// scheduled multi-MI callers must go through \p commitOneProductCycle so
 /// emission legality (including the shared RF-port predicate) cannot drift
-/// from the bake.
-bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs);
+/// from the bake. \p AA defaults to nullptr; \p commitOneProductCycle
+/// forwards ScheduleDAGMI AA so as-is generated members keep the probe's
+/// proven-disjoint result.
+bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
+                                    AAResults *AA = nullptr);
 
 /// One production commit site for scheduled multi-MI cycles (AIE
 /// applyBundles size()>1 peer). Emission probe (ports, WAW, RAW, format,
-/// field order) then exact bake. Callers must not open a second bake
-/// path beside this — residual hard-root and SMS/hwloop sites dissolve
-/// into the same pair.
-bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs);
+/// field order, store/load overlap) then exact bake. \p AA defaults to
+/// nullptr (fail-closed); leaveMBB passes HaydnScheduleDAGMI AA.
+/// Callers must not open a second bake path beside this — residual
+/// hard-root and SMS/hwloop sites dissolve into the same pair.
+bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs,
+                           AAResults *AA = nullptr);
 
 /// Residual unit-test helper: dissolve a multi-member BUNDLE shell and
 /// recommit via \p commitOneProductCycle when membership is one legal
@@ -1265,11 +1200,13 @@ bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs);
 ///
 /// \p BundleRoot must be TargetOpcode::BUNDLE with ≥2 real children.
 /// \p MII provides MCInstrDesc for member setDesc (TargetInstrInfo ok).
+/// \p AA is the same overlay as \p commitOneProductCycle.
 ///
 /// \returns true on successful recommit; false if membership is not one
 /// legal product cycle.
 bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
-                                     const MCInstrInfo &MII);
+                                     const MCInstrInfo &MII,
+                                     AAResults *AA = nullptr);
 
 //===----------------------------------------------------------------------===//
 // Diagnostic greedy split (NOT production post-RA commit)
@@ -1649,6 +1586,10 @@ memberShapesDirectEqual(unsigned LogicalOpc, unsigned MemberOpc,
 }
 
 /// \returns the number of BUNDLE roots reopened (0 = nothing to do).
+///
+/// Reopened children re-enter scheduling as bare MIs, so stale
+/// IsInternalRead is cleared like every other dissolve site (the shared
+/// finalizeBundle-never-clears law; see the unbind loop below).
 inline unsigned reopenProvisionalBundles(MachineFunction &MF,
                                          const MCInstrInfo &MII) {
   unsigned Reopened = 0;
@@ -1715,14 +1656,20 @@ inline unsigned reopenProvisionalBundles(MachineFunction &MF,
         for (MachineInstr *Kid : Kids)
           if (!isPadNopOpcode(Kid->getOpcode()))
             Order.push_back(Kid);
-        for (unsigned I = 0; I < Order.size(); ++I) {
+        // Do not auto-increment: erase+insert shifts the next member into
+        // slot I. ++I after a splice would skip it (chained dead-def pairs
+        // would leave a later dead def before its reader). Unsigned --I at
+        // I==0 wraps; advance only on the no-splice path.
+        for (unsigned I = 0; I < Order.size();) {
           MachineInstr *MI = Order[I];
           SmallVector<Register, 2> DeadRegs;
           for (const MachineOperand &MO : MI->operands())
             if (MO.isReg() && MO.isDef() && MO.isDead() && MO.getReg())
               DeadRegs.push_back(MO.getReg());
-          if (DeadRegs.empty())
+          if (DeadRegs.empty()) {
+            ++I;
             continue;
+          }
           int LastReader = -1;
           for (unsigned J = I + 1; J < Order.size(); ++J)
             for (const MachineOperand &MO : Order[J]->operands())
@@ -1731,8 +1678,10 @@ inline unsigned reopenProvisionalBundles(MachineFunction &MF,
                 LastReader = static_cast<int>(J);
                 break;
               }
-          if (LastReader < 0)
+          if (LastReader < 0) {
+            ++I;
             continue;
+          }
           MachineInstr *After = Order[LastReader];
           MachineBasicBlock *Parent = MI->getParent();
           // Bundled MIs cannot be remove()d; unbind MI's adjacency first,
@@ -1750,8 +1699,14 @@ inline unsigned reopenProvisionalBundles(MachineFunction &MF,
             if (Prev->isBundledWithSucc())
               Prev->clearFlag(MachineInstr::BundledSucc);
           }
+          // insertAfter() takes a bundle iterator; After is still a bundled
+          // member, so After->getIterator() would assert. Hexagon
+          // moveInstrOut splices with instr_iterator (HexagonVLIWPacketizer.cpp
+          // :155-174). Insert immediately after LastReader, inside the shell.
+          MachineBasicBlock::instr_iterator InsertPt =
+              std::next(After->getIterator());
           Parent->remove(MI);
-          Parent->insertAfter(After->getIterator(), MI);
+          Parent->insert(InsertPt, MI);
           Order.erase(Order.begin() + I);
           Order.insert(Order.begin() + LastReader, MI);
         }
@@ -1763,12 +1718,32 @@ inline unsigned reopenProvisionalBundles(MachineFunction &MF,
       // child (real, meta, debug, CFI, position) is unbundled; pad NOPs
       // are erased. A left-bundled non-real child would outlive the root
       // as an orphaned bundle chain (iterator assertion downstream).
+      //
+      // finalizeBundle only sets IsInternalRead; it never clears
+      // (MachineInstrBundle.cpp; the same law the pre-pack recommit clear
+      // and the sibling dissolve sites state — HaydnBundleMaterialize.cpp
+      // pre-pack clear, HaydnPostRASchedStrategy sequentializeMultiMemberRoot
+      // / unstamped dissolve, HaydnFixupHwLoops). A committed member that
+      // reads an in-parcel LocalDefs register carries that marker, and a
+      // reopened bare MI with a stale marker would hide the read from
+      // MachineOperand::readsReg() — blinding every readsReg()-based seat
+      // (the ONE shared no-forwarding predicate haydnHasIntraCycleRAW the
+      // incremental HR walk and SMS placement use) to a same-cycle true
+      // RAW. Reopen dissolves back to bare MIs: restore pre-bundle operand
+      // semantics on every kid that survives as a bare MI (real, meta,
+      // debug, CFI, position — clearing all is harmless and matches the
+      // erase-only exception for pad NOPs, which never re-enter
+      // scheduling).
       for (MachineInstr *Kid : Kids) {
         if (isPadNopOpcode(Kid->getOpcode())) {
           Kid->clearFlag(MachineInstr::BundledPred);
           Kid->clearFlag(MachineInstr::BundledSucc);
           Kid->eraseFromParent();
           continue;
+        }
+        for (MachineOperand &MO : Kid->operands()) {
+          if (MO.isReg() && MO.isInternalRead())
+            MO.setIsInternalRead(false);
         }
         const unsigned Opc = Kid->getOpcode();
         if (!Kid->isMetaInstruction() && !Kid->isDebugInstr() &&

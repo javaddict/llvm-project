@@ -24,6 +24,7 @@
 
 #include "HaydnBundlePlan.h"
 #include "HaydnHWLoopContracts.h"
+#include "HaydnPortModel.h"
 #include "HaydnSubtarget.h"
 #include "HaydnTargetMachine.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
@@ -33,15 +34,18 @@
 #include "llvm/Target/TargetOptions.h"
 #include "gtest/gtest.h"
 
-// Haydn::SET_HWLOOP opcode and Haydn::SFR register enums from tablegen.
-#define GET_INSTRINFO_ENUM
-#include "HaydnGenInstrInfo.inc"
-#define GET_REGINFO_ENUM
-#include "HaydnGenRegisterInfo.inc"
+// Haydn::SET_HWLOOP / Haydn::SFR enums come via HaydnPortModel →
+// HaydnMCTargetDesc (GET_INSTRINFO_ENUM / GET_REGINFO_ENUM).
 
 using namespace llvm;
 using namespace llvm::haydn::bundle;
 using namespace llvm::haydn::hwloop;
+
+// Generated Format E member opcode table (D1.11 classify ratchet). After
+// the using-directive so Haydn::-qualified member enumerators resolve at
+// file scope (same placement as HaydnHazardRecognizerTest.cpp).
+#define GET_FORMAT_E_MEMBER_OPCODES
+#include "HaydnGenFormatEMemberOpcodes.inc"
 
 namespace {
 
@@ -328,5 +332,54 @@ TEST_F(HaydnHWLoopSetDefsTest, SetVariantsAllDefineSfrSymmetrically) {
     EXPECT_TRUE(is_contained(D.implicit_defs(), Haydn::SFR))
         << TII().getName(Opc) << " must carry td Defs=[SFR] (W47)";
   }
+}
+
+// D1.11 classify ratchet: the ONE hwloop trip-conflict predicate
+// (haydnCycleMembersHaveHwloopTripConflict, HaydnPortModel.h) derives
+// SET_HWLOOP membership solely from haydnClassifyHwloopSetupOpcode over
+// the generated member-to-logical switch
+// (GET_FORMAT_E_MEMBER_TO_LOGICAL via logicalOpcodeOrSelf). The deleted
+// name-peel law once admitted members by symbol prefix alone, so a future
+// SET_HWLOOP_* member whose inversion (or classifier arm) is missing would
+// silently split seats — name-peel seats (commit/bake) accept, classifier
+// seats (freeze/verify) reject — the CB-167 shape-class. This pin fails
+// at unit time instead: every non-NOP generated member whose symbol
+// begins with SET_HWLOOP must classify != None. The reverse direction is
+// pinned too: the admitted families stay exactly Residual | Expanded | Tii
+// (never wider), so the classifier cannot silently become a name law.
+TEST_F(HaydnHWLoopSetDefsTest, GeneratedSetHwloopMembersAllClassify) {
+  using namespace llvm::haydn::format_e;
+  ASSERT_EQ(FormatEMemberOpcodeCount, FormatEMemberCount);
+  unsigned SetNamed = 0;
+  unsigned Admitted = 0;
+  for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+    const FormatEMemberRec &M = FormatEMembers[I];
+    const HaydnHwloopSetupFamily Fam =
+        haydnClassifyHwloopSetupOpcode(FormatEMemberOpcodes[I]);
+    if (Fam != HaydnHwloopSetupFamily::None) {
+      ++Admitted;
+      EXPECT_TRUE(Fam == HaydnHwloopSetupFamily::Residual ||
+                  Fam == HaydnHwloopSetupFamily::Expanded ||
+                  Fam == HaydnHwloopSetupFamily::Tii)
+          << M.MemberSymbol << " classified outside the admitted families";
+    }
+    if (M.IsNop)
+      continue;
+    const StringRef Symbol(M.MemberSymbol);
+    if (!Symbol.starts_with("SET_HWLOOP"))
+      continue;
+    ++SetNamed;
+    EXPECT_NE(Fam, HaydnHwloopSetupFamily::None)
+        << M.MemberSymbol << " is SET_HWLOOP-named but the numeric "
+        << "classifier misses it — extend haydnClassifyHwloopSetupOpcode "
+        << "(generated data), never reintroduce the name peel (D1.11)";
+  }
+  // Current inventory: 8 generated SET_HWLOOP_* members (1x SET_HWLOOP,
+  // 3x SET_HWLOOP_F2, 4x SET_HWLOOP_REG). Ratchet up only; a drop means a
+  // member lost its generated inversion.
+  EXPECT_GE(SetNamed, 8u);
+  // Admitted set is nonempty (logicals themselves classify too) and every
+  // admission is one of the three families — no wider silent law.
+  EXPECT_GE(Admitted, SetNamed);
 }
 } // namespace

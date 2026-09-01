@@ -69,6 +69,8 @@
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
@@ -467,6 +469,115 @@ inline HaydnSinCosArctanWindowLaw haydnSinCosArctanWindowLaw() {
 /// and the multi-stage remark so the name is one string.
 inline constexpr const char *HAYDN_NAMED_SAME_CYCLE_LAWS_TAG =
     "arctan-sincos+csrw-set+abs-e0";
+
+/// Named same-cycle laws (alone / CSRW↔SET / LUI-e0). Bundle.h-free so
+/// freeze/verify can call this without PackLegality (HR → Bundle).
+/// Occupied empty = no violation. Overlay of Hexagon packet solo /
+/// checkHWLoop (HexagonMCChecker.cpp check() FullCheck, checkHWLoop
+/// 326-338); Haydn overlay is CSR 0x20-0x25 + SET_HWLOOP, not SA0/SA1.
+inline bool haydnCycleViolatesNamedSameCycleLaws(
+    const MachineInstr &Cand, ArrayRef<const MachineInstr *> Occupied) {
+  if (Occupied.empty())
+    return false;
+  const unsigned CandOpc = Cand.getOpcode();
+  if (haydnOpcodeIssuesAloneInCycle(CandOpc))
+    return true;
+  const bool CandAbs = haydnIsAbsMaterializeOpcode(CandOpc);
+  const bool CandSetup = haydnClassifySoloIssueOpcode(CandOpc) ==
+                         HaydnSoloIssueClass::CsrwSetHwloop;
+  const bool CandCsrw = haydnHwloopCsrAddr(Cand) >= 0;
+  for (const MachineInstr *O : Occupied) {
+    if (!O)
+      continue;
+    const unsigned Opc = O->getOpcode();
+    if (haydnOpcodeIssuesAloneInCycle(Opc))
+      return true;
+    if (CandAbs || haydnIsAbsMaterializeOpcode(Opc))
+      return true;
+    const bool OccSetup = haydnClassifySoloIssueOpcode(Opc) ==
+                          HaydnSoloIssueClass::CsrwSetHwloop;
+    if ((CandSetup && haydnHwloopCsrAddr(*O) >= 0) ||
+        (CandCsrw && OccSetup))
+      return true;
+  }
+  return false;
+}
+
+/// Whole-cycle fold of haydnCycleViolatesNamedSameCycleLaws. Bundle.h-free
+/// so freeze/verify and leftover-bake share the HR/pack body.
+inline bool
+haydnCycleViolatesNamedSameCycleLaws(ArrayRef<MachineInstr *> Instrs) {
+  SmallVector<const MachineInstr *, 4> Occupied;
+  Occupied.reserve(Instrs.size());
+  for (MachineInstr *MI : Instrs) {
+    if (!MI)
+      continue;
+    if (haydnCycleViolatesNamedSameCycleLaws(*MI, Occupied))
+      return true;
+    Occupied.push_back(MI);
+  }
+  return false;
+}
+
+/// SET_HWLOOP samples trip/Off GPRs under snapshot no-forwarding: refuse
+/// coissue with any same-cycle producer of those regs (RAW needs forwarding;
+/// WAR-shaped snapshot samples stale trip). Opcode classify, not TII name
+/// peel — Format E members invert via logicalOpcodeOrSelf.
+///
+/// D1.11: this is the ONE hwloop trip-conflict predicate. Consumed by the
+/// freeze verifier (HaydnBundleVerify.cpp MI hook) directly, and by the
+/// commit/bake/free-pack/repair seats via the llvm::haydn::bundle alias
+/// (HaydnBundleMaterialize.h). SET_HWLOOP membership is derived solely
+/// from haydnClassifyHwloopSetupOpcode (Residual/Expanded families;
+/// LoopStart via Tii) over the generated member-to-logical switch — never
+/// from TII name strings. A future SET_HWLOOP_* generated member missing
+/// from GET_FORMAT_E_MEMBER_TO_LOGICAL fails the classify ratchet unit
+/// test (HaydnHWLoopContractsTest) instead of silently splitting seats.
+inline bool
+haydnCycleMembersHaveHwloopTripConflict(ArrayRef<MachineInstr *> Instrs,
+                                        const TargetRegisterInfo *TRI) {
+  if (Instrs.size() < 2)
+    return false;
+  auto overlaps = [&](Register A, Register B) -> bool {
+    if (A == B)
+      return true;
+    if (!TRI || !A.isPhysical() || !B.isPhysical())
+      return false;
+    return TRI->regsOverlap(A, B);
+  };
+  for (MachineInstr *SetMI : Instrs) {
+    if (!SetMI)
+      continue;
+    if (haydnClassifyHwloopSetupOpcode(SetMI->getOpcode()) ==
+        HaydnHwloopSetupFamily::None)
+      continue;
+    SmallVector<Register, 4> SetUses;
+    for (const MachineOperand &MO : SetMI->operands()) {
+      if (!MO.isReg() || !MO.getReg() || MO.isDef() || MO.isUndef())
+        continue;
+      Register R = MO.getReg();
+      if (R.isPhysical() || R.isVirtual())
+        SetUses.push_back(R);
+    }
+    if (SetUses.empty())
+      continue;
+    for (MachineInstr *Other : Instrs) {
+      if (!Other || Other == SetMI)
+        continue;
+      for (const MachineOperand &MO : Other->operands()) {
+        if (!MO.isReg() || !MO.getReg() || !MO.isDef())
+          continue;
+        Register D = MO.getReg();
+        if (!(D.isPhysical() || D.isVirtual()))
+          continue;
+        for (Register U : SetUses)
+          if (overlaps(D, U))
+            return true;
+      }
+    }
+  }
+  return false;
+}
 
 /// Availability-aware resource record generated from the current golden
 /// surface. Shared by pre-RA, ordinary post-RA, hazard recognizer, exact

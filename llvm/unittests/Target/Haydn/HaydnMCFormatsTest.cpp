@@ -29,6 +29,14 @@
 using namespace llvm;
 using namespace llvm::haydn::bundle;
 
+// Compiled occupancy universe floor (D1.10). AlternateInsts is one
+// MultiSlot_Pseudo row after LogicalMaterialize retirement; this include
+// is the itinerary+golden table, static to this TU. Haydn:: enumerators
+// resolve via using namespace llvm (HaydnMCFormats.cpp wraps the same
+// include in namespace llvm).
+#define GET_HAYDN_ALT_OCCUPANCY
+#include "HaydnGenAltOccupancy.inc"
+
 namespace {
 
 void expectAltOccupiesResidualSlot(const HaydnMCFormats &Fmts, unsigned Member,
@@ -616,6 +624,36 @@ TEST(HaydnMCFormatsTest, FormatEEntryWindowFromGeneratedLayouts) {
   EXPECT_EQ(LSB, 68u);
   EXPECT_FALSE(haydnFormatEEntryWindow(/*Mode=*/0, /*EntryIdx=*/2, Width, LSB));
   EXPECT_FALSE(haydnFormatEEntryWindow(/*Mode=*/1, /*EntryIdx=*/3, Width, LSB));
+}
+
+TEST(HaydnMCFormatsTest, AltOccupancyTableMeetsGeneratedFloor) {
+  // Generated-vs-checked occupancy ratchet: AlternateInsts is one
+  // MultiSlot_Pseudo row and must not satisfy this floor.
+  constexpr size_t N =
+      sizeof(HaydnAltOccupancy) / sizeof(HaydnAltOccupancy[0]);
+  static_assert(N >= 715,
+                "occupancy universe must not collapse to AlternateInsts");
+  EXPECT_GE(N, 715u);
+
+  auto MaskOf = [](unsigned Opcode) -> int {
+    const int Idx = haydnAltOccupancyIndex(Opcode);
+    if (Idx < 0)
+      return -1;
+    return static_cast<int>(HaydnAltOccupancy[static_cast<size_t>(Idx)].Mask);
+  };
+  // Product LS/SEXT pins: LS 0x6 restamps pipeline-*-*.ll / vliw-slot-stress.
+  EXPECT_EQ(MaskOf(Haydn::LD32), 0x3);
+  EXPECT_EQ(MaskOf(Haydn::LD64), 0x3);
+  EXPECT_EQ(MaskOf(Haydn::ST32), 0x1);
+  EXPECT_EQ(MaskOf(Haydn::ST64), 0x1);
+  EXPECT_EQ(MaskOf(Haydn::SEXT32T64), 0x7);
+  // D1.22 golden-cited exception-table pins: NOP is the named idle-parcel
+  // fact (no index row), WFI cites the golden WFI<TBD> HINT row
+  // (Available=ALU0), and ADD64 anchors the enumerated 0x6 DR-shell family
+  // (golden ALU triple, residual S1|S2).
+  EXPECT_EQ(MaskOf(Haydn::NOP), 0x1);
+  EXPECT_EQ(MaskOf(Haydn::WFI), 0x1);
+  EXPECT_EQ(MaskOf(Haydn::ADD64), 0x6);
 }
 
 TEST(HaydnMCFormatsTest, IdleParcelIsOneProductRecord) {

@@ -177,12 +177,13 @@ define i32 @test_loop(i32 %n) {
 ; CHECK-NEXT:    { nop; beqz r0, .LBB7_1 }
 ; CHECK-NEXT:  .LBB7_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r4, sp, 4; ld32 r2, sp, 5 } // 8-byte Folded Reload
+; CHECK-NEXT:    { ld32 r1, sp, 3; ld32 r4, sp, 4 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload4-byte Reload
-; CHECK-NEXT:    { nop; ld32 r1, sp, 3 } // 4-byte Folded Reload
+; CHECK-NEXT:    { nop; ld32 r2, sp, 5 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { add32 r2, r2, r4; addi32 r3, r4, 1 }
-; CHECK-NEXT:    { nop; st32 r2, sp, 2; slt32 r1, r3, r1 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; addi32 r3, r4, 1 }
+; CHECK-NEXT:    { nop; slt32 r1, r3, r1; add32 r2, r2, r4 }
+; CHECK-NEXT:    { nop; st32 r2, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; st32 r3, sp, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill

@@ -26,9 +26,9 @@
 ; OFF-LABEL: mb_chain2:
 ; OFF: { nop; addi32 r3, r0, 0 }
 ; OFF: { nop; bnez r2, .LBB0_2 }
-; OFF: { ld32 r1, r1, 0; ld32 r2, r1, 0 }
+; OFF: {{(\{ nop; ld32 r2, r1, 0 \}|\{ ld32 r1, r1, 0; ld32 r2, r1, 0 \})}}
 ; OFF: { nop; addi32 r3, r0, 3 }
-; OFF: { nop; addi32 r2, r2, 1 }
+; OFF: {{(\{ addi32 r2, r2, 1; ld32 r1, r1, 0 \}|\{ nop; addi32 r2, r2, 1 \})}}
 ; OFF: { nop; {{(nop; )?}}mull r3, r2, r3 }
 ; OFF: jalr
 

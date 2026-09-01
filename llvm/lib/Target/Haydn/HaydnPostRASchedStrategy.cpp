@@ -22,9 +22,16 @@
 // latency. Sequentialize is not a packing legality authority. No hard-root
 // freeze identity and no force-coissue. Post-RA never invents SMS stages.
 //
+// D1.26: bundle-reconstruction pads beyond HaydnPostRAMaxInterZonePads are a
+// named fatal at the bumpCycleForBundles seat (NumReconstructPadCapFatals),
+// symmetric with the D1.7 residual Top/Bot seam fatal — never a silent
+// clamp that would commit an under-stalled cycle. The cap still bounds
+// allocation (T4 hang-containment).
+//
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPostRASchedStrategy.h"
+#include "Haydn.h"
 #include "HaydnAlternateDescriptors.h"
 #include "HaydnBundle.h"
 #include "HaydnBundleMaterialize.h"
@@ -32,17 +39,18 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
-#include "HaydnSchedMutations.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
+#include "HaydnMachineScheduler.h"
+#include "HaydnPackLegality.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
 #include "HaydnPostRAScratch.h"
-#include "Haydn.h"
+#include "HaydnSchedMutations.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
@@ -113,15 +121,26 @@ STATISTIC(NumPostRAAltDescLeakFatals,
 STATISTIC(NumPostRAResourceAdmissionPinsHeld,
           "Number of post-RA enterMBB checks that held fail-closed per-op "
           "resource admission (product closed until golden import)");
-STATISTIC(NumAuctionScoreCalls,
-          "Number of ready-subset auction score requests (post-SU-sweep-cache)");
+STATISTIC(
+    NumAuctionScoreCalls,
+    "Number of ready-subset auction score requests (post-SU-sweep-cache)");
 STATISTIC(NumAuctionOpcodeMemoHits,
           "Number of auction scores served by the opcode-multiset memo");
 STATISTIC(NumAuctionSolves,
           "Number of auction scores that ran the subset/permutation solve");
 STATISTIC(NumInterZonePadCaps,
           "Number of Top/Bot seam pads that hit the published occupancy "
-          "horizon (T4 hang-containment; continue, do not loop)");
+          "horizon (T4 hang-containment; residual conflict is fatal)");
+// D1.26: reconstruction pads beyond HaydnPostRAMaxInterZonePads would commit
+// an under-stalled cycle (MI placed earlier than its zone-local ready cycle
+// requires). That class is fatal at the bumpCycleForBundles seat — never a
+// silent clamp. Distinct counter/wall from NumInterZonePadCaps so the D1.7
+// handleRegionConflicts seam and this reconstruction seam are separately
+// diagnosable.
+STATISTIC(NumReconstructPadCapFatals,
+          "Number of reconstruction cycle-list pads that hit the occupancy "
+          "horizon and would commit an under-stalled cycle (fatal; T4 cap "
+          "kept)");
 STATISTIC(NumBotScoreboardBundleReplays,
           "Number of scheduled successor cycle members replayed into the "
           "post-RA Bot scoreboard (inter-block; default-off)");
@@ -142,8 +161,9 @@ static cl::opt<unsigned> HaydnPostRAAuctionSkipReady(
 // unbounded. Dense MAC bodies can leave TopReadyCycle / CurrCycle far
 // ahead of the reconstructed list and the while never returns. Bound
 // pads to the published occupancy horizon (SIN_COS uimm4+2 = 17) plus
-// scoreboard slack. Residual seam conflict after the cap continues —
-// fatal would re-stick the product path. Peer loop stays the shape.
+// scoreboard slack. Residual seam conflict after the cap is a named
+// Top/Bot fatal (replayMultiMemberSeamHazards Guard>=64 peer), not a
+// continue that would commit under-stalled RAW.
 static constexpr unsigned HaydnPostRAMaxInterZonePads =
     HAYDN_SINCOS_OCCUPANCY_MAX + 16;
 
@@ -185,7 +205,8 @@ HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
   // still null when enterMBB first fires — get TII from the context instead.
   // (ScheduleDAGMI::startBlock -> SchedImpl->enterMBB happens before any
   // region's initialize; see MachineScheduler.cpp:824 vs :858/.)
-  HII = static_cast<const HaydnInstrInfo *>(C->MF->getSubtarget().getInstrInfo());
+  HII =
+      static_cast<const HaydnInstrInfo *>(C->MF->getSubtarget().getInstrInfo());
 
   // W68.2R S2 reopen (STATUS limit #1, contracts/pipeline.md S1/S2 repair
   // law): the FIRST S2 invocation on this function (per-function MFI
@@ -213,8 +234,8 @@ HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
       unsigned Reopened = haydn::bundle::reopenProvisionalBundles(*C->MF, TII);
       (void)Reopened;
       LLVM_DEBUG(dbgs() << "HaydnPostRASched S2: reopened " << Reopened
-                        << " provisional BUNDLE root(s) in "
-                        << C->MF->getName() << "\n");
+                        << " provisional BUNDLE root(s) in " << C->MF->getName()
+                        << "\n");
     }
   }
 }
@@ -251,9 +272,8 @@ static void gatherHaydnInterBlockEdges(
       // BUNDLEs, seed each post-boundary MI's depth from its bundle index
       // (cycle 0 = first bundle). A fresh S1 pass finds no bundles and
       // keeps static depths.
-      if (llvm::any_of(*Succ, [](const MachineInstr &MI) {
-            return MI.isBundle();
-          })) {
+      if (llvm::any_of(*Succ,
+                       [](const MachineInstr &MI) { return MI.isBundle(); })) {
         int Cycle = -1;
         for (MachineInstr &MI : *Succ) {
           if (MI.isBundle()) {
@@ -296,8 +316,7 @@ static unsigned scoreReadySubsetAuction(
 
   SmallVector<unsigned, 3> Base;
   const haydn::bundle::CycleState &Pref =
-      haydn::bundle::selectPreferredCandidate(
-          HR->getCurrentCycleCandidates());
+      haydn::bundle::selectPreferredCandidate(HR->getCurrentCycleCandidates());
   for (const haydn::bundle::CycleMember &M : Pref.Members)
     Base.push_back(M.LogicalOpcode);
   if (Base.size() >= Haydn::ISSUE_SLOT_COUNT)
@@ -349,6 +368,422 @@ static unsigned scoreReadySubsetAuction(
   return Score;
 }
 
+// D1.30 names the two NodeNum windows the D1.10 same-base seats use, once,
+// at file scope. Values are UNCHANGED from the inline literals they replace
+// (nearby-load 8, partner/tight 2 — the same 2 as the Dist<=2 laws in
+// isSameBaseSecondLoad/tryCandidate). The SameBaseLoadIndex itself bakes in
+// NO window: these are applied per query so no ranking constant hides in a
+// memo (W71 benchmark-window fold answered structurally).
+//
+// Seat 1 (hasNearbyUnscheduledSameBaseLoad): window 8 keeps later sp ld64
+// reloads from pinning va_list/spill stores.
+static constexpr unsigned SameBaseNearbyLoadWindow = 8;
+// Seats 2+3 (isAvailableNode partner loop, tryCandidate hasTightPartner,
+// and the identical Dist<=2 laws): tight partner distance.
+static constexpr unsigned SameBasePartnerWindow = 2;
+
+/// Base register of a catalog/member load or store, or Register() if unknown.
+/// getMemOperandsWithOffsetWidth peels generated members
+/// (logicalOpcodeOrSelf).
+static Register haydnMemBaseReg(const MachineInstr &MI,
+                                const HaydnInstrInfo *HII) {
+  if (!HII)
+    return {};
+  SmallVector<const MachineOperand *, 2> BaseOps;
+  int64_t Offset = 0;
+  bool Scalable = false;
+  LocationSize Width = LocationSize::precise(0);
+  if (!HII->getMemOperandsWithOffsetWidth(MI, BaseOps, Offset, Scalable, Width,
+                                          /*TRI=*/nullptr))
+    return {};
+  if (BaseOps.empty() || !BaseOps[0]->isReg())
+    return {};
+  return BaseOps[0]->getReg();
+}
+
+static int64_t haydnMemOffset(const MachineInstr &MI,
+                              const HaydnInstrInfo *HII) {
+  if (!HII)
+    return 0;
+  SmallVector<const MachineOperand *, 2> BaseOps;
+  int64_t Offset = 0;
+  bool Scalable = false;
+  LocationSize Width = LocationSize::precise(0);
+  if (!HII->getMemOperandsWithOffsetWidth(MI, BaseOps, Offset, Scalable, Width,
+                                          /*TRI=*/nullptr))
+    return 0;
+  return Offset;
+}
+
+/// True when Cand is a pure load sharing the base of a pure load already
+/// issued this cycle (LOADSTORE0+LOAD1 partner). Dual-load is not
+/// cycleHasMayAliasStoreLoad (Hexagon HexagonVLIWPacketizer.cpp:1559).
+static bool isSameBaseSecondLoad(const MachineInstr &CandMI, unsigned CandNum,
+                                 ArrayRef<MachineInstr *> Placed,
+                                 const HaydnInstrInfo *HII,
+                                 const ScheduleDAGMI *DAG) {
+  if (!haydn::pack::isPureLoad(CandMI))
+    return false;
+  const Register CandBase = haydnMemBaseReg(CandMI, HII);
+  if (!CandBase)
+    return false;
+  for (const MachineInstr *P : Placed) {
+    if (!P || !haydn::pack::isPureLoad(*P))
+      continue;
+    const Register PlacedBase = haydnMemBaseReg(*P, HII);
+    if (!PlacedBase || PlacedBase != CandBase)
+      continue;
+    if (!DAG)
+      continue;
+    const SUnit *PSU = DAG->getSUnit(const_cast<MachineInstr *>(P));
+    if (!PSU)
+      continue;
+    const unsigned PNum = PSU->NodeNum;
+    const unsigned Dist = PNum > CandNum ? PNum - CandNum : CandNum - PNum;
+    if (Dist <= 2)
+      return true;
+  }
+  return false;
+}
+
+/// True when To is reachable from From via Succs (From must issue first).
+static bool suReaches(const SUnit &From, const SUnit &To) {
+  if (&From == &To)
+    return false;
+  SmallVector<const SUnit *, 8> Work;
+  SmallPtrSet<const SUnit *, 16> Seen;
+  Work.push_back(&From);
+  Seen.insert(&From);
+  while (!Work.empty()) {
+    const SUnit *N = Work.pop_back_val();
+    for (const SDep &D : N->Succs) {
+      const SUnit *S = D.getSUnit();
+      if (!S || !Seen.insert(S).second)
+        continue;
+      if (S == &To)
+        return true;
+      Work.push_back(S);
+    }
+  }
+  return false;
+}
+
+void HaydnPostRASchedStrategy::buildSameBaseLoadIndex() {
+  // D1.30 (CB-153a): one pass over the region's SUnits collecting the
+  // static census — pure loads keyed by haydnMemBaseReg. Called from
+  // initialize() (the seam that first sees the region's SUnits) and
+  // cleared in enterMBB with the other memos. Scheduling-dependent state
+  // (isScheduled, suReaches, readiness, HR cycle contents) is deliberately
+  // NOT cached; every seat re-checks it per query so verdicts stay
+  // bit-identical to the unmemoized full scans.
+  SameBaseLoadIndex.clear();
+  if (!DAG || !HII)
+    return;
+  for (SUnit &SU : DAG->SUnits) {
+    MachineInstr *MI = SU.getInstr();
+    if (!MI || !haydn::pack::isPureLoad(*MI))
+      continue;
+    const Register Base = haydnMemBaseReg(*MI, HII);
+    if (!Base)
+      continue;
+    SameBaseLoadIndex[Base.id()].push_back(&SU);
+  }
+  // NodeNum is the SUnits vector entry number (ScheduleDAG.h:277;
+  // ScheduleDAGInstrs.h:419 SUnits.emplace_back(MI, SUnits.size())), so one
+  // in-order pass yields ascending NodeNum per list. Assert it: a future
+  // DAG mutation (clustering / postProcessDAG) that breaks the assumption
+  // becomes a loud build-time failure instead of silently corrupting the
+  // window queries. Queries use NodeNum only comparatively, so holes in
+  // the numbering are harmless.
+#ifndef NDEBUG
+  for (auto &KV : SameBaseLoadIndex) {
+    assert(llvm::is_sorted(KV.second,
+                           [](const SUnit *A, const SUnit *B) {
+                             return A->NodeNum < B->NodeNum;
+                           }) &&
+           "SameBaseLoadIndex lists must be NodeNum-ascending");
+  }
+#endif
+}
+
+ArrayRef<SUnit *> HaydnPostRASchedStrategy::sameBaseLoads(Register Base) const {
+  if (!Base)
+    return {};
+  auto It = SameBaseLoadIndex.find(Base.id());
+  if (It == SameBaseLoadIndex.end())
+    return {};
+  return It->second;
+}
+
+// Half-open [Lo,Hi) iterator range over a NodeNum-ascending same-base load
+// list, limited to +/- Window around NodeNum. Unsigned-underflow safe: the
+// comparison inside lower_bound is on the clamped low bound.
+static std::pair<ArrayRef<SUnit *>::const_iterator,
+                 ArrayRef<SUnit *>::const_iterator>
+sameBaseLoadWindow(ArrayRef<SUnit *> Loads, unsigned NodeNum, unsigned Window) {
+  const unsigned Lo = NodeNum > Window ? NodeNum - Window : 0;
+  const unsigned Hi = NodeNum + Window; // may wrap; upper_bound handles it
+  auto Begin = std::lower_bound(
+      Loads.begin(), Loads.end(), Lo,
+      [](const SUnit *SU, unsigned V) { return SU->NodeNum < V; });
+  auto End = std::upper_bound(
+      Loads.begin(), Loads.end(), Hi,
+      [](unsigned V, const SUnit *SU) { return V < SU->NodeNum; });
+  return {Begin, End};
+}
+
+/// Nearby same-base partner still waiting only on a ready store/ALU
+/// frontier (not on another load). NodeNum window keeps a later va_arg
+/// cluster from pinning the current pair.
+static bool nearbyPartnerWaitingOnReadyFrontier(const SUnit &Partner,
+                                                SchedBoundary &Zone) {
+  (void)Zone;
+  SmallVector<const SUnit *, 8> Work;
+  SmallPtrSet<const SUnit *, 16> Seen;
+  Work.push_back(&Partner);
+  Seen.insert(&Partner);
+  unsigned Steps = 0;
+  while (!Work.empty() && Steps++ < 16) {
+    const SUnit *N = Work.pop_back_val();
+    for (const SDep &P : N->Preds) {
+      SUnit *PS = P.getSUnit();
+      if (!PS || PS->isScheduled || !Seen.insert(PS).second)
+        continue;
+      if (!PS->getInstr())
+        continue;
+      if (haydn::pack::isPureLoad(*PS->getInstr()))
+        return false;
+      bool PredsDone = true;
+      for (const SDep &PP : PS->Preds) {
+        SUnit *PPS = PP.getSUnit();
+        if (PPS && !PPS->isScheduled && PPS->getInstr()) {
+          PredsDone = false;
+          break;
+        }
+      }
+      if (PredsDone)
+        continue;
+      Work.push_back(PS);
+    }
+  }
+  return Work.empty();
+}
+
+void HaydnPostRASchedStrategy::noteIssuedStore(const SUnit *SU,
+                                               bool IsTopNode) {
+  // Record before bumpNode so Last.Cycle is the issue cycle. Bot recedes;
+  // the stall is a Top empty-cycle hold (post-RA default OnlyTopDown).
+  if (!IsTopNode || !SU || !HII)
+    return;
+  const MachineInstr *MI = SU->getInstr();
+  if (!MI || !haydn::pack::isPureStore(*MI))
+    return;
+  const Register Base = haydnMemBaseReg(*MI, HII);
+  if (!Base)
+    return;
+  LastSameBaseStoreCycle[Base.id()] = {Top.getCurrCycle(), SU->NodeNum};
+}
+
+bool HaydnPostRASchedStrategy::hasNearbyUnscheduledSameBaseLoad(
+    Register Base, unsigned NodeNum) const {
+  // Dual-ld32 pair inside a tight NodeNum window. A single pending load
+  // is the store-load consumer (memory-cycle-latency / d110). Window 8
+  // (SameBaseNearbyLoadWindow) keeps later sp ld64 reloads from pinning
+  // va_list/spill stores.
+  if (!Base || !DAG || !HII)
+    return false;
+  // D1.30: window lookup over the per-region same-base index instead of a
+  // full DAG->SUnits scan. The index list is NodeNum-ascending by
+  // construction, so the filtered in-window subset is ascending without a
+  // re-sort — identical multiset and pair check to the previous collect-
+  // then-sort. The isScheduled filter stays per query (purity boundary).
+  SmallVector<unsigned, 4> NearbyLoads;
+  auto [WinBegin, WinEnd] = sameBaseLoadWindow(sameBaseLoads(Base), NodeNum,
+                                               SameBaseNearbyLoadWindow);
+  for (const SUnit *Other : ArrayRef<SUnit *>(WinBegin, WinEnd)) {
+    if (Other->isScheduled)
+      continue;
+    NearbyLoads.push_back(Other->NodeNum);
+  }
+  if (NearbyLoads.size() < 2)
+    return false;
+  for (unsigned I = 1, E = NearbyLoads.size(); I < E; ++I)
+    if (NearbyLoads[I] - NearbyLoads[I - 1] <= 2)
+      return true;
+  return false;
+}
+
+bool HaydnPostRASchedStrategy::isSameBaseStoreWithPendingLoad(
+    const SUnit &SU) const {
+  if (!DAG || !HII)
+    return false;
+  const MachineInstr *MI = SU.getInstr();
+  if (!MI || !haydn::pack::isPureStore(*MI))
+    return false;
+  const Register Base = haydnMemBaseReg(*MI, HII);
+  return Base && hasNearbyUnscheduledSameBaseLoad(Base, SU.NodeNum);
+}
+
+bool HaydnPostRASchedStrategy::shouldHoldForSameBaseStoreStall(
+    const SUnit &SU, SchedBoundary &Zone) const {
+  // Only same-base stores: holding loads/ALU was Anti-ALU-adjacent and
+  // deadlocked pickOnlyChoice with the dual-load hold.
+  //
+  // D1.30 fold-note (a) — Top-only is the DEFINED domain, not an accident:
+  // the D1.10 store-stall/dual-load hold model is keyed on the Top zone
+  // (LastSameBaseStoreCycle stores Top.getCurrCycle(); noteIssuedStore
+  // records Top issues only). Under -misched-postra-direction=bottomup /
+  // bidirectional the hold is inert by construction and the base
+  // scheduler's reconstruction owns those arms. Pinned by
+  // d130-store-stall-hold-top-zone-only.mir (two arms) so upstream drift
+  // cannot change the polarity silently; a hard direction assert was
+  // rejected because those direction arms are a supported green surface.
+  if (!Zone.isTop() || !isSameBaseStoreWithPendingLoad(SU))
+    return false;
+  const MachineInstr *MI = SU.getInstr();
+  const Register Base = haydnMemBaseReg(*MI, HII);
+  auto *HR = (Zone.HazardRec && Zone.HazardRec->isEnabled())
+                 ? static_cast<HaydnHazardRecognizer *>(Zone.HazardRec)
+                 : nullptr;
+  ArrayRef<MachineInstr *> Placed =
+      HR ? ArrayRef<MachineInstr *>(HR->getCurrentCyclePlacedMIs())
+         : ArrayRef<MachineInstr *>();
+
+  // Same-cycle dual-store would occupy LOADSTORE0 before the dual-load.
+  for (const MachineInstr *P : Placed) {
+    if (!P || !haydn::pack::isPureStore(*P))
+      continue;
+    if (haydnMemBaseReg(*P, HII) == Base)
+      return true;
+  }
+
+  // Do not join an ALU whose next NodeNum is an unscheduled same-base
+  // store that reads the ALU def (addi32 -24 then st32 r1, r2, 3). The
+  // addi32 r1, r3, 32 / st32 r1, r2, 2 pair has intervening SUs so the
+  // store may join ({st32 rB,0; addi32 r1, r3, 32}).
+  if (DAG) {
+    for (const MachineInstr *P : Placed) {
+      if (!P || haydn::pack::isPureLoad(*P) || haydn::pack::isPureStore(*P))
+        continue;
+      SUnit *PSU = DAG->getSUnit(const_cast<MachineInstr *>(P));
+      if (!PSU)
+        continue;
+      for (const SDep &D : PSU->Succs) {
+        if (D.getKind() != SDep::Data)
+          continue;
+        SUnit *C = D.getSUnit();
+        if (!C || C->isScheduled || C->NodeNum != PSU->NodeNum + 1)
+          continue;
+        const MachineInstr *CMI = C->getInstr();
+        if (!CMI || !haydn::pack::isPureStore(*CMI))
+          continue;
+        if (haydnMemBaseReg(*CMI, HII) == Base)
+          return true;
+      }
+    }
+  }
+
+  // Empty cycle immediately after a same-base store: one pickOnlyChoice
+  // bump (AIE TopReadyCycle = CurrCycle+1). Models the missing Ord
+  // Latency=2 memory edge that proven-disjoint removed between va_list
+  // stores. CurrCycle == Last+2 releases (no livelock). ALU is not held
+  // (Anti-ALU / r4 producer for st32 rB,0).
+  if (!Placed.empty())
+    return false;
+  auto It = LastSameBaseStoreCycle.find(Base.id());
+  return It != LastSameBaseStoreCycle.end() &&
+         Zone.getCurrCycle() == It->second.Cycle + 1;
+}
+
+bool HaydnPostRASchedStrategy::isAvailableNode(SUnit &SU, SchedBoundary &Zone,
+                                               bool VerifyReadyCycle) {
+  if (!PostGenericScheduler::isAvailableNode(SU, Zone, VerifyReadyCycle))
+    return false;
+  if (!DAG || !HII)
+    return true;
+
+  if (shouldHoldForSameBaseStoreStall(SU, Zone))
+    return false;
+
+  MachineInstr *MI = SU.getInstr();
+  if (!MI || !haydn::pack::isPureLoad(*MI))
+    return true;
+
+  auto *HR = (Zone.HazardRec && Zone.HazardRec->isEnabled())
+                 ? static_cast<HaydnHazardRecognizer *>(Zone.HazardRec)
+                 : nullptr;
+  ArrayRef<MachineInstr *> Placed =
+      HR ? ArrayRef<MachineInstr *>(HR->getCurrentCyclePlacedMIs())
+         : ArrayRef<MachineInstr *>();
+
+  const Register Base = haydnMemBaseReg(*MI, HII);
+  if (!Base)
+    return true;
+
+  auto predsScheduled = [](const SUnit &N) {
+    for (const SDep &P : N.Preds) {
+      SUnit *PS = P.getSUnit();
+      if (PS && !PS->isScheduled && PS->getInstr())
+        return false;
+    }
+    return true;
+  };
+  auto baseAvail = [&](SUnit &N) {
+    // Unreleased SUs have ReadyCycle 0 and look hazard-free; they are
+    // not Available until every real pred has issued.
+    if (!predsScheduled(N))
+      return false;
+    return PostGenericScheduler::isAvailableNode(N, Zone, VerifyReadyCycle);
+  };
+
+  bool ReadyPartner = false;
+  bool CloseWaitingPartner = false;
+  // D1.30: candidate enumeration runs over the per-region same-base index
+  // (SameBasePartnerWindow) instead of every SUnit in the region. The
+  // per-hit work — suReaches DFS, baseAvail/readiness,
+  // nearbyPartnerWaitingOnReadyFrontier's bounded-16 frontier walk — is
+  // untouched per hit, so this enumerates exactly the same filtered set
+  // with identical verdicts (purity boundary: only enumeration is indexed).
+  {
+    auto [WinBegin, WinEnd] = sameBaseLoadWindow(
+        sameBaseLoads(Base), SU.NodeNum, SameBasePartnerWindow);
+    for (SUnit *OtherP : ArrayRef<SUnit *>(WinBegin, WinEnd)) {
+      SUnit &Other = *OtherP;
+      if (&Other == &SU || Other.isScheduled)
+        continue;
+      if (suReaches(SU, Other))
+        continue;
+      if (baseAvail(Other))
+        ReadyPartner = true;
+      else if (nearbyPartnerWaitingOnReadyFrontier(Other, Zone))
+        CloseWaitingPartner = true;
+    }
+  }
+
+  // Hold every same-base load while a nearby partner is still waiting on
+  // barrier stores. Allowing a second-slot fill first pairs the already-ready
+  // load with a different same-base load (va_list __stack vs gp_offset).
+  if (CloseWaitingPartner)
+    return false;
+
+  if (isSameBaseSecondLoad(*MI, SU.NodeNum, Placed, HII, DAG))
+    return true;
+  for (const MachineInstr *P : Placed) {
+    if (!P || !haydn::pack::isPureLoad(*P))
+      continue;
+    if (haydnMemBaseReg(*P, HII) == Base)
+      return false;
+  }
+
+  if (ReadyPartner) {
+    // Both ready: issue as the first of an empty cycle. If a store/ALU
+    // already occupies the cycle, wait so the pair can take the next one
+    // instead of a proven-disjoint store+load fill.
+    return Placed.empty();
+  }
+  return true;
+}
+
 SUnit *HaydnPostRASchedStrategy::pickNode(bool &IsTopNode) {
   // One pickNode = cycle settle (pickOnlyChoice / pending release) followed by
   // the candidate sweep(s); HR state and each zone's Available set are
@@ -366,6 +801,82 @@ bool HaydnPostRASchedStrategy::tryCandidate(SchedCandidate &Cand,
   if (!Cand.isValid()) {
     TryCand.Reason = NodeOrder;
     return true;
+  }
+
+  // Second-slot dual-load (LOADSTORE0+LOAD1): once the open cycle holds a
+  // pure load, a same-base second load outranks a store/ALU partner.
+  // Proven-disjoint store+load is legal under cycleHasMayAliasStoreLoad,
+  // so the ready-subset auction IssuedCount otherwise fills LOADSTORE0
+  // with that store and leaves the second load for a later cycle. Dual-load
+  // is not that law (Hexagon HexagonVLIWPacketizer.cpp:1559). Same-base
+  // only — unrelated loads do not steal the slot. No auction dual-load
+  // bonus (that reordered spills).
+  {
+    SchedBoundary &Zone = TryCand.AtTop ? Top : Bot;
+    if (Zone.HazardRec && Zone.HazardRec->isEnabled() && TryCand.SU &&
+        TryCand.SU->getInstr() && Cand.SU && Cand.SU->getInstr()) {
+      auto *HR = static_cast<HaydnHazardRecognizer *>(Zone.HazardRec);
+      ArrayRef<MachineInstr *> Placed = HR->getCurrentCyclePlacedMIs();
+      const bool TrySecond = isSameBaseSecondLoad(
+          *TryCand.SU->getInstr(), TryCand.SU->NodeNum, Placed, HII, DAG);
+      const bool CandSecond = isSameBaseSecondLoad(
+          *Cand.SU->getInstr(), Cand.SU->NodeNum, Placed, HII, DAG);
+      if (TrySecond != CandSecond) {
+        if (TrySecond) {
+          TryCand.Reason = ResourceDemand;
+          return true;
+        }
+        return false;
+      }
+      if (Placed.empty() && haydn::pack::isPureLoad(*TryCand.SU->getInstr()) &&
+          haydn::pack::isPureLoad(*Cand.SU->getInstr())) {
+        const Register TryBase = haydnMemBaseReg(*TryCand.SU->getInstr(), HII);
+        const Register CandBase = haydnMemBaseReg(*Cand.SU->getInstr(), HII);
+        const unsigned Dist = TryCand.SU->NodeNum > Cand.SU->NodeNum
+                                  ? TryCand.SU->NodeNum - Cand.SU->NodeNum
+                                  : Cand.SU->NodeNum - TryCand.SU->NodeNum;
+        auto hasTightPartner = [&](const SUnit *Focus) {
+          if (!Focus || !DAG || !HII)
+            return false;
+          const Register B = haydnMemBaseReg(*Focus->getInstr(), HII);
+          if (!B)
+            return false;
+          // D1.30: window existence query over the per-region same-base
+          // index; the !isScheduled and O != Focus filters stay per query
+          // and the first-hit early exit is preserved (purity boundary).
+          auto [WinBegin, WinEnd] = sameBaseLoadWindow(
+              sameBaseLoads(B), Focus->NodeNum, SameBasePartnerWindow);
+          for (const SUnit *O : ArrayRef<const SUnit *>(WinBegin, WinEnd)) {
+            if (O == Focus || O->isScheduled)
+              continue;
+            return true;
+          }
+          return false;
+        };
+        if (TryBase && TryBase == CandBase) {
+          const bool TryTight = hasTightPartner(TryCand.SU);
+          const bool CandTight = hasTightPartner(Cand.SU);
+          if (TryTight != CandTight) {
+            if (TryTight) {
+              TryCand.Reason = ResourceDemand;
+              return true;
+            }
+            return false;
+          }
+          if (Dist <= 2) {
+            const int64_t TryOff = haydnMemOffset(*TryCand.SU->getInstr(), HII);
+            const int64_t CandOff = haydnMemOffset(*Cand.SU->getInstr(), HII);
+            if (TryOff != CandOff) {
+              if (TryOff < CandOff) {
+                TryCand.Reason = NodeOrder;
+                return true;
+              }
+              return false;
+            }
+          }
+        }
+      }
+    }
   }
 
   // Bounded ready-subset cycle auction (issue width 3): prefer the SU that
@@ -450,10 +961,13 @@ static bool isBundleSkippable(const MachineInstr &MI) {
   if (MI.isMetaInstruction())
     return true;
   HaydnMCFormats Fmts;
-  return Haydn::MachineBundle::isBundlePackSkippableOpcode(
-      MI.getOpcode(), MI.isPseudo(), Fmts);
+  return Haydn::MachineBundle::isBundlePackSkippableOpcode(MI.getOpcode(),
+                                                           MI.isPseudo(), Fmts);
 }
 
+// Zone-head forward-cycle clamp for the SchedBoundary::bumpCycle
+// ExitReadyCycle pad in handleRegionConflicts — a different object from the
+// reconstruction cycle list; bumpCycleForBundles owns the reconstruction law.
 static unsigned clampForwardCycle(unsigned From, unsigned To) {
   if (To <= From)
     return From;
@@ -468,12 +982,25 @@ void HaydnPostRASchedStrategy::bumpCycleForBundles(
   // Push the in-progress bundle as the current cycle, then pad with empty
   // bundles until reaching ToCycle. Mirrors AIE's bumpCycleForBundles
   // (AIEMachineScheduler.cpp:133-154). Invariant: Bundles.size == current
-  // cycle index. Cap the forward delta so a UINT_MAX ReadyCycle cannot
-  // allocate an unbounded empty-cycle list (T4 hang-root).
+  // cycle index.
+  //
+  // D1.26 law (one seat): a forward delta beyond HaydnPostRAMaxInterZonePads
+  // is a named fatal, never a silent clamp. Clamping here would place real
+  // MIs (or the zone's trailing hazard/issue-stall window) earlier than
+  // their zone-local ready cycles require — an under-stalled commit. The cap
+  // still bounds allocation (T4 hang-root containment: a hostile UINT_MAX
+  // ready cycle dies named before the pad loop runs, it never allocates an
+  // unbounded empty-cycle list). Symmetric with the D1.7 residual Top/Bot
+  // seam fatal in handleRegionConflicts; distinct counter and wall.
   unsigned CurrCycle = Bundles.size();
-  ToCycle = clampForwardCycle(CurrCycle, ToCycle);
-  if (ToCycle == CurrCycle)
+  if (ToCycle <= CurrCycle)
     return;
+  if (ToCycle - CurrCycle > HaydnPostRAMaxInterZonePads) {
+    ++NumReconstructPadCapFatals;
+    report_fatal_error(
+        "Haydn: reconstruction pad cap would commit an under-stalled cycle",
+        /*GenCrashDiag=*/false);
+  }
   Bundles.push_back(CurrBundle);
   ++CurrCycle;
   CurrBundle.Instrs.clear();
@@ -488,6 +1015,12 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
   AuctionScoreCache.clear();
   LegalMemo->Map.clear();
   ReadyAuctionScoreCache.clear();
+  LastSameBaseStoreCycle.clear();
+  // D1.30: the same-base load index is per-REGION (SUnits die with the
+  // region's DAG); cleared here so a stale per-base list can never point
+  // into a dead SUnits vector — including across skipped single-MI/empty
+  // regions that never call initialize. Rebuilt at the next initialize().
+  SameBaseLoadIndex.clear();
   // Dual-load packing is HR tryAddProduct PlacementAlternatives → setDesc
   // members (AIEHazardRecognizer.cpp:389; AIEMachineScheduler.cpp:1121-1132).
   // No promoteLoadsToSlot1 / AlternateSlots residual (AIE
@@ -534,8 +1067,7 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
       LLVM_DEBUG(dbgs() << "HaydnPostRASched: " << HardRoots
                         << " multi-member BUNDLE root(s) at post-RA entry "
                            "in bb."
-                        << MBB->getNumber()
-                        << " (metrics only)\n");
+                        << MBB->getNumber() << " (metrics only)\n");
     }
   }
   PostGenericScheduler::enterMBB(MBB);
@@ -544,6 +1076,14 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
 void HaydnPostRASchedStrategy::initialize(ScheduleDAGMI *Dag) {
   PostGenericScheduler::initialize(Dag);
   RegionWasScheduled = false;
+  // D1.30: build the per-region same-base load index HERE, not in
+  // enterMBB — this seam first sees the region's SUnits. startBlock ->
+  // enterMBB (MachineScheduler.cpp:824/:988) runs before the per-region
+  // schedule() -> buildSchedGraph (:1060) -> SchedImpl->initialize
+  // (:1073), so DAG->SUnits do not exist at enterMBB (see the constructor
+  // comment at :202-205). After the base initialize the DAG/TRI members
+  // are valid and no queue work has started. enterMBB hosts the clear.
+  buildSameBaseLoadIndex();
   // Bot HR is (re)created in the base initialize; replay after that.
   initializeBotScoreBoard();
 }
@@ -589,11 +1129,40 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
   }
 
   MachineFunction &MF = *CurrentMBB->getParent();
+  // D1.16 wrap-law seat: a latch (self-successor) re-executes its own
+  // leading cycles after the last body cycle. Replay the block's OWN first
+  // min(Depth, cycles) parcels into the Bot scoreboard at the wrap
+  // alignment so next-iteration-Top demand (e.g. a post-inc load at END
+  // whose dests are read at the next iteration's first cycle) constrains
+  // Bot placement. The replayed self-successor cycles are ALWAYS-executed
+  // (unlike exclusive real successors), but per-cycle max with the other
+  // replays stays the conservative merge — the wrap path executes on every
+  // iteration, so its demand can only raise a cycle the exclusive paths
+  // also see. Loop recurrence is NOT a new DDG cross-block edge: the
+  // scoreboard overlay is the mechanism (self-edge skip stays in the DDG).
+  const bool SelfSucc =
+      llvm::is_contained(CurrentMBB->successors(), CurrentMBB);
   SmallVector<MachineBasicBlock *, 4> ReplaySuccs;
   for (MachineBasicBlock *Succ : CurrentMBB->successors()) {
     if (Succ == CurrentMBB)
-      continue; // self-edge: loop recurrence, not a scheduled successor
+      continue; // handled as the wrap replay below (own leading cycles)
     if (!haydnSuccHasS1Depths(MF, Succ)) {
+      // D1.16: the wrap replay is the block's OWN leading cycles — it does
+      // not depend on any other successor being scheduled. An unscheduled
+      // real successor still keeps full latency (its cycles are NOT
+      // replayed), but a latch still owes its wrap demand: seed the
+      // self-successor only, then take the historical conservative return
+      // for the cross-successor replays.
+      if (SelfSucc) {
+        ReplaySuccs.push_back(CurrentMBB);
+        LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard wrap-only "
+                             "replay bb."
+                          << CurrentMBB->getNumber()
+                          << " (unscheduled "
+                             "successor bb."
+                          << Succ->getNumber() << " keeps full latency)\n");
+        break;
+      }
       LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard skip bb."
                         << CurrentMBB->getNumber() << " -> bb."
                         << Succ->getNumber()
@@ -602,7 +1171,7 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
     }
     ReplaySuccs.push_back(Succ);
   }
-  if (ReplaySuccs.empty())
+  if (ReplaySuccs.empty() && !SelfSucc)
     return;
 
   const int Depth =
@@ -612,8 +1181,10 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
   LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard replay bb."
                     << CurrentMBB->getNumber() << " depth=" << Depth << "\n");
 
-  // Insert successor cycle C at C-Depth so RecedeCycle(Depth+1) leaves
+  // Insert successor cycle C at C-Depth so recedeScoreboard(Depth+1) leaves
   // successor cycle 0 at scoreboard[+1] (AIE AlignScoreboardToCycleOne).
+  // RecedeCycle would also tick dest remaining and expire Occupancy-1
+  // windows (PipelineDepth>=17) before Bot starts.
   //
   // W69: successors of one block are EXCLUSIVE alternatives — at most one
   // executes — so per-cycle demand across successors is the element-wise max,
@@ -633,8 +1204,21 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
       CurrentMBB->getParent()->getSubtarget().getInstrItineraryData();
   HaydnHazardRecognizer ScratchHR(HII, Itin, /*IsPreRA=*/false, nullptr);
   unsigned Replayed = 0;
+  // D1.16 wrap replay: the latch's OWN leading cycles at the wrap
+  // alignment. Reuses the successor replay loop verbatim (same member
+  // collection / exclusion rules) by seeding the list with CurrentMBB —
+  // scheduled-depth gating does not apply (the block is being scheduled
+  // now; its own leading cycles are the wrap demand by construction).
+  // (When an unscheduled real successor forced the wrap-only break above,
+  // CurrentMBB is already seeded — do not seed twice: a duplicated replay
+  // would double-book the wrap cycles into the same Bot scoreboard.)
+  if (SelfSucc && ReplaySuccs.empty())
+    ReplaySuccs.push_back(CurrentMBB);
   for (MachineBasicBlock *Succ : ReplaySuccs) {
-    // First successor seeds BotHR directly; later ones merge via scratch.
+    // First successor seeds BotHR (occupancy + dest remaining). Later
+    // exclusive successors replay into ScratchHR and max-merge: per-cycle
+    // scoreboard maxWith plus dest remaining std::max per register, never
+    // additive |= (W69 phantom occupancy).
     HaydnHazardRecognizer *TargetHR = BotHR;
     if (Replayed) {
       ScratchHR.Reset();
@@ -668,8 +1252,11 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
 
   if (!Replayed)
     return;
-  for (int I = 0; I < Depth + 1; ++I)
-    BotHR->RecedeCycle();
+  // AIE AlignScoreboardToCycleOne: recedeScoreboard(Depth+1) so successor
+  // cycle 0 lands at scoreboard[+1]. RecedeCycle would tickDestWindows
+  // Depth+1 times (PipelineDepth>=17) and expire occupancy-1 dest remaining
+  // before Bot starts.
+  BotHR->recedeScoreboard(Depth + 1);
 }
 
 void HaydnPostRASchedStrategy::leaveMBB() {
@@ -708,20 +1295,20 @@ void HaydnPostRASchedStrategy::leaveMBB() {
                         << CurrentMBB->getNumber()
                         << " cycles=" << MBBBundles.size() << "\n");
       materializeBundles(*CurrentMBB, MBBBundles);
-        // W68.2 S1 depth feed: record each materialized instruction's issue
-  // cycle into every inter-block DDG where it is post-boundary, so the S2
-  // pass's effective-latency cut uses scheduled (not static) depths. AIE
-  // records these during its fixpoint replay (recordPostDepth family).
-  if (haydnInterBlockEnabled())
-    if (HaydnIBEdgesByPredMap *Reg =
-            haydnGetInterBlockEdgesRegistry(*CurrentMBB->getParent()))
-      for (const auto &[PredBB, Edges] : *Reg)
-        for (auto &E : Edges)
-          if (E->getSucc() == CurrentMBB)
-            for (unsigned C = 0; C < MBBBundles.size(); ++C)
-              for (MachineInstr *MI : MBBBundles[C].Instrs)
-                E->recordPostDepth(MI, (int)C);
-MBBBundles.clear();
+      // W68.2 S1 depth feed: record each materialized instruction's issue
+      // cycle into every inter-block DDG where it is post-boundary, so the S2
+      // pass's effective-latency cut uses scheduled (not static) depths. AIE
+      // records these during its fixpoint replay (recordPostDepth family).
+      if (haydnInterBlockEnabled())
+        if (HaydnIBEdgesByPredMap *Reg =
+                haydnGetInterBlockEdgesRegistry(*CurrentMBB->getParent()))
+          for (const auto &[PredBB, Edges] : *Reg)
+            for (auto &E : Edges)
+              if (E->getSucc() == CurrentMBB)
+                for (unsigned C = 0; C < MBBBundles.size(); ++C)
+                  for (MachineInstr *MI : MBBBundles[C].Instrs)
+                    E->recordPostDepth(MI, (int)C);
+      MBBBundles.clear();
     }
     commitOrSequentializeUnstampedMultiMemberBundles(*CurrentMBB);
     // Own only the current MBB. Predecessor re-probe after leave was a
@@ -775,17 +1362,17 @@ HaydnPostRASchedStrategy::computeAndFinalizeBundles(SchedBoundary &Zone) {
 
       // Zone-local ready cycle only — never read TopReadyCycle for a
       // bottom-scheduled SU (or BotReadyCycle for a top-scheduled SU).
-      unsigned EmitCycle =
-          Zone.isTop() ? SU->TopReadyCycle : SU->BotReadyCycle;
+      unsigned EmitCycle = Zone.isTop() ? SU->TopReadyCycle : SU->BotReadyCycle;
 
       // Defensive clamp: pre-RA-style physreg reschedule can leave ReadyCycle
       // behind the emission order (AIE computeAndFinalizeBundles pre-RA arm).
-      // Post-RA should not hit this; keep progress monotonic. Also cap a
-      // huge ReadyCycle so reconstruction cannot hang (T4 hang-root).
+      // Post-RA should not hit this; keep progress monotonic — placing an MI
+      // later than its ready cycle is latency-safe. An over-cap ready-cycle
+      // distance is NOT clamped here: bumpCycleForBundles owns that law and
+      // fatals (D1.26), because clamping would place the MI earlier than its
+      // latency requires (under-stall commit).
       if (EmitCycle < Bundles.size())
         EmitCycle = Bundles.size();
-      else
-        EmitCycle = clampForwardCycle(Bundles.size(), EmitCycle);
 
       if (EmitCycle != Bundles.size())
         bumpCycleForBundles(EmitCycle, Bundles, CurrBundle);
@@ -816,12 +1403,12 @@ HaydnPostRASchedStrategy::computeAndFinalizeBundles(SchedBoundary &Zone) {
 
   // Final CurrCycle flush: Top (and Bot after the sync above) may have been
   // advanced past the last emission cycle by hazards / issue stalls. Pad empty
-  // cycles so the reconstructed list covers the full scheduled window. Cap
-  // a runaway CurrCycle (T4 hang-root).
+  // cycles so the reconstructed list covers the full scheduled window. An
+  // over-cap trailing window is not silently truncated (D1.26): the
+  // bumpCycleForBundles seat fail-closes with the named fatal instead of
+  // committing an under-stalled cycle.
   if (Zone.getCurrCycle() != Bundles.size())
-    bumpCycleForBundles(
-        clampForwardCycle(Bundles.size(), Zone.getCurrCycle()), Bundles,
-        CurrBundle);
+    bumpCycleForBundles(Zone.getCurrCycle(), Bundles, CurrBundle);
 
   // Bot reconstruction walks reverse emission order; canonicalize to MBB order
   // for applyBundles / rolling NOP insert.
@@ -939,16 +1526,15 @@ static bool membersContiguous(ArrayRef<MachineInstr *> Instrs) {
 ///   * no schedule-order true RAW (\p cycleMembersHaveTrueRAW) — MI restatement
 ///     of the same avail-cycle contract after physreg paint
 /// Anti may share a cycle only with use-before-redef; emission is layer 3.
-static bool freePackReadyCycleAndDataDepsOK(
-    const ScheduleDAGMI *DAG, ArrayRef<MachineInstr *> Instrs, bool IsTop) {
+static bool freePackReadyCycleAndDataDepsOK(const ScheduleDAGMI *DAG,
+                                            ArrayRef<MachineInstr *> Instrs,
+                                            bool IsTop) {
   if (Instrs.size() < 2)
     return true;
 
   MachineFunction *MF = Instrs.front()->getMF();
   const TargetRegisterInfo *TRI =
       MF ? MF->getSubtarget().getRegisterInfo() : nullptr;
-  const TargetInstrInfo *TII =
-      MF ? MF->getSubtarget().getInstrInfo() : nullptr;
   // Available-cycle detect at MI level (def-before-use cannot share a cycle).
   if (haydn::bundle::cycleMembersHaveTrueRAW(Instrs, TRI)) {
     LLVM_DEBUG(dbgs() << "HaydnPostRASched: free multi-MI fails avail-cycle "
@@ -957,8 +1543,7 @@ static bool freePackReadyCycleAndDataDepsOK(
   }
   // SET_HWLOOP trip/Off sample under snapshot no-forwarding: refuse free pack
   // with any same-cycle producer of those regs (remat ADDI+SET peel).
-  if (TII && haydn::bundle::cycleMembersHaveHwloopTripConflict(Instrs, *TII,
-                                                               TRI)) {
+  if (haydn::bundle::cycleMembersHaveHwloopTripConflict(Instrs, TRI)) {
     LLVM_DEBUG(dbgs() << "HaydnPostRASched: free multi-MI SET trip/Off "
                          "conflict — refuse\n");
     return false;
@@ -1007,14 +1592,31 @@ static bool freePackReadyCycleAndDataDepsOK(
   return true;
 }
 
+// AIE AIEMachineScheduler.cpp:1792 Context->AA into buildEdges.
+// HaydnScheduleDAGMI::getAliasAnalysis is that overlay when the DAG
+// exists. leaveMBB still runs after skipped single-MI BUNDLE regions
+// (pre-existing multi-member root is one iterator slot), and DAG is
+// null there — Context still holds AA. Null both is fail-closed.
+// Dual-load is not cycleHasMayAliasStoreLoad.
+static AAResults *getHaydnPostRAAliasAnalysis(const ScheduleDAGMI *DAG,
+                                              const MachineSchedContext *Ctx) {
+  if (DAG)
+    if (AAResults *AA =
+            static_cast<const HaydnScheduleDAGMI *>(DAG)->getAliasAnalysis())
+      return AA;
+  return Ctx ? Ctx->AA : nullptr;
+}
+
 // exact no-split materialize for a free scheduled multi-MI cycle.
 // Product coissue law (HaydnBundleMaterialize.h):
 //   (1) same available/ready cycle + no Data Lat≥1 (dep graph)
 //   (2) emission pack + field-order no true RAW (canCoissueProductCycle)
 // Already-bundled members are never free-packed.
-static void materializeExactNoSplitCycle(
-    MachineBasicBlock &MBB, ArrayRef<MachineInstr *> Instrs,
-    const ScheduleDAGMI *DAG, bool IsTop) {
+static void materializeExactNoSplitCycle(MachineBasicBlock &MBB,
+                                         ArrayRef<MachineInstr *> Instrs,
+                                         const ScheduleDAGMI *DAG,
+                                         const MachineSchedContext *Ctx,
+                                         bool IsTop) {
   if (Instrs.size() < 2)
     return;
 
@@ -1053,8 +1655,10 @@ static void materializeExactNoSplitCycle(
   // Layer 3: one production commit site (as-is generated members or
   // rematch/bake). AIE applyBundles (AIEHazardRecognizer.cpp:326-352)
   // packs already-setDesc members by getSlotKind inside that site —
-  // PostRA must not open a second bake path.
-  if (haydn::bundle::commitOneProductCycle(Instrs)) {
+  // PostRA must not open a second bake path. AA from ScheduleDAGMI so
+  // proven-disjoint store/load coissue; dual-load is not that law.
+  AAResults *AA = getHaydnPostRAAliasAnalysis(DAG, Ctx);
+  if (haydn::bundle::commitOneProductCycle(Instrs, AA)) {
     ++NumMultiMIBundlesFinalized;
     return;
   }
@@ -1096,7 +1700,7 @@ void HaydnPostRASchedStrategy::materializeBundles(
       continue;
     }
 
-    materializeExactNoSplitCycle(MBB, CB.Instrs, DAG, /*IsTop=*/true);
+    materializeExactNoSplitCycle(MBB, CB.Instrs, DAG, Ctx, /*IsTop=*/true);
   }
 }
 
@@ -1137,7 +1741,8 @@ void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
     MaterializePseudo(MI);
 
   // AIE leaveRegion: materialize then SelectedAltDescs.clear()
-  // (AIEMachineScheduler.cpp:1081-1082). Full clear — no slot side-map survives.
+  // (AIEMachineScheduler.cpp:1081-1082). Full clear — no slot side-map
+  // survives.
   AltDescs.clear();
   if (!AltDescs.empty()) {
     ++NumPostRAAltDescLeakFatals;
@@ -1211,8 +1816,9 @@ void HaydnPostRASchedStrategy::handleRegionConflicts(
   // (SchedBoundary::bumpCycle → AdvanceCycle) so multi-cycle FU tails slide
   // past the Bot window. AIE's peer loop is unbounded
   // (AIEMachineScheduler.cpp:1192-1195); Haydn caps it so dense MAC
-  // bodies cannot hang post-RA (T4 hang-root). Continue after the cap —
-  // fatal would re-stick the product path.
+  // bodies cannot hang post-RA (T4 hang-root). Residual
+  // checkInterZoneConflicts after the cap is a named Top/Bot seam fatal,
+  // matching replayMultiMemberSeamHazards Guard>=64.
   unsigned Guard = 0;
   while (checkInterZoneConflicts(BotBundles) &&
          Guard < HaydnPostRAMaxInterZonePads) {
@@ -1223,11 +1829,16 @@ void HaydnPostRASchedStrategy::handleRegionConflicts(
   if (Guard >= HaydnPostRAMaxInterZonePads &&
       checkInterZoneConflicts(BotBundles)) {
     ++NumInterZonePadCaps;
-    LLVM_DEBUG(dbgs() << "  handleRegionConflicts: pad cap "
-                      << HaydnPostRAMaxInterZonePads << " — continue\n");
+    report_fatal_error("Haydn: residual Top/Bot inter-zone seam after pad cap",
+                       /*GenCrashDiag=*/false);
   }
 
   // Reflect any Top CurrCycle growth into the Top cycle list as empty pads.
+  // The delta here (ExitReadyCycle pad + guard bumps) can exceed
+  // HaydnPostRAMaxInterZonePads even after the D1.7 arm above clears; the
+  // bumpCycleForBundles seat owns that law (D1.26 fatal), so the raw
+  // CurrCycle is passed unclamped — a silent clamp here would truncate
+  // scheduled stall cycles.
   if (Top.getCurrCycle() != TopBundles.size()) {
     CycleBundle Dummy;
     bumpCycleForBundles(Top.getCurrCycle(), TopBundles, Dummy);
@@ -1345,6 +1956,10 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
       Roots.push_back(&MI);
   }
 
+  // AIE Context->AA overlay (HaydnScheduleDAGMI::getAliasAnalysis).
+  // Proven disjoint packs; missing MMO / unproven heap sequentialize.
+  // Dual-load is not this law.
+  AAResults *AA = getHaydnPostRAAliasAnalysis(DAG, Ctx);
   for (MachineInstr *Root : Roots) {
     if (!Root || !Root->getParent())
       continue;
@@ -1354,9 +1969,10 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
       continue;
 
     // Product coissue probe is the legality authority (schedule + field +
-    // SET trip/Off). Illegal → sequentialize recovery preserves schedule
-    // order; sequentialize itself does not invent packing legality.
-    if (!haydn::bundle::canCoissueProductCycle(Kids)) {
+    // SET trip/Off + proven-disjoint store/load). Illegal → sequentialize
+    // recovery preserves schedule order; sequentialize itself does not
+    // invent packing legality. Dual-load is not this law.
+    if (!haydn::bundle::canCoissueProductCycle(Kids, AA)) {
       ++NumProductCoissueProbeRejects;
       sequentializeMultiMemberRoot(*Root, Kids);
       ++NumUnstampedMultiMemberSequentialized;
@@ -1393,7 +2009,7 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
         K->unbundleFromSucc();
     }
     Root->eraseFromParent();
-    if (haydn::bundle::commitOneProductCycle(Kids)) {
+    if (haydn::bundle::commitOneProductCycle(Kids, AA)) {
       ++NumUnstampedMultiMemberCommitted;
       ++NumMultiMIBundlesFinalized;
       continue;
@@ -1422,10 +2038,10 @@ static void collectCycleMembers(MachineInstr &Head,
     Members.push_back(&Head);
 }
 
-static bool cycleConflictsScoreboard(
-    const HaydnHazardRecognizer &HR,
-    const ResourceScoreboard<HaydnFuncUnitWrapper> &SB,
-    ArrayRef<MachineInstr *> Members) {
+static bool
+cycleConflictsScoreboard(const HaydnHazardRecognizer &HR,
+                         const ResourceScoreboard<HaydnFuncUnitWrapper> &SB,
+                         ArrayRef<MachineInstr *> Members) {
   for (MachineInstr *MI : Members) {
     if (HR.checkConflict(SB, *MI, /*Cycle=*/0))
       return true;
@@ -1464,8 +2080,8 @@ void HaydnPostRASchedStrategy::replayMultiMemberSeamHazards(
     if (!MI.isBundle() || MI.isBundledWithPred())
       continue;
     SmallVector<MachineInstr *, 3> Kids = haydn::bundle::members(MI);
-    bool IsPre = llvm::any_of(
-        Kids, [&PreExistingMultiMembers](const MachineInstr *K) {
+    bool IsPre =
+        llvm::any_of(Kids, [&PreExistingMultiMembers](const MachineInstr *K) {
           return PreExistingMultiMembers.contains(K);
         });
     if (Kids.size() >= 2 && IsPre)
@@ -1526,8 +2142,7 @@ void HaydnPostRASchedStrategy::replayMultiMemberSeamHazards(
     if (AtSeam) {
       unsigned LatencyStalls = 0;
       const Side UseSide =
-          IsMulti ? Side::InRoot
-                  : (SeenMulti ? Side::PostRoot : Side::PreRoot);
+          IsMulti ? Side::InRoot : (SeenMulti ? Side::PostRoot : Side::PreRoot);
       for (MachineInstr *UseMI : Members) {
         for (unsigned U = 0, UE = UseMI->getNumOperands(); U != UE; ++U) {
           const MachineOperand &MO = UseMI->getOperand(U);
@@ -1546,8 +2161,8 @@ void HaydnPostRASchedStrategy::replayMultiMemberSeamHazards(
               Crosses = true;
             if (!Crosses)
               continue;
-            unsigned Gap = requiredLatencyGap(*HII, Itin, *DI.MI, DI.OpIdx,
-                                              *UseMI, U);
+            unsigned Gap =
+                requiredLatencyGap(*HII, Itin, *DI.MI, DI.OpIdx, *UseMI, U);
             if (Gap == 0)
               continue;
             unsigned Ready = DI.Cycle + Gap + 1;
@@ -1575,8 +2190,7 @@ void HaydnPostRASchedStrategy::replayMultiMemberSeamHazards(
       ScratchHR.enterResources(SB, *MI, /*DeltaCycles=*/0);
 
     const Side DefSide =
-        IsMulti ? Side::InRoot
-                : (SeenMulti ? Side::PostRoot : Side::PreRoot);
+        IsMulti ? Side::InRoot : (SeenMulti ? Side::PostRoot : Side::PreRoot);
     for (MachineInstr *MI : Members) {
       for (unsigned D = 0, DE = MI->getNumOperands(); D != DE; ++D) {
         const MachineOperand &MO = MI->getOperand(D);

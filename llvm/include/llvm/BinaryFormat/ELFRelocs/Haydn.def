@@ -84,6 +84,24 @@ ELF_RELOC(R_HAYDN_CSR_UImm8,            23)
 //   R_HAYDN_WIDE_BranchSImm12_E3{E0,E1,E2} — I12 cond at E3, imm @23/54/81.
 //   R_HAYDN_WIDE_BranchSImm12_RI_E3{E0,E1} — RI12 cond at E3, imm @23/54.
 //   R_HAYDN_JALRSImm12_E3{E0,E1} — JALR RI12 at E3, imm @23/54.
+//   R_HAYDN_HI12_E3* / CSR_UImm8_E3* — D1.17: HI12/CSR_UImm8 map/type is
+//     NOT member-unique (E3 e1/e0/e2 ALU0 I12 hosts LUI(opc=1) alongside
+//     BEQZ/BNEZ/BGEZ/BLTZ(4..7); I8 hosts CSRR(4)/CSRW(5) alongside
+//     ZERO_GPR/DR/SFR(1..3); layout 123 E3 e2 ALU0 carries LUI+branches).
+//     A `{ lui %hi12; beqz; nop }` parcel made the sniff return the branch
+//     window (54) while the LUI sits at 81/83 — wrong-window miscompile in
+//     both MC applyFixup and lld relocate. The producer now routes through
+//     resolveFieldLsbForMember (typed (Mode,EntryIdx,Unit)) and emits these
+//     qualified kinds; HI12 windows 21/23 (e0 ALU2/ALU0), 54 (e1 both
+//     units), 83/81 (e2 ALU2/ALU0); CSR windows 27/23 (e0 ALU2/ALU0), 54
+//     (e1 both units), 85 (e2 both units). Base kinds keep their default
+//     window (E2 e0 @32); the Loc sniff stays ONLY as the lld/base-site
+//     fallback and now pins opcodes on every arm.
+//   E2 e1 hosts no I12/I8 member at golden v2_2 (RI20/I32 @ALU1,
+//     R/RR/RRR @MAC1, AR/RI6/RR @LOAD1) — no E2-e1 qualified kind is
+//     minted. A symbolic LUI/CSR at E2 e1 gets no generated member at all
+//     (fail-closed by absence), so an E2-e1 window can never be patched
+//     (closes D1.24 by structure).
 // Value transforms/scales are IDENTICAL to the base kind; only the write
 // window differs. MC emits them from encodeSlotSubInst when the symbolic
 // member's committed entry is not the base kind's default window; the
@@ -98,3 +116,12 @@ ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI_E3E0,  30)
 ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI_E3E1,  31)
 ELF_RELOC(R_HAYDN_JALRSImm12_E3E0,            32)
 ELF_RELOC(R_HAYDN_JALRSImm12_E3E1,            33)
+ELF_RELOC(R_HAYDN_HI12_E3E0_ALU2,             34)
+ELF_RELOC(R_HAYDN_HI12_E3E0_ALU0,             35)
+ELF_RELOC(R_HAYDN_HI12_E3E1,                  36)
+ELF_RELOC(R_HAYDN_HI12_E3E2_ALU2,             37)
+ELF_RELOC(R_HAYDN_HI12_E3E2_ALU0,             38)
+ELF_RELOC(R_HAYDN_CSR_UImm8_E3E0_ALU2,        39)
+ELF_RELOC(R_HAYDN_CSR_UImm8_E3E0_ALU0,        40)
+ELF_RELOC(R_HAYDN_CSR_UImm8_E3E1,             41)
+ELF_RELOC(R_HAYDN_CSR_UImm8_E3E2,             42)

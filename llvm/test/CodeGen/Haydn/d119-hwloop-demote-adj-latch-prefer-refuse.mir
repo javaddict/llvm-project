@@ -1,0 +1,228 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+#
+# Role: MIR — D1.19 stack-counter demote refuse. Adj != 0 with no
+# PreheaderScr and LatchScr == Prefer must refuse the demote (fail-closed
+# fatal), never ST32 the FULL trip N while the kernel runs Prefer+Adj=N-S.
+#
+# Trigger construction (mirrors the cb166 demote_adj_stack_counter body-call
+# shape, so the preflight fails body-resolvably and demote runs):
+#   * LoopStart $r2, -1 — reg trip, Prefer=$r2 (a GPR not in {R0,R13,R15}),
+#     Adj=-1 != 0 (the S=1 peel addend).
+#   * every pickCounterReg candidate (R11,R10,R9,R8,R7,R4,R3,R2,R1,R12) is
+#     mentioned in the loop body → no GPR countdown → stack-counter arm.
+#   * every PostRAScratchPriority GPR (R1..R7, R11..R8; R12 excluded by
+#     PreferNotR12) is live across the latch end: the exit block uses each
+#     one, so the latch probe (successors {Header, Exit} computed live-ins)
+#     finds nothing → the CB-162 fallback sets LatchScr = Prefer.
+#   * the Adj!=0 preheader probe always excludes Prefer; the copy fallback
+#     requires LatchScr != Prefer → PreheaderScr stays invalid.
+#   Old behavior: the gate passed (HasImm==false), the store block skipped
+#   the ADDI (guarded on a physical PreheaderScr != Prefer) and fell back
+#   to StoreSrc = Prefer — ST32 stored the FULL trip 8 while the kernel
+#   must run 8-1=7 (the peeled iteration re-executes: duplicated side
+#   effects / wrong exit). Now demoteStackCounterAdmissible cell (e) refuses
+#   before any mutation and the formation seat's fail-closed fatal fires
+#   (rejectIncompleteRoleA with the preflight Why: the body call).
+#
+# Arm 2 (demote_adj_latch_prefer_freescratch) is the positive control: R7
+# unmentioned anywhere leaves the latch probe a non-Prefer scratch, the
+# preheader probe finds it too, and the demote proceeds — ADDI from Prefer
+# into that scratch + the closed stack-counter window (no over-refuse).
+#
+# Arm 3 (demote_adj0_latch_prefer) is the Adj==0 control: identical
+# suffocation but LoopStart $r2, 0 — remaining trip IS the full trip, so
+# Prefer is stored directly and the demote proceeds (the refuse is scoped
+# to Adj != 0 exactly).
+
+# FATAL: HaydnHardwareLoops: incomplete Role-A retained state rejected before mutation — body contains call/indirect/return
+#
+# DBG: demoting hwloop header=%bb.1 latch=%bb.1 exit=%bb.2 (LoopStart)
+# DBG: demote latch scratch = Prefer
+# DBG: demote refused — no spill-free non-R0 scratch for stack-counter windows (latch ok, preheader ok, adj-store NONE (Adj!=0, LatchScr==Prefer))
+
+--- |
+  define dso_local void @demote_adj_latch_prefer_refuse(ptr %p) {
+  entry:
+    br label %body
+  body:
+    call void @ext(ptr %p)
+    br label %exit
+  exit:
+    ret void
+  }
+  declare void @ext(ptr)
+
+  define dso_local void @demote_adj_latch_prefer_freescratch(ptr %p) {
+  entry:
+    br label %body
+  body:
+    call void @ext(ptr %p)
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @demote_adj0_latch_prefer(ptr %p) {
+  entry:
+    br label %body
+  body:
+    call void @ext(ptr %p)
+    br label %exit
+  exit:
+    ret void
+  }
+...
+
+---
+name:            demote_adj_latch_prefer_refuse
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, -1
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r15 = JAL_W @ext, csr_haydn, implicit-def $r1, implicit $r1, implicit-def $r15
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r1, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    ST32 $r1, $r3, 0
+    ST32 $r4, $r5, 0
+    ST32 $r6, $r7, 0
+    ST32 $r8, $r9, 0
+    ST32 $r10, $r11, 0
+    ST32 $r12, $r1, 0
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+# FATAL-COUNT-1: LoopStart
+# The fatal fires before any mutation: no demoted soft edge was installed,
+# so no full-trip ST32 counter window can exist. (The not-llc arm has no
+# output MIR; the refuse itself is pinned by the FATAL/DBG lines above.)
+
+---
+name:            demote_adj_latch_prefer_freescratch
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, -1
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r15
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r15 = JAL_W @ext, csr_haydn, implicit-def $r1, implicit $r1, implicit-def $r15
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r1, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r15
+    ST32 $r1, $r3, 0
+    ST32 $r4, $r5, 0
+    ST32 $r6, $r8, 0
+    ST32 $r9, $r10, 0
+    ST32 $r11, $r12, 0
+    ST32 $r1, $r3, 0
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+# CHECK-LABEL: name: demote_adj_latch_prefer_freescratch
+# Positive control (no over-refuse): the probed $r7 window is exactly the
+# cb166 stack arm — ADDI from Prefer into the scratch, then the closed
+# stack-counter latch window on $r7.
+# CHECK: $r7 = ADDI32{{[^ ]*}} $r2, -1
+# CHECK: $r7 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r7 = SUBI32{{.*}}$r7, 1
+# CHECK: S_SW_WITH_IMM{{.*}}$r7, $r13
+# CHECK: BNEZ{{.*}}$r7
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopStart
+# CHECK-NOT: PseudoLoopEnd
+
+---
+name:            demote_adj0_latch_prefer
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r15 = JAL_W @ext, csr_haydn, implicit-def $r1, implicit $r1, implicit-def $r15
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r1, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    ST32 $r1, $r3, 0
+    ST32 $r4, $r5, 0
+    ST32 $r6, $r7, 0
+    ST32 $r8, $r9, 0
+    ST32 $r10, $r11, 0
+    ST32 $r12, $r1, 0
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+# CHECK-LABEL: name: demote_adj0_latch_prefer
+# Adj==0 control: remaining trip IS the full trip — Prefer stored directly,
+# latch window on Prefer itself (the CB-162 value-preserve save/restore
+# keeps the exit value), and no -S ADDI anywhere.
+# CHECK-NOT: ADDI32{{[^ ]*}} {{.*}}, -1
+# CHECK: $r2 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r2 = SUBI32{{.*}}$r2, 1
+# CHECK: BNEZ{{.*}}$r2
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopStart
+# CHECK-NOT: PseudoLoopEnd

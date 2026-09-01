@@ -93,8 +93,9 @@ public:
   /// Inherit S1's recorded depths and successor occupancy into a freshly
   /// gathered S2 graph for the same edge (matched by MI, not by node number —
   /// S2's SUnit numbering may differ). Occupancy inherit is independent of
-  /// depth inherit: S2 gather may already have DepthsAreScheduled from
-  /// BUNDLE-root seeding without a replayable occupancy view.
+  /// depth inherit. Per-MI depths copy even if S2 already has
+  /// DepthsAreScheduled from BUNDLE-root seeding; MIs whose parent is not
+  /// Succ are skipped.
   void inheritRecordedPostDepths(const HaydnInterBlockEdges &S1);
 
   bool isPreBoundaryNode(const SUnit *SU) const {
@@ -115,7 +116,8 @@ public:
                                const TargetRegisterInfo *TRI,
                                const TargetSchedModel *TSM);
 
-  /// Longest-path depth of post-boundary nodes over post-boundary edges.
+  /// Longest-upward earliest-cycle fill of post-boundary nodes: max over
+  /// post-boundary Preds of latency+getPostDepthOr(Pred,0), else 0.
   void recomputePostDepthsFromEdges(const TargetSchedModel *TSM,
                                     const TargetInstrInfo *TII);
 
@@ -185,8 +187,8 @@ public:
     return SuccOccupancy;
   }
 
-  /// Recompute post-boundary depths (call after the successor block was
-  /// scheduled or its provisional schedule changed).
+  /// Recompute post-boundary depths with the same Pred-based fill as
+  /// recomputePostDepthsFromEdges (skipped-region / unscheduled successor).
   void recomputePostDepths();
 
   /// Cross-boundary edges: for a pre-boundary SU, its successor edges that

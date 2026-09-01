@@ -1,0 +1,131 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — D1.30 same-base load index memo is ranking/hold-identical.
+# One block exercises all three indexed seats:
+#   (i)   seat 2+3: same-base dual-load pair (isAvailableNode partner loop +
+#         tryCandidate tight-partner ranking) bundles one issue cycle;
+#   (ii)  seat 1: same-base stores keep the idle cycle after a same-base
+#         store while two nearby same-base loads are unscheduled
+#         (hasNearbyUnscheduledSameBaseLoad);
+#   (iii) far-window negative: same-base loads beyond the nearby-load
+#         window (>8 NodeNum) must not pin the store (window unchanged).
+# CHECKs are generated from the pre-change committed output; passing
+# unmodified IS the ranking-identical proof.
+
+--- |
+  define void @index_seats(ptr %p, ptr %q) { ret void }
+  define void @far_window_negative(ptr %p, ptr %q) { ret void }
+...
+---
+name:            index_seats
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; Seat 2+3: dual-load pair on $r1 (offsets 0/1) bundles one cycle.
+    ; Seat 1: two same-base stores on $r2 with two nearby same-base loads;
+    ; the second store stays out of the bundle cycle the first store took.
+    ; CHECK-LABEL: name: index_seats
+    ; CHECK: liveins: $r1, $r2
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r5, implicit-def $r6, implicit $r2 :: (load (s32) from %ir.q + 8), (load (s32) from %ir.q + 12) {
+    ; CHECK-NEXT: $r5 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r2, 8 :: (load (s32) from %ir.q + 8)
+    ; CHECK-NEXT: $r6 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r2, 12 :: (load (s32) from %ir.q + 12)
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r3, implicit-def $r4, implicit killed $r1 :: (load (s32) from %ir.p), (load (s32) from %ir.p + 4) {
+    ; CHECK-NEXT: $r3 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r1, 0 :: (load (s32) from %ir.p)
+    ; CHECK-NEXT: $r4 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r1, 4 :: (load (s32) from %ir.p + 4)
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r0 = ADD32_E3_E2_ALU2_RR killed $r5, killed $r6, implicit-def dead $sfr
+    ; CHECK-NEXT: BUNDLE 1, 0, implicit-def $r0, implicit-def dead $sfr, implicit $r0, implicit killed $r3, implicit $r2 :: (store (s32) into %ir.q) {
+    ; CHECK-NEXT: $r0 = ADD32_E3_E1_ALU1_RR $r0, $r3, implicit-def dead $sfr
+    ; CHECK-NEXT: S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6 killed $r3, $r2, 0 :: (store (s32) into %ir.q)
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r4, killed $r2, 16 :: (store (s32) into %ir.q + 16)
+    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    $r3 = LD32 $r1, 0 :: (load (s32) from %ir.p)
+    $r4 = LD32 $r1, 4 :: (load (s32) from %ir.p + 4)
+    ST32 $r3, $r2, 0 :: (store (s32) into %ir.q)
+    $r5 = LD32 $r2, 8 :: (load (s32) from %ir.q + 8)
+    $r6 = LD32 $r2, 12 :: (load (s32) from %ir.q + 12)
+    ST32 $r4, $r2, 16 :: (store (s32) into %ir.q + 16)
+    $r0 = ADD32 $r5, $r6, implicit-def dead $sfr
+    $r0 = ADD32 $r0, $r3, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...
+---
+name:            far_window_negative
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+machineFunctionInfo: {}
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+
+    ; The two $r2 loads are 9+ NodeNums from the store: outside the
+    ; nearby-load window, so the store is never held for them.
+    ; CHECK-LABEL: name: far_window_negative
+    ; CHECK: liveins: $r1, $r2
+    ; CHECK-NEXT: {{  $}}
+    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r6, implicit-def $r7, implicit $r1 :: (load (s32) from %ir.p + 12), (load (s32) from %ir.p + 16) {
+    ; CHECK-NEXT: $r6 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r1, 12 :: (load (s32) from %ir.p + 12)
+    ; CHECK-NEXT: $r7 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, 16 :: (load (s32) from %ir.p + 16)
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r9, implicit-def $r8, implicit $r1 :: (load (s32) from %ir.p + 24), (load (s32) from %ir.p + 20) {
+    ; CHECK-NEXT: $r9 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r1, 24 :: (load (s32) from %ir.p + 24)
+    ; CHECK-NEXT: $r8 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, 20 :: (load (s32) from %ir.p + 20)
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r10, implicit $r1, implicit killed $r2 :: (load (s32) from %ir.p + 28), (store (s32) into %ir.p) {
+    ; CHECK-NEXT: $r10 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r1, 28 :: (load (s32) from %ir.p + 28)
+    ; CHECK-NEXT: S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r2, $r1, 0 :: (store (s32) into %ir.p)
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: NOP
+    ; CHECK-NEXT: BUNDLE 0, 0, implicit-def $r3, implicit-def $r4, implicit $r1 :: (load (s32) from %ir.p), (load (s32) from %ir.p + 4) {
+    ; CHECK-NEXT: $r3 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r1, 0 :: (load (s32) from %ir.p)
+    ; CHECK-NEXT: $r4 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, 4 :: (load (s32) from %ir.p + 4)
+    ; CHECK-NEXT: }
+    ; CHECK-NEXT: $r5 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 killed $r1, 8 :: (load (s32) from %ir.p + 8)
+    ; CHECK-NEXT: $r0 = ADD32_E3_E2_ALU2_RR killed $r3, killed $r4, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = ADD32_E3_E2_ALU2_RR $r0, killed $r5, implicit-def dead $sfr
+    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ST32 $r2, $r1, 0 :: (store (s32) into %ir.p)
+    $r3 = LD32 $r1, 0 :: (load (s32) from %ir.p)
+    $r4 = LD32 $r1, 4 :: (load (s32) from %ir.p + 4)
+    $r5 = LD32 $r1, 8 :: (load (s32) from %ir.p + 8)
+    $r6 = LD32 $r1, 12 :: (load (s32) from %ir.p + 12)
+    $r7 = LD32 $r1, 16 :: (load (s32) from %ir.p + 16)
+    $r8 = LD32 $r1, 20 :: (load (s32) from %ir.p + 20)
+    $r9 = LD32 $r1, 24 :: (load (s32) from %ir.p + 24)
+    $r10 = LD32 $r1, 28 :: (load (s32) from %ir.p + 28)
+    $r0 = ADD32 $r3, $r4, implicit-def dead $sfr
+    $r0 = ADD32 $r0, $r5, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

@@ -69,6 +69,9 @@ unsigned PacketFormats::getNumFormats() const {
 // encodedBytesOf / encodedBitsOf / maxEncodedBytesInProfile.
 // Shipping tables are production E96 only (AIEFormat.h:29-120 PacketFormats
 // / VLIWFormat peer). Synthetic multi-bundle fixtures are not listed here.
+// Product EncodedBytes/Bits come from generated Format E golden pins
+// (GET_FORMAT_E_GOLDEN_PINS). AIE VLIWFormat::Size is the TableGen size
+// (AIEFormat.h:44-52), not a parallel hand 12.
 
 namespace {
 
@@ -79,20 +82,42 @@ constexpr HeaderPredicateID HP_E96_ThreeEntry = 2;
 // Phase transition handles (E96 reduces to a single alignment phase today).
 constexpr PhaseTransitionID PT_E96_Default = 1;
 
-// Production E96 row sizes: one fixed Format E family, 96-bit / 12-byte parcel,
-// with two internal entry geometries selected by header entry_num.
-constexpr EncodedBytes E96ParcelBytes{12};
-constexpr EncodedBits E96ParcelBits{96};
+namespace format_e_pins {
+#define GET_FORMAT_E_GOLDEN_PINS
+#include "HaydnGenFormatERecords.inc"
+} // namespace format_e_pins
 
-// Product rows (immutable production set).
-const BundleFormatRowDesc ProductRows[] = {
+static_assert(format_e_pins::FormatEEncodedBytes * 8u ==
+                  format_e_pins::FormatEBundleBits,
+              "generated Format E EncodedBytes must match FormatEBundleBits");
+// FE8: sole product parcel is Format E 96-bit / 12-byte. No dual 8/16 path
+// and no parallel E96ParcelBytes{12} literal.
+static_assert(format_e_pins::FormatEEncodedBytes == 12u,
+              "product EncodedBytes must be Format E 12 (non-E96 sizes retired)");
+static_assert(format_e_pins::FormatEBundleBits == 96u,
+              "product EncodedBits must be Format E 96 (non-E96 sizes retired)");
+
+// Product rows (immutable production set). EncodedBytes/Bits are the generated
+// Format E parcel width — not an independent E96ParcelBytes{12} literal.
+constexpr BundleFormatRowDesc ProductRows[] = {
     {BundleFormatRowID::E96TwoEntry, BundleFormatID::FormatE96, "E96TwoEntry",
-     E96ParcelBits, E96ParcelBytes, HP_E96_TwoEntry, PT_E96_Default,
+     EncodedBits{format_e_pins::FormatEBundleBits},
+     EncodedBytes{format_e_pins::FormatEEncodedBytes}, HP_E96_TwoEntry,
+     PT_E96_Default,
      /*EntryCount=*/2, /*TopPadBits=*/4, /*IsProduct=*/true},
     {BundleFormatRowID::E96ThreeEntry, BundleFormatID::FormatE96,
-     "E96ThreeEntry", E96ParcelBits, E96ParcelBytes, HP_E96_ThreeEntry,
+     "E96ThreeEntry", EncodedBits{format_e_pins::FormatEBundleBits},
+     EncodedBytes{format_e_pins::FormatEEncodedBytes}, HP_E96_ThreeEntry,
      PT_E96_Default, /*EntryCount=*/3, /*TopPadBits=*/1, /*IsProduct=*/true},
 };
+
+static_assert(ProductRows[0].Bytes.Value == format_e_pins::FormatEEncodedBytes &&
+                  ProductRows[1].Bytes.Value ==
+                      format_e_pins::FormatEEncodedBytes,
+              "ProductRows EncodedBytes is generated FormatEEncodedBytes");
+static_assert(ProductRows[0].Bits.Value == format_e_pins::FormatEBundleBits &&
+                  ProductRows[1].Bits.Value == format_e_pins::FormatEBundleBits,
+              "ProductRows EncodedBits is generated FormatEBundleBits");
 
 const BundleFormatDesc ProductFormats[] = {
     {BundleFormatID::FormatE96, "FormatE96",
@@ -148,10 +173,11 @@ namespace haydn {
 namespace format {
 
 ArrayRef<uint8_t> canonicalFullSlotIdleParcel() {
-  static const uint8_t Bytes[] = {
+  // Length is generated FormatEEncodedBytes, not a hand 12-byte oracle.
+  static const uint8_t Bytes[format_e_pins::FormatEEncodedBytes] = {
       static_cast<uint8_t>((FormatEIndicatorBits & 0x7u) |
                            ((FormatEEntryNumTwo & 0x1u) << 3)),
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  };
   const unsigned Parcel = encodedBytesOrDie(BundleFormatRowID::E96TwoEntry).Value;
   assert(Parcel == sizeof(Bytes) &&
          "full-slot idle length must match production EncodedBytes");

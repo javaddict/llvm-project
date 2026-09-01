@@ -44,6 +44,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineScheduler.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 
 #include <memory>
@@ -76,8 +77,9 @@ public:
 
   // After the base HR construction, replay scheduled successor bundles into
   // the Bot scoreboard (AIE initializeBotScoreBoard,
-  // AIEMachineScheduler.cpp:260-405). Unscheduled/unknown successors stay
-  // full-latency: no static-depth fill that could invent a cut.
+  // AIEMachineScheduler.cpp:260-405). Sole replay seat: first successor
+  // seeds BotHR, later successors ScratchHR+maxMergeSB (scoreboard and dest
+  // remaining). Unscheduled/unknown successors stay full-latency.
   void initialize(ScheduleDAGMI *Dag) override;
 
   // Stash CurrentMBB for leaveMBB materialize (DAG BB is not publicly
@@ -92,6 +94,18 @@ public:
   // once a load is already best — dual-load + MAC co-issue for hot-loop fill.
   // Sequentialize after a failed product commit stays recovery-only.
   bool tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand) override;
+
+  // Same-base dual-load hold plus D1.9 store/nop stall: keep a pure load
+  // pending while a nearby independent same-base partner is still waiting
+  // on already-ready barrier stores, and keep a proven-disjoint same-base
+  // store from occupying the idle cycle after another same-base store
+  // while a nearby same-base load is still unscheduled. Holds are
+  // cycle-relative so pickOnlyChoice bumpCycle releases (AIE
+  // AIEMachineScheduler.cpp:719-771 TopReadyCycle = CurrCycle+1). Not
+  // Anti-ALU. Dual-load is not the store/load overlap law (Hexagon
+  // HexagonVLIWPacketizer.cpp:1559).
+  bool isAvailableNode(SUnit &SU, SchedBoundary &Zone,
+                       bool VerifyReadyCycle) override;
 
   // Clear the per-pick SU score cache, then delegate. Within one pickNode the
   // HR cycle state and each zone's Available set are constant across the
@@ -108,6 +122,7 @@ public:
   void schedNode(SUnit *SU, bool IsTopNode) override {
     RegionWasScheduled = true;
     ReadyAuctionScoreCache.clear();
+    noteIssuedStore(SU, IsTopNode);
     PostGenericScheduler::schedNode(SU, IsTopNode);
   }
 
@@ -210,9 +225,52 @@ private:
   // so a later pick cannot reuse a stale Available/base snapshot.
   DenseMap<const SUnit *, unsigned> ReadyAuctionScoreCache;
 
+  // Last Top-issued pure store per base (cycle + NodeNum). The empty cycle
+  // immediately after that store stays idle while a nearby same-base load
+  // is still unscheduled. Cleared in enterMBB.
+  struct LastSameBaseStore {
+    unsigned Cycle = 0;
+    unsigned NodeNum = 0;
+  };
+  SmallDenseMap<unsigned, LastSameBaseStore, 8> LastSameBaseStoreCycle;
+
+  // D1.30 (CB-153a): per-region index of pure-load SUnits grouped by base
+  // register id, each list ascending by NodeNum. Built ONCE PER REGION in
+  // initialize() — NOT enterMBB: startBlock->enterMBB runs before the
+  // region's schedule()->buildSchedGraph, so DAG->SUnits do not exist yet
+  // at enterMBB (cpp :202-205 comment; MachineScheduler.cpp:824/988 vs
+  // :1060/:1073). enterMBB hosts the clear (LastSameBaseStoreCycle hygiene
+  // pattern; skipped single-MI/empty regions never call initialize, so the
+  // clear is what keeps a stale list from outliving its region's SUnits
+  // vector). The index memoizes ONLY the region-static census (isPureLoad
+  // + haydnMemBaseReg + NodeNum); isScheduled, suReaches, readiness, and
+  // HR current-cycle contents stay per-query, so the three D1.10 seats
+  // (hasNearbyUnscheduledSameBaseLoad, the isAvailableNode partner loop,
+  // tryCandidate's hasTightPartner) return verdicts identical to the
+  // unmemoized full-region scans. Query-time NodeNum windows are applied
+  // over this window-free index — no ranking constant is baked in.
+  // Members of the AuctionScoreCache/LegalMemo/LastSameBaseStoreCycle
+  // memo family (:179-189, :235). Stored non-const: the partner loop
+  // feeds baseAvail -> PostGenericScheduler::isAvailableNode(SUnit&,...).
+  SmallDenseMap<unsigned, SmallVector<SUnit *, 4>, 8> SameBaseLoadIndex;
+
+  void buildSameBaseLoadIndex();
+  ArrayRef<SUnit *> sameBaseLoads(Register Base) const;
+
+  void noteIssuedStore(const SUnit *SU, bool IsTopNode);
+  bool hasNearbyUnscheduledSameBaseLoad(Register Base,
+                                        unsigned NodeNum) const;
+  bool isSameBaseStoreWithPendingLoad(const SUnit &SU) const;
+  bool shouldHoldForSameBaseStoreStall(const SUnit &SU,
+                                       SchedBoundary &Zone) const;
+
   // Push the in-progress bundle as the current cycle, then pad with empty
   // bundles until reaching \p ToCycle. Invariant: Bundles.size == current
-  // cycle index. Mirrors AIE's bumpCycleForBundles.
+  // cycle index. Mirrors AIE's bumpCycleForBundles. D1.26 contract: a
+  // forward delta beyond HaydnPostRAMaxInterZonePads is a named fatal
+  // (NumReconstructPadCapFatals) — never a silent clamp that would commit an
+  // under-stalled cycle. Allocation stays bounded by the cap (T4
+  // hang-containment); callers pass unclamped ready/CurrCycle values.
   static void bumpCycleForBundles(unsigned ToCycle,
                                   SmallVectorImpl<CycleBundle> &Bundles,
                                   CycleBundle &CurrBundle);
@@ -232,7 +290,8 @@ private:
   // AIE handleRegionConflicts peer (AIEMachineScheduler.cpp:1176-1201):
   // ExitReadyCycle pad, then bump Top (and TopBundles) until inter-zone
   // scoreboard + TopReadyCycle deps are clear. Pads are capped at the
-  // published occupancy horizon so dense MAC bodies cannot hang.
+  // published occupancy horizon so dense MAC bodies cannot hang; residual
+  // checkInterZoneConflicts after the cap is a named Top/Bot seam fatal.
   void handleRegionConflicts(const SUnit &ExitSU,
                              SmallVectorImpl<CycleBundle> &TopBundles,
                              ArrayRef<CycleBundle> BotBundles);
@@ -263,8 +322,11 @@ private:
   bool isBottomRegion() const;
 
   // Populate Bot HR from scheduled successors' committed cycles. Uses HR
-  // emitInstruction(SU, Delta) + RecedeCycle only (AIE emitInScoreboard +
-  // recedeScoreboard peers). Flag-gated with -haydn-postra-interblock.
+  // emitInstruction(SU, Delta) + recedeScoreboard(Depth+1) (AIE
+  // emitInScoreboard + recedeScoreboard). RecedeCycle would expire dest
+  // remaining Depth+1 times before Bot starts. Exclusive successors
+  // max-merge dest remaining per register (never |= / sum). Flag-gated
+  // with -haydn-postra-interblock; do not flip region-end / WAW here.
   void initializeBotScoreBoard();
 };
 

@@ -27,6 +27,16 @@
 # 1. Independent ALU pair survives exact commit (no assert / lost members).
 # 2. MAC writeback → rs1 use still materializes a mid-stream idle NOP — the
 #    inter-zone pad loop must not collapse latency stalls or re-split cycles.
+# 3. Under-cap ExitReady/scoreboard/TopReadyCycle pads stay green. Residual
+#    checkInterZoneConflicts after HaydnPostRAMaxInterZonePads is a named
+#    Top/Bot seam fatal (replayMultiMemberSeamHazards Guard>=64 peer), not a
+#    continue that would commit under-stalled RAW. Do not raise the cap.
+# 4. D1.26 distinct sibling seam: reconstruction cycle-list pads over the
+#    same cap fatal at the bumpCycleForBundles seat
+#    (d126-reconstruct-pad-cap-fatal.mir pins its wall
+#    "Haydn: reconstruction pad cap would commit an under-stalled cycle" and
+#    counter NumReconstructPadCapFatals) — never a silent clamp. This test's
+#    three direction arms are all under-cap and must stay green unchanged.
 
 --- |
   define void @independent_alu_pair() { ret void }

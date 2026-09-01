@@ -79,7 +79,10 @@ enum Fixups {
   // (HaydnRelocLayout); residual s0 LoWord windows are retired.
   // HI12 -- LUI I12 imm12 @ parcel bits[32:43] (FieldLsb=32, FieldSize=12):
   // (val + 0x80000) >> 20. Generated members are LUI_E2_E0_ALU0_I12 / E3
-  // ALU0/ALU1/ALU2 I12 (occupancy suffixes retired).
+  // ALU0/ALU1/ALU2 I12 (occupancy suffixes retired). D1.17: non-default
+  // E3 sites emit the entry-qualified twins below (typed FieldLsb per
+  // kind); the base kind keeps the E2 e0 window plus the opc-pinned sniff
+  // fallback (map/type alone is not member-unique — BEQZ.. share I12).
   FIXUP_HAYDN_HI12,
   // LO20 -- ADDI32_W/ORI32_W RI20 field (absolute): val & 0xFFFFF @ parcel
   // bits[31:50] (FieldLsb=31). E3 windows via resolveFieldLsb.
@@ -137,12 +140,15 @@ enum Fixups {
   // Reloc CSRW_W / CSRR I8 members use this kind so encode never emits
   // an untyped NONE fixup. Unresolved externals emit ELF R_HAYDN_CSR_UImm8
   // (ELF 23). Do not borrow R_HAYDN_8 / Data32 (those are data-section
-  // 1-byte writes, not a parcel field).
+  // 1-byte writes, not a parcel field). D1.17: non-default E3 sites emit
+  // the entry-qualified twins below (typed FieldLsb per kind); I8
+  // map/type is not member-unique (ZERO_GPR/DR/SFR share it), so the
+  // sniff fallback pins opcodes 4/5 on every arm.
   FIXUP_HAYDN_CSR_UImm8,
 
   // Entry-qualified fixups (typed (kind, entry, window) mapping). Emitted
   // by encodeSlotSubInst when a symbolic member's committed entry is not
-  // the base kind's default window (see ELFRelocs/Haydn.def 24..33 for the
+  // the base kind's default window (see ELFRelocs/Haydn.def 24..42 for the
   // full law). Same value transform/scale as the base kind; the patch
   // window comes from the qualified table row, never from content sniffing.
   FIXUP_HAYDN_LO20_E1,
@@ -155,6 +161,20 @@ enum Fixups {
   FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1,
   FIXUP_HAYDN_JALRSImm12_E3E0,
   FIXUP_HAYDN_JALRSImm12_E3E1,
+  // D1.17 HI12/CSR_UImm8 qualified twins (ELF 34..42). FieldLsb typed per
+  // kind: HI12 21/23 (E3 e0 ALU2/ALU0), 54 (E3 e1 both units), 83/81
+  // (E3 e2 ALU2/ALU0); CSR 27/23 (E3 e0 ALU2/ALU0), 54 (E3 e1), 85
+  // (E3 e2 both units). No E2-e1 twin exists: golden v2_2 has no E2 e1
+  // I12/I8 member (fail-closed by absence — closes D1.24).
+  FIXUP_HAYDN_HI12_E3E0_ALU2,
+  FIXUP_HAYDN_HI12_E3E0_ALU0,
+  FIXUP_HAYDN_HI12_E3E1,
+  FIXUP_HAYDN_HI12_E3E2_ALU2,
+  FIXUP_HAYDN_HI12_E3E2_ALU0,
+  FIXUP_HAYDN_CSR_UImm8_E3E0_ALU2,
+  FIXUP_HAYDN_CSR_UImm8_E3E0_ALU0,
+  FIXUP_HAYDN_CSR_UImm8_E3E1,
+  FIXUP_HAYDN_CSR_UImm8_E3E2,
 
   // Marker - must be last
   FIXUP_HAYDN_INVALID,

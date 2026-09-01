@@ -1329,6 +1329,72 @@ def int_haydn_d_stwua_post : Haydn_Intrinsic<"haydn_d_stwua_post",
      IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
+// Circular-Buffer Unaligned (WUA-CB, golden AR_CBR family)
+//
+// Same AR funnel-shift window model as the linear UA family, but the post
+// step is the hardware circular-buffer wrap (+8 against CBR_BEGIN/END[cbr_sel]).
+// Golden step law: rs += 8 with wrap only on the high side; direction/residual
+// selector is rs[2] / rs[2:1], so the C cursor MUST be the wrapped HW value
+// for the next op in the stream. Unlike the linear UA writeback (dead def,
+// invisible to IR), the CB_POST writeback is LIVE: loads return {i64 data,
+// ptr new_ptr}, primes/stores return the updated pointer (ldw_cb frexp
+// contract). ar_sel admits {0,1}; cbr_sel selects CBR0/CBR1.
+// C2.2: IntrArgMemOnly + NoCapture so getTgtMemIntrinsic attaches an MMO.
+//===----------------------------------------------------------------------===//
+
+// void pltwwua_cb_post(i32 ar_sel, i32 cbr_sel, i32 ptr) -> ptr new_ptr
+// Prime AR from mem64[rs & ~7] and post-wrap rs by +8. ar_sel/cbr_sel ImmArg.
+def int_haydn_pltwwua_cb_post : Haydn_Intrinsic<"haydn_pltwwua_cb_post",
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+    [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<2>>, IntrHasSideEffects, IntrWillReturn]>;
+
+// void plqhwua_cb_post(i32 ar_sel, i32 cbr_sel, i32 ptr) -> ptr new_ptr
+def int_haydn_plqhwua_cb_post : Haydn_Intrinsic<"haydn_plqhwua_cb_post",
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+    [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>, IntrReadMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<2>>, IntrHasSideEffects, IntrWillReturn]>;
+
+// i64 ltwua_cb_post(i32 ptr, i32 ar_sel, i32 cbr_sel) -> {i64 data, ptr}
+// (IR name drops the D_ mnemonic prefix — ClangBuiltin auto-map requires the
+// intrinsic suffix to equal the builtin name exactly, like ldw_cb_imm.)
+def int_haydn_ltwua_cb_post : DefaultAttrsIntrinsic<
+    [llvm_i64_ty, llvm_ptr_ty],
+    [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>, IntrReadMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
+
+// i64 lqhwua_cb_post(i32 ptr, i32 ar_sel, i32 cbr_sel) -> {i64 data, ptr}
+def int_haydn_lqhwua_cb_post : DefaultAttrsIntrinsic<
+    [llvm_i64_ty, llvm_ptr_ty],
+    [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>, IntrReadMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<0>>, IntrHasSideEffects, IntrWillReturn]>;
+
+// ptr stwua_cb_post(i64 data, i32 ptr, i32 ar_sel, i32 cbr_sel) -> new_ptr
+def int_haydn_stwua_cb_post : Haydn_Intrinsic<"haydn_stwua_cb_post",
+    [llvm_ptr_ty],
+    [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>, IntrWriteMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
+
+// ptr sqhwua_cb_post(i64 data, i32 ptr, i32 ar_sel, i32 cbr_sel) -> new_ptr
+def int_haydn_sqhwua_cb_post : Haydn_Intrinsic<"haydn_sqhwua_cb_post",
+    [llvm_ptr_ty],
+    [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>, IntrWriteMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
+
+// void wbarwua_cb(i32 ar_sel, i32 cbr_sel, i32 ptr) -> ptr new_ptr
+// Write back residual AR bytes per rs[2:1], clear AR. No memory access of its
+// own beyond the residual store; rs is NOT post-wrapped by HW (golden has no
+// rs update) — intrinsic returns rs unchanged for stream uniformity.
+def int_haydn_wbarwua_cb : Haydn_Intrinsic<"haydn_wbarwua_cb",
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+    [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>, IntrWriteMem, IntrArgMemOnly,
+     NoCapture<ArgIndex<2>>, IntrHasSideEffects, IntrWillReturn]>;
+
+//===----------------------------------------------------------------------===//
 // Bit-Reversed Addressing Load/Store
 //
 // These instructions apply REVERSE32() to the base address before accessing

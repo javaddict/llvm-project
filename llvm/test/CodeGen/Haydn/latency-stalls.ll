@@ -56,3 +56,29 @@ loop:
 exit:
   ret i32 %sum
 }
+
+; D1.16 latch seam observation: the tail load's dests cross the back-edge
+; wrap. At -O2 the ZOL body ends with the post-inc load and the END-anchored
+; idle parcel keeps the wrap distance legal (see d116-zol-wrap-pad-before-
+; end.ll for the placement law and the MIR arms for the pad content).
+; O2-LABEL: wrap_tail_load:
+; O2: s_lw_post_imm
+; O2: nop
+define i32 @wrap_tail_load(ptr %p, i32 %n, i32 %c) nounwind {
+entry:
+  %first = getelementptr inbounds i32, ptr %p, i32 1
+  %v0 = load i32, ptr %first, align 4
+  br label %loop
+loop:
+  %i = phi i32 [ 0, %entry ], [ %inc, %loop ]
+  %ptr = phi ptr [ %first, %entry ], [ %next, %loop ]
+  %v = phi i32 [ %v0, %entry ], [ %v2, %loop ]
+  %sum = add i32 %v, %c
+  %next = getelementptr inbounds i32, ptr %ptr, i32 1
+  %v2 = load i32, ptr %next, align 4
+  %inc = add i32 %i, 1
+  %done = icmp eq i32 %inc, %n
+  br i1 %done, label %exit, label %loop
+exit:
+  ret i32 %sum
+}

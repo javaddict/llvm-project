@@ -43,9 +43,13 @@
 //   7. CSRW CSR 0x20–0x25 must not share a cycle with SET_HWLOOP family.
 //   Store→load pack law (Constraints:67, not a new numbered rule): a
 //   store and a load in one Format E cycle must be proven disjoint.
-//   may-alias / missing AA / missing MMO refuse. Ordinary list-sched
-//   is protected by ReadyCycle; multi-stage (Order latency 0) must
-//   call cycleHasMayAliasStoreLoad at pack time.
+//   may-alias / missing AA / missing MMO refuse. Dual-load is not this
+//   law. Seated at HR getHazardType Delta=0, canCoissueProductCycle /
+//   asIsGeneratedMembersFormLegalCycle, leftover-bake, and
+//   verifyCommittedBundle with AA when present (nullptr fail-closed).
+//   Hexagon HexagonVLIWPacketizer.cpp store-then-load alias(J,I) is
+//   sequential; Haydn LOADSTORE0+LOAD1 is legal when proven disjoint.
+//   Do not flip MemoryEdges (product default ON).
 //
 // Exhaustive unit coverage lives in:
 //   unittests/Target/Haydn/HaydnHazardRecognizerTest.cpp
@@ -56,22 +60,29 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNPACKLEGALITY_H
 
 #include "HaydnBundlePortBudget.h"
-#include "HaydnHazardRecognizer.h"
 #include "HaydnPortModel.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineInstr.h"
 
+// Do not include HaydnHazardRecognizer.h: that header pulls HaydnBundle.h,
+// which BundleVerify forbids. resourcesConflict is visible only when the
+// HR header is already included (unit tests / HR TU).
+
 namespace llvm {
 namespace haydn {
 namespace pack {
 
 /// Port / issue / unit-footprint conflict (rule 5). Pure data — no MI needed.
+/// HaydnFuncUnitWrapper is defined in HaydnHazardRecognizer.h; include that
+/// header first. BundleVerify includes this file without the HR graph.
+#ifdef LLVM_LIB_TARGET_HAYDN_HAYDNHAZARDRECOGNIZER_H
 inline bool resourcesConflict(const HaydnFuncUnitWrapper &A,
                               const HaydnFuncUnitWrapper &B) {
   return A.conflict(B);
 }
+#endif
 
 /// AIE memory-object wait-cycle bits stay dump-only. Golden dual-load of
 /// one object (LOADSTORE0 + LOAD1, including p[0]/p[1]) is legal; a
@@ -104,7 +115,7 @@ static_assert(haydnSchedCompleteModelPin() == 0,
 inline constexpr unsigned MaxIssuePerCycle = FormatEE3EntryCapacity;
 
 /// Number of named Format E execution units (resource identity).
-inline constexpr unsigned NumExecutionUnits = HAYDN_NUM_FU_BITS;
+inline constexpr unsigned NumExecutionUnits = HAYDN_NUM_EXEC_UNITS;
 
 /// Shared RF-port predicate (rule 5). Same haydnCycleMembersExceedPortBudget
 /// consumed by commit (Materialize) — never a second port check here.
@@ -136,42 +147,23 @@ inline unsigned sinCosWindowOccupancy(const MachineInstr &MI) {
 
 /// Named SF1 / HR same-cycle laws: SIN_COS/ARCTAN issue-alone,
 /// CSRW 0x20-0x25 vs SET_HWLOOP, and LUI/ADDI32_W e0-alone.
-/// One predicate for the HR emit path, ResourceCycle MI reserve, and
-/// the multi-stage fitInInterval conjunct. Occupied empty = no violation.
+/// Alias of haydnCycleViolatesNamedSameCycleLaws (PortModel). Occupied
+/// empty = no violation.
 inline bool cycleViolatesNamedSameCycleLaws(
     const MachineInstr &Cand, ArrayRef<const MachineInstr *> Occupied) {
-  if (Occupied.empty())
-    return false;
-  const unsigned CandOpc = Cand.getOpcode();
-  if (haydnOpcodeIssuesAloneInCycle(CandOpc))
-    return true;
-  const bool CandAbs = haydnIsAbsMaterializeOpcode(CandOpc);
-  const bool CandSetup = haydnClassifySoloIssueOpcode(CandOpc) ==
-                         HaydnSoloIssueClass::CsrwSetHwloop;
-  const bool CandCsrw = haydnHwloopCsrAddr(Cand) >= 0;
-  for (const MachineInstr *O : Occupied) {
-    if (!O)
-      continue;
-    const unsigned Opc = O->getOpcode();
-    if (haydnOpcodeIssuesAloneInCycle(Opc))
-      return true;
-    if (CandAbs || haydnIsAbsMaterializeOpcode(Opc))
-      return true;
-    const bool OccSetup = haydnClassifySoloIssueOpcode(Opc) ==
-                          HaydnSoloIssueClass::CsrwSetHwloop;
-    if ((CandSetup && haydnHwloopCsrAddr(*O) >= 0) ||
-        (CandCsrw && OccSetup))
-      return true;
-  }
-  return false;
+  return haydnCycleViolatesNamedSameCycleLaws(Cand, Occupied);
 }
 
 inline bool cycleViolatesNamedSameCycleLaws(ArrayRef<MachineInstr *> Occupied,
                                             const MachineInstr &Cand) {
   SmallVector<const MachineInstr *, 4> ConstOcc(Occupied.begin(),
                                                 Occupied.end());
-  return cycleViolatesNamedSameCycleLaws(
+  return haydnCycleViolatesNamedSameCycleLaws(
       Cand, ArrayRef<const MachineInstr *>(ConstOcc));
+}
+
+inline bool cycleViolatesNamedSameCycleLaws(ArrayRef<MachineInstr *> Instrs) {
+  return haydnCycleViolatesNamedSameCycleLaws(Instrs);
 }
 
 /// Tag printed by the multi-stage host so the three named laws stay one
@@ -200,11 +192,39 @@ inline bool cycleViolatesSinCosWindow(ArrayRef<MachineInstr *> Instrs) {
                           HAYDN_SINCOS_OCCUPANCY_MIN;
 }
 
+/// Pure load (LOADSTORE0/LOAD1). Dual-load is not the store/load overlap
+/// law — MachineInstr::mayAlias bails when neither mayStore
+/// (MachineInstr.cpp:1542-1545).
+inline bool isPureLoad(const MachineInstr &MI) {
+  return MI.mayLoad() && !MI.mayStore();
+}
+
+/// Pure store (LOADSTORE0). FmtLS stores must not inherit mayLoad
+/// (store-mayload-flags.ll / HaydnInstrFormats.td).
+inline bool isPureStore(const MachineInstr &MI) {
+  return MI.mayStore() && !MI.mayLoad();
+}
+
 /// Constraints:67 pack-layer gate. True when a store/load pair in this
-/// cycle is not proven disjoint. Null AA or empty MMOs fail closed
-/// (MachineInstr::mayAlias is conservative). Dual-load is not this law.
+/// cycle is not proven disjoint. Missing AA / missing MMOs refuse
+/// (fail closed). Dual-load is not this law: a cycle with no mayStore
+/// returns false without consulting AA (Hexagon packetizer load-load
+/// is OK; HexagonVLIWPacketizer.cpp:1559). Same-base non-overlapping
+/// widths stay legal via TII areMemAccessesTriviallyDisjoint
+/// (RISCVInstrInfo.cpp:3522-3552); heap noalias needs AA NoAlias
+/// (MachineInstr::mayAlias).
 inline bool cycleHasMayAliasStoreLoad(ArrayRef<const MachineInstr *> Instrs,
                                       AAResults *AA) {
+  bool AnyStore = false;
+  for (const MachineInstr *MI : Instrs) {
+    if (MI && MI->mayStore()) {
+      AnyStore = true;
+      break;
+    }
+  }
+  if (!AnyStore)
+    return false;
+
   for (const MachineInstr *StoreMI : Instrs) {
     if (!StoreMI || !StoreMI->mayStore())
       continue;
@@ -218,12 +238,12 @@ inline bool cycleHasMayAliasStoreLoad(ArrayRef<const MachineInstr *> Instrs,
   return false;
 }
 
+/// SmallVector<MachineInstr *> does not convert to ArrayRef<const MachineInstr *>.
 inline bool cycleHasMayAliasStoreLoad(ArrayRef<MachineInstr *> Instrs,
                                       AAResults *AA) {
-  SmallVector<const MachineInstr *, 4> ConstInstrs(Instrs.begin(),
-                                                   Instrs.end());
-  return cycleHasMayAliasStoreLoad(ArrayRef<const MachineInstr *>(ConstInstrs),
-                                   AA);
+  SmallVector<const MachineInstr *, 4> ConstInstrs(Instrs.begin(), Instrs.end());
+  return cycleHasMayAliasStoreLoad(
+      ArrayRef<const MachineInstr *>(ConstInstrs), AA);
 }
 
 } // namespace pack

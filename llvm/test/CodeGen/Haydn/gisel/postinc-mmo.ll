@@ -57,3 +57,33 @@ define i64 @postinc_i64_split_mmo(ptr %p) {
   store ptr %q, ptr @sink_ptr
   ret i64 %v
 }
+
+; D1.27: volatile accesses must NOT fuse into AGU PRE/POST members (golden
+; RI6 members are one plain access + writeback; no ordering facility). The
+; plain arms above are the positive control. Volatile keeps separate ld/st +
+; address update.
+; ISEL-LABEL: name: postinc_volatile_i32_no_fold
+; ISEL-NOT: S_LW_POST_IMM
+; ISEL-NOT: LD32_POST_INC
+; ISEL: LD32
+; ASM-LABEL: postinc_volatile_i32_no_fold:
+; ASM-NOT: s_lw_post_imm
+define i32 @postinc_volatile_i32_no_fold(ptr %p) {
+  %v = load volatile i32, ptr %p, align 4
+  %q = getelementptr i8, ptr %p, i32 4
+  store ptr %q, ptr @sink_ptr
+  ret i32 %v
+}
+
+; ISEL-LABEL: name: postinc_volatile_store_i32_no_fold
+; ISEL-NOT: S_SW_POST_IMM
+; ISEL-NOT: ST32_POST_INC
+; ISEL: ST32
+; ASM-LABEL: postinc_volatile_store_i32_no_fold:
+; ASM-NOT: s_sw_post_imm
+define void @postinc_volatile_store_i32_no_fold(ptr %p, i32 %v) {
+  store volatile i32 %v, ptr %p, align 4
+  %q = getelementptr i8, ptr %p, i32 4
+  store ptr %q, ptr @sink_ptr
+  ret void
+}

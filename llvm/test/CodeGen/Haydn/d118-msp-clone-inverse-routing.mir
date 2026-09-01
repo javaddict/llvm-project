@@ -1,0 +1,117 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# D1.18: `_MSP` encode clones traverse the structural inverse matrix at
+# every verifier seat. Clones complete an inverse record for the CATALOG
+# LOGICAL the serializer also selects (BEQZ_W_MSP->BEQZ,
+# JAL_W_MSP->JAL, JALR_MSP/JALR_W_MSP->JALR) at the stamped
+# (mode, membership entry). Before D1.18 both clone skips (Reals build and
+# per-member walk) made a clone-only bundle verify vacuously as an idle
+# plan (Occupied=0/StubIdle view) and let clones sit at memberless stamped
+# windows. Both previously-accepted illegal shapes below now fail closed;
+# wall string matches bundle-verify-independent-inverse-records.mir
+# verbatim (no redefined law).
+#
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %t/clone-only-ok.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=OK-CLONE
+# Freeze admits clones AND now structurally verifies them (admission and
+# verification are separate laws).
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles -verify-machineinstrs \
+# RUN:   %t/clone-only-ok.mir -o - | FileCheck %s --check-prefix=OK-CLONE
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/clone-memberless-e3-e2.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-MEMBER-E2
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/clone-mixed-e2-e1.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=NO-MEMBER-E1
+#
+# OK-CLONE-LABEL: name: clone_only_ok
+# OK-CLONE: BUNDLE 0, 0
+# OK-CLONE: BEQZ_W_MSP $r0, %bb.1
+# NO-MEMBER-E2: structural inverse: residual/logical inverse record not completed at membership entry (no generated member)
+# NO-MEMBER-E2: JAL_W_MSP @mode1 entry 2
+# NO-MEMBER-E1: structural inverse: residual/logical inverse record not completed at membership entry (no generated member)
+# NO-MEMBER-E1: BEQZ_W_MSP @mode0 entry 1
+
+#--- clone-only-ok.mir
+# Positive no-vacuity pin: the exact late-firewall committed shape (E2
+# entry 0, BEQZ E2_E0_ALU0_I12 member) survives verify green — and now
+# through the inverse matrix, not the clone skip.
+--- |
+  define void @clone_only_ok() { ret void }
+...
+---
+name:            clone_only_ok
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r0, $r15
+    BUNDLE 0, 0, implicit $r0 {
+      BEQZ_W_MSP $r0, %bb.1
+    }
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+...
+
+#--- clone-memberless-e3-e2.mir
+# Negative: JAL's golden span is E2 e0 / E3 e0 / E3 e1 — entry 2 has no
+# member. Pad NOPs occupy entries 0/1 (pads are unused windows, never
+# compacted), so the clone sits at membership entry 2 of the E3 row and
+# the walk fails closed at the stamped entry. Previously accepted vacuously.
+# JAL_W_MSP is isReturn+isTerminator+isBarrier, so the clone is the
+# block's last terminator (tail-call shape; no RET follows).
+--- |
+  define void @clone_memberless_e3_e2() { ret void }
+...
+---
+name:            clone_memberless_e3_e2
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r15
+    BUNDLE 1, 0, implicit-def $r12, implicit $r15 {
+      NOP
+      NOP
+      $r12 = JAL_W_MSP %bb.1, implicit $r15
+    }
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+...
+
+#--- clone-mixed-e2-e1.mir
+# Negative: BEQZ has no mode-0 entry-1 member (E2 span is e0 only). The
+# unit-cover pre-check stays quiet (E3 cover exists for the clone; ADD32
+# covers itself), so the failure is the walk's mode/entry match. The
+# branch reads livein $r0, not the same-cycle ADD32 def, so
+# -verify-machineinstrs stays quiet and the structural wall is the only
+# failure.
+--- |
+  define void @clone_mixed_e2_e1() { ret void }
+...
+---
+name:            clone_mixed_e2_e1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1 {
+      $r2 = ADD32 $r0, $r1
+      BEQZ_W_MSP $r0, %bb.1
+    }
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+...

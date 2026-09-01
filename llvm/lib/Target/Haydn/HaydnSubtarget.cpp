@@ -124,10 +124,28 @@ void HaydnSubtarget::overridePostRASchedPolicy(MachineSchedPolicy &Policy,
 }
 
 bool HaydnSubtarget::enableWindowScheduler() const {
-  // The upstream WindowScheduler crashes on ZOL-form loops (its TripleMBB
-  // cloning mishandles the PseudoLoopEnd meta-terminator). When ZOL
-  // pipelining is enabled, use only the SwingModuloScheduler, which handles
-  // ZOL loops correctly via PipelinerLoopInfo.
+  // D1.29 verified mechanism (2026-08-30; pinned by
+  // llvm/test/CodeGen/Haydn/d129-window-scheduler-forfeit.ll, tracked as the
+  // GOALS "WindowScheduler forfeit" row): this override is the ONLY layer
+  // that keeps the generic WindowScheduler off Haydn's ZOL loops on the
+  // product arm. MachinePipeliner::canPipelineLoop PASSES ZOL loops to WS —
+  // analyzeLoopForPipelining returns the HaydnPipelinerLoopInfo whenever
+  // EnableZOLPipelining is on — so after SMS declines
+  // (MachinePipeliner.cpp useWindowScheduler: WS_On && !Changed, and always
+  // under -window-sched=force) the WindowScheduler WOULD run on them. It
+  // must not:
+  //  - PseudoLoopEnd (isMeta + isTerminator, HaydnPseudos.td) is skipped by
+  //    WindowScheduler::initialize() with the other meta/terminator MIs and
+  //    by generateTripleMBB() in all three copies, leaving the TripleMBB
+  //    with no ZOL latch while WS's expand() implements no PipelinerLoopInfo
+  //    ZOL law at all (no adjustTripCount/$adj edit, no guarded prologues).
+  //  - Soft counted loops are excluded independently: initialize() rejects
+  //    any MI in the target ignore set ("Special MI defined by target is not
+  //    allowed in window scheduling!") — HaydnPipelinerLoopInfo puts the
+  //    loop-control chain (EndLoop/CmpMI/InvertMI) in that set.
+  // Unblocking WS for Haydn is an HC#0 item (smallest common delta recorded
+  // in contracts/pipeline.md): meta-terminator TripleMBB handling plus a ZOL
+  // expand law, and a target-owned ignore-set law for the soft arm.
   if (EnableZOLPipelining)
     return false;
   return true;

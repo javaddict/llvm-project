@@ -24,12 +24,16 @@
 #include "HaydnIntraCycleRAW.h"
 #include "HaydnIntraCycleWAW.h"
 #include "HaydnMemberSetDesc.h"
+#include "HaydnPackLegality.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
 #include "HaydnResourceRestrictionClasses.h"
+#include "HaydnSubtarget.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
@@ -45,6 +49,8 @@
 #include "llvm/Support/raw_ostream.h"
 #include <climits>
 #include <functional>
+#include <optional>
+#include <string>
 
 using namespace llvm;
 using namespace llvm::haydn::bundle;
@@ -332,8 +338,9 @@ void HaydnFuncUnitWrapper::dump() const {
 HaydnHazardRecognizer::HaydnHazardRecognizer(const TargetInstrInfo *TII,
                                              const InstrItineraryData *ItinData,
                                              bool IsPreRA,
-                                             HaydnAlternateDescriptors *AltDescs)
-    : TII(TII), ItinData(ItinData), IsPreRA(IsPreRA), AltDescs(AltDescs) {
+                                             HaydnAlternateDescriptors *AltDescs,
+                                             AAResults *AA)
+    : TII(TII), ItinData(ItinData), IsPreRA(IsPreRA), AltDescs(AltDescs), AA(AA) {
   // AIE FuncUnitWrapper::setFormatInterface from the HR ctor.
   HaydnFuncUnitWrapper::setFormatInterface(&haydnDefaultMCFormats());
   // Compute the scoreboard depth from the itineraries so the window covers
@@ -851,8 +858,8 @@ bool HaydnHazardRecognizer::hasSameBundleRAW(const MachineInstr &MI) const {
   // so a live writer is in CurrentCycleLiveDefs by the time its consumer-reader
   // is evaluated. WAR (reader issued before writer) does not trip: the writer
   // candidate does not read that reg, and WAR in a bundle is legal on Haydn
-  // anyway. SFR is still excluded from the live-def RAW set (dead flag
-  // side-effects have no consumer; live SFR RAW is rare and port-gated).
+  // anyway. Live SFR is included in the live-def RAW set (same-cycle true RAW
+  // is illegal; leftover unnamed dead $sfr stays out via isDead).
   // R0 is NOT excluded: soft-zero is a real register (borrow/restore); a
   // same-bundle reader of a live R0 write would observe the OLD value.
   // Vregs (pre-RA) match by Register identity; physregs use regsOverlap.
@@ -864,10 +871,10 @@ bool HaydnHazardRecognizer::hasSameBundleRAW(const MachineInstr &MI) const {
 }
 
 void HaydnHazardRecognizer::appendDefs(const MachineInstr &MI) {
-  // Record destination registers. SFR is included: product law is one SFR
-  // writer per cycle (dead implicit-def $sfr still counts). R0 is tracked:
+  // Record destination registers. SFR is included in WAW: product law is one
+  // SFR writer per cycle (dead implicit-def $sfr still counts). R0 is tracked:
   // soft-zero restores and R0-borrow loads are real defs. Every def goes into
-  // CurrentCycleDefs for the WAW check; only LIVE non-SFR defs go into
+  // CurrentCycleDefs for the WAW check; LIVE defs including live SFR go into
   // CurrentCycleLiveDefs for the RAW check (a dead write has no consumer and
   // a same-bundle reader correctly observes the OLD value). Virtual defs
   // (pre-RA) are tracked by Register identity.
@@ -960,6 +967,15 @@ void HaydnHazardRecognizer::bookSinCosWindow(const MachineInstr &MI) {
 
   // No dest-writer during the occupancy window (dest commits at cycle
   // Occupancy). Overlap uses TRI when available.
+  bookSinCosDestRemaining(MI);
+}
+
+void HaydnHazardRecognizer::bookSinCosDestRemaining(const MachineInstr &MI) {
+  if (IsPreRA)
+    return;
+  const unsigned Occupancy = sinCosWindowOccupancy(MI);
+  if (Occupancy < 2)
+    return;
   (void)getTRI(MI);
   for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg() || !MO.isDef() || !MO.getReg())
@@ -1100,6 +1116,126 @@ unsigned HaydnHazardRecognizer::destWindowExitLeak() const {
   for (const auto &KV : DestWritePending)
     Leak = std::max(Leak, KV.second);
   return Leak;
+}
+
+unsigned HaydnHazardRecognizer::destWindowWrapPadNeed() const {
+  // WRAP law: pending remaining at the end of the last body cycle is the
+  // number of pad cycles the wrap must cover before cycle 0 re-executes.
+  // Same max-remaining arithmetic as the EXIT seam (destWindowExitLeak) —
+  // one shared law, different insertion point. See header comment.
+  return destWindowExitLeak();
+}
+
+unsigned HaydnHazardRecognizer::wrapPadBeforeEndEqualsAfterStart(
+    ArrayRef<std::pair<unsigned, unsigned>> DefCycleAndLatency,
+    unsigned NumCycles) {
+  // Closed form of both emission sites on the same pending-window state.
+  // A def at cycle i with latency L leaves remaining L-1-(N-1-i) at block
+  // end (clamped at 0). pad-before-END: P_end = max(0, L-1-(N-1-i)) — the
+  // pads sit after every def, so the wrap distance grows by exactly P_end.
+  // pad-after-START: the def's distance to the NEXT iteration's cycle 0 is
+  // unchanged by leading pads (both the def and the consumer shift by P),
+  // so the required P_start is the same max term. Unit-test pin only.
+  unsigned P = 0;
+  for (const auto &[Cycle, Latency] : DefCycleAndLatency) {
+    assert(Cycle < NumCycles && "def cycle outside the body cycle list");
+    (void)NumCycles;
+    const signed DistanceToEnd =
+        static_cast<signed>(Latency) - 1 -
+        static_cast<signed>(NumCycles - 1 - Cycle);
+    if (DistanceToEnd > 0)
+      P = std::max(P, static_cast<unsigned>(DistanceToEnd));
+  }
+  return P;
+}
+
+std::optional<std::string> llvm::haydn::bundle::verifyMBBDestWindowSeams(
+    const MachineBasicBlock &MBB) {
+  const MachineFunction *MF = MBB.getParent();
+  if (!MF)
+    return std::nullopt;
+  const HaydnSubtarget &STI = MF->getSubtarget<HaydnSubtarget>();
+  const HaydnInstrInfo &TII = *STI.getInstrInfo();
+  const InstrItineraryData *Itin = STI.getInstrItineraryData();
+  // Empty itinerary: same skip as HaydnLatencyStalls (no dest-window authority).
+  if (!Itin || Itin->isEmpty())
+    return std::nullopt;
+
+  HaydnHazardRecognizer DestHR(&TII, Itin, /*IsPreRA=*/false);
+  DestHR.Reset();
+
+  auto isRealCycleMember = [](const MachineInstr &MI) {
+    return !MI.isMetaInstruction() && !MI.isDebugInstr() && !MI.isPosition();
+  };
+
+  for (MachineBasicBlock::const_instr_iterator I = MBB.instr_begin(),
+                                               E = MBB.instr_end();
+       I != E;) {
+    const MachineInstr &Head = *I;
+    if (Head.isBundledWithPred()) {
+      ++I;
+      continue;
+    }
+    SmallVector<const MachineInstr *, 4> Members;
+    if (Head.isBundle()) {
+      ++I;
+      while (I != E && I->isBundledWithPred()) {
+        if (isRealCycleMember(*I))
+          Members.push_back(&*I);
+        ++I;
+      }
+    } else {
+      if (isRealCycleMember(Head))
+        Members.push_back(&Head);
+      ++I;
+    }
+    if (Members.empty())
+      continue;
+
+    unsigned Stalls = 0;
+    const MachineInstr *Consumer = nullptr;
+    for (const MachineInstr *Mem : Members) {
+      const unsigned N = DestHR.destWindowStallNeed(*Mem);
+      if (N > Stalls) {
+        Stalls = N;
+        Consumer = Mem;
+      }
+    }
+    if (Stalls) {
+      std::string Msg;
+      raw_string_ostream OS(Msg);
+      OS << "dest-window seam: destWindowStallNeed=" << Stalls
+         << " at consecutive-cycle seam in " << MF->getName() << " BB#"
+         << MBB.getNumber();
+      if (Consumer)
+        OS << "\n  MI: " << *Consumer;
+      return Msg;
+    }
+
+    DestHR.advanceDestWindows();
+    for (const MachineInstr *Mem : Members)
+      DestHR.emitForDestWindow(*Mem);
+  }
+
+  // D1.16 wrap seam (detection-only; freeze seat, no emission authority).
+  // A latch (self-successor) re-executes its own cycle 0 after the last
+  // body cycle. A dest window still pending at the last cycle crosses the
+  // wrap exactly when cycle 0's members cannot consume it: the shared
+  // predicate destWindowWrapPadNeed > 0 means the committed layout lacks
+  // the wrap pads. Same predicate as HaydnLatencyStalls' emission seat —
+  // this closes the "freeze gate blind to the wrap" class (CB-167 lesson).
+  if (llvm::is_contained(MBB.successors(), &MBB)) {
+    if (unsigned Wrap = DestHR.destWindowWrapPadNeed()) {
+      std::string Msg;
+      raw_string_ostream OS(Msg);
+      OS << "dest-window wrap: destWindowWrapPadNeed=" << Wrap
+         << " at back-edge wrap of " << MF->getName() << " BB#"
+         << MBB.getNumber() << " (pending dest window crosses "
+         << "HWLR_END/branch -> body top)";
+      return Msg;
+    }
+  }
+  return std::nullopt;
 }
 
 void HaydnHazardRecognizer::commitPlacementForEmit(MachineInstr *MI) {
@@ -1310,6 +1446,38 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
       });
       return Hazard;
     }
+    // Store/load same-cycle overlap. Post-RA only: AIE Context->AA overlay
+    // (AIEMachineScheduler.cpp:1792). Pre-RA CreateTargetMIHazardRecognizer
+    // is the vreg-liveness DAG and does not install AA; null-AA fail-closed
+    // there sequentializes unproven vreg-base pairs before RA.
+    // Dual-load is not this law: skip AA when neither the candidate nor
+    // occupied is a store (HexagonVLIWPacketizer.cpp:1559 load-load OK).
+    // Hexagon store-then-load alias is sequential; Haydn LOADSTORE0+LOAD1
+    // is legal when TII same-base non-overlap or AA NoAlias. Missing MMO /
+    // null post-RA AA refuse for a real store+load pair.
+    if (!IsPreRA) {
+      bool CycleHasStore = MI->mayStore();
+      if (!CycleHasStore) {
+        for (MachineInstr *P : CurrentCyclePlacedMIs) {
+          if (P && P->mayStore()) {
+            CycleHasStore = true;
+            break;
+          }
+        }
+      }
+      if (CycleHasStore) {
+        SmallVector<const MachineInstr *, 4> ConstCycle(Cycle.begin(),
+                                                       Cycle.end());
+        if (haydn::pack::cycleHasMayAliasStoreLoad(ConstCycle, AA)) {
+          LLVM_DEBUG({
+            dbgs() << "May-alias store/load hazard for ";
+            MI->print(dbgs());
+            dbgs() << "\n";
+          });
+          return Hazard;
+        }
+      }
+    }
   }
 
   // Dest-read / SIN_COS dest-writer windows (no interlock). DeltaCycles
@@ -1384,7 +1552,7 @@ HaydnHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
     }
     Cycle.push_back(MI);
     if (!AnyLogicalAlt && Cycle.size() >= 2 &&
-        !canCoissueProductCycle(Cycle)) {
+        !canCoissueProductCycle(Cycle, AA)) {
       LLVM_DEBUG({
         dbgs() << "Product coissue hazard for ";
         MI->print(dbgs());
@@ -1434,8 +1602,13 @@ void HaydnHazardRecognizer::emitInstruction(SUnit *SU, int DeltaCycles) {
     else
       CurrentCycleHasNonAbsReal = true;
   } else {
-    // Non-zero delta: no current-cycle rematch; book once at relative cycle.
-    enterResources(Scoreboard, *MI, DeltaCycles);
+    // Non-zero delta: Bot successor replay (sole caller). Share the SMS
+    // occupancy overlay at DeltaCycles+K; dest remaining uses std::max on
+    // this HR. Do not appendDefs — CurrentCycleDefs is cycle-0 WAW state.
+    emitInScoreboard(Scoreboard, *MI, DeltaCycles);
+    if (isLockedSlotDspOp(*MI))
+      bookSinCosDestRemaining(*MI);
+    bookDestReadWindow(*MI);
   }
   LLVM_DEBUG({
     dbgs() << "Emit ";

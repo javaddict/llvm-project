@@ -459,14 +459,16 @@ private:
   bool HasNonAbsReal = false;
 
   /// LIVE destination registers written in this modulo issue cycle (peer of
-  /// HaydnHazardRecognizer::CurrentCycleLiveDefs). SMS placement now calls the
-  /// MI overload (D999 — operand-aware), so the no-forwarding intra-bundle RAW
-  /// law is enforceable here, identical to post-RA HR. Each DFAResources[phase]
-  /// object accumulates the live defs of every MI that will co-issue in that
-  /// modulo phase's runtime bundle; a consumer reading a live def already in
-  /// this set may NOT join the same cycle (no intra-bundle forwarding — Haydn
-  /// spec §Constraints) and is rejected, slipping to a later cycle. Uses
-  /// `Register` (not MCRegister) so pre-RA virtual defs are tracked by identity.
+  /// HaydnHazardRecognizer::CurrentCycleLiveDefs), including live SFR. SMS
+  /// placement now calls the MI overload (D999 — operand-aware), so the
+  /// no-forwarding intra-bundle RAW law is enforceable here, identical to
+  /// post-RA HR. Each DFAResources[phase] object accumulates the live defs of
+  /// every MI that will co-issue in that modulo phase's runtime bundle; a
+  /// consumer reading a live def already in this set may NOT join the same
+  /// cycle (no intra-bundle forwarding — Haydn spec §Constraints) and is
+  /// rejected, slipping to a later cycle. Leftover unnamed dead $sfr stays
+  /// out via isDead. Uses `Register` (not MCRegister) so pre-RA virtual defs
+  /// are tracked by identity.
   SmallSetVector<Register, 8> CurrentCycleLiveDefs;
   /// ALL destination registers written this modulo phase (peer of
   /// HaydnHazardRecognizer::CurrentCycleDefs). Same-phase WAW fail-closes even
@@ -626,7 +628,8 @@ public:
   // by SMS placement, which now passes the MI instead of its descriptor so the
   // operand-aware no-forwarding intra-bundle RAW law can be enforced here.
   // Prefer exact MRI-correct port demand (vreg regclass → bank); format still
-  // opcode-keyed. RAW (HaydnIntraCycleRAW, hard #7) and same-phase WAW (FE5B
+  // opcode-keyed. RAW (HaydnIntraCycleRAW, hard #7; live SFR included, leftover
+  // unnamed dead $sfr stays out via isDead) and same-phase WAW (FE5B
   // simultaneous same-reg defs — peer of HR hasSameBundleWAW) run BEFORE
   // accepting. Live/all defs accumulate per modulo phase (DFAResources[phase]
   // is one runtime bundle).

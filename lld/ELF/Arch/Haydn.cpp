@@ -30,8 +30,13 @@
 //   Out-of-range branch/call sites get long-branch thunks (needsThunk).
 //   R_HAYDN_HI20/LO16 — LUI+ADDI32 pair for 32-bit absolute addressing.
 //   R_HAYDN_HI12 — LUI I12 high 12 (RelocTrans::Hi12; specifier %hi12).
-//     FieldLsb via resolveFieldLsb (E2 e0 @32; E3 e0 ALU2 @21 / ALU0 @23;
-//     e1 @54; e2 ALU2 @83 / ALU0 @81).
+//     Producer emission is D1.17 TYPED: non-default E3 sites arrive as the
+//     R_HAYDN_HI12_E3* qualified kinds (typed window 21/23/54/83/81; no
+//     sniff). The base kind keeps the E2 e0 @32 window plus the opc-pinned
+//     sniff fallback (E3 e0 ALU2 @21 / ALU0 @23; e1 @54; e2 ALU2 @83 /
+//     ALU0 @81 — I12 shares LUI with branches, so every arm pins opc=1).
+//   R_HAYDN_CSR_UImm8_E3* — qualified twins (typed 27/23/54/85); I8 shares
+//     CSRR/CSRW (opc 4/5) with ZERO_* (1..3), so the sniff pins {4,5}.
 //   R_HAYDN_LO20 — ALU RI20 20-bit absolute field (specifier %lo20).
 //     FieldLsb via resolveFieldLsb (E2 e0 ALU0 @31; E2 e1 ALU1 @65).
 //     RI20 is E2-only — unrecognized parcels keep the table default.
@@ -194,6 +199,18 @@ public:
     case R_HAYDN_LS_IMM:
     case R_HAYDN_CSR_UImm8:
     case R_HAYDN_LO20_E1:
+    case R_HAYDN_HI12_E3E0_ALU2:
+    case R_HAYDN_HI12_E3E0_ALU0:
+    case R_HAYDN_HI12_E3E1:
+    case R_HAYDN_HI12_E3E2_ALU2:
+    case R_HAYDN_HI12_E3E2_ALU0:
+    case R_HAYDN_CSR_UImm8_E3E0_ALU2:
+    case R_HAYDN_CSR_UImm8_E3E0_ALU0:
+    case R_HAYDN_CSR_UImm8_E3E1:
+    case R_HAYDN_CSR_UImm8_E3E2:
+      // D1.17 qualified HI12/CSR twins: same R_ABS as the base kind; the
+      // write window rides the typed table row (resolveFieldLsb
+      // early-return via isEntryQualifiedKind), never a sniff.
       return R_ABS;
     case R_HAYDN_TPREL_HI20:
     case R_HAYDN_TPREL_LO16:
@@ -225,7 +242,7 @@ public:
   }
 
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override {
-    if (type > R_HAYDN_JALRSImm12_E3E1) {
+    if (type > R_HAYDN_CSR_UImm8_E3E2) {
       InternalErr(ctx, buf) << "cannot read addend for relocation " << type;
       return 0;
     }
@@ -338,7 +355,7 @@ public:
                   "(no PIC/GOT/PLT product ABI); refusing silent R_GOT";
       return;
     }
-    if (type > R_HAYDN_JALRSImm12_E3E1) {
+    if (type > R_HAYDN_CSR_UImm8_E3E2) {
       Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << type;
       return;
     }

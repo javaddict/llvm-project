@@ -1058,6 +1058,12 @@ public:
   /// idea to avoid optimizing based on that undef behavior.
   virtual bool isCLZForZeroUndef() const { return true; }
 
+  /// Whether a freestanding environment on this target still enters through
+  /// a hosted-style `main`, retaining the C99 5.1.2.2.3 implicit return zero
+  /// and main's hosted diagnostics under -ffreestanding. Bare-metal targets
+  /// whose startup code calls main return true.
+  virtual bool treatsMainAsEntryUnderFreestanding() const { return false; }
+
   /// Returns the kind of __builtin_va_list type that should be used
   /// with this target.
   virtual BuiltinVaListKind getBuiltinVaListKind() const = 0;

@@ -89,16 +89,16 @@ define i32 @test_gpr_spill_15_live(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    { nop; move32 r1, r10 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
+; CHECK-NEXT:    { nop; ld32 r5, sp, 2 } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r2, sp, 5 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r3, sp, 4 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; ld32 r4, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { nop; ld32 r5, sp, 2 } // 4-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; add32 r1, r2, r9 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r1, r3, r1 }
 ; CHECK-NEXT:    { nop; add32 r1, r11, r1 }
 ; CHECK-NEXT:    { nop; add32 r1, fp, r1 }
@@ -270,9 +270,9 @@ define i32 @test_interleaved_calls_heavy(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; jal lr, consume_i32 }
-; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r3, sp, 2 } // 4-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload
+; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r3 }

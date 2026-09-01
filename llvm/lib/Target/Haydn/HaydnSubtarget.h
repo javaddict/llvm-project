@@ -141,12 +141,15 @@ public:
   // plans/archive/2026-08-13-d490/DECISION-D490-early-ifconv-retire-genmux.md.
   bool enableEarlyIfConversion() const override { return true; }
 
-  // The WindowScheduler (upstream's newer SMS fallback) crashes on
-  // ZOL-form loops because its TripleMBB cloning doesn't handle the
-  // PseudoLoopEnd meta-terminator correctly. The SwingModuloScheduler
-  // (the original SMS) handles ZOL loops fine via PipelinerLoopInfo. When
-  // ZOL pipelining is enabled, disable the WindowScheduler so only the
-  // SwingModuloScheduler runs.
+  // WindowScheduler forfeit (D1.29-verified mechanism; pinned by
+  // llvm/test/CodeGen/Haydn/d129-window-scheduler-forfeit.ll and tracked as
+  // its own GOALS row): returning false under EnableZOLPipelining (product
+  // default ON) is the sole blocker keeping the generic WindowScheduler off
+  // Haydn's ZOL loops — canPipelineLoop passes them, so WS would otherwise
+  // run after SMS declines. WS drops the PseudoLoopEnd meta-terminator in
+  // its TripleMBB cloning and implements no ZOL expand law; soft loops are
+  // excluded separately by initialize()'s ignore-set rejection. Full detail
+  // in HaydnSubtarget.cpp; unblocking is HC#0-gated.
   bool enableWindowScheduler() const override;
   // Target-specific adjustment of a schedule dependency's latency.
   // SMS (MachinePipeliner.cpp:1271/1302) hard-codes the loop-carried

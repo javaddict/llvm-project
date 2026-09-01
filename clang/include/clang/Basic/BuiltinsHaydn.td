@@ -2689,6 +2689,78 @@ def sdw_cb_reg : HaydnBuiltin<"void*(int64_t, void*, int, int)", "circular-buffe
   let ImmChecks = [ImmCheck<2, ImmCheck0_1>];
   let Semantics = "circular-buffer double-word store with register stride. Returns the AGU-updated pointer. cbr_sel picks CBR0/CBR1 begin/end bounds.";
 }
+// WUA-CB (AR_CBR family): unaligned AR window access with hardware circular
+// post step (rs += 8, wrapped against CBR_BEGIN/END[cbr_sel]). The returned /
+// written-back pointer is the WRAPPED HW cursor and must feed the next op in
+// the stream (direction/residual selector is rs[2] / rs[2:1]). No stride
+// field — the step is fixed +8 in golden.
+def pltwwua_cb_post : HaydnBuiltin<"void*(int, int, void const*)", "circular-buffer,agu"> {
+  let Attributes = [NoThrow];
+  let Effect = "StateMem";
+  let PublicName = "pltwwua_cb_post";
+  let PublicPrototype = "void*(int, int, void const*)";
+  let Mnemonic = "PLTWWUA_CB_POST";
+  // ar_sel, cbr_sel, ptr — ar_sel/cbr_sel are encoding ImmArgs.
+  let ImmChecks = [ImmCheck<0, ImmCheck0_1>, ImmCheck<1, ImmCheck0_1>];
+  let Semantics = "prime AR for a 2-word unaligned circular window: ar[ar_sel] = mem64[rs & ~7], then rs += 8 with circular wrap on cbr_sel. Returns the wrapped cursor.";
+}
+def plqhwua_cb_post : HaydnBuiltin<"void*(int, int, void const*)", "circular-buffer,agu"> {
+  let Attributes = [NoThrow];
+  let Effect = "StateMem";
+  let PublicName = "plqhwua_cb_post";
+  let PublicPrototype = "void*(int, int, void const*)";
+  let Mnemonic = "PLQHWUA_CB_POST";
+  let ImmChecks = [ImmCheck<0, ImmCheck0_1>, ImmCheck<1, ImmCheck0_1>];
+  let Semantics = "prime AR for a 4-halfword unaligned circular window: ar[ar_sel] = mem64[rs & ~7], then rs += 8 with circular wrap on cbr_sel. Returns the wrapped cursor.";
+}
+def ltwua_cb_post_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int, int)", "circular-buffer,agu"> {
+  let Attributes = [NoThrow];
+  let Effect = "StateMem";
+  let PublicName = "ltwua_cb_post";
+  let PublicPrototype = "haydn_cb_ld_t(void const*, int, int)";
+  let Mnemonic = "D_LTWUA_CB_POST";
+  // ptr, ar_sel, cbr_sel — both selects are encoding ImmArgs.
+  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheck0_1>];
+  let Semantics = "load 2 words through the unaligned AR window with circular post step (+8 wrapped on cbr_sel). Returns {data, wrapped pointer}. The 4-byte alignment of rs selects the funnel half.";
+}
+def lqhwua_cb_post_pair : HaydnPairBuiltin<"int64_t(void**, void const*, int, int)", "circular-buffer,agu"> {
+  let Attributes = [NoThrow];
+  let Effect = "StateMem";
+  let PublicName = "lqhwua_cb_post";
+  let PublicPrototype = "haydn_cb_ld_t(void const*, int, int)";
+  let Mnemonic = "D_LQHWUA_CB_POST";
+  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheck0_1>];
+  let Semantics = "load 4 halfwords through the unaligned AR window with circular post step (+8 wrapped on cbr_sel). Returns {data, wrapped pointer}. rs[2:1] selects the funnel window.";
+}
+def stwua_cb_post : HaydnBuiltin<"void*(int64_t, void*, int, int)", "circular-buffer,agu"> {
+  let Attributes = [NoThrow];
+  let Effect = "StateMem";
+  let PublicName = "stwua_cb_post";
+  let PublicPrototype = "void*(int64_t, void*, int, int)";
+  let Mnemonic = "D_STWUA_CB_POST";
+  // data, ptr, ar_sel, cbr_sel — both selects are encoding ImmArgs.
+  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheck0_1>];
+  let Semantics = "store 2 words through the unaligned AR window with circular post step (+8 wrapped on cbr_sel); the split half lands in ar[ar_sel]. Returns the wrapped cursor. Pair with wbarwua_cb to flush the residual.";
+}
+def sqhwua_cb_post : HaydnBuiltin<"void*(int64_t, void*, int, int)", "circular-buffer,agu"> {
+  let Attributes = [NoThrow];
+  let Effect = "StateMem";
+  let PublicName = "sqhwua_cb_post";
+  let PublicPrototype = "void*(int64_t, void*, int, int)";
+  let Mnemonic = "D_SQHWUA_CB_POST";
+  let ImmChecks = [ImmCheck<2, ImmCheck0_1>, ImmCheck<3, ImmCheck0_1>];
+  let Semantics = "store 4 halfwords through the unaligned AR window with circular post step (+8 wrapped on cbr_sel); the split half lands in ar[ar_sel]. Returns the wrapped cursor. Pair with wbarwua_cb to flush the residual.";
+}
+def wbarwua_cb : HaydnBuiltin<"void*(int, int, void const*)", "circular-buffer,agu"> {
+  let Attributes = [NoThrow];
+  let Effect = "StateMem";
+  let PublicName = "wbarwua_cb";
+  let PublicPrototype = "void*(int, int, void const*)";
+  let Mnemonic = "WBARWUA_CB";
+  // ar_sel, cbr_sel, ptr — both selects are encoding ImmArgs.
+  let ImmChecks = [ImmCheck<0, ImmCheck0_1>, ImmCheck<1, ImmCheck0_1>];
+  let Semantics = "write back the ar[ar_sel] residual bytes selected by rs[2:1] and clear AR. Returns rs unchanged (golden performs no post step on the writeback).";
+}
 // SETCBR_* pseudos: cbr_sel is i32imm (0 or 1) selecting CBR_BEGIN/END CSR.
 // Product AE_ADDCIRC* headers only pass literal 0/1 — true ICE ImmArg.
 def setcbr_begin : HaydnBuiltin<"void(int, int)", "circular-buffer"> {

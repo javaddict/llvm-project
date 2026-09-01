@@ -16,4 +16,16 @@ python3 llvm/lib/Target/Haydn/FormatE/generate_sched_records.py --check --family
 # (M18 per-op import: covered=854 uncovered=3 complete_model=0 — the
 # shell-name map imports compiler spellings from their owning golden rows;
 # NOP/WFI/WFITBDTBDTBD stay uncovered by design).
+# Occupancy universe is itinerary+golden rows (>=700), not AlternateInsts
+# (LogicalMaterialize retirement left one MultiSlot_Pseudo row). Pass the
+# tblgen formats file so --check rejects that 1-row universe.
+FORMATS="${HAYDN_GEN_FORMATS:-}"
+if [ -z "$FORMATS" ] && [ -n "${HAYDN_BIN:-}" ]; then
+  FORMATS="$(cd "$(dirname "$HAYDN_BIN")/.." && pwd)/lib/Target/Haydn/HaydnGenFormats.inc"
+fi
+if [ -z "$FORMATS" ] || [ ! -f "$FORMATS" ]; then
+  echo "error: occupancy --check needs HaydnGenFormats.inc (set HAYDN_BIN or HAYDN_GEN_FORMATS)" >&2
+  exit 2
+fi
+python3 llvm/lib/Target/Haydn/FormatE/generate_alt_occupancy.py --check --family e96 --formats "$FORMATS"
 echo "umbrella generated-source check passed (e96)"

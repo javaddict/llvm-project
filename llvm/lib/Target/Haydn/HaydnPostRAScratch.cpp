@@ -11,6 +11,7 @@
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
 #include "HaydnFrameLowering.h"
+#include "HaydnHWLoopDemote.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMatInt.h"
@@ -301,8 +302,13 @@ Register llvm::findPostRAScratchNoSpill(
   for (const MachineBasicBlock *Succ : EffSuccs) {
     if (!Succ)
       continue;
-    for (const MachineBasicBlock::RegisterMaskPair &P : Succ->liveins())
-      LPR.addReg(P.PhysReg);
+    // Computed live-ins of Succ, not Succ->liveins(). Stored lists are
+    // stale this late: a BR split-tail / trampoline Exit with empty
+    // liveins would make every exit-only live-through GPR look free.
+    LivePhysRegs SuccLive;
+    haydn::hwloop::computeBlockLiveIns(SuccLive, *Succ);
+    for (MCPhysReg R : SuccLive)
+      LPR.addReg(R);
   }
   for (MachineBasicBlock::iterator II = MBB.end(); II != I;) {
     --II;

@@ -20,27 +20,22 @@
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <optional>
 
 using namespace llvm;
 
-// Format E PC is the 12-byte parcel base. Fixup byte offsets can sit mid-parcel
-// when a field lives in entry1/entry2 (EntryLSB/8 = 6+). Default MC P =
-// frag_off + fixup_off then fails Align=4 (hwloop) / Align=2 checks with a
-// spurious "mis-aligned relocation target". Seed Value with Abs % Parcel so
-// the default subtract lands on align_down(Abs, Parcel) (Xtensa l32r pattern).
-std::optional<bool> HaydnAsmBackend::evaluateFixup(const MCFragment &F,
-                                                   MCFixup &Fixup, MCValue &,
-                                                   uint64_t &Value) {
-  if (!Fixup.isPCRel() || !Asm)
-    return std::nullopt;
-  const unsigned Parcel = haydnProductionParcelBytes().Value;
-  if (Parcel <= 1)
-    return std::nullopt;
-  const uint64_t Abs = Asm->getFragmentOffset(F) + Fixup.getOffset();
-  Value = Abs % Parcel;
-  return std::nullopt;
-}
+// evaluateFixup is NOT overridden (D1.28): no backend-wide PC-rel re-base may
+// exist alongside the MC emitter, which is the one parcel-origin authority —
+// emitFormatEParcel re-bases every member fixup to ParcelBase
+// (HaydnMCCodeEmitter.cpp, Abs - Abs % Parcel) and the offset-0 sub-inst
+// translation does the same, so an instruction fixup's recorded offset IS the
+// parcel origin and default MC P = frag_off + fixup_off is already correct.
+// The former Value = Abs % Parcel seeding fired on EVERY PCRel-flagged kind;
+// for instruction kinds Abs % 12 == 0 made it a no-op, and for any data kind
+// (Data32PCRel, NBytes=4, outside both applyFixup grid families) it would
+// silently perturb S+C-Abs by up to Parcel-1 bytes with no fail-closed net.
+// Data PC-rel words (R_HAYDN_32_PCREL) must evaluate/link S+A-P at any
+// fragment offset; grid/align laws for control kinds live solely in the
+// applyFixup wall below plus computeRelocValue.
 
 // Check whether the given instruction may need relaxation.
 // Format E has no MC-layer opcode relaxation.
@@ -189,9 +184,11 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     // applyFixup patches parcel-absolute bits via resolveFieldLsb — do not
     // also shift by TargetOffset (AIE Dummy TargetOffset: AIEBaseAsmBackend.h
     // getFixupKindInfo 56-71; AIE applyFixup shifts only generic FK_Data_*).
-    // Typed (mode, entry, unit) producers use resolveFieldLsbForMember;
-    // Loc sniffing here covers HI12/LO20/PC_LO20/JALRSImm12/CSR_UImm8
-    // E3 e0/e1/e2 and E2 e1 windows.
+    // D1.17: producer emission of HI12/CSR_UImm8 (and every other
+    // entry-qualified kind) is TYPED — resolveFieldLsb early-returns the
+    // qualified row via isEntryQualifiedKind, so no byte re-sniff happens
+    // for qualified kinds. The Loc sniff remains only for base-kind
+    // base-window sites and is opc-pinned on every HI12/CSR arm.
     const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, Data);
     HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FieldLsb);
     return;
@@ -250,6 +247,15 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       "FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1",
       "FIXUP_HAYDN_JALRSImm12_E3E0",
       "FIXUP_HAYDN_JALRSImm12_E3E1",
+      "FIXUP_HAYDN_HI12_E3E0_ALU2",
+      "FIXUP_HAYDN_HI12_E3E0_ALU0",
+      "FIXUP_HAYDN_HI12_E3E1",
+      "FIXUP_HAYDN_HI12_E3E2_ALU2",
+      "FIXUP_HAYDN_HI12_E3E2_ALU0",
+      "FIXUP_HAYDN_CSR_UImm8_E3E0_ALU2",
+      "FIXUP_HAYDN_CSR_UImm8_E3E0_ALU0",
+      "FIXUP_HAYDN_CSR_UImm8_E3E1",
+      "FIXUP_HAYDN_CSR_UImm8_E3E2",
   };
   static_assert(std::size(Names) == Haydn::NumTargetFixupKinds,
                 "Names[] must list every target fixup kind, in enum order");

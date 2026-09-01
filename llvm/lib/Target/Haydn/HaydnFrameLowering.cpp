@@ -37,6 +37,12 @@
 
 #define DEBUG_TYPE "haydn-frame-lowering"
 
+namespace llvm {
+/// Shared with expandPostRAPseudo (HaydnInstrInfo.cpp). True iff LOADI64 /
+/// MOV_GPR_TO_DR64 will pack through DR64PackFI.
+bool haydnInstrNeedsDR64PackSlot(const MachineInstr &MI);
+} // namespace llvm
+
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -1288,38 +1294,19 @@ void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
   // motion. This replaces the dynamic SUBI32/ADDI32_W $r13,8 transient that
   // shifted SP mid-function and corrupted sibling SP-relative fixed objects.
   // Align(8) places it first among locals (smallest offset → short-form LS).
+  // Scan uses haydnInstrNeedsDR64PackSlot — the same predicate
+  // expandPostRAPseudo uses — so CSI-valid FI<0 is reservation drift, not a
+  // lazy CreateStackObject. Hexagon reserves scavenger FIs here
+  // (HexagonFrameLowering.cpp:2098-2132); RISC-V getMoveF64FrameIndex is
+  // ISel-time and is declined as a post-RA pattern.
   if (FuncInfo->getDR64PackFI() < 0) {
     bool NeedsPack = false;
     for (const MachineBasicBlock &ScanBB : MF) {
       for (const MachineInstr &ScanMI : ScanBB) {
-        if (ScanMI.getOpcode() == Haydn::LOADI64) {
-          // Register-only fast paths (Hi==0 zero-extend, Hi==-1&&Lo<0
-          // sign-extend) need no slot; only general both-halves-nonzero
-          // constants do. Non-immediate (relocatable) LOADI64 is rare but
-          // conservatively treated as a general pack.
-          if (!ScanMI.getOperand(1).isImm()) {
-            NeedsPack = true;
-          } else {
-            uint64_t V =
-                static_cast<uint64_t>(ScanMI.getOperand(1).getImm());
-            int32_t Lo = static_cast<int32_t>(V & 0xFFFFFFFFu);
-            int32_t Hi = static_cast<int32_t>((V >> 32) & 0xFFFFFFFFu);
-            if (Hi != 0 && !(Hi == -1 && Lo < 0))
-              NeedsPack = true;
-          }
-        } else if (ScanMI.getOpcode() == Haydn::MOV_GPR_TO_DR64) {
-          // R0-half packs take the stackless shift path; only the general
-          // two-live-GPR case (neither source is R0) needs the slot.
-          if (ScanMI.getNumOperands() > 2 && ScanMI.getOperand(1).isReg() &&
-              ScanMI.getOperand(2).isReg()) {
-            Register SrcLo = ScanMI.getOperand(1).getReg();
-            Register SrcHi = ScanMI.getOperand(2).getReg();
-            if (SrcLo != Haydn::R0 && SrcHi != Haydn::R0)
-              NeedsPack = true;
-          }
-        }
-        if (NeedsPack)
+        if (haydnInstrNeedsDR64PackSlot(ScanMI)) {
+          NeedsPack = true;
           break;
+        }
       }
       if (NeedsPack)
         break;

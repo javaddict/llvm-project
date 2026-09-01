@@ -108,15 +108,33 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // Reserved lazily by HaydnHardwareLoops demote; -1 when not reserved.
   int HwLoopDemoteSaveFI = -1;
 
-  // Frame-freeze snapshot (frame-deadline law): taken by the first
-  // unconditional Haydn post-PEI pass (HaydnExpandPseudos; when the hwloop
-  // pass runs first it snapshots too — earliest wins) and enforced by
-  // HaydnVerifyBundles at both seats. MachineFrameInfo has no upstream
-  // "finalized" flag; NumObjects is strictly monotone under Create*, and
-  // StackSize is written exactly once by PEI, so the pair detects any
-  // post-snapshot object creation or stack-size change. -1 = not yet taken.
+  // Frame-freeze snapshot: first post-PEI Haydn pass (HardwareLoops then
+  // ExpandPseudos; earliest wins). NumObjects+StackSize plus per-live-FI
+  // offset/size so an equal-size offset swap is a violation. Skip dead FIs
+  // (getObjectOffset asserts). -1 = unset. No separate snapshot type
+  // (AIE AIEMachineFunctionInfo.h:69-126 has none; clone is identity).
   int64_t FrameFreezeNumObjects = -1;
   int64_t FrameFreezeStackSize = -1;
+  SmallVector<int, 8> FrameFreezeLiveFIs;
+  SmallVector<int64_t, 8> FrameFreezeOffsets;
+  SmallVector<int64_t, 8> FrameFreezeSizes;
+
+  static void collectLiveFrameObjects(const MachineFrameInfo &MFI,
+                                      SmallVectorImpl<int> &FIs,
+                                      SmallVectorImpl<int64_t> &Offsets,
+                                      SmallVectorImpl<int64_t> &Sizes) {
+    FIs.clear();
+    Offsets.clear();
+    Sizes.clear();
+    for (int FI = MFI.getObjectIndexBegin(), E = MFI.getObjectIndexEnd();
+         FI != E; ++FI) {
+      if (MFI.isDeadObjectIndex(FI))
+        continue;
+      FIs.push_back(FI);
+      Offsets.push_back(MFI.getObjectOffset(FI));
+      Sizes.push_back(MFI.getObjectSize(FI));
+    }
+  }
 
   // Transient post-RA alt-descriptor side-map (not durable placement).
   // HaydnHazardRecognizer records chosen member opcodes during post-RA
@@ -231,13 +249,14 @@ public:
   bool hasFrameFreezeSnapshot() const {
     return FrameFreezeNumObjects >= 0;
   }
-  /// Take the snapshot if absent; returns false when one already exists
-  /// with DIFFERENT values (impossible: the counters are monotone/once).
+  /// Take the snapshot if absent (earliest-wins).
   void takeFrameFreezeSnapshot(const MachineFrameInfo &MFI) {
     if (hasFrameFreezeSnapshot())
       return;
     FrameFreezeNumObjects = static_cast<int64_t>(MFI.getNumObjects());
     FrameFreezeStackSize = static_cast<int64_t>(MFI.getStackSize());
+    collectLiveFrameObjects(MFI, FrameFreezeLiveFIs, FrameFreezeOffsets,
+                            FrameFreezeSizes);
   }
   /// Frame-freeze violation description, or empty when the frame is
   /// unchanged since the snapshot (or no snapshot was taken — MIR tests
@@ -245,14 +264,21 @@ public:
   std::string frameFreezeViolation(const MachineFrameInfo &MFI) const {
     if (!hasFrameFreezeSnapshot())
       return {};
-    if (static_cast<int64_t>(MFI.getNumObjects()) == FrameFreezeNumObjects &&
-        static_cast<int64_t>(MFI.getStackSize()) == FrameFreezeStackSize)
+    if (static_cast<int64_t>(MFI.getNumObjects()) != FrameFreezeNumObjects ||
+        static_cast<int64_t>(MFI.getStackSize()) != FrameFreezeStackSize)
+      return ("frame grew after the post-PEI snapshot: objects " +
+              std::to_string(FrameFreezeNumObjects) + "->" +
+              std::to_string(MFI.getNumObjects()) + ", stack " +
+              std::to_string(FrameFreezeStackSize) + "->" +
+              std::to_string(MFI.getStackSize()));
+    SmallVector<int, 8> LiveFIs;
+    SmallVector<int64_t, 8> Offsets;
+    SmallVector<int64_t, 8> Sizes;
+    collectLiveFrameObjects(MFI, LiveFIs, Offsets, Sizes);
+    if (LiveFIs == FrameFreezeLiveFIs && Offsets == FrameFreezeOffsets &&
+        Sizes == FrameFreezeSizes)
       return {};
-    return ("frame grew after the post-PEI snapshot: objects " +
-            std::to_string(FrameFreezeNumObjects) + "->" +
-            std::to_string(MFI.getNumObjects()) + ", stack " +
-            std::to_string(FrameFreezeStackSize) + "->" +
-            std::to_string(MFI.getStackSize()));
+    return "frame object offsets or sizes changed after the post-PEI snapshot";
   }
   //@}
 

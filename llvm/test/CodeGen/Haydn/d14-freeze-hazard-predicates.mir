@@ -1,0 +1,177 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# Freeze seat of the shared commit hazard predicates at haydn-verify-bundles
+# (one MI-overload hook covers all four Verify seats). Generated members so
+# freeze residual-logical does not fire first. No bare JALR: freeze treats
+# mixed committed BUNDLE + bare encode as fatal. Peer: HexagonMCChecker
+# checkNewValues (Haydn inverts: no .new forwarding), checkRegisters dual
+# write, checkHWLoop; AIE verifyInstruction fail-closed.
+#
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/raw-def-then-use.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=RAW
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/war-use-then-def.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=WAR
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/waw-dual-write.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=WAW
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/csrw-hwlr-set.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=CSRW
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/lui-alu-e0.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=LUI
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/hwloop-trip-producer.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=TRIP
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/dead-def-sibling-use.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=DEAD
+# Leftover dual-ALU implicit-def dead $sfr must not invent WAW at the
+# intermediate verify seat (ordinary ALU descriptors do not name SFR).
+# Freeze residual-logical is not this pin — no -haydn-freeze-verify.
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-verify-bundles -verify-machineinstrs \
+# RUN:   %t/leftover-dual-alu-sfr.mir -o - | FileCheck %s --check-prefix=SFR
+#
+# RAW: intra-cycle RAW
+# WAR: XOR32_E3_E0_ALU2_RR
+# WAR: ADD32_E3_E1_ALU1_RR
+# WAW: intra-cycle WAW
+# CSRW: {{named same-cycle law|intra-cycle WAW}}
+# LUI: named same-cycle law
+# TRIP: hwloop trip
+# DEAD: XOR32_E3_E1_ALU1_RR
+# SFR: ADD32
+# SFR: XOR32
+
+#--- raw-def-then-use.mir
+--- |
+  define void @raw_def_then_use() { ret void }
+...
+---
+name:            raw_def_then_use
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r4
+    BUNDLE 1, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r4 {
+      $r4 = ADD32_E3_E0_ALU2_RR $r0, $r1
+      $r5 = XOR32_E3_E1_ALU1_RR $r4, $r2
+    }
+...
+#--- war-use-then-def.mir
+--- |
+  define void @war_use_then_def() { ret void }
+...
+---
+name:            war_use_then_def
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r4
+    BUNDLE 1, 0, implicit-def $r5, implicit-def $r4, implicit $r4, implicit $r2, implicit $r0, implicit $r1 {
+      $r5 = XOR32_E3_E0_ALU2_RR $r4, $r2
+      $r4 = ADD32_E3_E1_ALU1_RR $r0, $r1
+    }
+...
+#--- waw-dual-write.mir
+--- |
+  define void @waw_dual_write() { ret void }
+...
+---
+name:            waw_dual_write
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3
+    BUNDLE 1, 0, implicit-def $r4, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32_E3_E0_ALU2_RR $r0, $r1
+      $r4 = XOR32_E3_E1_ALU1_RR $r2, $r3
+    }
+...
+#--- csrw-hwlr-set.mir
+--- |
+  define void @csrw_hwlr_set() { ret void }
+...
+---
+name:            csrw_hwlr_set
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+    BUNDLE 1, 0, implicit $r1, implicit $r2 {
+      SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR 0, 4, 8, $r2
+      CSRW_E3_E1_ALU1_I8 32, $r1
+    }
+...
+#--- lui-alu-e0.mir
+--- |
+  define void @lui_alu_e0() { ret void }
+...
+---
+name:            lui_alu_e0
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3
+    BUNDLE 1, 0, implicit-def $r1, implicit-def $r4, implicit $r2, implicit $r3 {
+      $r1 = LUI_E3_E0_ALU0_I12 1
+      $r4 = ADD32_E3_E1_ALU1_RR $r2, $r3
+    }
+...
+#--- hwloop-trip-producer.mir
+--- |
+  define void @hwloop_trip_producer() { ret void }
+...
+---
+name:            hwloop_trip_producer
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r6
+    BUNDLE 1, 0, implicit-def $r6, implicit $r0, implicit $r1, implicit $r6 {
+      SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR 0, 4, 8, $r6
+      $r6 = ADD32_E3_E1_ALU1_RR $r0, $r1
+    }
+...
+#--- dead-def-sibling-use.mir
+--- |
+  define void @dead_def_sibling_use() { ret void }
+...
+---
+name:            dead_def_sibling_use
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r4
+    BUNDLE 1, 0, implicit-def dead $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r4 {
+      dead $r4 = ADD32_E3_E0_ALU2_RR $r0, $r1
+      $r5 = XOR32_E3_E1_ALU1_RR $r4, $r2
+    }
+...
+#--- leftover-dual-alu-sfr.mir
+--- |
+  define void @leftover_dual_alu_sfr() { ret void }
+...
+---
+name:            leftover_dual_alu_sfr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3
+    BUNDLE 1, 0, implicit-def $r4, implicit-def $r5, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+      $r5 = XOR32 $r2, $r3, implicit-def dead $sfr
+    }
+...

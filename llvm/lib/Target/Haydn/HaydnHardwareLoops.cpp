@@ -830,6 +830,7 @@ using haydn::hwloop::eraseSetMemberAndRecommitSiblings;
 using haydn::hwloop::isLiveMBB;
 using haydn::hwloop::isSoundDemoteCounter;
 using haydn::hwloop::materializeTripCount;
+using haydn::hwloop::blockLiveInContains;
 using haydn::hwloop::pickCounterReg;
 using haydn::hwloop::regClobberedNonCountdownIn;
 using haydn::hwloop::stripResidualCountdown;
@@ -925,6 +926,10 @@ bool llvm::demoteHardwareLoopToSoftware(
   Register Prefer;
   int64_t Imm = 0;
   bool HasImm = false;
+  // LoopStart op1 is the pipeliner's signed trip adjustment (typically -S).
+  // Remaining kernel trip after a peel is Prefer+Adj. SET_* already rematted
+  // this addend at Role-A expand; applying it again would double-count.
+  int64_t LoopStartAdj = 0;
 
   // Cannot parse Header/Latch/trip: cannot prove the body is dead and
   // cannot install a soft edge. Hexagon FixupHwLoops.cpp:137-148 converts
@@ -943,6 +948,8 @@ bool llvm::demoteHardwareLoopToSoftware(
     if (!SetMI.getOperand(0).isReg())
       return refuseUnparseable();
     Prefer = SetMI.getOperand(0).getReg();
+    if (SetMI.getNumOperands() >= 2 && SetMI.getOperand(1).isImm())
+      LoopStartAdj = SetMI.getOperand(1).getImm();
     Header = ResolveBodyFn(SetMI);
     Latch = haydn::hwloop::resolveLoopStartLatch(Header, Preheader);
     if (Header && !Latch) {
@@ -1137,6 +1144,24 @@ bool llvm::demoteHardwareLoopToSoftware(
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const HaydnFrameLowering *TFL = ST.getFrameLowering();
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  const TargetRegisterInfo &TRI = *ST.getRegisterInfo();
+
+  // Dead-after-loop: one-block computed live-ins of every loop-exit
+  // successor (haydn::hwloop::blockLiveInContains). Stored MBB live-ins
+  // are stale this late; do not keep a third copy of the walk.
+  auto isLiveAfterLoop = [&](MCPhysReg R) -> bool {
+    for (const MachineBasicBlock *B : LoopBlocks) {
+      if (!B)
+        continue;
+      for (const MachineBasicBlock *S : B->successors()) {
+        if (LoopBlocks.contains(S))
+          continue;
+        if (blockLiveInContains(*S, R))
+          return true;
+      }
+    }
+    return false;
+  };
 
   auto canUsePreferAsCounter = [&]() -> bool {
     if (!Prefer.isPhysical() || Prefer == Haydn::R0 || Prefer == Haydn::R13 ||
@@ -1152,30 +1177,12 @@ bool llvm::demoteHardwareLoopToSoftware(
     // is dead on every exit edge: live-in of each exit-successor block must
     // not contain it. Live-after-exit → the free-counter materialize path
     // below copies the trip into an untouched register instead.
-    {
-      const TargetRegisterInfo &TRI = *ST.getRegisterInfo();
-      for (const MachineBasicBlock *B : LoopBlocks) {
-        if (!B)
-          continue;
-        for (const MachineBasicBlock *S : B->successors()) {
-          if (LoopBlocks.contains(S))
-            continue;
-          // Live-in(S): live-out(S) stepped backward over all of S.
-          LivePhysRegs LPR(TRI);
-          LPR.addLiveOuts(*S);
-          for (const MachineInstr &MI : llvm::reverse(*S))
-            LPR.stepBackward(MI);
-          if (LPR.contains(Prefer.asMCReg())) {
-            LLVM_DEBUG(dbgs() << DebugPrefix
-                              << ": demote Prefer "
-                              << printReg(Prefer, &TRI)
-                              << " live after loop exit ("
-                              << printMBBReference(*S)
-                              << ") — need copy/materialize counter\n");
-            return false;
-          }
-        }
-      }
+    if (isLiveAfterLoop(Prefer.asMCReg())) {
+      LLVM_DEBUG(dbgs() << DebugPrefix << ": demote Prefer "
+                        << printReg(Prefer, &TRI)
+                        << " live after loop exit — need copy/materialize "
+                           "counter\n");
+      return false;
     }
     // Counter ownership law (calls / callee-saved): see isSoundDemoteCounter.
     // Live range starts at the SET site — RA proved Prefer live up to here;
@@ -1183,7 +1190,7 @@ bool llvm::demoteHardwareLoopToSoftware(
     MachineBasicBlock::const_iterator From(
         topLevelForLayout(SetMI).getIterator());
     return isSoundDemoteCounter(Prefer.asMCReg(), LoopBlocks, Preheader, From,
-                                MF, *ST.getRegisterInfo());
+                                MF, TRI);
   };
 
   auto resolveScratchFI = [&]() -> int {
@@ -1202,15 +1209,30 @@ bool llvm::demoteHardwareLoopToSoftware(
     // Bundle-preserving: materialize before the SET cycle root, not mid-bundle.
     MachineBasicBlock::iterator Ins =
         topLevelForLayout(SetMI).getIterator();
-    if (canUsePreferAsCounter()) {
+    // CountReg==Prefer is legal only for Adj==0. In-place ADDI dest==Prefer
+    // violates AIE SetLoopCount LC-vs-src and rematerializeAddImmForUse
+    // (never Dest==Src); the body may still read the original trip.
+    if (canUsePreferAsCounter() && LoopStartAdj == 0) {
       CountReg = Prefer;
       InstallSoftLoop = true;
     } else {
       CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins,
                         DebugPrefix);
+      // pickCounterReg tries Prefer first; Adj!=0 needs dest != Prefer.
+      if (LoopStartAdj != 0 && CountReg == Prefer)
+        CountReg = pickCounterReg(LoopBlocks, Register(), ST, *Preheader, Ins,
+                                  DebugPrefix);
+      if (LoopStartAdj != 0 && CountReg == Prefer)
+        CountReg = Register();
       if (CountReg.isPhysical()) {
-        materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, 0,
-                             /*HasImm=*/false);
+        if (LoopStartAdj != 0)
+          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W, CountReg,
+                           [&](MachineInstrBuilder MIB) {
+                             MIB.addReg(Prefer).addImm(LoopStartAdj);
+                           });
+        else
+          materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, 0,
+                               /*HasImm=*/false);
         InstallSoftLoop = true;
         LLVM_DEBUG(dbgs() << DebugPrefix << ": demote trip "
                           << printReg(Prefer)
@@ -1279,7 +1301,11 @@ bool llvm::demoteHardwareLoopToSoftware(
       // scratch — the demote saves its value to the dedicated save FI
       // before the loop and reloads it at the exit (below). The only
       // exclusion stays R0 (XOR-zero clobbers the soft-zero law).
-      const bool PreferLiveAfterLoop = Prefer.isPhysical();
+      // PreferLiveAfterLoop is the one-block exit-successor walk (same law
+      // as canUsePreferAsCounter), not the Prefer.isPhysical() stub: empty
+      // stored live-ins on a BR split-tail must not hide a live-through GPR.
+      const bool PreferLiveAfterLoop =
+          Prefer.isPhysical() && isLiveAfterLoop(Prefer.asMCReg());
       // CB-165: whether the loop body itself redefines Prefer. When it
       // does, Prefer's exit value originates from that body def (software
       // pipelining routinely assigns the stage-k value to the same physreg
@@ -1309,8 +1335,24 @@ bool llvm::demoteHardwareLoopToSoftware(
             *Preheader, Ins, /*PreferNotR12=*/true, {},
             (Prefer.isPhysical() && !PreferLiveAfterLoop)
                 ? ArrayRef<Register>{Prefer} : NoExclude);
-      if (!(LatchScr.isPhysical() &&
-            (!HasImm || PreheaderScr.isPhysical()))) {
+      else if (LoopStartAdj != 0) {
+        // Adj dest must not be Prefer. Missing scratch is not a refuse —
+        // LatchScr != Prefer can hold Prefer+Adj; copy already had its chance.
+        PreheaderScr = findPostRAScratchNoSpill(
+            *Preheader, Ins, /*PreferNotR12=*/true, {},
+            Prefer.isPhysical() ? ArrayRef<Register>{Prefer} : NoExclude);
+        if (!PreheaderScr.isPhysical() && LatchScr.isPhysical() &&
+            LatchScr != Prefer)
+          PreheaderScr = LatchScr;
+      }
+      // D1.19: admission is the closed case matrix in
+      // haydn::hwloop::demoteStackCounterAdmissible (single law, gtest
+      // seam). Cell (e) — Adj!=0 with no PreheaderScr and LatchScr==Prefer
+      // — used to pass this gate and fall through to StoreSrc = Prefer,
+      // ST32ing the FULL trip while the kernel runs Prefer+Adj = N-S.
+      if (!haydn::hwloop::demoteStackCounterAdmissible(
+              LatchScr.isPhysical(), HasImm, PreheaderScr.isPhysical(),
+              LoopStartAdj != 0, LatchScr == Prefer)) {
         LLVM_DEBUG(dbgs() << DebugPrefix
                           << ": demote refused — no spill-free non-R0 "
                              "scratch for stack-counter windows (latch "
@@ -1318,6 +1360,12 @@ bool llvm::demoteHardwareLoopToSoftware(
                           << ", preheader "
                           << (!HasImm || PreheaderScr.isPhysical() ? "ok"
                                                                    : "NONE")
+                          << ", adj-store "
+                          << (HasImm || LoopStartAdj == 0 ||
+                                      PreheaderScr.isPhysical() ||
+                                      LatchScr != Prefer
+                                  ? "ok"
+                                  : "NONE (Adj!=0, LatchScr==Prefer)")
                           << "); never a spill bracket over the counter\n");
         return false;
       }
@@ -1404,10 +1452,24 @@ bool llvm::demoteHardwareLoopToSoftware(
                             .addImm(Elem);
                       });
       } else {
-        // Prefer holds trip at SET; store it to FI before erase.
+        // Prefer holds trip at SET; store remaining kernel trip Prefer+Adj.
+        // ADDI into scratch; leave Prefer for CB-162/165 save.
+        Register StoreSrc = Prefer;
+        unsigned StoreFlags = 0;
+        if (LoopStartAdj != 0 && PreheaderScr.isPhysical() &&
+            PreheaderScr != Prefer) {
+          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W,
+                           PreheaderScr, [&](MachineInstrBuilder MIB) {
+                             MIB.addReg(Prefer).addImm(LoopStartAdj);
+                           });
+          StoreSrc = PreheaderScr;
+          StoreFlags = getKillRegState(true);
+        }
         emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
                       [&](MachineInstrBuilder MIB) {
-                        MIB.addReg(Prefer).addReg(FrameReg).addImm(Elem);
+                        MIB.addReg(StoreSrc, StoreFlags)
+                            .addReg(FrameReg)
+                            .addImm(Elem);
                       });
       }
       UseStackCounter = true;

@@ -152,6 +152,19 @@ constexpr Row Table[] = {
     {RelocKind::WIDE_BranchSImm12_RI_E3E1, {12, 12, 54, 0, 2, true, true, RelocTrans::None}},
     {RelocKind::JALRSImm12_E3E0, {12, 12, 23, 0, 2, true, true, RelocTrans::None}},
     {RelocKind::JALRSImm12_E3E1, {12, 12, 54, 0, 2, true, true, RelocTrans::None}},
+    // D1.17 HI12/CSR_UImm8 qualified twins (ELF 34..42): geometry mirrors
+    // the base row exactly except the typed FieldLsb. Producer emission is
+    // typed (resolveFieldLsbForMember in qualifyFixupKindForEntry); the
+    // Loc sniff is the lld/base-site fallback only.
+    {RelocKind::HI12_E3E0_ALU2, {12, 12, 21, 0, 1, false, false, RelocTrans::Hi12}},
+    {RelocKind::HI12_E3E0_ALU0, {12, 12, 23, 0, 1, false, false, RelocTrans::Hi12}},
+    {RelocKind::HI12_E3E1, {12, 12, 54, 0, 1, false, false, RelocTrans::Hi12}},
+    {RelocKind::HI12_E3E2_ALU2, {12, 12, 83, 0, 1, false, false, RelocTrans::Hi12}},
+    {RelocKind::HI12_E3E2_ALU0, {12, 12, 81, 0, 1, false, false, RelocTrans::Hi12}},
+    {RelocKind::CSR_UImm8_E3E0_ALU2, {12, 8, 27, 0, 1, false, false, RelocTrans::None}},
+    {RelocKind::CSR_UImm8_E3E0_ALU0, {12, 8, 23, 0, 1, false, false, RelocTrans::None}},
+    {RelocKind::CSR_UImm8_E3E1, {12, 8, 54, 0, 1, false, false, RelocTrans::None}},
+    {RelocKind::CSR_UImm8_E3E2, {12, 8, 85, 0, 1, false, false, RelocTrans::None}},
 };
 
 static_assert(static_cast<unsigned>(RelocKind::WIDE_BranchSImm12_RI) ==
@@ -171,6 +184,33 @@ static_assert(static_cast<unsigned>(RelocKind::LO20_E1) ==
 static_assert(static_cast<unsigned>(RelocKind::JALRSImm12_E3E1) ==
                   ELF::R_HAYDN_JALRSImm12_E3E1,
               "JALRSImm12_E3E1 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::HI12_E3E0_ALU2) ==
+                  ELF::R_HAYDN_HI12_E3E0_ALU2,
+              "HI12_E3E0_ALU2 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::HI12_E3E0_ALU0) ==
+                  ELF::R_HAYDN_HI12_E3E0_ALU0,
+              "HI12_E3E0_ALU0 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::HI12_E3E1) ==
+                  ELF::R_HAYDN_HI12_E3E1,
+              "HI12_E3E1 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::HI12_E3E2_ALU2) ==
+                  ELF::R_HAYDN_HI12_E3E2_ALU2,
+              "HI12_E3E2_ALU2 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::HI12_E3E2_ALU0) ==
+                  ELF::R_HAYDN_HI12_E3E2_ALU0,
+              "HI12_E3E2_ALU0 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::CSR_UImm8_E3E0_ALU2) ==
+                  ELF::R_HAYDN_CSR_UImm8_E3E0_ALU2,
+              "CSR_UImm8_E3E0_ALU2 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::CSR_UImm8_E3E0_ALU0) ==
+                  ELF::R_HAYDN_CSR_UImm8_E3E0_ALU0,
+              "CSR_UImm8_E3E0_ALU0 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::CSR_UImm8_E3E1) ==
+                  ELF::R_HAYDN_CSR_UImm8_E3E1,
+              "CSR_UImm8_E3E1 RelocKind must match ELF");
+static_assert(static_cast<unsigned>(RelocKind::CSR_UImm8_E3E2) ==
+                  ELF::R_HAYDN_CSR_UImm8_E3E2,
+              "CSR_UImm8_E3E2 RelocKind must match ELF");
 
 // Fail-closed sentinel: unknown / Invalid kinds are never product-ready.
 // Returning Table[0] (None, Trans::None) used to make isRelocTransformReady
@@ -199,6 +239,9 @@ constexpr uint8_t kALU1 = 1;
 constexpr uint8_t kALU2 = 2;
 constexpr uint8_t kLOAD1 = 3;
 constexpr uint8_t kLS0 = 4;
+static_assert(kALU0 == 0 && kALU1 == 1 && kALU2 == 2 && kLOAD1 == 3 &&
+                  kLS0 == 4 && kAnyUnit == 0xff,
+              "reloc unit index vocabulary");
 
 struct FieldLsbSite {
   RelocKind Kind;
@@ -208,65 +251,14 @@ struct FieldLsbSite {
   uint8_t Lsb;
 };
 
-constexpr FieldLsbSite FieldLsbSites[] = {
-    // HI12 / LUI I12
-    {RelocKind::HI12, 0, 0, kAnyUnit, 32},
-    {RelocKind::HI12, 1, 0, kALU2, 21},
-    {RelocKind::HI12, 1, 0, kALU0, 23},
-    {RelocKind::HI12, 1, 1, kAnyUnit, 54},
-    {RelocKind::HI12, 1, 2, kALU2, 83},
-    {RelocKind::HI12, 1, 2, kALU0, 81},
-    // LO20 / PC_LO20 — RI20 is E2-only
-    {RelocKind::LO20, 0, 0, kALU0, 31},
-    {RelocKind::LO20, 0, 1, kALU1, 65},
-    {RelocKind::PC_LO20, 0, 0, kALU0, 31},
-    {RelocKind::PC_LO20, 0, 1, kALU1, 65},
-    // LS_IMM RI6
-    {RelocKind::LS_IMM, 0, 0, kLS0, 28},
-    {RelocKind::LS_IMM, 0, 1, kLOAD1, 72},
-    {RelocKind::LS_IMM, 1, 0, kLS0, 25},
-    {RelocKind::LS_IMM, 1, 1, kLOAD1, 54},
-    {RelocKind::LS_IMM, 1, 2, kLOAD1, 85},
-    // CSR I8
-    {RelocKind::CSR_UImm8, 0, 0, kAnyUnit, 32},
-    {RelocKind::CSR_UImm8, 1, 0, kALU2, 27},
-    {RelocKind::CSR_UImm8, 1, 0, kALU0, 23},
-    {RelocKind::CSR_UImm8, 1, 1, kAnyUnit, 54},
-    {RelocKind::CSR_UImm8, 1, 2, kAnyUnit, 85},
-    // JALR RI12 — generated members: E2 e0 / E3 e0 / E3 e1 ALU0 only
-    {RelocKind::JALRSImm12, 0, 0, kALU0, 32},
-    {RelocKind::JALRSImm12, 1, 0, kALU0, 23},
-    {RelocKind::JALRSImm12, 1, 1, kALU0, 54},
-    // I12 / RI12 cond-branch (same golden imm windows as JALR + E3 e2 I12)
-    {RelocKind::WIDE_BranchSImm12, 0, 0, kAnyUnit, 32},
-    {RelocKind::WIDE_BranchSImm12, 1, 0, kAnyUnit, 23},
-    {RelocKind::WIDE_BranchSImm12, 1, 1, kAnyUnit, 54},
-    {RelocKind::WIDE_BranchSImm12, 1, 2, kAnyUnit, 81},
-    {RelocKind::WIDE_BranchSImm12_RI, 0, 0, kAnyUnit, 32},
-    {RelocKind::WIDE_BranchSImm12_RI, 1, 0, kAnyUnit, 23},
-    {RelocKind::WIDE_BranchSImm12_RI, 1, 1, kAnyUnit, 54},
-    // JAL I20
-    {RelocKind::WIDE_CallSImm20, 0, 0, kAnyUnit, 31},
-    {RelocKind::WIDE_CallSImm20, 1, 0, kAnyUnit, 17},
-    {RelocKind::WIDE_CallSImm20, 1, 1, kAnyUnit, 48},
-    // SET_HWLOOP F2 (HWLRIIR) table windows; HWLRIII extras below
-    {RelocKind::HWLoopOff1, 0, 0, kAnyUnit, 32},
-    {RelocKind::HWLoopOff1, 1, 0, kAnyUnit, 18},
-    {RelocKind::HWLoopOff1, 1, 1, kAnyUnit, 49},
-    {RelocKind::HWLoopOff2, 0, 0, kAnyUnit, 38},
-    {RelocKind::HWLoopOff2, 1, 0, kAnyUnit, 24},
-    {RelocKind::HWLoopOff2, 1, 1, kAnyUnit, 55},
-};
-
 struct ExtraLsb {
   RelocKind Kind;
   uint8_t Lsb;
 };
 
-constexpr ExtraLsb ExtraPublishedLsb[] = {
-    {RelocKind::HWLoopOff1, 13}, // E2 e0 HWLRIII
-    {RelocKind::HWLoopOff2, 36}, // E2 e0 HWLRIII
-};
+// Generated from Format E member imm LSBs. Do not hand-edit the arrays.
+#define GET_HAYDN_RELOC_FIELD_LSB
+#include "HaydnGenRelocFieldLsb.inc"
 
 // Shared diagnostic for kinds whose value transform is not product-closed.
 constexpr const char *kTransformNotReady =
@@ -453,8 +445,16 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   if (R == RelocKind::HI12) {
     if (Indicator != 0x7u)
       return I.FieldLsb;
-    if (EntryNum == 0)
-      return 32u; // E2 e0
+    // E2 e0: golden ALU0 I12 (map=0, 5-bit type @8=0x0a) hosts LUI(1) with
+    // BEQZ(4)/BNEZ(5)/BGEZ(6)/BLTZ(7) — pin opc. Without the pin, a parcel
+    // whose e0 is a branch would patch the e0 tail of a symbolic LUI at
+    // another entry (the D1.24 wrong-window shape).
+    if (EntryNum == 0) {
+      if (GetBits(6, 2) == 0u && GetBits(8, 5) == 0x0au &&
+          GetBits(17, 3) == 1u)
+        return 32u; // E2 e0 LUI
+      return I.FieldLsb; // no LUI at E2 e0 — documented fail-through
+    }
     auto IsLuiAlu2 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 1u && GetBits(EntryLo + 2, 4) == 4u;
     };
@@ -466,13 +466,20 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
       return 21u;
     if (IsLuiAlu0(6) && GetBits(16, 3) == 1u)
       return 23u;
-    // E3 e1 @ abs [37:67]: both ALU1/ALU0 31b pack imm @ entry+17.
-    if (IsLuiAlu2(37) || IsLuiAlu0(37))
+    // E3 e1 @ abs [37:67]: both ALU1/ALU0 31b pack imm @ entry+17. The
+    // ALU0 site shares I12 with BEQZ..BLTZ (opc 4..7) — pin opc==1 (LUI)
+    // so a branch member at e1 never satisfies the HI12 sniff (D1.17:
+    // `{ lui; beqz; nop }` made this arm return 54 while the LUI sat at
+    // 81/83). ALU1 I12 hosts only NOP/LUI (1-bit opc) — pin opc==1.
+    if (IsLuiAlu2(37) && GetBits(49, 1) == 1u)
+      return 54u;
+    if (IsLuiAlu0(37) && GetBits(47, 3) == 1u)
       return 54u;
     // E3 e2 @ abs [68:94]: 27b ALU2 imm @ entry+15; ALU0 imm @ entry+13.
-    if (IsLuiAlu2(68))
+    // ALU0 e2 I12 (layout 123) again shares LUI with branches — pin opc.
+    if (IsLuiAlu2(68) && GetBits(74, 1) == 1u)
       return 83u;
-    if (IsLuiAlu0(68))
+    if (IsLuiAlu0(68) && GetBits(74, 3) == 1u)
       return 81u;
     return I.FieldLsb;
   }
@@ -547,24 +554,41 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   //     imm @ abs [30:23]
   //   e1 ALU1/ALU0 31b: same type/map pairing, imm @ abs [61:54]
   //   e2 ALU2/ALU0 27b: same type/map pairing, imm @ abs [92:85]
+  // D1.17: every I8 site hosts NOP(0) and ZERO_GPR(1)/ZERO_DR(2)/
+  // ZERO_SFR(3) alongside CSRR(4)/CSRW(5) — map/type alone is not
+  // member-unique, so every arm pins opc in {4,5}. Without the pins a
+  // `{ nop; csrr; zero_gpr }` parcel matched the e0 ZERO_GPR member and
+  // returned 23 while the real CSR window was 54.
   if (R == RelocKind::CSR_UImm8) {
     if (Indicator != 0x7u)
       return I.FieldLsb;
-    if (EntryNum == 0)
-      return 32u; // E2 e0
+    auto IsCsrOpc = [](unsigned V) -> bool {
+      return V == 4u || V == 5u;
+    };
+    // E2 e0: golden ALU0 I8 (map=0, 5-bit type @8=3) — pin opc.
+    if (EntryNum == 0) {
+      if (GetBits(6, 2) == 0u && GetBits(8, 5) == 3u &&
+          IsCsrOpc(GetBits(17, 3)))
+        return 32u; // E2 e0 CSRR/CSRW
+      return I.FieldLsb; // no CSR member at E2 e0 — fail-through
+    }
     auto IsI8Alu2 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 1u && GetBits(EntryLo + 2, 4) == 1u;
     };
     auto IsI8Alu0 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 3u;
     };
-    if (IsI8Alu2(6))
+    if (IsI8Alu2(6) && IsCsrOpc(GetBits(16, 3)))
       return 27u;
-    if (IsI8Alu0(6))
+    if (IsI8Alu0(6) && IsCsrOpc(GetBits(16, 3)))
       return 23u;
-    if (IsI8Alu2(37) || IsI8Alu0(37))
+    if (IsI8Alu2(37) && IsCsrOpc(GetBits(47, 3)))
       return 54u;
-    if (IsI8Alu2(68) || IsI8Alu0(68))
+    if (IsI8Alu0(37) && IsCsrOpc(GetBits(47, 3)))
+      return 54u;
+    if (IsI8Alu2(68) && IsCsrOpc(GetBits(74, 3)))
+      return 85u;
+    if (IsI8Alu0(68) && IsCsrOpc(GetBits(78, 3)))
       return 85u;
     return I.FieldLsb;
   }
@@ -895,6 +919,24 @@ RelocKind mapFixupKind(unsigned MCFixupKind) {
     return RelocKind::JALRSImm12_E3E0;
   case Haydn::FIXUP_HAYDN_JALRSImm12_E3E1:
     return RelocKind::JALRSImm12_E3E1;
+  case Haydn::FIXUP_HAYDN_HI12_E3E0_ALU2:
+    return RelocKind::HI12_E3E0_ALU2;
+  case Haydn::FIXUP_HAYDN_HI12_E3E0_ALU0:
+    return RelocKind::HI12_E3E0_ALU0;
+  case Haydn::FIXUP_HAYDN_HI12_E3E1:
+    return RelocKind::HI12_E3E1;
+  case Haydn::FIXUP_HAYDN_HI12_E3E2_ALU2:
+    return RelocKind::HI12_E3E2_ALU2;
+  case Haydn::FIXUP_HAYDN_HI12_E3E2_ALU0:
+    return RelocKind::HI12_E3E2_ALU0;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU2:
+    return RelocKind::CSR_UImm8_E3E0_ALU2;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU0:
+    return RelocKind::CSR_UImm8_E3E0_ALU0;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E1:
+    return RelocKind::CSR_UImm8_E3E1;
+  case Haydn::FIXUP_HAYDN_CSR_UImm8_E3E2:
+    return RelocKind::CSR_UImm8_E3E2;
   default:
     return RelocKind::Invalid;
   }
@@ -969,6 +1011,24 @@ unsigned mapRelocKindToFixup(RelocKind R) {
     return Haydn::FIXUP_HAYDN_JALRSImm12_E3E0;
   case RelocKind::JALRSImm12_E3E1:
     return Haydn::FIXUP_HAYDN_JALRSImm12_E3E1;
+  case RelocKind::HI12_E3E0_ALU2:
+    return Haydn::FIXUP_HAYDN_HI12_E3E0_ALU2;
+  case RelocKind::HI12_E3E0_ALU0:
+    return Haydn::FIXUP_HAYDN_HI12_E3E0_ALU0;
+  case RelocKind::HI12_E3E1:
+    return Haydn::FIXUP_HAYDN_HI12_E3E1;
+  case RelocKind::HI12_E3E2_ALU2:
+    return Haydn::FIXUP_HAYDN_HI12_E3E2_ALU2;
+  case RelocKind::HI12_E3E2_ALU0:
+    return Haydn::FIXUP_HAYDN_HI12_E3E2_ALU0;
+  case RelocKind::CSR_UImm8_E3E0_ALU2:
+    return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU2;
+  case RelocKind::CSR_UImm8_E3E0_ALU0:
+    return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU0;
+  case RelocKind::CSR_UImm8_E3E1:
+    return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E1;
+  case RelocKind::CSR_UImm8_E3E2:
+    return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E2;
   case RelocKind::C_BranchSImm4:
     return Haydn::FIXUP_HAYDN_C_BranchSImm4;
   case RelocKind::C_UImm4:

@@ -1,0 +1,133 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=CHAIN
+# RUN: llc -mtriple=haydn-unknown-elf -misched-postra-direction=bidirectional \
+# RUN:     -run-pass=postmisched -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=SEAM
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRASchedStrategy.cpp \
+# RUN:   --check-prefix=WALL
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRASchedStrategy.cpp \
+# RUN:   --check-prefix=LAW
+#
+# Role: MIR + source pin — D1.26 reconstruction pad-cap law.
+#
+# bumpCycleForBundles (the one reconstruction seat) must never silently
+# clamp a forward cycle delta to HaydnPostRAMaxInterZonePads (17+16=33):
+# clamping would place an MI (or a trailing hazard/issue-stall window)
+# earlier than its zone-local ready cycle requires — an under-stalled
+# commit. Over-cap deltas are a named fatal
+# (NumReconstructPadCapFatals; "Haydn: reconstruction pad cap would
+# commit an under-stalled cycle"), symmetric with the D1.7 residual
+# Top/Bot seam fatal (NumInterZonePadCaps; "Haydn: residual Top/Bot
+# inter-zone seam after pad cap") in handleRegionConflicts. The cap
+# still bounds allocation (T4 hang-containment): a poisoned ready cycle
+# dies named before the pad loop runs.
+#
+# Fatal-arm reachability note (honest, per D1.26 plan risk #2): with the
+# current golden every latency source feeding a reconstruction delta is
+# bounded by the published max (SIN_COS/ARCTAN OperandCycles 17; memory
+# last cycle 1; ZOL SetupIssueDistance 3; the interblock/successor
+# replay windows are the same 17-deep class), so every organically
+# constructible per-visit or trailing delta lands at or under the 33
+# cap. The fatal wall is therefore pinned textually here (WALL/LAW
+# source checks, the w50-silent-repair-fatal.mir pattern) while the two
+# RUN arms pin the law's positive boundary: under-cap reconstruction
+# pads (a chained occupancy-17 window sequence, topdown) and an
+# under-cap inter-zone seam pad stack (bidirectional) still commit with
+# their NOPs. No test-only forcing flag (hard constraint #14); the cap
+# is not raised (postmisched-interzone-hazard-pad.mir pins that).
+#
+# WALL: ++NumReconstructPadCapFatals;
+# WALL-NEXT: report_fatal_error(
+# WALL-NEXT: "Haydn: reconstruction pad cap would commit an under-stalled cycle",
+# WALL-NEXT: /*GenCrashDiag=*/false);
+# WALL-NOT: clampForwardCycle(CurrCycle, ToCycle)
+#
+# LAW: if (ToCycle - CurrCycle > HaydnPostRAMaxInterZonePads) {
+#
+# CHAIN: bb.0:
+# CHAIN: $d1 = SIN_COS{{.*}} $r1, 15
+# CHAIN: $r2 = ADD32{{.*}}
+# CHAIN-COUNT-14: NOP
+# CHAIN: $r6 = ARCTAN{{.*}} $d1, 15
+# CHAIN-COUNT-15: NOP
+# CHAIN: $d2 = SIN_COS{{.*}} $r6, 15
+# CHAIN-COUNT-15: NOP
+# CHAIN: $r7 = ARCTAN{{.*}} $d2, 15
+# CHAIN-COUNT-15: NOP
+# CHAIN: $d3 = SIN_COS{{.*}} $r7, 15
+# CHAIN-COUNT-15: NOP
+# CHAIN: $r8 = ARCTAN{{.*}} $d3, 15
+# CHAIN: BEQ{{.*}} %bb.2
+#
+# SEAM-LABEL: name: seam_exit_pad_and_guard
+# SEAM: bb.0:
+# SEAM: SIN_COS
+# SEAM: ARCTAN
+# SEAM: BEQ{{.*}} %bb.2
+
+--- |
+  define void @chain_occupancy_windows() { ret void }
+  define void @seam_exit_pad_and_guard() { ret void }
+...
+---
+name:            chain_occupancy_windows
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+
+    $d1 = SIN_COS $r1, 15
+    $r6 = ARCTAN $d1, 15
+    $d2 = SIN_COS $r6, 15
+    $r7 = ARCTAN $d2, 15
+    $d3 = SIN_COS $r7, 15
+    $r8 = ARCTAN $d3, 15
+    $r2 = ADD32 $r3, $r4, implicit-def dead $sfr
+    BEQ $r2, $r5, %bb.2, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $d1, $r15
+
+    $d13 = ADD64 $d1, $d1, implicit-def dead $sfr
+    RET implicit $r15
+
+  bb.2:
+    liveins: $d1, $r15
+
+    RET implicit $r15
+...
+---
+name:            seam_exit_pad_and_guard
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+
+    $d1 = SIN_COS $r1, 15
+    $r6 = ARCTAN $d1, 15
+    $r2 = ADD32 $r3, $r4, implicit-def dead $sfr
+    BEQ $r2, $r5, %bb.2, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $d1, $r15
+
+    $d13 = ADD64 $d1, $d1, implicit-def dead $sfr
+    RET implicit $r15
+
+  bb.2:
+    liveins: $d1, $r15
+
+    RET implicit $r15
+...

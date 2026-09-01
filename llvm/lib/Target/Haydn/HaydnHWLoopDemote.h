@@ -43,6 +43,7 @@ namespace llvm {
 
 class HaydnInstrInfo;
 class HaydnSubtarget;
+class LivePhysRegs;
 class MachineFunction;
 class TargetInstrInfo;
 class TargetRegisterInfo;
@@ -110,6 +111,47 @@ demoteSavePlacement(bool PreferIsLatchScratch, bool PreferRedefinedInBody);
 /// blocks (regClobberedNonCountdownIn is the authority).
 HwLoopDemoteSaveKind demoteSavePlacement(Register Prefer, Register LatchScr,
                                          const LoopBlockSet &Blocks);
+
+/// Stack-counter demote admission law (D1.19). Total, closed decision over
+/// the (LatchScr validity, HasImm, PreheaderScr validity, Adj!=0,
+/// LatchScr==Prefer) matrix for the demote arm that keeps the trip in a
+/// scratch FI and reloads it each latch. Inputs are the resolved facts at
+/// the single gate site (HaydnHardwareLoops demoteHardwareLoopToSoftware),
+/// same seam style as demoteSavePlacement. The full matrix:
+///
+///   (a) !LatchScrValid                -> refuse. The latch LD32/SUBI32/ST32
+///       window needs a spill-free non-R0 register; a spill bracket's home
+///       aliases the counter FI itself (existing law).
+///   (b) Adj==0 reg-trip (any LatchScr) -> admissible. The remaining kernel
+///       trip IS the full trip N still carried by Prefer; the preheader
+///       ST32 stores Prefer directly, no PreheaderScr needed (sound).
+///   (c) Adj!=0, PreheaderScrValid, PreheaderScr != Prefer -> admissible.
+///       ADDI PreheaderScr, Prefer, Adj then ST32 PreheaderScr stores the
+///       remaining trip N+Adj (the cb166 stack arm; sound).
+///   (d) Adj!=0, !PreheaderScrValid, LatchScr physical != Prefer ->
+///       admissible via the copy fallback PreheaderScr = LatchScr. Claimed
+///       sound today: LatchScr was probed dead at latch end against the
+///       post-rewrite successors, and the preheader ADDI defines it before
+///       the loop. (Adjacent residual: LatchScr is not probed dead AT the
+///       preheader insert point; filed separately if an MIR confirms it.)
+///   (e) Adj!=0, !PreheaderScrValid, LatchScr == Prefer -> REFUSE (the
+///       D1.19 defect). The ADDI addend dest must never be Prefer (in-place
+///       ADDI destroys the trip Prefer carries; AIE LC-vs-src law and
+///       rematerializeAddImmForUse never Dest==Src), so with no other
+///       PreheaderScr the store block would fall back to StoreSrc = Prefer
+///       and ST32 the FULL trip N while the kernel must run Prefer+Adj =
+///       N-S — the S peeled iterations re-execute. Exactly reachable when
+///       the CB-162 latch fallback set LatchScr = Prefer (empty latch
+///       probe, Prefer not in {R0,R13,R15}) and the Adj!=0 preheader probe
+///       (which always excludes Prefer) plus the copy fallback (which
+///       requires LatchScr != Prefer) both miss.
+///   (f) HasImm without PreheaderScrValid -> refuse. The imm-trip
+///       preheader window materializes the trip into PreheaderScr before
+///       the ST32; no scratch means no sound materialize seat (existing
+///       law; HasImm never has an Adj: SET_* already rematted the addend).
+bool demoteStackCounterAdmissible(bool LatchScrValid, bool HasImm,
+                                  bool PreheaderScrValid, bool AdjNonZero,
+                                  bool LatchScrIsPrefer);
 
 /// CFG-only body resolution shared by formation and fixup (see file law).
 /// LoopStart: PLE-carrying preheader successor (single-BB), else the unique
@@ -243,6 +285,15 @@ bool isCountdownStepOf(const MachineInstr &MI, Register Reg);
 /// BUNDLE interiors. Header-side leftovers on a multi-BB diamond are
 /// the same countdown as a latch leftover.
 void stripResidualCountdown(const LoopBlockSet &Blocks, Register Reg);
+
+/// Fill \p Live with the one-block live-ins of \p MBB: addLiveOuts then
+/// reverse stepBackward. Stored MBB live-in lists are stale this late
+/// (BranchRelaxation split tails may be empty). Overlay of AIE
+/// AIELiveRegs.cpp:37-52 without the function-wide worklist class.
+void computeBlockLiveIns(LivePhysRegs &Live, const MachineBasicBlock &MBB);
+
+/// True iff the computed live-ins of \p MBB contain \p Reg.
+bool blockLiveInContains(const MachineBasicBlock &MBB, MCPhysReg Reg);
 
 /// Pick a free GPR for soft-loop countdown at \p InsertPt in \p Preheader.
 /// Returns invalid Register if none is free (caller must refuse erase-only

@@ -162,9 +162,20 @@ void withPostRAScratch(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
 /// successors for the LivePhysRegs live-out seed; an EMPTY override means
 /// "use the block's real successors", never "no live-outs" — an empty
 /// live-out seed would judge live-through registers available and clobber
-/// them). Returns the chosen register, or an invalid Register when no
-/// spill-free non-R0 candidate exists (caller must refuse the
-/// transformation, never fall back to a spill bracket).
+/// them).
+///
+/// Seed contract: each effective successor contributes its *computed*
+/// live-ins (one-block backward LivePhysRegs walk: addLiveOuts, then
+/// reverse stepBackward), not the stored MBB live-in list. Stored lists
+/// are stale this late — a BranchRelaxation split-tail / trampoline Exit
+/// can have empty liveins while still using an exit-only live-through
+/// GPR; seeding from the stored list would pick that GPR as scratch and
+/// clobber it (save/restore only runs when LatchScr==Prefer). Conservative
+/// refusal is fail-closed QoR, not a proof the register is free.
+///
+/// Returns the chosen register, or an invalid Register when no spill-free
+/// non-R0 candidate exists (caller must refuse the transformation, never
+/// fall back to a spill bracket).
 Register findPostRAScratchNoSpill(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator I,
                                   bool PreferNotR12,

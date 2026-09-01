@@ -1,0 +1,134 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -misched-postra-direction=bidirectional %s -o - \
+# RUN:     | FileCheck %s --check-prefixes=S2,INTER
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs \
+# RUN:     -misched-postra-direction=bidirectional %s -o - \
+# RUN:     | FileCheck %s --check-prefixes=S2,OFF
+#
+# D1.3 llc pin: Bot successor replay must book SIN_COS/ARCTAN uimm4+2
+# Reserved occupancy and dest remaining. The nonzero-delta
+# emitInstruction arm shares emitInScoreboard (Reserved at Delta+K) plus
+# dest windows with std::max; it must not appendDefs (cycle-0 WAW).
+# Product edge flags stay OFF (no region-end-edges / waw-edges).
+# Occupancy length is Constraints uimm4+2 already generated; uimm4=2
+# is occupancy 4, so Occupancy-1 = 3 predecessor NOPs.
+#
+# PostGenericScheduler is OnlyTopDown by default, so Bot never picks
+# predecessor last SUs and dest remaining is invisible in that direction.
+# Bidirectional is not an edge-flag flip: it is the AIE Bot-zone direction
+# initializeBotScoreBoard is written for (AIE assert
+# !doMBBSchedRegionsTopDown). S1 records successor depths; S2 replays
+# ARCTAN/SIN_COS into BotHR. recedeScoreboard (not RecedeCycle) keeps
+# dest remaining across AlignScoreboardToCycleOne.
+#
+# With interblock: last pred dest-write of the DSP dest, then exactly
+# Occupancy-1 NOPs, then the DSP op — NOP-on-unit from replayed dest
+# remaining, not a W69 pad-cap flood. Without interblock: the same
+# bidirectional walk leaves those predecessor NOPs out.
+
+# S2-LABEL: name: bot_replay_arctan_window
+# S2:       bb.0:
+# S2:         $r1 = ADD32{{.*}}
+# INTER-NEXT: NOP
+# INTER-NEXT: NOP
+# INTER-NEXT: NOP
+# INTER-NOT:  NOP
+# OFF-NOT:    NOP
+# S2:       bb.1:
+# S2:         $r1 = ARCTAN{{.*}} $d0, 2
+
+# S2-LABEL: name: bot_replay_sincos_window
+# S2:       bb.0:
+# S2:         $d1 = ADD64{{.*}}
+# INTER-NEXT: NOP
+# INTER-NEXT: NOP
+# INTER-NEXT: NOP
+# INTER-NOT:  NOP
+# OFF-NOT:    NOP
+# S2:       bb.1:
+# S2:         $d1 = SIN_COS{{.*}} $r0, 2
+
+--- |
+  define void @bot_replay_arctan_window() { ret void }
+  define void @bot_replay_sincos_window() { ret void }
+...
+---
+name:            bot_replay_arctan_window
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:           true
+isSSA:            false
+noVRegs:          true
+registers:        []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:       []
+stack:            []
+constants:        []
+machineFunctionInfo: {}
+body:             |
+
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $d0, $r0, $r2
+
+    $r3 = ADD32 $r0, $r2, implicit-def dead $sfr
+    $r4 = ADD32 $r3, $r2, implicit-def dead $sfr
+    $r1 = ADD32 $r4, $r2, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $d0, $r0, $r15
+
+    $r1 = ARCTAN $d0, 2
+    $r0 = COPY killed $r1
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+---
+name:            bot_replay_sincos_window
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:           true
+isSSA:            false
+noVRegs:          true
+registers:        []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:       []
+stack:            []
+constants:        []
+machineFunctionInfo: {}
+body:             |
+
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $d0, $r0
+
+    $d2 = ADD64 $d0, $d0, implicit-def dead $sfr
+    $d1 = ADD64 $d2, $d0, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $r0, $r15
+
+    $d1 = SIN_COS $r0, 2
+    $r0 = COPY $r0
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...

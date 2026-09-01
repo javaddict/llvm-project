@@ -104,6 +104,11 @@ public:
 
   bool hasBitIntType() const override { return true; }
 
+  /// Haydn baremetal enters through `main` even under -ffreestanding (BSP
+  /// startup calls main); keep C99 5.1.2.2.3 fallthrough-to-zero so
+  /// gcc-torture freestanding builds return 0 instead of undef.
+  bool treatsMainAsEntryUnderFreestanding() const override { return true; }
+
 protected:
   ArrayRef<const char *> getGCCRegNames() const override;
   ArrayRef<GCCRegAlias> getGCCRegAliases() const override;
