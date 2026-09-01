@@ -47,7 +47,10 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Target/TargetOptions.h"
+#include <fcntl.h>
 #include <optional>
+#include <unistd.h>
 
 using namespace llvm;
 
@@ -243,6 +246,167 @@ HaydnTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
 }
 
 namespace {
+
+//===----------------------------------------------------------------------===//
+// GR2.3: fail-closed forced-enable rejection for unsupported executable
+// common-tail writers (MachineOutliner, MachineFunctionSplitter,
+// BasicBlockSections). One predicate, one owner (the Haydn addPreEmitPass
+// override), one mechanism: read-only TargetMachine state + read-only
+// cl::getRegisteredOptions() introspection of the two llc-only *hidden
+// static* flags (-enable-machine-outliner, -enable-split-machine-functions)
+// that generic code owns and no TargetMachine bit carries.
+//
+// Why the registered-option lookup is needed at all: every clang/C-API arm
+// arrives as a TM option bit (Options.EnableMachineOutliner,
+// Options.EnableMachineFunctionSplitter, getBBSectionsType()) and is read
+// directly, but the llc-only hidden static cl::opts in TargetPassConfig.cpp
+// are file-static in generic CodeGen. Exposing them would be a generic-code
+// edit (forbidden by hard constraint #1); cl::getRegisteredOptions() +
+// getNumOccurrences() + printOptionValue() is the public, read-only
+// introspection surface, so this stays target-owned.
+//
+// Why the PassConfig seat and not the TM constructor: TargetOptions are
+// final at TM creation, but tools speculatively create targets; the
+// PassConfig seat is where all pipeline law already lives (peer idiom:
+// every other Haydn pipeline invariant), and it fires strictly before the
+// common-tail writer block (see addPreEmitPass comment for the ordering
+// proof), so rejection precedes any writer pass construction.
+//
+// Deliberate exclusions (scope boundary is itself law):
+//  - static-data splitting (-split-static-data / partition-static-data
+//    sections): data-section-only, cannot change executable layout
+//    (contracts/pipeline.md common tail).
+//  - -basic-block-address-map alone: metadata-only, contract-admitted.
+//  - disable/no-op spellings (-enable-machine-outliner=never,
+//    -basic-block-sections=none, =false values): admitted, so shared
+//    multi-triple command lines that globally pass a disable spelling keep
+//    working on Haydn. This seat rejects ENABLE requests only.
+//
+// -run-pass/-start-after/-stop-after carve-outs never invoke
+// addMachinePasses, hence never this seat — the same carve-out shape the
+// D1.13 freeze seat documents. Product pipelines are never limited, and a
+// carve cannot contain these writers anyway (they are only ever added by
+// the full common tail), so the carve-out cannot mask this wall.
+//
+// Residual: a future Haydn new-PM CodeGenPassBuilder entry would need the
+// same predicate at its addPreEmitPass hook; every reachable Haydn pipeline
+// today (llc legacy, clang legacy addPassesToEmitFile, C API) is guarded.
+//===----------------------------------------------------------------------===//
+static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM) {
+  // Stable diagnostic family; GenCrashDiag=false so the process exits 1
+  // with the "LLVM ERROR:" prefix (plain `not llc` arm) rather than
+  // aborting — the HaydnLateConvergence/VerifyBundles diagnostic idiom.
+  auto Reject = [](const char *What) {
+    report_fatal_error(Twine("Haydn: unsupported forced common-tail writer: ") +
+                           What,
+                       /*GenCrashDiag=*/false);
+  };
+
+  // (1) BasicBlockSections: the TM bit covers every enable spelling
+  // (-basic-block-sections=... via llc CommandFlags, clang
+  // -fbasic-block-sections, C API). None = not requested; admitted.
+  if (TM.getBBSectionsType() != BasicBlockSection::None)
+    Reject("basic-block-sections (-basic-block-sections=/-fbasic-block-sections) "
+           "is not qualified for the one-commit Format E packet lifecycle "
+           "(contracts/pipeline.md common tail; GR2.3)");
+
+  // The llc-only hidden static flags are file-static in generic CodeGen;
+  // cl::getRegisteredOptions() is the public read-only way to reach them.
+  // getNumOccurrences() is the occurred gate (an untouched option prints
+  // its default and must never reject); printOptionValue() classifies the
+  // requested value. Pinned printed forms (gr23 lit test):
+  //   RunOutliner enum : "= always" | "= never" | "= optimistic-pgo" |
+  //                      "= conservative-pgo" | "= *unknown option value*"
+  //                      (the last is the untouched default; a bare
+  //                      ValueOptional occurrence prints "always")
+  //   bool flag        : "= 1" | "= 0"
+  // printOptionValue writes to llvm::outs() (Support offers no stream
+  // parameter and no public buffer swap), so the value is captured by
+  // redirecting fd 1 to a scratch file for the call only. This is the same
+  // sink -print-all-options uses; the redirect is local, restored on every
+  // path, and never spans user-visible output (outs() is flushed around
+  // the swap).
+  auto PrintedFlagValue = [](StringRef Name, SmallVectorImpl<char> &Out) {
+    auto It = cl::getRegisteredOptions().find(Name);
+    if (It == cl::getRegisteredOptions().end())
+      return false;
+    cl::Option *O = It->second;
+    if (O->getNumOccurrences() == 0)
+      return false;
+    llvm::outs().flush();
+    fflush(stdout);
+    int SavedFD = dup(STDOUT_FILENO);
+    if (SavedFD < 0)
+      return false;
+    char Scr[] = "/tmp/haydn-gr23-optval-XXXXXX";
+    int ScrFD = mkstemp(Scr);
+    if (ScrFD < 0) {
+      close(SavedFD);
+      return false;
+    }
+    dup2(ScrFD, STDOUT_FILENO);
+    O->printOptionValue(O->getOptionWidth(), /*Force=*/true);
+    llvm::outs().flush();
+    fflush(stdout);
+    dup2(SavedFD, STDOUT_FILENO);
+    close(SavedFD);
+    off_t Len = lseek(ScrFD, 0, SEEK_CUR);
+    if (Len > 0) {
+      lseek(ScrFD, 0, SEEK_SET);
+      Out.resize(Len);
+      ssize_t Read = read(ScrFD, Out.data(), Len);
+      Out.resize(Read > 0 ? Read : 0);
+    }
+    close(ScrFD);
+    unlink(Scr);
+    return true;
+  };
+
+  SmallString<128> Printed;
+
+  // (2) MachineOutliner. TM bit (clang -moutline via -mllvm, C API
+  // LLVMSetTargetMachineMachineOutliner) OR the llc hidden static flag
+  // with an enable value. TargetDefault/never/absent are admitted.
+  if (TM.Options.EnableMachineOutliner)
+    Reject("machine-outliner (-enable-machine-outliner/-moutline) is not "
+           "qualified for the one-commit Format E packet lifecycle "
+           "(contracts/pipeline.md common tail; GR2.3)");
+  Printed.clear();
+  if (PrintedFlagValue("enable-machine-outliner", Printed)) {
+    // "= never" and the untouched "= *unknown option value*" default are
+    // disable/no-request spellings; everything else (always /
+    // optimistic-pgo / conservative-pgo, including the bare sentinel
+    // print) is an enable request.
+    StringRef V(Printed.data(), Printed.size());
+    bool IsNever = V.contains("= never");
+    bool IsUnknownDefault = V.contains("*unknown option value*");
+    if (!IsNever && !IsUnknownDefault)
+      Reject("machine-outliner (-enable-machine-outliner/-moutline) is not "
+             "qualified for the one-commit Format E packet lifecycle "
+             "(contracts/pipeline.md common tail; GR2.3)");
+  }
+
+  // (3) MachineFunctionSplitter. TM bit (-split-machine-functions via llc
+  // CommandFlags, clang -fsplit-machine-functions) OR the llc hidden
+  // static flag -enable-split-machine-functions with a true value.
+  if (TM.Options.EnableMachineFunctionSplitter)
+    Reject("machine-function-splitter "
+           "(-enable-split-machine-functions/-split-machine-functions/"
+           "-fsplit-machine-functions) is not qualified for the one-commit "
+           "Format E packet lifecycle (contracts/pipeline.md common tail; "
+           "GR2.3)");
+  Printed.clear();
+  if (PrintedFlagValue("enable-split-machine-functions", Printed)) {
+    // bool flag: "= 1" is enable; "= 0" is an explicit disable, admitted.
+    StringRef SV(Printed.data(), Printed.size());
+    if (SV.contains("= 1"))
+      Reject("machine-function-splitter "
+             "(-enable-split-machine-functions/-split-machine-functions/"
+             "-fsplit-machine-functions) is not qualified for the one-commit "
+             "Format E packet lifecycle (contracts/pipeline.md common tail; "
+             "GR2.3)");
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Haydn codegen pass pipeline (execution order). Every Haydn pass has a
@@ -499,9 +663,13 @@ void HaydnPassConfig::addPreSched2() {
   // AIE2 always runs PostRA for bundle/NoOp correctness (incl. O0).
   // targetSchedulesPostRAScheduling skips the duplicate upstream slot.
   // CopyConstrain is pre-RA only (AIE CopyConstrain placement).
-  // Generic PostMachineScheduler still quality-skips optnone (no reorder);
-  // plain O0 without optnone still enters the post-RA pack path first and may
-  // form multi-MI full-fill packs for independent ops.
+  // GR2.4: HaydnSubtarget::forcePostRAScheduling() makes this one invocation
+  // mandatory for EVERY function, including optnone — scheduling and its
+  // sequential singleton fallback commit are legal-encode ownership, not
+  // reorder quality. optnone bodies may still co-issue independent ops like
+  // plain O0; the only remaining non-entries are the explicit
+  // -enable-post-ra-machine-sched=false product flag and pipeline truncation
+  // (-stop-after/-run-pass).
   addPass(&PostMachineSchedulerID);
   // W68.2 S2: second invocation of the SAME scheduler implementation,
   // flag-gated. S1 (above) scheduled the function and recorded per-MI
@@ -516,17 +684,19 @@ void HaydnPassConfig::addPreSched2() {
   // emit bare LUI+ADDI32_W+JALR_W (insertIndirectBranch); addPreEmitPass
   // re-runs the same Finalize+Verify after BR so those parcels commit.
   addPass(createHaydnLatencyStallsPass());
-  // After scheduling (or after an optnone skip), wrap remaining standalone
-  // MIs as singleton BUNDLEs and stamp generated Format E members
-  // (AIE2TargetMachine.cpp:242-244 createAIEFinalizeBundle;
-  // AIEFinalizeBundle.cpp:40-59). Multi-MI already
+  // After scheduling, wrap remaining standalone MIs as singleton BUNDLEs and
+  // stamp generated Format E members (AIE2TargetMachine.cpp:242-244
+  // createAIEFinalizeBundle; AIEFinalizeBundle.cpp:40-59). Multi-MI already
   // stamped in HaydnPostRASchedStrategy::finalizeLegalMultiMI. Finalize and
   // Verify never call skipFunction: they are target-local no-reorder commit
   // ownership so product emission never sees uncommitted bare encode MIR.
   // Do not reopen skipFunction on Finalize/Verify.
-  // Plain O0 (no optnone) keeps any multi-MI packs from postmisched; optnone
-  // is no-reorder singleton commit only. Leave only committed Format-E cycles
-  // for MC (underfill/top-pad invent stays fail-closed when golden is silent).
+  // GR2.4: with forcePostRAScheduling() the scheduler has already committed
+  // every function incl. optnone; Finalize owns only true residual commits
+  // (e.g. late BranchRelaxation insertIndirectBranch parcels re-committed by
+  // the addPreEmitPass re-run). VerifyBundles' optnone bare-encode refusal is
+  // unchanged. Leave only committed Format-E cycles for MC (underfill/top-pad
+  // invent stays fail-closed when golden is silent).
   addPass(createHaydnFinalizeBundlePass());
   // Fail-closed committed-cycle verifier immediately after finalize
   // (AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction peer; AIE finalize
@@ -542,6 +712,19 @@ void HaydnPassConfig::addBlockPlacement() {
 }
 
 void HaydnPassConfig::addPreEmitPass() {
+  // GR2.3 fail-closed wall: reject any request for an unsupported
+  // executable common-tail writer BEFORE the common tail can add it.
+  // TargetPassConfig::addMachinePasses invokes addPreEmitPass strictly
+  // before its own writer block (MachineOutliner, MachineFunctionSplitter,
+  // static-data splitting, BasicBlockSections) and before addPostBBSections
+  // (TargetPassConfig.cpp addPreEmitPass call -> writer passes ->
+  // addPostBBSections -> addPreEmitPass2), so a rejection here fires at
+  // pipeline construction: no outlining/splitting/reordering MI is ever
+  // created, and nothing unqualified ever reaches the S2 closure, the
+  // addPostBBSections closure Finalize/Verify, or the addPreEmitPass2
+  // freeze verifier. contracts/pipeline.md common tail: "A configuration
+  // requesting an unsupported executable common-tail writer rejects."
+  haydnRejectUnsupportedCommonTailWriters(getHaydnTargetMachine());
   // AIE PreEmit is empty (AIE2TargetMachine.cpp:88;
   // AIEBaseTargetMachine.cpp:388) — AIE has no BranchRelaxation. Haydn
   // keeps BR after the first commit (Format E simm fields).

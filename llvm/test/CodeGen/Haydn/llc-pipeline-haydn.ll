@@ -119,7 +119,9 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Haydn Bundle Finalization
 ; O0:      PostRA Machine Instruction Scheduler
 ; LatencyStalls then first Finalize/Verify (one commit+verify lane;
-; never skipFunction). postmisched may quality-skip optnone only.
+; never skipFunction). Since GR2.4 postmisched never skips optnone either
+; (HaydnSubtarget::forcePostRAScheduling; the only non-entry is the explicit
+; -enable-post-ra-machine-sched=false product flag).
 ; No Finalize/Verify before PostRA (no pre-RA bundle identity).
 ; O0-NEXT:      Haydn Exposed-Pipeline Latency Stalls
 ; O0-NEXT:      Haydn Bundle Finalization

@@ -5,9 +5,11 @@
 ; CSRR, MAC) must not be read in the next bundle. HaydnLatencyStalls is the
 ; addPreSched2 correctness net / auditor (before first Finalize):
 ;
-;   * plain -O0 without optnone still runs postmisched + Finalize; optnone
-;     skips postmisched only and Finalize forms no-reorder singleton commits.
-;     LatencyStalls is the Data_Latency net in both shapes.
+;   * plain -O0 without optnone still runs postmisched + Finalize; since
+;     GR2.4 optnone runs postmisched too (forcePostRAScheduling) and the
+;     scheduler commits singleton/co-issue packets itself; Finalize keeps
+;     only true residuals. LatencyStalls is the Data_Latency net in both
+;     shapes.
 ;   * at -O1+ schedulers already see architectural load→use latency 2 and
 ;     should leave empty cycles; the pass remains a late-mutation auditor
 ;     and still inserts if anything reorders into a latency window

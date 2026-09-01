@@ -705,7 +705,11 @@ MachineSchedulerPass::run(MachineFunction &MF,
 }
 
 bool PostMachineSchedulerLegacy::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
+  // A subtarget that owns packet legality/commit in its post-RA scheduler
+  // cannot tolerate the optnone/bisect quality skip: force the run. Mirrors
+  // the new-PM PostMachineSchedulerPass, which never calls skipFunction.
+  bool SchedulingRequired = MF.getSubtarget().forcePostRAScheduling();
+  if (!SchedulingRequired && skipFunction(MF.getFunction()))
     return false;
 
   if (EnablePostRAMachineSched.getNumOccurrences()) {

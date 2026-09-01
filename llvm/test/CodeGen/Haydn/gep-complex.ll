@@ -152,16 +152,21 @@ define i32 @gep_in_loop(ptr %arr, i32 %n) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; move32 r4, r3 }
+; GR2.1 Kind-A restamp: loop pipelines (guarded 2-stage peel; kernel packs
+; {add32 + IV bump} then {move32 + slt32}); epilog adds the tail.
+; CHECK-NEXT:    { addi32 r3, r0, 0; addi32 r5, r0, 2 }
+; CHECK-NEXT:    { slt32 r6, r2, r5; addi32 r4, r3, 1 }
+; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; bnez r6, .LBB7_2 }
 ; CHECK-NEXT:  .LBB7_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
-; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { nop; add32 r3, r3, r5; slt32 r6, r4, r2 }
-; CHECK-NEXT:    { nop; bnez r6, .LBB7_1 }
-; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { nop; move32 r1, r3 }
+; CHECK-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
+; CHECK-NEXT:    { add32 r3, r3, r5; addi32 r4, r4, 1 }
+; CHECK-NEXT:    { nop; move32 r5, r6; slt32 r7, r4, r2 }
+; CHECK-NEXT:    { nop; bnez r7, .LBB7_1 }
+; CHECK-NEXT:  .LBB7_2:
+; CHECK-NEXT:    { nop; add32 r1, r3, r5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

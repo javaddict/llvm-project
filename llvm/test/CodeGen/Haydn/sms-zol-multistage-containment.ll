@@ -13,7 +13,7 @@
 ; crosses RA (D493); the F41 knob at 1 restores the historic refuse
 ; (pinned by the CONTAINED arm of sms-f41-containment-product-pin.ll).
 
-; SWP: SMS-HANDOFF: metrics-only freeze
+; SWP: SMS-HANDOFF: coverage ok
 ; SWP-DAG: Schedule Found? 1
 ; SWP-DAG: SMS-SHOULDUSE: accept stages={{[2-9]}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
 ; SWP-NOT: SMS-SHOULDUSE: reject multi-stage

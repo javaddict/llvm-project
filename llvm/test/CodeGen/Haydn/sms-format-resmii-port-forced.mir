@@ -5,36 +5,24 @@
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=HANDOFF
 # REQUIRES: asserts
 
-# Role: MIR — Port-forced ResMII ≥ 2 pin (HaydnResourceCycle SMS path): Three independent ADD32 (1W each) pack under Full format in one issue.
+# Role: MIR — GR2.1 Kind-A ResMII pin: three independent ADD32 (1W each) now
+# pack in ONE pre-RA modulo cycle (IssueWidth cap = E3 entry capacity = 3); the
+# GPR 2W port budget no longer binds the pre-RA MII (exact ports are post-RA).
 
-# Port-forced ResMII ≥ 2 pin (HaydnResourceCycle SMS path):
-#   Three independent ADD32 (1W each) pack under Full format in one issue
-#   cycle (format greedy = exhaustive = 1, overestimate = 0). GPR write pool
-#   is 2W, so ResourceCycle / calculateResMIIDFA (MI path) must open a second
-#   modulo cycle — Return Res MII ≥ 2. Format-only SMS-RESMII oracle stays
-#   clean; ports alone force the bound.
-#
-#   ZOL form (LoopStart + PseudoLoopEnd) keeps the body to the three ALU ops
-#   so format packing is not polluted by SLT/IV compare. Schedule acceptance
-#   (shouldUseSchedule / min trip) is out of scope for this ResMII pin.
-#
-# Companion: sms-format-resmii.mir (accept overestimate=0),
-# sms-format-resmii-overestimate-reject.mir (positive fail-close),
-# sms-format-resmii-move32-port.mir (MOVE32-class MI-vs-desc differential).
-# Unit peer: HaydnBundleTest sequentialPortAwareCycleCount 3×1W → 2.
+# Kind-A restamp: 3 independent ADD32 fit one issue cycle (3 entries), so
+# Return Res MII == 1. Post-RA packing still pays the GPR 2W law (cycle-slip),
+# which is the post-RA scheduler's business, never a pre-RA MII input.
+#   ZOL form keeps the body to the three ALU ops; schedule acceptance is out
+#   of scope for this ResMII pin.
+# Companion: sms-format-resmii.mir, sms-format-resmii-move32-port.mir.
+# Unit peer: HaydnIssueWidthCycleTest.PacksExactlyIssueWidthThenRejects.
 #
 # PORT-NOT: SMS-HOOK: reject
-# PORT-NOT: SMS-RESMII: reject
 # PORT-NOT: SMS-HANDOFF: reject
 # PORT-NOT: Unable to analyzeLoop
-# Format-only packing: one cycle; zero SMS-RESMII overestimate.
-# PORT: SMS-RESMII: body_ops=3 greedy=1 exhaustive=1 overestimate=0
-# Qual-kernel is format-coissue packable (exact_packable=1); ports force DFA
-# ResMII ≥ 2 without failing HANDOFF metrics-only freeze.
-# PORT: SMS-HANDOFF: metrics-only freeze
-# PORT: SMS-HANDOFF: qual-kernel body_ops=3 coissue_packable=1 exact_packable=1 exhaustive=1
-# Ports force ResMII above format-only (2W pool / 3 writes).
-# PORT: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+# PORT: SMS-HANDOFF: coverage ok
+# Kind-A: 3 ADD32 pack in one cycle (IssueWidth cap; no port budget pre-RA).
+# PORT: Return Res MII:1
 
 --- |
   define void @sms_port_forced_resmii(i32 %n, i32 %a, i32 %b, i32 %c) #0 {

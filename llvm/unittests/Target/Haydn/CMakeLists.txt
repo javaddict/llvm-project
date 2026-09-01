@@ -39,6 +39,7 @@ add_llvm_target_unittest(HaydnTests
   HaydnHazardRecognizerTest.cpp
   HaydnInterBlockEdgesTest.cpp
   HaydnIntraCycleRAWTest.cpp
+  HaydnIssueWidthCycleTest.cpp
   HaydnIntraCycleWAWTest.cpp
   HaydnLaneStoreFoldTest.cpp
   HaydnLibcallNamesTest.cpp

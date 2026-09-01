@@ -45,9 +45,12 @@ exit:
 ; Default-off packing: S1-only product path (no experimental S2).
 ; OFF-LABEL: reopen_kernel:
 ; OFF: { nop; xor32 r0, r0, r0 }
-; OFF: { addi32 r1, r1, 4; ld32 r5, r1, 0 }
-; OFF: { nop; addi32 r4, r0, 0 }
-; OFF: { addi32 r6, r6, 1; ld32 r7, r1, 0 }
+; GR2.1 Kind-A restamp: software-pipelines (guarded peel; kernel packs
+; {add32+ld32}, {mull+IV}, {s_lw}, {add32+IV}, {slt+move}).
+; OFF: { slt32 r12, r3, r7; ld32 r5, r1, 0 }
+; OFF: { addi32 r1, r1, 4; addi32 r6, r4, 1 }
+; OFF: { add32 r7, r5, r7; ld32 r12, r1, 0 }
+; OFF: { mull r5, r7, r5; addi32 r6, r6, 1 }
 ; OFF: jalr
 
 ; Opt-in S2 is verify-clean and still jalr-terminated. Packing may differ

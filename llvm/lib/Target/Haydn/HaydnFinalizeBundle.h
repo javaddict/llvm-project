@@ -24,8 +24,9 @@
 // (PackLegality rule 3). Named-SFR writers and GPR dual-write still refuse.
 // Reloc leftover CSR stays FieldSlot.
 //
-// Never calls skipFunction: target-local no-reorder commit for remaining
-// bare MIs (including when PostMachineScheduler quality-skips optnone).
+// Never calls skipFunction: target-local no-reorder residual commit for
+// remaining bare MIs (since GR2.4 PostMachineScheduler itself runs for
+// optnone; Finalize owns true residuals such as late BR parcels).
 //
 // Pipeline:
 //   * addPreSched2 after PostMachineScheduler (AIE2TargetMachine.cpp:242-244)

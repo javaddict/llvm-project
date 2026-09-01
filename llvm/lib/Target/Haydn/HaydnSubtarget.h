@@ -127,6 +127,16 @@ public:
   // on the default AND of enableMachineScheduler && enablePostRAScheduler.
   bool enablePostRAMachineScheduler() const override { return true; }
 
+  // GR2.4: the post-RA pack owner is legal-encode ownership at every opt
+  // level, including optnone (contracts/pipeline.md addPreSched2;
+  // topics/scheduling/TOPIC.md "mandatory at O0, O2, and optnone").
+  // Scheduling and its sequential singleton fallback commit are mandatory for
+  // every function; FinalizeBundle keeps only true residual commits.
+  // AIEBaseSubtarget.h:99 peer. The only remaining non-entries are the
+  // explicit -enable-post-ra-machine-sched=false product flag and pipeline
+  // truncation (-stop-after/-run-pass), never optnone.
+  bool forcePostRAScheduling() const override { return true; }
+
   // Track register pressure even in small regions (AIE / RISCV pattern).
   // Stock LLVM signature uses SchedRegion (not bare NumRegionInstrs).
   void overrideSchedPolicy(MachineSchedPolicy &Policy,

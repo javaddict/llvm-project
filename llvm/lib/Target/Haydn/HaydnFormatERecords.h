@@ -16,7 +16,10 @@
 //     [--json PATH --xlsx PATH --canonical-vectors PATH]
 //   ninja HaydnFormatERecordsCheck
 // --check fail-closes on generated-file drift, XLSX↔JSON type-layout parity,
-// td-vs-golden imm width/signedness, and canonical-vector ledger round-trip.
+// td-vs-golden imm width/signedness, canonical-vector ledger round-trip, and
+// the universal singleton-coverage ratchet (PIPE-20: every compiler-reachable
+// logical must peel to a catalog alt span; the census runs in BOTH emit and
+// --check modes, HaydnFormatERecordsTest is the always-on runtime layer).
 // It does not drive llvm-mc.
 //
 //===----------------------------------------------------------------------===//
@@ -56,6 +59,12 @@ namespace format_e {
 #include "HaydnGenFormatERecords.inc"
 
 #define GET_FORMAT_E_ALTERNATIVES
+#include "HaydnGenFormatERecords.inc"
+
+// Universal singleton coverage (PIPE-20 / GR2.2): inert per-logical
+// NOP-completed mode proof + the empty uncovered ratchet set. Nothing in
+// a product pass consumes it; HaydnFormatERecordsTest pins the rows.
+#define GET_FORMAT_E_SINGLETON_COVERAGE
 #include "HaydnGenFormatERecords.inc"
 
 #define GET_FORMAT_E_INVERSE

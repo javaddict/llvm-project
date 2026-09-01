@@ -70,18 +70,20 @@ Pipeline ownership anchors (current implementation)
 | T7-ALIGN schema tip-reconcile | productVLIWFormatForRow PacketFormats full-cover only; no empty-cover / cross-row; no suffix discovery | HaydnBundlePlan.h; HaydnBundle.h getFormatOrNull |
 | P19 CMake leftover closed | Haydn/CMakeLists.txt golden-dir is env/-D only; banned plans-tree path gone; no home-directory discovery; skip if unset | llc-pipeline-haydn.ll CMAKE |
 | Callback-local repair residual | T4 ordinary / T3 inverse — not a second format pipeline | contracts/pipeline.md lifecycle gap |
-| skipFunction = optnone / pass gate | Pass.cpp FunctionPass::skipFunction | authority-o0-vs-optnone-commit.ll SKIP-OPTNONE |
+| GR2.4 postmisched mandatory for optnone (forcePostRAScheduling) | TargetSubtargetInfo.h defaulted virtual + MachineScheduler.cpp guard; HaydnSubtarget override true (legacy-only seam; new-PM never skipped) | gr24-optnone-mandatory-sched.ll POST-*; authority-o0-vs-optnone-commit.ll SKIP-OPTNONE/PACK |
+| skipFunction = optnone / pass gate (residual: LateConvergence S2 driver only) | Pass.cpp FunctionPass::skipFunction; HaydnLateConvergence.cpp | late-convergence-loop.ll DBG-NOT |
 | LatencyStalls never skipFunction | HaydnLatencyStalls.cpp::runOnMachineFunction | latency-stalls.ll |
 | Plain O0 commits Format-E BUNDLE (row+completion) | postmisched + finalize path | authority-o0-vs-optnone-commit.ll PLAIN |
-| optnone also commits Format-E BUNDLE (no-reorder) | finalize no-skip path | authority-o0-vs-optnone-commit.ll OPT + ASM |
-| optnone bare after postmisched (quality skip) | PostMachineScheduler skipFunction | authority-o0-vs-optnone-commit.ll SKIP-OPTNONE/PACK |
+| optnone also commits Format-E BUNDLE (mandatory scheduler singleton fallback + Finalize residual) | forcePostRAScheduling scheduler commit; Finalize no-skip residual | gr24-optnone-mandatory-sched.ll VERIFY-*; authority-o0-vs-optnone-commit.ll OPT + ASM |
+| GR2.4 optnone scheduler-committed identity at postmisched (dependent = generated members; independent = co-issue root) | PostMachineScheduler leaveRegion/leaveMBB | gr24-optnone-mandatory-sched.ll POST-O0/POST-O2 |
 | Indep multi plain postmisched members + Finalize wrap | postmisched setDesc members; Finalize singleton BUNDLE wrap; do not force-coissue | authority-o0-vs-optnone-commit.ll PACK/PLAIN indep_plain |
 | W51 one commit site (applyBundles funnel) | commitOneProductCycle = canCoissue + commitExact; as-is members kept | authority-o0-vs-optnone-commit.ll PACK; postmisched-exact-nosplit-pre-handoff.ll POST |
 | Postmisched may stamp generated members; Finalize wraps remaining encode MIs | leaveMBB materialize + Finalize no-skip (no force-coissue) | optnone-skip-policy.ll POST-O0/PLAIN-O0 |
 | GA-INFRA-4 MOVE32 per-field ports (no MI dedup) | countGPRPorts / countDRPorts / countARPorts / countSFRPorts | postmisched-move32-per-field-ports.mir |
 | W51 generated E2/E3 entry capacity | bundleRowEntryCount from registry row descriptor | HaydnBundleFormatSolver.h; no E2=2/E3=3 literals in commit/verify |
-| Indep multi optnone sequential singleton commit | Finalize no-reorder (quality skip of postmisched) | authority-o0-vs-optnone-commit.ll PLAIN/OPT indep_optnone |
-| Multi-op plain O0 / optnone both commit only | Finalize no-reorder + Verify bare ban | authority-o0-vs-optnone-commit.ll multi_*/indep_* |
+| GR2.4 indep multi optnone scheduler co-issue root (matches plain) | PostMachineScheduler exact commit (not Finalize) | authority-o0-vs-optnone-commit.ll PLAIN/OPT indep_optnone; gr24-optnone-mandatory-sched.ll |
+| GR2.4 optnone interblock registry cleared at S1 destructor (freeze no-fatal) | HaydnPostRASchedStrategy dtor hasOptNone condition | gr24-optnone-mandatory-sched.ll IB |
+| Multi-op plain O0 / optnone both commit only | mandatory scheduler + Finalize residual + Verify bare ban | authority-o0-vs-optnone-commit.ll multi_*/indep_* |
 | Mixed BUNDLE + bare encode refuse (all funcs) | HaydnVerifyBundles HasCommittedCycle gate | authority-o0-vs-optnone-commit.ll PLAIN-NOT bare |
 | Singleton/no-reorder completion is full-slot architectural NOP pad (AllEntriesReal; not underfill invent) | Finalize/Verify/AsmPrinter AllEntriesReal path | authority-o0-vs-optnone-commit.ll BUNDLE 0, 0 |
 | Full-fill multi-MI is product-legal (not invent) | AllEntriesReal completion | authority-o0-vs-optnone-commit.ll BUNDLE 0, 0 |

@@ -1377,36 +1377,54 @@ bool llvm::demoteHardwareLoopToSoftware(
       // (HaydnFrameLowering::processFunctionBeforeFrameFinalized — frame
       // deadline: no post-PEI CreateStackObject). Same word-aligned simm6
       // element law either way.
-      const int PostRASaveFI = FuncInfo->getPostRAScratchFI();
-      if (PostRASaveFI >= 0 && PostRASaveFI != StackCounterFI) {
-        SaveFI = PostRASaveFI;
-      } else {
-        SaveFI = FuncInfo->getHwLoopDemoteSaveFI();
-        if (SaveFI < 0) {
-          // Fail closed: the pre-PEI reservation should have covered every
-          // function whose hwloop setup survived to this post-RA pass.
-          // Reaching here means a setup opcode appeared after frame
-          // finalization — a pipeline-contract violation, not a slot miss.
-          report_fatal_error(
-              "Haydn: hwloop demote needs HwLoopDemoteSaveFI after frame "
-              "finalization (pre-PEI reservation missed a live setup)",
-              /*GenCrashDiag=*/false);
+      //
+      // GR2.1 fix: the save home is resolved and law-checked ONLY when a
+      // save/restore pair will actually be installed (SavePlacement !=
+      // NoSave, i.e. the latch scratch IS Prefer — the one window that
+      // destroys the value the exit must see). Every consumer below
+      // (preheader ST32, latch-end ST32, exit LD32) is guarded by the same
+      // placement; a demote whose latch scratch is a different register
+      // touches nothing near Prefer and must not be refused (or fatal) over
+      // a slot it never addresses. First live case: pre-RA Kind-A SMS on
+      // bqriir32x32_df1 — the prologue-peel grows Off1 past uimm6, demote
+      // picks a non-Prefer spill-free latch scratch, and the old
+      // unconditional check refused on the deeply negative PostRA offset
+      // (element outside simm6), leaving no legal compiler exit.
+      SavePlacement = demoteSavePlacement(LatchScr == Prefer,
+                                          PreferRedefinedInBody);
+      if (SavePlacement != HwLoopDemoteSaveKind::NoSave) {
+        const int PostRASaveFI = FuncInfo->getPostRAScratchFI();
+        if (PostRASaveFI >= 0 && PostRASaveFI != StackCounterFI) {
+          SaveFI = PostRASaveFI;
+        } else {
+          SaveFI = FuncInfo->getHwLoopDemoteSaveFI();
+          if (SaveFI < 0) {
+            // Fail closed: the pre-PEI reservation should have covered every
+            // function whose hwloop setup survived to this post-RA pass.
+            // Reaching here means a setup opcode appeared after frame
+            // finalization — a pipeline-contract violation, not a slot miss.
+            report_fatal_error(
+                "Haydn: hwloop demote needs HwLoopDemoteSaveFI after frame "
+                "finalization (pre-PEI reservation missed a live setup)",
+                /*GenCrashDiag=*/false);
+          }
         }
+        Register SaveFrameRegReg;
+        int64_t SaveOff = TFL->getFrameIndexReference(MF, SaveFI,
+                                                      SaveFrameRegReg)
+                              .getFixed();
+        if ((SaveOff % 4) != 0 || !isInt<6>(SaveOff / 4) ||
+            SaveFrameRegReg != FrameReg) {
+          LLVM_DEBUG(dbgs() << DebugPrefix
+                            << ": demote refused — save FI#" << SaveFI
+                            << " offset " << SaveOff
+                            << " not a word-aligned simm6 element on the "
+                               "counter frame register\n");
+          return false;
+        }
+        SaveFrameReg = SaveFrameRegReg;
+        SaveElem = SaveOff / 4;
       }
-      Register SaveFrameRegReg;
-      int64_t SaveOff = TFL->getFrameIndexReference(MF, SaveFI, SaveFrameRegReg)
-                            .getFixed();
-      if ((SaveOff % 4) != 0 || !isInt<6>(SaveOff / 4) ||
-          SaveFrameRegReg != FrameReg) {
-        LLVM_DEBUG(dbgs() << DebugPrefix
-                          << ": demote refused — save FI#" << SaveFI
-                          << " offset " << SaveOff
-                          << " not a word-aligned simm6 element on the "
-                             "counter frame register\n");
-        return false;
-      }
-      SaveFrameReg = SaveFrameRegReg;
-      SaveElem = SaveOff / 4;
       // CB-162/CB-165 value-preserve law. The save/restore pair exists to
       // return to the exit the value Prefer must carry OUT of the loop.
       // Two sound shapes:
@@ -1422,11 +1440,9 @@ bool llvm::demoteHardwareLoopToSoftware(
       // pair reloaded the preheader trip over a live loop-carried body def
       // (SMS epilogue value) — CB-165 (pr51581-2 -O2: c[N-1] = trip).
       // (HasImm forms have no live Prefer to preserve.)
-      // Placement is the pure unit decision demoteSavePlacement (gtest
-      // seam); this site only translates it into emits.
-      const bool LatchScrIsPrefer = LatchScr == Prefer;
-      SavePlacement = demoteSavePlacement(LatchScrIsPrefer,
-                                          PreferRedefinedInBody);
+      // Placement was decided above, before the save home was resolved
+      // (the home is only law-checked when a pair will be installed); this
+      // site only translates it into emits.
       if (!HasImm && SavePlacement == HwLoopDemoteSaveKind::PreheaderSave) {
         emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
                       [&](MachineInstrBuilder MIB) {

@@ -27,8 +27,9 @@
 # live-in excess; force keeps the pin schedule-shape stable.
 #
 # Companion accept: sms-format-resmii.mir / sms-format-qor-exit.ll
-# Companion HOOK/RESMII reject: sms-format-hook-reject.mir,
-#   sms-format-resmii-overestimate-reject.mir
+# Companion HOOK reject: sms-format-hook-reject.mir
+# (sms-format-resmii-overestimate-reject.mir deleted at GR2.1: the greedy-vs-
+#  exhaustive differential premise died with the Kind-A flip — no order trap.)
 # Never invents durable BUNDLE (HANDOFF metrics-only remains).
 
 # HC#0 II-retry (2026-08-28): shouldUseSchedule runs INSIDE the II
@@ -47,14 +48,12 @@
 # STAGE: SMS-SHOULDUSE: accept stages=1 II={{[1-9][0-9]*}}
 # STAGE: Schedule Found? 1 (II={{[1-9][0-9]*}})
 # STAGE-NOT: SMS-HOOK: reject
-# STAGE-NOT: SMS-RESMII: reject
 
 # PRESSURE: SMS-SHOULDUSE: reject pressure stages={{[1-9][0-9]*}} II={{[1-9][0-9]*}} (forced by -haydn-sms-force-pressure-reject)
 # PRESSURE: PPS-3: reject SMS (too much block pressure, stages={{[1-9][0-9]*}} II={{[1-9][0-9]*}})
 # PRESSURE: Target rejected schedule at II {{[1-9][0-9]*}}; continuing II search
 # PRESSURE: Schedule Found? 0 (II={{[1-9][0-9]*}})
 # PRESSURE-NOT: SMS-HOOK: reject
-# PRESSURE-NOT: SMS-RESMII: reject
 
 --- |
   define i64 @sms_shoulduse_multistage_mac(ptr nocapture readonly %a,

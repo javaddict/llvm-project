@@ -52,7 +52,7 @@ policy pins only.
 | Retained-loop incomplete LoopStart | G-HWLOOP-ROLE-A     | rejectIncompleteRoleA fatal    | hwloop-rolea-preflight-reject.mir (landed) |
 | Multi-BB TTI overlay; product OFF | G-MULTI-BB-HWLOOP    | innermost latch==exit accept   | hwloop-multibb.ll DEFAULT-NOT; HWON may SET |
 | Fixup range demote fatal     | G-HWLOOP-ROLE-A          | HaydnFixupHwLoops demote       | hwloop-demote-fatal-live.mir (landed)      |
-| O0 vs optnone ownership      | G-O0-EXACT-PIPELINE      | skipFunction + full-slot pad   | authority-o0-vs-optnone-commit.ll (landed) |
+| O0 vs optnone ownership      | G-O0-EXACT-PIPELINE      | full-slot pad; GR2.4 mandatory postmisched (forcePostRAScheduling) | authority-o0-vs-optnone-commit.ll + gr24-optnone-mandatory-sched.ll (landed) |
 | Residual SET_HWLOOP leftover | G-O0-EXACT-PIPELINE      | Expand/Verify residual scan    | vf5-residual-set-hwloop-ban.mir (landed)   |
 | Residual SETCBR leftover     | G-O0-EXACT-PIPELINE      | Expand/Verify residual scan    | vf5-residual-setcbr-ban.mir (landed)       |
 | Residual LOOPCTL leftover    | G-O0-EXACT-PIPELINE      | Verify residual scan           | vf5-residual-loopctl-ban.mir (landed)      |

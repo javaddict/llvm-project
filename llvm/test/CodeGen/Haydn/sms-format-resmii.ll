@@ -14,10 +14,9 @@
 ;   * HaydnResourceCycle same-cycle format + descriptor-derived port demand
 ;   * SMS-HOOK fail-closed for unsupported class-3 / operand-dependent cases
 ;     (ordinary countable loops remain analyzable — multi-cycle stages absent)
-;   * SMS-RESMII: calculateResMIIDFA still owns the SMS starting estimate; the
-;     target compares greedy vs exhaustive ≤3 format oracle and fail-closes on
-;     positive overestimate (see sms-format-resmii-overestimate-reject.mir).
-;     These bodies have overestimate=0. No shared MachinePipeliner rewrite.
+;   * GR2.1 Kind A: ResMII is calculateResMIIDFA over the IssueWidth cycle;
+;     the greedy-vs-exhaustive SMS-RESMII oracle is deleted (Kind A has no
+;     order trap). Port floors no longer bind pre-RA (see port-forced peer).
 ;   * Port-forced ResMII ≥ 2 pin: sms-format-resmii-port-forced.mir
 ;   * SMS-HANDOFF metrics-only freeze: analyzeLoop logs qual-kernel post-RA
 ;     packability; recordSuccessfulSMS stores scalar SWPS + durable groups.
@@ -32,21 +31,14 @@
 ; SMS-NOT: SMS-HOOK: reject
 ; SMS-NOT: unsupported SMS-HOOK resource class
 ; SMS-NOT: Unable to analyzeLoop
-; SMS-NOT: SMS-RESMII: reject
 ; SMS-NOT: SMS-HANDOFF: reject
 ; Both kernels remain analyzable; ResMII ≥ 2; SMS finds a schedule (II varies).
-; Zero SMS-RESMII overestimate (greedy ≡ exhaustive on qualification bodies).
-; SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
-; SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
-; SMS-DAG: SMS-HANDOFF: metrics-only freeze
-; SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
-; SMS-DAG: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+; GR2.1: coverage-ok is the only HANDOFF line (exact-pack gate deleted).
+; SMS-DAG: SMS-HANDOFF: coverage ok
+; SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
 ; SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
-; SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
-; SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
-; SMS-DAG: SMS-HANDOFF: metrics-only freeze
-; SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
-; SMS-DAG: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+; SMS-DAG: SMS-HANDOFF: coverage ok
+; SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
 ; SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
 
 ; Simple accumulation: analyzable; SMS finds a schedule at MII.

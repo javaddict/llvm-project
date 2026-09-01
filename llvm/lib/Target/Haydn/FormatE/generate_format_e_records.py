@@ -559,6 +559,75 @@ def mode_only_name_sets(cat: Catalog) -> Tuple[List[str], List[str]]:
     return e2_only, e3_only
 
 
+#//===---------------------------------------------------------------------===//
+# Universal singleton coverage (PIPE-20 schema seat)
+#//===---------------------------------------------------------------------===//
+#
+# Law: every compiler-reachable logical has generated singleton coverage —
+# at least one mode M and entry E where the logical owns >=1 generated
+# member AND the golden catalog hosts >=1 NOP member at the same (M, E)
+# window. One real child plus generated NOP completion fills a complete
+# admitted mode-M packet (E2 = 2 entries, E3 = 3), so RA always has a
+# sequential fallback without any matching frontier. NOP itself is exempt
+# from alt spans by construction (is_nop rows never enter cat.alternatives;
+# PIN_UNIQUE_NON_NOP=814 pins that) — its coverage is the NOP-completion
+# pin below, never a NOP row in alternatives.
+
+# Window modes that host >=1 NOP member (measured at golden v2_2: every
+# member-hosting (mode, entry) window hosts NOP; both modes admit the
+# architectural idle packet).
+def nop_completion_windows(cat: Catalog) -> Set[Tuple[str, int]]:
+    return {(m.mode, m.entry_idx) for m in cat.members if m.is_nop}
+
+
+def compute_singleton_coverage(
+    cat: Catalog,
+) -> Tuple[List[Tuple[str, int, int]], Set[str]]:
+    """Per-logical singleton proof rows + the uncovered set.
+
+    Returns ([("LOGICAL", ModeMask, FirstMemberId), …] sorted by logical,
+    {uncovered logicals}). ModeMask bit0 = E2, bit1 = E3 — a bit is set
+    when the logical has a member at some entry whose (mode, entry)
+    window also hosts a NOP member (NOP completion in the same packet).
+    FirstMemberId is the lowest covering MemberId. Fails closed when any
+    non-NOP catalog logical lacks a covering mode (catches golden growth:
+#   a new logical without NOP-completable placement is not admissible).
+    """
+    nop_windows = nop_completion_windows(cat)
+    cover: Dict[str, Tuple[int, int]] = {}
+    for rec in cat.members:
+        if rec.is_nop:
+            continue
+        if (rec.mode, rec.entry_idx) not in nop_windows:
+            continue
+        bit = 1 if rec.mode == "E2" else 2
+        prev = cover.get(rec.logical)
+        if prev is None:
+            cover[rec.logical] = (bit, rec.member_id)
+        else:
+            cover[rec.logical] = (prev[0] | bit, min(prev[1], rec.member_id))
+    uncovered = set(cat.alternatives) - set(cover)
+    if uncovered:
+        raise SystemExit(
+            "error: catalog logicals without NOP-completed singleton "
+            f"coverage ({len(uncovered)}): {sorted(uncovered)} — golden "
+            "growth must place every new logical in a NOP-hosting window"
+        )
+    rows = sorted(
+        (logical, mask, first) for logical, (mask, first) in cover.items()
+    )
+    return rows, set()
+
+
+def nop_completion_mode_mask(cat: Catalog) -> int:
+    """Modes hosting NOP members (bit0 = E2, bit1 = E3)."""
+    mask = 0
+    for rec in cat.members:
+        if rec.is_nop:
+            mask |= 1 if rec.mode == "E2" else 2
+    return mask
+
+
 def emit_records_inc(
     cat: Catalog, json_sha: str, xlsx_sha: str, family
 ) -> str:
@@ -805,6 +874,64 @@ def emit_records_inc(
         " FormatENonNopLogicalCount, \"alt span pin\");"
     )
     lines.append("#endif // GET_FORMAT_E_ALTERNATIVES")
+    lines.append("")
+
+    # Universal singleton coverage (PIPE-20 schema seat): per-logical
+    # NOP-completed mode proof. Inert generated data — no product pass
+    # consumes it; HaydnFormatERecordsTest pins the rows and the empty
+    # uncovered ratchet set. Same class as the mode-only name SETS
+    # (W44 / P18(c)): generators emit sets/proofs, never counts alone.
+    singleton_rows, _uncovered = compute_singleton_coverage(cat)
+    nop_modes = nop_completion_mode_mask(cat)
+    lines.append("#ifdef GET_FORMAT_E_SINGLETON_COVERAGE")
+    lines.append("#undef GET_FORMAT_E_SINGLETON_COVERAGE")
+    lines.append("struct FormatESingletonCoverageRec {")
+    lines.append("  const char *Logical;")
+    lines.append("  uint8_t ModeMask; // bit0=E2, bit1=E3 (NOP-completed)")
+    lines.append("  uint16_t FirstMemberId; // lowest covering member")
+    lines.append("};")
+    lines.append(
+        "static constexpr FormatESingletonCoverageRec"
+        " FormatESingletonCoverage[] = {"
+    )
+    for logical, mask, first in singleton_rows:
+        lines.append(
+            f'  {{"{c_escape(logical)}", 0b{mask:02b}u, {first}u}},'
+        )
+    lines.append("};")
+    lines.append(
+        f"static constexpr unsigned FormatESingletonCoverageCount ="
+        f" {len(singleton_rows)}u;"
+    )
+    lines.append(
+        "static_assert(sizeof(FormatESingletonCoverage) /"
+        " sizeof(FormatESingletonCoverage[0]) =="
+        " FormatESingletonCoverageCount, \"singleton coverage pin\");"
+    )
+    lines.append(
+        "static_assert(FormatESingletonCoverageCount =="
+        " FormatENonNopLogicalCount, \"singleton coverage covers every"
+        " non-NOP logical\");"
+    )
+    lines.append(
+        f"static constexpr uint8_t FormatENopCompletionModes ="
+        f" 0b{nop_modes:02b}u; // modes hosting architectural NOP members"
+    )
+    # Ratchet set: compiler-reachable logicals without catalog coverage.
+    # Monotone shrink only (same semantics as EXPECTED_SINGLETON_UNCOVERED
+    # in the census); EMPTY since installation — growth fails generation.
+    # The names live in the generator pin (a zero-size array is not valid
+    # C++); the generated constant is the count the unittest pins to 0.
+    lines.append(
+        f"static constexpr unsigned FormatESingletonUncoveredCount ="
+        f" {len(EXPECTED_SINGLETON_UNCOVERED)}u;"
+    )
+    lines.append(
+        "static_assert(FormatESingletonUncoveredCount == 0u,"
+        " \"singleton uncovered ratchet: compiler-reachable logicals"
+        " without coverage must stay pinned empty\");"
+    )
+    lines.append("#endif // GET_FORMAT_E_SINGLETON_COVERAGE")
     lines.append("")
 
     # Inverse table: sorted by (mode, entry, unit, type, opcode)
@@ -1408,6 +1535,11 @@ def emit_reloc_field_lsb_inc(cat: Catalog, json_sha: str, xlsx_sha: str, family)
 
 TD_OP_RE = re.compile(r"([A-Za-z0-9_]+):\$([A-Za-z0-9_]+)")
 TD_DEF_RE = re.compile(r"^def\s+([A-Za-z0-9_]+)\s*:")
+# Two-line def header (`def NAME\n    : Parent<…>;`): the parse-time regex
+# accepts an end-of-line terminator so the parent on the next line is seen.
+# (The MULTILINE collector regex at collect_td_def_names already handles
+# this shape via findall and must keep matching both spellings.)
+TD_DEF_TAIL_RE = re.compile(r"^def\s+([A-Za-z0-9_]+)\s*$")
 TD_CLASS_RE = re.compile(r"^class\s+([A-Za-z0-9_]+)\b")
 TD_PARENT_RE = re.compile(r":\s*([A-Za-z0-9_]+)\s*<")
 TD_LET_IN_RE = re.compile(r"\blet\b(.+)\bin\s*\{")
@@ -1433,6 +1565,147 @@ TD_LET_SEMI_RE = re.compile(r"\blet\s+([A-Za-z0-9_]+)\s*=\s*(.+?)\s*;")
 #     stores (rs_wb; ar_sel, rtd, rs), wbarwua (ar_sel, rs)); stride and
 #     dir_sel fold at ISel (golden: rs = rs+8, direction in rs[2:1]).
 EXPECTED_IDENTITY_DIVERGENT: frozenset = frozenset({})
+
+#//===---------------------------------------------------------------------===//
+# Universal singleton coverage census (compiler-reachable direction)
+#//===---------------------------------------------------------------------===//
+#
+# Contract (PIPE-20): every compiler-reachable TableGen instruction def —
+# Instruction-derived (lineage, not name), not isCodeGenOnly, not
+# isAsmParserOnly — maps through the ONE compiler peel law to a non-empty
+# catalog alt span, or sits in the pinned ratchet set below. A hand-added
+# logical escaping ExpandPseudos with no catalog span fails generation
+# here and the HaydnTests walk at build/test time — not as the post-RA
+# "no generated member" fatal (HaydnBundleVerify.cpp).
+#
+# The TD-name → catalog-logical normalization is pinned HERE (one seat,
+# extending td_logical_aliases in collect_member_to_logical). Each family
+# is mirrored by a peel-parity pin in HaydnFormatERecordsTest
+# (CompilerReachableLogicalsHaveSingletonCoverage) so this table and the
+# compiler's peelLogicalOpcodeName cannot drift silently: an alias added
+# to the C++ peel without this table fails this census closed, and vice
+# versa. Any def the table cannot map fails the census — never a silent
+# invented mapping.
+SINGLETON_PEEL_ALIASES: Dict[str, str] = {
+    # WIDE reloc spellings peel their trailing _W / _F2_W (StripWide).
+    "SET_HWLOOP_F2_W": "SET_HWLOOP_F2",
+    "WFITBDTBDTBD": "WFI<TBD>",
+}
+_SINGLETON_SUFFIX_PEELS: Tuple[Tuple[str, str], ...] = (
+    # Order mirrors peelLogicalOpcodeName: _M0S0LS-family strips first
+    # (looped), then _MSP, then PLDWWUA rename, then _W/_F2_W.
+    ("_M0S0LS", ""),
+    ("_M0S1LS", ""),
+    ("_M0S2LS", ""),
+    ("_M1S0LS", ""),
+    ("_M1S1LS", ""),
+    ("_M1S2LS", ""),
+)
+_SINGLETON_EXACT_PEELS: Dict[str, str] = {
+    # User LS spellings → catalog member logicals (one peel law).
+    "LD32": "S_LW_WITH_IMM",
+    "LD32_REG": "S_LW_WITH_REG",
+    "ST32": "S_SW_WITH_IMM",
+    "ST32_REG": "S_SW_WITH_REG",
+    "LD64": "D_LDW_WITH_IMM",
+    "LD64_REG": "D_LDW_WITH_REG",
+    "ST64": "D_SDW_WITH_IMM",
+    "ST64_REG": "D_SDW_WITH_REG",
+    "LD8": "S_LBS_WITH_IMM",
+    "LD8_REG": "S_LBS_WITH_REG",
+    "LDU8": "S_LBU_WITH_IMM",
+    "LDU8_REG": "S_LBU_WITH_REG",
+    "ST8": "S_SB_WITH_IMM",
+    "ST8_REG": "S_SB_WITH_REG",
+    "LD16": "S_LHWS_WITH_IMM",
+    "LD16_REG": "S_LHWS_WITH_REG",
+    "LDU16": "S_LHWU_WITH_IMM",
+    "LDU16_REG": "S_LHWU_WITH_REG",
+    "ST16": "S_SHW_WITH_IMM",
+    "ST16_REG": "S_SHW_WITH_REG",
+    "LD32_POST": "S_LW_POST_IMM",
+    "ST32_POST": "S_SW_POST_IMM",
+    "LD32_PRE": "S_LW_PRE_IMM",
+    "ST32_PRE": "S_SW_PRE_IMM",
+    "LD64_POST": "D_LDW_POST_IMM",
+    "ST64_POST": "D_SDW_POST_IMM",
+    "PLDWWUA": "PLDWWUA_POST",
+    # DR64-bank move family folds onto the sext catalog logical.
+    "SEXT_GPR32_TO_DR64": "SEXT32T64",
+    "MOV_GPR_TO_DR64": "SEXT32T64",
+    "MOVE_GPR_TO_DR64": "SEXT32T64",
+    "ZEXT_GPR32_TO_DR64": "SEXT32T64",
+    "RET": "JALR",
+    "WFI": "WFI<TBD>",
+}
+# NOP is exempt from alt spans by construction (is_nop rows never enter
+# cat.alternatives; PIN_UNIQUE_NON_NOP pins that boundary). Its coverage
+# is the NOP-completion law itself: NOP members exist in both modes, so
+# the idle parcel completes any singleton packet. The unittest pins that
+# fact directly (FormatENopCompletionModes == 0b11).
+SINGLETON_IDLE_PARCEL_EXEMPT: frozenset = frozenset({"NOP"})
+
+# Ratchet: compiler-reachable logicals still without catalog singleton
+# coverage. Monotone shrink only — a name leaving the set requires
+# re-pinning (smaller); any NEW name fails generation immediately in BOTH
+# emit and --check modes. EMPTY since installation (2026-08-31 GR2.2):
+# the measured residue over the five authored TD files + golden defs is
+# entirely alias spellings the one peel law maps.
+EXPECTED_SINGLETON_UNCOVERED: frozenset = frozenset({})
+
+
+def peel_logical_name(name: str) -> str:
+    """Python mirror of the compiler's peelLogicalOpcodeName for the
+    census residue only. Pinned families are exhaustive + fail-closed:
+    any def whose peeled name has no catalog span fails the census (never
+    silently maps). Each family carries a parity pin in
+    HaydnFormatERecordsTest so the two seats stay one law."""
+    base = SINGLETON_PEEL_ALIASES.get(name, name)
+    if name in SINGLETON_PEEL_ALIASES:
+        return base
+    # _M<n>S<m>LS occupancy-class strips (looped like the 3-pass C++ peel).
+    for _ in range(3):
+        before = base
+        for suf, _rep in _SINGLETON_SUFFIX_PEELS:
+            if base.endswith(suf):
+                base = base[: -len(suf)]
+        if base == before:
+            break
+    if base.endswith("_MSP"):
+        base = base[:-4]
+    if base == "PLDWWUA":
+        base = "PLDWWUA_POST"
+    if base.endswith("_F2_W"):
+        base = base[:-2]
+    elif base.endswith("_W"):
+        base = base[:-2]
+    if base in _SINGLETON_EXACT_PEELS:
+        return _SINGLETON_EXACT_PEELS[base]
+    return base
+
+
+def singleton_uncovered_census(
+    cat: Catalog,
+    logical_schemas: Dict[str, TDInstSchema],
+) -> List[str]:
+    """Sorted compiler-reachable def names with no catalog coverage.
+
+    Compiler-reachable = Instruction-lineage def, not isCodeGenOnly, not
+    isAsmParserOnly. NOP admits via the idle-parcel law; everything else
+    must peel to a non-empty cat.alternatives span or join the census.
+    """
+    alts = set(cat.alternatives)
+    uncovered: Set[str] = set()
+    for name, schema in logical_schemas.items():
+        if not schema.is_instruction:
+            continue
+        if schema.is_codegen_only or schema.is_asm_parser_only:
+            continue
+        if name in SINGLETON_IDLE_PARCEL_EXEMPT:
+            continue
+        if peel_logical_name(name) not in alts:
+            uncovered.add(name)
+    return sorted(uncovered)
 
 
 @dataclass
@@ -1461,6 +1734,11 @@ class TDInstSchema:
     implicit_uses: Tuple[str, ...] = ()
     is_codegen_only: int = 0
     is_asm_parser_only: int = 0
+    # Instruction-lineage (def's parent chain reaches the TableGen
+    # `Instruction` root). Operand/ImmLeaf defs (simm*, uimm*, brtarget,
+    # HaydnMem*) are NOT instructions; the singleton census excludes them
+    # by lineage, never by name.
+    is_instruction: bool = True
 
 
 def _strip_td_line(raw: str) -> str:
@@ -1617,6 +1895,7 @@ def _empty_schema_props() -> Dict[str, Any]:
 def parse_td_schemas(
     text: str,
     class_defaults: Optional[Dict[str, Dict[str, Any]]] = None,
+    class_parents: Optional[Dict[str, Optional[str]]] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, TDInstSchema]]:
     """Parse class defaults and named instruction schemas from TD text.
 
@@ -1624,7 +1903,9 @@ def parse_td_schemas(
     and class-default inheritance (one parent level, enough for the
     Haydn logical shells). class_defaults carries inherited class
     defaults across separately-parsed texts (caller compiles one
-    include-ordered unit); None starts fresh."""
+    include-ordered unit); None starts fresh. class_parents threads the
+    class→parent chain the same way so Instruction-lineage (vs Operand/
+    ImmLeaf defs) survives across per-file parse."""
     if class_defaults is None:
         class_defaults = {
             "Instruction": _empty_schema_props(),
@@ -1634,6 +1915,13 @@ def parse_td_schemas(
         class_defaults = dict(class_defaults)
         class_defaults.setdefault("Instruction", _empty_schema_props())
         class_defaults.setdefault("HaydnInst", _empty_schema_props())
+    # class → parent-name chain for Instruction-lineage resolution. The
+    # first parse (fresh None) seeds the root; a threaded map is mutated
+    # in place so every text in the include-ordered unit sees the chain.
+    if class_parents is None:
+        class_parents = {"Instruction": None}
+    else:
+        class_parents.setdefault("Instruction", None)
     schemas: Dict[str, TDInstSchema] = {}
     lines = [_strip_td_line(ln) for ln in text.splitlines()]
     depth = 0
@@ -1649,6 +1937,20 @@ def parse_td_schemas(
             merged.update(props)
         merged.update(pending_let)
         return merged
+
+    def is_instruction_class(name: str) -> bool:
+        # Lineage by class-parent chain rooted at `Instruction`. The
+        # class_defaults map keys every class seen in include order; a
+        # parent outside it (Operand, ImmLeaf roots in Target.td) is not
+        # an instruction — fail-closed to False, never a name guess.
+        seen: Set[str] = set()
+        cur: Optional[str] = name
+        while cur and cur not in seen:
+            seen.add(cur)
+            if cur == "Instruction":
+                return True
+            cur = class_parents.get(cur)
+        return False
 
     def take_header(start: int, first: str) -> Tuple[str, int]:
         buf = [first]
@@ -1696,6 +1998,16 @@ def parse_td_schemas(
             let_buf = []
         class_m = TD_CLASS_RE.match(ln.strip())
         def_m = TD_DEF_RE.match(ln.strip())
+        if def_m is None and i + 1 < n:
+            # Two-line def header: `def NAME` alone, parent on the next
+            # line. Only continue when the NEXT line actually opens a
+            # parent clause; otherwise fall through (blank/comment tails
+            # are not def headers).
+            tail_m = TD_DEF_TAIL_RE.match(ln.strip())
+            if tail_m and lines[i + 1].lstrip().startswith(":"):
+                def_m = re.match(
+                    r"^def\s+([A-Za-z0-9_]+)\s*:", ln.strip() + " :"
+                )
         if class_m:
             header, end_i = take_header(i, ln)
             parent_m = TD_PARENT_RE.search(header)
@@ -1717,6 +2029,7 @@ def parse_td_schemas(
             for sm in TD_LET_SEMI_RE.finditer(body):
                 props = _apply_td_props(props, {sm.group(1): sm.group(2)})
             class_defaults[class_m.group(1)] = props
+            class_parents[class_m.group(1)] = parent
             depth += header.count("{") - header.count("}")
             for raw in body_lines:
                 depth += raw.count("{") - raw.count("}")
@@ -1763,6 +2076,7 @@ def parse_td_schemas(
                 implicit_uses=tuple(props.get("implicit_uses") or ()),
                 is_codegen_only=int(props.get("is_codegen_only") or 0),
                 is_asm_parser_only=int(props.get("is_asm_parser_only") or 0),
+                is_instruction=is_instruction_class(parent),
             )
             pending_let = {}
             depth += header.count("{") - header.count("}")
@@ -1781,7 +2095,7 @@ def parse_td_schemas(
 
 def load_logical_schemas(
     td_dir: Path, extra_texts: Sequence[str]
-) -> Dict[str, TDInstSchema]:
+) -> Tuple[Dict[str, TDInstSchema], Dict[str, Optional[str]]]:
     texts: List[str] = []
     for fn in (
         "HaydnInstrFormats.td",
@@ -1799,12 +2113,14 @@ def load_logical_schemas(
     # defaults (HaydnPseudo isCodeGenOnly=1 lives in HaydnInstrFormats.td,
     # HaydnPseudos.td defs inherit it) must survive across per-file parse.
     # Thread one class_defaults map through every text so census exemptions
-    # see the same flags the real MCInstrDesc carries.
+    # see the same flags the real MCInstrDesc carries. class_parents rides
+    # the same thread for Instruction-lineage resolution.
     classes: Dict[str, Dict[str, Any]] = {}
+    parents: Dict[str, Optional[str]] = {"Instruction": None}
     for text in texts:
-        classes, found = parse_td_schemas(text, classes)
+        classes, found = parse_td_schemas(text, classes, parents)
         schemas.update(found)
-    return schemas
+    return schemas, parents
 
 
 def _td_op_is_reg(cls: str) -> bool:
@@ -5234,7 +5550,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # divergent census must only shrink; growth fails generation in BOTH
     # emit and --check modes.
     _m_classes, member_schemas = parse_td_schemas(members_td)
-    logical_schemas = load_logical_schemas(
+    logical_schemas, _logical_parents = load_logical_schemas(
         out_dir, [logical_defs_td] if logical_defs_td else []
     )
     census = identity_divergent_census(
@@ -5257,6 +5573,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(
             "note: setDesc identity ratchet: logicals now aligned (re-pin "
             f"the census): {sorted(fixed)}"
+        )
+    # Universal singleton coverage census (PIPE-20, GR2.2): every
+    # compiler-reachable logical must peel to a catalog alt span. Runs in
+    # BOTH emit and --check modes — the --check arm is the ratchet's
+    # regeneration gate; HaydnFormatERecordsTest is the always-on layer.
+    singleton_census = singleton_uncovered_census(cat, logical_schemas)
+    singleton_set = set(singleton_census)
+    if singleton_set - EXPECTED_SINGLETON_UNCOVERED:
+        raise SystemExit(
+            "error: compiler-reachable logicals without singleton "
+            f"coverage: {sorted(singleton_set - EXPECTED_SINGLETON_UNCOVERED)} "
+            "— add the catalog span or extend SINGLETON_PEEL_ALIASES / "
+            "peel_logical_name (and re-pin both seats + the unittest "
+            "parity rows); never let an unpeelable logical reach post-RA"
+        )
+    singleton_fixed = EXPECTED_SINGLETON_UNCOVERED - singleton_set
+    if singleton_fixed:
+        print(
+            "note: singleton coverage ratchet: logicals now covered "
+            f"(re-pin the census): {sorted(singleton_fixed)}"
         )
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical, family)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat, family)

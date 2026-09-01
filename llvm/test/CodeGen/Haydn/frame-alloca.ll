@@ -213,23 +213,29 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    .cfi_offset fp, -4
 ; CHECK-NEXT:    { slli32 r2, r1, 2; addi32 r3, r0, -8 }
 ; CHECK-NEXT:    { addi32 r4, r0, 1; addi32 r2, r2, 7 }
+; GR2.1 Kind-A restamp: the SET now issues after the size math with a guarded
+; peel (mull+move32 prelude); the ZOL kernel keeps {s_sw + mull} per iter.
 ; CHECK-NEXT:    { nop; max32 r4, r1, r4; and32 r2, r2, r3 }
-; CHECK-NEXT:    { set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r4; addi32 r2, r2, 7 }
+; CHECK-NEXT:    { addi32 r5, r0, 0; addi32 r2, r2, 7 }
+; CHECK-NEXT:    { and32 r2, r2, r3; addi32 r6, r0, 2 }
+; CHECK-NEXT:    { nop; slt32 r6, r4, r6; sub32 r2, sp, r2 }
 ; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
-; CHECK-NEXT:    { nop; sub32 r2, sp, r2 }
-; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; move32 sp, r2; move32 r4, r2 }
+; CHECK-NEXT:    { nop; addi32 r3, r4, -1 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3 }
+; CHECK-NEXT:    { nop; mull r4, r5, r5 }
+; CHECK-NEXT:    { nop; move32 r3, r2 }
+; CHECK-NEXT:    { move32 sp, r2; addi32 r5, r5, 1 }
+; CHECK-NEXT:    { nop; bnez r6, .LBB6_2 }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { nop; mull r5, r3, r3 }
-; CHECK-NEXT:    { s_sw_post_imm r5, r4, 1; addi32 r3, r3, 1 }
+; CHECK-NEXT:    { nop; s_sw_post_imm r4, r3, 1 }
+; CHECK-NEXT:    { nop; mull r4, r5, r5 }
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
+; CHECK-NEXT:    { nop; addi32 r5, r5, 1 }
+; CHECK-NEXT:  .LBB6_2:
+; CHECK-NEXT:    { s_sw_post_imm r4, r3, 1; addi32 r1, r1, -1 }
 ; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; ld32_reg r1, r2, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

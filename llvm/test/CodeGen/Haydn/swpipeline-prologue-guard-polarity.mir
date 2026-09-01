@@ -22,9 +22,13 @@
 #
 # Companion to swpipeline-prologue-guard-polarity.ll (end-to-end.s check).
 #
+# GR2.1 Kind-A restamp: the peel guard now tests the trip count against the
+# constant 2 (LOADI32 2 + SLT32), and the polarity law is unchanged: the
+# skip-prologue branch is BNEZ (branch when trip <= TC), never BEQZ.
 # CHECK-LABEL: name: guard_test
-# CHECK: %13:gpr32 = SLTU32 %8, %1
-# CHECK-NEXT: BNEZ_W{{(_S[012]_FLEX)?}} %{{[0-9]+}}
+# CHECK: %{{[0-9]+}}:gpr32 = LOADI32 2
+# CHECK-NEXT: %{{[0-9]+}}:gpr32 = SLT32 %1, %{{[0-9]+}}
+# CHECK-NEXT: BNEZ_W{{(_S[012]_FLEX)?}} %{{[0-9]+}}, %bb.{{[0-9]+}}
 
 --- |
   define i32 @guard_test(ptr captures(none) %p, i32 %n) #0 {

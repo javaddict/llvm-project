@@ -728,3 +728,187 @@ TEST(HaydnFormatERecords, DirectSetDescIdentityOverLedger) {
   EXPECT_EQ(DivergentNames, Allow)
       << "divergent census drifted from the pinned allow set";
 }
+
+// ---------------------------------------------------------------------------
+// Universal singleton coverage (PIPE-20 / GR2.2). The generator census
+// (singleton_uncovered_census in generate_format_e_records.py) owns the
+// build-time law in BOTH emit and --check modes; this is the always-on
+// runtime layer over the generated proof table. A logical lacking
+// singleton coverage fails HERE at test time, not as the post-RA "no
+// generated member" fatal in HaydnBundleVerify.
+// ---------------------------------------------------------------------------
+namespace {
+
+// Keep in sync with EXPECTED_SINGLETON_UNCOVERED in
+// llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py (EMPTY since
+// installation 2026-08-31: the generator census sees TableGen flags and its
+// five-file + golden-defs scope). The Desc-level walk below has no flags,
+// so the TD-exempt departures are named here — the exact
+// identityDivergentAllowSet pattern:
+//   * SHL32 / LSR32 / ASR32 — GISel-compat alias defs under
+//     `let isCodeGenOnly = 1` (HaydnInstrInfo.td:361-379). No C++ selects
+//     them (shifts select SLL32-family Pats); a stale comment in
+//     HaydnISelLowering.h:37 names SHL32 but G_BRJT lowers through
+//     legal ops. isCodeGenOnly is not an MCInstrDesc flag, so the walk
+//     cannot exempt them the way the generator census does.
+//   * BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY — the Format E packet
+//     CONTAINER opcodes (HaydnFormatE.td composites). Singleton coverage
+//     is a per-child-logical law; the composite is the completed packet
+//     itself, never a catalog span member. Not in the generator census
+//     scope (not one of the five logical-shape files).
+// NOP needs no seat here: its def is isPseudo=1, so the walk filters it,
+// and its coverage is the idle-parcel law pinned in the NOP-completion
+// test.
+std::set<std::string> singletonUncoveredAllowSet() {
+  return {
+      "SHL32",
+      "LSR32",
+      "ASR32",
+      "BUNDLE_E96_TWO_ENTRY",
+      "BUNDLE_E96_THREE_ENTRY",
+  };
+}
+
+} // namespace
+
+TEST(HaydnFormatERecords, SingletonCoverageCoversEveryCatalogLogical) {
+  // Every FormatEAltSpans logical owns a proof row with a NOP-completed
+  // mode; counts are pinned; the uncovered ratchet set stays empty.
+  std::set<std::string> SpanLogicals;
+  for (unsigned I = 0; I != FormatENonNopLogicalCount; ++I)
+    SpanLogicals.insert(FormatEAltSpans[I].Logical);
+  ASSERT_EQ(SpanLogicals.size(),
+            static_cast<size_t>(FormatENonNopLogicalCount));
+  EXPECT_EQ(FormatENonNopLogicalCount, 814u) << "golden v2_2 pin";
+
+  EXPECT_EQ(FormatESingletonCoverageCount, FormatENonNopLogicalCount);
+  static_assert(sizeof(FormatESingletonCoverage) /
+                        sizeof(FormatESingletonCoverage[0]) ==
+                    FormatESingletonCoverageCount,
+                "generated static_assert mirror");
+  std::set<std::string> Proved;
+  for (unsigned I = 0; I != FormatESingletonCoverageCount; ++I) {
+    const FormatESingletonCoverageRec &Rec = FormatESingletonCoverage[I];
+    EXPECT_NE(Rec.ModeMask, 0) << "logical without NOP-completed mode: "
+                               << Rec.Logical;
+    Proved.insert(Rec.Logical);
+  }
+  EXPECT_EQ(Proved, SpanLogicals)
+      << "proof table and alt spans disagree on the logical universe";
+
+  EXPECT_EQ(FormatESingletonUncoveredCount, 0u)
+      << "uncovered ratchet set must stay empty";
+}
+
+TEST(HaydnFormatERecords, SingletonCoverageNopCompletionHoldsAtEveryWindow) {
+  // Per proof row and mode bit: the logical has a member at some
+  // (mode, entry) window that ALSO hosts a NOP member — one real child
+  // plus generated NOP completion fills a complete admitted packet. The
+  // walk is over FormatEMembers, the same generated table encode uses.
+  for (unsigned I = 0; I != FormatESingletonCoverageCount; ++I) {
+    const FormatESingletonCoverageRec &Rec = FormatESingletonCoverage[I];
+    for (uint8_t Bit = 0; Bit != 2; ++Bit) {
+      if (!(Rec.ModeMask & (1u << Bit)))
+        continue;
+      const uint8_t Mode = Bit; // bit0=E2(0), bit1=E3(1)
+      bool NopAtWindow = false;
+      bool LogicalAtWindow = false;
+      for (unsigned M = 0; M != FormatEMemberCount; ++M) {
+        const FormatEMemberRec &Mem = FormatEMembers[M];
+        if (Mem.Mode != Mode)
+          continue;
+        if (Mem.IsNop)
+          NopAtWindow = true;
+        if (!Mem.IsNop && StringRef(Mem.Logical) == StringRef(Rec.Logical))
+          LogicalAtWindow = true;
+        if (NopAtWindow && LogicalAtWindow)
+          break;
+      }
+      EXPECT_TRUE(NopAtWindow && LogicalAtWindow)
+          << "mode " << unsigned(Mode) << " lacks NOP completion alongside "
+          << Rec.Logical;
+    }
+  }
+  // The architectural idle packet exists in BOTH modes (E2 and E3 each
+  // host NOP members); NOP never enters FormatEAltSpans by construction.
+  EXPECT_EQ(FormatENopCompletionModes, 0b11u);
+  EXPECT_EQ(findAltSpan("NOP"), nullptr)
+      << "NOP must be covered by the idle-parcel law, never an alt span";
+  bool NopMembers[2] = {false, false};
+  for (unsigned M = 0; M != FormatEMemberCount; ++M) {
+    const FormatEMemberRec &Mem = FormatEMembers[M];
+    if (Mem.IsNop)
+      NopMembers[Mem.Mode] = true;
+  }
+  EXPECT_TRUE(NopMembers[0] && NopMembers[1])
+      << "NOP members must exist in both E2 and E3";
+}
+
+TEST(HaydnFormatERecords, CompilerReachableLogicalsHaveSingletonCoverage) {
+  // Full enum walk: every opcode that survives the Desc-level reachability
+  // filter must peel (peelLogicalOpcodeName) to a catalog alt span. This
+  // is the acceptance-(2) seat: a hand-added logical escaping ExpandPseudos
+  // (not isPseudo, not pre-ISel, not meta) with no catalog span fails HERE
+  // and in the generator census at build time.
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  const auto Allow = singletonUncoveredAllowSet();
+  unsigned Checked = 0;
+  std::set<std::string> Uncovered;
+  for (unsigned Opc = 0; Opc != Haydn::INSTRUCTION_LIST_END; ++Opc) {
+    const MCInstrDesc &Desc = MII.get(Opc);
+    if (Desc.isPseudo() || Desc.isPreISelOpcode() || Desc.isMetaInstruction())
+      continue;
+    const std::string Peeled = peelLogicalOpcodeName(MII.getName(Opc));
+    ++Checked;
+    if (findAltSpan(Peeled.c_str()))
+      continue;
+    Uncovered.insert(MII.getName(Opc).str());
+  }
+  for (const std::string &Name : Uncovered) {
+    EXPECT_TRUE(Allow.count(Name))
+        << "compiler-reachable logical without singleton coverage: " << Name
+        << " (peel maps nowhere in FormatEAltSpans; add the catalog span "
+           "or extend BOTH peel seats and re-pin the allow sets)";
+  }
+  EXPECT_TRUE(Uncovered.empty() || Uncovered == Allow)
+      << "uncovered census drifted from the pinned allow set";
+  EXPECT_GT(Checked, 700u) << "enum walk lost its reachable opcodes";
+
+  // Peel-parity pins: ONE law at TWO seats. Each alias family the
+  // generator's pinned table maps is pinned here against the compiler's
+  // peel output, so generate_format_e_records.py::peel_logical_name and
+  // HaydnFormatERecords.h::peelLogicalOpcodeName cannot drift silently.
+  struct ParityPin {
+    const char *TD;
+    const char *Catalog;
+  };
+  const ParityPin Pins[] = {
+      {"LD32", "S_LW_WITH_IMM"},          {"ST32", "S_SW_WITH_IMM"},
+      {"LD64", "D_LDW_WITH_IMM"},         {"ST64", "D_SDW_WITH_IMM"},
+      {"LD8", "S_LBS_WITH_IMM"},          {"LDU8", "S_LBU_WITH_IMM"},
+      {"ST8", "S_SB_WITH_IMM"},           {"LD16", "S_LHWS_WITH_IMM"},
+      {"LDU16", "S_LHWU_WITH_IMM"},       {"ST16", "S_SHW_WITH_IMM"},
+      {"LD32_POST", "S_LW_POST_IMM"},     {"ST32_POST", "S_SW_POST_IMM"},
+      {"LD64_POST", "D_LDW_POST_IMM"},    {"ST64_POST", "D_SDW_POST_IMM"},
+      {"PLDWWUA", "PLDWWUA_POST"},        {"RET", "JALR"},
+      {"WFI", "WFI<TBD>"},                {"WFITBDTBDTBD", "WFI<TBD>"},
+      {"SEXT_GPR32_TO_DR64", "SEXT32T64"}, {"MOV_GPR_TO_DR64", "SEXT32T64"},
+      {"ZEXT_GPR32_TO_DR64", "SEXT32T64"}, {"ADDI32_W", "ADDI32"},
+      {"SET_HWLOOP_F2_W", "SET_HWLOOP_F2"}, {"CSRW_W", "CSRW"},
+      {"LD32_REG_M0S0LS", "S_LW_WITH_REG"}, {"ST32_REG_M0S0LS", "S_SW_WITH_REG"},
+  };
+  for (const ParityPin &Pin : Pins) {
+    const std::string Peeled = peelLogicalOpcodeName(Pin.TD);
+    EXPECT_EQ(Peeled, Pin.Catalog)
+        << "peel parity broke for " << Pin.TD << " -> " << Peeled;
+    EXPECT_NE(findAltSpan(Peeled.c_str()), nullptr)
+        << "parity pin " << Pin.TD << " peeled to a catalogless name";
+  }
+
+  // Negative probe: a hand-added ghost logical must find NO span and NO
+  // proof row — the fail direction of the ratchet.
+  EXPECT_EQ(findAltSpan("HAND_ADDED_GHOST_LOGICAL"), nullptr);
+  for (unsigned I = 0; I != FormatESingletonCoverageCount; ++I)
+    EXPECT_STRNE(FormatESingletonCoverage[I].Logical,
+                 "HAND_ADDED_GHOST_LOGICAL");
+}

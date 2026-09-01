@@ -20,12 +20,12 @@
 ; list HR / productSoftExitIIFloor (sibling: prera-format-qor-exit.ll).
 ;
 ; Contracts:
-; 1. Soft-exit II floor: softExitIIFloor = max(format exhaustive ResMII,
-;    MI port lower bound). analyzeLoop logs SMS-QOR: soft_exit_ii_floor=…
-;    Port-binds-above-format bodies still overestimate=0 and exact_packable=1.
+; 1. GR2.1: the exact soft-exit oracles (SMS-QOR/SMS-IPC floors) are deleted
+;    from analyzeLoop; the Kind C advisory (shouldUseSchedule) is the only
+;    remaining format-union floor, logged on the accept remark.
 ; 2. RecMII floor: MAC acc→acc feedback remains latency-1 (DDG/itinerary).
 ;    Pipeliner reports (rec=1, res=…) — ResourceCycle never invents RecMII.
-; 3. Post-RA exact-pack: qual-kernel exact_packable=1; after postmisched the
+; 3. Post-RA exact-pack: exact packability is post-RA business; after postmisched the
 ;    physical path may form multi-MI BUNDLE 0 (exact no-split). Pre-handoff
 ;    SMS expansion must NOT invent durable cycle groups (-stop-after=pipeliner
 ;    has no BUNDLE roots).
@@ -44,24 +44,18 @@
 ; SMS-NOT: SMS-HOOK: reject
 ; SMS-NOT: unsupported SMS-HOOK resource class
 ; SMS-NOT: Unable to analyzeLoop
-; SMS-NOT: SMS-RESMII: reject
 ; SMS-NOT: SMS-HANDOFF: reject
 
 ; --- Dual-load MAC stream: RecMII floor (rec=1) + soft-exit II/exact-pack ---
-; SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
-; SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
-; SMS-DAG: SMS-HANDOFF: metrics-only freeze
-; SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
-; SMS-DAG: SMS-QOR: soft_exit_ii_floor={{[1-9][0-9]*}} format_resmii={{[0-9]+}} port_resmii={{[0-9]+}} exact_packable=1 body_ops={{[0-9]+}}
+; SMS-DAG: SMS-HANDOFF: coverage ok
+; SMS-DAG: SMS-SHOULDUSE: advisory cycles={{[0-9]+}}
 ; SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
 ; SMS-DAG: MII = {{[0-9]+}} MAX_II = {{[0-9]+}} (rec=1, res={{[0-9]+}})
 ; SMS-DAG: Schedule Found? 1 (II={{[1-9][0-9]*}})
 
 ; --- Simple acc stream: soft-exit II floor + exact-pack (ports may bind res) ---
-; SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
-; SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
-; SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
-; SMS-DAG: SMS-QOR: soft_exit_ii_floor={{[1-9][0-9]*}} format_resmii={{[0-9]+}} port_resmii={{[0-9]+}} exact_packable=1 body_ops={{[0-9]+}}
+; SMS-DAG: SMS-HANDOFF: coverage ok
+; SMS-DAG: SMS-SHOULDUSE: advisory cycles={{[0-9]+}}
 ; SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
 ; SMS-DAG: MII = {{[0-9]+}} MAX_II = {{[0-9]+}} (rec=1, res={{[0-9]+}})
 ; SMS-DAG: Schedule Found? 1 (II={{[1-9][0-9]*}})

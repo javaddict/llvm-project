@@ -299,9 +299,11 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
       }
 
       // Refuse uncommitted bare encode escape for product commit ownership:
-      //   * optnone: postmisched quality-skips reorder, so every bare real
-      //     encode after Finalize is an MC standalone escape (all-bare or
-      //     mixed). Keyed on hasOptNone(), not skipFunction().
+      //   * optnone: since GR2.4 the mandatory scheduler
+      //     (forcePostRAScheduling) commits optnone via singleton/co-issue
+      //     packets itself, so every bare real encode after Finalize is still
+      //     an MC standalone escape (all-bare or mixed). Keyed on
+      //     hasOptNone(), not skipFunction().
       //   * any function with at least one committed BUNDLE root: mixed bare
       //     encode is a partial-commit hole for plain O0 and optnone alike
       //     (covers independent multi-MI packs that must not leave residual

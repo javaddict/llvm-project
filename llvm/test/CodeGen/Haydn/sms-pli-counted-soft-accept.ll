@@ -11,7 +11,7 @@
 ; StageCount>1 remains rejected. Non-zero-init incrementing reject is
 ; sms-pli-nonzero-init-reject.ll.
 
-; SWP: SMS-HANDOFF: metrics-only freeze
+; SWP: SMS-HANDOFF: coverage ok
 ; SWP-DAG: Schedule Found? 1
 ; SWP-NOT: Unable to analyzeLoop
 ; SWP-NOT: SMS: reject incrementing IV with non-zero init

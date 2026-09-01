@@ -17,8 +17,8 @@
 # Option A StageCount>1 reject that used to own the first run is gone for
 # soft loops. Second run: dual-load MAC MIR stays bare logical (no
 # multi-member BUNDLE). The MAC MIR is format-ResMII-bound stages=1.
-# SMS-RESMII overestimate on the IR body is metrics-only (analyzeLoop
-# continues).
+# GR2.1: the SMS-RESMII oracle is deleted; analyzeLoop continues on
+# coverage alone.
 
 # PIPE-NOT: SMS-HOOK: reject
 # PIPE-NOT: SMS-HANDOFF: reject

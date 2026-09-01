@@ -235,11 +235,12 @@ public:
 
   // Create the SMS-facing resource model (a ResourceCycle that tracks
   // functional-unit/slot usage per cycle).
-  // Default : a HaydnResourceCycle backed by Haydn::Bundle
-  // alternative-aware slot pressure so SWPS packs dual LD64 (slot0+slot1).
-  // The DFA fallback (DFAPacketizer over itineraries) is choice-set-naive and
-  // inflates ResMII on dual-load loops; reachable via
-  // haydn-hr-resource-cycle=0 for diagnosis only.
+  // GR2.1 contract boundary: the pre-RA pipeliner seat returns the Kind-A
+  // HaydnIssueWidthCycle — the generated IssueWidth entry cap plus the shared
+  // same-cycle RAW/WAW dependency laws, nothing else. Exact capacity, unit,
+  // port, and hazard matching is post-RA HR business (HaydnResourceCycle is
+  // the post-RA HR peer depth / statics / unit-test surface; no production
+  // instantiation at this seat).
   ResourceCycle *CreateTargetScheduleState(
       const TargetSubtargetInfo &STI) const override;
 

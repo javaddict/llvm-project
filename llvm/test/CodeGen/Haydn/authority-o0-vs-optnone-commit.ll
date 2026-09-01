@@ -17,27 +17,34 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s --check-prefix=ASM-O0
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s --check-prefix=ASM
 
-; Role: ownership — product-shape pin for plain O0 vs skipFunction-skipped
-; optnone committed-cycle formation (target-local no-reorder Finalize/Verify).
+; Role: ownership — product-shape pin for plain O0 vs optnone committed-cycle
+; formation after GR2.4 (mandatory scheduler entry; target-local no-reorder
+; Finalize/Verify residual lane).
 ;
 ; Live product (re-verify before citing):
-;   * PostMachineScheduler still calls skipFunction (quality/reorder only).
+;   * PostMachineScheduler no longer skips optnone:
+;     HaydnSubtarget::forcePostRAScheduling() makes the addPreSched2
+;     invocation mandatory for every function. Dependent chains stay
+;     sequential generated members (singleton fallback commit); independent
+;     ops may co-issue into scheduler-committed multi-MI BUNDLE roots at
+;     postmisched already.
 ;   * FinalizeBundle and VerifyBundles deliberately do NOT call skipFunction:
-;     they are the target-local no-reorder commit ownership for optnone.
-;     HaydnLatencyStalls sits between PostMachineScheduler and that first
-;     Finalize so stall NOPs are committed in the same lane. Product default
-;     also runs late Finalize/Verify after BranchRelaxation so
-;     insertIndirectBranch LUI+ADDI32_W+JALR_W rejoin the same lane.
+;     they own true residual commits (late BR parcels). HaydnLatencyStalls
+;     sits between PostMachineScheduler and the first Finalize so stall NOPs
+;     are committed in the same lane. Product default also runs late
+;     Finalize/Verify after BranchRelaxation so insertIndirectBranch
+;     LUI+ADDI32_W+JALR_W rejoin the same lane.
 ;   * Therefore both plain O0 and optnone leave committed Format-E BUNDLE roots
 ;     with private member placement and durable row/completion imms after
 ;     haydn-verify-bundles. Singleton completion is the documented stub identity
-;     (BUNDLE 0, 0 == E2 + AllEntriesReal full-slot NOP pad); underfill/top-pad invent remains
-;     fail-closed when golden is silent.
-;   * Independent multi-op canaries pin the product-shape distinction that
-;     dependent multi-op chains miss: optnone stays sequential bare logicals
-;     until Finalize wraps each as BUNDLE 0, 0. Plain O0/O2 currently wrap
-;     the same independent ADDs as sequential committed singletons (do not
-;     force-coissue). Underfill/top-pad invent remains fail-closed.
+;     (BUNDLE 0, 0 == E2 + AllEntriesReal full-slot NOP pad); underfill/top-pad
+;     invent remains fail-closed when golden is silent.
+;   * Independent multi-op canaries pin the shape distinction dependent
+;     multi-op chains miss: since GR2.4 optnone matches plain — the
+;     scheduler co-issues independent ADDs into one committed BUNDLE 1, 0
+;     root at postmisched, kept through Finalize/Verify (do not
+;     force-coissue; this is the observed product shape). Underfill/top-pad
+;     invent remains fail-closed.
 ;   * Verify also refuses mixed committed-BUNDLE + bare encode residual for
 ;     every function (partial-commit escape), while all-bare non-optnone MIR
 ;     unit fixtures remain legal until Finalize runs.
@@ -47,12 +54,14 @@
 ; Inventory: Inputs/SOURCE-AUTHORITY-ANCHORS.txt (T8-EVID restamp)
 ;
 ; Function order: optnone bodies first so SKIP-OPTNONE / PACK checks stay
-; in-function (positive JALR bounds -NOT before plain multi-op setDesc members).
+; in-function (GR2.4: optnone now carries generated members too; positive
+; JALR bounds -NOT before plain multi-op setDesc members).
 
 ; ---------------------------------------------------------------------------
 ; Phase firewall: no BUNDLE / private member / setDesc / row / completion /
-; issue-cycle identity before RA or through RA. Finalize/Verify still commit
-; after postmisched (including optnone: they do not skipFunction).
+; issue-cycle identity before RA or through RA. After postmisched committed
+; identity exists for every function (GR2.4 mandatory scheduling incl.
+; optnone; Finalize/Verify never skipFunction).
 ; ---------------------------------------------------------------------------
 ; PRERA: ADD32
 ; PRERA-NOT: BUNDLE
@@ -70,47 +79,53 @@
 ; THRU-NOT: CompletionStateID
 
 ; ---------------------------------------------------------------------------
-; After postmisched at -O0: plain packs independent multi; optnone is bare.
+; After postmisched at -O0 (GR2.4): optnone is scheduled too. Dependent
+; chains are sequential generated members (singleton fallback); independent
+; multi is a scheduler-committed BUNDLE root.
 ; ---------------------------------------------------------------------------
 ; PACK-LABEL: name:{{ +}}with_optnone
 ; PACK: $r{{[0-9]+}} = ADD32{{ }}
 ; PACK-NOT: BUNDLE
 ; PACK: JALR
+; Dependent multi-op optnone: sequential generated members, no BUNDLE root
+; at this stop (Finalize wraps each as a singleton).
 ; PACK-LABEL: name:{{ +}}multi_optnone
-; PACK: $r{{[0-9]+}} = ADD32{{ }}
-; PACK: $r{{[0-9]+}} = ADD32{{ }}
+; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
+; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PACK-NOT: BUNDLE
 ; PACK: JALR
-; Independent multi-op optnone remains sequential bare logicals (quality skip).
+; GR2.4: independent multi-op optnone is a scheduler-committed co-issue root.
 ; PACK-LABEL: name:{{ +}}indep_optnone
-; PACK: $r{{[0-9]+}} = ADD32{{ }}
-; PACK: $r{{[0-9]+}} = ADD32{{ }}
-; PACK-NOT: BUNDLE
+; PACK: BUNDLE 1, 0
+; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
+; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PACK: JALR
 ; Plain O0 independent multi co-issues under postmisched (product shape).
 ; PACK-LABEL: name:{{ +}}indep_plain
+; PACK: BUNDLE 1, 0
 ; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PACK: JALR
 
 ; ---------------------------------------------------------------------------
-; After postmisched at -O2: optnone still quality-skipped (bare logicals).
+; After postmisched at -O2: optnone scheduled identically (GR2.4; no skip).
 ; ---------------------------------------------------------------------------
 ; SKIP-OPTNONE-LABEL: name:{{ +}}with_optnone
 ; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
 ; SKIP-OPTNONE-NOT: BUNDLE
 ; SKIP-OPTNONE: JALR
-; Multi-op optnone remains sequential bare logicals (no reorder pack).
+; Dependent multi-op optnone: sequential generated members (no reorder pack).
 ; SKIP-OPTNONE-LABEL: name:{{ +}}multi_optnone
-; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
-; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
+; SKIP-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
+; SKIP-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; SKIP-OPTNONE-NOT: BUNDLE
 ; SKIP-OPTNONE: JALR
-; Independent multi-op optnone still bare after quality skip.
+; GR2.4: independent multi-op optnone is a scheduler-committed co-issue root
+; at -O2 as well.
 ; SKIP-OPTNONE-LABEL: name:{{ +}}indep_optnone
-; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
-; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
-; SKIP-OPTNONE-NOT: BUNDLE
+; SKIP-OPTNONE: BUNDLE 1, 0
+; SKIP-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
+; SKIP-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; SKIP-OPTNONE: JALR
 
 ; ---------------------------------------------------------------------------
@@ -131,11 +146,11 @@
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PLAIN-NOT: $r{{[0-9]+}} = ADD32{{ }}
 ; PLAIN: JALR_E2
-; Independent optnone: two sequential singleton commits (no co-issue).
+; GR2.4: independent optnone keeps the scheduler-committed co-issued root
+; (BUNDLE 1, 0) through Finalize/Verify.
 ; PLAIN-LABEL: name:{{ +}}indep_optnone
-; PLAIN: BUNDLE {{[01]}}, 0
+; PLAIN: BUNDLE 1, 0
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_
-; PLAIN: BUNDLE {{[01]}}, 0
 ; PLAIN: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PLAIN-NOT: $r{{[0-9]+}} = ADD32{{ }}
 ; PLAIN: JALR_E2
@@ -176,10 +191,10 @@
 ; OPT: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; OPT-NOT: $r{{[0-9]+}} = ADD32{{ }}
 ; OPT: JALR_E2
+; GR2.4: independent optnone keeps the scheduler-committed co-issued root.
 ; OPT-LABEL: name:{{ +}}indep_optnone
-; OPT: BUNDLE {{[01]}}, 0
+; OPT: BUNDLE 1, 0
 ; OPT: ADD32_E{{[23]}}_E{{[0-2]}}_
-; OPT: BUNDLE {{[01]}}, 0
 ; OPT: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; OPT-NOT: $r{{[0-9]+}} = ADD32{{ }}
 ; OPT: JALR_E2
@@ -196,8 +211,8 @@
 
 ; ---------------------------------------------------------------------------
 ; ASM path: committed Format E composite print, not bare uncommitted opcode.
-; Plain independent multi co-issues two add32 in one composite; optnone emits
-; two separate singleton composites (no-reorder).
+; GR2.4: independent multi (plain and optnone alike) co-issues two add32 in
+; one composite; dependent chains emit singleton composites.
 ; ---------------------------------------------------------------------------
 ; ASM-O0-LABEL: with_optnone:
 ; ASM-O0: {
@@ -208,10 +223,7 @@
 ; ASM-O0: {
 ; ASM-O0: add32
 ; ASM-O0-LABEL: indep_optnone:
-; ASM-O0: {
-; ASM-O0: add32
-; ASM-O0: {
-; ASM-O0: add32
+; ASM-O0: add32{{.*}}add32
 ; ASM-O0-LABEL: indep_plain:
 ; ASM-O0: {{{.*}}add32{{.*}}add32
 ; ASM-LABEL: with_optnone:
@@ -223,10 +235,7 @@
 ; ASM: {
 ; ASM: add32
 ; ASM-LABEL: indep_optnone:
-; ASM: {
-; ASM: add32
-; ASM: {
-; ASM: add32
+; ASM: add32{{.*}}add32
 ; ASM-LABEL: indep_plain:
 ; ASM: {{{.*}}add32{{.*}}add32
 

@@ -190,10 +190,21 @@ HaydnPostRASchedStrategy::~HaydnPostRASchedStrategy() {
   // Haydn freeze requires the same empty transients: drop the inter-block
   // DDG after the last scheduler invocation. S1 keeps it for S2 Bot replay
   // when -haydn-sms2 is on.
+  //
+  // GR2.4: forcePostRAScheduling() makes S1 run for optnone functions too.
+  // The LateConvergence driver (the only S2 seat) still skipFunctions
+  // optnone (HaydnLateConvergence.cpp:658), so invocations stays 1 and an
+  // optnone S1 would otherwise leave the inter-block DDG registry alive
+  // until the addPreEmitPass2 freeze fatal under -haydn-postra-interblock.
+  // hasOptNone mirrors the driver's dominant skip reason.
+  // Residual (accepted, debug-only): -opt-bisect-limit combined with
+  // -haydn-postra-interblock can still skip the driver and leak; the freeze
+  // fatal stays fail-closed visible rather than silently corrupting.
   if (!Ctx || !Ctx->MF)
     return;
   auto &MFI = *Ctx->MF->getInfo<HaydnMachineFunctionInfo>();
-  if (MFI.getPostRASchedInvocations() >= 2 || !haydnSMS2Enabled())
+  if (MFI.getPostRASchedInvocations() >= 2 || !haydnSMS2Enabled() ||
+      Ctx->MF->getFunction().hasOptNone())
     MFI.clearInterBlockRegistry();
 }
 

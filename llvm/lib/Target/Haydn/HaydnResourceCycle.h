@@ -13,6 +13,13 @@
 // SMS-HOOK/PORT, pre-RA StageCount>1 containment). Do not duplicate that
 // topic here. This header stays implementation-bearing (move residual).
 //
+// GR2.1 boundary: the pre-RA MachinePipeliner seat no longer instantiates
+// this class — CreateTargetScheduleState returns the Kind-A
+// HaydnIssueWidthCycle (above). HaydnResourceCycle remains the post-RA HR
+// peer depth, the shared qualification statics (unit tests + the pre-RA
+// MISCHED matching-frontier seat owned by GR1.2/GR1.10), and the unit-test
+// surface; it has no production instantiation.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNRESOURCECYCLE_H
@@ -396,6 +403,97 @@ struct SMSLCDTwoIteration {
 inline bool isHaydnSMSAloneOpcode(unsigned Opcode) {
   return haydnOpcodeIssuesAloneInCycle(Opcode);
 }
+
+//===----------------------------------------------------------------------===//
+// Kind-A pre-RA SMS resource cycle (GR2.1)
+//===----------------------------------------------------------------------===//
+// The pre-RA MachinePipeliner boundary sees ONE resource fact: the generated
+// IssueWidth entry cap (HaydnSchedModel.IssueWidth == FormatEE3EntryCapacity,
+// the widest Format E row — pin in HaydnMachineScheduler.cpp), plus the two
+// shared same-cycle DEPENDENCY laws (no-forwarding intra-cycle RAW, same-phase
+// no-dual-write WAW) that are the D999 miscompile class. It deliberately does
+// NOT consult exact format rows, alternates, unit menus, regfile port
+// budgets, alone-op/SIN_COS window occupancy, or the named CSRW-SET / LUI-e0
+// laws: exact capacity matching is post-RA HR business (pipeline contract
+// Kind A; pre-RA is proposal-only). Because IssueWidth is the widest row,
+// a Kind-A placement never under-counts the true hardware envelope — every
+// pre-RA SMS proposal stays post-RA encodable (cycle-slip absorbs overlap).
+//
+// Same member shape / law ordering as HaydnResourceCycle's MI overload
+// (check-before-accept, defs appended after commit), so the D999
+// sms-no-forwarding-raw-reject.ll class stays closed at this seat.
+class HaydnIssueWidthCycle : public ResourceCycle {
+public:
+  explicit HaydnIssueWidthCycle(unsigned IssueWidth)
+      : IssueWidth(IssueWidth ? IssueWidth : 1u) {}
+
+  void clearResources() override {
+    Entries = 0;
+    CurrentCycleLiveDefs.clear();
+    CurrentCycleDefs.clear();
+    TRI = nullptr;
+  }
+
+  // Descriptor placement path (SMS ResourceManager MID overload): the entry
+  // cap is descriptor-blind; only the count matters.
+  bool canReserveResources(const MCInstrDesc *MID) override {
+    assert(MID && "null MCInstrDesc");
+    if (isNoHazardMetaOpcode(MID->getOpcode()))
+      return true;
+    return Entries < IssueWidth;
+  }
+  void reserveResources(const MCInstrDesc *MID) override {
+    assert(MID && "null MCInstrDesc");
+    assert(canReserveResources(MID) && "reserve without canReserve");
+    if (isNoHazardMetaOpcode(MID->getOpcode()))
+      return;
+    ++Entries;
+  }
+
+  // MI placement path (calculateResMIIDFA packing + D999 SMS placement):
+  // WAW, then RAW (live defs), then the entry cap; defs recorded AFTER the
+  // successful commit so later same-cycle members see them — identical law
+  // order to HaydnResourceCycle::canReserveResources(MachineInstr&).
+  bool canReserveResources(MachineInstr &MI) override {
+    const TargetRegisterInfo *LocalTRI = getTRI(MI);
+    if (haydnHasIntraCycleWAW(MI, CurrentCycleDefs, LocalTRI))
+      return false;
+    if (haydnHasIntraCycleRAW(MI, CurrentCycleLiveDefs, LocalTRI))
+      return false;
+    if (isNoHazardMetaOpcode(MI.getOpcode()))
+      return true;
+    return Entries < IssueWidth;
+  }
+  void reserveResources(MachineInstr &MI) override {
+    assert(canReserveResources(MI) && "reserve without canReserve");
+    if (!isNoHazardMetaOpcode(MI.getOpcode()))
+      ++Entries;
+    haydnAppendCycleDefs(MI, CurrentCycleDefs);
+    haydnAppendLiveDefs(MI, CurrentCycleLiveDefs);
+  }
+
+  unsigned getIssueWidth() const { return IssueWidth; }
+  unsigned getEntryCount() const { return Entries; }
+
+private:
+  unsigned IssueWidth;
+  unsigned Entries = 0;
+  SmallSetVector<Register, 8> CurrentCycleLiveDefs;
+  SmallSetVector<Register, 8> CurrentCycleDefs;
+  const TargetRegisterInfo *TRI = nullptr;
+
+  static bool isNoHazardMetaOpcode(unsigned Opcode) {
+    if (Opcode == TargetOpcode::BUNDLE)
+      return true;
+    return Haydn::MachineBundle::isNoHazardMetaInstruction(Opcode);
+  }
+
+  const TargetRegisterInfo *getTRI(const MachineInstr &MI) {
+    if (!TRI)
+      TRI = MI.getMF()->getSubtarget().getRegisterInfo();
+    return TRI;
+  }
+};
 
 class HaydnResourceCycle : public ResourceCycle {
 public:

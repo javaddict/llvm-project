@@ -231,6 +231,13 @@ public:
   /// allocation.
   virtual bool enablePostRAMachineScheduler() const;
 
+  /// True if the subtarget requires the post-RA machine scheduler even for
+  /// functions it would otherwise skip (optnone / opt-bisect). Targets whose
+  /// post-RA scheduler owns packet legality and commit (not just reorder
+  /// quality) override this so scheduling, including its sequential fallback
+  /// commit, is mandatory for every function.
+  virtual bool forcePostRAScheduling() const { return false; }
+
   /// True if the subtarget should run the atomic expansion pass.
   virtual bool enableAtomicExpand() const;
 

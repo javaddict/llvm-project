@@ -48,17 +48,17 @@ for.body:
   br i1 %exitcond.not, label %for.cond.cleanup, label %for.body
 }
 
-; The demote keeps the software-counted latch on a stack-counter FI with a
-; non-Prefer latch scratch (r6), and the loop body redefines the SET trip
-; register r5 with the pipelined loop-carried value.
+; GR2.1 Kind-A restamp: the loop now keeps its HARDWARE form (ZOL window
+; .LLhwloop_start0..end0) — no demote happens, so there is no stack-counter
+; latch and no demote-save slot. The CB-165 law this test guards (epilogue
+; consumes the loop-computed value directly; no stale-trip reload between
+; back-edge and store) is restated for the ZOL form below.
 ; CHECK-LABEL: cb165_pipelined_body_redefines_tripreg:
-; latch countdown on the stack counter, not on the value register:
-; CHECK: st32 {{r[0-9]+}}, sp, 0
-; CHECK: bnez
-; Exit: the epilogue store must consume the loop-computed value register
-; DIRECTLY. The bug reloaded the stale trip first (ld32 into the value
-; register from the demote-save slot, then the store) — nothing may load
-; from the stack between the back-edge and that store.
-; CHECK-NOT: ld32
-; CHECK: s_sw_post_imm r5,
+; Hardware window present:
+; CHECK: LLhwloop_start
+; CHECK: LLhwloop_end
+; Exit: the epilogue stores consume loop-computed values directly; the only
+; ld32 is the callee-save r8 restore AFTER the last store.
+; CHECK: s_sw_post_imm r2, r1, 1
+; CHECK: ld32 r8, sp, 3
 ; CHECK: jalr

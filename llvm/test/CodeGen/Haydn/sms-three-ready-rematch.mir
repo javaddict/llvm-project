@@ -15,10 +15,10 @@
 #     and loses the second ADD64.
 #   * HaydnResourceCycle live CycleCandidateSet + exactTryAddProduct rematches
 #     ADD32 onto S0 so both ADD64 fit — one modulo issue cycle for the triple.
-#   * SMS-RESMII: greedy (exact/DFA peer) ≡ exhaustive ≤3 oracle (overestimate=0).
-#     Positive overestimate fail-closes analyzeLoop (see
-#     sms-format-resmii-overestimate-reject.mir). Preferred-collapse
-#     overestimate is unit-only (SMS_ThreeReadyRematch_ADD32_2xADD64).
+#   * GR2.1 Kind A: ResMII is the IssueWidth entry count; the greedy-vs-
+#     exhaustive SMS-RESMII oracle is deleted (Kind A has no order trap;
+#     preferred-collapse overestimate stays unit-only in
+#     SMS_ThreeReadyRematch_ADD32_2xADD64).
 #   * SMS-HOOK silent on single-cycle itineraries; no force-reject here
 #     (positive reject: sms-format-hook-reject.mir).
 #   * SMS-HANDOFF metrics-only freeze: qual-kernel exact_packable=1 for the
@@ -34,12 +34,8 @@
 # SMS-NOT: SMS-HOOK: reject
 # SMS-NOT: unsupported SMS-HOOK resource class
 # SMS-NOT: Unable to analyzeLoop
-# SMS-NOT: SMS-RESMII: reject
 # SMS-NOT: SMS-HANDOFF: reject
-# SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
-# SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
-# SMS-DAG: SMS-HANDOFF: metrics-only freeze
-# SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
+# SMS-DAG: SMS-HANDOFF: coverage ok
 # SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
 # SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
 

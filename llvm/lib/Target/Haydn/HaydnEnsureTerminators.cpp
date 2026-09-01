@@ -61,11 +61,12 @@ void HaydnEnsureTerminators::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool HaydnEnsureTerminators::runOnMachineFunction(MachineFunction &MF) {
-  // Correctness path: never call skipFunction. Generic PostMachineScheduler
-  // may still quality-skip optnone (no reorder); dead-end terminator insertion
-  // is target-local ownership that must run for every function so PEI can
-  // attach epilogues and product emission never falls through empty MBBs into
-  // the next symbol. Never change generic skipFunction semantics for quality
+  // Correctness path: never call skipFunction. Since GR2.4 the generic
+  // PostMachineScheduler also runs for optnone
+  // (HaydnSubtarget::forcePostRAScheduling); dead-end terminator insertion is
+  // target-local ownership that must run for every function so PEI can attach
+  // epilogues and product emission never falls through empty MBBs into the
+  // next symbol. Never change generic skipFunction semantics for quality
   // passes.
 
   const HaydnInstrInfo *TII =

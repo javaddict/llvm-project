@@ -107,16 +107,21 @@ define i32 @sum_array(ptr %arr, i32 %count) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; move32 r4, r3 }
+; GR2.1 Kind-A restamp: smaller ResMII pipelines this loop (guarded 2-stage
+; peel; kernel packs {move32 + slt32} with the IV bump). Epilog adds the tail.
+; CHECK-NEXT:    { addi32 r3, r0, 0; addi32 r5, r0, 2 }
+; CHECK-NEXT:    { slt32 r6, r2, r5; addi32 r4, r3, 1 }
+; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; bnez r6, .LBB3_2 }
 ; CHECK-NEXT:  .LBB3_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
-; CHECK-NEXT:    { nop; addi32 r4, r4, 1 }
-; CHECK-NEXT:    { nop; add32 r3, r3, r5; slt32 r6, r4, r2 }
-; CHECK-NEXT:    { nop; bnez r6, .LBB3_1 }
-; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { nop; move32 r1, r3 }
+; CHECK-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
+; CHECK-NEXT:    { add32 r3, r3, r5; addi32 r4, r4, 1 }
+; CHECK-NEXT:    { nop; move32 r5, r6; slt32 r7, r4, r2 }
+; CHECK-NEXT:    { nop; bnez r7, .LBB3_1 }
+; CHECK-NEXT:  .LBB3_2:
+; CHECK-NEXT:    { nop; add32 r1, r3, r5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -307,23 +312,37 @@ define i1 @array_contains(ptr %arr, i32 %size, i32 %target) {
 ; CHECK-LABEL: array_contains:
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
-; CHECK-NEXT:    { addi32 r5, r0, 2; addi32 r4, r0, 0 }
-; CHECK-NEXT:    { nop; slt32 r7, r2, r5 }
-; CHECK-NEXT:    { nop; addi32 r5, r4, 1 }
-; CHECK-NEXT:    { nop; seq32 r6, r6, r3 }
-; CHECK-NEXT:    { nop; bnez r7, .LBB10_2 }
-; CHECK-NEXT:  .LBB10_1: // %loop
+; GR2.1 Kind-A restamp: pipelines with a guarded 2-stage peel; the kernel
+; folds {or + IV bump} and {slt + seq}; epilog drains the tail or/seq.
+; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 r8, sp, 3 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 16
+; CHECK-NEXT:    .cfi_offset r8, -4
+; CHECK-NEXT:    { addi32 r4, r0, 0; addi32 r5, r0, 2 }
+; CHECK-NEXT:    { slt32 r6, r2, r5; addi32 r7, r4, 1 }
+; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; bnez r6, .LBB10_4 }
+; CHECK-NEXT:  // %bb.1: // %loop
+; CHECK-NEXT:    { seq32 r6, r5, r3; addi32 r12, r0, 3 }
+; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
+; CHECK-NEXT:    { slt32 r12, r2, r12; addi32 r7, r7, 1 }
+; CHECK-NEXT:    { nop; bnez r12, .LBB10_3 }
+; CHECK-NEXT:  .LBB10_2: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { nop; s_lw_post_imm r7, r1, 1 }
-; CHECK-NEXT:    { or32 r4, r4, r6; addi32 r5, r5, 1 }
-; CHECK-NEXT:    { nop; seq32 r6, r7, r3; slt32 r12, r5, r2 }
-; CHECK-NEXT:    { nop; bnez r12, .LBB10_1 }
-; CHECK-NEXT:  .LBB10_2:
-; CHECK-NEXT:    { nop; or32 r1, r4, r6 }
-; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; s_lw_post_imm r12, r1, 1 }
+; CHECK-NEXT:    { or32 r4, r4, r6; addi32 r7, r7, 1 }
+; CHECK-NEXT:    { nop; slt32 r8, r7, r2; seq32 r6, r5, r3 }
+; CHECK-NEXT:    { nop; move32 r5, r12 }
+; CHECK-NEXT:    { nop; bnez r8, .LBB10_2 }
+; CHECK-NEXT:  .LBB10_3:
+; CHECK-NEXT:    { nop; or32 r4, r4, r6 }
+; CHECK-NEXT:  .LBB10_4:
+; CHECK-NEXT:    { nop; seq32 r1, r5, r3 }
+; CHECK-NEXT:    { nop; or32 r1, r4, r1 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:

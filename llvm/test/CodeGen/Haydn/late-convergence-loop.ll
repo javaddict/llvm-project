@@ -51,8 +51,10 @@ exit:
 ; LOOP-LABEL: conv_chain:
 ; LOOP: jalr
 
-; optnone: the driver skips (quality transform), the function still
-; freezes through the ordinary no-reorder Finalize; loop must not touch it.
+; optnone: the driver skips (quality transform; GR2.4 scopes this to the
+; LateConvergence driver only — postmisched itself runs for optnone), the
+; function still freezes through the mandatory-scheduler + residual
+; Finalize lane; loop must not touch it.
 define i32 @conv_optnone(ptr nocapture readonly %a, i32 %n) noinline optnone {
 entry:
   %c = icmp sgt i32 %n, 0

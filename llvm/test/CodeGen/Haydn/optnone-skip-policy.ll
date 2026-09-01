@@ -4,32 +4,38 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-after=haydn-verify-bundles < %s 2>/dev/null | FileCheck %s --check-prefix=OPTNONE
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s --check-prefix=ASM
 ;
-; Product policy: plain O0 (no optnone) and optnone are distinct.
-;   * Generic postmisched may skip optnone (no reorder) via skipFunction.
-;   * FinalizeBundle + VerifyBundles never skip — optnone is target-local
-;     no-reorder commit (singleton Format E BUNDLEs), not MC standalone escape.
-;   * Both shapes must leave only committed BUNDLE roots for real encode MIs.
-;   * Independent multi-op canaries: do not force-coissue. Plain O0 may
-;     stamp generated members at postmisched; Finalize wraps remaining
-;     encode MIs. optnone remains sequential bare until Finalize
-;     (full-slot BUNDLE {{[01]}}, 0 each — architectural NOP pad).
+; Product policy (GR2.4): plain O0 (no optnone) and optnone now share the
+; SAME mandatory scheduler entry.
+;   * HaydnSubtarget::forcePostRAScheduling() makes the addPreSched2
+;     PostMachineScheduler run for optnone too: scheduling and its
+;     sequential singleton fallback commit are legal-encode ownership, not
+;     reorder quality. Dependent chains stay sequential generated members
+;     (singleton fallback); independent ops may co-issue into committed
+;     multi-MI BUNDLE roots at postmisched already.
+;   * FinalizeBundle + VerifyBundles never skip — they own true residual
+;     commits only. Both shapes must leave only committed BUNDLE roots for
+;     real encode MIs.
+;   * Independent multi-op canaries: do not force-coissue; pin the observed
+;     product shape (co-issued BUNDLE 1, 0 with two generated members).
 
 ; After postmisched: single-op plain may still be bare logical (Finalize wraps);
-; independent multi may already be generated members without a BUNDLE wrapper
-; (Finalize wraps remaining encode MIs). Do not force-coissue. optnone stays
-; bare on all shapes (quality skip).
+; independent multi is a scheduler-committed BUNDLE root with generated members
+; (structural proof the scheduler ran: Finalize has not executed at this stop).
+; Do not force-coissue beyond the observed shape.
 ; POST-O0-LABEL: name: plain_o0
 ; POST-O0: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
 ; POST-O0-LABEL: name: indep_plain
+; POST-O0: BUNDLE 1, 0
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
+; GR2.4: optnone is NO LONGER skipped — same scheduler-committed shapes.
 ; POST-OPTNONE-LABEL: name: optnone_fn
 ; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
 ; POST-OPTNONE-NOT: BUNDLE
 ; POST-OPTNONE-LABEL: name: indep_optnone
-; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
-; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
-; POST-OPTNONE-NOT: BUNDLE
+; POST-OPTNONE: BUNDLE 1, 0
+; POST-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
+; POST-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
 
 ; After Finalize+Verify: committed cycles only on both paths.
 ; PLAIN-O0-LABEL: name: plain_o0
@@ -58,10 +64,11 @@ define i32 @indep_plain(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; OPTNONE: ADD32
 ; Uncommitted bare encode form must not survive Verify.
 ; OPTNONE-NOT: {{^[ ]+\$r1 = ADD32 }}
+; GR2.4: independent optnone ops keep the scheduler-committed co-issued root
+; through Finalize/Verify (not two Finalize-wrapped singletons).
 ; OPTNONE-LABEL: name: indep_optnone
-; OPTNONE: BUNDLE {{[01]}}, 0
+; OPTNONE: BUNDLE 1, 0
 ; OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
-; OPTNONE: BUNDLE {{[01]}}, 0
 ; OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; OPTNONE-NOT: {{^[ ]+\$r[0-9]+ = ADD32 }}
 define i32 @optnone_fn(i32 %a, i32 %b) #0 {
@@ -81,8 +88,6 @@ define i32 @indep_optnone(i32 %a, i32 %b, i32 %c, i32 %d) #0 {
 ; ASM: {
 ; ASM: add32
 ; ASM-LABEL: indep_optnone:
-; ASM: {
-; ASM: add32
-; ASM: {
-; ASM: add32
+; GR2.4: one co-issued composite (two add32 in one packet), matching plain.
+; ASM: add32{{.*}}add32
 attributes #0 = { noinline nounwind optnone }

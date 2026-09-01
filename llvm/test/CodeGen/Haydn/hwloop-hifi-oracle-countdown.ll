@@ -87,9 +87,13 @@ exit:
 }
 
 ; Register pressure: many live values so post-RA may spill step=-1 / limit=0
-; and reuse physregs (divide-class residual). Must still form ZOL (P9).
+; and reuse physregs (divide-class residual). GR2.1 Kind-A restamp: this
+; high-pressure body now SOFTWARE-pipelines (II=2, guarded peel with folded
+; spills) instead of forming a ZOL — the ZOL-form pins for the two
+; low-pressure peers above are unchanged.
 ; CHECK-LABEL: countdown_high_pressure:
-; CHECK: set_hwloop_f2
+; CHECK: // =>This Inner Loop Header: Depth=1
+; CHECK-NOT: set_hwloop
 define i32 @countdown_high_pressure(ptr %p, i32 %n,
                                     i32 %a0, i32 %a1, i32 %a2, i32 %a3,
                                     i32 %a4, i32 %a5, i32 %a6, i32 %a7) nounwind {

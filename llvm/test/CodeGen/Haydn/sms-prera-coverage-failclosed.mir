@@ -1,0 +1,133 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs %s -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=COV
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs %s -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=OK
+# REQUIRES: asserts
+
+# Role: GR2.1 — generated-coverage fail-close pin (replaces the deleted exact-
+# pack SMS-HANDOFF gate). The only format fact the pre-RA seat may consult is
+# COVERAGE: every packable body logical must be encodable in at least one
+# non-NOP golden-admitted Format E row (findAltSpan over the normalized
+# catalog name — the same generated oracle the Kind C estimate uses). A miss
+# rejects analyzeLoopForPipelining fail-closed. Exact packability is post-RA
+# business (cycle-slip + universal singleton fallback), never a pre-RA
+# matching input.
+#
+# This corpus uses LOADI32 as the uncovered body logical: it is a pseudo
+# (materialize expands it to XOR/LUI+ADDI post-RA) with no Format E alt row,
+# so haydnCheckSMSCoverage must reject before any ZOL/naive recognition.
+#
+# The OK arm (second function) is the covered control: the same body with the
+# LOADI32 hoisted out of the loop covers and proceeds to normal analysis.
+#
+# COV: SMS-HANDOFF: reject — body logical 'LOADI32' has no generated non-NOP alternate
+# COV: Unable to analyzeLoop, can NOT pipeline Loop
+# COV-NOT: Schedule Found? 1
+#
+# OK: SMS-HANDOFF: coverage ok
+# (The control loop may still be unanalyzable for unrelated ZOL-form reasons;
+#  the pin is that COVERAGE passes — no SMS-HANDOFF reject fires after it.)
+# OK-NOT: SMS-HANDOFF: reject — body logical
+
+--- |
+  define void @sms_coverage_uncovered(i32 %n) #0 {
+  entry:
+    br label %loop
+  loop:
+    br label %exit
+  exit:
+    ret void
+  }
+  define void @sms_coverage_ok(i32 %n) #0 {
+  entry:
+    br label %loop
+  loop:
+    br label %exit
+  exit:
+    ret void
+  }
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+name:            sms_coverage_uncovered
+alignment:       16
+legalized: true
+regBankSelected: true
+selected: true
+tracksRegLiveness: true
+noPhis:          false
+isSSA:           true
+noVRegs:         false
+registers:
+  - { id: 0, class: gpr32 }
+  - { id: 1, class: gpr32 }
+  - { id: 2, class: gpr32 }
+  - { id: 3, class: gpr32 }
+liveins:
+  - { reg: '$r2' }
+frameInfo:
+  maxAlignment:    1
+machineFunctionInfo: {}
+body:             |
+  bb.1.entry:
+    liveins: $r2
+
+    %0:gpr32 = COPY $r2
+
+  bb.2.loop:
+    successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+
+    %1:gpr32 = PHI %3, %bb.2, %0, %bb.1
+    ; Uncovered body logical: LOADI32 has no non-NOP Format E alternate row.
+    %2:gpr32 = LOADI32 1
+    %3:gpr32 = ADD32 %1, %2
+    %4:gpr32 = ADD32 %1, %3
+    BNEZ_W %4, %bb.2
+    B %bb.3
+
+  bb.3.exit:
+    RET implicit $r15
+
+...
+---
+name:            sms_coverage_ok
+alignment:       16
+legalized: true
+regBankSelected: true
+selected: true
+tracksRegLiveness: true
+noPhis:          false
+isSSA:           true
+noVRegs:         false
+registers:
+  - { id: 0, class: gpr32 }
+  - { id: 1, class: gpr32 }
+  - { id: 2, class: gpr32 }
+  - { id: 3, class: gpr32 }
+liveins:
+  - { reg: '$r2' }
+frameInfo:
+  maxAlignment:    1
+machineFunctionInfo: {}
+body:             |
+  bb.1.entry:
+    liveins: $r2
+
+    %0:gpr32 = COPY $r2
+    %2:gpr32 = LOADI32 1
+
+  bb.2.loop:
+    successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+
+    %1:gpr32 = PHI %3, %bb.2, %0, %bb.1
+    %3:gpr32 = ADD32 %1, %2
+    %4:gpr32 = ADD32 %1, %3
+    BNEZ_W %4, %bb.2
+    B %bb.3
+
+  bb.3.exit:
+    RET implicit $r15
+
+...

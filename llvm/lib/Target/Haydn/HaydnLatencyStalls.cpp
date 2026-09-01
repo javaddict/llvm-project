@@ -282,11 +282,12 @@ void HaydnLatencyStalls::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
-  // No skipFunction: latency is correctness, not quality. Plain O0 without
-  // optnone still runs postmisched (and may hold multi-MI packs); optnone
-  // quality-skips postmisched only. Both need this net so Data_Latency
-  // windows never leak into the next issue cycle. Inserted bare stall NOPs
-  // are committed by the following Finalize (no MC uncommitted escape).
+  // No skipFunction: latency is correctness, not quality. Since GR2.4
+  // postmisched runs for every function incl. optnone
+  // (forcePostRAScheduling) and may hold multi-MI packs. All shapes need
+  // this net so Data_Latency windows never leak into the next issue cycle.
+  // Inserted bare stall NOPs are committed by the following Finalize (no MC
+  // uncommitted escape).
   //
   // Consume the same availability-aware record as pre-RA / ordinary post-RA /
   // SMS / hazard recognizer. Itinerary Data_Latency stays the stall authority;

@@ -14,20 +14,14 @@
 #     drives ResMII (MII uses res component > 0 on these bodies).
 #   * SMS-HOOK fail-closed is silent on ordinary single-cycle itineraries
 #     (no multi-cycle stage / operand-dependent format predicate).
-#   * SMS-RESMII: greedy (exactTryAdd / DFA peer) ≡ exhaustive ≤3 format oracle
-#     (overestimate=0) — positive overestimate fail-closes analyzeLoop (see
-#     sms-format-resmii-overestimate-reject.mir). Preferred-collapse
-#     overestimate is unit-only.
-#   * SMS-FORMAT: ResourceCycle ≡ pure exact ≡ post-RA HR format-acceptance
-#     differential (plan §8.4 #7). match=1 / pins=1 on accepted bodies; ports
-#     orthogonal (SMS-PORT). Unit: SMS_FormatAcceptanceDifferentialPins +
-#     SMS_FormatAcceptance_LiveHRMatchesResourceCycle.
-#   * Port-forced ResMII ≥ 2: sms-format-resmii-port-forced.mir (format=1,
-#     DFA/ports open a second cycle under GPR 2W).
+#   * GR2.1 Kind A: ResMII is calculateResMIIDFA over the generated
+#     IssueWidth entry cap; the exact format frontier, port budgets, and the
+#     greedy-vs-exhaustive SMS-RESMII oracle are deleted from this seat
+#     (Kind A has no order trap; port-forcing is post-RA business).
 #   * MOVE32-class MI-vs-desc port differential: sms-format-resmii-move32-port.mir
 #     (SMS-PORT metrics; MI and descriptor both 2R1W per-field).
-#   * SMS-HANDOFF metrics-only freeze: analyzeLoop logs qual-kernel post-RA
-#     packability (exact_packable=1); recordSuccessfulSMS scalar only.
+#   * SMS-HANDOFF coverage fail-close: analyzeLoop rejects only a body
+#     logical with no generated non-NOP alternate; recordSuccessfulSMS scalar only.
 #     Default OFF: expansion keeps logical opcodes (HANDOFF-NOT:BUNDLE).
 #     Clone→cycle materialize always on (product multi-stage)
 #     (sms-handoff-materialize-groups.mir; CONT XFAIL:
@@ -40,22 +34,14 @@
 # SMS-NOT: SMS-HOOK: reject
 # SMS-NOT: unsupported SMS-HOOK resource class
 # SMS-NOT: Unable to analyzeLoop
-# SMS-NOT: SMS-RESMII: reject
 # SMS-NOT: SMS-HANDOFF: reject
 # (Positive HOOK reject: sms-format-hook-reject.mir + -haydn-sms-hook-force-reject)
-# (Positive RESMII reject: sms-format-resmii-overestimate-reject.mir)
-# ResMII ≥ 2 on these bodies (port/format capacity binds, not a trivial 1-only).
-# SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
-# SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
-# SMS-DAG: SMS-HANDOFF: metrics-only freeze
-# SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
-# SMS-DAG: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+# ResMII ≥ 1 both kernels (Kind-A entry cap; exact ports/format no longer bind).
+# SMS-DAG: SMS-HANDOFF: coverage ok
+# SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
 # SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
-# SMS-DAG: SMS-RESMII: body_ops={{[0-9]+}} greedy={{[0-9]+}} exhaustive={{[0-9]+}} overestimate=0
-# SMS-DAG: SMS-FORMAT: rc_hr_diff match=1 {{.*}} pins=1
-# SMS-DAG: SMS-HANDOFF: metrics-only freeze
-# SMS-DAG: SMS-HANDOFF: qual-kernel body_ops={{[0-9]+}} coissue_packable={{[01]}} exact_packable=1 exhaustive={{[0-9]+}}
-# SMS-DAG: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+# SMS-DAG: SMS-HANDOFF: coverage ok
+# SMS-DAG: Return Res MII:{{[1-9][0-9]*}}
 # SMS-DAG: Schedule Found? 1 (II={{[0-9]+}})
 
 --- |

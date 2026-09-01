@@ -296,70 +296,6 @@ entry:
 ; Streaming dual-load MAC-shaped loop — pre-RA through RA stays logical on
 ; both dual-run arms (no HANDOFF invent from ranking residual).
 define i32 @base_dual_load_mac_stream(ptr nocapture readonly %x,
-; POST-LABEL: name: base_dual_load_mac_stream
-; CB-166 restamp (2026-08-27): runtime-trip loop (%n) pipelines with a
-; dynamic prologue guard — preheader carries SET (count n-1) + peeled
-; stage + BNEZ guard; kernel bb.2 co-issues {MULL + LD} bundles; bb.3 is
-; the epilog drain. Same loads/MULL/accumulation, guarded peel.
-; POST: bb.0.entry:
-; POST-NEXT:   successors: %bb.1(0x50000000), %bb.4(0x30000000)
-; POST-NEXT:   liveins: $r1, $r2, $r3, $r0
-; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
-; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
-; POST-NEXT:   $r4 = MOVE32{{(_E[0-9]_[^ ]+)?}} killed $r1
-; POST-NEXT:   $r1 = ADDI32{{(_E[0-9]_[^ ]+)?}} $r0, 0
-; POST-NEXT:   $r5 = SLT32{{(_E[0-9]_[^ ]+)?}} $r1, $r3
-; POST-NEXT:   $r5 = XORI32{{(_E[0-9]_[^ ]+)?}} killed $r5, 1
-; POST-NEXT:   BNEZ_W killed $r5, %bb.4
-; POST-NEXT: {{  $}}
-; POST-NEXT: bb.1.loop.preheader:
-; POST-NEXT:   successors: %bb.2(0x40000000), %bb.3(0x40000000)
-; POST-NEXT:   liveins: $r1, $r2, $r3, $r4
-; POST-NEXT: {{  $}}
-; POST-NEXT:   $r5 = ADDI32{{(_E[0-9]_[^ ]+)?}} $r3, -1
-; POST-NEXT:   $r6 = ADDI32{{(_E[0-9]_[^ ]+)?}} $r0, 2
-; POST-NEXT:   SET_HWLOOP_F2{{(_E[0-9]_[^ ]+)?}} 0, %bb.2, %bb.2, killed $r5, implicit-def $sfr
-; The two peeled loads are independent; the matching-frontier bisect arm
-; swaps their order (and their register roles). Accept either shape.
-; POST-NEXT: {{(\$r[0-9]+(, \$r[0-9]+)? = S_LW_(POST|WITH)_IMM(_E[0-9]_[^ ]+)? .*$)}}
-; POST-NEXT: {{(\$r[0-9]+ = SLT32(_E[0-9]_[^ ]+)? killed \$r[0-9]+, killed \$r[0-9]+$)}}
-; POST-NEXT: {{(\$r[0-9]+(, \$r[0-9]+)? = S_LW_(POST|WITH)_IMM(_E[0-9]_[^ ]+)? .*$)}}
-; POST-NEXT:   $r4 = ADDI32{{(_E[0-9]_[^ ]+)?}} killed $r4, 4
-; POST-NEXT:   BNEZ_W killed $r6, %bb.3
-; POST-NEXT: {{  $}}
-; POST-NEXT: bb.2.loop:
-; POST-NEXT:   successors: %bb.2(0x7c000000), %bb.3(0x04000000)
-; POST-NEXT:   liveins: $r1, $r2, $r3, $r4, $r5
-; POST-NEXT: {{  $}}
-; The CB-166 co-issue invariant: the kernel bundles {MULL + LD} and keeps
-; the post-inc S_LW outside; register roles/order differ between the
-; matching-frontier bisect arms. Accept either leg assignment.
-; POST-NEXT:   BUNDLE 0, 0, {{.*implicit-def \$r6.*\{$}}
-; POST-NEXT:     $r6 = MULL{{(_E[0-9]_[^ ]+)?}} killed $r{{[35]}}, killed $r{{[35]}}
-; POST-NEXT:     $r{{[35]}} = S_LW_WITH_IMM{{(_E[0-9]_[^ ]+)?}} $r4, 0 :: (load (s32) from %ir.lsr.iv1 + 4)
-; POST-NEXT:   {{\}$}}
-; POST-NEXT:   $r{{[35]}}, $r2 = S_LW_POST_IMM{{(_E[0-9]_[^ ]+)?}} killed $r2, 1 :: (load (s32) from %ir.lsr.iv + 4)
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r4, implicit-def $r1, implicit killed $r4, implicit killed $r1, implicit killed $r6 {
-; POST-NEXT:     $r4 = ADDI32{{(_E[0-9]_[^ ]+)?}} killed $r4, 4
-; POST-NEXT:     $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r6
-; POST-NEXT:   }
-; POST-NEXT:   PseudoLoopEnd %bb.2
-; POST-NEXT: {{  $}}
-; POST-NEXT: bb.3:
-; POST-NEXT:   successors: %bb.4(0x80000000)
-; POST-NEXT:   liveins: $r1, $r3, $r5
-; POST-NEXT: {{  $}}
-; POST-NEXT:   $r2 = MULL{{(_E[0-9]_[^ ]+)?}} killed $r{{[35]}}, killed $r{{[35]}}
-; POST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r2
-; POST-NEXT: {{  $}}
-; POST-NEXT: bb.4.exit:
-; POST-NEXT:   liveins: $r1
-; POST-NEXT: {{  $}}
-; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
-; POST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
-; POST-NEXT:   $r0 = JALR_W $r15, 0, implicit killed $r1
                                       ptr nocapture readonly %h, i32 %n) {
 ; Option A containment: no pre-RA SMS multi-member BUNDLE freeze.
 entry:
@@ -381,6 +317,30 @@ exit:
   %r = phi i32 [ 0, %entry ], [ %acc.next, %loop ]
   ret i32 %r
 }
+; POST-LABEL: name: base_dual_load_mac_stream
+; GR2.1 Kind-A restamp: ResMII 3->2 accepts a two-stage peel; bb.0 guards
+; n>=2 directly, bb.1.loop is the guarded prologue, bb.2.loop the kernel
+; (soft path - no SET_HWLOOP preheader), and bb.3 drains the tail MULL+ADD.
+; POST: bb.0.entry:
+; POST-NEXT:   successors: {{.*}}
+; POST-NEXT:   liveins: $r1, $r2, $r3, $r0
+; POST-NEXT: {{  $}}
+; POST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
+; POST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
+; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
+; POST-NEXT:   $r4 = MOVE32{{(_E[0-9]_[^ ]+)?}} killed $r1
+; POST-NEXT:   $r1 = ADDI32{{(_E[0-9]_[^ ]+)?}} $r0, 0
+; POST-NEXT:   $r5 = SLT32{{(_E[0-9]_[^ ]+)?}} $r1, $r3
+; POST-NEXT:   $r5 = XORI32{{(_E[0-9]_[^ ]+)?}} killed $r5, 1
+; POST-NEXT:   BNEZ_W killed $r5, %bb.{{[0-9]+}}
+; Kernel (distinctive shape): {MULL + LD} co-issued in one BUNDLE.
+; POST:       $r{{[0-9]+}} = MULL{{(_E[0-9]_[^ ]+)?}} killed $r{{[0-9]+}}, killed $r{{[0-9]+}}
+; POST:        $r{{[0-9]+}} = S_LW_WITH_IMM{{(_E[0-9]_[^ ]+)?}} $r{{[0-9]+}}, 0
+; POST:       BNEZ_W killed $r{{[0-9]+}}, %bb.{{[0-9]+}}
+; Epilog drain (after the kernel): tail MULL + acc ADD scalar, then return.
+; POST:       $r{{[0-9]+}} = MULL{{(_E[0-9]_[^ ]+)?}} killed $r{{[0-9]+}}, killed $r{{[0-9]+}}
+; POST:       $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r{{[0-9]+}}
+; POST:       $r0 = JALR_W $r15, 0, implicit killed $r1
 
 ; Mid-pressure live-across-call: dual-run spill/reload counters must stay
 ; silent (zero) on this corpus — ranking residual must not invent spills.

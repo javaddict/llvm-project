@@ -296,17 +296,14 @@ cl::opt<int> HaydnLoopMinTripCount(
 // Product multi-stage SWP and exact E96 commit live only in the post-RA engine.
 // No pre-RA SMS BUNDLE / clone-cycle group materialize remains.
 
-cl::opt<bool> EnableHaydnHRResourceCycle(
-    "haydn-hr-resource-cycle", cl::Hidden, cl::init(true),
-    cl::desc("/: return a HaydnResourceCycle (Bundle-backed"
-             "alternative-aware) from CreateTargetScheduleState so SMS reasons "
-             "about real slot pressure. Default ON: the DFA packetizer is "
-             "choice-set-naive (DFAPacketizerEmitter ORs all units in a stage), "
-             "so a Slot01_LD LD64 reserves BOTH slot0+slot1 bits and two LD64 "
-             "always conflict — inflating ResMII past the schedule span and "
-             "rejecting every dual-load streaming loop (Subagent A). The"
-             "Bundle model picks ONE slot from the alt-set, so two LD64 pack as "
-             "slot0+slot1. Mirrors AIE's AIEResourceCycle (AIE-faithful)."));
+// GR2.1: the pre-RA SMS ResourceCycle boundary is the Kind-A
+// HaydnIssueWidthCycle (generated IssueWidth entry cap + the shared
+// same-cycle RAW/WAW dependency laws). The former exact HaydnResourceCycle
+// arm, its -haydn-hr-resource-cycle switch, and the createDFAPacketizer
+// fallback are deleted from this seat: exact capacity/unit/port/hazard
+// matching is post-RA HR business, and pre-RA is proposal-only (pipeline
+// contract Kind A). HaydnResourceCycle remains the post-RA HR peer depth +
+// shared statics + unit-test surface.
 
 // SMS-HOOK positive / bisect: product itineraries are InstrStage cycles==1, so
 // the multi-cycle scan has no live reject corpus. Force fail-closed so lits can
@@ -2808,16 +2805,15 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
 
 ResourceCycle *HaydnInstrInfo::CreateTargetScheduleState(
     const TargetSubtargetInfo &STI) const {
-  // Bundle-backed resource model for SWPS (alternative-aware slot
-  // pressure). Default ON — see EnableHaydnHRResourceCycle. The DFA fallback is
-  // choice-set-naive (reserves all alt bits in a stage), which inflates ResMII
-  // on dual-load streaming loops. Pre-RA SMS uses this adapter for modulo
-  // resource accounting only; it never materializes multi-member BUNDLE
-  // roots (StageCount>1 is rejected; product multi-stage is post-RA).
-  if (EnableHaydnHRResourceCycle)
-    return new HaydnResourceCycle();
-  const InstrItineraryData *II = STI.getInstrItineraryData();
-  return static_cast<const HaydnSubtarget &>(STI).createDFAPacketizer(II);
+  // Pre-RA SMS contract boundary (GR2.1): Kind-A only — the generated
+  // IssueWidth entry cap (bound once from the sched model; IssueWidth ==
+  // FormatEE3EntryCapacity == Haydn::ISSUE_SLOT_COUNT, pinned in
+  // HaydnMachineScheduler.cpp) plus the shared same-cycle RAW/WAW dependency
+  // laws via the D999 MI overload. No exact format/unit/port consultation at
+  // this seat; exact legality, cycle-slip, and commit are post-RA. The seat
+  // never materializes multi-member BUNDLE roots (StageCount>1 is rejected;
+  // product multi-stage is post-RA).
+  return new HaydnIssueWidthCycle(STI.getSchedModel().IssueWidth);
 }
 
 ScheduleHazardRecognizer *HaydnInstrInfo::CreateTargetMIHazardRecognizer(
@@ -3693,65 +3689,6 @@ static bool haydnLoopHasUnsupportedSMSResources(const MachineBasicBlock &LoopBB,
   return false;
 }
 
-/// Collect placeable body opcodes for SMS-RESMII (format packing multiset).
-/// Skips PHI / meta / debug / terminators — same filter spirit as the HOOK scan.
-static void haydnCollectSMSBodyOpcodes(const MachineBasicBlock &LoopBB,
-                                       SmallVectorImpl<unsigned> &Out) {
-  Out.clear();
-  for (const MachineInstr &MI : LoopBB) {
-    if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isImplicitDef() ||
-        MI.isKill() || MI.isCFIInstruction() || MI.isPHI() || MI.isTerminator())
-      continue;
-    Out.push_back(MI.getOpcode());
-  }
-}
-
-/// SMS-RESMII gate: compare left-to-right greedy (exactTryAddProduct — same
-/// depth as ResourceCycle / calculateResMIIDFA packing) with the exhaustive ≤3
-/// format set oracle. Logs MBB-order metrics for dual-run KPI; does not rewrite
-/// shared MachinePipeliner or replace ResourceManager::calculateResMIIDFA.
-///
-/// Pure productResMIIFailsQualification remains the unit/pre-RA surface pin
-/// for positive overestimate (order-trap multisets). analyzeLoop no longer
-/// nulls the loop on that signal: residual Format E entry-capacity / E2-only
-/// packs make ordinary IR body order overestimate while exhaustive still finds
-/// a finite cover, and Option A product containment already rejects every
-/// StageCount>1 at shouldUseSchedule. Inflated greedy ResMII is conservative
-/// (safe II floor), not a miscompile. Preferred-collapse overestimate stays
-/// unit-only. Exact-pack fail-close remains in haydnCheckSMSHandoffPackability.
-///
-/// Uses DEBUG_WITH_TYPE("pipeliner") so sms-* lits with -debug-only=pipeliner
-/// pin the gate line (file DEBUG_TYPE is haydn-instr-info).
-/// \returns true always (metrics-only; overestimate is not analyze reject).
-static bool haydnCheckSMSResMIIOracle(const MachineBasicBlock &LoopBB) {
-  SmallVector<unsigned, 16> Body;
-  haydnCollectSMSBodyOpcodes(LoopBB, Body);
-  if (Body.empty())
-    return true;
-
-  using namespace haydn::bundle;
-  const unsigned Greedy = computeProductResMII(Body);
-  const unsigned Exact = computeExhaustiveProductResMII(Body);
-  const int Over = productResMIIOverestimate(Body);
-  const bool OverEstimates = productResMIIFailsQualification(Body);
-
-  DEBUG_WITH_TYPE("pipeliner", {
-    dbgs() << "SMS-RESMII: body_ops=" << Body.size() << " greedy=" << Greedy
-           << " exhaustive=" << Exact << " overestimate=" << Over;
-    if (Body.size() > MaxExhaustiveProductResMIIOps)
-      dbgs() << " (exhaustive fallback=greedy; N>"
-             << MaxExhaustiveProductResMIIOps << ")";
-    dbgs() << "\n";
-    if (OverEstimates)
-      dbgs() << "SMS-RESMII: reject — greedy overestimates exhaustive oracle by "
-             << Over
-             << " (metrics-only; StageCount>1 containment is the product gate; "
-                "format-dependent multi-stage is post-RA only)\n";
-  });
-  // Always continue analyzeLoop: StageCount>1 / HOOK / exact-pack own reject.
-  return true;
-}
-
 /// SMS-PORT metrics (MOVE32-class MI-versus-descriptor):
 /// Log when the body contains MOVE32 (or slot members) so qualification can
 /// pin that MI and descriptor paths are both 2R1W per-field. Does **not**
@@ -3781,141 +3718,42 @@ static void haydnLogSMSPortMiVsDescDifferential(const MachineBasicBlock &LoopBB)
   });
 }
 
-/// Format-acceptance differential metrics (plan §8.4 #7 SMS surface):
-/// Log live ResourceCycle ≡ pure exactTryAddProduct polarity for the body
-/// opcode multiset, plus the product pin. Metrics-only — never fail-closes
-/// (format reject is already covered by RESMII / HANDOFF packability; this
-/// line freezes RC↔HR peer agreement for qualification). Ports (MOVE32-class)
-/// are orthogonal SMS-PORT metrics.
-static void haydnLogSMSFormatAcceptanceDiff(const MachineBasicBlock &LoopBB) {
-  SmallVector<unsigned, 16> Body;
-  haydnCollectSMSBodyOpcodes(LoopBB, Body);
-
-  const bool Match =
-      HaydnResourceCycle::formatAcceptanceMatchesPureExact(Body);
-  const bool Pins =
-      HaydnResourceCycle::formatAcceptanceDifferentialPins();
-  const unsigned LiveCycles =
-      HaydnResourceCycle::formatSequentialCycleCount(Body);
-  const bool PureSeq =
-      HaydnResourceCycle::formatPureExactCanPackSequence(Body);
-  const bool LiveSeq = HaydnResourceCycle::formatCanPackSequence(Body);
-
-  DEBUG_WITH_TYPE("pipeliner", {
-    dbgs() << "SMS-FORMAT: rc_hr_diff match=" << (Match ? 1 : 0)
-           << " live_pack=" << (LiveSeq ? 1 : 0)
-           << " pure_pack=" << (PureSeq ? 1 : 0)
-           << " live_cycles=" << LiveCycles
-           << " pins=" << (Pins ? 1 : 0)
-           << " body_ops=" << Body.size()
-           << " (ResourceCycle≡pure exact≡post-RA HR format; ports orthogonal)\n";
-  });
-}
-
-/// Soft-exit QoR metrics (format-SMS corpus): log softExitIIFloor =
-/// max(exhaustive format ResMII, MI port lower bound) plus exact-pack flag.
-/// Metrics-only — never invents RecMII or durable BUNDLE groups. RecMII floors
-/// remain DDG/itinerary (pipeliner "rec=" line / macc-acc-feedback).
-/// VF3-G2 Generic-pass freeze (§8.4 #11): these lines are the SMS KPI surface
-/// dual-run pinned under product vs matching-frontier=false vs finer-rp=false
-/// in sms-format-generic-baseline.ll (unexplained ResMII/II delta blocks wave).
-/// VF3-G3 ILP/critical residual attribution: same PROD/GEN/RP KPI parity is
-/// frozen on dedicated ILP multi-load / dual-acc and critical-path chain
-/// kernels in sms-format-ilp-crit-dual-run.ll (ranking residual must not invent
-/// soft-exit / ResMII / II deltas; ResourceDemand pre-RA attribution is the
-/// residual signal — multi-MI finalize parity holds on residual arms).
-static void haydnLogSMSSoftExitQoR(const MachineBasicBlock &LoopBB) {
-  SmallVector<unsigned, 16> Body;
-  haydnCollectSMSBodyOpcodes(LoopBB, Body);
-
-  HaydnCyclePortDemand Ports;
+/// GR2.1 generated-coverage fail-close (replaces the deleted exact-pack
+/// SMS-HANDOFF gate). The ONLY format fact the pre-RA seat may consult is
+/// coverage: every packable body logical must be encodable in at least one
+/// non-NOP golden-admitted Format E row (findAltSpan over the normalized
+/// catalog name — the same generated coverage oracle
+/// HaydnPipelinerLoopInfo::estimateCyclesAcrossAvailableFormats uses). A miss
+/// is an RA-legal tuple with no alternate: reject analyzeLoopForPipelining
+/// fail-closed. This is coverage data, not exact packability — whether covered
+/// bodies co-issue is post-RA business (cycle-slip + universal singleton
+/// fallback). Witness-free; no rows/units/ports are matched here.
+/// \returns false when the loop must be rejected (uncovered body logical).
+static bool haydnCheckSMSCoverage(const TargetInstrInfo &TII,
+                                  const MachineBasicBlock &LoopBB) {
   for (const MachineInstr &MI : LoopBB) {
     if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isImplicitDef() ||
         MI.isKill() || MI.isCFIInstruction() || MI.isPHI() || MI.isTerminator())
       continue;
-    Ports += countHaydnPortsFromMI(MI);
+    // Same catalog-name normalization as the Kind C estimate (post-inc /
+    // load-store families use catalog occupancy names).
+    const std::string CatalogName = haydn::format_e::peelLogicalOpcodeName(
+        TII.getName(MI.getOpcode()));
+    if (!haydn::format_e::findAltSpan(CatalogName.c_str())) {
+      DEBUG_WITH_TYPE("pipeliner", {
+        dbgs() << "SMS-HANDOFF: reject — body logical '" << CatalogName
+               << "' has no generated non-NOP alternate (coverage fail-close; "
+                  "post-RA packability is not a pre-RA matching input)\n";
+      });
+      return false;
+    }
   }
-
-  const unsigned FormatII =
-      Body.empty() ? 0u
-                   : haydn::bundle::computeExhaustiveProductResMII(Body);
-  const unsigned PortII = HaydnResourceCycle::portLowerBoundResMII(
-      Ports.GPRReads, Ports.GPRWrites, Ports.DRReads, Ports.DRWrites,
-      Ports.ARReads, Ports.ARWrites);
-  const unsigned Floor = HaydnResourceCycle::softExitIIFloor(
-      Body, Ports.GPRReads, Ports.GPRWrites, Ports.DRReads, Ports.DRWrites,
-      Ports.ARReads, Ports.ARWrites);
-  const bool Exact = HaydnResourceCycle::qualKernelExactlyPackable(Body);
-
   DEBUG_WITH_TYPE("pipeliner", {
-    dbgs() << "SMS-QOR: soft_exit_ii_floor=" << Floor
-           << " format_resmii=" << FormatII << " port_resmii=" << PortII
-           << " exact_packable=" << (Exact ? 1 : 0) << " body_ops=" << Body.size()
-           << " (metrics-only; no HANDOFF invent; RecMII is DDG)\n";
+    dbgs() << "SMS-HANDOFF: coverage ok (every packable body logical has a "
+              "generated non-NOP alternate; Kind C advisory in "
+              "shouldUseSchedule)\n";
   });
-
-  // Same-artifact occupancy proxy (enc_fill / issue_width). Observation only;
-  // not a competitive IPC claim and not a densify rewrite. Issue width is
-  // Haydn::ISSUE_SLOT_COUNT (HaydnBaseInfo.h:27), matching Format E E3.
-  const unsigned IssueWidth = Haydn::ISSUE_SLOT_COUNT;
-  const double EncFill =
-      FormatII ? (static_cast<double>(Body.size()) /
-                  static_cast<double>(FormatII))
-               : 0.0;
-  const double IpcProxy =
-      IssueWidth ? (EncFill / static_cast<double>(IssueWidth)) : 0.0;
-  DEBUG_WITH_TYPE("pipeliner", {
-    dbgs() << "SMS-IPC: enc_fill=" << EncFill << " ipc_proxy=" << IpcProxy
-           << " issue_width=" << IssueWidth
-           << " (same-artifact proxy; not competitive)\n";
-  });
-}
-
-/// Qualification-kernel post-RA packability metrics (analyzeLoop). Proves
-/// accepted bodies remain exact-packable under the shared product oracle.
-/// No pre-RA clone-cycle BUNDLE materialize. Does **not** fail-close on
-/// multi-cycle covers (those remain legal; only RESMII overestimate rejects).
-/// Exact_packable=0 on an exact-bound body after RESMII pass would mean the
-/// exhaustive cover is missing — treat as fail-close so qualification never
-/// claims a kernel that post-RA cannot pack under the same product model.
-/// Bodies with N > MaxExhaustiveProductResMIIOps use the greedy fallback
-/// oracle (same as SMS-RESMII): a finite cover still counts as packable —
-/// never false-reject large streaming kernels on the inexact bound.
-/// \returns false when the loop must be rejected (not exactly packable).
-static bool haydnCheckSMSHandoffPackability(const MachineBasicBlock &LoopBB) {
-  SmallVector<unsigned, 16> Body;
-  haydnCollectSMSBodyOpcodes(LoopBB, Body);
-
-  // Metrics-only contract restated for lit pins (no pre-RA cycle groups;
-  // no generic post-expand virtual). Keep the historical SMS-HANDOFF prefix.
-  DEBUG_WITH_TYPE("pipeliner", {
-    dbgs() << "SMS-HANDOFF: metrics-only freeze "
-              "(scalar metrics on success remark; no pre-RA cycle groups)\n";
-  });
-
-  if (Body.empty()) {
-    DEBUG_WITH_TYPE("pipeliner", {
-      dbgs() << "SMS-HANDOFF: qual-kernel body_ops=0 coissue_packable=1 "
-                "exact_packable=1 exhaustive=0\n";
-    });
-    return true;
-  }
-
-  const bool Coissue = HaydnResourceCycle::qualKernelCoissuePackable(Body);
-  const bool Exact = HaydnResourceCycle::qualKernelExactlyPackable(Body);
-  const unsigned Exhaustive =
-      haydn::bundle::computeExhaustiveProductResMII(Body);
-
-  DEBUG_WITH_TYPE("pipeliner", {
-    dbgs() << "SMS-HANDOFF: qual-kernel body_ops=" << Body.size()
-           << " coissue_packable=" << (Coissue ? 1 : 0)
-           << " exact_packable=" << (Exact ? 1 : 0)
-           << " exhaustive=" << Exhaustive << "\n";
-    if (!Exact)
-      dbgs() << "SMS-HANDOFF: reject — qualification kernel not exactly "
-                "packable under product oracle (post-RA no-split contract)\n";
-  });
-  return Exact;
+  return true;
 }
 
 } // namespace
@@ -3932,43 +3770,26 @@ HaydnInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
     return nullptr;
   }
 
-  // SMS-RESMII: greedy vs exhaustive ≤3 format oracle metrics. Positive
-  // overestimate is logged only (Option A: StageCount>1 containment is the
-  // product gate; inflated greedy II is conservative). Exact-pack reject stays
-  // in haydnCheckSMSHandoffPackability. Does not replace calculateResMIIDFA.
-  if (!haydnCheckSMSResMIIOracle(*LoopBB)) {
+  // GR2.1: the exact pre-RA oracle seats are deleted (SMS-RESMII greedy-vs-
+  // exhaustive differential, SMS-FORMAT RC↔pure-exact differential, SMS-QOR/
+  // SMS-IPC exact format/port floors, SMS-HANDOFF exact-pack gate). The pre-RA
+  // seat reasons on generated IssueWidth (Kind A ResourceCycle) plus the
+  // witness-free Kind C floor only; ResMII itself is the generic pipeliner's
+  // calculateResMIIDFA over the Kind-A cycle. The one surviving fail-close is
+  // generated COVERAGE (Kind C findAltSpan) — exact packability is post-RA
+  // business (cycle-slip + universal singleton fallback).
+  if (!haydnCheckSMSCoverage(*this, *LoopBB)) {
     DEBUG_WITH_TYPE("pipeliner", {
       dbgs() << "SMS: analyzeLoopForPipelining fail-closed "
-                "(SMS-RESMII greedy overestimate)\n";
+                "(SMS-HANDOFF uncovered body logical)\n";
     });
     return nullptr;
   }
-
-  // SMS-FORMAT: metrics-only ResourceCycle ≡ pure exact ≡ post-RA HR
-  // format-acceptance differential (plan §8.4 #7). Does not fail-close —
-  // polarity pin + body match log; ports are SMS-PORT orthogonal metrics.
-  haydnLogSMSFormatAcceptanceDiff(*LoopBB);
 
   // SMS-PORT: metrics-only MOVE32-class MI-versus-descriptor differential.
   // Placement (MID) overcounts repeated sources; ResMII (MI) is exact. Does
   // not fail-close — intentional conservative placement.
   haydnLogSMSPortMiVsDescDifferential(*LoopBB);
-
-  // Qualification-kernel post-RA packability metrics. Logs evidence under the
-  // historical SMS-HANDOFF debug prefix; fail-closes only for in-bound bodies
-  // that are not exactly packable (rare after RESMII). N>bound is not rejected
-  // here. Pre-RA never freezes multi-member BUNDLE roots.
-  if (!haydnCheckSMSHandoffPackability(*LoopBB)) {
-    DEBUG_WITH_TYPE("pipeliner", {
-      dbgs() << "SMS: analyzeLoopForPipelining fail-closed "
-                "(SMS-HANDOFF qual-kernel not exactly packable)\n";
-    });
-    return nullptr;
-  }
-
-  // Soft-exit QoR: metrics-only II floor (max format ResMII, MI port floor)
-  // + exact-pack restate. Never invents RecMII or BUNDLE groups.
-  haydnLogSMSSoftExitQoR(*LoopBB);
 
   // Check for ZOL (Zero-Overhead Loop) form. The IR-level HardwareLoops pass
   // runs before IRTranslator, so it has ALREADY converted every countable

@@ -1485,9 +1485,11 @@ inline void applyFinalDirectCompatibleSingleton(MachineInstr &MI,
   applyFinalDirectCompatibleOpcode(MI, Fmts, TII);
 }
 
-/// Product-path identity bake for remaining FieldSlot/logicals (optnone
-/// skipFunction on PostMachineScheduler, late BR/Fixup inserts that miss
-/// leaveMBB). Does not wrap, restamp, peel, or DFS.
+/// Product-path identity bake for remaining FieldSlot/logicals (late
+/// BR/Fixup inserts that miss leaveMBB; since GR2.4 the scheduler runs for
+/// optnone too via forcePostRAScheduling, so late inserts rejoining through
+/// the late Finalize are the remaining source). Does not wrap, restamp,
+/// peel, or DFS.
 inline void applyFinalDirectCompatibleMembers(MachineFunction &MF) {
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();

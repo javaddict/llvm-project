@@ -23,7 +23,7 @@
 ; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
 ; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
 ; SWP-NOT: Unable to analyzeLoop
-; SWP: SMS-HANDOFF: metrics-only freeze
+; SWP: SMS-HANDOFF: coverage ok
 ; ASM-LABEL: soft_countdown_sum:
 ; ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
 ; ASM: {

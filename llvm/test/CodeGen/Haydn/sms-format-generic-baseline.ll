@@ -47,20 +47,23 @@
 ; the frozen generic residual arms on ResMII/II/soft-exit/exact-pack KPIs.
 ;
 ; Dual-run arms (existing product flags only; never null pre-RA HR factory;
-; isavail-delay stays default OFF; HANDOFF stays metrics-only / default OFF):
+; isavail-delay stays default OFF; HANDOFF stays coverage fail-close only):
 ;   * PROD — product defaults
 ;   * GEN  — -haydn-premisched-matching-frontier=false (stock NodeOrder after
 ;            pressure/critical; cycle-ranking residual)
 ;   * RP   — -haydn-premisched-finer-rp-tracking=false (GenericScheduler
 ;            pressure-policy residual; AIE reduce_pressure peer surface)
 ;
-; Frozen format-SMS KPIs (identical PROD/GEN/RP — unexplained delta blocks wave):
-;   * dual-load MAC stream: soft_exit_ii_floor=4, format_resmii=3, port=4,
-;     Res MII/II=4, rec=1, overestimate=0, exact_packable=1
-;   * simple acc stream: soft_exit_ii_floor=3, format_resmii=2, port=3,
-;     Res MII/II=3, rec=1, overestimate=0, exact_packable=1
-;   * HOOK / RESMII / HANDOFF rejects silent; Schedule Found? 1 both kernels
-;   * -stop-after=pipeliner: no durable BUNDLE (metrics-only HANDOFF freeze)
+; GR2.1 Kind-A restamp: the pre-RA seat reasons on the generated IssueWidth
+; entry cap + shared same-cycle RAW/WAW only (the exact RESMII/FORMAT/QOR/IPC
+; oracles and the exact-pack HANDOFF gate are deleted). ResMII is the generic
+; calculateResMIIDFA count over the Kind-A cycle; the deleted exact floors
+; (port 4/3, format 3/2) no longer inflate it:
+;   * dual-load MAC stream: Res MII/II=3 (was 4), rec=1
+;   * simple acc stream: Res MII/II=2 (was 3), rec=1
+;   * SMS-HANDOFF is now the generated-coverage ok line; no reject
+;   * HOOK rejects silent; Schedule Found? 1 both kernels
+;   * -stop-after=pipeliner: no durable BUNDLE (coverage-only HANDOFF)
 ;   * -stop-after=postmisched: multi-MI BUNDLE 0 still legal both ranking modes
 ;   * -stats: multi-MI exact finalize parity; spill/reload/split/hard-root silent
 ;
@@ -75,53 +78,37 @@
 ; BASE-NOT: SMS-HOOK: reject
 ; BASE-NOT: unsupported SMS-HOOK resource class
 ; BASE-NOT: Unable to analyzeLoop
-; BASE-NOT: SMS-RESMII: reject
 ; BASE-NOT: SMS-HANDOFF: reject
 
-; --- PROD frozen ResMII/II/soft-exit (product ranking) ---
-; PROD-DAG: SMS-RESMII: body_ops=7 greedy=3 exhaustive=3 overestimate=0
-; PROD-DAG: SMS-HANDOFF: metrics-only freeze
-; PROD-DAG: SMS-HANDOFF: qual-kernel body_ops=7 coissue_packable=0 exact_packable=1 exhaustive=3
-; PROD-DAG: SMS-QOR: soft_exit_ii_floor=4 format_resmii=3 port_resmii=4 exact_packable=1 body_ops=7
-; PROD-DAG: Return Res MII:4
-; PROD-DAG: MII = 4 MAX_II = 14 (rec=1, res=4)
-; PROD-DAG: Schedule Found? 1 (II=4)
-; PROD-DAG: SMS-RESMII: body_ops=4 greedy=2 exhaustive=2 overestimate=0
-; PROD-DAG: SMS-HANDOFF: qual-kernel body_ops=4 coissue_packable=0 exact_packable=1 exhaustive=2
-; PROD-DAG: SMS-QOR: soft_exit_ii_floor=3 format_resmii=2 port_resmii=3 exact_packable=1 body_ops=4
+; --- PROD Kind-A ResMII/II (product ranking) ---
+; PROD-DAG: SMS-HANDOFF: coverage ok
 ; PROD-DAG: Return Res MII:3
 ; PROD-DAG: MII = 3 MAX_II = 13 (rec=1, res=3)
 ; PROD-DAG: Schedule Found? 1 (II=3)
+; PROD-DAG: SMS-HANDOFF: coverage ok
+; PROD-DAG: Return Res MII:2
+; PROD-DAG: MII = 2 MAX_II = 12 (rec=1, res=2)
+; PROD-DAG: Schedule Found? 1 (II=2)
 
-; --- GEN frozen ResMII/II/soft-exit (matching-frontier OFF residual) ---
-; GEN-DAG: SMS-RESMII: body_ops=7 greedy=3 exhaustive=3 overestimate=0
-; GEN-DAG: SMS-HANDOFF: metrics-only freeze
-; GEN-DAG: SMS-HANDOFF: qual-kernel body_ops=7 coissue_packable=0 exact_packable=1 exhaustive=3
-; GEN-DAG: SMS-QOR: soft_exit_ii_floor=4 format_resmii=3 port_resmii=4 exact_packable=1 body_ops=7
-; GEN-DAG: Return Res MII:4
-; GEN-DAG: MII = 4 MAX_II = 14 (rec=1, res=4)
-; GEN-DAG: Schedule Found? 1 (II=4)
-; GEN-DAG: SMS-RESMII: body_ops=4 greedy=2 exhaustive=2 overestimate=0
-; GEN-DAG: SMS-HANDOFF: qual-kernel body_ops=4 coissue_packable=0 exact_packable=1 exhaustive=2
-; GEN-DAG: SMS-QOR: soft_exit_ii_floor=3 format_resmii=2 port_resmii=3 exact_packable=1 body_ops=4
+; --- GEN Kind-A ResMII/II (matching-frontier OFF residual) ---
+; GEN-DAG: SMS-HANDOFF: coverage ok
 ; GEN-DAG: Return Res MII:3
 ; GEN-DAG: MII = 3 MAX_II = 13 (rec=1, res=3)
 ; GEN-DAG: Schedule Found? 1 (II=3)
+; GEN-DAG: SMS-HANDOFF: coverage ok
+; GEN-DAG: Return Res MII:2
+; GEN-DAG: MII = 2 MAX_II = 12 (rec=1, res=2)
+; GEN-DAG: Schedule Found? 1 (II=2)
 
-; --- RP frozen ResMII/II/soft-exit (finer-rp OFF residual) ---
-; RP-DAG: SMS-RESMII: body_ops=7 greedy=3 exhaustive=3 overestimate=0
-; RP-DAG: SMS-HANDOFF: metrics-only freeze
-; RP-DAG: SMS-HANDOFF: qual-kernel body_ops=7 coissue_packable=0 exact_packable=1 exhaustive=3
-; RP-DAG: SMS-QOR: soft_exit_ii_floor=4 format_resmii=3 port_resmii=4 exact_packable=1 body_ops=7
-; RP-DAG: Return Res MII:4
-; RP-DAG: MII = 4 MAX_II = 14 (rec=1, res=4)
-; RP-DAG: Schedule Found? 1 (II=4)
-; RP-DAG: SMS-RESMII: body_ops=4 greedy=2 exhaustive=2 overestimate=0
-; RP-DAG: SMS-HANDOFF: qual-kernel body_ops=4 coissue_packable=0 exact_packable=1 exhaustive=2
-; RP-DAG: SMS-QOR: soft_exit_ii_floor=3 format_resmii=2 port_resmii=3 exact_packable=1 body_ops=4
+; --- RP Kind-A ResMII/II (finer-rp OFF residual) ---
+; RP-DAG: SMS-HANDOFF: coverage ok
 ; RP-DAG: Return Res MII:3
 ; RP-DAG: MII = 3 MAX_II = 13 (rec=1, res=3)
 ; RP-DAG: Schedule Found? 1 (II=3)
+; RP-DAG: SMS-HANDOFF: coverage ok
+; RP-DAG: Return Res MII:2
+; RP-DAG: MII = 2 MAX_II = 12 (rec=1, res=2)
+; RP-DAG: Schedule Found? 1 (II=2)
 
 ; --- Dual-run -stats attribution (PROD vs GEN vs RP) ---
 ; FileCheck order follows -stats emission (post-RA first among these).

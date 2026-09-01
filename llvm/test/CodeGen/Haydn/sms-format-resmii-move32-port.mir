@@ -17,22 +17,19 @@
 #
 #   Body: three independent MOVE32 (format greedy=exhaustive=1). Write pool
 #   2W forces DFA ResMII ≥ 2 under the MI path (same as port-forced ADD32).
-#   SMS-RESMII format oracle stays clean (overestimate=0).
+#   GR2.1: ResMII is Kind-A (entry count); MOVE32 1R1W no longer binds it.
 #
 # Companion: sms-format-resmii-port-forced.mir (ADD32 3×1W),
 # sms-format-resmii.mir (accept). Unit peer: HaydnBundleTest
 # SMS_Move32Class* ResourceCycle packing differential.
 #
 # PORT-NOT: SMS-HOOK: reject
-# PORT-NOT: SMS-RESMII: reject
 # PORT-NOT: SMS-HANDOFF: reject
 # PORT-NOT: Unable to analyzeLoop
-# PORT: SMS-RESMII: body_ops=3 greedy=1 exhaustive=1 overestimate=0
+# PORT: SMS-HANDOFF: coverage ok
 # PORT: SMS-PORT: move32-class ops=3 desc_shape=1R1W mi_repeated_src=1R1W desc_overcounts_mi=0
-# PORT: SMS-HANDOFF: metrics-only freeze
-# PORT: SMS-HANDOFF: qual-kernel body_ops=3 coissue_packable=1 exact_packable=1 exhaustive=1
-# MI-path ResMII ≥ 2 (3 writes under 2W); logical shape is dest+src.
-# PORT: Return Res MII:{{[2-9]|[1-9][0-9]+}}
+# Kind-A: entry-count ResMII only; ports never bind pre-RA.
+# PORT: Return Res MII:{{[1-9][0-9]*}}
 
 --- |
   define void @sms_move32_port_diff(i32 %n, i32 %a, i32 %b, i32 %c) #0 {
