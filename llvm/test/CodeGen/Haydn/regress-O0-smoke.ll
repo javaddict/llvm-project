@@ -120,7 +120,7 @@ define i32 @test_if_else(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; bnez r1, .LBB6_2 }
 ; CHECK-NEXT:    { nop; beqz r0, .LBB6_1 }
 ; CHECK-NEXT:  .LBB6_1: // %then
-; CHECK-NEXT:    { ld32 r2, sp, 5; ld32 r1, sp, 4 } // 8-byte Folded Reload
+; CHECK-NEXT:    { ld32 r1, sp, 4; ld32 r2, sp, 5 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload4-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
@@ -128,7 +128,7 @@ define i32 @test_if_else(i32 %a, i32 %b) {
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; beqz r0, .LBB6_3 }
 ; CHECK-NEXT:  .LBB6_2: // %else
-; CHECK-NEXT:    { ld32 r2, sp, 5; ld32 r1, sp, 4 } // 8-byte Folded Reload
+; CHECK-NEXT:    { ld32 r1, sp, 4; ld32 r2, sp, 5 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload4-byte Reload
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; sub32 r1, r1, r2 }
@@ -177,7 +177,7 @@ define i32 @test_loop(i32 %n) {
 ; CHECK-NEXT:    { nop; beqz r0, .LBB7_1 }
 ; CHECK-NEXT:  .LBB7_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    { ld32 r2, sp, 5; ld32 r4, sp, 4 } // 8-byte Folded Reload
+; CHECK-NEXT:    { ld32 r4, sp, 4; ld32 r2, sp, 5 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload4-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r1, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
@@ -288,12 +288,9 @@ define i32 @test_call_9args(i32 %a) {
 ; CHECK-NEXT:    .cfi_offset lr, -12
 ; CHECK-NEXT:    { nop; move32 r12, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { nop; addi32 r4, r0, 4 }
-; CHECK-NEXT:    { nop; addi32 r5, r0, 5 }
-; CHECK-NEXT:    { nop; addi32 r6, r0, 6 }
-; CHECK-NEXT:    { nop; addi32 r7, r0, 7 }
+; CHECK-NEXT:    { addi32 r3, r0, 3; addi32 r2, r0, 2 }
+; CHECK-NEXT:    { addi32 r5, r0, 5; addi32 r4, r0, 4 }
+; CHECK-NEXT:    { addi32 r7, r0, 7; addi32 r6, r0, 6 }
 ; CHECK-NEXT:    { nop; addi32 r9, r0, 8 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; move32 r8, sp }

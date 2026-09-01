@@ -8,38 +8,23 @@
 //
 // Port of AIEFinalizeBundle (AIEFinalizeBundle.h:17-19 / .cpp:22-54).
 //
-// This pass provides the same functionality as the generic Bundle Finalization
-// in MachineInstrBundle, except that it also bundles standalone instructions.
-// After PostMachineScheduler multi-MI materialize (Format E row/completion
-// stamp), every remaining non-meta, non-bundled real MI becomes a singleton
-// BUNDLE with durable Format E BundleFormatRowID + CompletionStateID.
+// Same as generic MachineInstrBundle finalization, plus wrapping remaining
+// standalone real MIs. Haydn overlay stamps Format E BundleFormatRowID +
+// CompletionStateID on newly wrapped singletons and copies the earliest
+// member DebugLoc onto any BUNDLE root that has none. Already-bundled
+// stamped roots are identity. Construction only: no row resettle, name
+// peel, DFS/mode retry, keep-map rewrite, or late setDesc.
 //
-// Never calls skipFunction: this is target-local no-reorder commit ownership
-// for remaining bare MIs (including when PostMachineScheduler quality-skips
-// optnone). Plain O0 without optnone still runs postmisched first and may
-// already hold multi-MI full-fill packs; already-bundled roots are left alone
-// by the wrap loop. Cutover is identity on roots the independent inverse
-// already accepts; residual FieldSlots still bind to generated members.
-// Mixed MemberId + leftover FieldSlot is fail-closed. Reloc CSRW_W carries
-// typed (row, entry, MemberId, CSR I8 fixup-kind) through setDesc. Both
-// paths leave only committed Format-E cycles for product emission.
-// Singleton completion is full-slot architectural NOP pad (AllEntriesReal),
-// not unqualified underfill/singleton stub invent.
+// Mixed-stream code-bearing inline asm is fail-closed. Mixed MemberId +
+// leftover FieldSlot is fail-closed.
 //
-// Also empty-cycle tryAdd → setDesc on bare multi-slot logicals before wrap
-// (AIEMachineScheduler.cpp:1121-1139 peer). Idempotent on already-setDesc
-// members / ops without PlacementAlternatives.
-//
-// After wrap/stamp, copy the earliest member DebugLoc onto any BUNDLE root
-// that has none (generic finalizeBundle already does this for new wraps —
-// MachineInstrBundle.cpp:90-136; Hexagon packetize-debug-loc.mir). This pass
-// also fills already-bundled roots it otherwise skips, so DwarfDebug
-// beginInstruction on the top-level BUNDLE (AsmPrinter iterates MBB, not
-// bundled children) still records line-table / is_stmt.
+// Never calls skipFunction: target-local no-reorder commit for remaining
+// bare MIs (including when PostMachineScheduler quality-skips optnone).
 //
 // Pipeline:
 //   * addPreSched2 after PostMachineScheduler (AIE2TargetMachine.cpp:242-244)
-//   * addPreEmit after BR/Fixup/BR (Haydn late firewall; AIE PreEmit empty)
+//   * addPreEmit after BR/Fixup/BR
+//   * addPostBBSections closure after the common executable tail
 //
 //===----------------------------------------------------------------------===//
 
@@ -72,12 +57,6 @@ public:
 };
 
 FunctionPass *createHaydnFinalizeBundlePass();
-
-/// Wrap remaining bare MIs as Format E singleton cycles. Does not restamp
-/// already-bundled roots (missing-row E2 default stays fatal at the
-/// printer). Shared first loop of Finalize; late PreEmit Finalize reuses
-/// it after BranchRelaxation insertIndirectBranch (AIEFinalizeBundle.cpp:40-59).
-bool haydnRecommitLateMixedBare(MachineFunction &MF);
 
 } // namespace llvm
 

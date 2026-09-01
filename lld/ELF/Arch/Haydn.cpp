@@ -158,6 +158,12 @@ public:
     case R_HAYDN_WIDE_CallSImm20:
     case R_HAYDN_HWLoopOff1:
     case R_HAYDN_HWLoopOff2:
+    case R_HAYDN_WIDE_CallSImm20_E3E1:
+    case R_HAYDN_WIDE_BranchSImm12_E3E0:
+    case R_HAYDN_WIDE_BranchSImm12_E3E1:
+    case R_HAYDN_WIDE_BranchSImm12_E3E2:
+    case R_HAYDN_WIDE_BranchSImm12_RI_E3E0:
+    case R_HAYDN_WIDE_BranchSImm12_RI_E3E1:
       return R_PC;
     case R_HAYDN_JALRSImm12:
       // Dedicated ELF 22. Assembler symbol convention is parcel-relative
@@ -167,6 +173,13 @@ public:
       // (resolveFieldLsb / resolveFieldLsbForMember). Call-indirect / JT
       // jalr-with-zero is not this kind; PIC/JT label-diff is
       // R_HAYDN_32_PCREL (R_PC on a 32-bit data word).
+      return R_PC;
+    case R_HAYDN_JALRSImm12_E3E0:
+    case R_HAYDN_JALRSImm12_E3E1:
+      // Qualified twins of ELF 22 (same R_PC; window is typed per kind).
+      return R_PC;
+    case R_HAYDN_PC_LO20_E1:
+      // Qualified twin of R_HAYDN_PC_LO20.
       return R_PC;
     case R_HAYDN_NONE:
       return R_NONE;
@@ -180,6 +193,7 @@ public:
     case R_HAYDN_LO20:
     case R_HAYDN_LS_IMM:
     case R_HAYDN_CSR_UImm8:
+    case R_HAYDN_LO20_E1:
       return R_ABS;
     case R_HAYDN_TPREL_HI20:
     case R_HAYDN_TPREL_LO16:
@@ -211,7 +225,7 @@ public:
   }
 
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override {
-    if (type > R_HAYDN_CSR_UImm8) {
+    if (type > R_HAYDN_JALRSImm12_E3E1) {
       InternalErr(ctx, buf) << "cannot read addend for relocation " << type;
       return 0;
     }
@@ -227,6 +241,14 @@ public:
     case R_HAYDN_WIDE_BranchSImm12:
     case R_HAYDN_WIDE_BranchSImm12_RI:
     case R_HAYDN_JALRSImm12:
+    case R_HAYDN_JALRSImm12_E3E0:
+    case R_HAYDN_JALRSImm12_E3E1:
+    case R_HAYDN_WIDE_CallSImm20_E3E1:
+    case R_HAYDN_WIDE_BranchSImm12_E3E0:
+    case R_HAYDN_WIDE_BranchSImm12_E3E1:
+    case R_HAYDN_WIDE_BranchSImm12_E3E2:
+    case R_HAYDN_WIDE_BranchSImm12_RI_E3E0:
+    case R_HAYDN_WIDE_BranchSImm12_RI_E3E1:
     case R_HAYDN_HWLoopOff1:
     case R_HAYDN_HWLoopOff2: {
       HaydnReloc::RelocKind R =
@@ -250,6 +272,12 @@ public:
     case R_HAYDN_WIDE_BranchSImm12:
     case R_HAYDN_WIDE_BranchSImm12_RI:
     case R_HAYDN_WIDE_CallSImm20:
+    case R_HAYDN_WIDE_CallSImm20_E3E1:
+    case R_HAYDN_WIDE_BranchSImm12_E3E0:
+    case R_HAYDN_WIDE_BranchSImm12_E3E1:
+    case R_HAYDN_WIDE_BranchSImm12_E3E2:
+    case R_HAYDN_WIDE_BranchSImm12_RI_E3E0:
+    case R_HAYDN_WIDE_BranchSImm12_RI_E3E1:
       return !inBranchRange(type, branchAddr, s.getVA(ctx, a));
     // JALRSImm12 shares the signed-12 range oracle (inBranchRange) but is
     // never veneered: execution is rs+imm12, not a PC-relative long-branch.
@@ -310,7 +338,7 @@ public:
                   "(no PIC/GOT/PLT product ABI); refusing silent R_GOT";
       return;
     }
-    if (type > R_HAYDN_CSR_UImm8) {
+    if (type > R_HAYDN_JALRSImm12_E3E1) {
       Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << type;
       return;
     }

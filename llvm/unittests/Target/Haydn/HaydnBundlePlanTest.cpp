@@ -119,6 +119,29 @@ TEST(HaydnBundlePlanTest, CeilProductParcelsFromEncodedBytes) {
             3 * static_cast<int64_t>(productParcelBytes().Value));
 }
 
+// W70.1: the size oracle is per-row EncodedBytes, never a member-count
+// multiple of the parcel. Both product rows carry the same registry width
+// today; the law this pins is that committedEncodedBytes resolves THROUGH
+// encodedBytesForRow (registry lookup), so a future unequal-width family
+// changes the answer by construction, not by falling through to
+// productParcelBytes() arithmetic.
+TEST(HaydnBundlePlanTest, RowBytesAreRegistryLookupNotParcelArithmetic) {
+  for (BundleFormatRowID Row :
+       {BundleFormatRowID::E96TwoEntry, BundleFormatRowID::E96ThreeEntry}) {
+    auto B = encodedBytesForRow(Row);
+    ASSERT_TRUE(B.has_value());
+    // Registry width equals (not derived from) the product parcel today.
+    EXPECT_EQ(B->Value, productParcelBytes().Value);
+    // The lookup is the only sanctioned source: it must not return a
+    // member-count multiple (E3 == 3 entries == 1 parcel, NOT 3).
+    EXPECT_LT(B->Value,
+              3u * productParcelBytes().Value);
+  }
+  // Unknown rows fail closed rather than inventing a parcel width.
+  EXPECT_FALSE(encodedBytesForRow(static_cast<BundleFormatRowID>(0xDEAD))
+                   .has_value());
+}
+
 //===----------------------------------------------------------------------===//
 // BundlePlan product legality + plan paths
 //===----------------------------------------------------------------------===//

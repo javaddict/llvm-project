@@ -262,6 +262,26 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     // MC-only kinds sit after the shared ELF range.
     return ELF::R_HAYDN_JALRSImm12;
 
+  case Haydn::FIXUP_HAYDN_LO20_E1:
+    return ELF::R_HAYDN_LO20_E1;
+  case Haydn::FIXUP_HAYDN_PC_LO20_E1:
+    return ELF::R_HAYDN_PC_LO20_E1;
+  case Haydn::FIXUP_HAYDN_WIDE_CallSImm20_E3E1:
+    return ELF::R_HAYDN_WIDE_CallSImm20_E3E1;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E0:
+    return ELF::R_HAYDN_WIDE_BranchSImm12_E3E0;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E1:
+    return ELF::R_HAYDN_WIDE_BranchSImm12_E3E1;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E2:
+    return ELF::R_HAYDN_WIDE_BranchSImm12_E3E2;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E0:
+    return ELF::R_HAYDN_WIDE_BranchSImm12_RI_E3E0;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1:
+    return ELF::R_HAYDN_WIDE_BranchSImm12_RI_E3E1;
+  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E0:
+    return ELF::R_HAYDN_JALRSImm12_E3E0;
+  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E1:
+    return ELF::R_HAYDN_JALRSImm12_E3E1;
   case Haydn::FIXUP_HAYDN_CSR_UImm8:
     // R_HAYDN_CSR_UImm8 (ELF 23). Format E I8 uimm8 CSR address.
     // Distinct from R_HAYDN_8 (data-section 1-byte write). Local

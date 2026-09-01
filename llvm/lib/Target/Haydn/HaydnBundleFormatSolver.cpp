@@ -545,6 +545,17 @@ unsigned llvm::haydn::bundle::productSolveLogicalOpcode(
   auto It = AltsByName.find(Peeled);
   if (It != AltsByName.end() && hasPlacementAlternatives(Fmts, It->second))
     return It->second;
+  // Compact reloc span when the unsuffixed `_W` name owns AlternateInsts
+  // (catalogOccupancyName / peelLogicalOpcodeName StripWide). JAL_W / BEQZ_W
+  // FieldSlots are retired; Format E members live on JAL / BEQZ.
+  const std::string Compact = format_e::peelLogicalOpcodeName(
+      haydnOpcodeName(Opc), /*StripWide=*/true);
+  if (Compact != Peeled) {
+    auto ItW = AltsByName.find(Compact);
+    if (ItW != AltsByName.end() &&
+        hasPlacementAlternatives(Fmts, ItW->second))
+      return ItW->second;
+  }
   return MemberLog;
 }
 

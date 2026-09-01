@@ -59,8 +59,7 @@ define void @cb_setup_and_st(i64 %data, ptr %base) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 4096 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 4351 }
+; CHECK-NEXT:    { addi32 r3, r0, 4351; addi32 r2, r0, 4096 }
 ; CHECK-NEXT:    { nop; csrw 44, r2 }
 ; CHECK-NEXT:    { nop; csrw 45, r3 }
 ; CHECK-NEXT:    { nop; d_sdw_cb_imm 0, d0, r1, 1 }

@@ -63,13 +63,16 @@ from family_core import (
 SSML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 # Catalog snapshot pins from the current JSON hash (manifest §5).
-PIN_UNIQUE_NON_NOP = 807
-PIN_E2_NON_NOP = 801
-PIN_E3_NON_NOP = 797
-PIN_BOTH_NON_NOP = 791
+# 2026-08-28 v2_2 rollover: +7 AR_CBR instrs (unique 807→814, E2 801→808,
+# E3 797→804, both 791→798; type layouts 126→128 = the two new LOADSTORE0
+# AR_CBR tables; alt multiplicity 2: 66→73).
+PIN_UNIQUE_NON_NOP = 814
+PIN_E2_NON_NOP = 808
+PIN_E3_NON_NOP = 804
+PIN_BOTH_NON_NOP = 798
 PIN_E2_ONLY = 10
 PIN_E3_ONLY = 6
-PIN_TYPE_LAYOUTS = 126
+PIN_TYPE_LAYOUTS = 128
 PIN_E2_UNIT_PAIRS = 9
 PIN_E3_LEGAL_TUPLES = 42
 PIN_E3_ILLEGAL_TUPLES = 22
@@ -475,7 +478,7 @@ def validate_catalog(cat: Catalog) -> None:
 
     # Alt multiplicity pin (manifest §5).
     mult = Counter(len(v) for v in cat.alternatives.values())
-    expected_mult = {1: 1, 2: 66, 3: 15, 4: 7, 5: 532, 7: 186}
+    expected_mult = {1: 1, 2: 73, 3: 15, 4: 7, 5: 532, 7: 186}
     if dict(mult) != expected_mult:
         raise SystemExit(f"alt multiplicity {dict(mult)} != {expected_mult}")
 
@@ -1815,8 +1818,13 @@ LS_USER_MNEMONIC = {
     "S_SHW_WITH_IMM": "st16",
 }
 # Golden type names that are CSR / WFI / hwloop / SFR / AR / circular-buffer.
+# v2_2: AR_CBR joins — the CB writeback UA loads/stores advance CB state
+# (rs base wrap + ar[ar_sel] update) beyond mayLoad/mayStore.
 SIDE_EFFECT_TYPES = frozenset(
-    {"SFR", "HINT", "HWLRIII", "HWLRIIR", "HWLRRRR", "AR", "CBRI", "CBRR"}
+    {
+        "SFR", "HINT", "HWLRIII", "HWLRIIR", "HWLRRRR",
+        "AR", "CBRI", "CBRR", "AR_CBR",
+    }
 )
 
 BLANKET_HAS_SIDE_EFFECTS_LET = (
@@ -4094,10 +4102,26 @@ def check_canonical_vectors(path: Path, cat: Catalog) -> None:
         raise SystemExit(f"unexpected canonical byte-order convention {byte_order!r}")
 
     oracle = ((data.get("authority") or {}).get("oracle_sha256")) or {}
-    if oracle.get("format_e_bit_layout_v2_1.json") != PINNED_JSON_SHA256:
-        raise SystemExit("canonical oracle JSON hash != pinned JSON")
-    if oracle.get("format_e_bit_layout_v2_1.xlsx") != PINNED_XLSX_SHA256:
-        raise SystemExit("canonical oracle XLSX hash != pinned XLSX")
+    # The v1 canonical-vector ledger is UNCHANGED under golden v2_2 (same
+    # file sha as the v2_1 era) and carries no AR_CBR entries. Its embedded
+    # provenance block therefore still names the v2_1 layout pair it was
+    # authored against; pin that block verbatim (v2_1 digests) so any edit
+    # to the ledger's authority stanza fails closed until re-audited — the
+    # ledger is a derived parity check, never an oracle for new surface.
+    CANONICAL_LEDGER_ORACLE = {
+        "format_e_bit_layout_v2_1.json": (
+            "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a"
+        ),
+        "format_e_bit_layout_v2_1.xlsx": (
+            "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f"
+        ),
+    }
+    if oracle != CANONICAL_LEDGER_ORACLE:
+        raise SystemExit(
+            "canonical oracle provenance block changed "
+            f"{oracle!r} — the v1 ledger is v2_1-authored; re-audit before "
+            "moving this pin"
+        )
 
     n = 0
     n_hex = 0
@@ -4612,23 +4636,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # (generated defs tied the 72 32X16 accumulators) -> 46 (2026-08-19
     # S2b wave-1) -> 4 (2026-08-19 S2b wave-2: F2MULAS32R/RS, F2MULSA32R/
     # RS, FMULS16_HS/LS, FMULAA16/SS16 pairs, MULSA32/MULSS32, SMULA16
-    # family, and X4CLAMP16 all migrated to generated tied defs). The
-    # remaining 4 ledger items are the partial-write/conditional-move
-    # families (MOVEI_H/L, MOVF64/MOVT64, X2MOVF/T32, X4MOVF/T16):
-    # golden reads the old rtd to preserve the unwritten half, but a tie
-    # requires an explicit old-destination operand through the whole API
-    # chain (builtin -> IR intrinsic -> GISel -> logical -> member).
-    # Tracked as GOALS M23; do NOT add a
-    # generator-only tie (MI arity would desync from the public API).
+    # family, and X4CLAMP16 all migrated to generated tied defs) -> 0
+    # (2026-08-28 M23 one-wave: MOVEI_H/L and MOVF64/MOVT64 gained the tied
+    # $rd_old logical input; X2MOVF/T32 and X4MOVF/T16 were already tied).
+    # The non-LS remainder must stay EMPTY: any growth is a new unmodeled
+    # golden dest read — re-audit member arity vs the logicals before
+    # touching this pin.
     divergent_non_ls = [
         k for k in divergent
         if not k.startswith(("D_", "S_", "PLD", "WBAR"))
     ]
-    if len(divergent_non_ls) != 4:
+    if divergent_non_ls:
         raise SystemExit(
-            "error: golden-tied-but-TD-untied set changed "
+            "error: golden-tied-but-TD-untied set must stay empty "
             f"({len(divergent_non_ls)}): {divergent_non_ls} — re-audit "
-            "member arity vs the logicals (CB ledger: unmodeled dest reads)"
+            "member arity vs the logicals (CB ledger: unmodeled dest reads; "
+            "M23 closed the last four 2026-08-28)"
         )
     # 2026-08-21: golden SFR-writer set (compares + MOVEGPR2SFR/ZERO_SFR)
     # drives implicit Defs = [SFR] on members. Measured pin below.
@@ -4661,7 +4684,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # Measured pins: a regen that changes either census must be re-audited
     # against golden before the itineraries move.
     store_writeback = load_store_writeback_logicals(index_path)
-    if len(store_writeback) != 38:
+    # v2_2: 38 -> 40 (D_STWUA_CB_POST, D_SQHWUA_CB_POST join — the CB
+    # writeback UA stores carry the same golden GPR Write∩Read lat-1 tie).
+    if len(store_writeback) != 40:
         raise SystemExit(
             "error: golden store-writeback lat-1 census changed "
             f"({len(store_writeback)}): {sorted(store_writeback)} — "

@@ -804,7 +804,7 @@ countGPRPorts(const MachineInstr &MI,
               const MachineRegisterInfo *MRI = nullptr) {
   // Per-field: every explicit GPR use/def operand reserves one port.
   // Tied use/def of one register still charge independently (one R + one W).
-  // MOVE32 rd, rs is 1R1W (dest+src logical, same field shape as the
+  // Logical MOVE32 rd, rs is 1R1W (dest+src, same field shape as the
   // generated Format E members).
   //
   // ChargeImplicits=false: call ABI clobbers (JAL_W/JALR_W regmask +

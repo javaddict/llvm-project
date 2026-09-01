@@ -142,8 +142,7 @@ define i32 @switch_consecutive(i32 %x) {
 ; CHECK-NEXT:    { nop; bnez r3, .LBB2_6 }
 ; CHECK-NEXT:  // %bb.1:
 ; CHECK-NEXT:    { nop; lui r3, .LJTI2_0 }
-; CHECK-NEXT:    { nop; addi32 r3, r3, .LJTI2_0 }
-; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
+; CHECK-NEXT:    { slli32 r2, r2, 2; addi32 r3, r3, .LJTI2_0 }
 ; CHECK-NEXT:    { nop; add32 r2, r3, r2 }
 ; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }

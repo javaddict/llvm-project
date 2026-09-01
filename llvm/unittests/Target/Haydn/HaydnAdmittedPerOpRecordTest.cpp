@@ -100,15 +100,18 @@ TEST(HaydnAdmittedPerOpRecordTest, AdmissionFlipWithoutTableFailsPins) {
 
 // ---------------------------------------------------------------------------
 // M18 golden per-op import (HaydnGenPerOpResources.inc). Golden FACTS only:
-// the import is partial (806 covered / 44 uncovered census), so every
+// the import is partial (847 covered / 3 uncovered census after the M18
+// shell-name map: codegen spellings LD32/ST32/_W etc. import their owning
+// golden row; NOP/WFI/WFITBDTBDTBD stay uncovered by design), so every
 // admission pin above stays byte-identical and CompleteModel stays 0.
 // ---------------------------------------------------------------------------
 
 TEST(HaydnAdmittedPerOpRecordTest, GoldenImportCensusPins) {
   // Census pins: coverage counts are generator-owned and must move ONLY
   // with a golden index change (ratchet like the setDesc ledger).
-  EXPECT_EQ(haydnGoldenPerOpRecordCount(), 806u);
-  EXPECT_EQ(haydnGoldenPerOpUncoveredCount(), 44u);
+  // v2_2 2026-08-28: 847 -> 854 (the 7 AR_CBR instrs gained golden rows).
+  EXPECT_EQ(haydnGoldenPerOpRecordCount(), 854u);
+  EXPECT_EQ(haydnGoldenPerOpUncoveredCount(), 3u);
   // The import itself does NOT flip admission or CompleteModel.
   EXPECT_FALSE(haydnHasAdmittedPerOpResourceRecords());
   EXPECT_EQ(haydnSchedCompleteModelPin(), 0u);

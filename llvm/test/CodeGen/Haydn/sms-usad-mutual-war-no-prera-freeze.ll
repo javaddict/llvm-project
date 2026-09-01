@@ -19,8 +19,11 @@
 ; BundleFormatRowID / CompletionStateID stamping) is pinned by the PIPE and
 ; ASM arms below and must hold under the accept too.
 ;
-; SWP: Schedule Found? 1
+; HC#0 II-retry (2026-08-28): shouldUseSchedule runs inside the II
+; search; accept lines precede "Schedule Found? 1".
+
 ; SWP: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
+; SWP: Schedule Found? 1
 ; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
 ; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
 

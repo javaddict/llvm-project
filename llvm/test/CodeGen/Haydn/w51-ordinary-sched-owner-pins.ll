@@ -63,16 +63,22 @@
 ; IB: successorsAreScheduled
 ; IB: ScheduledMBBs.insert(BB);
 
-; IBBRICK: haydn-postra-region-end-edges", cl::init(false)
-; IBBRICK: haydn-postra-interblock", cl::init(false)
-; IBBRICK: no PerSuccEdges invent
-; IBBRICK: haydn-postra-waw-edges", cl::init(false)
+; G004 trim 2026-08-27: -haydn-sms2 is product default ON (sms2-only arm
+; CM -3.76% / DH -0.86%); the three post-RA edge mutations stay default
+; OFF (combined arm super-additively regressive: CM +33.38%, DH +12.18%).
+; IBBRICK: haydn-postra-region-end-edges",
+; IBBRICK: cl::init(haydnPostRARegionEndEdgesProductDefaultEnabled())
+; IBBRICK: haydn-postra-interblock",
+; IBBRICK: cl::init(haydnPostRAInterblockProductDefaultEnabled())
+; IBBRICK: no PerSuccEdges invent)
+; IBBRICK: haydn-postra-waw-edges",
+; IBBRICK: cl::init(haydnPostRAWAWEdgesProductDefaultEnabled())
 ; IBBRICK: IncludeStages(!EnableHaydnPostRAInterBlock
 ; IBBRICK: ReduceLatency(EnableHaydnPostRAInterBlock && IsBottomRegion &&
 ; IBBRICK-NOT: getPerSuccEdges
 ; IBBRICK-NOT: buildPerSuccEdges
 ; IBBRICK-NOT: class PerSuccEdges
 
-; IBHDR: stay off until same-artifact evidence
+; IBHDR: Product defaults for the post-RA inter-block mutations stay OFF
 ; IBHDR: no PerSuccEdges invent
 ; IBHDR: Never a process-static lookup

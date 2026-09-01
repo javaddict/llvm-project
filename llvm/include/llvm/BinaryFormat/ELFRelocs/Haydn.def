@@ -67,3 +67,34 @@ ELF_RELOC(R_HAYDN_JALRSImm12,           22)
 // HaydnRelocLayout::resolveFieldLsb). Distinct from R_HAYDN_8 (data-section
 // 1-byte write). ValueShift=0, Align=1, not PC-relative.
 ELF_RELOC(R_HAYDN_CSR_UImm8,            23)
+// Entry-qualified relocations (typed (kind, entry, window) mapping — the
+// runtime-topic exit row). A Format E parcel can legally carry more than
+// one symbolic immediate field (e.g. ADDI32 RI20 at E2 e0 ALU0 and E2 e1
+// ALU1 in the same 12-byte parcel). The base kinds above resolve their
+// write window by sniffing parcel content (resolveFieldLsb), which is
+// ambiguous once two same-kind fields coexist: one member's imm gets
+// patched twice, the other never (t_global g=g*3 linked the store base
+// as 0; G004 keep-off evidence). These kinds carry the entry identity in
+// the TYPE, so r_offset stays the parcel origin (exact code record) and
+// the patch window is table-derived, never sniffed:
+//   R_HAYDN_LO20_E1 / PC_LO20_E1 — ADDI32 RI20 at E2 e1 ALU1, imm @65.
+//     (RI20 is E2-only in golden; LUI never shares a cycle — solo law —
+//     so HI12 stays base/e0.)
+//   R_HAYDN_WIDE_CallSImm20_E3E1 — JAL I20 at E3 e1, imm @48.
+//   R_HAYDN_WIDE_BranchSImm12_E3{E0,E1,E2} — I12 cond at E3, imm @23/54/81.
+//   R_HAYDN_WIDE_BranchSImm12_RI_E3{E0,E1} — RI12 cond at E3, imm @23/54.
+//   R_HAYDN_JALRSImm12_E3{E0,E1} — JALR RI12 at E3, imm @23/54.
+// Value transforms/scales are IDENTICAL to the base kind; only the write
+// window differs. MC emits them from encodeSlotSubInst when the symbolic
+// member's committed entry is not the base kind's default window; the
+// base kinds remain valid for their default entry.
+ELF_RELOC(R_HAYDN_LO20_E1,                    24)
+ELF_RELOC(R_HAYDN_PC_LO20_E1,                 25)
+ELF_RELOC(R_HAYDN_WIDE_CallSImm20_E3E1,       26)
+ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_E3E0,     27)
+ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_E3E1,     28)
+ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_E3E2,     29)
+ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI_E3E0,  30)
+ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI_E3E1,  31)
+ELF_RELOC(R_HAYDN_JALRSImm12_E3E0,            32)
+ELF_RELOC(R_HAYDN_JALRSImm12_E3E1,            33)

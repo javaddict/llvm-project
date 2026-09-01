@@ -63,7 +63,7 @@ body:             |
 # MIR: ADD32{{.*}}
 # MIR: XOR32{{.*}}
 # MIR: BUNDLE 0
-# MIR: RET
+# MIR: {{RET|JALR}}
 # MIR-NOT: LOADI32
 # MIR-NOT: LOAD_ADDR
 # MIR-NOT: SETCBR
@@ -102,7 +102,7 @@ body:             |
 # MIR: ADD64_E3_E1_ALU1_RR
 # MIR: ADD64_E3_E2_ALU0_RR
 # MIR: BUNDLE 0
-# MIR: RET
+# MIR: {{RET|JALR}}
 # MIR-NOT: LOADI32
 # MIR-NOT: LoopDec
 
@@ -137,7 +137,7 @@ body:             |
 # MIR: killed $r3
 # MIR: ADD32_E3_E0_ALU2_RR killed $r0, killed $r1
 # MIR: XOR32_E3_E1_ALU1_RR killed $r2, killed $r3
-# MIR: RET
+# MIR: {{RET|JALR}}
 # MIR-NOT: LOADI32
 # MIR-NOT: LoopDec
 # MIR-NOT: SETCBR
@@ -176,7 +176,7 @@ body:             |
 # MIR: BUNDLE 1, 0
 # MIR: XOR32_E3_
 # MIR: BEQZ_E3_
-# MIR: RET
+# MIR: {{RET|JALR}}
 
 # OBJ-LABEL: <hard_root_xor32_beqz_e2_rematch>:
 # OBJ: xor32
@@ -202,4 +202,4 @@ body:             |
 # MIR-LABEL: name: pad_only_missing_row
 # MIR: BUNDLE 0, 0 {
 # MIR-NEXT: NOP
-# MIR: RET
+# MIR: {{RET|JALR}}

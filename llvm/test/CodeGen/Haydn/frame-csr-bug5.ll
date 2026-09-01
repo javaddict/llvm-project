@@ -37,11 +37,10 @@ define i32 @bug5_main(i32 %argc) {
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; lui r2, g }
 ; CHECK-NEXT:    { nop; lui r4, 1025 }
-; CHECK-NEXT:    { nop; addi32 r4, r4, -131072 }
-; CHECK-NEXT:    { nop; st32 r4, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { addi32 r2, r2, g; addi32 r4, r4, -131072 }
+; CHECK-NEXT:    { st32 r4, sp, 3; addi32 r3, r2, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32 r2, r2, g }
-; CHECK-NEXT:    { nop; addi32 r3, r2, 4 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d8, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }

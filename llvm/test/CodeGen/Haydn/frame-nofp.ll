@@ -34,9 +34,9 @@ define i32 @stack_locals(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
+; CHECK-NEXT:    { addi32 r3, sp, 8; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; addi32 r3, sp, 8 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
@@ -81,9 +81,9 @@ define i32 @locals_and_alloca(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { nop; addi32 r2, sp, 28 }
+; CHECK-NEXT:    { addi32 r3, sp, 12; addi32 r2, sp, 28 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; addi32 r3, sp, 12 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 7 }
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }

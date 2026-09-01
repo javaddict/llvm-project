@@ -43,19 +43,14 @@ define i32 @caller_with_stack_args() {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { nop; addi32 r4, r0, 4 }
-; CHECK-NEXT:    { nop; addi32 r5, r0, 5 }
-; CHECK-NEXT:    { nop; addi32 r6, r0, 6 }
-; CHECK-NEXT:    { nop; addi32 r7, r0, 7 }
-; CHECK-NEXT:    { nop; addi32 r12, r0, 8 }
+; CHECK-NEXT:    { addi32 r2, r0, 2; addi32 r1, r0, 1 }
+; CHECK-NEXT:    { addi32 r4, r0, 4; addi32 r3, r0, 3 }
+; CHECK-NEXT:    { addi32 r6, r0, 6; addi32 r5, r0, 5 }
+; CHECK-NEXT:    { addi32 r12, r0, 8; addi32 r7, r0, 7 }
 ; CHECK-NEXT:    { nop; addi32 r8, r0, 9 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; move32 r9, sp }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r12, r9, 2 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r8, r9, 0 }
 ; CHECK-NEXT:    { nop; jal lr, many_args }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -67,6 +62,7 @@ define i32 @caller_with_stack_args() {
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; P4 golden S_SW_POST_IMM Data_Latency=1: no writeback stall before reader.
   %r = call i32 @many_args(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
                            i32 8, i32 9)
   ret i32 %r
@@ -85,18 +81,13 @@ define i32 @caller_no_stack_args() {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset lr, -8
-; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { nop; addi32 r4, r0, 4 }
-; CHECK-NEXT:    { nop; addi32 r5, r0, 5 }
-; CHECK-NEXT:    { nop; addi32 r6, r0, 6 }
-; CHECK-NEXT:    { nop; addi32 r7, r0, 7 }
-; CHECK-NEXT:    { nop; addi32 r12, r0, 0 }
+; CHECK-NEXT:    { addi32 r2, r0, 2; addi32 r1, r0, 1 }
+; CHECK-NEXT:    { addi32 r4, r0, 4; addi32 r3, r0, 3 }
+; CHECK-NEXT:    { addi32 r6, r0, 6; addi32 r5, r0, 5 }
+; CHECK-NEXT:    { addi32 r12, r0, 0; addi32 r7, r0, 7 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; move32 r8, sp }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r12, r8, 2 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r12, r8, 0 }
 ; CHECK-NEXT:    { nop; jal lr, many_args }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -107,6 +98,7 @@ define i32 @caller_no_stack_args() {
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; P4 golden S_SW_POST_IMM Data_Latency=1: no writeback stall before reader.
   %r = call i32 @many_args(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
                            i32 0, i32 0)
   ret i32 %r

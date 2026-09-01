@@ -320,6 +320,28 @@ public:
     return *this;
   }
 
+  // W69: exclusive-alternative merge. Exactly one of several successor paths
+  // executes, so a cycle's demand across successors is the element-wise max,
+  // never the additive operator|= (which is for same-cycle co-issue). Keeps
+  // the Bot successor-replay view conservative without inventing phantom
+  // over-limit bundles (issue>3 / GPR>4R) that no single path could form.
+  void maxWith(const HaydnFuncUnitWrapper &Other) {
+    Required |= Other.Required;
+    Reserved |= Other.Reserved;
+    Slots |= Other.Slots;
+    IssueCount = std::max(IssueCount, Other.IssueCount);
+    GPRReads = std::max(GPRReads, Other.GPRReads);
+    GPRWrites = std::max(GPRWrites, Other.GPRWrites);
+    DRReads = std::max(DRReads, Other.DRReads);
+    DRWrites = std::max(DRWrites, Other.DRWrites);
+    ARReads = std::max(ARReads, Other.ARReads);
+    ARWrites = std::max(ARWrites, Other.ARWrites);
+    SFRReads = std::max(SFRReads, Other.SFRReads);
+    SFRWrites = std::max(SFRWrites, Other.SFRWrites);
+    LoadMemObjectsBits |= Other.LoadMemObjectsBits;
+    StoreMemObjectsBits |= Other.StoreMemObjectsBits;
+  }
+
   // True iff issuing Other's resources on top of this cycle would violate a
   // constraint. Rules:
   // * exclusive single-unit Required: both |Required|==1 and same bit
@@ -407,6 +429,15 @@ public:
   // Accessors used by HaydnPostRASchedStrategy and tests.
   int getMaxLatency() const { return MaxLatency; }
   int getPipelineDepth() const { return PipelineDepth; }
+  /// W69 fix seat: merge an exclusively-alternative successor cycle view into
+  /// this scoreboard by per-cycle element-wise max. Successors of one block
+  /// are alternative execution paths: at most one runs, so per-cycle demand
+  /// is the max over successors, never the sum. operator|='s additive
+  /// IssueCount/port sums are for same-cycle co-issue, not alternates.
+  void maxMergeSB(const HaydnHazardRecognizer &Other, int Low, int High) {
+    for (int C = Low; C <= High; ++C)
+      Scoreboard[C].maxWith(Other.Scoreboard[C]);
+  }
   /// AIEHazardRecognizer.cpp:718-720. Distance at which two issued
   /// instructions can still share occupancy. Floor 1 so an empty itinerary
   /// cannot divide-by-zero the SF10 kernel replay.

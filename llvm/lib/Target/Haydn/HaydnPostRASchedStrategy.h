@@ -28,7 +28,9 @@
 // shells sequentialize in schedule order as recovery only — sequentialize
 // is not a packing legality authority. Replays multi-member parcel seam
 // latency. No hard-root dissolve identity and no force-coissue.
-// Dual-load packing is HR exactTryAddProduct → setDesc members.
+// Dual-load packing is HR exactTryAddProduct → identity setDesc members.
+// Closed singletons receive the ProductDefaultRowID member here so
+// Finalize is construction-only (no late tryAdd chooser).
 //
 //===----------------------------------------------------------------------===//
 
@@ -80,7 +82,7 @@ public:
 
   // Stash CurrentMBB for leaveMBB materialize (DAG BB is not publicly
   // accessible). Count multi-member BUNDLE roots at entry for metrics only
-  // (product expects 0). Dual-load packing is HR alts tryAdd → setDesc.
+  // (product expects 0). Dual-load packing is HR alts tryAdd → identity setDesc.
   void enterMBB(MachineBasicBlock *MBB) override;
 
   // Override tryCandidate: (1) bounded ready-subset cycle auction ranks denser
@@ -118,7 +120,8 @@ public:
   // AIE materializeMultiOpcodeInstrs
   // (AIEMachineScheduler.cpp:1121-1139) — for each MI in the DAG top/bottom
   // region ranges with a selected format-member opcode in AltDescs, call
-  // MI.setDesc(TII->get(*AltOpcode)). HR wrote the selection via
+  // MI.setDesc(TII->get(*AltOpcode)) unconditionally. Identity census is
+  // empty: no keep/permutation/tie rewrite. HR wrote the selection via
   // setAlternateDescriptor in commitPlacementForEmit. Ends with full
   // AltDescs.clear() (AIEMachineScheduler.cpp:1081-1082;
   // AIEAlternateDescriptors.h:74).
@@ -135,10 +138,10 @@ private:
   // an idle cycle (materialized as a rolling-position NOP). Product format is
   // always Format E (E96TwoEntry / E96ThreeEntry from HaydnBundlePlan).
   // Multi-MI materialize stamps BundleFormatRowID + CompletionStateID imms
-  // on the BUNDLE root via stampBundleCommit. Singletons stay standalone MIR
-  // here and are wrapped by HaydnFinalizeBundle after PostMachineScheduler
-  // (AIEFinalizeBundle peer). Post-commit placement is getSlotKind on
-  // member Desc (AIEBaseMCFormats.cpp:66-75).
+  // on the BUNDLE root via stampBundleCommit. Singletons receive the closed-
+  // cycle identity-compatible member here; HaydnFinalizeBundle wraps and
+  // stamps only (AIEFinalizeBundle peer). Post-commit placement is
+  // getSlotKind on member Desc (AIEBaseMCFormats.cpp:66-75).
   struct CycleBundle {
     SmallVector<MachineInstr *, 3> Instrs;
     bool empty() const { return Instrs.empty(); }
@@ -234,7 +237,8 @@ private:
                              SmallVectorImpl<CycleBundle> &TopBundles,
                              ArrayRef<CycleBundle> BotBundles);
 
-  // Insert one NOP (via TII->insertNoop) per empty cycle in \p Bundles, and
+  // Insert one NOP (via TII->insertNoop) per empty cycle in \p Bundles,
+  // apply identity-compatible closed-cycle members on singletons, and
   // exact-commit each legal multi-MI cycle via the one production site
   // haydn::bundle::commitOneProductCycle. Already-bundled members
   // are refused. Illegal scheduled multi-MI fails closed (no production

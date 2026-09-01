@@ -1348,6 +1348,16 @@ TEST(HaydnPortModelTest, PreRASMSShouldUseScheduleFailCloseSurface) {
   EXPECT_FALSE(S::smsZOLRejectsMinTrip(true, /*Prologue=*/1, /*MinTrip=*/4));
   EXPECT_FALSE(S::smsZOLRejectsMinTrip(/*IsZOL=*/false, /*Prologue=*/5,
                                        /*MinTrip=*/0));
+  // CB-166: a runtime trip REGISTER (dynamic per-prologue guard on the
+  // LoopStart count reg) lifts the static MinTripCount refuse; constant
+  // trips keep it.
+  EXPECT_FALSE(S::smsZOLRejectsMinTrip(/*IsZOL=*/true, /*Prologue=*/1,
+                                       /*MinTrip=*/0,
+                                       /*HasRuntimeTripReg=*/true));
+  EXPECT_FALSE(S::smsZOLRejectsMinTrip(true, /*Prologue=*/3, /*MinTrip=*/0,
+                                       /*HasRuntimeTripReg=*/true));
+  EXPECT_TRUE(S::smsZOLRejectsMinTrip(true, /*Prologue=*/2, /*MinTrip=*/2,
+                                      /*HasRuntimeTripReg=*/false));
 
   // Pure spill-pressure excess: MaxSetPressure[i] > Limits[i].
   {
@@ -1392,6 +1402,22 @@ TEST(HaydnPortModelTest, PreRASMSShouldUseScheduleFailCloseSurface) {
   // ZOL unknown trip → fail-close even with multi-stage + no pressure.
   EXPECT_TRUE(S::smsShouldUseScheduleFailsClosed(
       true, /*Prologue=*/1, /*MinTrip=*/0, /*PressureExcess=*/false));
+
+  // CB-166: ZOL runtime trip reg → the same shape accepts (dynamic guard).
+  EXPECT_FALSE(S::smsShouldUseScheduleFailsClosed(
+      true, /*Prologue=*/1, /*MinTrip=*/0, /*PressureExcess=*/false,
+      S::productSMSMaxStageCount, S::productSMSTrackRegPressureDefault,
+      /*HasRuntimeTripReg=*/true));
+  // ... but single-stage still refuses (no overlap), guard or not.
+  EXPECT_TRUE(S::smsShouldUseScheduleFailsClosed(
+      true, /*Prologue=*/0, /*MinTrip=*/0, /*PressureExcess=*/false,
+      S::productSMSMaxStageCount, S::productSMSTrackRegPressureDefault,
+      /*HasRuntimeTripReg=*/true));
+  // ... and stage-count max still bounds it.
+  EXPECT_TRUE(S::smsShouldUseScheduleFailsClosed(
+      true, /*Prologue=*/3, /*MinTrip=*/0, /*PressureExcess=*/false,
+      S::productSMSMaxStageCount, S::productSMSTrackRegPressureDefault,
+      /*HasRuntimeTripReg=*/true));
 
   // Stage count > max (Prologue=3 → StageCount=4 > 3) → fail-close.
   EXPECT_TRUE(S::smsShouldUseScheduleFailsClosed(
@@ -3594,12 +3620,12 @@ TEST(HaydnHazardRecognizerTest, InterZoneScoreboardConflictDeltaMinusOne) {
   EXPECT_FALSE(TopSB.conflict(BotSB, /*DeltaCycles=*/-1));
 }
 
-// INLINEASM / INLINEASM_BR are the normal-LLVM opaque layout boundary:
-// getInstSizeInBytes uses getInlineAsmLength with MaxInstLength = product
-// Full parcel (HaydnMCAsmInfo). Empty barriers charge 0; multi-line text
-// charges N parcels so Fixup/HardwareLoops/BR never undercount. Compiler
-// bundles must not cross INLINEASM (isSchedulingBoundary).
-TEST_F(HaydnBundleBoundaryTest, InlineAsmConservativeLayoutSize) {
+// INLINEASM / INLINEASM_BR are the normal-LLVM layout boundary:
+// getInstSizeInBytes uses exact typed getInlineAsmLength. Empty barriers
+// charge 0; each unbraced public mnemonic is one product parcel; a braced
+// Format E packet is one parcel (not N × MaxInstLength). Opaque text is
+// rejected. Compiler bundles must not cross INLINEASM (isSchedulingBoundary).
+TEST_F(HaydnBundleBoundaryTest, InlineAsmExactTypedLayoutSize) {
   using namespace llvm::haydn::bundle;
   const HaydnInstrInfo &II = TII();
   DebugLoc DL;
@@ -3610,8 +3636,8 @@ TEST_F(HaydnBundleBoundaryTest, InlineAsmConservativeLayoutSize) {
   ASSERT_EQ(FullBytes, productParcelBytes().Value);
   ASSERT_NE(TM->getMCAsmInfo(), nullptr);
   EXPECT_EQ(TM->getMCAsmInfo()->getMaxInstLength(), FullBytes)
-      << "MaxInstLength must equal product Full parcel so INLINEASM layout "
-         "charges one parcel per textual instruction";
+      << "MaxInstLength must equal product Full parcel (generic .space / "
+         "peer fallback quantum); Haydn charges exact typed parcels";
 
   auto makeAsm = [&](const char *Str) -> MachineInstr & {
     // ExtraInfo = 1 → sideeffect (matches MIR `INLINEASM &"...", 1`).
@@ -3627,21 +3653,25 @@ TEST_F(HaydnBundleBoundaryTest, InlineAsmConservativeLayoutSize) {
   EXPECT_EQ(II.getInstSizeInBytes(Empty), 0u);
   EXPECT_TRUE(II.isSchedulingBoundary(Empty, MBB, *MF));
 
-  // One textual instruction → one Full parcel (conservative).
+  // One public mnemonic → one product parcel (MC singleton wrap).
   MachineInstr &One = makeAsm("nop");
   EXPECT_EQ(II.getInstSizeInBytes(One), FullBytes);
   EXPECT_EQ(ceilProductParcels(II.getInstSizeInBytes(One)), 1u);
 
-  // Multi-line (real newlines): three instructions → three Full parcels.
+  // Multi-line (real newlines): three standalone packets.
   MachineInstr &ThreeNL = makeAsm("nop\nnop\nnop");
   EXPECT_EQ(II.getInstSizeInBytes(ThreeNL), 3u * FullBytes);
   EXPECT_EQ(ceilProductParcels(II.getInstSizeInBytes(ThreeNL)), 3u);
 
-  // SeparatorString (';') multi-stmt — same conservative Following count
-  // that MIR lits can express without real newlines.
+  // SeparatorString (';') multi-stmt — three unbraced packets.
   MachineInstr &ThreeSemi = makeAsm("nop; nop; nop");
   EXPECT_EQ(II.getInstSizeInBytes(ThreeSemi), 3u * FullBytes);
   EXPECT_EQ(ceilProductParcels(II.getInstSizeInBytes(ThreeSemi)), 3u);
+
+  // Braced Format E packet is one parcel, not N textual instructions.
+  MachineInstr &Braced = makeAsm("{ nop; nop; nop }");
+  EXPECT_EQ(II.getInstSizeInBytes(Braced), FullBytes);
+  EXPECT_EQ(ceilProductParcels(II.getInstSizeInBytes(Braced)), 1u);
 
   // .space uses the explicit byte count (not MaxInstLength × 1).
   MachineInstr &Space = makeAsm(".space 32");
@@ -3658,11 +3688,12 @@ TEST_F(HaydnBundleBoundaryTest, InlineAsmConservativeLayoutSize) {
   EXPECT_EQ(II.getInstSizeInBytes(BrAsm), FullBytes);
   EXPECT_TRUE(II.isSchedulingBoundary(BrAsm, MBB, *MF));
 
-  // lateLayoutBytes mirrors getInstSizeInBytes for opaque INLINEASM (not a
+  // lateLayoutBytes mirrors getInstSizeInBytes for INLINEASM (not a
   // product parcel invent). finalizeExactLateSingleton must leave it bare.
   EXPECT_EQ(lateLayoutBytes(One), FullBytes);
   EXPECT_EQ(lateLayoutBytes(ThreeNL), 3u * FullBytes);
   EXPECT_EQ(lateLayoutBytes(ThreeSemi), 3u * FullBytes);
+  EXPECT_EQ(lateLayoutBytes(Braced), FullBytes);
   EXPECT_EQ(lateLayoutBytes(Empty), 0u);
   finalizeExactLateSingleton(One);
   EXPECT_FALSE(One.isBundled());

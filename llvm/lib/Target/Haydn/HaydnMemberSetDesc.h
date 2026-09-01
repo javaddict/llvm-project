@@ -7,8 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // One keep-map rewrite for setDesc onto a generated Format E member.
-// Finalize and post-RA materialize share this so raw setDesc cannot leave
-// extra ties (MAC acc) or vestigial uses (MOVE32 rs2).
+// Post-RA materialize / hazard bake share this so raw setDesc cannot leave
+// extra ties (MAC acc) or vestigial uses (MOVE32 rs2). FinalizeBundle is
+// construction-only and does not call these.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,17 +31,17 @@ class TargetInstrInfo;
 // inline visible to this header's users.
 
 /// True when FieldSlot/logical explicit operands have a keep-map onto
-/// \p MemberOpc (same closed drop rules as Finalize cutover).
-/// Reloc CSRW_W uses the 2-op identity/swap map; kindOk accepts a
-/// Global/Symbol on the uimm8 slot. Generated CSR I8 members carry the
-/// committed (row, entry, MemberId) plus TypeName I8 so encode binds
-/// FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8, never untyped NONE.
+/// \p MemberOpc. Reloc CSRW_W uses the 2-op identity/swap map; kindOk
+/// accepts a Global/Symbol on the uimm8 slot. Generated CSR I8 members
+/// carry the committed (row, entry, MemberId) plus TypeName I8 so encode
+/// binds FIXUP_HAYDN_CSR_UImm8 / R_HAYDN_CSR_UImm8, never untyped NONE.
 /// Mixed MemberId + leftover FieldSlot is not a keep-map success.
 bool memberDescCompatible(const MachineInstr &MI, unsigned MemberOpc,
                           const TargetInstrInfo &TII);
 
 /// setDesc to \p MemberOpc and drop operands the member does not keep.
-/// Caller already proved memberDescCompatible.
+/// Caller already proved memberDescCompatible. Scheduler/materialize bake
+/// only — not FinalizeBundle.
 void rewriteFieldSlotToMember(MachineInstr &MI, unsigned MemberOpc,
                               const TargetInstrInfo &TII);
 

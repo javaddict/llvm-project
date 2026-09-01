@@ -3510,6 +3510,31 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     return true;
   };
 
+  // M23 tied old-dest unary: logicals whose golden Behavior reads their
+  // destination (MOVT64/MOVF64 `rtd = cond ? rsd : rtd`, MOVEI_H/L
+  // `rtd = {imm32, rtd[31:00]}`). The IR intrinsic is unary/imm-only —
+  // there is no old-dest VALUE in IR — so the tied input is seeded undef
+  // from the destination vreg. TwoAddressInstructionPass rewrites an undef
+  // tied use straight onto the def register (`rewrite undef`), which makes
+  // the machine-level RMW read explicit for RA/scheduling without
+  // inventing an IR-level dependency the API never had.
+  auto selectUnaryTiedOldDest =
+      [&](unsigned Opcode, const TargetRegisterClass &RC) {
+        Register SrcReg = I.getOperand(2).getReg();
+        if (DstReg.isVirtual())
+          RBI.constrainGenericRegister(DstReg, RC, MRI);
+        if (SrcReg.isVirtual())
+          RBI.constrainGenericRegister(SrcReg, RC, MRI);
+        MachineInstr *MI = MIB.buildInstr(Opcode)
+                               .addDef(DstReg)
+                               .addReg(DstReg, RegState::Undef)
+                               .addReg(SrcReg);
+        if (!constrainSelectedInstRegOperands(*MI, TII, TRI, RBI))
+          return false;
+        I.eraseFromParent();
+        return true;
+      };
+
   // R_GD unary: GPR32 dest + DR64 source (FormatsALU64 R_GD / POPCOUNT64 shape).
   // Same-bank selectUnary cannot express the cross-bank constraint.
   auto selectUnaryR_GD = [&](unsigned Opcode) {
@@ -4298,7 +4323,10 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_movei_h:
   case haydn_movei_l: {
     // Select logical MOVEI_H/L; post-RA setDesc commits MOVEI_*_S0.
-    // ImmArg bare Imm after legalize.
+    // ImmArg bare Imm after legalize. M23: the logical carries a tied
+    // $rd_old (golden reads the unwritten half of rtd); the imm-only IR
+    // intrinsic has no old value, so seed it undef from the destination
+    // (selectUnaryTiedOldDest rationale).
     int64_t ImmVal = 0;
     if (!getConstOpSExt(I.getOperand(2), ImmVal))
       return false;
@@ -4306,7 +4334,10 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
     unsigned Opc =
         (IntrID == Intrinsic::haydn_movei_h) ? MOVEI_H : MOVEI_L;
-    MachineInstr *MI = MIB.buildInstr(Opc).addDef(DstReg).addImm(ImmVal);
+    MachineInstr *MI = MIB.buildInstr(Opc)
+                           .addDef(DstReg)
+                           .addReg(DstReg, RegState::Undef)
+                           .addImm(ImmVal);
     if (!constrainSelectedInstRegOperands(*MI, TII, TRI, RBI))
       return false;
     I.eraseFromParent();
@@ -5576,9 +5607,13 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
 
   //===---------------------------------------------------------------===
   // Wave 5: Scalar 64-bit SFR Conditional Move (unary DR64)
+  // M23: MOVT64/MOVF64 carry a tied $rd_old (golden reads rtd). The IR
+  // intrinsic is unary — no fallthrough value — so seed $rd_old undef
+  // from the destination; the two-address pass rewrites the tie onto $rd
+  // and the machine truth (old rtd read) reaches the scheduler.
   //===---------------------------------------------------------------===
-  case haydn_movt64: return selectUnary(MOVT64, DR64RegClass);
-  case haydn_movf64: return selectUnary(MOVF64, DR64RegClass);
+  case haydn_movt64: return selectUnaryTiedOldDest(MOVT64, DR64RegClass);
+  case haydn_movf64: return selectUnaryTiedOldDest(MOVF64, DR64RegClass);
 
   //===---------------------------------------------------------------===
   // Wave 5: SFR Register Transfer

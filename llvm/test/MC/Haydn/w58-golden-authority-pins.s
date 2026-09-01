@@ -29,7 +29,7 @@
 # PIN-DAG: operands_info.md
 # PIN-DAG: instruction_type_operands.json
 # PIN-DAG: instruction_to_entry.xlsx#cells
-# PIN-DAG: format_e_bit_layout_v2_1.json
+# PIN-DAG: format_e_bit_layout_v2_2.json
 # PIN-DAG: instruction_type_index.json
 # PIN-DAG: not ZIP bytes
 # PIN-NOT: slot0_alu_instruction_list.json

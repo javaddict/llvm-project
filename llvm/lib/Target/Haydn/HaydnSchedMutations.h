@@ -10,13 +10,12 @@
 //
 // Pre-RA: PropagateIncomingLatencies, EnforceCopyEdges, FuncArgCopyEdges
 // ( CopyConstrain in createHaydnPreRAScheduler)
-// Post-RA: RegionEndEdges (MaxLatencyFinder + successorsAreScheduled;
-// default off), MemoryEdges (ExactLatencies), MachineSchedWAWEdges
-// (SFR/CBR; default off). Product defaults for
-// -haydn-postra-interblock, -haydn-postra-region-end-edges, and
-// -haydn-postra-waw-edges stay off until same-artifact evidence
-// decides. Experimental-on: IncludeStages drop plus DDG remaining-latency
-// cut; no PerSuccEdges invent.
+// Post-RA: RegionEndEdges (MaxLatencyFinder + successorsAreScheduled),
+// MemoryEdges (ExactLatencies), MachineSchedWAWEdges (SFR/CBR). Product
+// defaults for -haydn-postra-interblock, -haydn-postra-region-end-edges,
+// and -haydn-postra-waw-edges are ON since the G004 flip 2026-08-27
+// (same-artifact matrix green; see HaydnTargetMachine.cpp). Enabled shape:
+// IncludeStages drop plus DDG remaining-latency cut; no PerSuccEdges invent.
 //
 // Parked (no Haydn peer): LockDelays, BiasDepth, EmitFixedSUnits
 // WAWStickyRegistersEdges. PerSuccEdges is not invented.
@@ -37,9 +36,22 @@ namespace llvm {
 std::vector<std::unique_ptr<ScheduleDAGMutation>> getHaydnPreRAMutations();
 std::vector<std::unique_ptr<ScheduleDAGMutation>> getHaydnPostRAMutations();
 
-/// W68.2R: -haydn-postra-interblock (default off). True when the experimental
+// Product defaults for the post-RA inter-block mutations stay OFF. QoR
+// campaigns 2026-08-27 (CM/DHRY, ON-vs-OFF bisect on the flip artifact):
+// sms2=1 + edges=0 delivers CM -3.76% / DH -0.86% bundles, but the combined
+// sms2=1 + edges=1 arm is super-additively bundle-REGRESSIVE (CM +33.38%,
+// DH +12.18%). Correctness is green in every arm; the loss is pure QoR.
+// The interaction (edges change the DDG the S2 replay consumes) must be
+// understood before any edge flag joins the product default.
+// AIE turns InterBlockLatency on (AIEMaxLatencyFinder.cpp:27). Haydn
+// declined the HC#0 next-block driver; no PerSuccEdges invent.
+constexpr bool haydnPostRAInterblockProductDefaultEnabled() { return false; }
+constexpr bool haydnPostRARegionEndEdgesProductDefaultEnabled() { return false; }
+constexpr bool haydnPostRAWAWEdgesProductDefaultEnabled() { return false; }
+
+/// W68.2R: -haydn-postra-interblock (default off). True when the
 /// inter-block DDG substrate and its consumers (effective-latency cut) are
-/// enabled. Product default stays off until same-artifact evidence decides.
+/// enabled.
 bool haydnInterBlockEnabled();
 
 class HaydnInterBlockEdges;

@@ -39,6 +39,7 @@
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -73,23 +74,30 @@ bool HaydnAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 }
 
 void HaydnAsmPrinter::emitFunctionEntryLabel() {
-  // HasFunctionAlignment is false (HaydnMCAsmInfo): emit alignment here.
-  // User alignment (aligned(N)) is a LANGUAGE guarantee — the pointer's low
-  // bits are observable — so it is honored, not capped to the parcel
-  // power-of-two. The capping rationale (non-parcel pads at LLD boundaries)
-  // is obsolete: BundleSim's coverage walk accepts zero-byte gaps by looking
-  // at the bytes (CB-146), the product link runs -ffunction-sections so the
-  // pad is inter-section zero fill, and inside a single .text a non-parcel
-  // align still fail-closes in writeNopData rather than silently
-  // misaligning (cb146_overaligned_function exercises the honored path).
+  // W70.2: entry alignment is real committed bytes — HaydnMachineAlignment
+  // (addPostBBSections, after the closure Finalize+Verify) pads the
+  // committed extent with legal generated idle-parcel BUNDLEs, and those
+  // parcels are charged by the BR/HWLoop prefix budgets via
+  // getInstSizeInBytes. This label no longer grows: no emitAlignment, no
+  // MC fill in front of the entry symbol.
+  //
+  // Serialize-only residue (zero bytes): promote sh_addralign so LLD
+  // honors the requirement where the section start already satisfies it —
+  // under the product -ffunction-sections link every entry sits at section
+  // offset 0, so the promoted section alignment IS the guarantee. User
+  // alignment (aligned(N)) stays a language guarantee, honored not capped;
+  // HasFunctionAlignment=false keeps the generic header out, so consult
+  // F.getAlign() here as before or aligned(N) never reaches the object.
   const TargetLowering *TLI = MF->getSubtarget().getTargetLowering();
   Align A = std::max(MF->getAlignment(), TLI->getMinFunctionAlignment());
-  // HasFunctionAlignment=false bypasses the generic header's getGVAlignment,
-  // which is where F.getAlign() normally promotes MF alignment — consult it
-  // here or aligned(N) never reaches the object.
   if (MaybeAlign FnAlign = MF->getFunction().getAlign())
     A = std::max(A, *FnAlign);
-  emitAlignment(A);
+  if (A > Align(1) && TM.getTargetTriple().isOSBinFormatELF()) {
+    // MCSectionELF has no classof (TargetLoweringObjectFileImpl.cpp:1001
+    // static_cast peer); the triple check is the guard.
+    auto *Sec = static_cast<MCSectionELF *>(MF->getSection());
+    Sec->ensureMinAlignment(A);
+  }
   AsmPrinter::emitFunctionEntryLabel();
 }
 

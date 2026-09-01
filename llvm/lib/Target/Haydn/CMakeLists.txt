@@ -67,6 +67,7 @@ add_llvm_target(HaydnCodeGen
   HaydnLatencyStalls.cpp
   HaydnHazardRecognizer.cpp
   HaydnLateConvergence.cpp
+  HaydnMachineAlignment.cpp
   HaydnHardwareLoops.cpp
   HaydnHWLoopDemote.cpp
   HaydnFixupHwLoops.cpp
@@ -114,15 +115,15 @@ add_subdirectory(TargetInfo)
 # build. Ordinary builds consume the checked-in generated outputs
 # (HaydnGenFormatE*.inc, HaydnFormatsE96Members.td.inc,
 # HaydnInstrInfoGolden.td.inc) the same way they consume authored sources.
-# To regenerate after a golden v2_1 update, run the importer manually against
+# To regenerate after a golden v2_2 update, run the importer manually against
 # the pinned nine-file golden bundle (see contracts/pipeline.md
 # "Generated/authored input and check contract" and GOALS P19):
 #   python3 FormatE/generate_format_e_records.py \
-#     --json  <golden>/format_e_bit_layout_v2_1.json \
-#     --xlsx  <golden>/format_e_bit_layout_v2_1.xlsx \
+#     --json  <golden>/format_e_bit_layout_v2_2.json \
+#     --xlsx  <golden>/format_e_bit_layout_v2_2.xlsx \
 #     --canonical-vectors <golden>/format_e_canonical_vectors_v1.json \
 #     --out-dir .
 # and generate_sched_records.py likewise (adds --constraints). Both default to
-# v2_1 names and pin golden hashes. Do not wire golden paths into CMake: they
+# v2_2 names and pin golden hashes. Do not wire golden paths into CMake: they
 # are machine-specific and would silently skip (or worse, pass stale) on hosts
 # without the plans-tree bundle.

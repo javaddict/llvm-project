@@ -36,15 +36,16 @@ define i32 @shift_loop(ptr %p, i32 %n) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r3, r2, r3 }
-; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3 }
+; CHECK-NEXT:    { nop; max32 r3, r2, r3 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { nop; nop; slli32 r2, r2, 1 }
+; CHECK-NEXT:    { nop; slli32 r2, r2, 1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LLhwloop_end0:
 ; CHECK-NEXT:    { nop; nop }

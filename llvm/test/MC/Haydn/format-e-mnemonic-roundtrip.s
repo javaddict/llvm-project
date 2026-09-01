@@ -23,7 +23,7 @@
 # Role: object — assemble each product mnemonic, require a 12-byte
 # non-all-zero parcel, and require objdump to print the logical name.
 # Peer: llvm/test/MC/Hexagon/v67_all.s (mnemonic × assemble+objdump).
-# ENC-COUNT-806: encoding: [
+# ENC-COUNT-813: encoding: [
 # ENC-NOT: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
 
 .text
@@ -312,11 +312,23 @@ rt_d_lhw_with_reg:
 # DIS-LABEL: <rt_d_lhw_with_reg>:
 # DIS: {{[ \t]}}d_lhw_with_reg{{[ \t,;]}}
 
+# MNEM: d_lqhwua_cb_post
+rt_d_lqhwua_cb_post:
+{ nop; d_lqhwua_cb_post 0, 0, d0, r1 }
+# DIS-LABEL: <rt_d_lqhwua_cb_post>:
+# DIS: {{[ \t]}}d_lqhwua_cb_post{{[ \t,;]}}
+
 # MNEM: d_lqhwua_post
 rt_d_lqhwua_post:
 { nop; d_lqhwua_post 0, d0, r1 }
 # DIS-LABEL: <rt_d_lqhwua_post>:
 # DIS: {{[ \t]}}d_lqhwua_post{{[ \t,;]}}
+
+# MNEM: d_ltwua_cb_post
+rt_d_ltwua_cb_post:
+{ nop; d_ltwua_cb_post 0, 0, d0, r1 }
+# DIS-LABEL: <rt_d_ltwua_cb_post>:
+# DIS: {{[ \t]}}d_ltwua_cb_post{{[ \t,;]}}
 
 # MNEM: d_ltwua_post
 rt_d_ltwua_post:
@@ -458,11 +470,23 @@ rt_d_shw_with_reg:
 # DIS-LABEL: <rt_d_shw_with_reg>:
 # DIS: {{[ \t]}}d_shw_with_reg{{[ \t,;]}}
 
+# MNEM: d_sqhwua_cb_post
+rt_d_sqhwua_cb_post:
+{ nop; d_sqhwua_cb_post 0, 0, d0, r1 }
+# DIS-LABEL: <rt_d_sqhwua_cb_post>:
+# DIS: {{[ \t]}}d_sqhwua_cb_post{{[ \t,;]}}
+
 # MNEM: d_sqhwua_post
 rt_d_sqhwua_post:
 { nop; d_sqhwua_post 0, d0, r1 }
 # DIS-LABEL: <rt_d_sqhwua_post>:
 # DIS: {{[ \t]}}d_sqhwua_post{{[ \t,;]}}
+
+# MNEM: d_stwua_cb_post
+rt_d_stwua_cb_post:
+{ nop; d_stwua_cb_post 0, 0, d0, r1 }
+# DIS-LABEL: <rt_d_stwua_cb_post>:
+# DIS: {{[ \t]}}d_stwua_cb_post{{[ \t,;]}}
 
 # MNEM: d_stwua_post
 rt_d_stwua_post:
@@ -3256,6 +3280,18 @@ rt_pldwwua:
 # DIS-LABEL: <rt_pldwwua>:
 # DIS: {{[ \t]}}pldwwua{{[ \t,;]}}
 
+# MNEM: plqhwua_cb_post
+rt_plqhwua_cb_post:
+{ nop; plqhwua_cb_post 0, 0, r1 }
+# DIS-LABEL: <rt_plqhwua_cb_post>:
+# DIS: {{[ \t]}}plqhwua_cb_post{{[ \t,;]}}
+
+# MNEM: pltwwua_cb_post
+rt_pltwwua_cb_post:
+{ nop; pltwwua_cb_post 0, 0, r1 }
+# DIS-LABEL: <rt_pltwwua_cb_post>:
+# DIS: {{[ \t]}}pltwwua_cb_post{{[ \t,;]}}
+
 # MNEM: popcount32
 rt_popcount32:
 { nop; popcount32 r1, r2 }
@@ -4139,6 +4175,12 @@ rt_wbarwua:
 { nop; wbarwua 0, r1 }
 # DIS-LABEL: <rt_wbarwua>:
 # DIS: {{[ \t]}}wbarwua{{[ \t,;]}}
+
+# MNEM: wbarwua_cb
+rt_wbarwua_cb:
+{ nop; wbarwua_cb 0, 0, r1 }
+# DIS-LABEL: <rt_wbarwua_cb>:
+# DIS: {{[ \t]}}wbarwua_cb{{[ \t,;]}}
 
 # MNEM: wfi
 # UNENCODABLE: WFI<TBD> (wfi) — no invented encoding

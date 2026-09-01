@@ -2,7 +2,7 @@
 """Pin 100% MC coverage of product Format E non-NOP logical mnemonics.
 
 Extracts unique non-NOP logical names from HaydnGenFormatERecords.inc
-FormatEAltSpans (PIN_UNIQUE_NON_NOP = 683) and fails if any name is absent
+FormatEAltSpans (PIN_UNIQUE_NON_NOP = 814) and fails if any name is absent
 from llvm/test/MC/Haydn/. Hypothesized HaydnInstrInfoManual.td encodings are
 isCodeGenOnly and are not this pin.
 
@@ -12,7 +12,7 @@ Usage:
   check_mc_mnemonic_coverage.py --self-test
 
 Exit:
-  0  every product mnemonic appears in MC tests (683/683)
+  0  every product mnemonic appears in MC tests (814/814)
   1  missing mnemonics or pin mismatch
   2  usage / missing paths
 
@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-PIN_UNIQUE_NON_NOP = 807
+PIN_UNIQUE_NON_NOP = 814
 RECORDS_REL = "llvm/lib/Target/Haydn/HaydnGenFormatERecords.inc"
 MC_REL = "llvm/test/MC/Haydn"
 SCAN_SUFFIXES = {".s"}

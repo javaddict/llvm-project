@@ -35,8 +35,8 @@ define i32 @ret_after_csr_epilogue(i32 %x) {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { nop; addi32 r9, sp, 12 }
-; CHECK-NEXT:    { nop; move32 r1, r9; move32 r8, r1 }
+; CHECK-NEXT:    { move32 r8, r1; addi32 r9, sp, 12 }
+; CHECK-NEXT:    { nop; move32 r1, r9 }
 ; CHECK-NEXT:    { nop; jal lr, ext }
 ; CHECK-NEXT:    { nop; addi32 r1, r8, 1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

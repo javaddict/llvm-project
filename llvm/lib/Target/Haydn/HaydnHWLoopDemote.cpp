@@ -22,6 +22,7 @@
 #include "HaydnPortModel.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -95,17 +96,87 @@ static bool isPLETargetingHeader(const MachineInstr *MI,
                                  const MachineBasicBlock *Header);
 
 /// The block's unique live successor, or null (zero, or ambiguous).
+/// CB-166: the classic expander's guarded-prologue branch insertion can
+/// register the SAME successor twice (addSuccessor on an edge already
+/// present); a duplicated edge is still one successor — dedupe by block.
 static MachineBasicBlock *getLoneSuccessor(const MachineBasicBlock &BB) {
   const MachineFunction *MF = BB.getParent();
   MachineBasicBlock *Only = nullptr;
   for (MachineBasicBlock *Succ : BB.successors()) {
     if (!isLiveMBB(*MF, Succ))
       continue;
-    if (Only)
+    if (Only && Only != Succ)
       return nullptr;
     Only = Succ;
   }
   return Only;
+}
+
+/// CB-166: does the successor chain starting at \p Cur reach a self-latched
+/// kernel (a block whose PseudoLoopEnd targets itself) within the guarded
+/// prologue chain? A guarded prologue has two live successors (guard edge
+/// to epilog + progress edge); BOTH are explored and any reaching path
+/// proves the kernel exists downstream — the caller then discriminates the
+/// progress edge by uniqueness. \p Barrier (the preheader) terminates every
+/// exploration path: an edge back to the preheader is the OUTER loop's
+/// back edge, not this chain's progress (the guard target of a nested-loop
+/// peel reaches the kernel only by re-entering the preheader, which is not
+/// a proof of this chain). A block carrying ANOTHER LoopStart is also a
+/// barrier: sequential/nested loop regions are delimited by their setups,
+/// and a skip edge flowing into the NEXT loop's preheader reaches that
+/// loop's kernel — not proof of THIS chain. Bounded DFS; \p Visited
+/// carries the already-walked chain blocks so a guard edge back into the
+/// chain cycles out (refused). Pure CFG proof — never layout order.
+static bool
+prologueChainReachesKernel(MachineBasicBlock *Cur,
+                           SmallPtrSet<MachineBasicBlock *, 8> &Visited,
+                           MachineBasicBlock *Barrier = nullptr) {
+  SmallVector<MachineBasicBlock *, 8> Worklist;
+  SmallPtrSet<MachineBasicBlock *, 8> Seen;
+  auto isChainBarrier = [&](const MachineBasicBlock *B) {
+    if (B == Barrier)
+      return true;
+    for (const MachineInstr &MI : *B)
+      if (haydnClassifyHwloopSetupOpcode(MI.getOpcode()) !=
+          HaydnHwloopSetupFamily::None)
+        return true; // another loop's region starts here
+    return false;
+  };
+  Worklist.push_back(Cur);
+  while (!Worklist.empty()) {
+    MachineBasicBlock *B = Worklist.pop_back_val();
+    for (unsigned Hop = 0; Hop < 8 && B; ++Hop) {
+      if (isPLETargetingHeader(findPseudoLoopEnd(B), B))
+        return true;
+      if (isChainBarrier(B))
+        break; // outer back edge / next loop region — not this chain
+      if (!Seen.insert(B).second || Visited.count(B))
+        break;
+      MachineFunction *MF = B->getParent();
+      MachineBasicBlock *Fallthrough = nullptr;
+      unsigned LiveSuccs = 0;
+      for (MachineBasicBlock *Succ : B->successors()) {
+        if (!isLiveMBB(*MF, Succ) || Seen.count(Succ) || Visited.count(Succ) ||
+            isChainBarrier(Succ))
+          continue;
+        ++LiveSuccs;
+        Fallthrough = Succ; // remember the last; explore extras below
+      }
+      if (LiveSuccs > 1) {
+        // Guarded prologue: explore every unvisited live successor; the
+        // guard edge fails the kernel test on its own subchain.
+        for (MachineBasicBlock *Succ : B->successors()) {
+          if (!isLiveMBB(*MF, Succ) || Seen.count(Succ) || Visited.count(Succ) ||
+              isChainBarrier(Succ))
+            continue;
+          Worklist.push_back(Succ);
+        }
+        break;
+      }
+      B = Fallthrough;
+    }
+  }
+  return false;
 }
 
 MachineBasicBlock *haydn::hwloop::resolveBodyMBBCore(MachineInstr &SetMI) {
@@ -149,20 +220,69 @@ MachineBasicBlock *haydn::hwloop::resolveBodyMBBCore(MachineInstr &SetMI) {
     if (FoundHeader)
       return FoundHeader;
     // Generic pre-RA SMS multi-stage peel shape (W68.1): the classic
-    // ModuloScheduleExpander inserts a PROLOGUE between the (new)
-    // preheader and the kernel — preheader -> prologue -> kernel(self
-    // latch, PseudoLoopEnd targets the kernel itself), with the LoopStart
-    // $adj already crediting the peeled iterations. The prologue carries
-    // the peeled iterations' real instructions and its trip guard, so it
-    // is NOT an empty continue-trampoline (those stay Fixup-only: walking
+    // ModuloScheduleExpander inserts PROLOGUES between the (new) preheader
+    // and the kernel — preheader -> prologue -> ... -> kernel(self latch,
+    // PseudoLoopEnd targets the kernel itself), with the LoopStart $adj
+    // already crediting the peeled iterations. A prologue carries the
+    // peeled iterations' real instructions and its trip guard, so it is
+    // NOT an empty continue-trampoline (those stay Fixup-only: walking
     // them at formation would invent a body from layout). Proof here is
     // CFG shape + real-prologue content, never layout order alone.
-    if (MachineBasicBlock *Only = getLoneSuccessor(*Pre)) {
-      if (!isContinueTrampolineBlock(Only)) {
-        if (MachineBasicBlock *Kernel = getLoneSuccessor(*Only)) {
-          MachineInstr *PLE = findPseudoLoopEnd(Kernel);
-          if (isPLETargetingHeader(PLE, Kernel))
-            return Kernel;
+    //
+    // CB-166 (2026-08-27): with RUNTIME trip counts the prologues AND the
+    // preheader carry DYNAMIC guards (createTripCountGreaterCondition), so
+    // both may have TWO live successors — the guard-taken EPILOG edge and
+    // the fall-through PROGRESS edge into the next prologue/kernel. The
+    // lone-successor walk stops at the first guard. Walk the guarded chain
+    // instead: try each live preheader successor as the chain entry —
+    // exactly one must prove (bounded, cycle-safe, barrier-safe) that it
+    // reaches the self-latched kernel; ambiguous -> refuse. Within the
+    // chain each hop self-latches (kernel) or its progress edge is proven
+    // the same way. The guard edge never proves the chain: it leaves for
+    // an epilog/exit and any path back through the preheader or into
+    // ANOTHER loop's region (a block carrying a hwloop setup is a
+    // barrier) is refused. Pure CFG proof, no layout order, bounded by
+    // the PPS-3 stage count.
+    {
+      MachineBasicBlock *Entry = nullptr;
+      SmallPtrSet<MachineBasicBlock *, 8> EntryVisited;
+      for (MachineBasicBlock *Succ : Pre->successors()) {
+        if (!isLiveMBB(*MF, Succ) || isContinueTrampolineBlock(Succ))
+          continue;
+        if (prologueChainReachesKernel(Succ, EntryVisited, Pre)) {
+          if (Entry && Entry != Succ) {
+            Entry = nullptr;
+            break;
+          }
+          Entry = Succ;
+        }
+      }
+      if (Entry) {
+        SmallPtrSet<MachineBasicBlock *, 8> Visited;
+        MachineBasicBlock *Cur = Entry;
+        for (unsigned Hop = 0; Hop < 8 && Cur; ++Hop) {
+          if (isPLETargetingHeader(findPseudoLoopEnd(Cur), Cur))
+            return Cur; // self-latched kernel
+          if (!Visited.insert(Cur).second)
+            break; // cycle — refuse
+          // Progress edge: the successor that (transitively, as a lone or
+          // guarded chain) reaches a self-latched kernel. Try each live
+          // successor's chain; the guard edge fails the kernel test.
+          MachineBasicBlock *Next = nullptr;
+          for (MachineBasicBlock *Succ : Cur->successors()) {
+            if (!isLiveMBB(*MF, Succ) || Visited.count(Succ))
+              continue;
+            if (prologueChainReachesKernel(Succ, Visited, Pre)) {
+              if (Next && Next != Succ) {
+                Next = nullptr;
+                break;
+              }
+              Next = Succ;
+            }
+          }
+          if (!Next)
+            break;
+          Cur = Next;
         }
       }
     }

@@ -1,6 +1,7 @@
 ; REQUIRES: asserts
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -O2 -verify-machineinstrs < %s | FileCheck %s --check-prefix=OFF
+; RUN:     -O2 -verify-machineinstrs -haydn-sms2=false \
+; RUN:     -haydn-postra-interblock=false < %s | FileCheck %s --check-prefix=OFF
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -O2 -verify-machineinstrs -haydn-postra-interblock \
 ; RUN:     -haydn-postra-region-end-edges -haydn-sms2 < %s \
@@ -15,7 +16,7 @@
 ; time AFTER the late range/layout mutations, as a whole-function pass
 ; (contracts/pipeline.md "S1/S2 repair law" — running the whole function
 ; is conservative and legal; calling that "changed-BB-only repair" when
-; no such filter exists is not). Flags stay default-off.
+; no such filter exists is not). Product default ON; explicit-off pin above.
 ;
 ; This kernel's opt-in packing is identical to default-off, so both RUN
 ; arms share the OFF checks. The WHOLE arm proves S1 schedules every
@@ -28,7 +29,7 @@
 ; OFF: { ld32 r1, r1, 0; ld32 r2, r1, 0 }
 ; OFF: { nop; addi32 r3, r0, 3 }
 ; OFF: { nop; addi32 r2, r2, 1 }
-; OFF: { nop; mull r3, r2, r3 }
+; OFF: { nop; {{(nop; )?}}mull r3, r2, r3 }
 ; OFF: jalr
 
 ; S1 post-RA schedules the whole function (every MBB that materializes

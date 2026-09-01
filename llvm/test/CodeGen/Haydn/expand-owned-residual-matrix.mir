@@ -144,8 +144,8 @@
 # RUN:   -verify-machineinstrs %t/br_jt_ok.mir -o - | FileCheck %s --check-prefix=BRJT
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
 # RUN:   -verify-machineinstrs %t/pseudo_call_indirect_ok.mir -o - | FileCheck %s --check-prefix=CALLI
-# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
-# RUN:   %t/bundled_b.mir -o - 2>&1 | FileCheck %s --check-prefix=BB
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_b.mir -o - | FileCheck %s --check-prefix=BB
 # RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
 # RUN:   %t/bundled_ret.mir -o - 2>&1 | FileCheck %s --check-prefix=BRET
 # RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
@@ -753,7 +753,8 @@ body:             |
   bb.0:
     liveins: $d0, $r15
     ; MOVT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
-    $d0 = MOVT64 $d0, implicit $sfr
+    ; M23 tied old-dest: operand 1 reads old $d0 (tied to def per Desc).
+    $d0 = MOVT64 $d0, $d0, implicit $sfr
     RET implicit $r15
 
 #--- residual_log2.mir
@@ -801,7 +802,8 @@ body:             |
   bb.0:
     liveins: $d0, $r15
     ; MOVF64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
-    $d0 = MOVF64 $d0, implicit $sfr
+    ; M23 tied old-dest: operand 1 reads old $d0 (tied to def per Desc).
+    $d0 = MOVF64 $d0, $d0, implicit $sfr
     RET implicit $r15
 
 #--- residual_nsaz64.mir
@@ -1371,8 +1373,11 @@ body:             |
   bb.0:
     liveins: $r15
     successors: %bb.1
-    ; BB: residual representation-expand pseudo
-    ; BB: B
+    ; W68.4: Bundled-B is EXEMPT at ExpandPseudos (closure Finalize
+    ; expandUncondBToBeqz owns B->BEQZ_W_MSP after the last BR); expand
+    ; leaves the bundle serialized as-is and exits clean.
+    ; BB: BUNDLE
+    ; BB: B %bb.1
     BUNDLE {
       B %bb.1
     }

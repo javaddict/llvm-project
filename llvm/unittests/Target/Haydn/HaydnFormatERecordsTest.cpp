@@ -19,6 +19,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -41,16 +42,14 @@ using namespace llvm::haydn::format_e;
 namespace {
 
 TEST(HaydnFormatERecords, GoldenHashPins) {
-  // Golden v2_1 (supersedes v2 2026-08-18): +120 MAC RR 32X16 instrs, +4 LS
-  // D_SW_F64RS rows, RRR operand canonicalization; geometry identical. The
-  // JSON is as-delivered (26098770…); the companion forced read-port repair
-  // (6 FMUL*32S rows) landed in instruction_type_index.json (7a13453a…),
-  // not here. This pin must move together with PINNED_JSON_SHA256 in
-  // generate_format_e_records.py.
+  // Golden v2_2 (supersedes v2_1 2026-08-28): +AR_CBR type 101 on
+  // LOADSTORE0 entry0 in both packet entries, carrying 7 circular-buffer
+  // UA load/store instrs. This pin must move together with
+  // PINNED_JSON_SHA256 in generate_format_e_records.py.
   EXPECT_STREQ(FormatEJSONSHA256,
-               "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a");
+               "c436793cc8d3295088dda2271e68e5b53074eeb4bce3341d443ebac3e828dcba");
   EXPECT_STREQ(FormatEXLSXSHA256,
-               "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f");
+               "2a2b43cb394a16cf89173538f2a673235fdb6e4ed04cb6e4e75e72520cf7ffdb");
   // Canonical-vector SHA-256 is enforced by generate_format_e_records.py
   // --check (PINNED_CANONICAL_SHA256 = 6d403139…b728f9). The ledger is a
   // check input, not an encode table, so it is not emitted into the .inc.
@@ -84,14 +83,16 @@ TEST(HaydnFormatERecords, MemberAndLedgerFamilyIsE96) {
 }
 
 TEST(HaydnFormatERecords, CatalogSnapshotPins) {
-  EXPECT_EQ(FormatETypeLayoutCount, 126u);
-  EXPECT_EQ(FormatEUniqueNonNopNames, 807u);
-  EXPECT_EQ(FormatEE2NonNopNames, 801u);
-  EXPECT_EQ(FormatEE3NonNopNames, 797u);
-  EXPECT_EQ(FormatEBothModeNonNopNames, 791u);
+  // v2_2: +7 AR_CBR instrs (unique 807→814, E2 801→808, E3 797→804,
+  // both 791→798; type layouts 126→128).
+  EXPECT_EQ(FormatETypeLayoutCount, 128u);
+  EXPECT_EQ(FormatEUniqueNonNopNames, 814u);
+  EXPECT_EQ(FormatEE2NonNopNames, 808u);
+  EXPECT_EQ(FormatEE3NonNopNames, 804u);
+  EXPECT_EQ(FormatEBothModeNonNopNames, 798u);
   EXPECT_EQ(FormatEE2OnlyNames, 10u);
   EXPECT_EQ(FormatEE3OnlyNames, 6u);
-  EXPECT_EQ(FormatENonNopLogicalCount, 807u);
+  EXPECT_EQ(FormatENonNopLogicalCount, 814u);
   EXPECT_EQ(FormatEE2UnitPairCount, 9u);
   EXPECT_EQ(FormatEE3LegalTupleCount, 42u);
   EXPECT_EQ(FormatEE3IllegalTupleCount, 22u);
@@ -213,8 +214,9 @@ TEST(HaydnFormatERecords, LayoutAndMemberCoverage) {
     else
       ++E3Layouts;
   }
-  EXPECT_EQ(E2Layouts, 34u);
-  EXPECT_EQ(E3Layouts, 92u);
+  // v2_2: AR_CBR adds one layout per mode (LOADSTORE0 entry0).
+  EXPECT_EQ(E2Layouts, 35u);
+  EXPECT_EQ(E3Layouts, 93u);
 
   std::unordered_set<std::string> NonNop;
   std::unordered_set<std::string> E2, E3;
@@ -280,10 +282,10 @@ TEST(HaydnFormatERecords, AlternativeMultiplicityAndInverseIdentity) {
       EXPECT_EQ(Inv, static_cast<int>(Mid)) << S.Logical;
     }
   }
-  // v2_1 restamp 2026-08-18: 32X16 family widens mult-2 (62->66) and
-  // mult-5 (412->532); 1/3/4/7 unchanged.
+  // v2_2 restamp 2026-08-28: the 7 AR_CBR instrs widen mult-2 (66->73);
+  // 1/3/4/5/7 unchanged from v2_1.
   EXPECT_EQ(Mult[1], 1u);
-  EXPECT_EQ(Mult[2], 66u);
+  EXPECT_EQ(Mult[2], 73u);
   EXPECT_EQ(Mult[3], 15u);
   EXPECT_EQ(Mult[4], 7u);
   EXPECT_EQ(Mult[5], 532u);
@@ -396,6 +398,51 @@ TEST(HaydnFormatERecords, StoreLogicalsAreLoadStore0Only) {
   EXPECT_FALSE(logicalsHaveUnitCover(DualStoreAlu));
   const std::string StoreAlu[] = {"D_SW_L_WITH_IMM", "OR64"};
   EXPECT_TRUE(logicalsHaveUnitCover(StoreAlu));
+}
+
+TEST(HaydnFormatERecords, ArcbrFamilyAdmittedOnLoadStore0Only) {
+  // Golden v2_2 admission: AR_CBR type 101 lives on LOADSTORE0 entry0 in
+  // BOTH modes (E2 + E3) and nowhere else — LOAD1 keeps AR/RI6/RR. Eight
+  // mapping rows (NOP 0x00 + 7 instrs 0x01-0x07). Members must exist for
+  // exactly the 7 non-NOP names, each with TypeCode 5 (0b101) and
+  // OpcodeWidth 3.
+  const char *const kArcbrLogicals[] = {
+      "PLTWWUA_CB_POST", "PLQHWUA_CB_POST", "D_LTWUA_CB_POST",
+      "D_LQHWUA_CB_POST", "D_STWUA_CB_POST", "D_SQHWUA_CB_POST",
+      "WBARWUA_CB",
+  };
+  std::unordered_map<std::string, unsigned> Placements;
+  unsigned ArcbrLayouts = 0;
+  for (unsigned I = 0; I < FormatETypeLayoutCount; ++I) {
+    const FormatETypeLayoutRec &L = FormatETypeLayouts[I];
+    if (std::string_view(L.TypeName) != "AR_CBR")
+      continue;
+    ++ArcbrLayouts;
+    EXPECT_EQ(L.TypeCode, 5u) << L.TypeName;
+    EXPECT_EQ(L.TypeCodeWidth, 3u) << L.TypeName;
+    EXPECT_EQ(std::string_view(L.UnitName), "LOADSTORE0") << L.TypeName;
+    EXPECT_EQ(L.EntryIdx, 0u) << L.TypeName;
+  }
+  // One layout per mode.
+  EXPECT_EQ(ArcbrLayouts, 2u);
+  for (unsigned I = 0; I < FormatEMemberCount; ++I) {
+    const FormatEMemberRec &M = FormatEMembers[I];
+    if (std::string_view(M.TypeName) != "AR_CBR")
+      continue;
+    // The golden NOP 0x00 row is the shared architectural idle member.
+    if (M.IsNop) {
+      EXPECT_EQ(M.Opcode, 0u) << "AR_CBR NOP opcode";
+      continue;
+    }
+    Placements[M.Logical]++;
+    EXPECT_EQ(M.Unit, FormatETypeLayouts[M.LayoutId].Unit);
+    EXPECT_EQ(M.OpcodeWidth, 3u) << M.Logical;
+    EXPECT_LE(M.Opcode, 7u) << M.Logical;
+  }
+  EXPECT_EQ(Placements.size(), 7u);
+  for (const char *Name : kArcbrLogicals) {
+    EXPECT_EQ(Placements[Name], 2u) << Name; // one E2 + one E3 member
+  }
 }
 
 TEST(HaydnFormatERecords, CanonicalVectorGeometryAndHeaderHex) {

@@ -77,7 +77,7 @@ define i32 @test_sequential_loads(ptr %p) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r3, r1, 1; ld32 r2, r1, 0 }
+; CHECK-NEXT:    { ld32 r2, r1, 0; ld32 r3, r1, 1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
@@ -102,12 +102,13 @@ define i32 @test_store_load_same_offset(ptr %p, i32 %val) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; s_sw_pre_imm r2, r1, 4 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %ptr = getelementptr i32, ptr %p, i32 4
   store i32 %val, ptr %ptr
   %v = load i32, ptr %ptr
@@ -128,13 +129,13 @@ define i32 @test_2d_array_const_col(ptr %arr, i32 %row) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 20 }
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %rowptr = getelementptr [5 x i32], ptr %arr, i32 %row
   %elem = getelementptr [5 x i32], ptr %rowptr, i32 0, i32 3
   %v = load i32, ptr %elem

@@ -52,8 +52,11 @@
 # chain. PASS = expander runs, accept log with stages>=2, the SMS-TC no-op
 # line fires, and the verifier stays clean.
 
-# SWP: Schedule Found? 1 (II={{[1-9][0-9]*}})
+# HC#0 II-retry (2026-08-28): shouldUseSchedule runs inside the II
+# search; accept lines precede "Schedule Found? 1".
+
 # SWP: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[1-9][0-9]*}}
+# SWP: Schedule Found? 1 (II={{[1-9][0-9]*}})
 # SWP: SMS-TC: soft adjustTripCount delta={{-?[0-9]+}} is a structural no-op
 # SWP-NOT: SMS-SHOULDUSE: reject
 # SWP-NOT: Reading virtual register without a def

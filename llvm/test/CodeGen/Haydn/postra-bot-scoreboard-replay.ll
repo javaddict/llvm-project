@@ -1,8 +1,9 @@
 ; REQUIRES: asserts
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -O2 -verify-machineinstrs < %s | FileCheck %s --check-prefix=OFF
+; RUN:     -O2 -verify-machineinstrs -haydn-postra-interblock=false < %s \
+; RUN:     | FileCheck %s --check-prefix=OFF
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -O2 -stats -o /dev/null < %s 2>&1 \
+; RUN:     -O2 -haydn-postra-interblock=false -stats -o /dev/null < %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=OFF-STATS
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -O2 -verify-machineinstrs -haydn-postra-interblock < %s \
@@ -15,7 +16,7 @@
 ; RUN:     | FileCheck %s --check-prefix=ON-STATS
 ;
 ; W68.2R Bot scoreboard replay (AIE initializeBotScoreBoard peer,
-; AIEMachineScheduler.cpp:260-405). Flags stay default-off.
+; AIEMachineScheduler.cpp:260-405). Product default ON; explicit-off pin above.
 ; Layout: hdr is scheduled first; body has a single back-edge successor
 ; that already carries S1 depths, so initializeBotScoreBoard replays hdr's
 ; committed cycles into body's Bot HR. Unscheduled/unknown successors take

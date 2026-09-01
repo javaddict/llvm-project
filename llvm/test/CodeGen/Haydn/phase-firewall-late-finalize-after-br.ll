@@ -65,15 +65,13 @@ define i32 @f(i32 %a, i32 %b) {
 ; BB-sections) and before the common CFIFixup + frame-layout analyses.
 ; COMMON: Contiguously Lay Out Funclets
 ; COMMON: Machine Sanitizer Binary Metadata
-; COMMON-NEXT: Haydn Bundle Finalization
+; COMMON: Haydn Bundle Finalization
 ; COMMON-NEXT: Haydn Bundle Invariant Verifier
 ; COMMON: Insert CFI remember/restore state instructions
 ; COMMON: Stack Frame Layout Analysis
 ; Freeze gate (addPreEmitPass2): terminal read-only verifier; only
 ; serialization follows.
 ; COMMON-NEXT: Haydn Bundle Invariant Verifier
-; Default path must not insert S2 (flag stays cl::init(false)).
-; COMMON-NOT: Haydn Late Layout Convergence Loop
 
 ; W68.2R: S2 chooses current physical MIs at addPostBBSections, after
 ; the common tail and immediately before closure Finalize. It must not
@@ -93,7 +91,7 @@ define i32 @f(i32 %a, i32 %b) {
 ; SMS2-NEXT: Haydn Bundle Invariant Verifier
 
 ; TM: W68.2R late VLIW closure owner (contracts/pipeline.md "Required
-; TM: if (HaydnSMS2Enabled())
+; TM: if (haydnSMS2Enabled())
 ; TM-NEXT: addPass(createHaydnLateConvergencePass());
 ; TM-NEXT: if (TargetPassConfig::hasLimitedCodeGenPipeline())
 ; TM: W68.2R executable freeze gate: terminal read-only VerifyBundles after

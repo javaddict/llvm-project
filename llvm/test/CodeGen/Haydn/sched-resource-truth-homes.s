@@ -68,14 +68,13 @@
 # MEM: case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
 # MEM: case Haydn::Sched::Slot01_LD: return 0; // Slot01_LD
-# MEM: case Haydn::Sched::Slot2_LS: return 0; // Slot2_LS
 # MEM: HaydnInstrInfo::getLastMemoryCycle
 # MEM: case Haydn::Sched::Slot0_LS: return 1; // Slot0_LS
 # MEM: case Haydn::Sched::Slot1_LD: return 1; // Slot1_LD
 # MEM: case Haydn::Sched::Slot01_LD: return 1; // Slot01_LD
-# MEM: case Haydn::Sched::Slot2_LS: return 1; // Slot2_LS
 # MEM-NOT: Slot12_ALU_AccLat
 # MEM-NOT: Slot2_ALU_AccLat
+# MEM-NOT: Slot2_LS
 #
 # GEN: DO NOT EDIT
 # GEN: Generator: llvm/lib/Target/Haydn/FormatE/generate_sched_records.py
@@ -113,9 +112,12 @@
 # PACK: cycleViolatesNamedSameCycleLaws
 # PACK: cycleViolatesSinCosWindow
 #
-# MUT: haydn-postra-region-end-edges", cl::init(false)
-# MUT: haydn-postra-interblock", cl::init(false)
-# MUT: haydn-postra-waw-edges", cl::init(false)
+# MUT: haydn-postra-region-end-edges",
+# MUT: cl::init(haydnPostRARegionEndEdgesProductDefaultEnabled())
+# MUT: haydn-postra-interblock",
+# MUT: cl::init(haydnPostRAInterblockProductDefaultEnabled())
+# MUT: haydn-postra-waw-edges",
+# MUT: cl::init(haydnPostRAWAWEdgesProductDefaultEnabled())
 # MUT: haydnInterBlockEnabled() { return EnableHaydnPostRAInterBlock; }
 # MUT: constexpr bool ExactLatencies = true
 # MUT: class MaxLatencyFinder

@@ -16,7 +16,8 @@
 
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-COUNT-2:  R_HAYDN_PC_LO20 target_data
+# RELOCS:          R_HAYDN_PC_LO20 target_data
+# RELOCS:          R_HAYDN_PC_LO20_E1 target_data
 # RELOCS-NOT:      R_HAYDN_LO20
 # RELOCS-NOT:      R_HAYDN_32_PCREL
 # RELOCS:        }

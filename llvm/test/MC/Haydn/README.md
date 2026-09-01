@@ -64,7 +64,7 @@ llvm-mc -triple=haydn-unknown-elf -filetype=obj < test.s | llvm-objdump -d -
 
 - Tests are golden-driven: binary encodings are generated from the
   authoritative Format E layout pair
-  `~/haydn-plans/Database/golden/format_e_bit_layout_v2_1.{json,xlsx}`
+  `~/haydn-plans/Database/golden/format_e_bit_layout_v2_2.{json,xlsx}`
   via the CodeGenFormat backend (D394); never hand-hypothesized
 - Relocation kinds live in `HaydnRelocLayout` (single geometry authority;
   GE96-03 branch/call = byte PC+imm, hwloop imm <<2)

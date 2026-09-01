@@ -292,15 +292,33 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   // unknown/unbounded — refuse every multi-stage schedule (analysis may
   // still succeed so the ZOL form is recognized; SMS is not applied).
   // Peer AIEBasePipelinerLoopInfo.cpp:807-814.
-  if (IsZOL &&
+  //
+  // CB-166 (2026-08-27): when ZOLTripReg carries the RUNTIME count
+  // register feeding LoopStart, the expander guard contract CAN emit a
+  // dynamic per-prologue condition on that register
+  // (createTripCountGreaterCondition below; Hexagon J2_loop0r law,
+  // HexagonInstrInfo.cpp:755-771), so small/unknown static trips no
+  // longer refuse the schedule — the guard skips prologue/kernel for
+  // trips that cannot cover the peel, preserving the iteration-count
+  // invariant without a static bound. The static MinTripCount law above
+  // still governs constant-trip loops (guard-free acceptance).
+  if (IsZOL && !ZOLTripReg.isValid() &&
       (MinTripCount == 0 ||
        static_cast<int64_t>(PrologueCount) >= MinTripCount)) {
     DEBUG_WITH_TYPE("pipeliner", {
       dbgs() << "ZOL: reject SMS (MaxStageCount=" << PrologueCount
-             << " MinTripCount=" << MinTripCount << ")\n";
+             << " MinTripCount=" << MinTripCount
+             << " — no runtime trip reg for a dynamic guard)\n";
       logZOLGeometryFloors();
     });
     return false;
+  }
+  if (IsZOL && ZOLTripReg.isValid()) {
+    DEBUG_WITH_TYPE("pipeliner", {
+      dbgs() << "ZOL: runtime trip reg live — dynamic prologue guards "
+                "cover the peel (MaxStageCount="
+             << PrologueCount << " MinTripCount=" << MinTripCount << ")\n";
+    });
   }
 
   // W59 routing seam RETIRED (W68.1): its reason to exist was "pre-RA never
@@ -384,7 +402,7 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
       HaydnPreRASchedStrategy::smsProductShouldUseScheduleFailsClosed(
           IsZOL, PrologueCount, MinTripCount, /*PressureExcess=*/false,
           HaydnSMSMaxStageCount, HaydnSMSTrackRegPressure,
-          HaydnSMSContainmentMax))
+          HaydnSMSContainmentMax, /*HasRuntimeTripReg=*/ZOLTripReg.isValid()))
     report_fatal_error(
         "Haydn SMS shouldUseSchedule pure product containment polarity desync",
         /*GenCrashDiag=*/false);
@@ -505,15 +523,75 @@ HaydnPipelinerLoopInfo::estimateCyclesAcrossAvailableFormats(
 std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
     int TC, MachineBasicBlock &MBB,
     SmallVectorImpl<MachineOperand> &Cond) {
+  // Dynamic-guard emission shared by the soft counted path and the ZOL
+  // runtime-trip path (CB-166). Emits a runtime "branch if CountReg <= TC"
+  // (skip-prologue) condition into Cond and returns nullopt — NEVER a
+  // compile-time static bool. Returning a static bool here was the Blocker-1
+  // silent-wrong-code root cause: a hand-rolled `(limit-init)/step` value
+  // drove `PeelingModuloScheduleExpander::fixupBranches`
+  // (ModuloSchedule.cpp:1980-1999) into the static-false (`KernelDisposed`)
+  // branch, collapsing countable loops (e.g. dot_product_16, trip 16) to ~1
+  // iteration with `-verify-machineinstrs` still green.
+  auto EmitDynamicGuard = [&](Register CountReg) {
+    // CountReg > TC <=> NOT (CountReg < TC + 1)
+    // <=> BNEZ (SLT32 CountReg, TC+1)
+    MachineRegisterInfo &MRI = MF->getRegInfo();
+    const TargetRegisterClass *RC = &Haydn::GPR32RegClass;
+    DebugLoc BranchDL = MBB.findBranchDebugLoc();
+
+    // Materialize (TC + 1) into a register.
+    Register CmpReg = MRI.createVirtualRegister(RC);
+    if (isInt<16>(TC + 1)) {
+      BuildMI(&MBB, BranchDL, HII->get(Haydn::LOADI32), CmpReg).addImm(TC + 1);
+    } else {
+      BuildMI(&MBB, BranchDL, HII->get(Haydn::LUI), CmpReg)
+          .addImm(((static_cast<uint32_t>(TC + 1) + 0x8000) >> 16) & 0xFFFF);
+      BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32_W), CmpReg)
+          .addReg(CmpReg)
+          .addImm((TC + 1) & 0xFFFF);
+    }
+
+    // CmpResult = (CountReg < TC + 1)
+    Register CmpResult = MRI.createVirtualRegister(RC);
+    BuildMI(&MBB, BranchDL, HII->get(Haydn::SLT32), CmpResult)
+        .addReg(CountReg)
+        .addReg(CmpReg);
+
+    // fix: upstream contract (see Hexagon's J2_jumpf reference and
+    // PeelingModuloScheduleExpander::fixupBranches / placeRematerializersCall
+    // call sites in ModuloSchedule.cpp:886,1975) requires the Cond to be TRUE
+    // (branch-taken) when the trip count is NOT greater than TC, i.e. when the
+    // prologue should be SKIPPED. CmpResult = (CountReg < TC+1) is true when
+    // trip <= TC. To branch on that "skip" condition we must fire when
+    // CmpResult != 0, hence BNEZ_W. The previous BEQZ fired when trip > TC
+    // (CmpResult == 0), reversing the guard and dead-stripping every pipelined
+    // loop with trip > stage count (counting-sort, vec-max). Phase 1b: emit
+    // the WIDE 48-bit form so insertBranch / AsmPrinter produce a WIDE parcel.
+    Cond.push_back(MachineOperand::CreateImm(Haydn::BNEZ_W));
+    Cond.push_back(MachineOperand::CreateReg(CmpResult, false));
+    return std::optional<bool>{};
+  };
+
   // ZOL mode — the hardware loop counter handles the iteration count.
-  // We cannot emit a dynamic guard (the ZOL terminator cannot be reversed).
-  // AIE only returns true when MinTripCount > TC (static no-guard); otherwise
-  // llvm_unreachable. We mirror that contract: only claim "no guard needed"
-  // when MinTripCount statically exceeds the requested TC. Schedules that
-  // would need a dynamic guard must already have been rejected in
-  // shouldUseSchedule / analyzeLoopForPipelining.
-  // Peer AIEBasePipelinerLoopInfo.cpp:750-761.
+  // CB-166 (2026-08-27): with a RUNTIME count register feeding LoopStart,
+  // emit the same dynamic per-prologue guard as the soft path on that
+  // register (Hexagon J2_loop0r law, HexagonInstrInfo.cpp:755-771). The
+  // register holds exactly the value SET_HWLOOP_F2_W consumes (Role A
+  // reads LoopStart operand 0), so the guard tests the count the hardware
+  // decrements — the iteration-count invariant. The expander inserts the
+  // conditional branch in the PROLOGUE blocks (plain BBs; the ZOL
+  // terminator itself is only ever cloned into the kernel), so nothing
+  // reverses the ZOL exit.
+  // Constant-trip ZOL keeps the AIE static law (peer
+  // AIEBasePipelinerLoopInfo.cpp:750-761): only claim "no guard needed"
+  // when MinTripCount statically exceeds the requested TC.
   if (IsZOL) {
+    if (ZOLTripReg.isValid()) {
+      LLVM_DEBUG(dbgs() << "ZOL: dynamic prologue guard on runtime trip reg "
+                           "(TC="
+                        << TC << ")\n");
+      return EmitDynamicGuard(ZOLTripReg);
+    }
     if (MinTripCount > TC)
       return true;
     LLVM_DEBUG(dbgs() << "ZOL: createTripCountGreaterCondition TC=" << TC
@@ -527,54 +605,12 @@ std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
   // Always emit a runtime "branch if TripCountReg > TC" and return nullopt
   // NEVER a compile-time static bool. This mirrors the ARM reference
   // implementation (ARMBaseInstrInfo.cpp::ARMPipelinerLoopInfo), which has no
-  // static-trip-count path whatsoever. Returning a static bool here was the
-  // Blocker-1 silent-wrong-code root cause: a hand-rolled `(limit-init)/step`
-  // value drove `PeelingModuloScheduleExpander::fixupBranches`
-  // (ModuloSchedule.cpp:1980-1999) into the static-false (`KernelDisposed`)
-  // branch, collapsing countable loops (e.g. dot_product_16, trip 16) to ~1
-  // iteration with `-verify-machineinstrs` still green. See.
+  // static-trip-count path whatsoever.
   //
   // `analyzeLoopForPipelining` rejects any loop without a usable runtime
   // trip-count register, so TripCountReg must be valid here.
   assert(TripCountReg.isValid() && "pipelined loop must have a runtime TC reg");
-
-  // TripCountReg > TC <=> NOT (TripCountReg < TC + 1)
-  // <=> BEQZ (SLT32 TripCountReg, TC+1)
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  const TargetRegisterClass *RC = &Haydn::GPR32RegClass;
-  DebugLoc BranchDL = MBB.findBranchDebugLoc();
-
-  // Materialize (TC + 1) into a register.
-  Register CmpReg = MRI.createVirtualRegister(RC);
-  if (isInt<16>(TC + 1)) {
-    BuildMI(&MBB, BranchDL, HII->get(Haydn::LOADI32), CmpReg).addImm(TC + 1);
-  } else {
-    BuildMI(&MBB, BranchDL, HII->get(Haydn::LUI), CmpReg)
-        .addImm(((static_cast<uint32_t>(TC + 1) + 0x8000) >> 16) & 0xFFFF);
-    BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32_W), CmpReg)
-        .addReg(CmpReg)
-        .addImm((TC + 1) & 0xFFFF);
-  }
-
-  // CmpResult = (TripCountReg < TC + 1)
-  Register CmpResult = MRI.createVirtualRegister(RC);
-  BuildMI(&MBB, BranchDL, HII->get(Haydn::SLT32), CmpResult)
-      .addReg(TripCountReg)
-      .addReg(CmpReg);
-
-  // fix: upstream contract (see Hexagon's J2_jumpf reference and
-  // PeelingModuloScheduleExpander::fixupBranches / placeRematerializersCall
-  // call sites in ModuloSchedule.cpp:886,1975) requires the Cond to be TRUE
-  // (branch-taken) when the trip count is NOT greater than TC, i.e. when the
-  // prologue should be SKIPPED. CmpResult = (TripCountReg < TC+1) is true when
-  // trip <= TC. To branch on that "skip" condition we must fire when CmpResult
-  // != 0, hence BNEZ_W. The previous BEQZ fired when trip > TC (CmpResult ==
-  // 0), reversing the guard and dead-stripping every pipelined loop with trip
-  // > stage count (counting-sort, vec-max). Phase 1b: emit the
-  // WIDE 48-bit form so insertBranch / AsmPrinter produce a WIDE parcel.
-  Cond.push_back(MachineOperand::CreateImm(Haydn::BNEZ_W));
-  Cond.push_back(MachineOperand::CreateReg(CmpResult, false));
-  return {};
+  return EmitDynamicGuard(TripCountReg);
 }
 
 void HaydnPipelinerLoopInfo::adjustTripCount(int TripCountAdjust) {

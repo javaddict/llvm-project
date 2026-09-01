@@ -47,13 +47,13 @@ define i32 @leaf_arith(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply): the
-; mull -> sub32 consumer now issues in the NEXT parcel; the old all-NOP
-; stall parcel is gone. Rebaselined; instruction stream is unchanged.
 ; CHECK-NEXT:    { nop; sub32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply): the
+; mull -> sub32 consumer now issues in the NEXT parcel; the old all-NOP
+; stall parcel is gone. Rebaselined; instruction stream is unchanged.
   %s1 = add i32 %a, %b
   %s2 = mul i32 %s1, %c
   %s3 = sub i32 %s2, %a
@@ -154,9 +154,9 @@ define i32 @leaf_multi_alloca(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
+; CHECK-NEXT:    { addi32 r3, sp, 8; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; addi32 r3, sp, 8 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }

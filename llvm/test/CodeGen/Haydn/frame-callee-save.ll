@@ -216,7 +216,7 @@ define i64 @save_mixed_gpr_dr64(i32 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    .cfi_offset d8, -16
-; CHECK-NEXT:    { nop; nop; sext32t64 d8, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d8, r1 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; add64 d0, d0, d8; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
@@ -316,7 +316,7 @@ define i32 @deep_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    .cfi_offset r11, -16
 ; CHECK-NEXT:    .cfi_offset fp, -20
 ; CHECK-NEXT:    .cfi_offset lr, -24
-; CHECK-NEXT:    { st32 r7, sp, 3; move32 r11, r2; move32 fp, r3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r7, sp, 3; move32 fp, r3; move32 r11, r2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; move32 r9, r5; move32 r8, r4 }
 ; CHECK-NEXT:    { nop; move32 r10, r6 }

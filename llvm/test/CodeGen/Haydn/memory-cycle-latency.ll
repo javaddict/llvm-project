@@ -88,7 +88,9 @@ define i32 @store_store_load(ptr %p, i32 %a, i32 %b) {
 ; PACK-PRODUCT-NEXT:    { nop; subi32 sp, sp, 8 }
 ; PACK-PRODUCT-NEXT:    .cfi_def_cfa_offset 8
 ; PACK-PRODUCT-NEXT:    { nop; st32 r2, r1, 0 }
+; PACK-PRODUCT-NEXT:    { nop; nop }
 ; PACK-PRODUCT-NEXT:    { nop; st32 r3, r1, 1 }
+; PACK-PRODUCT-NEXT:    { nop; nop }
 ; PACK-PRODUCT-NEXT:    { nop; ld32 r2, r1, 0 }
 ; PACK-PRODUCT-NEXT:    { nop; nop }
 ; PACK-PRODUCT-NEXT:    { nop; move32 r1, r2 }
@@ -101,8 +103,8 @@ define i32 @store_store_load(ptr %p, i32 %a, i32 %b) {
 ; PACK-SOFT-NEXT:    { nop; subi32 sp, sp, 8 }
 ; PACK-SOFT-NEXT:    .cfi_def_cfa_offset 8
 ; PACK-SOFT-NEXT:    { nop; st32 r2, r1, 0 }
-; PACK-SOFT-NEXT:    { st32 r3, r1, 1; ld32 r2, r1, 0 }
-; PACK-SOFT-NEXT:    { nop; nop }
+; PACK-SOFT-NEXT:    { nop; ld32 r2, r1, 0 }
+; PACK-SOFT-NEXT:    { nop; st32 r3, r1, 1 }
 ; PACK-SOFT-NEXT:    { nop; move32 r1, r2 }
 ; PACK-SOFT-NEXT:    { nop; addi32 sp, sp, 8 }
 ; PACK-SOFT:    { nop; jalr r0, lr, 0 }

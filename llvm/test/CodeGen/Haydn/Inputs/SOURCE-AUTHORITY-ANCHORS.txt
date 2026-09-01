@@ -41,11 +41,11 @@ Golden nine-file set: see STATUS.md SHA-256 table only (W55).
   instruction_type_operands.json, instruction_to_entry.xlsx, operands_info.md.
 Consumer catalog provenance: BundleSim isa/database/generated/GOLDEN_INPUTS.sha256
   pins six consumed files; the pin FILE sha256 is the product stamp
-  02b5bed3c7d5030eca4451491b60e88ee2ad6caae6c5ebdeac3685a1c0aaeba3.
+  2af5e0ac5f1ee9dae3b69a46df81c88b91fd78cdd914b0b6667bce2b6036c778.
   Header comments on that file are content drift (ARTIFACT hashes the
   pin file, not only inner digests). Unused/derived nine-file members
   stay on llvm/lib/Target/Haydn/FormatE/GOLDEN_INPUTS.sha256.
-  generate_catalog.py reads format_e_bit_layout_v2_1.json only (retired
+  generate_catalog.py reads format_e_bit_layout_v2_2.json only (retired
   seven per-slot JSONs and 17-file ledger are not inputs).
 
 Pipeline ownership anchors (current implementation)
@@ -254,7 +254,7 @@ Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN /
 | XFAIL ledger parity unexplained=0 | Inputs/XFAIL-OWNER-LEDGER.txt | check_xfail_ledger.py + xfail-owner-ledger-selfcheck.ll |
 | lit summary Failed ≠ Expectedly Failed | llvm/utils/haydn/parse_lit_summary.py | parse-lit-summary-selfcheck.ll + --self-test |
 | Freestanding ARTIFACT 64-hex + libc/libm | $sysroot/ARTIFACT.json | product_coverage_pin.sh; full-gate restamp |
-| Six-file catalog authority + GOLDEN_INPUTS pin | BundleSim isa/database/generated/GOLDEN_INPUTS.sha256 (file sha256 02b5bed3c7d5…; no header comments) | catalog-golden-inputs-pin.ll; check_golden_pin.sh; product_coverage_pin; full-gate |
+| Six-file catalog authority + GOLDEN_INPUTS pin | BundleSim isa/database/generated/GOLDEN_INPUTS.sha256 (file sha256 2af5e0ac5f1e…; no header comments) | catalog-golden-inputs-pin.ll; check_golden_pin.sh; product_coverage_pin; full-gate |
 | Catalog generate from layout only (no 7-slot/17-file) | generate_catalog.py + instruction_catalog_generated.inc | generate_catalog --check; ARTIFACT.catalog.complete |
 | ARTIFACT.catalog five-file + retired_inputs_consumed=false | record_haydn_artifact_set.py build_catalog_block | check_haydn_artifact_set.sh; product_coverage_pin |
 | ARTIFACT.decode Functional_Model + model hashes | record_haydn_artifact_set.py build_decode_block | check_isa_pin_discipline.sh; product_coverage; full-gate DECODE FM |

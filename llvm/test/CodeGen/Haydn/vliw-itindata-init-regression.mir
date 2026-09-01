@@ -97,7 +97,7 @@ body:             |
     ; CHECK-NEXT: S_SW_WITH_IMM_E{{[23]}}_E{{[0-2]}}_LOADSTORE0_RI6 killed $r1, $r0, 0, implicit-def dead $sfr
     ; CHECK-NEXT: NOP
     ; CHECK-NEXT: S_SW_WITH_IMM_E{{[23]}}_E{{[0-2]}}_LOADSTORE0_RI6 killed $r3, killed $r2, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r0 = JALR{{(_E2_E0_ALU0_RI12)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     ST32 $r1, $r0, 0, implicit-def dead $sfr
     ST32 $r3, $r2, 0, implicit-def dead $sfr
 
@@ -149,7 +149,7 @@ body:             |
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: $r4 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, killed $r1, implicit-def dead $sfr
     ; CHECK-NEXT: S_SW_WITH_IMM_E{{[23]}}_E{{[0-2]}}_LOADSTORE0_RI6 killed $r3, killed $r2, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r0 = JALR{{(_E2_E0_ALU0_RI12)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
     ST32 $r3, $r2, 0, implicit-def dead $sfr
 

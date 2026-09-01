@@ -13,9 +13,10 @@ define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
-; CHECK-NEXT:    { nop; nop; maxu32 r3, r2, r3 }
-; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3 }
+; CHECK-NEXT:    { nop; maxu32 r3, r2, r3 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -23,13 +24,13 @@ define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK-NEXT:  .LLhwloop_start0:
 ; CHECK-NEXT:    { nop; s_sw_post_imm r2, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LLhwloop_end0:
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; P4 golden S_SW_POST_IMM Data_Latency=1: no pre-END writeback stall parcel.
 ; InterveningCycles=2 following parcels after SET before BEGIN.
 ; Inclusive START..END must both appear; body work lives between them.
 entry:

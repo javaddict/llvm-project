@@ -478,20 +478,85 @@ def compiler_reachable_logicals(haydn_dir: Path) -> Tuple[set, set]:
     return member_fams, hand
 
 
+# M18 name map: codegen shells whose public spelling differs from the golden
+# instruction_type_index.json Instruction name. Each entry maps a
+# compiler-reachable logical to the golden row that owns its semantics — the
+# row is imported under the codegen name (units/ports/latency from golden);
+# no row is synthesized. Width-by-width LS shells map to their S_/D_ family
+# (the selector emits LD32/ST32 etc. directly with imm 0 — they are the
+# S_LW_WITH_IMM/S_SW_WITH_IMM instructions under compiler spellings); _W wide
+# shells drop the suffix (the same golden op in the wide assembler surface);
+# shifts use golden mnemonics SLL/SRL/SRA. NOP/WFI/WFITBDTBDTBD stay
+# uncovered by design: NOP is the architectural idle (no unit/latency fact),
+# WFI<TBD> is the golden placeholder for an unpublished op.
+SHELL_TO_GOLDEN = {
+    "LD8": "S_LBS_WITH_IMM",
+    "LDU8": "S_LBU_WITH_IMM",
+    "LD16": "S_LHWS_WITH_IMM",
+    "LDU16": "S_LHWU_WITH_IMM",
+    "LD32": "S_LW_WITH_IMM",
+    "LD64": "D_LDW_WITH_IMM",
+    "ST8": "S_SB_WITH_IMM",
+    "ST16": "S_SHW_WITH_IMM",
+    "ST32": "S_SW_WITH_IMM",
+    "ST64": "D_SDW_WITH_IMM",
+    "LD32_POST": "S_LW_POST_IMM",
+    "LD64_POST": "D_LDW_POST_IMM",
+    "ST32_POST": "S_SW_POST_IMM",
+    "ST64_POST": "D_SDW_POST_IMM",
+    "LD32_REG_M0S0LS": "S_LW_WITH_REG",
+    "LD64_REG_M0S0LS": "D_LDW_WITH_REG",
+    "ST32_REG_M0S0LS": "S_SW_WITH_REG",
+    "ST64_REG_M0S0LS": "D_SDW_WITH_REG",
+    "SHL32": "SLL32",
+    "LSR32": "SRL32",
+    "ASR32": "SRA32",
+    "PLDWWUA": "PLDWWUA_POST",
+    "SEXT_GPR32_TO_DR64": "SEXT32T64",
+    "ADDI32_W": "ADDI32",
+    "BEQZ_W": "BEQZ",
+    "BEQ_W": "BEQ",
+    "BGEU_W": "BGEU",
+    "BGEZ_W": "BGEZ",
+    "BGE_W": "BGE",
+    "BLTU_W": "BLTU",
+    "BLTZ_W": "BLTZ",
+    "BLT_W": "BLT",
+    "BNEZ_W": "BNEZ",
+    "BNE_W": "BNE",
+    "CSRW_W": "CSRW",
+    "JALR_W": "JALR",
+    "JAL_W": "JAL",
+    "ORI32_W": "ORI32",
+    "SET_HWLOOP_F2_W": "SET_HWLOOP_F2",
+    "SET_HWLOOP_REG_W": "SET_HWLOOP_REG",
+    "SET_HWLOOP_W": "SET_HWLOOP",
+}
+
+
 def build_per_op_rows(
     index: Dict[str, dict], member_fams: set, hand: set, surf: GoldenLatencySurface
 ) -> Tuple[List[PerOpResourceRow], List[str]]:
     """Rows for every compiler-reachable logical with a golden record.
 
-    Fail-closed census: reachable names without a golden row are returned
-    as the uncovered list (never synthesized). WFI<TBD> is the golden
-    placeholder for an unpublished op; its WFITBDTBDTBD member family maps
-    to no record.
+    Fail-closed census: reachable names without a golden row (directly or
+    through SHELL_TO_GOLDEN) are returned as the uncovered list (never
+    synthesized). WFI<TBD> is the golden placeholder for an unpublished op;
+    its WFITBDTBDTBD member family maps to no record. NOP is the
+    architectural idle parcel — no unit/latency fact exists to import.
     """
-    reachable = {n for n in (member_fams | hand) if n in index}
+    def golden_row_for(name: str):
+        if name in index:
+            return index[name]
+        mapped = SHELL_TO_GOLDEN.get(name)
+        if mapped is not None and mapped in index:
+            return index[mapped]
+        return None
+
+    reachable = {n for n in (member_fams | hand) if golden_row_for(n) is not None}
     rows: List[PerOpResourceRow] = []
     for name in sorted(reachable):
-        fmt, rec = index[name]
+        fmt, rec = golden_row_for(name)
         units = parse_index_units(rec.get("Available"))
         mask = 0
         for unit in units:

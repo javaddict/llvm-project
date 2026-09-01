@@ -20,8 +20,11 @@
 ; BUNDLE+COPY). Target-rejected is the old StageCount>1 arm — do not require
 ; it here.
 ;
-; SWP: Schedule Found? 1
+; HC#0 II-retry (2026-08-28): shouldUseSchedule runs inside the II
+; search; accept lines precede "Schedule Found? 1".
+
 ; SWP: SMS-SHOULDUSE: accept stages=1 II={{[0-9]+}}
+; SWP: Schedule Found? 1
 ; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
 ; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
 

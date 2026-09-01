@@ -15,8 +15,9 @@
 
 define { i32, i32 } @return_small_struct() {
 ; CHECK-LABEL: return_small_struct:
-; CHECK:       addi32{{(\.s[012])?}} r1, r0, 42
-; CHECK:       addi32{{(\.s[012])?}} r2, r0, 99
+; Default-ON convergence driver packs both materializations into one E2
+; parcel; composite operand order is (r2, r1).
+; CHECK:       addi32{{(\.s[012])?}} r2, r0, 99;{{.*}}addi32{{(\.s[012])?}} r1, r0, 42
   %r = insertvalue { i32, i32 } undef, i32 42, 0
   %r2 = insertvalue { i32, i32 } %r, i32 99, 1
   ret { i32, i32 } %r2

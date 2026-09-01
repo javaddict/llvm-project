@@ -1,0 +1,94 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -haydn-postra-region-end-edges %s -o - \
+# RUN:     | FileCheck %s --check-prefix=S2
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -haydn-postra-region-end-edges -haydn-postra-waw-edges %s -o - \
+# RUN:     | FileCheck %s --check-prefix=S2
+#
+# W69 regression pin: a bottom region with TWO scheduled successors must not
+# alias their replayed cycle-0 parcels additively into the same Bot scoreboard
+# slot. The pre-W69 shape booked every successor at Cycle-Depth starting from
+# Cycle=0, stacking exclusive alternatives into phantom over-limit bundles
+# (issue>3 / GPR>4R). HaydnFuncUnitWrapper::conflict then reported a conflict
+# against even an EMPTY Top cycle (0+5 reads > 4), handleRegionConflicts'
+# Top bumps could never clear the Bot-side phantom, and each such region
+# saturated the inter-zone pad cap (33 NOP parcels per region; the +33%
+# CoreMark / +12% Dhrystone blowup under sms2+edges).
+#
+# Fixture: bb.0 ends in a two-way conditional branch (successors bb.1 and
+# bb.2, both scheduled ahead of bb.0's bottom region in the S2 re-walk).
+# Each successor holds a full parcel's worth of GPR reads; the additive
+# stack would exceed 4R. Post-W69 the replay max-merges, so bb.0 schedules
+# with NO phantom inter-zone pads: the two-branch shape packs exactly one
+# parcel per real instruction and no idle { nop; nop } fillers appear in
+# bb.0 beyond what single-successor scheduling produces.
+#
+# S2 checks: bb.0's parcels stay tight — every emitted bundle holds a real
+# instruction (no idle filler before the terminator).
+
+# S2-LABEL: name: multi_successor_replay
+# S2:       bb.0:
+# S2-NEXT:    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+# S2-NEXT:    liveins: $r0, $r1, $r2
+# S2-DAG:     $r3 = ADD32_E3_E2_ALU2_RR $r0, $r1
+# S2-DAG:     $r4 = ADD32_E3_E2_ALU2_RR killed $r1, $r2
+# S2-DAG:     $r5 = SEQ32_E3_E2_ALU2_RR $r3, $r4
+# S2:         BNEZ killed $r5, %bb.2
+# S2-NEXT:    B %bb.1
+# S2-NOT:     {{^.*NOP}}
+# S2:         bb.1:
+
+--- |
+  define void @multi_successor_replay() { ret void }
+...
+---
+name:            multi_successor_replay
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:         true
+tracksRegLiveness: true
+noPhis:           true
+isSSA:            false
+noVRegs:          true
+registers:        []
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:       []
+stack:            []
+constants:        []
+machineFunctionInfo: {}
+body:             |
+
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $r0, $r1, $r2
+
+    $r3 = ADD32 $r0, $r1, implicit-def dead $sfr
+    $r4 = ADD32 $r1, $r2, implicit-def dead $sfr
+    $r5 = SEQ32 $r3, $r4, implicit-def dead $sfr
+    BNEZ killed $r5, %bb.2
+    B %bb.1
+
+  bb.1:
+    liveins: $r0, $r3
+
+    $r6 = ADD32 $r3, $r0, implicit-def dead $sfr
+    $r0 = COPY killed $r6
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+  bb.2:
+    liveins: $r4, $r2
+
+    $r7 = ADD32 $r4, $r2, implicit-def dead $sfr
+    $r0 = COPY killed $r7
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...

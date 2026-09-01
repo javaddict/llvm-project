@@ -27,9 +27,10 @@ define i32 @phi_loop_counter(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r2, r1, r2 }
-; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r2 }
+; CHECK-NEXT:    { nop; max32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -1 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r2 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LBB0_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -60,9 +61,9 @@ define i64 @phi_i64_loop(i32 %n, i64 %init) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; max32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
-; CHECK-NEXT:    { nop; sext32t64 d2, r2; set_hwloop_f2 0, .LLhwloop_start1, .LLhwloop_end1, r1 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start1, .LLhwloop_end1, r1; sext32t64 d2, r2 }
 ; CHECK-NEXT:    { nop; nop; slli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d2, d2, 32 }
 ; CHECK-NEXT:  .LBB1_1: // %loop
@@ -97,9 +98,10 @@ define i32 @phi_double(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r2, r1, r2 }
-; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start2, .LLhwloop_end2, r2 }
+; CHECK-NEXT:    { nop; max32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -2 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start2, .LLhwloop_end2, r2 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LBB2_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -139,11 +141,11 @@ define i32 @phi_const_init(i32 %n) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r1, r1, r2 }
+; CHECK-NEXT:    { addi32 r3, r0, 0; addi32 r2, r0, 1 }
+; CHECK-NEXT:    { nop; move32 r2, r3; max32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start3, .LLhwloop_end3, r1 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; move32 r2, r3 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LBB3_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted
@@ -175,8 +177,7 @@ define i32 @phi_nested_loops(i32 %n, i32 %m) nounwind {
 ; CHECK:       // %bb.0: // %entry
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; addi32 r5, r0, 1 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
+; CHECK-NEXT:    { addi32 r3, r0, 0; addi32 r5, r0, 1 }
 ; CHECK-NEXT:    { nop; max32 r5, r2, r5; move32 r4, r3 }
 ; CHECK-NEXT:    { nop; move32 r2, r3 }
 ; CHECK-NEXT:  .LBB4_1: // %outer
@@ -232,12 +233,11 @@ define i64 @phi_mixed_types(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r2, r1, r2 }
+; CHECK-NEXT:    { nop; max32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
-; CHECK-NEXT:    { nop; sext32t64 d1, r1; set_hwloop_f2 0, .LLhwloop_start5, .LLhwloop_end5, r2 }
-; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start5, .LLhwloop_end5, r2; sext32t64 d1, r1 }
+; CHECK-NEXT:    { slli64 d1, d1, 32; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:  .LBB5_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted
@@ -270,10 +270,11 @@ define i32 @phi_cond_update(i32 %n, i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r1, r1, r3 }
-; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start6, .LLhwloop_end6, r1 }
+; CHECK-NEXT:    { nop; max32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; move32 r4, r3 }
+; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start6, .LLhwloop_end6, r1; move32 r4, r3 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LBB6_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted

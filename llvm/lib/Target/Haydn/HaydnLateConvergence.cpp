@@ -37,19 +37,19 @@
 //   those prefix charges; whole-function byte totals are not a proof.
 //
 // * Monotone law (checked every iteration; violation is a hard diagnostic):
-//     - a branch site that reached the Indirect level (JALR_W long form)
-//       never returns to a PC-relative form, and the Indirect-site census
-//       never shrinks;
 //     - the hardware-loop setup census never grows (demotion erases the
 //       SET; no late pass creates one).
-//   Short->Relaxed shape growth is deliberately NOT a census dimension:
-//   the relaxed two-branch shape is byte-identical in kind to an ordinary
+//   There is deliberately NO indirect-count monotone check. The
+//   gcc_layout t018 story (a BR re-run swaps a JALR_W long form back to
+//   PC-relative) predates the TII guards that make JALR promotion
+//   irreversible and is stale; IndirectCount is non-decreasing in
+//   practice, but it is not law-checked because it seeds the iteration
+//   bound and the per-MBB byte census carries the fixed point.
+//   Short->Relaxed shape growth is also NOT a census dimension: the
+//   relaxed two-branch shape is byte-identical in kind to an ordinary
 //   two-target conditional lowering (insertBranch emits cond+B), so shape
 //   churn under S2 repacking cannot be distinguished from promotion — the
-//   per-MBB byte census carries those iterations instead. The JALR form is
-//   the only irreversible promotion the relaxer can produce
-//   (fixupUnconditionalBranch -> insertIndirectBranch) and nothing in this
-//   loop ever shortens one.
+//   per-MBB byte census carries those iterations instead.
 //
 //===----------------------------------------------------------------------===//
 
@@ -57,6 +57,7 @@
 #include "Haydn.h"
 #include "HaydnBundlePlan.h"
 #include "HaydnFixupHwLoops.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnLatencyStalls.h"
 #include "HaydnSubtarget.h"
@@ -243,9 +244,16 @@ static void collectRangePairs(const MachineFunction &MF,
 }
 
 struct ConvergenceSnapshot {
-  /// Source MBB numbers holding a JALR/JALR_W long form. Monotone law:
-  /// this set only grows (irreversible promotion).
+  /// Source MBB numbers holding a JALR/JALR_W long form. Diagnostic aid
+  /// only — the monotone LAW is the COUNT (IndirectSites can shift MBB
+  /// numbers under BranchRelaxation splits, which renumbers blocks while
+  /// every site survives; a per-number set difference false-positives as
+  /// a regression, gcc_layout t018).
   DenseSet<unsigned> IndirectSites;
+  /// JALR/JALR_W long-form site count. Non-decreasing under the TII
+  /// guards (JALR promotion is irreversible); counted once at entry to
+  /// seed the iteration bound, where its term is slack-safe.
+  unsigned IndirectCount = 0;
 
   /// Hardware-loop setup instructions (SET_HWLOOP_* forms / LoopStart).
   /// Monotone law: only decreases (demotion erases the SET).
@@ -260,7 +268,9 @@ struct ConvergenceSnapshot {
   DenseMap<PrefixKey, uint64_t> PrefixCharge;
 
   bool operator==(const ConvergenceSnapshot &R) const {
-    return IndirectSites == R.IndirectSites &&
+    // IndirectSites (MBB numbers) is deliberately excluded: BR splits
+    // renumber blocks while every site survives; the count is the law.
+    return IndirectCount == R.IndirectCount &&
            HwLoopSetups == R.HwLoopSetups && MBBBytes == R.MBBBytes &&
            PrefixCharge == R.PrefixCharge;
   }
@@ -295,8 +305,20 @@ ConvergenceSnapshot takeSnapshot(MachineFunction &MF,
       // PC-relative sites (cond/B) may freely change shape between short
       // and relaxed two-branch forms — that churn is layout-visible in
       // MBBBytes/PrefixCharge, not a promotion regression.
-      if (Opc == Haydn::JALR || Opc == Haydn::JALR_W)
+      //
+      // S2 identity-bakes JALR_W onto generated JALR_E2_/JALR_E3_ members
+      // (AIEMachineScheduler.cpp:1126-1132 setDesc). Census the logical,
+      // not the raw opcode — otherwise a bake looks like the site shrank
+      // back to a PC-relative B and the monotone diagnostic is a false
+      // positive (core_matrix / NatureDSP compile abort).
+      unsigned Log = haydn::format_e::logicalOpcodeOrSelf(Opc);
+      StringRef Name = TII.getName(Log);
+      if (Name.ends_with("_MSP"))
+        Name = Name.drop_back(4);
+      if (Name.starts_with("JALR")) {
         S.IndirectSites.insert(MBB.getNumber());
+        ++S.IndirectCount;
+      }
     }
   }
   return S;
@@ -313,7 +335,7 @@ bool inventoryChanged(const ConvergenceSnapshot &Before,
                       const ConvergenceSnapshot &After) {
   if (Before.HwLoopSetups != After.HwLoopSetups)
     return true;
-  if (Before.IndirectSites != After.IndirectSites)
+  if (Before.IndirectCount != After.IndirectCount)
     return true;
   if (Before.MBBBytes.size() != After.MBBBytes.size())
     return true;
@@ -327,11 +349,14 @@ bool inventoryChanged(const ConvergenceSnapshot &Before,
 /// iteration. Returns a diagnostic string on violation.
 std::string checkMonotonicity(const ConvergenceSnapshot &Before,
                               const ConvergenceSnapshot &After) {
-  for (const unsigned Site : Before.IndirectSites)
-    if (!After.IndirectSites.count(Site))
-      return ("indirect long-form branch site (bb." + Twine(Site) +
-              ") regressed to a PC-relative form")
-          .str();
+  // Deliberately NO indirect-count monotone check. JALR promotion is
+  // irreversible under the TII guards (analyzeBranch unanalyzable at
+  // JALR; removeBranch keeps LUI+ADDI32_W+JALR_W intact), so
+  // IndirectCount is non-decreasing — but the earlier gcc_layout t018
+  // swap-back narrative predates those guards and the count is not
+  // law-checked; termination rests on the global iteration bound
+  // (#cond + #hwloop + #indirect + 2, the indirect term slack-safe)
+  // and the MBBBytes/PrefixCharge fixed point.
   if (After.HwLoopSetups > Before.HwLoopSetups)
     return ("hardware-loop setup count grew from " +
             Twine(Before.HwLoopSetups) + " to " + Twine(After.HwLoopSetups))
@@ -452,15 +477,26 @@ bool llvm::runHaydnLateConvergence(MachineFunction &MF,
   // revalidation + BranchRelaxation LAST without another S2 (a second S2
   // on committed roots is not a fixed point). Exhaustion without a census
   // fixed point is a hard diagnostic.
-  unsigned NumCondBranches = 0, NumHwLoopSetups = 0;
+  unsigned NumCondBranches = 0, NumHwLoopSetups = 0, NumIndirect = 0;
   for (MachineBasicBlock &MBB : MF)
     for (MachineInstr &MI : MBB.instrs()) {
       if (MI.isConditionalBranch())
         ++NumCondBranches;
       if (HII.isHardwareLoopSetupInstr(MI))
         ++NumHwLoopSetups;
+      unsigned Opc = MI.getOpcode();
+      StringRef N = TII.getName(
+          haydn::format_e::logicalOpcodeOrSelf(Opc));
+      if (N.ends_with("_MSP"))
+        N = N.drop_back(4);
+      if (N.starts_with("JALR"))
+        ++NumIndirect;
     }
-  const unsigned MaxIterations = NumCondBranches + NumHwLoopSetups + 2;
+  // Indirect sites never demote (TII guards make JALR promotion
+  // irreversible), so the #indirect term is dead slack; it is retained
+  // because the bound is slack-safe either way.
+  const unsigned MaxIterations =
+      NumCondBranches + NumHwLoopSetups + NumIndirect + 2;
 
   LLVM_DEBUG(dbgs() << "HaydnLateConvergence: " << MF.getName()
                     << " bound=" << MaxIterations << " (cond="

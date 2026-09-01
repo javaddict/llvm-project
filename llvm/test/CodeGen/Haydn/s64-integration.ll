@@ -37,17 +37,17 @@ define i64 @load_arith_s64(ptr %p, ptr %q) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; addi32 r3, r1, 4 }
-; CHECK-NEXT:    { ld32 r3, r3, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; addi32 r3, r1, 4 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r1, sp, 2; ld32 r3, r3, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r4, r2, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; addi32 r4, r2, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld64 d0, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r4, r4, 0 }
+; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; ld32 r4, r4, 0 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; st32 r4, sp, 3 } // 4-byte Folded Spill
@@ -73,8 +73,7 @@ define void @arith_store_s64(ptr %p, i64 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { add64 d0, d0, d1; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -171,11 +170,11 @@ define i64 @array_access_s64(ptr %arr, i32 %idx) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 3 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r1, sp, 2; ld32 r2, r2, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
@@ -196,10 +195,9 @@ define i64 @extend_arith_s64(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
-; CHECK-NEXT:    { nop; sext32t64 d1, r2; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r2; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; slli64 d1, d1, 32; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

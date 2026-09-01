@@ -138,7 +138,7 @@ define i32 @qor_three_write_port_floor(ptr nocapture readonly %p,
 ; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
-; ASM-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; ASM-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
 ; ASM-NEXT:    { nop; ld32 r3, r3, 0 }
 ; ASM-NEXT:    { nop; add32 r1, r1, r2 }
 ; ASM-NEXT:    { nop; add32 r1, r1, r3 }
@@ -218,28 +218,33 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; ASM-NEXT:    { nop; addi32 r1, r0, 0 }
 ; ASM-NEXT:    { nop; slt32 r5, r1, r3 }
 ; ASM-NEXT:    { nop; xori32 r5, r5, 1 }
-; ASM-NEXT:    { nop; bnez r5, .LBB2_3 }
+; ASM-NEXT:    { nop; bnez r5, .LBB2_4 }
 ; ASM-NEXT:  // %bb.1: // %loop.preheader
-; ASM-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3 }
-; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { nop; nop }
+; ASM-NEXT:    { addi32 r6, r0, 2; addi32 r5, r3, -1 }
+; ASM-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r5 }
+; ASM-NEXT:    { nop; ld32 r5, r4, 0 }
+; ASM-NEXT:    { nop; slt32 r6, r3, r6 }
+; ASM-NEXT:    { nop; s_lw_post_imm r3, r2, 1 }
+; ASM-NEXT:    { nop; addi32 r4, r4, 4 }
+; ASM-NEXT:    { nop; bnez r6, .LBB2_3 }
 ; ASM-NEXT:  .LBB2_2: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    // Label of block must be emitted
 ; ASM-NEXT:  .LLhwloop_start0:
-; ASM-NEXT:    { addi32 r4, r4, 4; ld32 r3, r4, 0 }
-; ASM-NEXT:    { nop; s_lw_post_imm r5, r2, 1 }
-; ASM-NEXT:    { nop; nop }
-; ASM-NEXT:    { nop; mull r3, r3, r5 }
+; ASM-NEXT:    { ld32 r5, r4, 0; mull r6, r5, r3 }
+; ASM-NEXT:    { nop; s_lw_post_imm r3, r2, 1 }
 ; ASM-NEXT:  .LLhwloop_end0:
-; ASM-NEXT:    { nop; add32 r1, r1, r3 }
-; ASM-NEXT:  .LBB2_3: // %exit
+; ASM-NEXT:    { add32 r1, r1, r6; addi32 r4, r4, 4 }
+; ASM-NEXT:  .LBB2_3:
+; ASM-NEXT:    { nop; mull r2, r5, r3 }
+; ASM-NEXT:    { nop; add32 r1, r1, r2 }
+; ASM-NEXT:  .LBB2_4: // %exit
 ; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa sp, 0
 ; ASM-NEXT:    { nop; jalr r0, lr, 0 }
 ; PREGREEDY-LABEL: name: qor_dual_load_mac_stream
 ; PREGREEDY: bb.0.entry:
-; PREGREEDY-NEXT:   successors: %bb.1(0x50000000), %bb.4(0x30000000)
+; PREGREEDY-NEXT:   successors: %bb.1(0x50000000), %bb.6(0x30000000)
 ; PREGREEDY-NEXT:   liveins: $r1, $r2, $r3
 ; PREGREEDY-NEXT: {{  $}}
 ; PREGREEDY-NEXT:   [[COPY:%[0-9]+]]:gpr32 = COPY $r1
@@ -250,34 +255,52 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; PREGREEDY-NEXT:   [[XORI32_:%[0-9]+]]:gpr32 = XORI32 [[SLT32_]], 1
 ; PREGREEDY-NEXT:   BEQZ_W [[XORI32_]], %bb.1
 ; PREGREEDY-NEXT: {{  $}}
-; PREGREEDY-NEXT: bb.4:
-; PREGREEDY-NEXT:   successors: %bb.3(0x80000000)
+; PREGREEDY-NEXT: bb.6:
+; PREGREEDY-NEXT:   successors: %bb.5(0x80000000)
 ; PREGREEDY-NEXT: {{  $}}
-; PREGREEDY-NEXT:   B %bb.3
+; PREGREEDY-NEXT:   B %bb.5
 ; PREGREEDY-NEXT: {{  $}}
 ; PREGREEDY-NEXT: bb.1.loop.preheader:
 ; PREGREEDY-NEXT:   successors: %bb.2(0x80000000)
 ; PREGREEDY-NEXT: {{  $}}
-; PREGREEDY-NEXT:   LoopStart [[COPY2]], 0
+; PREGREEDY-NEXT:   LoopStart [[COPY2]], -1
 ; PREGREEDY-NEXT: {{  $}}
 ; PREGREEDY-NEXT: bb.2.loop:
-; PREGREEDY-NEXT:   successors: %bb.2(0x7c000000), %bb.3(0x04000000)
+; PREGREEDY-NEXT:   successors: %bb.3(0x40000000), %bb.4(0x40000000)
 ; PREGREEDY-NEXT: {{  $}}
+; PREGREEDY-NEXT:   [[LOADI32_1:%[0-9]+]]:gpr32 = LOADI32 2
 ; PREGREEDY-NEXT:   [[LD32_:%[0-9]+]]:gpr32 = LD32 [[COPY]], 0 :: (load (s32) from %ir.lsr.iv1)
+; PREGREEDY-NEXT:   [[ADDI32_:%[0-9]+]]:gpr32 = ADDI32 [[COPY]], 4
+; PREGREEDY-NEXT:   [[SLT32_1:%[0-9]+]]:gpr32 = SLT32 [[COPY2]], [[LOADI32_1]]
 ; PREGREEDY-NEXT:   [[S_LW_POST_IMM:%[0-9]+]]:gpr32, [[COPY1:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[COPY1]], 1 :: (load (s32) from %ir.lsr.iv)
-; PREGREEDY-NEXT:   [[MULL:%[0-9]+]]:gpr32 = MULL [[LD32_]], [[S_LW_POST_IMM]]
-; PREGREEDY-NEXT:   [[COPY:%[0-9]+]]:gpr32 = ADDI32 [[COPY]], 4
-; PREGREEDY-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = ADD32 [[LOADI32_]], [[MULL]]
-; PREGREEDY-NEXT:   PseudoLoopEnd %bb.2
+; PREGREEDY-NEXT:   BNEZ_W [[SLT32_1]], %bb.4
 ; PREGREEDY-NEXT:   B %bb.3
 ; PREGREEDY-NEXT: {{  $}}
-; PREGREEDY-NEXT: bb.3.exit:
+; PREGREEDY-NEXT: bb.3.loop:
+; PREGREEDY-NEXT:   successors: %bb.3(0x7c000000), %bb.4(0x04000000)
+; PREGREEDY-NEXT: {{  $}}
+; PREGREEDY-NEXT:   [[MULL:%[0-9]+]]:gpr32 = MULL [[LD32_]], [[S_LW_POST_IMM]]
+; PREGREEDY-NEXT:   [[LD32_:%[0-9]+]]:gpr32 = LD32 [[ADDI32_]], 0 :: (load (s32) from %ir.lsr.iv1 + 4)
+; PREGREEDY-NEXT:   [[S_LW_POST_IMM:%[0-9]+]]:gpr32, [[COPY1:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[COPY1]], 1 :: (load (s32) from %ir.lsr.iv + 4)
+; PREGREEDY-NEXT:   [[ADDI32_:%[0-9]+]]:gpr32 = ADDI32 [[ADDI32_]], 4
+; PREGREEDY-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = ADD32 [[LOADI32_]], [[MULL]]
+; PREGREEDY-NEXT:   PseudoLoopEnd %bb.3
+; PREGREEDY-NEXT:   B %bb.4
+; PREGREEDY-NEXT: {{  $}}
+; PREGREEDY-NEXT: bb.4:
+; PREGREEDY-NEXT:   successors: %bb.5(0x80000000)
+; PREGREEDY-NEXT: {{  $}}
+; PREGREEDY-NEXT:   [[MULL1:%[0-9]+]]:gpr32 = MULL [[LD32_]], [[S_LW_POST_IMM]]
+; PREGREEDY-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = ADD32 [[LOADI32_]], [[MULL1]]
+; PREGREEDY-NEXT:   B %bb.5
+; PREGREEDY-NEXT: {{  $}}
+; PREGREEDY-NEXT: bb.5.exit:
 ; PREGREEDY-NEXT:   $r1 = COPY [[LOADI32_]]
 ; PREGREEDY-NEXT:   RET implicit $r15, implicit $r1, implicit $r15
 ;
 ; PREPOST-LABEL: name: qor_dual_load_mac_stream
 ; PREPOST: bb.0.entry:
-; PREPOST-NEXT:   successors: %bb.1(0x50000000), %bb.3(0x30000000)
+; PREPOST-NEXT:   successors: %bb.1(0x50000000), %bb.4(0x30000000)
 ; PREPOST-NEXT:   liveins: $r1, $r2, $r3, $r0
 ; PREPOST-NEXT: {{  $}}
 ; PREPOST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
@@ -287,28 +310,40 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; PREPOST-NEXT:   $r1 = ADDI32_W $r0, 0
 ; PREPOST-NEXT:   $r5 = SLT32 $r1, $r3
 ; PREPOST-NEXT:   $r5 = XORI32 killed $r5, 1
-; PREPOST-NEXT:   BNEZ_W $r5, %bb.3
+; PREPOST-NEXT:   BNEZ_W $r5, %bb.4
 ; PREPOST-NEXT: {{  $}}
 ; PREPOST-NEXT: bb.1.loop.preheader:
-; PREPOST-NEXT:   successors: %bb.2(0x80000000)
+; PREPOST-NEXT:   successors: %bb.2(0x40000000), %bb.3(0x40000000)
 ; PREPOST-NEXT:   liveins: $r1, $r2, $r3, $r4
 ; PREPOST-NEXT: {{  $}}
-; PREPOST-NEXT:   SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r3, implicit-def $sfr
-; PREPOST-NEXT:   NOP
-; PREPOST-NEXT:   NOP
+; PREPOST-NEXT:   $r5 = ADDI32_W $r3, -1
+; PREPOST-NEXT:   SET_HWLOOP_F2_W 0, %bb.2, %bb.2, killed $r5, implicit-def $sfr
+; PREPOST-NEXT:   $r6 = ADDI32_W $r0, 2
+; PREPOST-NEXT:   $r5 = LD32 $r4, 0 :: (load (s32) from %ir.lsr.iv1)
+; PREPOST-NEXT:   $r4 = ADDI32 killed $r4, 4
+; PREPOST-NEXT:   $r6 = SLT32 killed $r3, killed $r6
+; PREPOST-NEXT:   $r3, $r2 = S_LW_POST_IMM killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
+; PREPOST-NEXT:   BNEZ_W $r6, %bb.3
 ; PREPOST-NEXT: {{  $}}
 ; PREPOST-NEXT: bb.2.loop:
 ; PREPOST-NEXT:   successors: %bb.2(0x7c000000), %bb.3(0x04000000)
-; PREPOST-NEXT:   liveins: $r1, $r2, $r4
+; PREPOST-NEXT:   liveins: $r1, $r2, $r3, $r4, $r5
 ; PREPOST-NEXT: {{  $}}
-; PREPOST-NEXT:   $r3 = LD32 $r4, 0 :: (load (s32) from %ir.lsr.iv1)
-; PREPOST-NEXT:   $r5, $r2 = S_LW_POST_IMM killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
-; PREPOST-NEXT:   $r3 = MULL killed $r3, killed $r5
+; PREPOST-NEXT:   $r6 = MULL killed $r5, killed $r3
+; PREPOST-NEXT:   $r5 = LD32 $r4, 0 :: (load (s32) from %ir.lsr.iv1 + 4)
+; PREPOST-NEXT:   $r3, $r2 = S_LW_POST_IMM killed $r2, 1 :: (load (s32) from %ir.lsr.iv + 4)
 ; PREPOST-NEXT:   $r4 = ADDI32 killed $r4, 4
-; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r3
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r6
 ; PREPOST-NEXT:   PseudoLoopEnd %bb.2
 ; PREPOST-NEXT: {{  $}}
-; PREPOST-NEXT: bb.3.exit:
+; PREPOST-NEXT: bb.3:
+; PREPOST-NEXT:   successors: %bb.4(0x80000000)
+; PREPOST-NEXT:   liveins: $r1, $r3, $r5
+; PREPOST-NEXT: {{  $}}
+; PREPOST-NEXT:   $r2 = MULL killed $r5, killed $r3
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r2
+; PREPOST-NEXT: {{  $}}
+; PREPOST-NEXT: bb.4.exit:
 ; PREPOST-NEXT:   liveins: $r1
 ; PREPOST-NEXT: {{  $}}
 ; PREPOST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
@@ -317,7 +352,7 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ;
 ; POST-LABEL: name: qor_dual_load_mac_stream
 ; POST: bb.0.entry:
-; POST-NEXT:   successors: %bb.1(0x50000000), %bb.3(0x30000000)
+; POST-NEXT:   successors: %bb.1(0x50000000), %bb.4(0x30000000)
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r0
 ; POST-NEXT: {{  $}}
 ; POST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
@@ -327,31 +362,44 @@ define i32 @qor_dual_load_mac_stream(ptr nocapture readonly %x,
 ; POST-NEXT:   $r1 = ADDI32_E2_E0_ALU0_RI20 $r0, 0
 ; POST-NEXT:   $r5 = SLT32_E3_E2_ALU2_RR $r1, $r3
 ; POST-NEXT:   $r5 = XORI32_E2_E1_ALU1_RI20 killed $r5, 1
-; POST-NEXT:   BNEZ_W killed $r5, %bb.3
+; POST-NEXT:   BNEZ_W killed $r5, %bb.4
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.1.loop.preheader:
-; POST-NEXT:   successors: %bb.2(0x80000000)
+; POST-NEXT:   successors: %bb.2(0x40000000), %bb.3(0x40000000)
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r4
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR 0, %bb.2, %bb.2, killed $r3, implicit-def $sfr
-; POST-NEXT:   NOP
-; POST-NEXT:   NOP
+; POST-NEXT:   $r5 = ADDI32_E2_E0_ALU0_RI20 $r3, -1
+; POST-NEXT:   $r6 = ADDI32_E2_E0_ALU0_RI20 $r0, 2
+; POST-NEXT:   SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR 0, %bb.2, %bb.2, killed $r5, implicit-def $sfr
+; POST-NEXT:   $r5 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r4, 0 :: (load (s32) from %ir.lsr.iv1)
+; POST-NEXT:   $r6 = SLT32_E3_E2_ALU2_RR killed $r3, killed $r6
+; POST-NEXT:   $r3, $r2 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
+; POST-NEXT:   $r4 = ADDI32_E2_E1_ALU1_RI20 killed $r4, 4
+; POST-NEXT:   BNEZ_W killed $r6, %bb.3
 ; POST-NEXT: {{  $}}
 ; POST-NEXT: bb.2.loop:
 ; POST-NEXT:   successors: %bb.2(0x7c000000), %bb.3(0x04000000)
-; POST-NEXT:   liveins: $r1, $r2, $r4
+; POST-NEXT:   liveins: $r1, $r2, $r3, $r4, $r5
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   BUNDLE 0, 0, implicit-def $r3, implicit-def $r4, implicit killed $r4 :: (load (s32) from %ir.lsr.iv1) {
-; POST-NEXT:     $r3 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r4, 0 :: (load (s32) from %ir.lsr.iv1)
-; POST-NEXT:     $r4 = ADDI32_E2_E0_ALU0_RI20 killed $r4, 4
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r6, implicit-def $r5, implicit killed $r5, implicit killed $r3, implicit $r4 :: (load (s32) from %ir.lsr.iv1 + 4) {
+; POST-NEXT:     $r6 = MULL_E2_E1_MAC1_RR killed $r5, killed $r3
+; POST-NEXT:     $r5 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r4, 0 :: (load (s32) from %ir.lsr.iv1 + 4)
 ; POST-NEXT:   }
-; POST-NEXT:   $r5, $r2 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r2, 1 :: (load (s32) from %ir.lsr.iv)
-; POST-NEXT:   NOP
-; POST-NEXT:   $r3 = MULL_E3_E2_MAC1_RR killed $r3, killed $r5
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r3
+; POST-NEXT:   $r3, $r2 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r2, 1 :: (load (s32) from %ir.lsr.iv + 4)
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r4, implicit-def $r1, implicit killed $r4, implicit killed $r1, implicit killed $r6 {
+; POST-NEXT:     $r4 = ADDI32_E2_E1_ALU1_RI20 killed $r4, 4
+; POST-NEXT:     $r1 = ADD32_E2_E0_ALU0_RR killed $r1, killed $r6
+; POST-NEXT:   }
 ; POST-NEXT:   PseudoLoopEnd %bb.2
 ; POST-NEXT: {{  $}}
-; POST-NEXT: bb.3.exit:
+; POST-NEXT: bb.3:
+; POST-NEXT:   successors: %bb.4(0x80000000)
+; POST-NEXT:   liveins: $r1, $r3, $r5
+; POST-NEXT: {{  $}}
+; POST-NEXT:   $r2 = MULL_E3_E2_MAC1_RR killed $r5, killed $r3
+; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
+; POST-NEXT: {{  $}}
+; POST-NEXT: bb.4.exit:
 ; POST-NEXT:   liveins: $r1
 ; POST-NEXT: {{  $}}
 ; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8

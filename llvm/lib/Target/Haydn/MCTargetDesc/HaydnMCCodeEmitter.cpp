@@ -208,6 +208,13 @@ private:
                          APInt &Op, SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const;
 
+  // Entry qualification (typed (kind, entry, window) mapping): retarget a
+  // base fixup kind to its entry-qualified variant when the member's
+  // committed entry is not the base default window. Unmapped sites fatal.
+  unsigned qualifyFixupKindForEntry(unsigned Kind, uint8_t Mode,
+                                    unsigned EntryIdx,
+                                    const FormatEMemberRec &Mem) const;
+
   // Residual TargetOpcode::BUNDLE: typed MemberId children scatter as-is.
   // Public logicals fatal (skip-Finalize never DFS/fill). Empty/all-NOP uses
   // canonical idle when registered.
@@ -1241,8 +1248,88 @@ void HaydnMCCodeEmitter::encodeSlotSubInst(
   // origin so applyFixup / lld P is the hardware PC (exact code record).
   // Peer: AIE translateFixupsInComposite emits MCFixup at offset 0
   // (AIEBaseMCCodeEmitter.cpp:231-232).
+  //
+  // ENTRY QUALIFICATION (typed (kind, entry, window) mapping): a parcel can
+  // carry two same-kind symbolic fields (e.g. ADDI32 RI20 at E2 e0 ALU0 and
+  // E2 e1 ALU1). The base kinds resolve their window by sniffing parcel
+  // content, which is ambiguous in that case — one imm gets patched twice,
+  // the other never. When this member's committed entry is NOT the base
+  // kind's default window, retarget the fixup to the entry-qualified kind
+  // so the patch window rides the TYPE (r_offset stays the parcel origin).
   for (const MCFixup &F : LocalFixups)
-    addHaydnFixup(Fixups, /*Offset=*/0, F.getValue(), F.getKind());
+    addHaydnFixup(Fixups, /*Offset=*/0, F.getValue(),
+                  qualifyFixupKindForEntry(F.getKind(), Mode, SlotIdx, *Typed));
+}
+
+// Retarget a base fixup kind to its entry-qualified variant when the
+// member's committed (Mode, EntryIdx) is not the base default window.
+// Unmapped (kind, entry) sites fail closed: no silent e0 patch of a
+// non-e0 field (the dual-RI20 mislink class).
+static unsigned SubInstOpcodeForMember(const FormatEMemberRec &Mem) {
+  return Mem.MemberId < FormatEMemberOpcodeCount
+             ? FormatEMemberOpcodes[Mem.MemberId]
+             : Haydn::NOP;
+}
+
+unsigned HaydnMCCodeEmitter::qualifyFixupKindForEntry(unsigned Kind,
+                                                      uint8_t Mode,
+                                                      unsigned EntryIdx,
+                                                      const FormatEMemberRec &Mem) const {
+  using RK = HaydnReloc::RelocKind;
+  const RK R = HaydnReloc::mapFixupKind(Kind);
+  switch (R) {
+  case RK::LO20:
+  case RK::PC_LO20:
+    // RI20 is E2-only; the non-default entry is E2 e1 ALU1 (@65).
+    if (Mode == 0 && EntryIdx == 1)
+      return R == RK::LO20 ? Haydn::FIXUP_HAYDN_LO20_E1
+                           : Haydn::FIXUP_HAYDN_PC_LO20_E1;
+    return Kind;
+  case RK::WIDE_CallSImm20:
+    if (Mode == 1 && EntryIdx == 1)
+      return Haydn::FIXUP_HAYDN_WIDE_CallSImm20_E3E1;
+    return Kind;
+  case RK::WIDE_BranchSImm12:
+    if (Mode == 1 && EntryIdx == 0)
+      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E0;
+    if (Mode == 1 && EntryIdx == 1)
+      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E1;
+    if (Mode == 1 && EntryIdx == 2)
+      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E2;
+    return Kind;
+  case RK::WIDE_BranchSImm12_RI:
+    if (Mode == 1 && EntryIdx == 0)
+      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E0;
+    if (Mode == 1 && EntryIdx == 1)
+      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1;
+    return Kind;
+  case RK::JALRSImm12:
+    if (Mode == 1 && EntryIdx == 0)
+      return Haydn::FIXUP_HAYDN_JALRSImm12_E3E0;
+    if (Mode == 1 && EntryIdx == 1)
+      return Haydn::FIXUP_HAYDN_JALRSImm12_E3E1;
+    return Kind;
+  default:
+    // Uniqueness-by-law kinds keep the base kind at any entry: content
+    // sniffing is deterministic while at most ONE such field can exist in
+    // a parcel — HI12 (LUI alone-in-cycle, LuiAddiE0), CSR_UImm8 (SFR is
+    // single-writer per cycle), HWLoopOff1/2 (SET_HWLOOP is
+    // serialized against CSRW by the same-cycle law). LS_IMM is the
+    // exception: two symbolic loads (LOADSTORE0 + LOAD1) CAN share a
+    // parcel with identical kind, so a non-default entry is ambiguous —
+    // fail closed until an entry-qualified LS row exists.
+    if (EntryIdx != 0 && R == RK::LS_IMM) {
+      report_fatal_error(
+          Twine("Haydn MC: symbolic member '") +
+              MII.getName(SubInstOpcodeForMember(Mem)) +
+              "' carries LS_IMM at a non-default entry (mode=" + Twine(Mode) +
+              " entry=" + Twine(EntryIdx) +
+              ") with no entry-qualified row — dual symbolic loads in one "
+              "parcel would sniff-ambiguate; refuse",
+          /*GenCrashDiag=*/false);
+    }
+    return Kind;
+  }
 }
 
 //===----------------------------------------------------------------------===//

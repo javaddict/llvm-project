@@ -47,7 +47,7 @@ body:             |
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: $r0 = XOR32{{.*}} $r0, $r0, implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = ADDI32{{.*}} killed $r1, 0, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r0 = JALR{{(_E2_E0_ALU0_RI12)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r0 = XOR32 $r0, $r0, implicit-def dead $sfr
     $r0 = ADDI32 $r1, 0, implicit-def dead $sfr
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
@@ -84,7 +84,7 @@ body:             |
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: $r0 = XOR32{{.*}} $r0, $r0, implicit-def dead $sfr
     ; CHECK-NEXT: $r3 = ADD32{{.*}} killed $r1, killed $r2, implicit-def dead $sfr
-    ; CHECK-NEXT: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK-NEXT: $r0 = JALR{{(_E2_E0_ALU0_RI12)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r0 = XOR32 $r0, $r0, implicit-def dead $sfr
     $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

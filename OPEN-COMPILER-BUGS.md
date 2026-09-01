@@ -33,7 +33,7 @@
 > |----|-----|-------|-----------------|
 > | **CB-163 CLOSED 2026-08-26 (2nd retest)** | — | **GONE on fresh toolchain `c6200933db5d`** | Exact ledger repro (`./build/run_c -O0/-O2 --bundle-limit 60000000 $BS/tests/fir/fir_gate_blk.c -I …kernel_v4/include`): **guest_exit=0 both levels** (O0 54,209,472 bundles / O2 12,262,784). Objdump of the -O2 object: **1198/1198 `move32_dr_[lh]` take a `dN` source, 0 `rN`-source**. First "repro" was an in-flight `.so` relink (stale `libLLVMHaydnCodeGen` labeled MOVE32 c1=0x2 rows as MOVE32_DR_L c1=0x4); the fresh-build retest shows no defect. Full row + original evidence in git history 2026-08-26. |
 > | **CB-164 CLOSED 2026-08-26** | — | **FIXED: Fixup measured Off1/Off2 from AFTER the SET cycle; MC encodes from the SET parcel BASE** | Root cause: `HaydnFixupHwLoops::computeOffsets` measured StartOff/EndOff starting at `nextBundleBoundary(SetMI)`, but the encoder anchors HWLoopOff1/Off2 at the SET parcel's own base (`HaydnAsmBackend::evaluateFixup` seeds `Value = Abs % Parcel` so MCAssembler's PC-rel subtract lands on `align_down(fixup_loc, 12)`). Every encoded displacement was one parcel (12 B) larger than Fixup's accepted value, leaving a one-parcel blind slot at the uimm6 ceiling: pr51581-1 `f9`/`f11` at -O2 measured 252 B (accepted ≤ 252 cap) and encoded 264 B → `264>>2 = 66 > uimm6 63` → `error: relocation offset out of range` at object emission. Why fir_gate was caught but div-constant not: fir_gate's overflow was by whole parcels (measured value itself > 252 → demoted); the div-constant fat preheader landed measured exactly AT 252 — inside the blind slot. Fix (same commit as this row): `computeOffsets` charges the SET cycle's committed `EncodedBytes` (root via `haydn::hwloop::topLevelForLayout`) onto both offsets; the setup timing floor moves to `MinSetupIssueBytes` (= `MinSetupBytes` + one parcel, same accepted geometry); delta-based consumers (body-min-law, pads) are anchor-invariant. The two offending loops now demote to software loops (`startOff=264 > 252` → product demote-first); all other hwloops keep hardware forms. Law helper `haydn::hwloop::anchoredFromAfterSet` (HaydnHWLoopContracts.h) is the sole after-SET→encoded bridge, consumed by `computeOffsets` and sealed by gtest `HaydnHWLoopContractsTest.OffAnchorIsSetParcelBase` (bridge identity, −1 passthrough, CB-164 boundary 252→264→66>63, one-under=ceiling encodable, `MinSetupBytes→MinSetupIssueBytes` floor) plus compile-time static_asserts. MIR pin: `llvm/test/CodeGen/Haydn/cb164-hwloop-off1-set-parcel-anchor.mir` (21-parcel tail demotes; 20-parcel tail = encoded 252 exactly → hardware form SURVIVES, no over-demote); MC-side anchor boundary already sealed by `MC/Haydn/reloc-range-hwloop-div4-boundaries.s` (`.space 228`→field 60 pass / `.space 252`→264→OOR — the compiler-side instance of the same law). Verification: `clang -O2 -c pr51581-1.c` clean; torture `-O2 --filter 'pr51581'` → **pr51581-1 AND pr51581-2 both PASS** (compile+execute, guest_exit=0); full Haydn lit **1024 discovered: 1009 pass / 0 fail / 14 unsupported / 1 XFAIL** (`ar-unaligned-roundtrip.s`, pre-existing CB-151); all 14 hwloop-Fixup tests pass; HaydnTests gtest binary **595/595**; full BundleSim ctest 683/683. Original filing text in git history 2026-08-26. |
-> | **CB-165 NEW 2026-08-26 (P1)** | HWLOOP runtime miscompile | gcc torture `pr51581-2.c` (`c[i]=b[i]%3` etc., N=4096, mod-by-constant) **ABORTs at -O2 only** (PASS -O0/-O1): `stop=ABORT guest_exit=134 bundles=930135`. Same source shape as CB-164 sibling pr51581-1. **HWLOOP proven causal**: rebuild with `-mllvm -haydn-enable-hwloops=false` at -O2 → links and runs `guest_exit=0`. `clang -O2 -S` shows 5× `set_hwloop_f2`. Repro: `/ssd2/mhyang/BundleSim/scripts/run_gcc_torture_lit.sh -j1 -O2 --filter "^pr51581-2.c$"`; workaround arm: compile `-O2 -mllvm -haydn-enable-hwloops=false`, link vs bsp-stage + llvm-libc + libclang_rt.builtins-haydn.a, BundleSim → exit 0. Likely same family as CB-162 (demote/counter clobber) or hwloop+mod-constant interaction; needs bisection vs W68 commits. |
+> | **CB-165 CLOSED 2026-08-27** | — | **GONE on `ead16580abae` (w68-new, post-W68.4 restamp)** | Retest on current HEAD: torture `-O2 --filter ^pr51581-2.c$` → **PASS** (guest clean, 1/1); sibling `pr51581-1.c` also PASS. Likely fixed by the W68.4 wave (identity-bake seats / commitLate wrap-only / restamp ead16580abae) or the CB-162/CB-164 lineage. Original filing text in git history 2026-08-26.
 > | **CB-160 CLOSED 2026-08-26** | — | **FIXED: `tryFoldMove32DrToSw` double-scaled the ST32 offset** | Root cause: `HaydnPostSelectOptimize::tryFoldMove32DrToSw` (GISel post-select peephole, O1+ only — hence clean -O0) folded `MOVE32_DR_L/H + ST32` into `D_SW_L/H_WITH_IMM` but divided the ST32 offset by 4, assuming a byte offset. ST32 (golden `S_SW_WITH_IMM`) and `D_SW_L/H_WITH_IMM` share ONE word-scaled EA law `EA = rs + (imm6 << 2)` (ISS `ls_ea_with_imm(...,2)` both; NOTION-closed (a) probes confirm), so the already-word-scaled ST32 imm must pass through UNCHANGED. Effect in `fft_stage_inner_DFT4_16x16_ie`: first pair store lowered to `MOVE32_DR_L + ST32 %v, %y16, -4` (EA y+0) and the fold rewrote it to `d_sw_l_with_imm -1` (EA y+12): y[0] never stored, y[12] clobbered each iteration. Fix (same commit as this row): pass-through imm, keep `isInt<6>` gate. MIR pin: `llvm/test/CodeGen/Haydn/cb160-lane-store-fold-word-scaled-imm.mir` (imm out == imm in, ±). Verification: repro PASS -O0/-O1/-O2/-O3 (Y0=000004cc); full Haydn lit 1008 pass / 0 fail / 14 unsupported / 1 XFAIL (`ar-unaligned-roundtrip.s`, pre-existing CB-151) — identical to pre-fix baseline; ALL six fft-family dual-path gates PASS (g1 12, g2 33, g3 27, g4 4, g5 26, g6 float); picojpeg embench BOTH tests PASS (`bundlesim_embench_picojpeg`, `bundlesim_embench_v2_picojpeg`) — the same value-class as the CB-160-family picojpeg note. Original filing text in git history 2026-08-26. |
 > | **NOTION-closed 2026-08-26 (a)** | — | "D_SW_L double-scaled imm" — NOT REPRODUCIBLE on `c6200933db5d` | 8 semantic probes on BundleSim, all match golden `instruction_type_index.json` exactly: d_sw_l imm=1→word 1 (`imm<<2` ✓), d_sdw imm=1→word 2 (`imm<<3` ✓), composed ptr+1&imm=2→word 3 ✓, d_sw_h imm=2 ✓, reg-form unscaled `rs+rs2` ✓, post/pre writeback forms ✓, imm sweep 0..3/−1/−2 ✓. Compiler obj bytes = hand-asm obj bytes (identical `87 43 08 11…`). If this notion came from a real failure it predates the current artifact; reopen only with a self-contained repro. |
 > | **NOTION-closed 2026-08-26 (b)** | — | "picojpeg final-MIR-present-but-not-emitted" — FALSE ALARM (measurement artifact) | Full per-function, per-opcode compare of terminal-verify MIR vs emitted asm across all 11 picojpeg functions: **11/11 exact real-op match**. The apparent diffs were three parser artifacts: (1) MIR member names (`S_LBU_WITH_IMM_E2…`) vs public mnemonics (`ldu8`) — mapped via the generated td.inc table; (2) `nsw/nuw/disjoint` flags sit between `=` and the opcode; (3) late legal expansions `B`→`beqz`, `BR_JT`→`jalr` (member print), `RET`/`JALR_MSP`→`jalr_w`. NOP deltas (+47..+2649/parcel) are slot pad fill by design. Zero dropped instructions. |
@@ -43,6 +43,7 @@
 > | **CB-154 UPDATED 2026-08-26** | P2 (scope shrunk) | unmodeled destination reads — residual 4 families | Generator pin now expects **`len(divergent_non_ls) == 4`** (generate_format_e_records.py:4627): the 2026-08-19 S2b waves migrated MULSS32/MULSA32, SMULA16/SMULS16, FMULS16/FMULAA16/FMULSS16, F2MULAS32/F2MULSA32, X4CLAMP16 etc. to generated tied defs (87 → 46 → 4). Remaining 4 = partial-write/conditional-move families (MOVEI_H/L, MOVF64/MOVT64, X2MOVF/T32, X4MOVF/T16) where golden reads old rtd to preserve the unwritten half; fix requires explicit old-destination operand through builtin→IR→GISel→member chain. Tracked under GOALS partial-write taxonomy. |
 > | **CB-151** | P2 (sharpened 2026-08-15) | AR-ua encode | The D-side unaligned-window post ops encode through the bag-by-class member binding; golden's whole UA family carries NO rs2 and NO dir_sel (`D_LTWUA_POST rtd, ar_sel, rs`) — the five-operand LLVM logical shape is a fabrication against golden, and the wire member (3 fields) is the CORRECT shape. The public builtins (int64_t(void const*, int, int, int) in haydn_dsp.h) mirror the fat form, so the real fix reshapes the AE-compat LOWERING to expand the 4-arg public semantic onto golden-shaped ops — owner's API-intent territory (same layer as CB-150), not a generator patch. `ar-unaligned-roundtrip.s` XFAIL w/ OWNER note is the tracking signal (overlaps GE96-09 classification). |
 > | **CB-150** | P3 | AE tier machinery | Tip mid-stream state, pre-existing at 1c740f0d5708: `ae-tier-audit.test` inventory counts drift (macros=600 surface=673 td_tiers=661), `ae-compat-tier-closure.c`, and `ae-compat-selp24-f24-satshift.c` expecting `llvm.smax`-shaped compat IR the current headers no longer produce. Needs the tier inventory regeneration workflow (owner's machine) — not guessed at in the merge. |
+> | **CB-166 PARTIAL 2026-08-27** | P2 (perf) | VLIW scheduler: load-in-MAC-bundle enabled by SMS (033372428db8); strict {2MAC+LD} triple still absent | FIR-class 32x32 kernels stay at **avg 1.0 MAC/bundle / peak 2.0** (8 bundles per 4-out group) instead of the vendor HiFi3z **2.0 sustained** `{LD + LL_S2 + HH}` (2 MACs + load per cycle). Verified on toolchain `ead16580abae` with a 3-line repro (below): the scheduler emits each `ff2mula32r` in its own bundle and never places a `d_ldw_post_imm` in a MAC bundle. **Not a miscompile** — bit-exact everywhere; it is the perf ceiling for the whole FIR/dot triple. **RETEST-2 2026-08-27 on `e4c7077e7e2c` (fix 033372428db8): PARTIAL — harness `benchmarks/naturedsp_kernels/tools/cb166_retest.sh` (exit 3): loads NOW ride MAC bundles in the SMS-pipelined kernel ({MAC+LD}>0, core density 1.00→1.60 MAC/bundle, baseline-shape fn bundles 1.00M→954k), but the strict `{2MAC+LD}` triple is still 0 everywhere and straight-line T1 is untouched (SMS is loop-only). Side effects: -O3 baseline shape now beats the ldw.strand port (swizzle chain blocks the 5-bundle pipeline); -O2 unchanged ordering. Full numbers in the section below.** |
 >
 > **CB-162 FIXED (2026-08-24; row moved out of OPEN):** the "-O3 unroller
 miscompile" was NOT the unroller — IR was proven innocent by a host-x86
@@ -581,6 +582,184 @@ scripts/run_gcc_torture_lit.sh --filter '920501-8|930513-1|conversion' -j8 -a
 ---
 
 # Currently OPEN
+
+## CB-167 — OPEN 2026-08-27: S2 convergence repack flips a legal same-cycle WAR into a wrong sequential order
+
+**Class:** miscompile under `-haydn-sms2` (late-convergence driver).
+**Toolchain:** w68-new @ `ad8bbc4ac8c9` (entry-qualified relocs + census fix landed).
+
+**Reproducer:** gcc torture `pr85529-1.c` at -O2 (`run_gcc_torture_lit.sh -O2
+--filter ^pr85529-1.c$` with `BUNDLESIM_TORTURE_EXTRA_CFLAGS="-mllvm -haydn-sms2"`):
+OFF arm exits 0 (286 bundles); ON arm ABORT (165 bundles).
+
+**Root cause (traced):** the short-circuit chain `s.a != (k < foo(k,2) && (c=k=g))`
+lowers to `srai32 r9,r9,24` (foo result) → `slt32 r8,r8,r9` (use) → `ld32 r9,[r6]`
+(volatile s.a read, WAR on r9). The DEFAULT scheduler packs
+`{ slt32 r8,r8,r9 ; ld32 r9,[r6] }` in ONE parcel — same-cycle WAR, legal under
+Haydn snapshot (read-old) semantics, executes correctly. The S2 invocation inside
+HaydnLateConvergence SEQUENTIALIZES the pair with the LOAD FIRST (bundle trace:
+ld r9 @pc+2 before slt @pc+3), so `slt` reads the LOADED value and the
+short-circuit takes the wrong path → `c=k=g` executes → `c!=1` → abort.
+The WAR anti-dependence between the same-cycle pair is lost/flipped during the
+convergence repack (reopen → reschedule → recommit); the
+`asIsGeneratedMembersFormLegalCycle` "Rematch can flip a legal WAR" note and the
+archive F-series warnings point at the same rematch seam.
+
+**Impact:** sole failure of the torture -O2 sms2 arm (1478/1479); full 659-suite
+sms2 + all-flags arms green; CM -3.8% / DH -0.9% bundles. Blocks the G004
+default-ON flip.
+
+**Fix direction:** the S2/recommit path must preserve WAR order between a
+member pair that was same-cycle-legal in S1: either keep such pairs coissued
+(prefer the S1 cycle over re-formation) or re-derive the anti-dep from the
+snapshot semantics (read-old) before emitting the sequential form. Owner:
+HaydnPostRASchedStrategy / HaydnBundleMaterialize rematch.
+
+**Precise DAG evidence (machine-scheduler dump, S1 region):**
+`SU(8): dead $r9 = S_LW_WITH_IMM $r6, 0 (volatile s.a)` carries
+`Successors: SU(9): Data Latency=2 Reg=$r9` into
+`SU(9): $r8 = SLT32 killed $r8, killed $r9`.
+A *Data* (RAW) edge from a `dead`-dest def into a use that also carries
+`killed` is a mis-built dependence: SLT's reaching r9 def is the preceding
+SRAI32 chain, and the LD→SLT relation is WAR (edge should be SU(9)→SU(8),
+latency 0). Same-cycle packing in S1 masks the wrong edge (snapshot
+read-old); the S2 latency-honoring schedule exposes it as a 2-cycle
+LD-before-SLT serialization that reads the loaded value. Fix belongs in
+the post-RA dependence construction for dead-def redefinitions of a
+register whose prior def's last use carries the same register (the
+dead/killed marker pair on the volatile-load materialization).
+
+
+**Refined owner (bundle-interior dependence):** the S1 MIR commits
+`BUNDLE { dead LD r9 ; SLT32 killed r8, killed r9 }` (legal: dead def, no
+true intra-cycle RAW). When the scheduling DAG is (re)built over this
+code — S1 bundle flattening or the S2 reschedule before repack — the
+members are walked in order and the LD def of r9 meets SLT's use of r9 as
+a *Data Latency=2* edge (SU(8) -> SU(9) in the dump), encoding a false
+RAW that the snapshot hardware does not have. Any latency-honoring
+schedule then serializes LD two cycles before SLT, which reads the loaded
+value (the executed miscompile). Fix owner: the post-RA dependence
+construction for bundle members must treat a DEAD-def member redefining a
+register whose same-bundle sibling reads the PRIOR def as no edge (or an
+Anti), matching HaydnIntraCycleRAW's dead-def skip; sites:
+ScheduleDAGInstrs bundle walk / HaydnPostRASchedStrategy region build.
+## CB-166 — PARTIAL FIX 2026-08-27 (033372428db8): ZOL runtime-trip SMS + grounded PHI chains; strict {LD+2MAC} co-issue tier remains OPEN
+
+> **RETEST-2 2026-08-27 on `e4c7077e7e2c` (installed 17:10 build incl. 033372428db8) —
+> PARTIAL CONFIRMED.** Three-tier harness (BundleSim `9461984`,
+> `benchmarks/naturedsp_kernels/tools/cb166_retest.sh`; exit 0=full / 3=partial / 1=open):
+> T1 straight-line repro `{MAC+LD}=0` (SMS is loop-only — by design). **T2 kernel:
+> `{MAC+LD}>0 — loads now ride MAC bundles.** bkfir32x32 -O3 core density
+> **1.00 → 1.60 MAC/bundle** (5-bundle SMS-pipelined body, `{ff2mula32r.ll d4; ld64 d9}`
+> co-issue; fn bundles 1,001,160 → 954,000 on the baseline shape). Strict vendor
+> `{LD + 2MAC}` triple: still 0 in every shape. Consequence: at -O3 the SMS-fixed
+> **baseline shape now beats the ldw.strand port** (1,023,702 vs 1,067,879 — the port's
+> x2sel32 swizzle/rotate chain blocks the tight 5-bundle pipeline), while at -O2 (SMS
+> not engaged) the port still wins 1,063,918 vs 3,741,259. All gates re-pass on the new
+> build (bkfir32x32-ab incl bench-shape, fir_gate_blk 19/75, dualtest-asc, ctest -L
+> regression 190/190). Attribution: `-mllvm -haydn-sms2=false` changes totals <0.1%
+> and the {MAC+LD} bundle persists — the enabling path is **033372428db8's generic
+> ZOL-accept SMS**, not the G004 sms2 default.
+> **RETEST 2026-08-27 — STILL OPEN on `554957730440`** (w68-new HEAD, post
+> CB-167 fix + entry-qualified-reloc wave). Harness:
+> `BundleSim/benchmarks/naturedsp_kernels/tools/cb166_retest.sh` (two tiers,
+> exit 0 on any {2MAC+LD} bundle). Results: T1 minimal repro
+> `{2MAC}=0 {2MAC+LD}=0` (identical to filing); T2 bkfir32x32 -O3 kernel body
+> `{2MAC}=4 {2MAC+LD}=0` — the scheduler DOES pack 2 MACs into one bundle in
+> the real hot loop, but NEVER rides a load into one. The CB-167 lineage
+> (bundle-interior dead-def false RAW edge) was the right neighborhood and
+> did not close this. Side observation: the new build regresses cold-path
+> density on this kernel (prologue/drain nop-padding +266k bundles, -O3
+> total 1,009,368 -> 1,275,519 while the hot core shape stays byte-identical);
+> the ldw.strand PORT WIN still holds against the same-build baseline
+> (1,338,267 -> 1,275,519, -4.7% -O3; -75.7% -O2).
+
+
+**UPDATE 2026-08-27 — PARTIAL FIX LANDED (`033372428db8`, llvm-head):**
+runtime-trip ZOL loops now reach the generic modulo scheduler with a
+dynamic guard (J2_loop0r-style SLT32+BNEZ_W on the exact register
+SET_HWLOOP_F2_W consumes), and grounded sliding-window PHI chains (the
+FIR tap-delay shape) are no longer blanket-rejected. Measured on the
+shared artifact: bkfir32x32 -O3 fn-attributed bundles 1,206,600 ->
+998,960 (**-17.2%**, beats every recorded baseline; total 1,275,519 ->
+1,067,879), sink bit-exact, {2MAC} parcels 4 -> 6, FIR A/B 9/9 bit-exact,
+lit 1076/0F, units 599/599, BundleSim regression 218/218.
+**Still open (this row stays tracked):** the strict tier — a load riding
+INTO a dual-MAC parcel ({LD + MAC + MAC}) — is still 0 everywhere. Root
+cause chain: (a) no-forwarding law forces load-fed MACs into separate
+cycles; closing the last gap needs post-RA packer gap-filling, not SMS
+acceptance; (b) the T1 straight-line probe additionally has a generic
+register-coalescer false dep (not Haydn-owned). Retest harness verdict
+line still reports STILL OPEN until the strict tier lands.
+
+**Class:** perf / scheduling (NOT a miscompile). **Toolchain:** clang built from
+`ead16580abae3aa52c2b19102dd63fa102db4121`; checked-out llvm-head `22cebc257e1b` (w68-new).
+
+**Symptom:** FIR-class 32x32 kernels (4 independent Q31 accumulators, one
+DR64 pair per 2 taps, `ff2mula32r_ll`/`_hh` per lane) run at **avg 1.0
+MAC/bundle, peak 2.0** — an 8-bundle hot loop per 4-output group — instead
+of the vendor HiFi3z **2.0 MAC/cycle sustained**: `{LD + LL_S2 + HH}`
+(one load + two MACs per VLIW bundle). The vendor body is exactly:
+
+```
+cy:  { AE_LA32X2.IC;  MULAF32R.LL_S2 q;  MULAF32R.HH    }   # 2 MAC + 1 load
+     { AE_L32X2.XC;   MULAF32R.LL_S2 q;  MULAF32R.HH    }   # every cycle
+```
+
+On Haydn, the same algorithm emits at best `{ ff2mula32r.ll ; ff2mula32r.ll }`
+(two MACs, no load) in the densest bundles, with the loads (`d_ldw_post_imm`)
+in separate bundles — 2 loads + 2 lane-swizzles + 2 register-rotates consume
+the non-MAC bundles, so the 4-MAC-per-tap-pair loop takes 8 bundles (avg 1.0).
+
+**Reproducer (3-line, self-contained):**
+
+```bash
+cat >/tmp/cb166.c <<'C'
+#include <haydn.h>
+#include <stdint.h>
+static volatile int64_t sinkv;
+__attribute__((noinline)) int64_t f(const int64_t *restrict w, int64_t a)
+{
+  haydn_cb_ld_t l0 = haydn_d_ldw_post_imm((const void *)w, 1);
+  haydn_cb_ld_t l1 = haydn_d_ldw_post_imm(l0.new_ptr, 1);
+  int64_t x0 = l0.data, x1 = l1.data;
+  int64_t y0 = 0, y1 = 0;            /* independent accumulator targets */
+  y0 = (int64_t)haydn_ff2mula32r_ll(y0, (haydn_dr64_t)x0, (haydn_dr64_t)a);
+  y1 = (int64_t)haydn_ff2mula32r_ll(y1, (haydn_dr64_t)x1, (haydn_dr64_t)a);
+  sinkv = y0 + y1;
+  return y0 + y1;
+}
+C
+clang --target=haydn-unknown-elf -O3 -mcpu=haydn -S -o /tmp/cb166.s /tmp/cb166.c \
+  -I $HAYDN_BIN/../lib/clang/22/include
+grep -cE '\{\s*[^}]*ff2mula32r[^}]*ff2mula32r[^}]*\}' /tmp/cb166.s    # = 0 (2-MAC alone never packs)
+grep -cE '\{\s*[^}]*ff2mula32r[^}]*ff2mula32r[^}]*d_ldw[^}]*\}' /tmp/cb166.s  # = 0 (2-MAC+load never)
+```
+
+Result on the above toolchain: **both greps = 0** — the backend never packs
+even two independent-accumulator `ff2mula32r` into one bundle, and never
+co-issues `d_ldw_post_imm` with a MAC. Same negative across shapes: same-op
+(ll,ll) and diff-op (ll,hh), 2/4 data pairs, the AE-structured inner loop
+(`bkfir32x32_haydn_ae.c`) recompiled under these exact flags, and unroll
+variants — all retain a separate-bundle body. (An earlier report showing
+`{ff2mula32r.ll d3; ff2mula32r.ll d6; d_ldw_post_imm d9}` in the AE kernel
+was from a DIFFERENT compile than the run_c `-O3 -mcpu=haydn` path.)
+
+**Impact (quantified, BundleSim committed-bundle proxy):**
+- `bkfir32x32` bench (-O3, N=256 M=64 x40 blocks): hot loop = 8 bundles /
+  4 outputs (655,360 committed core bundles), `ourPeak 2.00` `ourAvg 0.65`
+  over the loop body. Baseline 1,080,288 total bundles; ldw.strand
+  sliding-window port (BundleSim `548558e`, bit-exact) lowers total to
+  1,009,368 (−6.6%, all cold/prologue/drain) — the **hot-loop core is
+  unchanged** because the load/dual-MAC co-issue is the blocker.
+- Vendor report (`kernel_reports/ndsp/fir/bkfir32x32/report.md`): 8 cy / 16 MACs = **2.0**,
+  22 real ops / 8 cy = 91.7% util, `loopnez`, `{LD + LL_S2 + HH}` every cycle.
+
+**Ask (scheduler / bundling):** allow the post-RA (or wave) scheduler to form
+`{ D_LDW_POST_IMM + ff2mula32r + ff2mula32r }` 3-op bundles for a load +
+two independent-accumulator MACs — the HiFi3z `ae_format0` slot shape
+(slot0 LD / slot1 MAC_S2 / slot2 primary MAC). This is the difference
+between 1.0 and 2.0 MAC/cy for the entire FIR/dot 32x32 family.
 
 ## Retest log (2026-07-22)
 

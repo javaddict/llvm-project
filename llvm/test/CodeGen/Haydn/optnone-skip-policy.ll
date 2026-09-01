@@ -19,16 +19,16 @@
 ; (Finalize wraps remaining encode MIs). Do not force-coissue. optnone stays
 ; bare on all shapes (quality skip).
 ; POST-O0-LABEL: name: plain_o0
-; POST-O0: $r{{[0-9]+}} = ADD32{{ }}
+; POST-O0: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
 ; POST-O0-LABEL: name: indep_plain
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-OPTNONE-LABEL: name: optnone_fn
-; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
+; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
 ; POST-OPTNONE-NOT: BUNDLE
 ; POST-OPTNONE-LABEL: name: indep_optnone
-; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
-; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
+; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
+; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
 ; POST-OPTNONE-NOT: BUNDLE
 
 ; After Finalize+Verify: committed cycles only on both paths.

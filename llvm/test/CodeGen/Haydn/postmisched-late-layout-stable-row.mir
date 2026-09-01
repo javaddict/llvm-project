@@ -112,9 +112,9 @@ body:             |
     ; LATE: ADD32{{.*}}
     ;
     ; CHECK: BUNDLE 0
-    ; CHECK: B %bb.1
+    ; CHECK: {{B|BEQZ_W_MSP \$r0,}} %bb.1
     ; CHECK: BUNDLE 0
-    ; CHECK: RET
+    ; CHECK: {{RET|JALR}}
     ; CHECK-NOT: LoopDec
     ; CHECK-NOT: LoopJNZ
     BUNDLE 0 {
@@ -201,5 +201,5 @@ body:             |
 # CHECK: BNEZ_E2
 # CHECK: bb.3.exit
 # CHECK: BUNDLE 0
-# CHECK: RET
+# CHECK: {{RET|JALR}}
 ...

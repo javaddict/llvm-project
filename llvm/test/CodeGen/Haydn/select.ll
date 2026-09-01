@@ -87,8 +87,7 @@ define i32 @select_eq(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
-; CHECK-NEXT:    { nop; seq32 r1, r1, r2 }
+; CHECK-NEXT:    { seq32 r1, r1, r2; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { nop; movt32 r4, r3, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r4 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -127,8 +126,7 @@ define i32 @select_chain(i32 %val) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 100 }
+; CHECK-NEXT:    { addi32 r3, r0, 100; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; max32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; min32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -220,8 +218,7 @@ define i32 @select_const(i1 %cond) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r3, r0, 42 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 99 }
+; CHECK-NEXT:    { addi32 r2, r0, 99; addi32 r3, r0, 42 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; movt32 r2, r3, r1 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
@@ -258,8 +255,7 @@ define i32 @abs(i32 %x) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, -1 }
+; CHECK-NEXT:    { addi32 r3, r0, -1; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; slt32 r3, r3, r1; sub32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; movt32 r2, r1, r3 }
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
@@ -283,8 +279,7 @@ define i32 @saturating_add(i32 %a, i32 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; lui r3, 2048 }
-; CHECK-NEXT:    { nop; addi32 r3, r3, -1 }
-; CHECK-NEXT:    { nop; sltu32 r2, r1, r2 }
+; CHECK-NEXT:    { sltu32 r2, r1, r2; addi32 r3, r3, -1 }
 ; CHECK-NEXT:    { nop; movt32 r1, r3, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

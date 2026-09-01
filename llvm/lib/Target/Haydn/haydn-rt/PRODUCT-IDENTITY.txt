@@ -14,7 +14,7 @@ Folded residual IDs (same-artifact inventory under G-RUNTIME-TOOLCHAIN;
 Identity stamp: $sysroot/ARTIFACT.json (schema haydn-artifact-set-v1)
 Catalog pin: BundleSim isa/database/generated/GOLDEN_INPUTS.sha256 is
   six digest lines (no header comments). Product FILE sha256
-  02b5bed3c7d5030eca4451491b60e88ee2ad6caae6c5ebdeac3685a1c0aaeba3.
+  2af5e0ac5f1ee9dae3b69a46df81c88b91fd78cdd914b0b6667bce2b6036c778.
   Inner hashes stay the six consumed STATUS files. Comment/whitespace
   rewrites are content drift (ARTIFACT hashes the pin file). Compiler
   nine-file pin is llvm/lib/Target/Haydn/FormatE/GOLDEN_INPUTS.sha256.

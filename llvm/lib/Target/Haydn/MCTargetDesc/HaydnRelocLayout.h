@@ -80,19 +80,63 @@ enum class RelocKind : uint16_t {
   // resolveFieldLsb. Reloc CSRW_W uses this kind so the encoder does not
   // emit an untyped NONE fixup. Unresolved externals emit R_HAYDN_CSR_UImm8.
   CSR_UImm8 = 23,
+  // Entry-qualified kinds (shared with ELF R_HAYDN_* 24..33). Same value
+  // transform/scale/size as the base kind; FieldLsb is the typed window
+  // (never sniffed). Emitted when a symbolic member's committed entry is
+  // not the base kind's default window.
+  LO20_E1 = 24,
+  PC_LO20_E1 = 25,
+  WIDE_CallSImm20_E3E1 = 26,
+  WIDE_BranchSImm12_E3E0 = 27,
+  WIDE_BranchSImm12_E3E1 = 28,
+  WIDE_BranchSImm12_E3E2 = 29,
+  WIDE_BranchSImm12_RI_E3E0 = 30,
+  WIDE_BranchSImm12_RI_E3E1 = 31,
+  JALRSImm12_E3E0 = 32,
+  JALRSImm12_E3E1 = 33,
   // MC-only fixups (never become ELF relocs)
-  C_BranchSImm4 = 24,
-  C_UImm4 = 25,
-  C_BranchSImm10 = 26,
-  HWLoopOffset = 27, // legacy placeholder (WIDE path uses HWLoopOff1/2)
-  LongBranchSImm20 = 28,
+  C_BranchSImm4 = 34,
+  C_UImm4 = 35,
+  C_BranchSImm10 = 36,
+  HWLoopOffset = 37, // legacy placeholder (WIDE path uses HWLoopOff1/2)
+  LongBranchSImm20 = 38,
   // s0 LS scaled-imm fields (MC-only — FI spill offsets are local).
-  S0LSOff4_2 = 29, // LD32/ST32 word offset (÷4)
-  S0LSOff4_3 = 30, // LD64/ST64 doubleword offset (÷8)
-  S0LSOff2_0 = 31, // LD16/LDU16/LD8/LDU8 (unscaled)
-  S0LSOff3_0 = 32, // ST16/ST8 (unscaled)
+  S0LSOff4_2 = 39, // LD32/ST32 word offset (÷4)
+  S0LSOff4_3 = 40, // LD64/ST64 doubleword offset (÷8)
+  S0LSOff2_0 = 41, // LD16/LDU16/LD8/LDU8 (unscaled)
+  S0LSOff3_0 = 42, // ST16/ST8 (unscaled)
   Invalid = 0xFFFF,
 };
+
+/// Base (entry-default) kind for an entry-qualified kind; identity for
+/// base kinds themselves. Qualified kinds share the base transform/scale.
+constexpr RelocKind baseKindFor(RelocKind R) {
+  switch (R) {
+  case RelocKind::LO20_E1:
+    return RelocKind::LO20;
+  case RelocKind::PC_LO20_E1:
+    return RelocKind::PC_LO20;
+  case RelocKind::WIDE_CallSImm20_E3E1:
+    return RelocKind::WIDE_CallSImm20;
+  case RelocKind::WIDE_BranchSImm12_E3E0:
+  case RelocKind::WIDE_BranchSImm12_E3E1:
+  case RelocKind::WIDE_BranchSImm12_E3E2:
+    return RelocKind::WIDE_BranchSImm12;
+  case RelocKind::WIDE_BranchSImm12_RI_E3E0:
+  case RelocKind::WIDE_BranchSImm12_RI_E3E1:
+    return RelocKind::WIDE_BranchSImm12_RI;
+  case RelocKind::JALRSImm12_E3E0:
+  case RelocKind::JALRSImm12_E3E1:
+    return RelocKind::JALRSImm12;
+  default:
+    return R;
+  }
+}
+
+/// True when \p R is one of the entry-qualified kinds (24..33).
+constexpr bool isEntryQualifiedKind(RelocKind R) {
+  return R >= RelocKind::LO20_E1 && R <= RelocKind::JALRSImm12_E3E1;
+}
 
 // Value transform applied before the field bits are selected. Mirrors the
 // MIPS-style HI/LO split used by the LUI+ADDI32 materialization pairs.

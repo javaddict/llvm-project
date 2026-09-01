@@ -31,17 +31,28 @@
 #   sms-format-resmii-overestimate-reject.mir
 # Never invents durable BUNDLE (HANDOFF metrics-only remains).
 
-# STAGE: Schedule Found? 1 (II={{[1-9][0-9]*}})
+# HC#0 II-retry (2026-08-28): shouldUseSchedule runs INSIDE the II
+# search. A target rejection no longer aborts at the first feasible II —
+# it continues the search ("Target rejected schedule at II N; continuing
+# II search"). STAGE arm: the organic stages>=2 schedule is rejected at
+# its II and the search continues until a stages=1 schedule at a larger
+# II is accepted (or MAX_II aborts). PRESSURE arm: the forced pressure
+# reject now rejects EVERY feasible II up to MAX_II, so the loop ends
+# with Schedule Found? 0 — the fail-closed pin is the exhaustion, not a
+# single reject line.
+
 # STAGE: SMS-SHOULDUSE: reject stages={{[2-9]|[1-9][0-9]+}} max=1 II={{[1-9][0-9]*}}
 # STAGE: PPS-3: reject SMS (stages={{[2-9]|[1-9][0-9]+}} > max=1 II={{[1-9][0-9]*}})
-# STAGE: Target rejected schedule
+# STAGE: Target rejected schedule at II {{[1-9][0-9]*}}; continuing II search
+# STAGE: SMS-SHOULDUSE: accept stages=1 II={{[1-9][0-9]*}}
+# STAGE: Schedule Found? 1 (II={{[1-9][0-9]*}})
 # STAGE-NOT: SMS-HOOK: reject
 # STAGE-NOT: SMS-RESMII: reject
 
-# PRESSURE: Schedule Found? 1 (II={{[1-9][0-9]*}})
 # PRESSURE: SMS-SHOULDUSE: reject pressure stages={{[1-9][0-9]*}} II={{[1-9][0-9]*}} (forced by -haydn-sms-force-pressure-reject)
 # PRESSURE: PPS-3: reject SMS (too much block pressure, stages={{[1-9][0-9]*}} II={{[1-9][0-9]*}})
-# PRESSURE: Target rejected schedule
+# PRESSURE: Target rejected schedule at II {{[1-9][0-9]*}}; continuing II search
+# PRESSURE: Schedule Found? 0 (II={{[1-9][0-9]*}})
 # PRESSURE-NOT: SMS-HOOK: reject
 # PRESSURE-NOT: SMS-RESMII: reject
 

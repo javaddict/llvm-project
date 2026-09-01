@@ -58,7 +58,7 @@ body:             |
   bb.0:
     liveins: $r1, $r15
     ; MIR-LABEL: name: csrw_w_reloc_e3
-    ; MIR: CSRW_E3_E0_ALU{{[02]}}_I8
+    ; MIR: CSRW_E3_E0_ALU0_I8
     ; MIR-NOT: CSRW_W
     BUNDLE 1, 0, implicit $r1, implicit-def $sfr {
       CSRW_W @g, $r1, implicit-def $sfr

@@ -91,7 +91,7 @@ if [[ "$GOT_CATALOG_FILE_SHA" != "$WANT_CATALOG_FILE_SHA" ]]; then
   fail "catalog GOLDEN_INPUTS.sha256 file sha256 $GOT_CATALOG_FILE_SHA != product pin $WANT_CATALOG_FILE_SHA (comment/whitespace rewrites are content drift; keep six digest lines only)"
 fi
 
-# Six digest lines, no comments, v2_1 names only.
+# Six digest lines, no comments, v2_2 names only.
 mapfile -t PIN_LINES < <(grep -v '^[[:space:]]*$' "$CATALOG_PIN" || true)
 if [[ "${#PIN_LINES[@]}" -ne 6 ]]; then
   fail "catalog pin has ${#PIN_LINES[@]} rows; want six-file"
@@ -100,11 +100,11 @@ for line in "${PIN_LINES[@]}"; do
   if [[ "$line" == \#* ]]; then
     fail "catalog pin has a comment line (FILE hash is product content)"
   fi
-  if [[ "$line" == *format_e_bit_layout_v2.xlsx* && "$line" != *format_e_bit_layout_v2_1.xlsx* ]]; then
-    fail "catalog pin names stale layout xlsx (want v2_1)"
+  if [[ "$line" == *format_e_bit_layout_v2.xlsx* && "$line" != *format_e_bit_layout_v2_2.xlsx* ]]; then
+    fail "catalog pin names stale layout xlsx (want v2_2)"
   fi
-  if [[ "$line" == *format_e_bit_layout_v2.json* && "$line" != *format_e_bit_layout_v2_1.json* ]]; then
-    fail "catalog pin names stale layout json (want v2_1)"
+  if [[ "$line" == *format_e_bit_layout_v2.json* && "$line" != *format_e_bit_layout_v2_2.json* ]]; then
+    fail "catalog pin names stale layout json (want v2_2)"
   fi
 done
 if grep -E 'operands_info\.md|instruction_type_operands\.json|instruction_to_entry\.xlsx' "$CATALOG_PIN" >/dev/null; then
@@ -151,11 +151,11 @@ if [[ "$LIVE" -eq 1 ]]; then
   if [[ ! -d "$GOLDEN" ]]; then
     fail "directory missing: $GOLDEN"
   fi
-  if [[ ! -f "$GOLDEN/format_e_bit_layout_v2_1.json" && -f "$GOLDEN/golden/format_e_bit_layout_v2_1.json" ]]; then
+  if [[ ! -f "$GOLDEN/format_e_bit_layout_v2_2.json" && -f "$GOLDEN/golden/format_e_bit_layout_v2_2.json" ]]; then
     GOLDEN="$GOLDEN/golden"
   fi
-  if [[ ! -f "$GOLDEN/format_e_bit_layout_v2_1.json" ]]; then
-    fail "golden dir missing format_e_bit_layout_v2_1.json: $GOLDEN"
+  if [[ ! -f "$GOLDEN/format_e_bit_layout_v2_2.json" ]]; then
+    fail "golden dir missing format_e_bit_layout_v2_2.json: $GOLDEN"
   fi
   (
     cd -- "$GOLDEN"

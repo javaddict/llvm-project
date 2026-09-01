@@ -172,6 +172,8 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
   if (asIsGeneratedMembersFormLegalCycle(Instrs, TRI))
     return true;
 
+
+
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   if (!instrsFormOneLegalCycle(Instrs, Fmts))
     return false;

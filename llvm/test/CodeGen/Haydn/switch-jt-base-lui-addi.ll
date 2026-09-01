@@ -39,8 +39,7 @@ define i32 @jt_base_lui_addi(i32 %sel, i32 %v) nounwind {
 ; CHECK-NEXT:    { nop; bnez r4, .LBB0_6 }
 ; CHECK-NEXT:  // %bb.1: // %entry
 ; CHECK-NEXT:    { nop; lui r4, .LJTI0_0 }
-; CHECK-NEXT:    { nop; addi32 r4, r4, .LJTI0_0 }
-; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { slli32 r1, r1, 2; addi32 r4, r4, .LJTI0_0 }
 ; CHECK-NEXT:    { nop; add32 r1, r4, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }

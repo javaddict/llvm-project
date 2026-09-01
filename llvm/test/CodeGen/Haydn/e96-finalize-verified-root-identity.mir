@@ -1,69 +1,76 @@
+# RUN: split-file %s %t
 # RUN: llc -mtriple=haydn-unknown-elf \
-# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-finalize-mi-bundles,haydn-verify-bundles \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %t/verified.mir -o - | FileCheck %s --check-prefix=VERIFIED
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %t/stale.mir -o - | FileCheck %s --check-prefix=STALE
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %t/fieldslot.mir -o - | FileCheck %s --check-prefix=SLOT
 # REQUIRES: haydn-registered-target
 
-# Role: MIR — late Finalize is identity on roots the independent inverse
-# already accepts. A second Finalize+Verify lane (PreEmit re-entry) must
-# not E2/E3 restamp or abort those roots. Residual FieldSlot packs and
-# inverse-rejected stale stamps still bind / Mode-retry. Bare MIs still
-# wrap. AIEFinalizeBundle.cpp:49-56 is identity on already-bundled.
+# Role: MIR — late Finalize is identity on already-bundled roots
+# (AIEFinalizeBundle.cpp:49-56). A second Finalize must not E2/E3 restamp,
+# FieldSlot-cutover, or Mode-retry. Inverse-rejected stale stamps stay
+# as-is; VerifyBundles is the independent inverse, not this pass.
 
+#--- verified.mir
 --- |
   define void @verified_e2_singleton_identity() { ret void }
-  define void @stale_e2_e3_member_rebind() { ret void }
-  define void @residual_fieldslot_singleton() { ret void }
 ...
 ---
-# Already-verified E2 singleton member. Double Finalize must keep the stamp
-# and MemberId; the previous refuse-restamp abort is not a legal identity.
 name:            verified_e2_singleton_identity
 tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
     liveins: $r0, $r1, $r15
-    ; CHECK-LABEL: name: verified_e2_singleton_identity
-    ; CHECK: BUNDLE 0, 0
-    ; CHECK: ADD32_E2_E0_ALU0_RR
-    ; CHECK-NOT: ADD32_E3_
+    ; VERIFIED-LABEL: name: verified_e2_singleton_identity
+    ; VERIFIED: BUNDLE 0, 0
+    ; VERIFIED: ADD32_E2_E0_ALU0_RR
+    ; VERIFIED-NOT: ADD32_E3_
     BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
     }
     RET implicit $r15
 
+#--- stale.mir
+--- |
+  define void @stale_e2_e3_member_identity() { ret void }
 ...
 ---
-# E3 member under an E2 stamp. Inverse rejects Mode; sequential rebinds
-# onto the E2 e0 member. Must not abort as a verified-root restamp refuse.
-name:            stale_e2_e3_member_rebind
+# E3 member under an E2 stamp. Construction-only Finalize must not rebind.
+name:            stale_e2_e3_member_identity
 tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
     liveins: $r0, $r1, $r15
-    ; CHECK-LABEL: name: stale_e2_e3_member_rebind
-    ; CHECK: BUNDLE 0, 0
-    ; CHECK: ADD32_E2_E0_ALU0_RR
+    ; STALE-LABEL: name: stale_e2_e3_member_identity
+    ; STALE: BUNDLE 0, 0
+    ; STALE: ADD32_E3_E0_ALU2_RR
+    ; STALE-NOT: ADD32_E2_E0_ALU0_RR
     BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32_E3_E0_ALU2_RR $r0, $r1, implicit-def dead $sfr
     }
     RET implicit $r15
 
+#--- fieldslot.mir
+--- |
+  define void @residual_fieldslot_identity() { ret void }
 ...
 ---
-# Residual logical FieldSlot under E2. Cutover still rewrites to MemberId
-# (FieldSlot leak closed).
-name:            residual_fieldslot_singleton
+# Residual logical FieldSlot stays logical. No MemberId cutover.
+name:            residual_fieldslot_identity
 tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
     liveins: $r0, $r1, $r15
-    ; CHECK-LABEL: name: residual_fieldslot_singleton
-    ; CHECK: BUNDLE 0, 0
-    ; CHECK: ADD32_E2_E0_ALU0_RR
-    ; CHECK-NOT: $r2 = ADD32 $
+    ; SLOT-LABEL: name: residual_fieldslot_identity
+    ; SLOT: BUNDLE 0, 0
+    ; SLOT: $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1
     BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     }

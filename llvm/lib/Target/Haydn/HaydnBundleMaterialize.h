@@ -34,8 +34,10 @@
 //   * commitExactHardRootProductCycle — residual unit-test helper only:
 //     dissolve then commitOneProductCycle. Product leaveMBB does not keep
 //     hard-root freeze identity.
-//   * commitLateProductCycle / finalizeExactLateSingleton — late layout
-//     firewall: empty-cycle tryAdd → setDesc + stamp Format E commit.
+//   * applyFinalDirectCompatibleSingleton — S1/S2 closed-cycle identity
+//     setDesc (no keep/permutation/tie repair). Finalize constructs only.
+//   * commitLateProductCycle / finalizeExactLateSingleton — late insert
+//     (BR / Fixup) wrap+stamp. Not a second packet chooser for S1/S2.
 //   * greedySplitLegalOpcodeCycles — DIAGNOSTIC ONLY (ResMII / unit tests).
 //
 // Each committed cycle stamps Format E BundleFormatRowID + CompletionStateID
@@ -56,6 +58,7 @@
 #include "HaydnPortModel.h"
 #include "HaydnPlacementAlternative.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/bit.h"
 #include "llvm/ADT/SmallSet.h"
@@ -86,9 +89,19 @@ namespace llvm {
 void applyFormatOrdering(Haydn::MachineBundle &Bundle, const VLIWFormat &Format,
                          MachineBasicBlock::iterator InsertPoint);
 
-/// Durable setDesc onto a generated Format E member. Keep-map rewrite drops
-/// extra ties / vestigial uses. Never raw-setDesc a Format E member.
-/// Residual FieldSlot names still use plain setDesc.
+/// Durable setDesc onto a generated Format E member.
+/// AIE peer: AIEMachineScheduler.cpp:1126-1132 unconditional setDesc when
+/// the selected alternate is present. Haydn overlay: most compiler-reachable
+/// logicals already match member operand shape (identity census), but the
+/// CB load/store families do not: the logical lists (rtd, rs_wb | rs,
+/// cbr_sel, imm) while the tied member lists (dest1, dest2_wb | cbr_sel,
+/// dest2, imm) — positions 2/3 of the explicit inputs swap and the tie
+/// moves from an implicit writeback onto the explicit dest2_wb def. Raw
+/// setDesc puts cbr_sel in a register slot and an imm on a tied operand
+/// (MachineVerifier "Bad machine code" x4 → llc abort). Gate every bake on
+/// memberDescCompatible and rewrite operands through the keep map; a pair
+/// with no keep map is NOT baked (stays logical for Finalize/refusal —
+/// never a partial identity).
 inline void bakeFormatEMemberDesc(MachineInstr &MI, unsigned Member,
                                   const TargetInstrInfo &TII) {
   if (Member == MI.getOpcode())
@@ -106,7 +119,7 @@ inline void bakeFormatEMemberDesc(MachineInstr &MI, unsigned Member,
 /// (values, per-operand flags, and tie links).
 ///
 /// W23 / CR-B1 (scheduling F2 ≡ encoding F9): the exact multi-MI commit bakes
-/// Format E member descriptors (setDesc + keep-map operand rewrite) and clears
+/// Format E member descriptors (identity setDesc) and clears
 /// stale InternalRead markers BEFORE the final coissue checks. A late
 /// `return false` used to leave member opcodes baked into MIR with no BUNDLE
 /// root — a hard-constraint #8 violation surface (private member identity
@@ -477,8 +490,13 @@ exactSolveProductOpcodes(ArrayRef<unsigned> Opcodes, const HaydnMCFormats &Fmts)
 /// for E3-only menus (ALU2-only opcodes and friends).
 inline std::optional<ExactProductCycle>
 exactSolveLateSingleton(unsigned LogicalOpc, const HaydnMCFormats &Fmts) {
+  // Same alias peel as exactSolveProductOpcodes: residual codegen names
+  // (ST32_POST, LD32, …) own AlternateInsts on the catalog logical
+  // (S_SW_POST_IMM). AIE has no alias layer (AIEMachineScheduler.cpp:1126-1132
+  // setDesc of getSelectedOpcode). Not a Finalize DFS/name-peel chooser.
+  const unsigned Log = productSolveLogicalOpcode(LogicalOpc, Fmts);
   CycleCandidateSet Cands = makeProductCandidateSet(Fmts.getPacketFormats());
-  if (!exactTryAddProduct(Cands, Fmts, LogicalOpc))
+  if (!exactTryAddProduct(Cands, Fmts, Log))
     return std::nullopt;
 
   CycleCandidateSet E2Cands;
@@ -499,7 +517,7 @@ exactSolveLateSingleton(unsigned LogicalOpc, const HaydnMCFormats &Fmts) {
     if (!Plan || !Plan->isProductLegal())
       return std::nullopt;
     ExactProductCycle Out;
-    Out.LogicalOpcodes.assign(1, LogicalOpc);
+    Out.LogicalOpcodes.assign(1, Log);
     Out.MemberOpcodes.push_back(S.Members[0].MemberOpcode);
     Out.Plan = *Plan;
     Out.State = S;
@@ -1330,15 +1348,18 @@ greedySplitLegalOpcodeCycles(ArrayRef<unsigned> Opcodes,
 }
 
 //===----------------------------------------------------------------------===//
-// late layout firewall — empty-cycle tryAdd → setDesc member
+// late insert wrap — not an S1/S2 packet chooser
 //===----------------------------------------------------------------------===//
 
-/// Result of committing one late bare MI as a product singleton cycle.
+/// Result of committing one late-inserted bare MI as a product singleton.
 ///
 /// AIE has no PreEmit growth, so setDesc+finalize never re-runs
 /// (AIE2TargetMachine.cpp:88). Haydn BR / FixupHwLoops may insert bare
 /// NOPs, branches, demote LoopDec+LoopJNZ — each becomes one explicit
 /// Format E cycle (row+completion; no silent reshape, no MCFlags).
+/// Scheduled S1/S2 code applies identity-compatible members in the reused
+/// owner before construction-only Finalize; this object is not a second
+/// layout chooser for those MIs.
 struct LateProductCycle {
   /// Pre-commit public opcode (input logical identity).
   unsigned LogicalOpcode = 0;
@@ -1375,17 +1396,36 @@ commitLateProductCycle(unsigned LogicalOpc, const HaydnMCFormats &Fmts) {
     return Out;
   };
 
-  // Prefer exact singleton solve, with the documented CLOSED-singleton row
-  // default (E2) — see exactSolveLateSingleton.
-  if (auto Exact = exactSolveLateSingleton(LogicalOpc, Fmts)) {
-    Out.MemberOpcode = Exact->MemberOpcodes.front();
-    Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
-    Out.Plan = Exact->Plan;
-    return finish();
+  // An already-generated member input is wrap-only: members have no
+  // PlacementAlternatives and the exact solve would silently re-place the
+  // committed e3 identity onto the E2 default
+  // (commitLateProductCycleAlreadyMember). Late INSERT callers pass
+  // logicals; scheduler-left member identity is preserved by the
+  // stalls-end / Finalize seats.
+  const bool InputIsMember = isGeneratedFormatEMemberName(
+      haydnOpcodeName(LogicalOpc));
+  if (!InputIsMember && hasPlacementAlternatives(Fmts, LogicalOpc)) {
+    // Prefer exact singleton solve, with the documented CLOSED-singleton
+    // row default (E2) — see exactSolveLateSingleton. No-alt pseudos
+    // (B/RET) and members stay wrap-only.
+    if (auto Exact = exactSolveLateSingleton(LogicalOpc, Fmts)) {
+      Out.MemberOpcode = Exact->MemberOpcodes.front();
+      Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
+      Out.Plan = Exact->Plan;
+      return finish();
+    }
   }
 
   CycleState S = makeProductCycleState(Fmts.getPacketFormats());
-  if (tryAddProduct(S, Fmts, LogicalOpc)) {
+  // An already-generated member input is wrap-only: no alts, no
+  // re-solve onto the E2 preference (commitLateProductCycleAlreadyMember;
+  // the late INSERT path always passes logicals, and the scheduler-left
+  // e3 member identity is preserved by the stalls-end/Finalize seats).
+  const unsigned Log =
+      (InputIsMember || !hasPlacementAlternatives(Fmts, LogicalOpc))
+          ? LogicalOpc
+          : productSolveLogicalOpcode(LogicalOpc, Fmts);
+  if (tryAddProduct(S, Fmts, Log)) {
     assert(S.Members.size() == 1 && "empty-cycle tryAdd is a singleton");
     Out.MemberOpcode = S.Members[0].MemberOpcode;
     Out.NeedsSetDesc = (Out.MemberOpcode != LogicalOpc);
@@ -1440,6 +1480,83 @@ inline unsigned lateProductMemberOpcode(unsigned LogicalOpc) {
   if (auto C = commitLateProductCycle(LogicalOpc, Fmts))
     return C->MemberOpcode;
   return LogicalOpc;
+}
+
+/// Apply the closed-cycle identity-compatible member for one bare real MI.
+/// AIE bakes the HR-selected alternate unconditionally
+/// (AIEMachineScheduler.cpp:1126-1132). Haydn overlay: a bare LOGICAL takes
+/// the exactSolveLateSingleton member (ProductDefaultRowID E2 preferred) so
+/// Finalize does not resettle or re-tryAdd. A bare MI the scheduler already
+/// baked as a generated member (HR open-cycle fill / MaterializePseudo) KEEPS
+/// that committed identity: re-solving it here would silently move a
+/// scheduler-chosen e3_* unit (e.g. MOVE32_E3_E2_ALU2) onto the E2 default —
+/// a second packet authority over the same cycle (postra-move32 port-cap
+/// regression). Bundled children keep the committed applyBundles member.
+inline void applyFinalDirectCompatibleOpcode(MachineInstr &MI,
+                                             const HaydnMCFormats &Fmts,
+                                             const TargetInstrInfo &TII) {
+  if (!MI.getParent() || MI.isBundle() || MI.isInlineAsm())
+    return;
+  if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isPosition() ||
+      MI.isCFIInstruction() || MI.isKill() || MI.isImplicitDef())
+    return;
+  if (isResidualCycleFormingPseudo(MI.getOpcode()) ||
+      isRepresentationExpandPseudo(MI.getOpcode()))
+    return;
+  // Compiler `_MSP` clones keep their flag overlay (JALR_MSP isCall not
+  // terminator; BEQZ_W_MSP isBarrier). Encoder peels `_MSP`. Baking onto
+  // the catalog member would restore golden-frozen flags and break CFG.
+  const StringRef Name = TII.getName(MI.getOpcode());
+  if (Name.ends_with("_MSP"))
+    return;
+  // Already a generated member: a BUNDLED child keeps its committed
+  // identity; a BARE e3_* member is an open-cycle fill leftover (the
+  // cycle never closed) and the closed singleton default row is E2
+  // (CB-152b) — resettle to the E2-committable sibling when the solve
+  // has one (keep-map identity-gated). e3-only menus keep the e3 member.
+  if (isGeneratedFormatEMemberName(Name)) {
+    if (MI.isBundled())
+      return;
+    if (!haydn::bundle::formatECompositeSlotIsE3(Fmts.getSlotKind(
+            MI.getOpcode())))
+      return;
+    const unsigned Logical = format_e::logicalOpcodeOrSelf(MI.getOpcode());
+    auto Exact = exactSolveLateSingleton(Logical, Fmts);
+    if (Exact && formatECompositeSlotIsE2(
+                    Fmts.getSlotKind(Exact->MemberOpcodes.front())))
+      bakeFormatEMemberDesc(MI, Exact->MemberOpcodes.front(), TII);
+    return;
+  }
+  // Bundled children keep committed applyBundles identity (or wait for
+  // Finalize leftover-logical group bake).
+  if (MI.isBundled())
+    return;
+  auto Exact = exactSolveLateSingleton(MI.getOpcode(), Fmts);
+  if (!Exact)
+    return;
+  bakeFormatEMemberDesc(MI, Exact->MemberOpcodes.front(), TII);
+}
+
+/// Bare remaining MI: identity-compatible closed-cycle member so skipped
+/// single-MI regions and sequential recovery still reach construction-only
+/// Finalize as generated members.
+inline void applyFinalDirectCompatibleSingleton(MachineInstr &MI,
+                                                const HaydnMCFormats &Fmts,
+                                                const TargetInstrInfo &TII) {
+  if (MI.isBundled() || MI.isBundle())
+    return;
+  applyFinalDirectCompatibleOpcode(MI, Fmts, TII);
+}
+
+/// Product-path identity bake for remaining FieldSlot/logicals (optnone
+/// skipFunction on PostMachineScheduler, late BR/Fixup inserts that miss
+/// leaveMBB). Does not wrap, restamp, peel, or DFS.
+inline void applyFinalDirectCompatibleMembers(MachineFunction &MF) {
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
+  for (MachineBasicBlock &MBB : MF)
+    for (MachineInstr &MI : MBB.instrs())
+      applyFinalDirectCompatibleOpcode(MI, Fmts, TII);
 }
 
 /// Wrap a bare real MI as a Format E singleton BUNDLE root (row+completion).
@@ -1505,6 +1622,32 @@ inline unsigned lateLayoutBytes(const MachineInstr &MI) {
 /// the commit path's setDesc bake, so operands already match the logical
 /// shape (direct-alternate compatibility law).
 ///
+/// True when the logical/member explicit-operand sequences match one-to-one
+/// in kind and register class (DIRECT pair). Direct pairs invert the commit
+/// bake with a plain setDesc; keep-map pairs do not.
+inline bool
+memberShapesDirectEqual(unsigned LogicalOpc, unsigned MemberOpc,
+                        const MCInstrInfo &MII = getHaydnSharedMCInstrInfo()) {
+  const MCInstrDesc &L = MII.get(LogicalOpc);
+  const MCInstrDesc &M = MII.get(MemberOpc);
+  const unsigned LN = L.getNumOperands(), MN = M.getNumOperands();
+  if (LN != MN)
+    return false;
+  for (unsigned I = 0; I != LN; ++I) {
+    const MCOperandInfo &A = L.operands()[I];
+    const MCOperandInfo &B = M.operands()[I];
+    const bool AReg =
+        A.OperandType == MCOI::OPERAND_REGISTER || A.RegClass >= 0;
+    const bool BReg =
+        B.OperandType == MCOI::OPERAND_REGISTER || B.RegClass >= 0;
+    if (AReg != BReg)
+      return false;
+    if (AReg && A.RegClass != B.RegClass)
+      return false;
+  }
+  return true;
+}
+
 /// \returns the number of BUNDLE roots reopened (0 = nothing to do).
 inline unsigned reopenProvisionalBundles(MachineFunction &MF,
                                          const MCInstrInfo &MII) {
@@ -1519,6 +1662,15 @@ inline unsigned reopenProvisionalBundles(MachineFunction &MF,
     for (MachineInstr *Root : Roots) {
       SmallVector<MachineInstr *, 4> Kids = members(*Root);
       // Every real child must be identity-recoverable; pad NOPs drop.
+      // Recoverable = member has a logical identity AND the logical/member
+      // pair is DIRECT-shaped (same explicit operand kind/class sequence).
+      // Keep-map-class pairs (CB load/store: logical ins order is
+      // rs, cbr_sel, imm while the member commits cbr_sel, rs, imm) were
+      // REORDERED by the commit bake; a desc-only inverse would leave the
+      // member-ordered operands under the logical Desc — a half-baked MI
+      // that later fails every keep-map solve (cbr_wrap_csr under the
+      // convergence driver). Such roots stay committed and S2 schedules
+      // around them, same as identity-less members.
       bool AllRecoverable = true;
       for (MachineInstr *Kid : Kids) {
         if (isPadNopOpcode(Kid->getOpcode()))
@@ -1527,16 +1679,83 @@ inline unsigned reopenProvisionalBundles(MachineFunction &MF,
             Kid->isPosition())
           continue;
         const unsigned Opc = Kid->getOpcode();
-        if (lookupPrivateFormatEMember(Opc) &&
-            format_e::lookupGeneratedMemberToLogical(Opc) == 0) {
+        if (!lookupPrivateFormatEMember(Opc))
+          continue;
+        const unsigned Logical =
+            format_e::lookupGeneratedMemberToLogical(Opc);
+        if (Logical == 0) {
           // Generated private member without a logical identity: not
           // recoverable through the generated mapping.
+          AllRecoverable = false;
+          break;
+        }
+        if (!memberShapesDirectEqual(Logical, Opc)) {
+          // Keep-map class: operand order differs; reopen is desc-only and
+          // cannot restore the logical operand order.
           AllRecoverable = false;
           break;
         }
       }
       if (!AllRecoverable)
         continue;
+
+      // CB-167 read-old dissolve order: within a committed parcel, a
+      // member may carry a DEAD definition of a register R that a sibling
+      // reads as the PRIOR definition (S1 coissued them legally under
+      // snapshot read-old semantics; the intra-cycle RAW check skips dead
+      // defs). Dissolving must not leave that dead def BEFORE the sibling
+      // reader in the bare-MI order: the rebuilt scheduling DAG derives a
+      // Data edge for that program order and serializes the reader after
+      // the load, which then reads the LOADED value instead of the prior
+      // def (pr85529-1: the k < foo(k,2) short-circuit took the wrong
+      // path). Move every colliding dead-def member AFTER the same-parcel
+      // readers of the same register before unbinding.
+      {
+        SmallVector<MachineInstr *, 4> Order;
+        for (MachineInstr *Kid : Kids)
+          if (!isPadNopOpcode(Kid->getOpcode()))
+            Order.push_back(Kid);
+        for (unsigned I = 0; I < Order.size(); ++I) {
+          MachineInstr *MI = Order[I];
+          SmallVector<Register, 2> DeadRegs;
+          for (const MachineOperand &MO : MI->operands())
+            if (MO.isReg() && MO.isDef() && MO.isDead() && MO.getReg())
+              DeadRegs.push_back(MO.getReg());
+          if (DeadRegs.empty())
+            continue;
+          int LastReader = -1;
+          for (unsigned J = I + 1; J < Order.size(); ++J)
+            for (const MachineOperand &MO : Order[J]->operands())
+              if (MO.isReg() && MO.isUse() && MO.getReg() &&
+                  llvm::is_contained(DeadRegs, MO.getReg())) {
+                LastReader = static_cast<int>(J);
+                break;
+              }
+          if (LastReader < 0)
+            continue;
+          MachineInstr *After = Order[LastReader];
+          MachineBasicBlock *Parent = MI->getParent();
+          // Bundled MIs cannot be remove()d; unbind MI's adjacency first,
+          // relink its neighbors, then splice it after the reader. MI's
+          // flags are re-cleared by the common unbind loop below.
+          MI->clearFlag(MachineInstr::BundledPred);
+          MI->clearFlag(MachineInstr::BundledSucc);
+          // Splice via the ilist: remove from the bundle chain in place.
+          MachineBasicBlock::instr_iterator IIt = MI->getIterator();
+          MachineBasicBlock::instr_iterator Next = std::next(IIt);
+          if (Next != Parent->instr_end() && Next->isBundledWithPred())
+            Next->clearFlag(MachineInstr::BundledPred);
+          if (IIt != Parent->instr_begin()) {
+            MachineBasicBlock::instr_iterator Prev = std::prev(IIt);
+            if (Prev->isBundledWithSucc())
+              Prev->clearFlag(MachineInstr::BundledSucc);
+          }
+          Parent->remove(MI);
+          Parent->insertAfter(After->getIterator(), MI);
+          Order.erase(Order.begin() + I);
+          Order.insert(Order.begin() + LastReader, MI);
+        }
+      }
 
       // Canonicalize each real child to its logical descriptor in place,
       // then dissolve the bundle shell (children stay at the root's

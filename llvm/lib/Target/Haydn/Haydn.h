@@ -45,6 +45,16 @@ FunctionPass *createHaydnLatencyStallsPass();
 // W68.3R bounded late repair loop (S2 -> stalls -> HWLoop validate ->
 // BranchRelaxation-last, to a census fixed point; -haydn-sms2 gated).
 FunctionPass *createHaydnLateConvergencePass();
+// W70.2 function-entry alignment writer (AIE MachineAlignment peer; after
+// the closure Finalize+Verify at addPostBBSections). Pads the committed
+// extent with legal generated idle-parcel BUNDLEs; the AsmPrinter label no
+// longer grows.
+FunctionPass *createHaydnMachineAlignmentPass();
+
+/// -haydn-sms2 (product default ON, G004 flip 2026-08-27). S1 keeps the
+/// inter-block DDG for S2 Bot replay; the last scheduler invocation clears
+/// it before freeze.
+bool haydnSMS2Enabled();
 
 // Pass initialization declarations
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
@@ -57,6 +67,7 @@ void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
 void initializeHaydnLatencyStallsPass(PassRegistry &);
 void initializeHaydnLateConvergencePassPass(PassRegistry &);
+void initializeHaydnMachineAlignmentPass(PassRegistry &);
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_HAYDN_HAYDN_H

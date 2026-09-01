@@ -66,14 +66,12 @@ define i32 @vla_basic(i32 %n) {
 ; CHECK-NEXT:    { nop; addi32 fp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa fp, 0
 ; CHECK-NEXT:    .cfi_offset fp, -4
-; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, -8 }
-; CHECK-NEXT:    { nop; addi32 r1, r1, 7 }
+; CHECK-NEXT:    { slli32 r1, r1, 2; addi32 r2, r0, -8 }
+; CHECK-NEXT:    { addi32 r3, r0, 42; addi32 r1, r1, 7 }
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 7 }
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; sub32 r1, sp, r1 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 42 }
 ; CHECK-NEXT:    { nop; and32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; st32 r3, r2, 0; move32 sp, r2 }
 ; CHECK-NEXT:    { nop; nop }
@@ -110,8 +108,7 @@ define ptr @dynamic_alloca_with_call(i32 %size) {
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset fp, -8
 ; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, -8 }
+; CHECK-NEXT:    { slli32 r1, r1, 2; addi32 r2, r0, -8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 7 }
 ; CHECK-NEXT:    { nop; and32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 7 }
@@ -144,11 +141,10 @@ define void @multi_size_allocas(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { nop; addi32 r2, sp, 20 }
+; CHECK-NEXT:    { addi32 r3, sp, 12; addi32 r2, sp, 20 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; addi32 r3, sp, 12 }
-; CHECK-NEXT:    { nop; addi32 r1, r3, 4 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r3, 0 }
+; CHECK-NEXT:    { nop; addi32 r1, r3, 4 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -215,14 +211,12 @@ define i32 @vla_indexed(i32 %n, i32 %idx) {
 ; CHECK-NEXT:    { nop; addi32 fp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa fp, 0
 ; CHECK-NEXT:    .cfi_offset fp, -4
-; CHECK-NEXT:    { nop; slli32 r2, r1, 2 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, -8 }
-; CHECK-NEXT:    { nop; addi32 r2, r2, 7 }
-; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
-; CHECK-NEXT:    { nop; addi32 r2, r2, 7 }
-; CHECK-NEXT:    { nop; addi32 r4, r0, 1 }
+; CHECK-NEXT:    { slli32 r2, r1, 2; addi32 r3, r0, -8 }
+; CHECK-NEXT:    { addi32 r4, r0, 1; addi32 r2, r2, 7 }
 ; CHECK-NEXT:    { nop; max32 r4, r1, r4; and32 r2, r2, r3 }
-; CHECK-NEXT:    { nop; sub32 r2, sp, r2; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r4 }
+; CHECK-NEXT:    { set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r4; addi32 r2, r2, 7 }
+; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
+; CHECK-NEXT:    { nop; sub32 r2, sp, r2 }
 ; CHECK-NEXT:    { nop; and32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; move32 sp, r2; move32 r4, r2 }

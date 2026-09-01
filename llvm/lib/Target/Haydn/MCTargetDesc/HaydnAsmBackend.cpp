@@ -241,6 +241,15 @@ MCFixupKindInfo HaydnAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       "FIXUP_HAYDN_S0LSOff2_0",   "FIXUP_HAYDN_S0LSOff3_0",
       "FIXUP_HAYDN_LS_IMM",       "FIXUP_HAYDN_JALRSImm12",
       "FIXUP_HAYDN_CSR_UImm8",
+      "FIXUP_HAYDN_LO20_E1",      "FIXUP_HAYDN_PC_LO20_E1",
+      "FIXUP_HAYDN_WIDE_CallSImm20_E3E1",
+      "FIXUP_HAYDN_WIDE_BranchSImm12_E3E0",
+      "FIXUP_HAYDN_WIDE_BranchSImm12_E3E1",
+      "FIXUP_HAYDN_WIDE_BranchSImm12_E3E2",
+      "FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E0",
+      "FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1",
+      "FIXUP_HAYDN_JALRSImm12_E3E0",
+      "FIXUP_HAYDN_JALRSImm12_E3E1",
   };
   static_assert(std::size(Names) == Haydn::NumTargetFixupKinds,
                 "Names[] must list every target fixup kind, in enum order");

@@ -98,7 +98,8 @@ static cl::opt<bool> EnableHaydnPostRAMemoryEdges(
 // invent PerSuccEdges. Product default stays off until same-artifact
 // evidence decides; seating S2 does not flip these mutations.
 static cl::opt<bool> EnableHaydnPostRARegionEndEdges(
-    "haydn-postra-region-end-edges", cl::init(false), cl::Hidden,
+    "haydn-postra-region-end-edges",
+    cl::init(haydnPostRARegionEndEdgesProductDefaultEnabled()), cl::Hidden,
     cl::desc("Post-RA: recompute ExitSU edges (MaxLatencyFinder ported; "
              "default off until same-artifact evidence)"));
 
@@ -107,7 +108,8 @@ static cl::opt<bool> EnableHaydnPostRARegionEndEdges(
 // HaydnScheduleDAGMI. Experimental-on applies the DDG remaining-latency cut;
 // do not invent PerSuccEdges. Product default stays off.
 static cl::opt<bool> EnableHaydnPostRAInterBlock(
-    "haydn-postra-interblock", cl::init(false), cl::Hidden,
+    "haydn-postra-interblock",
+    cl::init(haydnPostRAInterblockProductDefaultEnabled()), cl::Hidden,
     cl::desc("Post-RA: drop ExitSU stage latency when successorsAreScheduled "
              "(AIE IncludeStages; default off; no PerSuccEdges invent)"));
 
@@ -115,7 +117,8 @@ static cl::opt<bool> EnableHaydnPostRAInterBlock(
 // status/control writes via isSimplifiableReservedReg. Haydn overlay:
 // SFR and CBR0/CBR1. R0/SP/LR stay real data and are never simplified.
 static cl::opt<bool> EnableHaydnPostRAWAWEdges(
-    "haydn-postra-waw-edges", cl::init(false), cl::Hidden,
+    "haydn-postra-waw-edges",
+    cl::init(haydnPostRAWAWEdgesProductDefaultEnabled()), cl::Hidden,
     cl::desc("Post-RA: simplify dead reserved-status Output (WAW) edges "
              "(SFR/CBR; AIE isSimplifiableReservedReg overlay; default off)"));
 

@@ -29,8 +29,7 @@ define i32 @trunc_s64_2_to_i1() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 20 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
+; CHECK-NEXT:    { addi32 r1, r0, 10; addi32 r2, r0, 20 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -45,8 +44,7 @@ define i32 @trunc_s64_3_to_i1() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 20 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 10 }
+; CHECK-NEXT:    { addi32 r1, r0, 10; addi32 r2, r0, 20 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, -1 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

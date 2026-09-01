@@ -2890,17 +2890,26 @@ bool SwingSchedulerDAG::schedulePipeline(SMSchedule &Schedule) {
     if (scheduleFound && LimitRegPressure)
       scheduleFound =
           !HRPDetector->detect(this, Schedule, Schedule.getMaxStageCount());
+
+    // HC#0 (Haydn, 2026-08-28): ask the target inside the II search. A
+    // target that refuses a schedule shape (Haydn's ZOL law rejects
+    // StageCount<=1) previously aborted the whole loop at the FIRST
+    // feasible II, never seeing the larger IIs where a multi-stage
+    // schedule exists. Treat a target rejection like any other infeasible
+    // II and keep searching. Smallest upstreamable delta: the final
+    // shouldUseSchedule call below still guards the accepted schedule,
+    // so targets that accept anything see identical behavior.
+    if (scheduleFound &&
+        !LoopPipelinerInfo->shouldUseSchedule(*this, Schedule)) {
+      LLVM_DEBUG(dbgs() << "Target rejected schedule at II " << II
+                        << "; continuing II search\n");
+      scheduleFound = false;
+    }
   }
 
   LLVM_DEBUG(dbgs() << "Schedule Found? " << scheduleFound
                     << " (II=" << Schedule.getInitiationInterval()
                     << ")\n");
-
-  if (scheduleFound) {
-    scheduleFound = LoopPipelinerInfo->shouldUseSchedule(*this, Schedule);
-    if (!scheduleFound)
-      LLVM_DEBUG(dbgs() << "Target rejected schedule\n");
-  }
 
   if (scheduleFound) {
     Schedule.finalizeSchedule(this);

@@ -57,7 +57,7 @@ body:             |
     ; EXPAND-NEXT: CSRW_W 46, $r1, implicit-def $sfr, implicit-def $cbr1
     ; EXPAND-NEXT: CSRW_W 47, $r1, implicit-def $sfr, implicit-def $cbr1
     ; EXPAND-NOT: SETCBR
-    ; EXPAND: RET
+    ; EXPAND: {{RET|JALR}}
     ;
     ; PACK-LABEL: name: expand_addrs
     ; One-commit bake stamps generated Format E members (not residual _S*).

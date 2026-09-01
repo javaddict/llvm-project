@@ -199,7 +199,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; PROD-NEXT:    { nop; move32 r6, r5 }
 ; PROD-NEXT:  .LBB0_1: // %loop
 ; PROD-NEXT:    // =>This Inner Loop Header: Depth=1
-; PROD-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
+; PROD-NEXT:    { ld32 r7, r1, 0; ld32 r12, r2, 0 }
 ; PROD-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
 ; PROD-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
 ; PROD-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }
@@ -225,7 +225,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; GEN-NEXT:    { nop; move32 r6, r5 }
 ; GEN-NEXT:  .LBB0_1: // %loop
 ; GEN-NEXT:    // =>This Inner Loop Header: Depth=1
-; GEN-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
+; GEN-NEXT:    { ld32 r7, r1, 0; ld32 r12, r2, 0 }
 ; GEN-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
 ; GEN-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
 ; GEN-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }
@@ -251,7 +251,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; RP-NEXT:    { nop; move32 r6, r5 }
 ; RP-NEXT:  .LBB0_1: // %loop
 ; RP-NEXT:    // =>This Inner Loop Header: Depth=1
-; RP-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
+; RP-NEXT:    { ld32 r7, r1, 0; ld32 r12, r2, 0 }
 ; RP-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
 ; RP-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
 ; RP-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }
@@ -277,7 +277,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; ASM-NEXT:    { nop; move32 r6, r5 }
 ; ASM-NEXT:  .LBB0_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
-; ASM-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
+; ASM-NEXT:    { ld32 r7, r1, 0; ld32 r12, r2, 0 }
 ; ASM-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
 ; ASM-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
 ; ASM-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }

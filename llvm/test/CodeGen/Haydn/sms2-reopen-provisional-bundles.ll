@@ -1,6 +1,6 @@
 ; REQUIRES: asserts
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -O2 -verify-machineinstrs < %s \
+; RUN:     -O2 -verify-machineinstrs -haydn-sms2=false < %s \
 ; RUN:     | FileCheck %s --check-prefix=OFF
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -O2 -verify-machineinstrs -haydn-sms2 < %s \
@@ -11,9 +11,8 @@
 ; RUN:     -debug-only=haydn-post-ra-sched < %s -o /dev/null 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=REOPEN
 ;
-; W68.2R S2 reopen pin (STATUS limit #1): flags -haydn-sms2 /
-; -haydn-postra-interblock stay default-off. The default-off arm is
-; verify-clean and packing-identical to today's S1-only product path.
+; W68.2R S2 reopen pin (STATUS limit #1): -haydn-sms2 is product-on.
+; The explicit-off arm is verify-clean S1-only packing.
 ; The FIRST S2 invocation reopens every provisional S1 BUNDLE whose real
 ; children carry generated member->logical identity (contracts/pipeline.md
 ; "S1/S2 repair law" — S2 rebuilds from current bare MIs; unrecoverable

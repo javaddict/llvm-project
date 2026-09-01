@@ -37,8 +37,8 @@ define void @epilogue_restore_from_sp(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; CHECK-NEXT:    { nop; st32 r11, sp, 0 }
 ; CHECK-NEXT:    { nop; move32 r7, r10 }
 ; CHECK-NEXT:    { nop; jal lr, callee_with_many_args }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32 r1, r8 }
 ; CHECK-NEXT:    { nop; move32 r2, r9 }

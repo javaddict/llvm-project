@@ -1,0 +1,1049 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-relaxation -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — W70.1 layout pins: committed BUNDLE roots are the size oracle.
+
+# GOALS W70.1 (2026-08-28): "Layout walks BUNDLE-root
+# committedEncodedBytes / encodedBytesForRow only... no new
+# N * productParcelBytes() on committed roots. Bare-MI parcel charge is
+# pre-Kind-B only."
+#
+# Pins exercised through the BranchRelaxation size walk
+# (getInstSizeInBytes -> committedEncodedBytes on the root):
+#   * coissued_root_charged_once: a committed BUNDLE carrying THREE real
+#     members charges exactly one parcel (12 B), never memberCount * 12.
+#     A 3-member + 1-member pre-branch layout stays inside the short
+#     window; a consumer multiplying by membership would double-to-triple
+#     the distance and relax early.
+#   * stamped_root_walks_registry: the same layout with finalize-stamped
+#     row/completion imms charges encodedBytesForRow, identical bytes.
+#   * bare_pre_kind_b: bare real MIs before format commit still charge one
+#     parcel each (pre-Kind-B stand-in law).
+
+--- |
+  define void @coissued_root_charged_once(i1 %c, ptr %p) {
+  entry:
+    br i1 %c, label %near, label %exit
+  near:
+    store i32 1, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+  define void @stamped_root_walks_registry(i1 %c, ptr %p) {
+  entry:
+    br i1 %c, label %near, label %exit
+  near:
+    store i32 1, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+  define void @bare_pre_kind_b(i1 %c, ptr %p) {
+  entry:
+    br i1 %c, label %near, label %exit
+  near:
+    store i32 1, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+  define void @member_count_not_multiplied(i1 %c, ptr %p) {
+  entry:
+    br i1 %c, label %near, label %exit
+  near:
+    store i32 1, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            coissued_root_charged_once
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: coissued_root_charged_once
+    ; Three-member committed root (one 12 B parcel) + singleton root.
+    ; CHECK: BUNDLE
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    ; CHECK: BUNDLE
+    BUNDLE 0 {
+      $r5 = XOR32 $r0, $r0
+    }
+    ; CHECK: BEQZ_W $r0
+    BEQZ_W $r0, %bb.1
+    B %bb.2
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    B %bb.2
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            stamped_root_walks_registry
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: stamped_root_walks_registry
+    ; Same 3+1 parcel layout, but roots are finalize-stamped
+    ; (imm0 = BundleFormatRowID, imm1 = CompletionStateID per
+    ; stampBundleCommit). committedEncodedBytes takes encodedBytesForRow;
+    ; the row registry value for both product rows is 12 B, so the short
+    ; window verdict must be identical to the unstamped function.
+    ; CHECK: BUNDLE 0, 1, 0 {
+    BUNDLE 0, 1, 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    ; CHECK: BUNDLE 0, 1, 0 {
+    BUNDLE 0, 1, 0 {
+      $r5 = XOR32 $r0, $r0
+    }
+    ; CHECK: BEQZ_W $r0
+    BEQZ_W $r0, %bb.1
+    B %bb.2
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    B %bb.2
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bare_pre_kind_b
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: bare_pre_kind_b
+    ; Pre-Kind-B window: bare real MIs charge one parcel each.
+    ; CHECK: $r2 = XOR32 $r0, $r0
+    $r2 = XOR32 $r0, $r0
+    $r3 = XOR32 $r0, $r0
+    $r4 = XOR32 $r0, $r0
+    ; CHECK: BEQZ_W $r0
+    BEQZ_W $r0, %bb.1
+    B %bb.2
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    B %bb.2
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15
+
+...
+
+---
+name:            member_count_not_multiplied
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; DISCRIMINATOR: 160 three-member committed roots = 160 parcels
+    ; (1920 B) + 2 singleton parcels (24 B) = 1944 B < 2048 B simm12
+    ; window. The conditional must NOT relax. A consumer charging
+    ; memberCount * parcel (3x per root = 480 parcels = 5760 B) would
+    ; exceed the window and rewrite this into an inverted-cond + far-B
+    ; pair (CHECK-NOT insertIndirectBranch / no LUI materialization).
+    ; CHECK-LABEL: name: member_count_not_multiplied
+    ; CHECK: BUNDLE
+    ; CHECK-NOT: LOADI32
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r2 = XOR32 $r0, $r0
+      $r3 = XOR32 $r0, $r0
+      $r4 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r5 = XOR32 $r0, $r0
+    }
+    BUNDLE 0 {
+      $r6 = XOR32 $r0, $r0
+    }
+    ; CHECK: BEQZ_W $r0
+    BEQZ_W $r0, %bb.1
+    B %bb.2
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    B %bb.2
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15
+
+...

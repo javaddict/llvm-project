@@ -131,7 +131,7 @@ body:             |
   bb.0:
     liveins: $r2, $r15
     ; CHECK-LABEL: name: cutover_ld32_s0
-    ; CHECK: S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6
+    ; CHECK: S_LW_WITH_IMM_E2_E1_LOAD1_RI6
     BUNDLE 0, 0, implicit-def $r1, implicit $r2 {
       $r1 = LD32 $r2, 1
     }
@@ -161,7 +161,7 @@ body:             |
   bb.0:
     liveins: $r2, $r15
     ; CHECK-LABEL: name: cutover_s_lw_post_imm
-    ; CHECK: S_LW_POST_IMM_E2_E0_LOADSTORE0_RI6
+    ; CHECK: S_LW_POST_IMM_E2_E1_LOAD1_RI6
     ; CHECK-NOT: S_LW_POST_IMM_S0
     BUNDLE 0, 0, implicit-def $r1, implicit-def $r2, implicit $r2 {
       $r1, $r2 = S_LW_POST_IMM $r2, 1
@@ -502,7 +502,7 @@ body:             |
   bb.0:
     liveins: $d0, $d1, $d2, $r15
     ; CHECK-LABEL: name: cutover_mula64_hh_s1
-    ; CHECK: MULA64_HH_E2_E0_MAC0_RR
+    ; CHECK: MULA64_HH_E2_E1_MAC1_RR
     BUNDLE 0, 0, implicit-def $d0, implicit $d0, implicit $d1, implicit $d2 {
       $d0 = MULA64_HH $d0, $d1, $d2
     }
@@ -547,7 +547,7 @@ body:             |
   bb.0:
     liveins: $d0, $d1, $d2, $d3, $r15
     ; CHECK-LABEL: name: cutover_x2mula32_s1
-    ; CHECK: X2MULA32_E2_E0_MAC0_RRR
+    ; CHECK: X2MULA32_E2_E1_MAC1_RRR
     BUNDLE 0, 0, implicit-def $d0, implicit-def $d1, implicit $d0, implicit $d1, implicit $d2, implicit $d3 {
       $d0, $d1 = X2MULA32 $d0, $d1, $d2, $d3
     }

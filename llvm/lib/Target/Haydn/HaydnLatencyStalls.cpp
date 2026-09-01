@@ -12,6 +12,7 @@
 
 #include "HaydnLatencyStalls.h"
 #include "Haydn.h"
+#include "HaydnBundleMaterialize.h"
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
@@ -239,8 +240,12 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
   const HaydnSubtarget &STI = MF.getSubtarget<HaydnSubtarget>();
   const HaydnInstrInfo &TII = *STI.getInstrInfo();
   const InstrItineraryData *Itin = STI.getInstrItineraryData();
-  if (!Itin || Itin->isEmpty())
+  if (!Itin || Itin->isEmpty()) {
+    // Empty-itinerary arm still owes the identity bake (layout identity
+    // only; no stall computation runs here).
+    haydn::bundle::applyFinalDirectCompatibleMembers(MF);
     return false;
+  }
 
   // -O1+: insertions are unexpected if schedulers already saw architectural
   // latency; still insert for correctness and count for the auditor.
@@ -328,6 +333,16 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
                    /*Unexpected=*/false);
     }
   }
+
+  // Identity-bake remaining FieldSlot/logicals AFTER the dest-window
+  // computation. Baking earlier replaces the logical Desc (e.g. ST32_POST,
+  // itinerary Slot1_LD, OperandCycles [2]) with the generated member
+  // (S_SW_POST_IMM_E2_E0_..., Slot0_LS_WbLat, OperandCycles [1]) and the
+  // writeback read of the post-incremented base then sees latency 1 — the
+  // stall parcel the exposed pipeline requires disappears (stack-align
+  // regression). The bake is layout identity only; it must never change
+  // which cycles the stall authority charges.
+  haydn::bundle::applyFinalDirectCompatibleMembers(MF);
 
   return Changed;
 }

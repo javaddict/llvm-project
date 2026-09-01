@@ -39,7 +39,7 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r5, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r4, r4, r5 }
+; CHECK-NEXT:    { nop; max32 r4, r4, r5 }
 ; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r4 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; nop }
@@ -47,7 +47,7 @@ define void @ii_scheduler_reorder(ptr %a, ptr %b, ptr %c, i32 %n) {
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { ld32 r5, r2, 0; ld32 r4, r1, 0 }
+; CHECK-NEXT:    { ld32 r4, r1, 0; ld32 r5, r2, 0 }
 ; CHECK-NEXT:    { nop; ld32 r6, r3, 0 }
 ; CHECK-NEXT:    { nop; add32 r7, r4, r5 }
 ; CHECK-NEXT:    { nop; st32 r7, r1, 0; add32 r5, r5, r6 }

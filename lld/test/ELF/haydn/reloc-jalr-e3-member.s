@@ -19,16 +19,16 @@
 # RELOCS: Flags [ (0x1)
 # RELOCS:      Relocations [
 # RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-NEXT:     0x0 R_HAYDN_JALRSImm12 tgt_e0
-# RELOCS-NEXT:     0x24 R_HAYDN_JALRSImm12 tgt_e1
+# RELOCS-NEXT:     0x0 R_HAYDN_JALRSImm12_E3E0 tgt_e0
+# RELOCS-NEXT:     0x24 R_HAYDN_JALRSImm12_E3E1 tgt_e1
 # RELOCS-NEXT:   }
 # RELOCS-NEXT: ]
 # RELOCS-NOT: R_HAYDN_WIDE_BranchSImm12
 # RELOCS-NOT: R_HAYDN_WIDE_BranchSImm12_RI
 #
 # ELF32 r_info low byte is the type: 0x16 = ELF 22.
-# ELFNUM: {{[0-9a-fA-F]+}}16 R_HAYDN_JALRSImm12 {{.*}} tgt_e0
-# ELFNUM: {{[0-9a-fA-F]+}}16 R_HAYDN_JALRSImm12 {{.*}} tgt_e1
+# ELFNUM: {{[0-9a-fA-F]+}}20 R_HAYDN_JALRSImm12_E3E0 {{.*}} tgt_e0
+# ELFNUM: {{[0-9a-fA-F]+}}21 R_HAYDN_JALRSImm12_E3E1 {{.*}} tgt_e1
 #
 # LINK-LABEL: <e0_site>:
 # LINK: 10000: {{.*}}jalr{{.*}}r2, 24

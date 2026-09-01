@@ -31,18 +31,27 @@ AUTHORED_OVERLAY_PATH = Path(__file__).with_name("authored_catalog_overlay.json"
 
 # Manifest pin for the companion XLSX (geometry authority pair).
 PINNED_XLSX_SHA256 = (
-    "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f"
+    "2a2b43cb394a16cf89173538f2a673235fdb6e4ed04cb6e4e75e72520cf7ffdb"
 )
-# Golden v2_1 (supersedes v2 2026-08-18): +120 MAC RR 32X16 instrs, +4 LS
-# D_SW_F64RS rows, RRR operand-field canonicalization; zero removals, zero
-# opcode changes, bit geometry identical to v2. Read-port repair applied
-# 2026-08-18 (haydn_encoding.py --fix-read-ports --write: 6 FMUL*32S rows in
-# instruction_type_index.json gained rtd; layout JSON untouched).
+# Golden v2_2 (supersedes v2_1 2026-08-28): +AR_CBR type 101 (3b opcode)
+# on LOADSTORE0 entry0 in BOTH packet entries (E2 and E3; LOAD1 keeps
+# AR/RI6/RR), carrying 7 new circular-buffer UA load/store instrs
+# (PLTWWUA_CB_POST, PLQHWUA_CB_POST, D_LTWUA_CB_POST, D_LQHWUA_CB_POST,
+# D_STWUA_CB_POST, D_SQHWUA_CB_POST, WBARWUA_CB; opcodes 0x01-0x07 plus
+# NOP 0x00). Operand fields ar_sel[2b]/cbr_sel[1b]/dest1(rtd)[4b]/
+# dest2(rs)[4b]; E2 bits [37:36]/[35]/[23:20]/[27:24], E3 shifted to
+# [36:35]/[34]/[20:17]/[24:21] (E3 payload uses 89/90b). instruction_
+# type_index.json and instruction_type_operands.json gained the 7 rows
+# (+AR_CBR operand shapes). Zero removals, zero opcode changes on the
+# v2_1 surface; bit geometry identical elsewhere. Read-port repair
+# re-applied 2026-08-28 (haydn_encoding.py --fix-read-ports --write: the
+# same 6 FMUL*32S rows regained rtd in DR_Read_Port; the v2_2 delivery
+# had dropped the v2_1 repair). Index pin is the repaired file.
 PINNED_JSON_SHA256 = (
-    "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a"
+    "c436793cc8d3295088dda2271e68e5b53074eeb4bce3341d443ebac3e828dcba"
 )
 PINNED_INDEX_SHA256 = (
-    "7a13453ad934d6be9a303b51fcaeb6e908d97015b3e75db7d76fa13cb7a6dede"
+    "3f306463d108c8240b6f8afa876e3fa4ca06b91ee7f38efe1fb4eba631c3433b"
 )
 PINNED_CANONICAL_SHA256 = (
     "741f5b4141990dc27dc217d2b0c0d7ab57240e08ef31c34bc036f11bbda1938e"
@@ -57,12 +66,12 @@ PINNED_OPERANDS_INFO_SHA256 = (
     "e4b61bf5b5be2634b1665474bf4906db0df017a939289a49d40e82bc2121fb12"
 )
 PINNED_TYPE_OPERANDS_SHA256 = (
-    "0f97fdf5ecf56172190fa21aeb22049a0a0cace28640314e3209623a167413e7"
+    "434544ef336fe703ff69c6c59316c3e89f3350e1d4cae6fd6790929d01e7bd20"
 )
 # instruction_to_entry.xlsx ZIP bytes embed openpyxl timestamps. Pin the
 # extracted cell values, not the file bytes.
 PINNED_ENTRY_XLSX_CELLS_SHA256 = (
-    "6b084277e2b92a5166feb06cad7050651f2b06cf99138c885ce9e9da9e7cdb6c"
+    "ba6d65066b812083925ec5b68dae6dee26323ceb8aaab0040db0ff083f5d3098"
 )
 
 SSML_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -105,10 +114,10 @@ class AuthorityFile:
 # (openpyxl timestamps). Authority is the pinned index, not the xlsx bytes.
 AUTHORITY_FILES: Tuple[AuthorityFile, ...] = (
     AuthorityFile(
-        "format_e_bit_layout_v2_1.xlsx", PINNED_XLSX_SHA256, "consumed"
+        "format_e_bit_layout_v2_2.xlsx", PINNED_XLSX_SHA256, "consumed"
     ),
     AuthorityFile(
-        "format_e_bit_layout_v2_1.json", PINNED_JSON_SHA256, "consumed"
+        "format_e_bit_layout_v2_2.json", PINNED_JSON_SHA256, "consumed"
     ),
     AuthorityFile(
         "format_e_canonical_vectors_v1.json",
@@ -147,8 +156,8 @@ AUTHORITY_BY_NAME: Dict[str, AuthorityFile] = {
 # Unused/derived nine-file members stay on the compiler pin.
 # operands_info.md is a retired catalog basename.
 CATALOG_PIN_FILES: Tuple[str, ...] = (
-    "format_e_bit_layout_v2_1.xlsx",
-    "format_e_bit_layout_v2_1.json",
+    "format_e_bit_layout_v2_2.xlsx",
+    "format_e_bit_layout_v2_2.json",
     "format_e_canonical_vectors_v1.json",
     "VLIW_Engine_Compiler_Constraints.md",
     "VLIW_Engine_Reference_Manual.docx",
@@ -159,7 +168,7 @@ CATALOG_PIN_FILES: Tuple[str, ...] = (
 # (two spaces) plus a trailing newline; no header comments.
 # Compiler-only rows and commentary live on GOLDEN_INPUTS_PIN_REL.
 CATALOG_PIN_FILE_SHA256 = (
-    "02b5bed3c7d5030eca4451491b60e88ee2ad6caae6c5ebdeac3685a1c0aaeba3"
+    "2af5e0ac5f1ee9dae3b69a46df81c88b91fd78cdd914b0b6667bce2b6036c778"
 )
 RETIRED_CATALOG_BASENAMES = frozenset(
     {
@@ -216,8 +225,8 @@ E96 = BundleFamily(
     id=0,
     cli_name="e96",
     display="E96",
-    json_filename="format_e_bit_layout_v2_1.json",
-    xlsx_filename="format_e_bit_layout_v2_1.xlsx",
+    json_filename="format_e_bit_layout_v2_2.json",
+    xlsx_filename="format_e_bit_layout_v2_2.xlsx",
     index_filename="instruction_type_index.json",
     canonical_filename="format_e_canonical_vectors_v1.json",
     constraints_filename="VLIW_Engine_Compiler_Constraints.md",

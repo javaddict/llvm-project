@@ -38,10 +38,11 @@
 ; Contract checked below:
 ;   Pipeliner trace -- analyzeLoop succeeds (LOADI32 step recognized, not
 ;     "Unable to analyzeLoop") and a schedule is found ("Schedule Found? 1").
-;     Product multi-stage SMS uses durable clone→cycle groups (no handoff switch)
-;     (CoreMark matrix_sum residual — see sms-multistage-naive-handoff-off-reject.ll),
-;     so the schedule may be Target-rejected after Found? 1; that is orthogonal
-;     to LOADI32 step recognition.
+;     (The bespoke post-RA multi-stage engine and its handoff-switch corpus
+;     were deleted by W68.1 — generic pre-RA MachinePipeliner owns SMS; the
+;     former naive-handoff fixture is gone.) The schedule may still be
+;     Target-rejected after Found? 1; that is orthogonal to LOADI32 step
+;     recognition.
 ;   MIR -- after pipeliner, the countdown step materialization is still LOADI32
 ;     -1 (or an equivalent ADDI32 -1) and the IV init COPY of $r2 survives.
 ;     With the getInductionStep bug the loop was still analyzable only via the

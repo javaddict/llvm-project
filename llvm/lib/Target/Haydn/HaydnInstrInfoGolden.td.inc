@@ -9,15 +9,15 @@
 // Overlay: authored_catalog_overlay.json
 // Overlay-SHA256: 276dea569f8761e81bb3d17e041a4f74911d34ba6f30711939a293519ac531fc
 // Compiler nine-file pin (8 byte + 1 cell). Catalog generate_catalog.py stays six-file.
-// PIN: dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f  format_e_bit_layout_v2_1.xlsx
-// PIN: 2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a  format_e_bit_layout_v2_1.json
+// PIN: 2a2b43cb394a16cf89173538f2a673235fdb6e4ed04cb6e4e75e72520cf7ffdb  format_e_bit_layout_v2_2.xlsx
+// PIN: c436793cc8d3295088dda2271e68e5b53074eeb4bce3341d443ebac3e828dcba  format_e_bit_layout_v2_2.json
 // PIN: 741f5b4141990dc27dc217d2b0c0d7ab57240e08ef31c34bc036f11bbda1938e  format_e_canonical_vectors_v1.json
-// PIN: 7a13453ad934d6be9a303b51fcaeb6e908d97015b3e75db7d76fa13cb7a6dede  instruction_type_index.json
+// PIN: 3f306463d108c8240b6f8afa876e3fa4ca06b91ee7f38efe1fb4eba631c3433b  instruction_type_index.json
 // PIN: e0d7f7f0e7ce06622f4ae90dc9366caf16da48993c7f803c02d460473fd9b56a  VLIW_Engine_Compiler_Constraints.md
 // PIN: 550dac0c82c160397c510bd403116056e046a43d8df41cd34d81ab678cd9b49b  VLIW_Engine_Reference_Manual.docx
 // PIN: e4b61bf5b5be2634b1665474bf4906db0df017a939289a49d40e82bc2121fb12  operands_info.md
-// PIN: 0f97fdf5ecf56172190fa21aeb22049a0a0cace28640314e3209623a167413e7  instruction_type_operands.json
-// PIN: 6b084277e2b92a5166feb06cad7050651f2b06cf99138c885ce9e9da9e7cdb6c  instruction_to_entry.xlsx#cells
+// PIN: 434544ef336fe703ff69c6c59316c3e89f3350e1d4cae6fd6790929d01e7bd20  instruction_type_operands.json
+// PIN: ba6d65066b812083925ec5b68dae6dee26323ceb8aaab0040db0ff083f5d3098  instruction_to_entry.xlsx#cells
 //
 // Logical (matcher-facing) defs for golden catalog names that have NO
 // hand def in HaydnInstrInfo.td. Encoding
@@ -184,6 +184,22 @@ def D_LHW_WITH_REG : HaydnInst<4, (outs DR64:$rd1),
     (ins GPR32:$rs1, GPR32:$rs2),
     "d_lhw_with_reg	$rd1, $rs1, $rs2", []> {
   let Itinerary = Slot01_LD;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LQHWUA_CB_POST : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, GPR32:$rs),
+    "d_lqhwua_cb_post	$ar_sel_0, $cbr_sel_0, $rd1, $rs", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def D_LTWUA_CB_POST : HaydnInst<4, (outs DR64:$rd1, GPR32:$rs_wb),
+    (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, GPR32:$rs),
+    "d_ltwua_cb_post	$ar_sel_0, $cbr_sel_0, $rd1, $rs", []> {
+  let Itinerary = Slot0_LS;
 }
 }
 
@@ -360,6 +376,22 @@ def D_SHW_WITH_REG : HaydnInst<4, (outs),
     (ins DR64:$rd1, GPR32:$rs1, GPR32:$rs2),
     "d_shw_with_reg	$rd1, $rs1, $rs2", []> {
   let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_SQHWUA_CB_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, DR64:$rd1, GPR32:$rs),
+    "d_sqhwua_cb_post	$ar_sel_0, $cbr_sel_0, $rd1, $rs", []> {
+  let Itinerary = Slot0_LS_WbLat;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayStore = 1, Constraints = "$rs = $rs_wb" in {
+def D_STWUA_CB_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, DR64:$rd1, GPR32:$rs),
+    "d_stwua_cb_post	$ar_sel_0, $cbr_sel_0, $rd1, $rs", []> {
+  let Itinerary = Slot0_LS_WbLat;
 }
 }
 
@@ -3299,6 +3331,22 @@ def PLDWWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
 }
 }
 
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def PLQHWUA_CB_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, GPR32:$rs),
+    "plqhwua_cb_post	$ar_sel_0, $cbr_sel_0, $rs", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0, mayLoad = 1, Constraints = "$rs = $rs_wb" in {
+def PLTWWUA_CB_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, GPR32:$rs),
+    "pltwwua_cb_post	$ar_sel_0, $cbr_sel_0, $rs", []> {
+  let Itinerary = Slot0_LS;
+}
+}
+
 let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
 def SET_HWLOOP_F2 : HaydnInst<4, (outs),
     (ins uimm1:$hwlr_sel_0, uimm6:$imm1_0, uimm12:$imm2_0, GPR32:$rs1),
@@ -4160,6 +4208,14 @@ def TRANSF64_L : HaydnInst<4, (outs DR64:$rd1),
     (ins DR64:$rd2),
     "transf64_l	$rd1, $rd2", []> {
   let Itinerary = Slot012_ALU;
+}
+}
+
+let isCodeGenOnly = 0, DecoderNamespace = "HaydnAutoNoDecode", isAsmParserOnly = 0 in {
+def WBARWUA_CB : HaydnInst<4, (outs),
+    (ins uimm2:$ar_sel_0, uimm1:$cbr_sel_0, GPR32:$rs1),
+    "wbarwua_cb	$ar_sel_0, $cbr_sel_0, $rs1", []> {
+  let Itinerary = Slot0_LS;
 }
 }
 
@@ -5187,4 +5243,4 @@ def X4SWAP16 : HaydnInst<4, (outs DR64:$rd1),
 }
 }
 
-// generated logical defs: 645
+// generated logical defs: 652

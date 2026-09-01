@@ -24,12 +24,12 @@ body:             |
   bb.0:
     liveins: $r1, $r15
     ; CHECK-LABEL: name: load_then_use
-    ; CHECK: LD32
+    ; CHECK: S_LW_WITH_IMM
     ; CHECK-NEXT: nomerge NOP
     ; CHECK-NEXT: ADD32
     ; CHECK-NOT: NOP
     ; TWICE-LABEL: name: load_then_use
-    ; TWICE: LD32
+    ; TWICE: S_LW_WITH_IMM
     ; TWICE-NEXT: nomerge NOP
     ; TWICE-NEXT: ADD32
     ; TWICE-NOT: NOP

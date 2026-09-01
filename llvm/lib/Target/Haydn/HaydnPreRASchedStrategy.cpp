@@ -303,6 +303,10 @@ void HaydnPreRASchedStrategy::leaveRegion(const SUnit & /*ExitSU*/) {
       // AND ZOL; the historic Option A value 1 survives only as the F41
       // bisect-down constant). ZOL multi-stage now accepts when its own
       // AIE-peer gates pass (static MinTripCount guard) — pinned both ways.
+      // CB-166 (2026-08-27): a runtime trip REGISTER unlocks the same
+      // accept the static MinTripCount>PrologueCount law gives constant
+      // trips (dynamic per-prologue guard); constant trips keep the static
+      // law; single-stage still refuses (no overlap).
       if (productSMSSoftContainmentMaxStageCount != productSMSMaxStageCount ||
           productSMSContainmentMaxStageCount != 1u ||
           !smsProductStageCountExceedsContainment(
@@ -330,7 +334,28 @@ void HaydnPreRASchedStrategy::leaveRegion(const SUnit & /*ExitSU*/) {
               /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/0,
               /*PressureExcess=*/false, productSMSMaxStageCount,
               productSMSTrackRegPressureDefault,
-              productSMSSoftContainmentMaxStageCount))
+              productSMSSoftContainmentMaxStageCount) ||
+          // CB-166 pins: runtime-trip ZOL multi-stage ACCEPTS; the same
+          // loop without the runtime reg still fails closed; single-stage
+          // with a runtime reg still refuses (no overlap).
+          !smsProductShouldUseScheduleAccepts(
+              /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/0,
+              /*PressureExcess=*/false, productSMSMaxStageCount,
+              productSMSTrackRegPressureDefault,
+              productSMSSoftContainmentMaxStageCount,
+              /*HasRuntimeTripReg=*/true) ||
+          !smsProductShouldUseScheduleFailsClosed(
+              /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/0,
+              /*PressureExcess=*/false, productSMSMaxStageCount,
+              productSMSTrackRegPressureDefault,
+              productSMSSoftContainmentMaxStageCount,
+              /*HasRuntimeTripReg=*/false) ||
+          !smsProductShouldUseScheduleFailsClosed(
+              /*IsZOL=*/true, /*PrologueCount=*/0, /*MinTripCount=*/0,
+              /*PressureExcess=*/false, productSMSMaxStageCount,
+              productSMSTrackRegPressureDefault,
+              productSMSSoftContainmentMaxStageCount,
+              /*HasRuntimeTripReg=*/true))
         report_fatal_error(
             "Haydn pre-RA product SMS containment pins failed",
             /*GenCrashDiag=*/false);

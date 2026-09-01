@@ -140,6 +140,22 @@ enum Fixups {
   // 1-byte writes, not a parcel field).
   FIXUP_HAYDN_CSR_UImm8,
 
+  // Entry-qualified fixups (typed (kind, entry, window) mapping). Emitted
+  // by encodeSlotSubInst when a symbolic member's committed entry is not
+  // the base kind's default window (see ELFRelocs/Haydn.def 24..33 for the
+  // full law). Same value transform/scale as the base kind; the patch
+  // window comes from the qualified table row, never from content sniffing.
+  FIXUP_HAYDN_LO20_E1,
+  FIXUP_HAYDN_PC_LO20_E1,
+  FIXUP_HAYDN_WIDE_CallSImm20_E3E1,
+  FIXUP_HAYDN_WIDE_BranchSImm12_E3E0,
+  FIXUP_HAYDN_WIDE_BranchSImm12_E3E1,
+  FIXUP_HAYDN_WIDE_BranchSImm12_E3E2,
+  FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E0,
+  FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1,
+  FIXUP_HAYDN_JALRSImm12_E3E0,
+  FIXUP_HAYDN_JALRSImm12_E3E1,
+
   // Marker - must be last
   FIXUP_HAYDN_INVALID,
 

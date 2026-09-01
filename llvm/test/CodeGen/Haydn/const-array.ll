@@ -16,8 +16,7 @@ define i32 @local_const_array(i32 %index) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 10 }
+; CHECK-NEXT:    { addi32 r3, r0, 10; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 r3, r2, 0; slli32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 20 }
@@ -66,8 +65,7 @@ define i32 @read_global_array(i32 %index) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r2, global_const_array }
-; CHECK-NEXT:    { nop; addi32 r2, r2, global_const_array }
-; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { slli32 r1, r1, 2; addi32 r2, r2, global_const_array }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -188,14 +186,13 @@ define i64 @read_i64_array(i32 %index) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; lui r2, global_i64_array }
-; CHECK-NEXT:    { nop; addi32 r2, r2, global_i64_array }
-; CHECK-NEXT:    { nop; slli32 r1, r1, 3 }
+; CHECK-NEXT:    { slli32 r1, r1, 3; addi32 r2, r2, global_i64_array }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
-; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { ld32 r1, r1, 0; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r1, sp, 2; ld32 r2, r2, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
@@ -222,8 +219,7 @@ define i32 @read_struct_array(i32 %index) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r2, struct_array }
-; CHECK-NEXT:    { nop; addi32 r2, r2, struct_array }
-; CHECK-NEXT:    { nop; slli32 r1, r1, 3 }
+; CHECK-NEXT:    { slli32 r1, r1, 3; addi32 r2, r2, struct_array }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -260,8 +256,6 @@ define i32 @two_d_array_access(ptr %matrix, i32 %row, i32 %col, i32 %width) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mull r2, r2, r4 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
@@ -269,6 +263,8 @@ define i32 @two_d_array_access(ptr %matrix, i32 %row, i32 %col, i32 %width) {
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %row_offset = mul i32 %row, %width
   %index = add i32 %row_offset, %col
   %ptr = getelementptr i32, ptr %matrix, i32 %index
@@ -286,8 +282,7 @@ define i32 @read_repeated(i32 %index) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r2, repeated_array }
-; CHECK-NEXT:    { nop; addi32 r2, r2, repeated_array }
-; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { slli32 r1, r1, 2; addi32 r2, r2, repeated_array }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -315,8 +310,7 @@ define i1 @array_contains(ptr %arr, i32 %size, i32 %target) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
-; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
-; CHECK-NEXT:    { nop; addi32 r5, r0, 2 }
+; CHECK-NEXT:    { addi32 r5, r0, 2; addi32 r4, r0, 0 }
 ; CHECK-NEXT:    { nop; slt32 r7, r2, r5 }
 ; CHECK-NEXT:    { nop; addi32 r5, r4, 1 }
 ; CHECK-NEXT:    { nop; seq32 r6, r6, r3 }
@@ -360,8 +354,7 @@ define i32 @read_zero_array(i32 %index) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r2, zero_array }
-; CHECK-NEXT:    { nop; addi32 r2, r2, zero_array }
-; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
+; CHECK-NEXT:    { slli32 r1, r1, 2; addi32 r2, r2, zero_array }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

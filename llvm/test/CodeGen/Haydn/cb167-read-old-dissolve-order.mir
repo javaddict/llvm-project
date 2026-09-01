@@ -1,0 +1,45 @@
+# REQUIRES: haydn-registered-target
+# RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn -x mir \
+# RUN:   -start-before=haydn-late-convergence -o - %s | FileCheck %s
+
+# CB-167: S1 legally coissues { dead LD r9 ; SLT32 killed r8, killed r9 }
+# in one parcel (snapshot read-old semantics; the intra-cycle RAW check
+# skips dead defs). Reopening the bundle for the S2 reschedule must not
+# flatten the dead-def member BEFORE the sibling reader: the rebuilt DAG
+# would derive a Data edge for that order and serialize the reader after
+# the load, which reads the LOADED value instead of the prior def
+# (pr85529-1: k < foo(k,2) short-circuit took the wrong path -> abort).
+#
+# The reopen law moves the colliding dead-def member AFTER the reader, so
+# the flattened order keeps SLT32 first; the repacked output must read the
+# PRIOR r9 (from the SRAI32 def) — pinned by the slt32 operand staying
+# r9 with the load ordered later in program order in any sequential form,
+# or coissued again.
+
+--- |
+  target triple = "haydn-unknown-unknown-elf"
+  @s = internal global i32 0
+  define void @f(i32 %k, ptr %p, i32 %one) { ret void }
+...
+---
+name:            f
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r4, $r6, $r2
+    $r8 = ADDI32_E2_E0_ALU0_RI20 $r2, 1
+    $r9 = SRAI32_E3_E2_ALU2_RI5 $r4, 24
+    BUNDLE 0, 0, implicit-def dead $r9, implicit-def $r8, implicit $r6, implicit killed $r8, implicit killed $r9 :: (volatile dereferenceable load (s32) from @s) {
+      dead $r9 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r6, 0 :: (volatile dereferenceable load (s32) from @s)
+      $r8 = SLT32_E2_E0_ALU0_RR killed $r8, killed $r9
+    }
+    $r2 = XORI32_E2_E1_ALU1_RI20 killed $r8, 1
+    $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0, implicit $r2
+
+# The repacked parcel must list the READER (slt32) at or before the
+# dead-def load (ld32) — either coissued (any member order is legal:
+# snapshot read-old) or sequential with slt32 first. The CB-167 defect
+# shape was a SEQUENTIAL ld32-first flattening; the one-parcel form with
+# slt32 present is the corrected dissolve.
+# CHECK: slt32{{.*}}r8, r8, r9; {{.*}}ld32{{.*}}r9

@@ -101,6 +101,11 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         1u, 1u, {1},
         1u, 0u,
     },
+    { // ADDI32_W (RI20) units=0x1C
+        Haydn::ADDI32_W, 1, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
+        1u, 1u, {1},
+        1u, 0u,
+    },
     { // AND32 (RR) units=0x1C
         Haydn::AND32, 2, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
         1u, 1u, {1},
@@ -121,6 +126,11 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         0u, 1u, {17},
         1u, 0u,
     },
+    { // ASR32 (RR) units=0x1C
+        Haydn::ASR32, 2, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
+        1u, 1u, {1},
+        1u, 0u,
+    },
     { // BEQ (RI12) units=0x04
         Haydn::BEQ, 2, 0, 0, 0, 0, 0, 0, 0, 0x04u,
         0u, 0u, {},
@@ -128,6 +138,16 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
     },
     { // BEQZ (I12) units=0x04
         Haydn::BEQZ, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BEQZ_W (I12) units=0x04
+        Haydn::BEQZ_W, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BEQ_W (RI12) units=0x04
+        Haydn::BEQ_W, 2, 0, 0, 0, 0, 0, 0, 0, 0x04u,
         0u, 0u, {},
         1u, 0u,
     },
@@ -141,8 +161,23 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         0u, 0u, {},
         1u, 0u,
     },
+    { // BGEU_W (RI12) units=0x04
+        Haydn::BGEU_W, 2, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
     { // BGEZ (I12) units=0x04
         Haydn::BGEZ, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BGEZ_W (I12) units=0x04
+        Haydn::BGEZ_W, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BGE_W (RI12) units=0x04
+        Haydn::BGE_W, 2, 0, 0, 0, 0, 0, 0, 0, 0x04u,
         0u, 0u, {},
         1u, 0u,
     },
@@ -156,8 +191,23 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         0u, 0u, {},
         1u, 0u,
     },
+    { // BLTU_W (RI12) units=0x04
+        Haydn::BLTU_W, 2, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
     { // BLTZ (I12) units=0x04
         Haydn::BLTZ, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BLTZ_W (I12) units=0x04
+        Haydn::BLTZ_W, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BLT_W (RI12) units=0x04
+        Haydn::BLT_W, 2, 0, 0, 0, 0, 0, 0, 0, 0x04u,
         0u, 0u, {},
         1u, 0u,
     },
@@ -168,6 +218,16 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
     },
     { // BNEZ (I12) units=0x04
         Haydn::BNEZ, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BNEZ_W (I12) units=0x04
+        Haydn::BNEZ_W, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // BNE_W (RI12) units=0x04
+        Haydn::BNE_W, 2, 0, 0, 0, 0, 0, 0, 0, 0x04u,
         0u, 0u, {},
         1u, 0u,
     },
@@ -183,6 +243,11 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
     },
     { // CSRW (I8) units=0x1C
         Haydn::CSRW, 1, 0, 0, 0, 0, 0, 0, 0, 0x1Cu,
+        2u, 1u, {2},
+        1u, 0u,
+    },
+    { // CSRW_W (I8) units=0x1C
+        Haydn::CSRW_W, 1, 0, 0, 0, 0, 0, 0, 0, 0x1Cu,
         2u, 1u, {2},
         1u, 0u,
     },
@@ -266,10 +331,20 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         2u, 1u, {2},
         1u, 2u,
     },
+    { // D_LQHWUA_CB_POST (AR_CBR) units=0x01
+        Haydn::D_LQHWUA_CB_POST, 1, 1, 0, 1, 1, 1, 0, 0, 0x01u,
+        2u, 1u, {2},
+        1u, 2u,
+    },
     { // D_LQHWUA_POST (AR) units=0x03
         Haydn::D_LQHWUA_POST, 1, 1, 0, 1, 1, 1, 0, 0, 0x03u,
         2u, 1u, {2},
         1u, 2u,
+    },
+    { // D_LTWUA_CB_POST (AR_CBR) units=0x01
+        Haydn::D_LTWUA_CB_POST, 1, 1, 0, 1, 1, 1, 0, 0, 0x01u,
+        2u, 1u, {2},
+        1u, 4u,
     },
     { // D_LTWUA_POST (AR) units=0x03
         Haydn::D_LTWUA_POST, 1, 1, 0, 1, 1, 1, 0, 0, 0x03u,
@@ -386,10 +461,20 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         0u, 0u, {},
         1u, 2u,
     },
+    { // D_SQHWUA_CB_POST (AR_CBR) units=0x01
+        Haydn::D_SQHWUA_CB_POST, 1, 1, 1, 0, 1, 1, 0, 0, 0x01u,
+        1u, 1u, {1},
+        1u, 2u,
+    },
     { // D_SQHWUA_POST (AR) units=0x01
         Haydn::D_SQHWUA_POST, 1, 1, 1, 0, 1, 1, 0, 0, 0x01u,
         1u, 1u, {1},
         1u, 2u,
+    },
+    { // D_STWUA_CB_POST (AR_CBR) units=0x01
+        Haydn::D_STWUA_CB_POST, 1, 1, 1, 0, 1, 1, 0, 0, 0x01u,
+        1u, 1u, {1},
+        1u, 4u,
     },
     { // D_STWUA_POST (AR) units=0x01
         Haydn::D_STWUA_POST, 1, 1, 1, 0, 1, 1, 0, 0, 0x01u,
@@ -1511,9 +1596,74 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         1u, 1u, {1},
         1u, 0u,
     },
+    { // JALR_W (RI12) units=0x04
+        Haydn::JALR_W, 1, 1, 0, 0, 0, 0, 0, 0, 0x04u,
+        1u, 1u, {1},
+        1u, 0u,
+    },
+    { // JAL_W (I20) units=0x04
+        Haydn::JAL_W, 0, 1, 0, 0, 0, 0, 0, 0, 0x04u,
+        1u, 1u, {1},
+        1u, 0u,
+    },
+    { // LD16 (RI6) units=0x03
+        Haydn::LD16, 1, 1, 0, 0, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 2u,
+    },
+    { // LD32 (RI6) units=0x03
+        Haydn::LD32, 1, 1, 0, 0, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 4u,
+    },
+    { // LD32_POST (RI6) units=0x03
+        Haydn::LD32_POST, 1, 2, 0, 0, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 4u,
+    },
+    { // LD32_REG_M0S0LS (RR) units=0x03
+        Haydn::LD32_REG_M0S0LS, 2, 1, 0, 0, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 4u,
+    },
+    { // LD64 (RI6) units=0x03
+        Haydn::LD64, 1, 0, 0, 1, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 8u,
+    },
+    { // LD64_POST (RI6) units=0x03
+        Haydn::LD64_POST, 1, 1, 0, 1, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 8u,
+    },
+    { // LD64_REG_M0S0LS (RR) units=0x03
+        Haydn::LD64_REG_M0S0LS, 2, 0, 0, 1, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 8u,
+    },
+    { // LD8 (RI6) units=0x03
+        Haydn::LD8, 1, 1, 0, 0, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 1u,
+    },
+    { // LDU16 (RI6) units=0x03
+        Haydn::LDU16, 1, 1, 0, 0, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 2u,
+    },
+    { // LDU8 (RI6) units=0x03
+        Haydn::LDU8, 1, 1, 0, 0, 0, 0, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 1u,
+    },
     { // LOG2 (R) units=0x18
         Haydn::LOG2, 1, 1, 0, 0, 0, 0, 0, 0, 0x18u,
         2u, 1u, {2},
+        1u, 0u,
+    },
+    { // LSR32 (RR) units=0x1C
+        Haydn::LSR32, 2, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
+        1u, 1u, {1},
         1u, 0u,
     },
     { // LUI (I12) units=0x1C
@@ -2426,10 +2576,30 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         1u, 1u, {1},
         1u, 0u,
     },
+    { // ORI32_W (RI20) units=0x1C
+        Haydn::ORI32_W, 1, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
+        1u, 1u, {1},
+        1u, 0u,
+    },
+    { // PLDWWUA (AR) units=0x03
+        Haydn::PLDWWUA, 1, 1, 0, 0, 0, 1, 0, 0, 0x03u,
+        2u, 1u, {2},
+        1u, 2u,
+    },
     { // PLDWWUA_POST (AR) units=0x03
         Haydn::PLDWWUA_POST, 1, 1, 0, 0, 0, 1, 0, 0, 0x03u,
         2u, 1u, {2},
         1u, 2u,
+    },
+    { // PLQHWUA_CB_POST (AR_CBR) units=0x01
+        Haydn::PLQHWUA_CB_POST, 1, 1, 0, 0, 0, 1, 0, 0, 0x01u,
+        2u, 1u, {2},
+        1u, 2u,
+    },
+    { // PLTWWUA_CB_POST (AR_CBR) units=0x01
+        Haydn::PLTWWUA_CB_POST, 1, 1, 0, 0, 0, 1, 0, 0, 0x01u,
+        2u, 1u, {2},
+        1u, 4u,
     },
     { // POPCOUNT32 (R) units=0x1C
         Haydn::POPCOUNT32, 1, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
@@ -2466,13 +2636,38 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         0u, 0u, {},
         1u, 0u,
     },
+    { // SET_HWLOOP_F2_W (HWLRIIR) units=0x04
+        Haydn::SET_HWLOOP_F2_W, 1, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
     { // SET_HWLOOP_REG (HWLRRRR) units=0x04
         Haydn::SET_HWLOOP_REG, 3, 0, 0, 0, 0, 0, 0, 0, 0x04u,
         0u, 0u, {},
         1u, 0u,
     },
+    { // SET_HWLOOP_REG_W (HWLRRRR) units=0x04
+        Haydn::SET_HWLOOP_REG_W, 3, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
+    { // SET_HWLOOP_W (HWLRIII) units=0x04
+        Haydn::SET_HWLOOP_W, 0, 0, 0, 0, 0, 0, 0, 0, 0x04u,
+        0u, 0u, {},
+        1u, 0u,
+    },
     { // SEXT32T64 (R) units=0x1C
         Haydn::SEXT32T64, 1, 0, 0, 1, 0, 0, 0, 0, 0x1Cu,
+        1u, 1u, {1},
+        1u, 0u,
+    },
+    { // SEXT_GPR32_TO_DR64 (R) units=0x1C
+        Haydn::SEXT_GPR32_TO_DR64, 1, 0, 0, 1, 0, 0, 0, 0, 0x1Cu,
+        1u, 1u, {1},
+        1u, 0u,
+    },
+    { // SHL32 (RR) units=0x1C
+        Haydn::SHL32, 2, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
         1u, 1u, {1},
         1u, 0u,
     },
@@ -2790,6 +2985,46 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
         Haydn::SRLI64, 0, 0, 1, 1, 0, 0, 0, 0, 0x1Cu,
         1u, 1u, {1},
         1u, 0u,
+    },
+    { // ST16 (RI6) units=0x01
+        Haydn::ST16, 2, 0, 0, 0, 0, 0, 0, 0, 0x01u,
+        0u, 0u, {},
+        1u, 2u,
+    },
+    { // ST32 (RI6) units=0x01
+        Haydn::ST32, 2, 0, 0, 0, 0, 0, 0, 0, 0x01u,
+        0u, 0u, {},
+        1u, 4u,
+    },
+    { // ST32_POST (RI6) units=0x01
+        Haydn::ST32_POST, 2, 1, 0, 0, 0, 0, 0, 0, 0x01u,
+        1u, 1u, {1},
+        1u, 4u,
+    },
+    { // ST32_REG_M0S0LS (RR) units=0x01
+        Haydn::ST32_REG_M0S0LS, 3, 0, 0, 0, 0, 0, 0, 0, 0x01u,
+        0u, 0u, {},
+        1u, 4u,
+    },
+    { // ST64 (RI6) units=0x01
+        Haydn::ST64, 1, 0, 1, 0, 0, 0, 0, 0, 0x01u,
+        0u, 0u, {},
+        1u, 8u,
+    },
+    { // ST64_POST (RI6) units=0x01
+        Haydn::ST64_POST, 1, 1, 1, 0, 0, 0, 0, 0, 0x01u,
+        1u, 1u, {1},
+        1u, 8u,
+    },
+    { // ST64_REG_M0S0LS (RR) units=0x01
+        Haydn::ST64_REG_M0S0LS, 2, 0, 1, 0, 0, 0, 0, 0, 0x01u,
+        0u, 0u, {},
+        1u, 8u,
+    },
+    { // ST8 (RI6) units=0x01
+        Haydn::ST8, 2, 0, 0, 0, 0, 0, 0, 0, 0x01u,
+        0u, 0u, {},
+        1u, 1u,
     },
     { // SUB32 (RR) units=0x1C
         Haydn::SUB32, 2, 1, 0, 0, 0, 0, 0, 0, 0x1Cu,
@@ -3123,6 +3358,11 @@ static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {
     },
     { // WBARWUA (AR) units=0x01
         Haydn::WBARWUA, 1, 0, 0, 0, 1, 1, 0, 0, 0x01u,
+        1u, 1u, {1},
+        1u, 2u,
+    },
+    { // WBARWUA_CB (AR_CBR) units=0x01
+        Haydn::WBARWUA_CB, 1, 0, 0, 0, 1, 1, 0, 0, 0x01u,
         1u, 1u, {1},
         1u, 2u,
     },
@@ -4101,1638 +4341,1693 @@ haydnGetAdmittedPerOpResourceRecord(unsigned Opcode) {
     return &Table[12];
   case Haydn::ADDI32S:
     return &Table[13];
-  case Haydn::AND32:
+  case Haydn::ADDI32_W:
     return &Table[14];
-  case Haydn::AND64:
+  case Haydn::AND32:
     return &Table[15];
-  case Haydn::ANDI32:
+  case Haydn::AND64:
     return &Table[16];
-  case Haydn::ARCTAN:
+  case Haydn::ANDI32:
     return &Table[17];
-  case Haydn::BEQ:
+  case Haydn::ARCTAN:
     return &Table[18];
-  case Haydn::BEQZ:
+  case Haydn::ASR32:
     return &Table[19];
-  case Haydn::BGE:
+  case Haydn::BEQ:
     return &Table[20];
-  case Haydn::BGEU:
+  case Haydn::BEQZ:
     return &Table[21];
-  case Haydn::BGEZ:
+  case Haydn::BEQZ_W:
     return &Table[22];
-  case Haydn::BLT:
+  case Haydn::BEQ_W:
     return &Table[23];
-  case Haydn::BLTU:
+  case Haydn::BGE:
     return &Table[24];
-  case Haydn::BLTZ:
+  case Haydn::BGEU:
     return &Table[25];
-  case Haydn::BNE:
+  case Haydn::BGEU_W:
     return &Table[26];
-  case Haydn::BNEZ:
+  case Haydn::BGEZ:
     return &Table[27];
-  case Haydn::BREV32:
+  case Haydn::BGEZ_W:
     return &Table[28];
-  case Haydn::CSRR:
+  case Haydn::BGE_W:
     return &Table[29];
-  case Haydn::CSRW:
+  case Haydn::BLT:
     return &Table[30];
-  case Haydn::D_LDW_BREV_IMM:
+  case Haydn::BLTU:
     return &Table[31];
-  case Haydn::D_LDW_BREV_REG:
+  case Haydn::BLTU_W:
     return &Table[32];
-  case Haydn::D_LDW_CB_IMM:
+  case Haydn::BLTZ:
     return &Table[33];
-  case Haydn::D_LDW_CB_REG:
+  case Haydn::BLTZ_W:
     return &Table[34];
-  case Haydn::D_LDW_POST_IMM:
+  case Haydn::BLT_W:
     return &Table[35];
-  case Haydn::D_LDW_POST_REG:
+  case Haydn::BNE:
     return &Table[36];
-  case Haydn::D_LDW_PRE_IMM:
+  case Haydn::BNEZ:
     return &Table[37];
-  case Haydn::D_LDW_PRE_REG:
+  case Haydn::BNEZ_W:
     return &Table[38];
-  case Haydn::D_LDW_WITH_IMM:
+  case Haydn::BNE_W:
     return &Table[39];
-  case Haydn::D_LDW_WITH_REG:
+  case Haydn::BREV32:
     return &Table[40];
-  case Haydn::D_LHW_POST_IMM:
+  case Haydn::CSRR:
     return &Table[41];
-  case Haydn::D_LHW_POST_REG:
+  case Haydn::CSRW:
     return &Table[42];
-  case Haydn::D_LHW_PRE_IMM:
+  case Haydn::CSRW_W:
     return &Table[43];
-  case Haydn::D_LHW_PRE_REG:
+  case Haydn::D_LDW_BREV_IMM:
     return &Table[44];
-  case Haydn::D_LHW_WITH_IMM:
+  case Haydn::D_LDW_BREV_REG:
     return &Table[45];
-  case Haydn::D_LHW_WITH_REG:
+  case Haydn::D_LDW_CB_IMM:
     return &Table[46];
-  case Haydn::D_LQHWUA_POST:
+  case Haydn::D_LDW_CB_REG:
     return &Table[47];
-  case Haydn::D_LTWUA_POST:
+  case Haydn::D_LDW_POST_IMM:
     return &Table[48];
-  case Haydn::D_LW_POST_IMM:
+  case Haydn::D_LDW_POST_REG:
     return &Table[49];
-  case Haydn::D_LW_POST_REG:
+  case Haydn::D_LDW_PRE_IMM:
     return &Table[50];
-  case Haydn::D_LW_PRE_IMM:
+  case Haydn::D_LDW_PRE_REG:
     return &Table[51];
-  case Haydn::D_LW_PRE_REG:
+  case Haydn::D_LDW_WITH_IMM:
     return &Table[52];
-  case Haydn::D_LW_WITH_IMM:
+  case Haydn::D_LDW_WITH_REG:
     return &Table[53];
-  case Haydn::D_LW_WITH_REG:
+  case Haydn::D_LHW_POST_IMM:
     return &Table[54];
-  case Haydn::D_SDW_BREV_IMM:
+  case Haydn::D_LHW_POST_REG:
     return &Table[55];
-  case Haydn::D_SDW_BREV_REG:
+  case Haydn::D_LHW_PRE_IMM:
     return &Table[56];
-  case Haydn::D_SDW_CB_IMM:
+  case Haydn::D_LHW_PRE_REG:
     return &Table[57];
-  case Haydn::D_SDW_CB_REG:
+  case Haydn::D_LHW_WITH_IMM:
     return &Table[58];
-  case Haydn::D_SDW_POST_IMM:
+  case Haydn::D_LHW_WITH_REG:
     return &Table[59];
-  case Haydn::D_SDW_POST_REG:
+  case Haydn::D_LQHWUA_CB_POST:
     return &Table[60];
-  case Haydn::D_SDW_PRE_IMM:
+  case Haydn::D_LQHWUA_POST:
     return &Table[61];
-  case Haydn::D_SDW_PRE_REG:
+  case Haydn::D_LTWUA_CB_POST:
     return &Table[62];
-  case Haydn::D_SDW_WITH_IMM:
+  case Haydn::D_LTWUA_POST:
     return &Table[63];
-  case Haydn::D_SDW_WITH_REG:
+  case Haydn::D_LW_POST_IMM:
     return &Table[64];
-  case Haydn::D_SHW_POST_IMM:
+  case Haydn::D_LW_POST_REG:
     return &Table[65];
-  case Haydn::D_SHW_POST_REG:
+  case Haydn::D_LW_PRE_IMM:
     return &Table[66];
-  case Haydn::D_SHW_PRE_IMM:
+  case Haydn::D_LW_PRE_REG:
     return &Table[67];
-  case Haydn::D_SHW_PRE_REG:
+  case Haydn::D_LW_WITH_IMM:
     return &Table[68];
-  case Haydn::D_SHW_WITH_IMM:
+  case Haydn::D_LW_WITH_REG:
     return &Table[69];
-  case Haydn::D_SHW_WITH_REG:
+  case Haydn::D_SDW_BREV_IMM:
     return &Table[70];
-  case Haydn::D_SQHWUA_POST:
+  case Haydn::D_SDW_BREV_REG:
     return &Table[71];
-  case Haydn::D_STWUA_POST:
+  case Haydn::D_SDW_CB_IMM:
     return &Table[72];
-  case Haydn::D_SW_F64RS_POST_IMM:
+  case Haydn::D_SDW_CB_REG:
     return &Table[73];
-  case Haydn::D_SW_F64RS_POST_REG:
+  case Haydn::D_SDW_POST_IMM:
     return &Table[74];
-  case Haydn::D_SW_F64RS_WITH_IMM:
+  case Haydn::D_SDW_POST_REG:
     return &Table[75];
-  case Haydn::D_SW_F64RS_WITH_REG:
+  case Haydn::D_SDW_PRE_IMM:
     return &Table[76];
-  case Haydn::D_SW_H_POST_IMM:
+  case Haydn::D_SDW_PRE_REG:
     return &Table[77];
-  case Haydn::D_SW_H_POST_REG:
+  case Haydn::D_SDW_WITH_IMM:
     return &Table[78];
-  case Haydn::D_SW_H_PRE_IMM:
+  case Haydn::D_SDW_WITH_REG:
     return &Table[79];
-  case Haydn::D_SW_H_PRE_REG:
+  case Haydn::D_SHW_POST_IMM:
     return &Table[80];
-  case Haydn::D_SW_H_WITH_IMM:
+  case Haydn::D_SHW_POST_REG:
     return &Table[81];
-  case Haydn::D_SW_H_WITH_REG:
+  case Haydn::D_SHW_PRE_IMM:
     return &Table[82];
-  case Haydn::D_SW_L_POST_IMM:
+  case Haydn::D_SHW_PRE_REG:
     return &Table[83];
-  case Haydn::D_SW_L_POST_REG:
+  case Haydn::D_SHW_WITH_IMM:
     return &Table[84];
-  case Haydn::D_SW_L_PRE_IMM:
+  case Haydn::D_SHW_WITH_REG:
     return &Table[85];
-  case Haydn::D_SW_L_PRE_REG:
+  case Haydn::D_SQHWUA_CB_POST:
     return &Table[86];
-  case Haydn::D_SW_L_WITH_IMM:
+  case Haydn::D_SQHWUA_POST:
     return &Table[87];
-  case Haydn::D_SW_L_WITH_REG:
+  case Haydn::D_STWUA_CB_POST:
     return &Table[88];
-  case Haydn::EXP2:
+  case Haydn::D_STWUA_POST:
     return &Table[89];
-  case Haydn::F2MULAA32RS_HHLL:
+  case Haydn::D_SW_F64RS_POST_IMM:
     return &Table[90];
-  case Haydn::F2MULAA32RS_HLLH:
+  case Haydn::D_SW_F64RS_POST_REG:
     return &Table[91];
-  case Haydn::F2MULAA32R_HHLL:
+  case Haydn::D_SW_F64RS_WITH_IMM:
     return &Table[92];
-  case Haydn::F2MULAA32R_HLLH:
+  case Haydn::D_SW_F64RS_WITH_REG:
     return &Table[93];
-  case Haydn::F2MULAS32RS_HHLL:
+  case Haydn::D_SW_H_POST_IMM:
     return &Table[94];
-  case Haydn::F2MULAS32RS_HLLH:
+  case Haydn::D_SW_H_POST_REG:
     return &Table[95];
-  case Haydn::F2MULAS32R_HHLL:
+  case Haydn::D_SW_H_PRE_IMM:
     return &Table[96];
-  case Haydn::F2MULAS32R_HLLH:
+  case Haydn::D_SW_H_PRE_REG:
     return &Table[97];
-  case Haydn::F2MULSA32RS_HHLL:
+  case Haydn::D_SW_H_WITH_IMM:
     return &Table[98];
-  case Haydn::F2MULSA32RS_HLLH:
+  case Haydn::D_SW_H_WITH_REG:
     return &Table[99];
-  case Haydn::F2MULSA32R_HHLL:
+  case Haydn::D_SW_L_POST_IMM:
     return &Table[100];
-  case Haydn::F2MULSA32R_HLLH:
+  case Haydn::D_SW_L_POST_REG:
     return &Table[101];
-  case Haydn::F2MULSS32RS_HHLL:
+  case Haydn::D_SW_L_PRE_IMM:
     return &Table[102];
-  case Haydn::F2MULSS32RS_HLLH:
+  case Haydn::D_SW_L_PRE_REG:
     return &Table[103];
-  case Haydn::F2MULSS32R_HHLL:
+  case Haydn::D_SW_L_WITH_IMM:
     return &Table[104];
-  case Haydn::F2MULSS32R_HLLH:
+  case Haydn::D_SW_L_WITH_REG:
     return &Table[105];
-  case Haydn::F2MULZAA32RS_HHLL:
+  case Haydn::EXP2:
     return &Table[106];
-  case Haydn::F2MULZAA32RS_HLLH:
+  case Haydn::F2MULAA32RS_HHLL:
     return &Table[107];
-  case Haydn::F2MULZAA32R_HHLL:
+  case Haydn::F2MULAA32RS_HLLH:
     return &Table[108];
-  case Haydn::F2MULZAA32R_HLLH:
+  case Haydn::F2MULAA32R_HHLL:
     return &Table[109];
-  case Haydn::F2MULZAS32RS_HHLL:
+  case Haydn::F2MULAA32R_HLLH:
     return &Table[110];
-  case Haydn::F2MULZAS32RS_HLLH:
+  case Haydn::F2MULAS32RS_HHLL:
     return &Table[111];
-  case Haydn::F2MULZAS32R_HHLL:
+  case Haydn::F2MULAS32RS_HLLH:
     return &Table[112];
-  case Haydn::F2MULZAS32R_HLLH:
+  case Haydn::F2MULAS32R_HHLL:
     return &Table[113];
-  case Haydn::F2MULZSA32RS_HHLL:
+  case Haydn::F2MULAS32R_HLLH:
     return &Table[114];
-  case Haydn::F2MULZSA32RS_HLLH:
+  case Haydn::F2MULSA32RS_HHLL:
     return &Table[115];
-  case Haydn::F2MULZSA32R_HHLL:
+  case Haydn::F2MULSA32RS_HLLH:
     return &Table[116];
-  case Haydn::F2MULZSA32R_HLLH:
+  case Haydn::F2MULSA32R_HHLL:
     return &Table[117];
-  case Haydn::F2MULZSS32RS_HHLL:
+  case Haydn::F2MULSA32R_HLLH:
     return &Table[118];
-  case Haydn::F2MULZSS32RS_HLLH:
+  case Haydn::F2MULSS32RS_HHLL:
     return &Table[119];
-  case Haydn::F2MULZSS32R_HHLL:
+  case Haydn::F2MULSS32RS_HLLH:
     return &Table[120];
-  case Haydn::F2MULZSS32R_HLLH:
+  case Haydn::F2MULSS32R_HHLL:
     return &Table[121];
-  case Haydn::FF2MUL32RS_HH:
+  case Haydn::F2MULSS32R_HLLH:
     return &Table[122];
-  case Haydn::FF2MUL32RS_LH:
+  case Haydn::F2MULZAA32RS_HHLL:
     return &Table[123];
-  case Haydn::FF2MUL32RS_LL:
+  case Haydn::F2MULZAA32RS_HLLH:
     return &Table[124];
-  case Haydn::FF2MUL32R_HH:
+  case Haydn::F2MULZAA32R_HHLL:
     return &Table[125];
-  case Haydn::FF2MUL32R_LH:
+  case Haydn::F2MULZAA32R_HLLH:
     return &Table[126];
-  case Haydn::FF2MUL32R_LL:
+  case Haydn::F2MULZAS32RS_HHLL:
     return &Table[127];
-  case Haydn::FF2MULA32RS_HH:
+  case Haydn::F2MULZAS32RS_HLLH:
     return &Table[128];
-  case Haydn::FF2MULA32RS_LH:
+  case Haydn::F2MULZAS32R_HHLL:
     return &Table[129];
-  case Haydn::FF2MULA32RS_LL:
+  case Haydn::F2MULZAS32R_HLLH:
     return &Table[130];
-  case Haydn::FF2MULA32R_HH:
+  case Haydn::F2MULZSA32RS_HHLL:
     return &Table[131];
-  case Haydn::FF2MULA32R_LH:
+  case Haydn::F2MULZSA32RS_HLLH:
     return &Table[132];
-  case Haydn::FF2MULA32R_LL:
+  case Haydn::F2MULZSA32R_HHLL:
     return &Table[133];
-  case Haydn::FF2MULS32RS_HH:
+  case Haydn::F2MULZSA32R_HLLH:
     return &Table[134];
-  case Haydn::FF2MULS32RS_LH:
+  case Haydn::F2MULZSS32RS_HHLL:
     return &Table[135];
-  case Haydn::FF2MULS32RS_LL:
+  case Haydn::F2MULZSS32RS_HLLH:
     return &Table[136];
-  case Haydn::FF2MULS32R_HH:
+  case Haydn::F2MULZSS32R_HHLL:
     return &Table[137];
-  case Haydn::FF2MULS32R_LH:
+  case Haydn::F2MULZSS32R_HLLH:
     return &Table[138];
-  case Haydn::FF2MULS32R_LL:
+  case Haydn::FF2MUL32RS_HH:
     return &Table[139];
-  case Haydn::FLAR:
+  case Haydn::FF2MUL32RS_LH:
     return &Table[140];
-  case Haydn::FMUL16_HS00:
+  case Haydn::FF2MUL32RS_LL:
     return &Table[141];
-  case Haydn::FMUL16_HS01:
+  case Haydn::FF2MUL32R_HH:
     return &Table[142];
-  case Haydn::FMUL16_HS02:
+  case Haydn::FF2MUL32R_LH:
     return &Table[143];
-  case Haydn::FMUL16_HS03:
+  case Haydn::FF2MUL32R_LL:
     return &Table[144];
-  case Haydn::FMUL16_HS11:
+  case Haydn::FF2MULA32RS_HH:
     return &Table[145];
-  case Haydn::FMUL16_HS12:
+  case Haydn::FF2MULA32RS_LH:
     return &Table[146];
-  case Haydn::FMUL16_HS13:
+  case Haydn::FF2MULA32RS_LL:
     return &Table[147];
-  case Haydn::FMUL16_HS22:
+  case Haydn::FF2MULA32R_HH:
     return &Table[148];
-  case Haydn::FMUL16_HS23:
+  case Haydn::FF2MULA32R_LH:
     return &Table[149];
-  case Haydn::FMUL16_HS33:
+  case Haydn::FF2MULA32R_LL:
     return &Table[150];
-  case Haydn::FMUL16_LS00:
+  case Haydn::FF2MULS32RS_HH:
     return &Table[151];
-  case Haydn::FMUL16_LS01:
+  case Haydn::FF2MULS32RS_LH:
     return &Table[152];
-  case Haydn::FMUL16_LS02:
+  case Haydn::FF2MULS32RS_LL:
     return &Table[153];
-  case Haydn::FMUL16_LS03:
+  case Haydn::FF2MULS32R_HH:
     return &Table[154];
-  case Haydn::FMUL16_LS11:
+  case Haydn::FF2MULS32R_LH:
     return &Table[155];
-  case Haydn::FMUL16_LS12:
+  case Haydn::FF2MULS32R_LL:
     return &Table[156];
-  case Haydn::FMUL16_LS13:
+  case Haydn::FLAR:
     return &Table[157];
-  case Haydn::FMUL16_LS22:
+  case Haydn::FMUL16_HS00:
     return &Table[158];
-  case Haydn::FMUL16_LS23:
+  case Haydn::FMUL16_HS01:
     return &Table[159];
-  case Haydn::FMUL16_LS33:
+  case Haydn::FMUL16_HS02:
     return &Table[160];
-  case Haydn::FMUL32S_HH:
+  case Haydn::FMUL16_HS03:
     return &Table[161];
-  case Haydn::FMUL32S_LH:
+  case Haydn::FMUL16_HS11:
     return &Table[162];
-  case Haydn::FMUL32S_LL:
+  case Haydn::FMUL16_HS12:
     return &Table[163];
-  case Haydn::FMUL32X16_H0:
+  case Haydn::FMUL16_HS13:
     return &Table[164];
-  case Haydn::FMUL32X16_H1:
+  case Haydn::FMUL16_HS22:
     return &Table[165];
-  case Haydn::FMUL32X16_H2:
+  case Haydn::FMUL16_HS23:
     return &Table[166];
-  case Haydn::FMUL32X16_H3:
+  case Haydn::FMUL16_HS33:
     return &Table[167];
-  case Haydn::FMUL32X16_L0:
+  case Haydn::FMUL16_LS00:
     return &Table[168];
-  case Haydn::FMUL32X16_L1:
+  case Haydn::FMUL16_LS01:
     return &Table[169];
-  case Haydn::FMUL32X16_L2:
+  case Haydn::FMUL16_LS02:
     return &Table[170];
-  case Haydn::FMUL32X16_L3:
+  case Haydn::FMUL16_LS03:
     return &Table[171];
-  case Haydn::FMULA16_HS00:
+  case Haydn::FMUL16_LS11:
     return &Table[172];
-  case Haydn::FMULA16_HS01:
+  case Haydn::FMUL16_LS12:
     return &Table[173];
-  case Haydn::FMULA16_HS02:
+  case Haydn::FMUL16_LS13:
     return &Table[174];
-  case Haydn::FMULA16_HS03:
+  case Haydn::FMUL16_LS22:
     return &Table[175];
-  case Haydn::FMULA16_HS11:
+  case Haydn::FMUL16_LS23:
     return &Table[176];
-  case Haydn::FMULA16_HS12:
+  case Haydn::FMUL16_LS33:
     return &Table[177];
-  case Haydn::FMULA16_HS13:
+  case Haydn::FMUL32S_HH:
     return &Table[178];
-  case Haydn::FMULA16_HS22:
+  case Haydn::FMUL32S_LH:
     return &Table[179];
-  case Haydn::FMULA16_HS23:
+  case Haydn::FMUL32S_LL:
     return &Table[180];
-  case Haydn::FMULA16_HS33:
+  case Haydn::FMUL32X16_H0:
     return &Table[181];
-  case Haydn::FMULA16_LS00:
+  case Haydn::FMUL32X16_H1:
     return &Table[182];
-  case Haydn::FMULA16_LS01:
+  case Haydn::FMUL32X16_H2:
     return &Table[183];
-  case Haydn::FMULA16_LS02:
+  case Haydn::FMUL32X16_H3:
     return &Table[184];
-  case Haydn::FMULA16_LS03:
+  case Haydn::FMUL32X16_L0:
     return &Table[185];
-  case Haydn::FMULA16_LS11:
+  case Haydn::FMUL32X16_L1:
     return &Table[186];
-  case Haydn::FMULA16_LS12:
+  case Haydn::FMUL32X16_L2:
     return &Table[187];
-  case Haydn::FMULA16_LS13:
+  case Haydn::FMUL32X16_L3:
     return &Table[188];
-  case Haydn::FMULA16_LS22:
+  case Haydn::FMULA16_HS00:
     return &Table[189];
-  case Haydn::FMULA16_LS23:
+  case Haydn::FMULA16_HS01:
     return &Table[190];
-  case Haydn::FMULA16_LS33:
+  case Haydn::FMULA16_HS02:
     return &Table[191];
-  case Haydn::FMULA32S_HH:
+  case Haydn::FMULA16_HS03:
     return &Table[192];
-  case Haydn::FMULA32S_LH:
+  case Haydn::FMULA16_HS11:
     return &Table[193];
-  case Haydn::FMULA32S_LL:
+  case Haydn::FMULA16_HS12:
     return &Table[194];
-  case Haydn::FMULA32X16_H0:
+  case Haydn::FMULA16_HS13:
     return &Table[195];
-  case Haydn::FMULA32X16_H1:
+  case Haydn::FMULA16_HS22:
     return &Table[196];
-  case Haydn::FMULA32X16_H2:
+  case Haydn::FMULA16_HS23:
     return &Table[197];
-  case Haydn::FMULA32X16_H3:
+  case Haydn::FMULA16_HS33:
     return &Table[198];
-  case Haydn::FMULA32X16_L0:
+  case Haydn::FMULA16_LS00:
     return &Table[199];
-  case Haydn::FMULA32X16_L1:
+  case Haydn::FMULA16_LS01:
     return &Table[200];
-  case Haydn::FMULA32X16_L2:
+  case Haydn::FMULA16_LS02:
     return &Table[201];
-  case Haydn::FMULA32X16_L3:
+  case Haydn::FMULA16_LS03:
     return &Table[202];
-  case Haydn::FMULAA16_HS_11_00:
+  case Haydn::FMULA16_LS11:
     return &Table[203];
-  case Haydn::FMULAA16_HS_13_02:
+  case Haydn::FMULA16_LS12:
     return &Table[204];
-  case Haydn::FMULAA16_HS_33_22:
+  case Haydn::FMULA16_LS13:
     return &Table[205];
-  case Haydn::FMULAA16_LS_11_00:
+  case Haydn::FMULA16_LS22:
     return &Table[206];
-  case Haydn::FMULAA16_LS_13_02:
+  case Haydn::FMULA16_LS23:
     return &Table[207];
-  case Haydn::FMULAA16_LS_33_22:
+  case Haydn::FMULA16_LS33:
     return &Table[208];
-  case Haydn::FMULAA32S_HHLL:
+  case Haydn::FMULA32S_HH:
     return &Table[209];
-  case Haydn::FMULAA32S_HLLH:
+  case Haydn::FMULA32S_LH:
     return &Table[210];
-  case Haydn::FMULAA32X16_H0_L1:
+  case Haydn::FMULA32S_LL:
     return &Table[211];
-  case Haydn::FMULAA32X16_H1_L0:
+  case Haydn::FMULA32X16_H0:
     return &Table[212];
-  case Haydn::FMULAA32X16_H2_L3:
+  case Haydn::FMULA32X16_H1:
     return &Table[213];
-  case Haydn::FMULAA32X16_H3_L2:
+  case Haydn::FMULA32X16_H2:
     return &Table[214];
-  case Haydn::FMULAS32S_HHLL:
+  case Haydn::FMULA32X16_H3:
     return &Table[215];
-  case Haydn::FMULAS32S_HLLH:
+  case Haydn::FMULA32X16_L0:
     return &Table[216];
-  case Haydn::FMULAS32X16_H1_L0:
+  case Haydn::FMULA32X16_L1:
     return &Table[217];
-  case Haydn::FMULAS32X16_H3_L2:
+  case Haydn::FMULA32X16_L2:
     return &Table[218];
-  case Haydn::FMULS16_HS00:
+  case Haydn::FMULA32X16_L3:
     return &Table[219];
-  case Haydn::FMULS16_HS01:
+  case Haydn::FMULAA16_HS_11_00:
     return &Table[220];
-  case Haydn::FMULS16_HS02:
+  case Haydn::FMULAA16_HS_13_02:
     return &Table[221];
-  case Haydn::FMULS16_HS03:
+  case Haydn::FMULAA16_HS_33_22:
     return &Table[222];
-  case Haydn::FMULS16_HS11:
+  case Haydn::FMULAA16_LS_11_00:
     return &Table[223];
-  case Haydn::FMULS16_HS12:
+  case Haydn::FMULAA16_LS_13_02:
     return &Table[224];
-  case Haydn::FMULS16_HS13:
+  case Haydn::FMULAA16_LS_33_22:
     return &Table[225];
-  case Haydn::FMULS16_HS22:
+  case Haydn::FMULAA32S_HHLL:
     return &Table[226];
-  case Haydn::FMULS16_HS23:
+  case Haydn::FMULAA32S_HLLH:
     return &Table[227];
-  case Haydn::FMULS16_HS33:
+  case Haydn::FMULAA32X16_H0_L1:
     return &Table[228];
-  case Haydn::FMULS16_LS00:
+  case Haydn::FMULAA32X16_H1_L0:
     return &Table[229];
-  case Haydn::FMULS16_LS01:
+  case Haydn::FMULAA32X16_H2_L3:
     return &Table[230];
-  case Haydn::FMULS16_LS02:
+  case Haydn::FMULAA32X16_H3_L2:
     return &Table[231];
-  case Haydn::FMULS16_LS03:
+  case Haydn::FMULAS32S_HHLL:
     return &Table[232];
-  case Haydn::FMULS16_LS11:
+  case Haydn::FMULAS32S_HLLH:
     return &Table[233];
-  case Haydn::FMULS16_LS12:
+  case Haydn::FMULAS32X16_H1_L0:
     return &Table[234];
-  case Haydn::FMULS16_LS13:
+  case Haydn::FMULAS32X16_H3_L2:
     return &Table[235];
-  case Haydn::FMULS16_LS22:
+  case Haydn::FMULS16_HS00:
     return &Table[236];
-  case Haydn::FMULS16_LS23:
+  case Haydn::FMULS16_HS01:
     return &Table[237];
-  case Haydn::FMULS16_LS33:
+  case Haydn::FMULS16_HS02:
     return &Table[238];
-  case Haydn::FMULS32S_HH:
+  case Haydn::FMULS16_HS03:
     return &Table[239];
-  case Haydn::FMULS32S_LH:
+  case Haydn::FMULS16_HS11:
     return &Table[240];
-  case Haydn::FMULS32S_LL:
+  case Haydn::FMULS16_HS12:
     return &Table[241];
-  case Haydn::FMULS32X16_H0:
+  case Haydn::FMULS16_HS13:
     return &Table[242];
-  case Haydn::FMULS32X16_H1:
+  case Haydn::FMULS16_HS22:
     return &Table[243];
-  case Haydn::FMULS32X16_H2:
+  case Haydn::FMULS16_HS23:
     return &Table[244];
-  case Haydn::FMULS32X16_H3:
+  case Haydn::FMULS16_HS33:
     return &Table[245];
-  case Haydn::FMULS32X16_L0:
+  case Haydn::FMULS16_LS00:
     return &Table[246];
-  case Haydn::FMULS32X16_L1:
+  case Haydn::FMULS16_LS01:
     return &Table[247];
-  case Haydn::FMULS32X16_L2:
+  case Haydn::FMULS16_LS02:
     return &Table[248];
-  case Haydn::FMULS32X16_L3:
+  case Haydn::FMULS16_LS03:
     return &Table[249];
-  case Haydn::FMULSA32S_HHLL:
+  case Haydn::FMULS16_LS11:
     return &Table[250];
-  case Haydn::FMULSA32S_HLLH:
+  case Haydn::FMULS16_LS12:
     return &Table[251];
-  case Haydn::FMULSA32X16_H1_L0:
+  case Haydn::FMULS16_LS13:
     return &Table[252];
-  case Haydn::FMULSA32X16_H3_L2:
+  case Haydn::FMULS16_LS22:
     return &Table[253];
-  case Haydn::FMULSS16_HS_11_00:
+  case Haydn::FMULS16_LS23:
     return &Table[254];
-  case Haydn::FMULSS16_HS_13_02:
+  case Haydn::FMULS16_LS33:
     return &Table[255];
-  case Haydn::FMULSS16_HS_33_22:
+  case Haydn::FMULS32S_HH:
     return &Table[256];
-  case Haydn::FMULSS16_LS_11_00:
+  case Haydn::FMULS32S_LH:
     return &Table[257];
-  case Haydn::FMULSS16_LS_13_02:
+  case Haydn::FMULS32S_LL:
     return &Table[258];
-  case Haydn::FMULSS16_LS_33_22:
+  case Haydn::FMULS32X16_H0:
     return &Table[259];
-  case Haydn::FMULSS32S_HHLL:
+  case Haydn::FMULS32X16_H1:
     return &Table[260];
-  case Haydn::FMULSS32S_HLLH:
+  case Haydn::FMULS32X16_H2:
     return &Table[261];
-  case Haydn::FMULSS32X16_H1_L0:
+  case Haydn::FMULS32X16_H3:
     return &Table[262];
-  case Haydn::FMULSS32X16_H3_L2:
+  case Haydn::FMULS32X16_L0:
     return &Table[263];
-  case Haydn::FMULZAA16_HS_11_00:
+  case Haydn::FMULS32X16_L1:
     return &Table[264];
-  case Haydn::FMULZAA16_HS_13_02:
+  case Haydn::FMULS32X16_L2:
     return &Table[265];
-  case Haydn::FMULZAA16_HS_33_22:
+  case Haydn::FMULS32X16_L3:
     return &Table[266];
-  case Haydn::FMULZAA16_LS_11_00:
+  case Haydn::FMULSA32S_HHLL:
     return &Table[267];
-  case Haydn::FMULZAA16_LS_13_02:
+  case Haydn::FMULSA32S_HLLH:
     return &Table[268];
-  case Haydn::FMULZAA16_LS_33_22:
+  case Haydn::FMULSA32X16_H1_L0:
     return &Table[269];
-  case Haydn::FMULZAA32S_HHLL:
+  case Haydn::FMULSA32X16_H3_L2:
     return &Table[270];
-  case Haydn::FMULZAA32S_HLLH:
+  case Haydn::FMULSS16_HS_11_00:
     return &Table[271];
-  case Haydn::FMULZAA32X16_H0_L1:
+  case Haydn::FMULSS16_HS_13_02:
     return &Table[272];
-  case Haydn::FMULZAA32X16_H1_L0:
+  case Haydn::FMULSS16_HS_33_22:
     return &Table[273];
-  case Haydn::FMULZAA32X16_H2_L3:
+  case Haydn::FMULSS16_LS_11_00:
     return &Table[274];
-  case Haydn::FMULZAA32X16_H3_L2:
+  case Haydn::FMULSS16_LS_13_02:
     return &Table[275];
-  case Haydn::FMULZAS32S_HHLL:
+  case Haydn::FMULSS16_LS_33_22:
     return &Table[276];
-  case Haydn::FMULZAS32S_HLLH:
+  case Haydn::FMULSS32S_HHLL:
     return &Table[277];
-  case Haydn::FMULZAS32X16_H1_L0:
+  case Haydn::FMULSS32S_HLLH:
     return &Table[278];
-  case Haydn::FMULZAS32X16_H3_L2:
+  case Haydn::FMULSS32X16_H1_L0:
     return &Table[279];
-  case Haydn::FMULZSA32S_HHLL:
+  case Haydn::FMULSS32X16_H3_L2:
     return &Table[280];
-  case Haydn::FMULZSA32S_HLLH:
+  case Haydn::FMULZAA16_HS_11_00:
     return &Table[281];
-  case Haydn::FMULZSA32X16_H1_L0:
+  case Haydn::FMULZAA16_HS_13_02:
     return &Table[282];
-  case Haydn::FMULZSA32X16_H3_L2:
+  case Haydn::FMULZAA16_HS_33_22:
     return &Table[283];
-  case Haydn::FMULZSS16_HS_11_00:
+  case Haydn::FMULZAA16_LS_11_00:
     return &Table[284];
-  case Haydn::FMULZSS16_HS_13_02:
+  case Haydn::FMULZAA16_LS_13_02:
     return &Table[285];
-  case Haydn::FMULZSS16_HS_33_22:
+  case Haydn::FMULZAA16_LS_33_22:
     return &Table[286];
-  case Haydn::FMULZSS16_LS_11_00:
+  case Haydn::FMULZAA32S_HHLL:
     return &Table[287];
-  case Haydn::FMULZSS16_LS_13_02:
+  case Haydn::FMULZAA32S_HLLH:
     return &Table[288];
-  case Haydn::FMULZSS16_LS_33_22:
+  case Haydn::FMULZAA32X16_H0_L1:
     return &Table[289];
-  case Haydn::FMULZSS32S_HHLL:
+  case Haydn::FMULZAA32X16_H1_L0:
     return &Table[290];
-  case Haydn::FMULZSS32S_HLLH:
+  case Haydn::FMULZAA32X16_H2_L3:
     return &Table[291];
-  case Haydn::FMULZSS32X16_H1_L0:
+  case Haydn::FMULZAA32X16_H3_L2:
     return &Table[292];
-  case Haydn::FMULZSS32X16_H3_L2:
+  case Haydn::FMULZAS32S_HHLL:
     return &Table[293];
-  case Haydn::JAL:
+  case Haydn::FMULZAS32S_HLLH:
     return &Table[294];
-  case Haydn::JALR:
+  case Haydn::FMULZAS32X16_H1_L0:
     return &Table[295];
-  case Haydn::LOG2:
+  case Haydn::FMULZAS32X16_H3_L2:
     return &Table[296];
-  case Haydn::LUI:
+  case Haydn::FMULZSA32S_HHLL:
     return &Table[297];
-  case Haydn::MAX32:
+  case Haydn::FMULZSA32S_HLLH:
     return &Table[298];
-  case Haydn::MAX64:
+  case Haydn::FMULZSA32X16_H1_L0:
     return &Table[299];
-  case Haydn::MAXU32:
+  case Haydn::FMULZSA32X16_H3_L2:
     return &Table[300];
-  case Haydn::MIN32:
+  case Haydn::FMULZSS16_HS_11_00:
     return &Table[301];
-  case Haydn::MIN64:
+  case Haydn::FMULZSS16_HS_13_02:
     return &Table[302];
-  case Haydn::MINU32:
+  case Haydn::FMULZSS16_HS_33_22:
     return &Table[303];
-  case Haydn::MOVE32:
+  case Haydn::FMULZSS16_LS_11_00:
     return &Table[304];
-  case Haydn::MOVE32_DR_H:
+  case Haydn::FMULZSS16_LS_13_02:
     return &Table[305];
-  case Haydn::MOVE32_DR_L:
+  case Haydn::FMULZSS16_LS_33_22:
     return &Table[306];
-  case Haydn::MOVE64:
+  case Haydn::FMULZSS32S_HHLL:
     return &Table[307];
-  case Haydn::MOVEGPR2SFR:
+  case Haydn::FMULZSS32S_HLLH:
     return &Table[308];
-  case Haydn::MOVEI_H:
+  case Haydn::FMULZSS32X16_H1_L0:
     return &Table[309];
-  case Haydn::MOVEI_L:
+  case Haydn::FMULZSS32X16_H3_L2:
     return &Table[310];
-  case Haydn::MOVESFR2GPR:
+  case Haydn::JAL:
     return &Table[311];
-  case Haydn::MOVF32:
+  case Haydn::JALR:
     return &Table[312];
-  case Haydn::MOVF64:
+  case Haydn::JALR_W:
     return &Table[313];
-  case Haydn::MOVT32:
+  case Haydn::JAL_W:
     return &Table[314];
-  case Haydn::MOVT64:
+  case Haydn::LD16:
     return &Table[315];
-  case Haydn::MUL16AQ:
+  case Haydn::LD32:
     return &Table[316];
-  case Haydn::MUL16ZAQ:
+  case Haydn::LD32_POST:
     return &Table[317];
-  case Haydn::MUL32X16_H0:
+  case Haydn::LD32_REG_M0S0LS:
     return &Table[318];
-  case Haydn::MUL32X16_H1:
+  case Haydn::LD64:
     return &Table[319];
-  case Haydn::MUL32X16_H2:
+  case Haydn::LD64_POST:
     return &Table[320];
-  case Haydn::MUL32X16_H3:
+  case Haydn::LD64_REG_M0S0LS:
     return &Table[321];
-  case Haydn::MUL32X16_L0:
+  case Haydn::LD8:
     return &Table[322];
-  case Haydn::MUL32X16_L1:
+  case Haydn::LDU16:
     return &Table[323];
-  case Haydn::MUL32X16_L2:
+  case Haydn::LDU8:
     return &Table[324];
-  case Haydn::MUL32X16_L3:
+  case Haydn::LOG2:
     return &Table[325];
-  case Haydn::MUL64_HH:
+  case Haydn::LSR32:
     return &Table[326];
-  case Haydn::MUL64_HL:
+  case Haydn::LUI:
     return &Table[327];
-  case Haydn::MUL64_HUH:
+  case Haydn::MAX32:
     return &Table[328];
-  case Haydn::MUL64_HUL:
+  case Haydn::MAX64:
     return &Table[329];
-  case Haydn::MUL64_LH:
+  case Haydn::MAXU32:
     return &Table[330];
-  case Haydn::MUL64_LL:
+  case Haydn::MIN32:
     return &Table[331];
-  case Haydn::MUL64_LUH:
+  case Haydn::MIN64:
     return &Table[332];
-  case Haydn::MUL64_LUL:
+  case Haydn::MINU32:
     return &Table[333];
-  case Haydn::MUL64_UHH:
+  case Haydn::MOVE32:
     return &Table[334];
-  case Haydn::MUL64_UHL:
+  case Haydn::MOVE32_DR_H:
     return &Table[335];
-  case Haydn::MUL64_UHUH:
+  case Haydn::MOVE32_DR_L:
     return &Table[336];
-  case Haydn::MUL64_UHUL:
+  case Haydn::MOVE64:
     return &Table[337];
-  case Haydn::MUL64_ULH:
+  case Haydn::MOVEGPR2SFR:
     return &Table[338];
-  case Haydn::MUL64_ULL:
+  case Haydn::MOVEI_H:
     return &Table[339];
-  case Haydn::MUL64_ULUH:
+  case Haydn::MOVEI_L:
     return &Table[340];
-  case Haydn::MUL64_ULUL:
+  case Haydn::MOVESFR2GPR:
     return &Table[341];
-  case Haydn::MULA32X16_H0:
+  case Haydn::MOVF32:
     return &Table[342];
-  case Haydn::MULA32X16_H1:
+  case Haydn::MOVF64:
     return &Table[343];
-  case Haydn::MULA32X16_H2:
+  case Haydn::MOVT32:
     return &Table[344];
-  case Haydn::MULA32X16_H3:
+  case Haydn::MOVT64:
     return &Table[345];
-  case Haydn::MULA32X16_L0:
+  case Haydn::MUL16AQ:
     return &Table[346];
-  case Haydn::MULA32X16_L1:
+  case Haydn::MUL16ZAQ:
     return &Table[347];
-  case Haydn::MULA32X16_L2:
+  case Haydn::MUL32X16_H0:
     return &Table[348];
-  case Haydn::MULA32X16_L3:
+  case Haydn::MUL32X16_H1:
     return &Table[349];
-  case Haydn::MULA64_HH:
+  case Haydn::MUL32X16_H2:
     return &Table[350];
-  case Haydn::MULA64_HL:
+  case Haydn::MUL32X16_H3:
     return &Table[351];
-  case Haydn::MULA64_HUH:
+  case Haydn::MUL32X16_L0:
     return &Table[352];
-  case Haydn::MULA64_HUL:
+  case Haydn::MUL32X16_L1:
     return &Table[353];
-  case Haydn::MULA64_LH:
+  case Haydn::MUL32X16_L2:
     return &Table[354];
-  case Haydn::MULA64_LL:
+  case Haydn::MUL32X16_L3:
     return &Table[355];
-  case Haydn::MULA64_LUH:
+  case Haydn::MUL64_HH:
     return &Table[356];
-  case Haydn::MULA64_LUL:
+  case Haydn::MUL64_HL:
     return &Table[357];
-  case Haydn::MULA64_UHH:
+  case Haydn::MUL64_HUH:
     return &Table[358];
-  case Haydn::MULA64_UHL:
+  case Haydn::MUL64_HUL:
     return &Table[359];
-  case Haydn::MULA64_UHUH:
+  case Haydn::MUL64_LH:
     return &Table[360];
-  case Haydn::MULA64_UHUL:
+  case Haydn::MUL64_LL:
     return &Table[361];
-  case Haydn::MULA64_ULH:
+  case Haydn::MUL64_LUH:
     return &Table[362];
-  case Haydn::MULA64_ULL:
+  case Haydn::MUL64_LUL:
     return &Table[363];
-  case Haydn::MULA64_ULUH:
+  case Haydn::MUL64_UHH:
     return &Table[364];
-  case Haydn::MULA64_ULUL:
+  case Haydn::MUL64_UHL:
     return &Table[365];
-  case Haydn::MULAA32X16_H0_L1:
+  case Haydn::MUL64_UHUH:
     return &Table[366];
-  case Haydn::MULAA32X16_H1_L0:
+  case Haydn::MUL64_UHUL:
     return &Table[367];
-  case Haydn::MULAA32X16_H2_L3:
+  case Haydn::MUL64_ULH:
     return &Table[368];
-  case Haydn::MULAA32X16_H3_L2:
+  case Haydn::MUL64_ULL:
     return &Table[369];
-  case Haydn::MULAA32_HHLL:
+  case Haydn::MUL64_ULUH:
     return &Table[370];
-  case Haydn::MULAA32_HLLH:
+  case Haydn::MUL64_ULUL:
     return &Table[371];
-  case Haydn::MULAS32X16_H1_L0:
+  case Haydn::MULA32X16_H0:
     return &Table[372];
-  case Haydn::MULAS32X16_H3_L2:
+  case Haydn::MULA32X16_H1:
     return &Table[373];
-  case Haydn::MULAS32_HHLL:
+  case Haydn::MULA32X16_H2:
     return &Table[374];
-  case Haydn::MULAS32_HLLH:
+  case Haydn::MULA32X16_H3:
     return &Table[375];
-  case Haydn::MULAS64_HH:
+  case Haydn::MULA32X16_L0:
     return &Table[376];
-  case Haydn::MULAS64_HL:
+  case Haydn::MULA32X16_L1:
     return &Table[377];
-  case Haydn::MULAS64_HUH:
+  case Haydn::MULA32X16_L2:
     return &Table[378];
-  case Haydn::MULAS64_HUL:
+  case Haydn::MULA32X16_L3:
     return &Table[379];
-  case Haydn::MULAS64_LH:
+  case Haydn::MULA64_HH:
     return &Table[380];
-  case Haydn::MULAS64_LL:
+  case Haydn::MULA64_HL:
     return &Table[381];
-  case Haydn::MULAS64_LUH:
+  case Haydn::MULA64_HUH:
     return &Table[382];
-  case Haydn::MULAS64_LUL:
+  case Haydn::MULA64_HUL:
     return &Table[383];
-  case Haydn::MULAS64_UHH:
+  case Haydn::MULA64_LH:
     return &Table[384];
-  case Haydn::MULAS64_UHL:
+  case Haydn::MULA64_LL:
     return &Table[385];
-  case Haydn::MULAS64_UHUH:
+  case Haydn::MULA64_LUH:
     return &Table[386];
-  case Haydn::MULAS64_UHUL:
+  case Haydn::MULA64_LUL:
     return &Table[387];
-  case Haydn::MULAS64_ULH:
+  case Haydn::MULA64_UHH:
     return &Table[388];
-  case Haydn::MULAS64_ULL:
+  case Haydn::MULA64_UHL:
     return &Table[389];
-  case Haydn::MULAS64_ULUH:
+  case Haydn::MULA64_UHUH:
     return &Table[390];
-  case Haydn::MULAS64_ULUL:
+  case Haydn::MULA64_UHUL:
     return &Table[391];
-  case Haydn::MULL:
+  case Haydn::MULA64_ULH:
     return &Table[392];
-  case Haydn::MULS32X16_H0:
+  case Haydn::MULA64_ULL:
     return &Table[393];
-  case Haydn::MULS32X16_H1:
+  case Haydn::MULA64_ULUH:
     return &Table[394];
-  case Haydn::MULS32X16_H2:
+  case Haydn::MULA64_ULUL:
     return &Table[395];
-  case Haydn::MULS32X16_H3:
+  case Haydn::MULAA32X16_H0_L1:
     return &Table[396];
-  case Haydn::MULS32X16_L0:
+  case Haydn::MULAA32X16_H1_L0:
     return &Table[397];
-  case Haydn::MULS32X16_L1:
+  case Haydn::MULAA32X16_H2_L3:
     return &Table[398];
-  case Haydn::MULS32X16_L2:
+  case Haydn::MULAA32X16_H3_L2:
     return &Table[399];
-  case Haydn::MULS32X16_L3:
+  case Haydn::MULAA32_HHLL:
     return &Table[400];
-  case Haydn::MULS64_HH:
+  case Haydn::MULAA32_HLLH:
     return &Table[401];
-  case Haydn::MULS64_HL:
+  case Haydn::MULAS32X16_H1_L0:
     return &Table[402];
-  case Haydn::MULS64_HUH:
+  case Haydn::MULAS32X16_H3_L2:
     return &Table[403];
-  case Haydn::MULS64_HUL:
+  case Haydn::MULAS32_HHLL:
     return &Table[404];
-  case Haydn::MULS64_LH:
+  case Haydn::MULAS32_HLLH:
     return &Table[405];
-  case Haydn::MULS64_LL:
+  case Haydn::MULAS64_HH:
     return &Table[406];
-  case Haydn::MULS64_LUH:
+  case Haydn::MULAS64_HL:
     return &Table[407];
-  case Haydn::MULS64_LUL:
+  case Haydn::MULAS64_HUH:
     return &Table[408];
-  case Haydn::MULS64_UHH:
+  case Haydn::MULAS64_HUL:
     return &Table[409];
-  case Haydn::MULS64_UHL:
+  case Haydn::MULAS64_LH:
     return &Table[410];
-  case Haydn::MULS64_UHUH:
+  case Haydn::MULAS64_LL:
     return &Table[411];
-  case Haydn::MULS64_UHUL:
+  case Haydn::MULAS64_LUH:
     return &Table[412];
-  case Haydn::MULS64_ULH:
+  case Haydn::MULAS64_LUL:
     return &Table[413];
-  case Haydn::MULS64_ULL:
+  case Haydn::MULAS64_UHH:
     return &Table[414];
-  case Haydn::MULS64_ULUH:
+  case Haydn::MULAS64_UHL:
     return &Table[415];
-  case Haydn::MULS64_ULUL:
+  case Haydn::MULAS64_UHUH:
     return &Table[416];
-  case Haydn::MULSA32X16_H1_L0:
+  case Haydn::MULAS64_UHUL:
     return &Table[417];
-  case Haydn::MULSA32X16_H3_L2:
+  case Haydn::MULAS64_ULH:
     return &Table[418];
-  case Haydn::MULSA32_HHLL:
+  case Haydn::MULAS64_ULL:
     return &Table[419];
-  case Haydn::MULSA32_HLLH:
+  case Haydn::MULAS64_ULUH:
     return &Table[420];
-  case Haydn::MULSS32X16_H1_L0:
+  case Haydn::MULAS64_ULUL:
     return &Table[421];
-  case Haydn::MULSS32X16_H3_L2:
+  case Haydn::MULL:
     return &Table[422];
-  case Haydn::MULSS32_HHLL:
+  case Haydn::MULS32X16_H0:
     return &Table[423];
-  case Haydn::MULSS32_HLLH:
+  case Haydn::MULS32X16_H1:
     return &Table[424];
-  case Haydn::MULSS64_HH:
+  case Haydn::MULS32X16_H2:
     return &Table[425];
-  case Haydn::MULSS64_HL:
+  case Haydn::MULS32X16_H3:
     return &Table[426];
-  case Haydn::MULSS64_HUH:
+  case Haydn::MULS32X16_L0:
     return &Table[427];
-  case Haydn::MULSS64_HUL:
+  case Haydn::MULS32X16_L1:
     return &Table[428];
-  case Haydn::MULSS64_LH:
+  case Haydn::MULS32X16_L2:
     return &Table[429];
-  case Haydn::MULSS64_LL:
+  case Haydn::MULS32X16_L3:
     return &Table[430];
-  case Haydn::MULSS64_LUH:
+  case Haydn::MULS64_HH:
     return &Table[431];
-  case Haydn::MULSS64_LUL:
+  case Haydn::MULS64_HL:
     return &Table[432];
-  case Haydn::MULSS64_UHH:
+  case Haydn::MULS64_HUH:
     return &Table[433];
-  case Haydn::MULSS64_UHL:
+  case Haydn::MULS64_HUL:
     return &Table[434];
-  case Haydn::MULSS64_UHUH:
+  case Haydn::MULS64_LH:
     return &Table[435];
-  case Haydn::MULSS64_UHUL:
+  case Haydn::MULS64_LL:
     return &Table[436];
-  case Haydn::MULSS64_ULH:
+  case Haydn::MULS64_LUH:
     return &Table[437];
-  case Haydn::MULSS64_ULL:
+  case Haydn::MULS64_LUL:
     return &Table[438];
-  case Haydn::MULSS64_ULUH:
+  case Haydn::MULS64_UHH:
     return &Table[439];
-  case Haydn::MULSS64_ULUL:
+  case Haydn::MULS64_UHL:
     return &Table[440];
-  case Haydn::MULSSH:
+  case Haydn::MULS64_UHUH:
     return &Table[441];
-  case Haydn::MULSUH:
+  case Haydn::MULS64_UHUL:
     return &Table[442];
-  case Haydn::MULUUH:
+  case Haydn::MULS64_ULH:
     return &Table[443];
-  case Haydn::MULZAA32X16_H0_L1:
+  case Haydn::MULS64_ULL:
     return &Table[444];
-  case Haydn::MULZAA32X16_H1_L0:
+  case Haydn::MULS64_ULUH:
     return &Table[445];
-  case Haydn::MULZAA32X16_H2_L3:
+  case Haydn::MULS64_ULUL:
     return &Table[446];
-  case Haydn::MULZAA32X16_H3_L2:
+  case Haydn::MULSA32X16_H1_L0:
     return &Table[447];
-  case Haydn::MULZAA32_HHLL:
+  case Haydn::MULSA32X16_H3_L2:
     return &Table[448];
-  case Haydn::MULZAA32_HLLH:
+  case Haydn::MULSA32_HHLL:
     return &Table[449];
-  case Haydn::MULZAS32X16_H1_L0:
+  case Haydn::MULSA32_HLLH:
     return &Table[450];
-  case Haydn::MULZAS32X16_H3_L2:
+  case Haydn::MULSS32X16_H1_L0:
     return &Table[451];
-  case Haydn::MULZAS32_HHLL:
+  case Haydn::MULSS32X16_H3_L2:
     return &Table[452];
-  case Haydn::MULZAS32_HLLH:
+  case Haydn::MULSS32_HHLL:
     return &Table[453];
-  case Haydn::MULZSA32X16_H1_L0:
+  case Haydn::MULSS32_HLLH:
     return &Table[454];
-  case Haydn::MULZSA32X16_H3_L2:
+  case Haydn::MULSS64_HH:
     return &Table[455];
-  case Haydn::MULZSA32_HHLL:
+  case Haydn::MULSS64_HL:
     return &Table[456];
-  case Haydn::MULZSA32_HLLH:
+  case Haydn::MULSS64_HUH:
     return &Table[457];
-  case Haydn::MULZSS32X16_H1_L0:
+  case Haydn::MULSS64_HUL:
     return &Table[458];
-  case Haydn::MULZSS32X16_H3_L2:
+  case Haydn::MULSS64_LH:
     return &Table[459];
-  case Haydn::MULZSS32_HHLL:
+  case Haydn::MULSS64_LL:
     return &Table[460];
-  case Haydn::MULZSS32_HLLH:
+  case Haydn::MULSS64_LUH:
     return &Table[461];
-  case Haydn::NEG32:
+  case Haydn::MULSS64_LUL:
     return &Table[462];
-  case Haydn::NEG32S:
+  case Haydn::MULSS64_UHH:
     return &Table[463];
-  case Haydn::NEG64:
+  case Haydn::MULSS64_UHL:
     return &Table[464];
-  case Haydn::NEG64S:
+  case Haydn::MULSS64_UHUH:
     return &Table[465];
-  case Haydn::NOT32:
+  case Haydn::MULSS64_UHUL:
     return &Table[466];
-  case Haydn::NOT64:
+  case Haydn::MULSS64_ULH:
     return &Table[467];
-  case Haydn::NSA16_L:
+  case Haydn::MULSS64_ULL:
     return &Table[468];
-  case Haydn::NSA32:
+  case Haydn::MULSS64_ULUH:
     return &Table[469];
-  case Haydn::NSA32_L:
+  case Haydn::MULSS64_ULUL:
     return &Table[470];
-  case Haydn::NSA64:
+  case Haydn::MULSSH:
     return &Table[471];
-  case Haydn::NSAU32:
+  case Haydn::MULSUH:
     return &Table[472];
-  case Haydn::NSAZ16_L:
+  case Haydn::MULUUH:
     return &Table[473];
-  case Haydn::NSAZ32_L:
+  case Haydn::MULZAA32X16_H0_L1:
     return &Table[474];
-  case Haydn::NSAZ64:
+  case Haydn::MULZAA32X16_H1_L0:
     return &Table[475];
-  case Haydn::OR32:
+  case Haydn::MULZAA32X16_H2_L3:
     return &Table[476];
-  case Haydn::OR64:
+  case Haydn::MULZAA32X16_H3_L2:
     return &Table[477];
-  case Haydn::ORI32:
+  case Haydn::MULZAA32_HHLL:
     return &Table[478];
-  case Haydn::PLDWWUA_POST:
+  case Haydn::MULZAA32_HLLH:
     return &Table[479];
-  case Haydn::POPCOUNT32:
+  case Haydn::MULZAS32X16_H1_L0:
     return &Table[480];
-  case Haydn::POPCOUNT64:
+  case Haydn::MULZAS32X16_H3_L2:
     return &Table[481];
-  case Haydn::RECIP:
+  case Haydn::MULZAS32_HHLL:
     return &Table[482];
-  case Haydn::SEQ32:
+  case Haydn::MULZAS32_HLLH:
     return &Table[483];
-  case Haydn::SEQ64:
+  case Haydn::MULZSA32X16_H1_L0:
     return &Table[484];
-  case Haydn::SET_HWLOOP:
+  case Haydn::MULZSA32X16_H3_L2:
     return &Table[485];
-  case Haydn::SET_HWLOOP_F2:
+  case Haydn::MULZSA32_HHLL:
     return &Table[486];
-  case Haydn::SET_HWLOOP_REG:
+  case Haydn::MULZSA32_HLLH:
     return &Table[487];
-  case Haydn::SEXT32T64:
+  case Haydn::MULZSS32X16_H1_L0:
     return &Table[488];
-  case Haydn::SIN_COS:
+  case Haydn::MULZSS32X16_H3_L2:
     return &Table[489];
-  case Haydn::SLE32:
+  case Haydn::MULZSS32_HHLL:
     return &Table[490];
-  case Haydn::SLE64:
+  case Haydn::MULZSS32_HLLH:
     return &Table[491];
-  case Haydn::SLL32:
+  case Haydn::NEG32:
     return &Table[492];
-  case Haydn::SLL64:
+  case Haydn::NEG32S:
     return &Table[493];
-  case Haydn::SLLI32:
+  case Haydn::NEG64:
     return &Table[494];
-  case Haydn::SLLI64:
+  case Haydn::NEG64S:
     return &Table[495];
-  case Haydn::SLT32:
+  case Haydn::NOT32:
     return &Table[496];
-  case Haydn::SLT64:
+  case Haydn::NOT64:
     return &Table[497];
-  case Haydn::SLTU32:
+  case Haydn::NSA16_L:
     return &Table[498];
-  case Haydn::SMULA16S_00:
+  case Haydn::NSA32:
     return &Table[499];
-  case Haydn::SMULA16S_10:
+  case Haydn::NSA32_L:
     return &Table[500];
-  case Haydn::SMULA16S_11:
+  case Haydn::NSA64:
     return &Table[501];
-  case Haydn::SMULA16S_20:
+  case Haydn::NSAU32:
     return &Table[502];
-  case Haydn::SMULA16S_21:
+  case Haydn::NSAZ16_L:
     return &Table[503];
-  case Haydn::SMULA16S_22:
+  case Haydn::NSAZ32_L:
     return &Table[504];
-  case Haydn::SMULA16S_30:
+  case Haydn::NSAZ64:
     return &Table[505];
-  case Haydn::SMULA16S_31:
+  case Haydn::OR32:
     return &Table[506];
-  case Haydn::SMULA16S_32:
+  case Haydn::OR64:
     return &Table[507];
-  case Haydn::SMULA16S_33:
+  case Haydn::ORI32:
     return &Table[508];
-  case Haydn::SMULA16_00:
+  case Haydn::ORI32_W:
     return &Table[509];
-  case Haydn::SMULA16_10:
+  case Haydn::PLDWWUA:
     return &Table[510];
-  case Haydn::SMULA16_11:
+  case Haydn::PLDWWUA_POST:
     return &Table[511];
-  case Haydn::SMULA16_20:
+  case Haydn::PLQHWUA_CB_POST:
     return &Table[512];
-  case Haydn::SMULA16_21:
+  case Haydn::PLTWWUA_CB_POST:
     return &Table[513];
-  case Haydn::SMULA16_22:
+  case Haydn::POPCOUNT32:
     return &Table[514];
-  case Haydn::SMULA16_30:
+  case Haydn::POPCOUNT64:
     return &Table[515];
-  case Haydn::SMULA16_31:
+  case Haydn::RECIP:
     return &Table[516];
-  case Haydn::SMULA16_32:
+  case Haydn::SEQ32:
     return &Table[517];
-  case Haydn::SMULA16_33:
+  case Haydn::SEQ64:
     return &Table[518];
-  case Haydn::SMULS16S_00:
+  case Haydn::SET_HWLOOP:
     return &Table[519];
-  case Haydn::SMULS16S_10:
+  case Haydn::SET_HWLOOP_F2:
     return &Table[520];
-  case Haydn::SMULS16S_11:
+  case Haydn::SET_HWLOOP_F2_W:
     return &Table[521];
-  case Haydn::SMULS16S_20:
+  case Haydn::SET_HWLOOP_REG:
     return &Table[522];
-  case Haydn::SMULS16S_21:
+  case Haydn::SET_HWLOOP_REG_W:
     return &Table[523];
-  case Haydn::SMULS16S_22:
+  case Haydn::SET_HWLOOP_W:
     return &Table[524];
-  case Haydn::SMULS16S_30:
+  case Haydn::SEXT32T64:
     return &Table[525];
-  case Haydn::SMULS16S_31:
+  case Haydn::SEXT_GPR32_TO_DR64:
     return &Table[526];
-  case Haydn::SMULS16S_32:
+  case Haydn::SHL32:
     return &Table[527];
-  case Haydn::SMULS16S_33:
+  case Haydn::SIN_COS:
     return &Table[528];
-  case Haydn::SMULS16_00:
+  case Haydn::SLE32:
     return &Table[529];
-  case Haydn::SMULS16_10:
+  case Haydn::SLE64:
     return &Table[530];
-  case Haydn::SMULS16_11:
+  case Haydn::SLL32:
     return &Table[531];
-  case Haydn::SMULS16_20:
+  case Haydn::SLL64:
     return &Table[532];
-  case Haydn::SMULS16_21:
+  case Haydn::SLLI32:
     return &Table[533];
-  case Haydn::SMULS16_22:
+  case Haydn::SLLI64:
     return &Table[534];
-  case Haydn::SMULS16_30:
+  case Haydn::SLT32:
     return &Table[535];
-  case Haydn::SMULS16_31:
+  case Haydn::SLT64:
     return &Table[536];
-  case Haydn::SMULS16_32:
+  case Haydn::SLTU32:
     return &Table[537];
-  case Haydn::SMULS16_33:
+  case Haydn::SMULA16S_00:
     return &Table[538];
-  case Haydn::SQRT:
+  case Haydn::SMULA16S_10:
     return &Table[539];
-  case Haydn::SRA32:
+  case Haydn::SMULA16S_11:
     return &Table[540];
-  case Haydn::SRA32R:
+  case Haydn::SMULA16S_20:
     return &Table[541];
-  case Haydn::SRA64:
+  case Haydn::SMULA16S_21:
     return &Table[542];
-  case Haydn::SRA64R:
+  case Haydn::SMULA16S_22:
     return &Table[543];
-  case Haydn::SRAI32:
+  case Haydn::SMULA16S_30:
     return &Table[544];
-  case Haydn::SRAI32R:
+  case Haydn::SMULA16S_31:
     return &Table[545];
-  case Haydn::SRAI64:
+  case Haydn::SMULA16S_32:
     return &Table[546];
-  case Haydn::SRAI64R:
+  case Haydn::SMULA16S_33:
     return &Table[547];
-  case Haydn::SRL32:
+  case Haydn::SMULA16_00:
     return &Table[548];
-  case Haydn::SRL64:
+  case Haydn::SMULA16_10:
     return &Table[549];
-  case Haydn::SRLI32:
+  case Haydn::SMULA16_11:
     return &Table[550];
-  case Haydn::SRLI64:
+  case Haydn::SMULA16_20:
     return &Table[551];
-  case Haydn::SUB32:
+  case Haydn::SMULA16_21:
     return &Table[552];
-  case Haydn::SUB32S:
+  case Haydn::SMULA16_22:
     return &Table[553];
-  case Haydn::SUB64:
+  case Haydn::SMULA16_30:
     return &Table[554];
-  case Haydn::SUB64S:
+  case Haydn::SMULA16_31:
     return &Table[555];
-  case Haydn::SUB64S_H:
+  case Haydn::SMULA16_32:
     return &Table[556];
-  case Haydn::SUB64S_L:
+  case Haydn::SMULA16_33:
     return &Table[557];
-  case Haydn::SUB64_H:
+  case Haydn::SMULS16S_00:
     return &Table[558];
-  case Haydn::SUB64_L:
+  case Haydn::SMULS16S_10:
     return &Table[559];
-  case Haydn::SUBI32:
+  case Haydn::SMULS16S_11:
     return &Table[560];
-  case Haydn::SUBI32S:
+  case Haydn::SMULS16S_20:
     return &Table[561];
-  case Haydn::S_LBS_POST_IMM:
+  case Haydn::SMULS16S_21:
     return &Table[562];
-  case Haydn::S_LBS_POST_REG:
+  case Haydn::SMULS16S_22:
     return &Table[563];
-  case Haydn::S_LBS_PRE_IMM:
+  case Haydn::SMULS16S_30:
     return &Table[564];
-  case Haydn::S_LBS_PRE_REG:
+  case Haydn::SMULS16S_31:
     return &Table[565];
-  case Haydn::S_LBS_WITH_IMM:
+  case Haydn::SMULS16S_32:
     return &Table[566];
-  case Haydn::S_LBS_WITH_REG:
+  case Haydn::SMULS16S_33:
     return &Table[567];
-  case Haydn::S_LBU_POST_IMM:
+  case Haydn::SMULS16_00:
     return &Table[568];
-  case Haydn::S_LBU_POST_REG:
+  case Haydn::SMULS16_10:
     return &Table[569];
-  case Haydn::S_LBU_PRE_IMM:
+  case Haydn::SMULS16_11:
     return &Table[570];
-  case Haydn::S_LBU_PRE_REG:
+  case Haydn::SMULS16_20:
     return &Table[571];
-  case Haydn::S_LBU_WITH_IMM:
+  case Haydn::SMULS16_21:
     return &Table[572];
-  case Haydn::S_LBU_WITH_REG:
+  case Haydn::SMULS16_22:
     return &Table[573];
-  case Haydn::S_LHWS_POST_IMM:
+  case Haydn::SMULS16_30:
     return &Table[574];
-  case Haydn::S_LHWS_POST_REG:
+  case Haydn::SMULS16_31:
     return &Table[575];
-  case Haydn::S_LHWS_PRE_IMM:
+  case Haydn::SMULS16_32:
     return &Table[576];
-  case Haydn::S_LHWS_PRE_REG:
+  case Haydn::SMULS16_33:
     return &Table[577];
-  case Haydn::S_LHWS_WITH_IMM:
+  case Haydn::SQRT:
     return &Table[578];
-  case Haydn::S_LHWS_WITH_REG:
+  case Haydn::SRA32:
     return &Table[579];
-  case Haydn::S_LHWU_POST_IMM:
+  case Haydn::SRA32R:
     return &Table[580];
-  case Haydn::S_LHWU_POST_REG:
+  case Haydn::SRA64:
     return &Table[581];
-  case Haydn::S_LHWU_PRE_IMM:
+  case Haydn::SRA64R:
     return &Table[582];
-  case Haydn::S_LHWU_PRE_REG:
+  case Haydn::SRAI32:
     return &Table[583];
-  case Haydn::S_LHWU_WITH_IMM:
+  case Haydn::SRAI32R:
     return &Table[584];
-  case Haydn::S_LHWU_WITH_REG:
+  case Haydn::SRAI64:
     return &Table[585];
-  case Haydn::S_LW_BREV_IMM:
+  case Haydn::SRAI64R:
     return &Table[586];
-  case Haydn::S_LW_BREV_REG:
+  case Haydn::SRL32:
     return &Table[587];
-  case Haydn::S_LW_POST_IMM:
+  case Haydn::SRL64:
     return &Table[588];
-  case Haydn::S_LW_POST_REG:
+  case Haydn::SRLI32:
     return &Table[589];
-  case Haydn::S_LW_PRE_IMM:
+  case Haydn::SRLI64:
     return &Table[590];
-  case Haydn::S_LW_PRE_REG:
+  case Haydn::ST16:
     return &Table[591];
-  case Haydn::S_LW_WITH_IMM:
+  case Haydn::ST32:
     return &Table[592];
-  case Haydn::S_LW_WITH_REG:
+  case Haydn::ST32_POST:
     return &Table[593];
-  case Haydn::S_SB_POST_IMM:
+  case Haydn::ST32_REG_M0S0LS:
     return &Table[594];
-  case Haydn::S_SB_POST_REG:
+  case Haydn::ST64:
     return &Table[595];
-  case Haydn::S_SB_PRE_IMM:
+  case Haydn::ST64_POST:
     return &Table[596];
-  case Haydn::S_SB_PRE_REG:
+  case Haydn::ST64_REG_M0S0LS:
     return &Table[597];
-  case Haydn::S_SB_WITH_IMM:
+  case Haydn::ST8:
     return &Table[598];
-  case Haydn::S_SB_WITH_REG:
+  case Haydn::SUB32:
     return &Table[599];
-  case Haydn::S_SHW_POST_IMM:
+  case Haydn::SUB32S:
     return &Table[600];
-  case Haydn::S_SHW_POST_REG:
+  case Haydn::SUB64:
     return &Table[601];
-  case Haydn::S_SHW_PRE_IMM:
+  case Haydn::SUB64S:
     return &Table[602];
-  case Haydn::S_SHW_PRE_REG:
+  case Haydn::SUB64S_H:
     return &Table[603];
-  case Haydn::S_SHW_WITH_IMM:
+  case Haydn::SUB64S_L:
     return &Table[604];
-  case Haydn::S_SHW_WITH_REG:
+  case Haydn::SUB64_H:
     return &Table[605];
-  case Haydn::S_SW_BREV_IMM:
+  case Haydn::SUB64_L:
     return &Table[606];
-  case Haydn::S_SW_BREV_REG:
+  case Haydn::SUBI32:
     return &Table[607];
-  case Haydn::S_SW_POST_IMM:
+  case Haydn::SUBI32S:
     return &Table[608];
-  case Haydn::S_SW_POST_REG:
+  case Haydn::S_LBS_POST_IMM:
     return &Table[609];
-  case Haydn::S_SW_PRE_IMM:
+  case Haydn::S_LBS_POST_REG:
     return &Table[610];
-  case Haydn::S_SW_PRE_REG:
+  case Haydn::S_LBS_PRE_IMM:
     return &Table[611];
-  case Haydn::S_SW_WITH_IMM:
+  case Haydn::S_LBS_PRE_REG:
     return &Table[612];
-  case Haydn::S_SW_WITH_REG:
+  case Haydn::S_LBS_WITH_IMM:
     return &Table[613];
-  case Haydn::TRANSF64:
+  case Haydn::S_LBS_WITH_REG:
     return &Table[614];
-  case Haydn::TRANSF64F2:
+  case Haydn::S_LBU_POST_IMM:
     return &Table[615];
-  case Haydn::TRANSF64_H:
+  case Haydn::S_LBU_POST_REG:
     return &Table[616];
-  case Haydn::TRANSF64_L:
+  case Haydn::S_LBU_PRE_IMM:
     return &Table[617];
-  case Haydn::WBARWUA:
+  case Haydn::S_LBU_PRE_REG:
     return &Table[618];
-  case Haydn::X2ABS32:
+  case Haydn::S_LBU_WITH_IMM:
     return &Table[619];
-  case Haydn::X2ABS32S:
+  case Haydn::S_LBU_WITH_REG:
     return &Table[620];
-  case Haydn::X2ADD32:
+  case Haydn::S_LHWS_POST_IMM:
     return &Table[621];
-  case Haydn::X2ADD32S:
+  case Haydn::S_LHWS_POST_REG:
     return &Table[622];
-  case Haydn::X2ADD32S_HLLH:
+  case Haydn::S_LHWS_PRE_IMM:
     return &Table[623];
-  case Haydn::X2ADD32_HLLH:
+  case Haydn::S_LHWS_PRE_REG:
     return &Table[624];
-  case Haydn::X2ADDSUB32:
+  case Haydn::S_LHWS_WITH_IMM:
     return &Table[625];
-  case Haydn::X2ADDSUB32S:
+  case Haydn::S_LHWS_WITH_REG:
     return &Table[626];
-  case Haydn::X2ADDSUB32S_HLLH:
+  case Haydn::S_LHWU_POST_IMM:
     return &Table[627];
-  case Haydn::X2ADDSUB32_HLLH:
+  case Haydn::S_LHWU_POST_REG:
     return &Table[628];
-  case Haydn::X2CLAMP32:
+  case Haydn::S_LHWU_PRE_IMM:
     return &Table[629];
-  case Haydn::X2CMUL32:
+  case Haydn::S_LHWU_PRE_REG:
     return &Table[630];
-  case Haydn::X2CMUL32S:
+  case Haydn::S_LHWU_WITH_IMM:
     return &Table[631];
-  case Haydn::X2CMUL32S_F2:
+  case Haydn::S_LHWU_WITH_REG:
     return &Table[632];
-  case Haydn::X2CMUL32X16_H:
+  case Haydn::S_LW_BREV_IMM:
     return &Table[633];
-  case Haydn::X2CMUL32X16_L:
+  case Haydn::S_LW_BREV_REG:
     return &Table[634];
-  case Haydn::X2CMUL32_F2:
+  case Haydn::S_LW_POST_IMM:
     return &Table[635];
-  case Haydn::X2CMULA32X16_H:
+  case Haydn::S_LW_POST_REG:
     return &Table[636];
-  case Haydn::X2CMULA32X16_L:
+  case Haydn::S_LW_PRE_IMM:
     return &Table[637];
-  case Haydn::X2DOT32:
+  case Haydn::S_LW_PRE_REG:
     return &Table[638];
-  case Haydn::X2FCMUL32RS:
+  case Haydn::S_LW_WITH_IMM:
     return &Table[639];
-  case Haydn::X2FCMUL32RSS:
+  case Haydn::S_LW_WITH_REG:
     return &Table[640];
-  case Haydn::X2FCMUL32X16RS_H:
+  case Haydn::S_SB_POST_IMM:
     return &Table[641];
-  case Haydn::X2FCMUL32X16RS_L:
+  case Haydn::S_SB_POST_REG:
     return &Table[642];
-  case Haydn::X2FCMULA32RS:
+  case Haydn::S_SB_PRE_IMM:
     return &Table[643];
-  case Haydn::X2FCMULA32RSS:
+  case Haydn::S_SB_PRE_REG:
     return &Table[644];
-  case Haydn::X2FCMULA32X16RS_H:
+  case Haydn::S_SB_WITH_IMM:
     return &Table[645];
-  case Haydn::X2FCMULA32X16RS_L:
+  case Haydn::S_SB_WITH_REG:
     return &Table[646];
-  case Haydn::X2FF2RSST32:
+  case Haydn::S_SHW_POST_IMM:
     return &Table[647];
-  case Haydn::X2FF2RST32:
+  case Haydn::S_SHW_POST_REG:
     return &Table[648];
-  case Haydn::X2FMUL32RS:
+  case Haydn::S_SHW_PRE_IMM:
     return &Table[649];
-  case Haydn::X2FMUL32RSS:
+  case Haydn::S_SHW_PRE_REG:
     return &Table[650];
-  case Haydn::X2FMUL32TS:
+  case Haydn::S_SHW_WITH_IMM:
     return &Table[651];
-  case Haydn::X2FMUL32X16RSS_H:
+  case Haydn::S_SHW_WITH_REG:
     return &Table[652];
-  case Haydn::X2FMUL32X16RSS_L:
+  case Haydn::S_SW_BREV_IMM:
     return &Table[653];
-  case Haydn::X2FMUL32X16RS_H:
+  case Haydn::S_SW_BREV_REG:
     return &Table[654];
-  case Haydn::X2FMUL32X16RS_L:
+  case Haydn::S_SW_POST_IMM:
     return &Table[655];
-  case Haydn::X2FMUL32X16TS_H:
+  case Haydn::S_SW_POST_REG:
     return &Table[656];
-  case Haydn::X2FMUL32X16TS_L:
+  case Haydn::S_SW_PRE_IMM:
     return &Table[657];
-  case Haydn::X2FMULA32RS:
+  case Haydn::S_SW_PRE_REG:
     return &Table[658];
-  case Haydn::X2FMULA32RSS:
+  case Haydn::S_SW_WITH_IMM:
     return &Table[659];
-  case Haydn::X2FMULA32TS:
+  case Haydn::S_SW_WITH_REG:
     return &Table[660];
-  case Haydn::X2FMULA32X16RSS_H:
+  case Haydn::TRANSF64:
     return &Table[661];
-  case Haydn::X2FMULA32X16RSS_L:
+  case Haydn::TRANSF64F2:
     return &Table[662];
-  case Haydn::X2FMULA32X16RS_H:
+  case Haydn::TRANSF64_H:
     return &Table[663];
-  case Haydn::X2FMULA32X16RS_L:
+  case Haydn::TRANSF64_L:
     return &Table[664];
-  case Haydn::X2FMULA32X16TS_H:
+  case Haydn::WBARWUA:
     return &Table[665];
-  case Haydn::X2FMULA32X16TS_L:
+  case Haydn::WBARWUA_CB:
     return &Table[666];
-  case Haydn::X2FMULS32RS:
+  case Haydn::X2ABS32:
     return &Table[667];
-  case Haydn::X2FMULS32RSS:
+  case Haydn::X2ABS32S:
     return &Table[668];
-  case Haydn::X2FMULS32TS:
+  case Haydn::X2ADD32:
     return &Table[669];
-  case Haydn::X2FMULS32X16RSS_H:
+  case Haydn::X2ADD32S:
     return &Table[670];
-  case Haydn::X2FMULS32X16RSS_L:
+  case Haydn::X2ADD32S_HLLH:
     return &Table[671];
-  case Haydn::X2FMULS32X16RS_H:
+  case Haydn::X2ADD32_HLLH:
     return &Table[672];
-  case Haydn::X2FMULS32X16RS_L:
+  case Haydn::X2ADDSUB32:
     return &Table[673];
-  case Haydn::X2FMULS32X16TS_H:
+  case Haydn::X2ADDSUB32S:
     return &Table[674];
-  case Haydn::X2FMULS32X16TS_L:
+  case Haydn::X2ADDSUB32S_HLLH:
     return &Table[675];
-  case Haydn::X2FRSST32:
+  case Haydn::X2ADDSUB32_HLLH:
     return &Table[676];
-  case Haydn::X2FRST32:
+  case Haydn::X2CLAMP32:
     return &Table[677];
-  case Haydn::X2HADD32S_H:
+  case Haydn::X2CMUL32:
     return &Table[678];
-  case Haydn::X2HADD32S_L:
+  case Haydn::X2CMUL32S:
     return &Table[679];
-  case Haydn::X2HADD32_H:
+  case Haydn::X2CMUL32S_F2:
     return &Table[680];
-  case Haydn::X2HADD32_L:
+  case Haydn::X2CMUL32X16_H:
     return &Table[681];
-  case Haydn::X2HMAX32:
+  case Haydn::X2CMUL32X16_L:
     return &Table[682];
-  case Haydn::X2HMIN32:
+  case Haydn::X2CMUL32_F2:
     return &Table[683];
-  case Haydn::X2MAX32:
+  case Haydn::X2CMULA32X16_H:
     return &Table[684];
-  case Haydn::X2MIN32:
+  case Haydn::X2CMULA32X16_L:
     return &Table[685];
-  case Haydn::X2MJSWAP32:
+  case Haydn::X2DOT32:
     return &Table[686];
-  case Haydn::X2MJSWAP32S:
+  case Haydn::X2FCMUL32RS:
     return &Table[687];
-  case Haydn::X2MOVF32:
+  case Haydn::X2FCMUL32RSS:
     return &Table[688];
-  case Haydn::X2MOVT32:
+  case Haydn::X2FCMUL32X16RS_H:
     return &Table[689];
-  case Haydn::X2MUL32:
+  case Haydn::X2FCMUL32X16RS_L:
     return &Table[690];
-  case Haydn::X2MUL32X16_H:
+  case Haydn::X2FCMULA32RS:
     return &Table[691];
-  case Haydn::X2MUL32X16_L:
+  case Haydn::X2FCMULA32RSS:
     return &Table[692];
-  case Haydn::X2MULA32:
+  case Haydn::X2FCMULA32X16RS_H:
     return &Table[693];
-  case Haydn::X2MULA32X16_H:
+  case Haydn::X2FCMULA32X16RS_L:
     return &Table[694];
-  case Haydn::X2MULA32X16_L:
+  case Haydn::X2FF2RSST32:
     return &Table[695];
-  case Haydn::X2MULAPH32:
+  case Haydn::X2FF2RST32:
     return &Table[696];
-  case Haydn::X2MULAPL32:
+  case Haydn::X2FMUL32RS:
     return &Table[697];
-  case Haydn::X2MULPH32:
+  case Haydn::X2FMUL32RSS:
     return &Table[698];
-  case Haydn::X2MULPL32:
+  case Haydn::X2FMUL32TS:
     return &Table[699];
-  case Haydn::X2MULS32:
+  case Haydn::X2FMUL32X16RSS_H:
     return &Table[700];
-  case Haydn::X2MULS32X16_H:
+  case Haydn::X2FMUL32X16RSS_L:
     return &Table[701];
-  case Haydn::X2MULS32X16_L:
+  case Haydn::X2FMUL32X16RS_H:
     return &Table[702];
-  case Haydn::X2MULSPH32:
+  case Haydn::X2FMUL32X16RS_L:
     return &Table[703];
-  case Haydn::X2MULSPL32:
+  case Haydn::X2FMUL32X16TS_H:
     return &Table[704];
-  case Haydn::X2NEG32:
+  case Haydn::X2FMUL32X16TS_L:
     return &Table[705];
-  case Haydn::X2NEG32S:
+  case Haydn::X2FMULA32RS:
     return &Table[706];
-  case Haydn::X2NEG32S_L:
+  case Haydn::X2FMULA32RSS:
     return &Table[707];
-  case Haydn::X2NEG32_L:
+  case Haydn::X2FMULA32TS:
     return &Table[708];
-  case Haydn::X2SEL32_HH:
+  case Haydn::X2FMULA32X16RSS_H:
     return &Table[709];
-  case Haydn::X2SEL32_HL:
+  case Haydn::X2FMULA32X16RSS_L:
     return &Table[710];
-  case Haydn::X2SEL32_LH:
+  case Haydn::X2FMULA32X16RS_H:
     return &Table[711];
-  case Haydn::X2SEL32_LL:
+  case Haydn::X2FMULA32X16RS_L:
     return &Table[712];
-  case Haydn::X2SEQ32:
+  case Haydn::X2FMULA32X16TS_H:
     return &Table[713];
-  case Haydn::X2SLE32:
+  case Haydn::X2FMULA32X16TS_L:
     return &Table[714];
-  case Haydn::X2SLL32:
+  case Haydn::X2FMULS32RS:
     return &Table[715];
-  case Haydn::X2SLLI32:
+  case Haydn::X2FMULS32RSS:
     return &Table[716];
-  case Haydn::X2SLT32:
+  case Haydn::X2FMULS32TS:
     return &Table[717];
-  case Haydn::X2SRA32:
+  case Haydn::X2FMULS32X16RSS_H:
     return &Table[718];
-  case Haydn::X2SRA32R:
+  case Haydn::X2FMULS32X16RSS_L:
     return &Table[719];
-  case Haydn::X2SRAI32:
+  case Haydn::X2FMULS32X16RS_H:
     return &Table[720];
-  case Haydn::X2SRAI32R:
+  case Haydn::X2FMULS32X16RS_L:
     return &Table[721];
-  case Haydn::X2SRL32:
+  case Haydn::X2FMULS32X16TS_H:
     return &Table[722];
-  case Haydn::X2SRLI32:
+  case Haydn::X2FMULS32X16TS_L:
     return &Table[723];
-  case Haydn::X2SUB32:
+  case Haydn::X2FRSST32:
     return &Table[724];
-  case Haydn::X2SUB32S:
+  case Haydn::X2FRST32:
     return &Table[725];
-  case Haydn::X2SUB32S_HLLH:
+  case Haydn::X2HADD32S_H:
     return &Table[726];
-  case Haydn::X2SUB32_HLLH:
+  case Haydn::X2HADD32S_L:
     return &Table[727];
-  case Haydn::X2SUBADD32:
+  case Haydn::X2HADD32_H:
     return &Table[728];
-  case Haydn::X2SUBADD32S:
+  case Haydn::X2HADD32_L:
     return &Table[729];
-  case Haydn::X2SUBADD32S_HLLH:
+  case Haydn::X2HMAX32:
     return &Table[730];
-  case Haydn::X2SUBADD32_HLLH:
+  case Haydn::X2HMIN32:
     return &Table[731];
-  case Haydn::X2SWAP32:
+  case Haydn::X2MAX32:
     return &Table[732];
-  case Haydn::X4ABS16:
+  case Haydn::X2MIN32:
     return &Table[733];
-  case Haydn::X4ABS16S:
+  case Haydn::X2MJSWAP32:
     return &Table[734];
-  case Haydn::X4ADD16:
+  case Haydn::X2MJSWAP32S:
     return &Table[735];
-  case Haydn::X4ADD16S:
+  case Haydn::X2MOVF32:
     return &Table[736];
-  case Haydn::X4CJMUL16S_H:
+  case Haydn::X2MOVT32:
     return &Table[737];
-  case Haydn::X4CJMUL16S_L:
+  case Haydn::X2MUL32:
     return &Table[738];
-  case Haydn::X4CJMULA16S_H:
+  case Haydn::X2MUL32X16_H:
     return &Table[739];
-  case Haydn::X4CJMULA16S_L:
+  case Haydn::X2MUL32X16_L:
     return &Table[740];
-  case Haydn::X4CLAMP16:
+  case Haydn::X2MULA32:
     return &Table[741];
-  case Haydn::X4CMUL16:
+  case Haydn::X2MULA32X16_H:
     return &Table[742];
-  case Haydn::X4CMUL16S:
+  case Haydn::X2MULA32X16_L:
     return &Table[743];
-  case Haydn::X4CMUL16S_F2:
+  case Haydn::X2MULAPH32:
     return &Table[744];
-  case Haydn::X4CMUL16S_H:
+  case Haydn::X2MULAPL32:
     return &Table[745];
-  case Haydn::X4CMUL16S_L:
+  case Haydn::X2MULPH32:
     return &Table[746];
-  case Haydn::X4CMUL16_F2:
+  case Haydn::X2MULPL32:
     return &Table[747];
-  case Haydn::X4CMULA16S_H:
+  case Haydn::X2MULS32:
     return &Table[748];
-  case Haydn::X4CMULA16S_L:
+  case Haydn::X2MULS32X16_H:
     return &Table[749];
-  case Haydn::X4CONJ16:
+  case Haydn::X2MULS32X16_L:
     return &Table[750];
-  case Haydn::X4CONJ16S:
+  case Haydn::X2MULSPH32:
     return &Table[751];
-  case Haydn::X4DOT16:
+  case Haydn::X2MULSPL32:
     return &Table[752];
-  case Haydn::X4ENERGY16:
+  case Haydn::X2NEG32:
     return &Table[753];
-  case Haydn::X4FCMUL16RS:
+  case Haydn::X2NEG32S:
     return &Table[754];
-  case Haydn::X4FCMUL16RSS:
+  case Haydn::X2NEG32S_L:
     return &Table[755];
-  case Haydn::X4FCMULA16RS:
+  case Haydn::X2NEG32_L:
     return &Table[756];
-  case Haydn::X4FCMULA16RSS:
+  case Haydn::X2SEL32_HH:
     return &Table[757];
-  case Haydn::X4FF2MUL16S:
+  case Haydn::X2SEL32_HL:
     return &Table[758];
-  case Haydn::X4FF2MULA16S:
+  case Haydn::X2SEL32_LH:
     return &Table[759];
-  case Haydn::X4FF2MULS16S:
+  case Haydn::X2SEL32_LL:
     return &Table[760];
-  case Haydn::X4FMUL16RS:
+  case Haydn::X2SEQ32:
     return &Table[761];
-  case Haydn::X4FMUL16RSS:
+  case Haydn::X2SLE32:
     return &Table[762];
-  case Haydn::X4FMUL16TS:
+  case Haydn::X2SLL32:
     return &Table[763];
-  case Haydn::X4FRSST16:
+  case Haydn::X2SLLI32:
     return &Table[764];
-  case Haydn::X4FRST16:
+  case Haydn::X2SLT32:
     return &Table[765];
-  case Haydn::X4HADD16_H:
+  case Haydn::X2SRA32:
     return &Table[766];
-  case Haydn::X4HADD16_L:
+  case Haydn::X2SRA32R:
     return &Table[767];
-  case Haydn::X4HMAX16:
+  case Haydn::X2SRAI32:
     return &Table[768];
-  case Haydn::X4HMIN16:
+  case Haydn::X2SRAI32R:
     return &Table[769];
-  case Haydn::X4MAX16:
+  case Haydn::X2SRL32:
     return &Table[770];
-  case Haydn::X4MIN16:
+  case Haydn::X2SRLI32:
     return &Table[771];
-  case Haydn::X4MJSWAP16:
+  case Haydn::X2SUB32:
     return &Table[772];
-  case Haydn::X4MJSWAP16S:
+  case Haydn::X2SUB32S:
     return &Table[773];
-  case Haydn::X4MOVF16:
+  case Haydn::X2SUB32S_HLLH:
     return &Table[774];
-  case Haydn::X4MOVT16:
+  case Haydn::X2SUB32_HLLH:
     return &Table[775];
-  case Haydn::X4MUL16:
+  case Haydn::X2SUBADD32:
     return &Table[776];
-  case Haydn::X4MULA16:
+  case Haydn::X2SUBADD32S:
     return &Table[777];
-  case Haydn::X4MULA16S:
+  case Haydn::X2SUBADD32S_HLLH:
     return &Table[778];
-  case Haydn::X4MULS16:
+  case Haydn::X2SUBADD32_HLLH:
     return &Table[779];
-  case Haydn::X4MULS16S:
+  case Haydn::X2SWAP32:
     return &Table[780];
-  case Haydn::X4NEG16:
+  case Haydn::X4ABS16:
     return &Table[781];
-  case Haydn::X4NEG16S:
+  case Haydn::X4ABS16S:
     return &Table[782];
-  case Haydn::X4SAT32T16:
+  case Haydn::X4ADD16:
     return &Table[783];
-  case Haydn::X4SEL16:
+  case Haydn::X4ADD16S:
     return &Table[784];
-  case Haydn::X4SELI16:
+  case Haydn::X4CJMUL16S_H:
     return &Table[785];
-  case Haydn::X4SEQ16:
+  case Haydn::X4CJMUL16S_L:
     return &Table[786];
-  case Haydn::X4SLE16:
+  case Haydn::X4CJMULA16S_H:
     return &Table[787];
-  case Haydn::X4SLL16:
+  case Haydn::X4CJMULA16S_L:
     return &Table[788];
-  case Haydn::X4SLLI16:
+  case Haydn::X4CLAMP16:
     return &Table[789];
-  case Haydn::X4SLT16:
+  case Haydn::X4CMUL16:
     return &Table[790];
-  case Haydn::X4SRA16:
+  case Haydn::X4CMUL16S:
     return &Table[791];
-  case Haydn::X4SRA16R:
+  case Haydn::X4CMUL16S_F2:
     return &Table[792];
-  case Haydn::X4SRAI16:
+  case Haydn::X4CMUL16S_H:
     return &Table[793];
-  case Haydn::X4SRAI16R:
+  case Haydn::X4CMUL16S_L:
     return &Table[794];
-  case Haydn::X4SRL16:
+  case Haydn::X4CMUL16_F2:
     return &Table[795];
-  case Haydn::X4SRLI16:
+  case Haydn::X4CMULA16S_H:
     return &Table[796];
-  case Haydn::X4SUB16:
+  case Haydn::X4CMULA16S_L:
     return &Table[797];
-  case Haydn::X4SUB16S:
+  case Haydn::X4CONJ16:
     return &Table[798];
-  case Haydn::X4SWAP16:
+  case Haydn::X4CONJ16S:
     return &Table[799];
-  case Haydn::XOR32:
+  case Haydn::X4DOT16:
     return &Table[800];
-  case Haydn::XOR64:
+  case Haydn::X4ENERGY16:
     return &Table[801];
-  case Haydn::XORI32:
+  case Haydn::X4FCMUL16RS:
     return &Table[802];
-  case Haydn::ZERO_DR:
+  case Haydn::X4FCMUL16RSS:
     return &Table[803];
-  case Haydn::ZERO_GPR:
+  case Haydn::X4FCMULA16RS:
     return &Table[804];
-  case Haydn::ZERO_SFR:
+  case Haydn::X4FCMULA16RSS:
     return &Table[805];
+  case Haydn::X4FF2MUL16S:
+    return &Table[806];
+  case Haydn::X4FF2MULA16S:
+    return &Table[807];
+  case Haydn::X4FF2MULS16S:
+    return &Table[808];
+  case Haydn::X4FMUL16RS:
+    return &Table[809];
+  case Haydn::X4FMUL16RSS:
+    return &Table[810];
+  case Haydn::X4FMUL16TS:
+    return &Table[811];
+  case Haydn::X4FRSST16:
+    return &Table[812];
+  case Haydn::X4FRST16:
+    return &Table[813];
+  case Haydn::X4HADD16_H:
+    return &Table[814];
+  case Haydn::X4HADD16_L:
+    return &Table[815];
+  case Haydn::X4HMAX16:
+    return &Table[816];
+  case Haydn::X4HMIN16:
+    return &Table[817];
+  case Haydn::X4MAX16:
+    return &Table[818];
+  case Haydn::X4MIN16:
+    return &Table[819];
+  case Haydn::X4MJSWAP16:
+    return &Table[820];
+  case Haydn::X4MJSWAP16S:
+    return &Table[821];
+  case Haydn::X4MOVF16:
+    return &Table[822];
+  case Haydn::X4MOVT16:
+    return &Table[823];
+  case Haydn::X4MUL16:
+    return &Table[824];
+  case Haydn::X4MULA16:
+    return &Table[825];
+  case Haydn::X4MULA16S:
+    return &Table[826];
+  case Haydn::X4MULS16:
+    return &Table[827];
+  case Haydn::X4MULS16S:
+    return &Table[828];
+  case Haydn::X4NEG16:
+    return &Table[829];
+  case Haydn::X4NEG16S:
+    return &Table[830];
+  case Haydn::X4SAT32T16:
+    return &Table[831];
+  case Haydn::X4SEL16:
+    return &Table[832];
+  case Haydn::X4SELI16:
+    return &Table[833];
+  case Haydn::X4SEQ16:
+    return &Table[834];
+  case Haydn::X4SLE16:
+    return &Table[835];
+  case Haydn::X4SLL16:
+    return &Table[836];
+  case Haydn::X4SLLI16:
+    return &Table[837];
+  case Haydn::X4SLT16:
+    return &Table[838];
+  case Haydn::X4SRA16:
+    return &Table[839];
+  case Haydn::X4SRA16R:
+    return &Table[840];
+  case Haydn::X4SRAI16:
+    return &Table[841];
+  case Haydn::X4SRAI16R:
+    return &Table[842];
+  case Haydn::X4SRL16:
+    return &Table[843];
+  case Haydn::X4SRLI16:
+    return &Table[844];
+  case Haydn::X4SUB16:
+    return &Table[845];
+  case Haydn::X4SUB16S:
+    return &Table[846];
+  case Haydn::X4SWAP16:
+    return &Table[847];
+  case Haydn::XOR32:
+    return &Table[848];
+  case Haydn::XOR64:
+    return &Table[849];
+  case Haydn::XORI32:
+    return &Table[850];
+  case Haydn::ZERO_DR:
+    return &Table[851];
+  case Haydn::ZERO_GPR:
+    return &Table[852];
+  case Haydn::ZERO_SFR:
+    return &Table[853];
   }
 }
 
 // Compiler-reachable logicals WITHOUT a golden row (fail-closed
 // census; never synthesized). CompleteModel=0 evidence.
 static constexpr const char *HaydnPerOpUncoveredNames[] = {
-    "ADDI32_W",
-    "ASR32",
-    "BEQZ_W",
-    "BEQ_W",
-    "BGEU_W",
-    "BGEZ_W",
-    "BGE_W",
-    "BLTU_W",
-    "BLTZ_W",
-    "BLT_W",
-    "BNEZ_W",
-    "BNE_W",
-    "CSRW_W",
-    "JALR_W",
-    "JAL_W",
-    "LD16",
-    "LD32",
-    "LD32_POST",
-    "LD32_REG_M0S0LS",
-    "LD64",
-    "LD64_POST",
-    "LD64_REG_M0S0LS",
-    "LD8",
-    "LDU16",
-    "LDU8",
-    "LSR32",
     "NOP",
-    "ORI32_W",
-    "PLDWWUA",
-    "SET_HWLOOP_F2_W",
-    "SET_HWLOOP_REG_W",
-    "SET_HWLOOP_W",
-    "SEXT_GPR32_TO_DR64",
-    "SHL32",
-    "ST16",
-    "ST32",
-    "ST32_POST",
-    "ST32_REG_M0S0LS",
-    "ST64",
-    "ST64_POST",
-    "ST64_REG_M0S0LS",
-    "ST8",
     "WFI",
     "WFITBDTBDTBD",
 };

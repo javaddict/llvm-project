@@ -91,7 +91,7 @@ body:             |
     ; CHECK: $r2 = MOVE32_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_R $r0, implicit-def dead $sfr
     ; CHECK: $r3 = MOVE32_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_R {{(killed )?}}$r1, implicit-def dead $sfr
     ; CHECK: $r0 = COPY
-    ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK: $r0 = JALR{{(_E2_E0_ALU0_RI12)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = MOVE32 $r0, implicit-def dead $sfr
     $r3 = MOVE32 $r1, implicit-def dead $sfr
 
@@ -148,7 +148,7 @@ body:             |
     ; CHECK: $r2 = ADD32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r2, $r0, implicit-def dead $sfr
     ; CHECK: $r3 = ADDI32_E{{[23]}}_E{{[0-2]}}_{{.*}} killed $r1, 5, implicit-def dead $sfr
     ; CHECK: $r0 = COPY
-    ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK: $r0 = JALR{{(_E2_E0_ALU0_RI12)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADD32 $r2, $r0, implicit-def dead $sfr
     $r3 = ADDI32 $r1, 5, implicit-def dead $sfr
 
@@ -206,7 +206,7 @@ body:             |
     ; CHECK: dead $r4 = ADDI32_E{{[23]}}_E{{[0-2]}}_{{.*}} $r0, 30, implicit-def dead $sfr
     ; CHECK-NOT: BUNDLE{{.*}}$r4
     ; CHECK: $r0 = COPY
-    ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    ; CHECK: $r0 = JALR{{(_E2_E0_ALU0_RI12)?}} $r15, 0, implicit $r15, implicit $r0, implicit $r15
     $r2 = ADDI32 $r0, 10, implicit-def dead $sfr
     $r3 = ADDI32 $r0, 20, implicit-def dead $sfr
     dead $r4 = ADDI32 $r0, 30, implicit-def dead $sfr

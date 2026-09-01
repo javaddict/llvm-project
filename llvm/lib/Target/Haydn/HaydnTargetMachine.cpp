@@ -20,6 +20,7 @@
 #include "HaydnFinalizeBundle.h"
 #include "HaydnLateConvergence.h"
 #include "HaydnLatencyStalls.h"
+#include "HaydnMachineAlignment.h"
 #include "HaydnVerifyBundles.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnMachineScheduler.h"
@@ -98,18 +99,37 @@ static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
               "hardware-loop product default is ON after the 2026-08-22 "
               "independent + combined qualification; this assert pins the "
               "policy against accidental re-parking without evidence");
-// W68.2R: S2/LateConvergence driver flag. Default remains off until the
-// same-artifact BundleSim + default decision gate. When on, the same
+// W68.2R: S2/LateConvergence driver flag. Product default ON since the
+// G004 flip 2026-08-27 (entry-qualified relocations a7473774858a + read-old
+// dissolve order 554957730440 closed the two defect classes behind the
+// original keep-off; same-artifact matrix 659/659 sms2-ON, torture
+// 1479/1479, CM -3.76% bundles, DH -0.86%). The three -haydn-postra-*
+// edge mutations stay default OFF: with them ON the QoR bisect
+// (2026-08-27, CM/DHRY ON-vs-OFF) is super-additively bundle-regressive
+// (CM +33.38%, DH +12.18%); see HaydnSchedMutations.h. When on, the same
 // post-RA scheduler implementation runs at addPostBBSections after the
 // common executable tail (outliner/split/BB sections) and before the
-// closure Finalize. S1 in addPreSched2 is disposable.
+// closure Finalize. S1 commits reopenable provisional BUNDLEs (the first
+// S2 invocation canonicalizes them back to logicals under the direct-shape
+// and CB-167 read-old order gates). HC#0 walker hooks
+// stay declined; this flag does not port them.
+static constexpr bool haydnLateConvergenceProductDefaultEnabled() {
+  // G004 flip 2026-08-27 (@ 5549577): sms2-only arm of the same-artifact
+  // matrix green — 659-suite 659/659, torture -O2 1479/1479, CoreMark
+  // PASS -3.76% bundles, Dhrystone PASS -0.86%, default lit+MC+lld
+  // 1071/0F, HaydnTests 599/599, BundleSim full 687/687. The
+  // postra-edges=ON arms were measured super-additively regressive and
+  // are NOT part of this default.
+  return true;
+}
 static cl::opt<bool> EnableHaydnSMS2(
-    "haydn-sms2", cl::Hidden, cl::init(false),
+    "haydn-sms2", cl::Hidden,
+    cl::init(haydnLateConvergenceProductDefaultEnabled()),
     cl::desc("W68.2R: invoke the post-RA scheduler a second time (S2; "
              "addPostBBSections after the common executable tail). "
-             "Default off."));
+             "Product default ON (G004 flip 2026-08-27)."));
 
-static bool HaydnSMS2Enabled() { return EnableHaydnSMS2; }
+bool llvm::haydnSMS2Enabled() { return EnableHaydnSMS2; }
 
 static cl::opt<bool> EnableHaydnHardwareLoops(
     "haydn-enable-hwloops",
@@ -147,6 +167,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnHardwareLoopsPass(PR);
   initializeHaydnFixupHwLoopsPass(PR);
   initializeHaydnLateConvergencePassPass(PR);
+  initializeHaydnMachineAlignmentPass(PR);
   initializeBranchRelaxationLegacyPass(PR);
   initializeMachinePipelinerPass(PR);
 }
@@ -246,8 +267,9 @@ namespace {
 // Layout: addBlockPlacement empty (AIE2TargetMachine.cpp:250-253)
 // Pre-emit: BranchRelaxation; FixupHwLoops(O1+hwloops) + second BR;
 // mid Finalize+Verify after BR (bare-parcel recommit). S2/LateConvergence
-// is at addPostBBSections under -haydn-sms2 (default off), after the
-// common executable tail and before closure Finalize. insertIndirectBranch
+// is at addPostBBSections under -haydn-sms2 (product default ON, G004
+// flip 2026-08-27), after the common executable tail and before closure
+// Finalize. insertIndirectBranch
 // emits real LUI+ADDI32_W+JALR_W that must rejoin the mid/late lanes.
 // AIE PreEmit empty :88 — AIE has no BR. Asm: AsmPrinter
 // (O1) = opt-gated; * = load-bearing / legal encode. Deleted: PushPopOpt
@@ -564,8 +586,9 @@ void HaydnPassConfig::addPostBBSections() {
   // executable writer — RegUsageInfoCollector/IPRA, FuncletLayout,
   // RemoveLoadsIntoFakeUses, StackMapLiveness, LiveDebugValues, sanitizer
   // metadata, MachineOutliner, function/data splitting, and
-  // BasicBlockSections all precede addPostBBSections. S2 (HaydnLateConvergence,
-  // -haydn-sms2 default-off) chooses current physical MIs here, then the
+  // BasicBlockSections all precede addPostBBSections. S2
+  // (HaydnLateConvergence, -haydn-sms2 product default ON) chooses current
+  // physical MIs here, then the
   // one closure Finalize commits any bare MI those writers reintroduced
   // (outlined sequences rejoin committed state) and Verify fail-closes the
   // committed-cycle invariants. Optional CFIFixup (metadata/CFI only,
@@ -582,13 +605,29 @@ void HaydnPassConfig::addPostBBSections() {
   //
   // S2 still seats under the limited-pipeline carve-out so -stop-after=
   // haydn-late-convergence can observe the pass; Finalize/Verify remain
-  // product-pipeline-only. Flag stays default-off (cl::init(false)).
-  if (HaydnSMS2Enabled())
+  // product-pipeline-only. Flag is product default ON (G004 flip
+  // 2026-08-27, haydnLateConvergenceProductDefaultEnabled).
+  if (haydnSMS2Enabled())
     addPass(createHaydnLateConvergencePass());
   if (TargetPassConfig::hasLimitedCodeGenPipeline())
     return;
   addPass(createHaydnFinalizeBundlePass());
   addPass(createHaydnVerifyBundlesPass());
+  // W70.2 function-alignment writer (GOALS/contract: "AIE MachineAlignment
+  // seat after first Finalize and after S2 closure: pad with a legal
+  // generated idle row. Delete printer emitFunctionEntryLabel growth.
+  // Prefix budgets charge the same pad."). Peer AIE2TargetMachine.cpp:247
+  // seats createAIEMachineAlignment directly after createAIEFinalizeBundle.
+  // This seat is after the FIRST Finalize (addPreSched2) and after the S2
+  // closure Finalize+Verify above, and before the addPreEmitPass2 freeze
+  // verifier — the pads are real committed idle-parcel BUNDLEs, so the
+  // freeze verifier and every byte-distance consumer (BR/HWLoop walks via
+  // getInstSizeInBytes) charge them for free. Pad-only (no AIE elongation):
+  // both product rows encode the same single EncodedBytes parcel and golden
+  // admits no underfill/top-pad. Runs at every opt level including optnone
+  // (layout, not optimization); same limited-pipeline carve-out as the
+  // closure seats above it.
+  addPass(createHaydnMachineAlignmentPass());
 }
 
 void HaydnPassConfig::addPreEmitPass2() {

@@ -27,13 +27,12 @@ define i64 @caller_5th_i64_spills(i64 %x) {
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; sext32t64 d4, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
-; CHECK-NEXT:    { nop; sext32t64 d1, r1; slli64 d4, d4, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 3 }
-; CHECK-NEXT:    { nop; sext32t64 d2, r1; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 4 }
-; CHECK-NEXT:    { nop; sext32t64 d3, r1; slli64 d2, d2, 32 }
-; CHECK-NEXT:    { nop; srli64 d4, d4, 32; slli64 d3, d3, 32 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { sext32t64 d2, r1; slli64 d4, d4, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { slli64 d2, d2, 32; addi32 r1, r0, 4 }
+; CHECK-NEXT:    { sext32t64 d3, r1; srli64 d4, d4, 32; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d2, d2, 32; slli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 0 }

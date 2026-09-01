@@ -134,7 +134,7 @@ attributes #0 = { mustprogress nofree norecurse nosync nounwind willreturn memor
 ; specific packing.
 ; CHECK-LABEL: name: postra_auction_wide_postcall_region
 ; CHECK: BUNDLE
-; CHECK: JAL_W
+; CHECK: JAL{{(_W|_E2_[^ ]+)?}}
 ; CHECK: S_SB_WITH_IMM
 ; CHECK: S_SHW_WITH_IMM
 ; CHECK: S_SHW_WITH_IMM

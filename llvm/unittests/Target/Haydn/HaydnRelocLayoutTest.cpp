@@ -739,24 +739,24 @@ TEST(HaydnRelocLayoutTest, SharedRelocKindMatchesElfCoverage) {
 // collides with Kalray KVX; distinguisher stays EF_HAYDN_E96=0x1.
 TEST(HaydnRelocLayoutTest, NineFileHashAndProvisionalObjectIdentity) {
   EXPECT_STREQ(FormatEXLSXSHA256,
-               "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f");
+               "2a2b43cb394a16cf89173538f2a673235fdb6e4ed04cb6e4e75e72520cf7ffdb");
   EXPECT_STREQ(FormatEJSONSHA256,
-               "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a");
+               "c436793cc8d3295088dda2271e68e5b53074eeb4bce3341d443ebac3e828dcba");
   static constexpr const char *kNineFile[][2] = {
-      {"format_e_bit_layout_v2_1.xlsx",
-       "dd8491b7c182d006ad7d05c8cd46f64c02f439ae41bad0416f7139703d07b76f"},
-      {"format_e_bit_layout_v2_1.json",
-       "2609877075156dd9749e1e8dd0b45ff1ef326dae2e1c2a9c10fbd9cd1c1c8f6a"},
+      {"format_e_bit_layout_v2_2.xlsx",
+       "2a2b43cb394a16cf89173538f2a673235fdb6e4ed04cb6e4e75e72520cf7ffdb"},
+      {"format_e_bit_layout_v2_2.json",
+       "c436793cc8d3295088dda2271e68e5b53074eeb4bce3341d443ebac3e828dcba"},
       {"format_e_canonical_vectors_v1.json",
        "741f5b4141990dc27dc217d2b0c0d7ab57240e08ef31c34bc036f11bbda1938e"},
       {"instruction_type_index.json",
-       "7a13453ad934d6be9a303b51fcaeb6e908d97015b3e75db7d76fa13cb7a6dede"},
+       "3f306463d108c8240b6f8afa876e3fa4ca06b91ee7f38efe1fb4eba631c3433b"},
       {"operands_info.md",
        "e4b61bf5b5be2634b1665474bf4906db0df017a939289a49d40e82bc2121fb12"},
       {"instruction_type_operands.json",
-       "0f97fdf5ecf56172190fa21aeb22049a0a0cace28640314e3209623a167413e7"},
+       "434544ef336fe703ff69c6c59316c3e89f3350e1d4cae6fd6790929d01e7bd20"},
       {"instruction_to_entry.xlsx#cells",
-       "6b084277e2b92a5166feb06cad7050651f2b06cf99138c885ce9e9da9e7cdb6c"},
+       "ba6d65066b812083925ec5b68dae6dee26323ceb8aaab0040db0ff083f5d3098"},
       {"VLIW_Engine_Compiler_Constraints.md",
        "e0d7f7f0e7ce06622f4ae90dc9366caf16da48993c7f803c02d460473fd9b56a"},
       {"VLIW_Engine_Reference_Manual.docx",

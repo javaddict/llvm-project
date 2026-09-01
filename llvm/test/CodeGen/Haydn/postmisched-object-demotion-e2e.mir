@@ -101,7 +101,7 @@ body:             |
 # MIR: BUNDLE 0
 # MIR: BNEZ_E2
 # MIR: bb.3.exit
-# MIR: RET
+# MIR: {{RET|JALR}}
 
 # Object bytes are produced from the same MIR (llc -filetype=obj above).
 # Disassembly print of residual FieldSlots is encoding-owned.

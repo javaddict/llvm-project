@@ -139,6 +139,19 @@ constexpr Row Table[] = {
     // Align=1, not PC-relative. NBytes=12 covers E3 e2 @ bit 85 via
     // resolveFieldLsb. Distinct from Data8 (1-byte data image at LSB 0).
     {RelocKind::CSR_UImm8, {12, 8, 32, 0, 1, false, false, RelocTrans::None}},
+    // Entry-qualified rows: same geometry as the base kind EXCEPT FieldLsb
+    // is the typed (kind, entry) window. NBytes/FieldSize/ValueShift/Align/
+    // IsSigned/IsPCRel/Trans mirror the base row exactly.
+    {RelocKind::LO20_E1, {12, 20, 65, 0, 1, false, false, RelocTrans::Lo20}},
+    {RelocKind::PC_LO20_E1, {12, 20, 65, 0, 1, false, true, RelocTrans::Lo20}},
+    {RelocKind::WIDE_CallSImm20_E3E1, {12, 20, 48, 0, 2, true, true, RelocTrans::None}},
+    {RelocKind::WIDE_BranchSImm12_E3E0, {12, 12, 23, 0, 2, true, true, RelocTrans::None}},
+    {RelocKind::WIDE_BranchSImm12_E3E1, {12, 12, 54, 0, 2, true, true, RelocTrans::None}},
+    {RelocKind::WIDE_BranchSImm12_E3E2, {12, 12, 81, 0, 2, true, true, RelocTrans::None}},
+    {RelocKind::WIDE_BranchSImm12_RI_E3E0, {12, 12, 23, 0, 2, true, true, RelocTrans::None}},
+    {RelocKind::WIDE_BranchSImm12_RI_E3E1, {12, 12, 54, 0, 2, true, true, RelocTrans::None}},
+    {RelocKind::JALRSImm12_E3E0, {12, 12, 23, 0, 2, true, true, RelocTrans::None}},
+    {RelocKind::JALRSImm12_E3E1, {12, 12, 54, 0, 2, true, true, RelocTrans::None}},
 };
 
 static_assert(static_cast<unsigned>(RelocKind::WIDE_BranchSImm12_RI) ==
@@ -152,6 +165,12 @@ static_assert(static_cast<unsigned>(RelocKind::JALRSImm12) ==
 static_assert(static_cast<unsigned>(RelocKind::CSR_UImm8) ==
                   ELF::R_HAYDN_CSR_UImm8,
               "CSR_UImm8 RelocKind must match ELF R_HAYDN_CSR_UImm8");
+static_assert(static_cast<unsigned>(RelocKind::LO20_E1) ==
+                  ELF::R_HAYDN_LO20_E1,
+              "LO20_E1 RelocKind must match ELF R_HAYDN_LO20_E1");
+static_assert(static_cast<unsigned>(RelocKind::JALRSImm12_E3E1) ==
+                  ELF::R_HAYDN_JALRSImm12_E3E1,
+              "JALRSImm12_E3E1 RelocKind must match ELF");
 
 // Fail-closed sentinel: unknown / Invalid kinds are never product-ready.
 // Returning Table[0] (None, Trans::None) used to make isRelocTransformReady
@@ -362,6 +381,11 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
 unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   const RelocFieldInfo &I = getRelocFieldInfo(R);
   if (!Loc)
+    return I.FieldLsb;
+  // Entry-qualified kinds carry the write window in the TYPE (the typed
+  // (kind, entry, window) mapping). Never sniff parcel content for them —
+  // sniffing is ambiguous once two same-kind fields share a parcel.
+  if (isEntryQualifiedKind(R))
     return I.FieldLsb;
 
   auto GetBits = [&](unsigned Lo, unsigned Width) -> unsigned {
@@ -851,6 +875,26 @@ RelocKind mapFixupKind(unsigned MCFixupKind) {
     return RelocKind::JALRSImm12;
   case Haydn::FIXUP_HAYDN_CSR_UImm8:
     return RelocKind::CSR_UImm8;
+  case Haydn::FIXUP_HAYDN_LO20_E1:
+    return RelocKind::LO20_E1;
+  case Haydn::FIXUP_HAYDN_PC_LO20_E1:
+    return RelocKind::PC_LO20_E1;
+  case Haydn::FIXUP_HAYDN_WIDE_CallSImm20_E3E1:
+    return RelocKind::WIDE_CallSImm20_E3E1;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E0:
+    return RelocKind::WIDE_BranchSImm12_E3E0;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E1:
+    return RelocKind::WIDE_BranchSImm12_E3E1;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E2:
+    return RelocKind::WIDE_BranchSImm12_E3E2;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E0:
+    return RelocKind::WIDE_BranchSImm12_RI_E3E0;
+  case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1:
+    return RelocKind::WIDE_BranchSImm12_RI_E3E1;
+  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E0:
+    return RelocKind::JALRSImm12_E3E0;
+  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E1:
+    return RelocKind::JALRSImm12_E3E1;
   default:
     return RelocKind::Invalid;
   }
@@ -905,6 +949,26 @@ unsigned mapRelocKindToFixup(RelocKind R) {
     return Haydn::FIXUP_HAYDN_JALRSImm12;
   case RelocKind::CSR_UImm8:
     return Haydn::FIXUP_HAYDN_CSR_UImm8;
+  case RelocKind::LO20_E1:
+    return Haydn::FIXUP_HAYDN_LO20_E1;
+  case RelocKind::PC_LO20_E1:
+    return Haydn::FIXUP_HAYDN_PC_LO20_E1;
+  case RelocKind::WIDE_CallSImm20_E3E1:
+    return Haydn::FIXUP_HAYDN_WIDE_CallSImm20_E3E1;
+  case RelocKind::WIDE_BranchSImm12_E3E0:
+    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E0;
+  case RelocKind::WIDE_BranchSImm12_E3E1:
+    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E1;
+  case RelocKind::WIDE_BranchSImm12_E3E2:
+    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E2;
+  case RelocKind::WIDE_BranchSImm12_RI_E3E0:
+    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E0;
+  case RelocKind::WIDE_BranchSImm12_RI_E3E1:
+    return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1;
+  case RelocKind::JALRSImm12_E3E0:
+    return Haydn::FIXUP_HAYDN_JALRSImm12_E3E0;
+  case RelocKind::JALRSImm12_E3E1:
+    return Haydn::FIXUP_HAYDN_JALRSImm12_E3E1;
   case RelocKind::C_BranchSImm4:
     return Haydn::FIXUP_HAYDN_C_BranchSImm4;
   case RelocKind::C_UImm4:

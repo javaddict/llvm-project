@@ -34,11 +34,11 @@
 #include "HaydnHazardRecognizer.h"
 #include "HaydnSchedMutations.h"
 #include "HaydnInstrInfo.h"
-#include "HaydnMemberSetDesc.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPortModel.h"
 #include "HaydnPostRAScratch.h"
+#include "Haydn.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -165,7 +165,17 @@ static unsigned countMultiMemberHardRoots(MachineBasicBlock &MBB) {
   return Count;
 }
 
-HaydnPostRASchedStrategy::~HaydnPostRASchedStrategy() = default;
+HaydnPostRASchedStrategy::~HaydnPostRASchedStrategy() {
+  // AIE leaveRegion clears AltDescs (AIEMachineScheduler.cpp:1081-1082).
+  // Haydn freeze requires the same empty transients: drop the inter-block
+  // DDG after the last scheduler invocation. S1 keeps it for S2 Bot replay
+  // when -haydn-sms2 is on.
+  if (!Ctx || !Ctx->MF)
+    return;
+  auto &MFI = *Ctx->MF->getInfo<HaydnMachineFunctionInfo>();
+  if (MFI.getPostRASchedInvocations() >= 2 || !haydnSMS2Enabled())
+    MFI.clearInterBlockRegistry();
+}
 
 HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
     : PostGenericScheduler(C), Ctx(C),
@@ -604,8 +614,32 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
 
   // Insert successor cycle C at C-Depth so RecedeCycle(Depth+1) leaves
   // successor cycle 0 at scoreboard[+1] (AIE AlignScoreboardToCycleOne).
+  //
+  // W69: successors of one block are EXCLUSIVE alternatives — at most one
+  // executes — so per-cycle demand across successors is the element-wise max,
+  // never the sum. Booking every successor directly into BotHR (the pre-W69
+  // shape) stacked alternative paths additively into the same cycles,
+  // producing phantom over-limit bundles (issue>3, GPR>4R/2W) that
+  // HaydnFuncUnitWrapper::conflict then reported against even an EMPTY Top
+  // cycle (0+5 > 4). handleRegionConflicts' Top bumps can never clear a
+  // Bot-side phantom, so every affected region saturated the inter-zone pad
+  // cap (33 NOP parcels per region; the +33% CoreMark blowup under
+  // sms2+edges). Each successor now replays into its own scratch recognizer
+  // and merges by per-cycle maxWith: still conservative for every single
+  // path, never additive across paths. Multi-cycle residual in the scratch
+  // beyond its own window is dropped by the same isInRange gate
+  // enterResources applies.
+  const InstrItineraryData *Itin =
+      CurrentMBB->getParent()->getSubtarget().getInstrItineraryData();
+  HaydnHazardRecognizer ScratchHR(HII, Itin, /*IsPreRA=*/false, nullptr);
   unsigned Replayed = 0;
   for (MachineBasicBlock *Succ : ReplaySuccs) {
+    // First successor seeds BotHR directly; later ones merge via scratch.
+    HaydnHazardRecognizer *TargetHR = BotHR;
+    if (Replayed) {
+      ScratchHR.Reset();
+      TargetHR = &ScratchHR;
+    }
     int Cycle = 0;
     for (MachineInstr &MI : *Succ) {
       if (MI.isBundledWithPred())
@@ -620,12 +654,14 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
       collectCycleMembers(MI, Members);
       for (MachineInstr *M : Members) {
         SUnit Tmp(M, /*NodeNum=*/0);
-        BotHR->emitInstruction(&Tmp, Cycle - Depth);
+        TargetHR->emitInstruction(&Tmp, Cycle - Depth);
         ++Replayed;
         ++NumBotScoreboardBundleReplays;
       }
       ++Cycle;
     }
+    if (TargetHR == &ScratchHR && Cycle > 0)
+      BotHR->maxMergeSB(ScratchHR, -Depth, Depth - 1);
     LLVM_DEBUG(dbgs() << "  replayed bb." << Succ->getNumber()
                       << " through cycle " << Cycle << "\n");
   }
@@ -694,6 +730,15 @@ MBBBundles.clear();
     // cross-MBB callback repair).
     if (!PreExistingMultiMembers.empty())
       replayMultiMemberSeamHazards(*CurrentMBB, PreExistingMultiMembers);
+    // Skipped single-MI regions never enter leaveRegion materialize
+    // (MachineScheduler.cpp:862-866). Remaining bare MIs stay LOGICAL here:
+    // LatencyStalls charges dest windows from the logical Desc's published
+    // itinerary (ST32_POST Slot1_LD [2]); baking the singleton member here
+    // (S_SW_POST_IMM_E2_* Slot0_LS_WbLat [1]) would erase the exposed-
+    // pipeline stall parcel before the stall authority runs. Identity bake
+    // for bare singles happens at the END of LatencyStalls and at Finalize
+    // wrap (exactSolveLateSingleton, CB-152b E2 resettle) — construction
+    // stays member-committed without a second latency authority.
     HaydnAlternateDescriptors &AltDescs =
         CurrentMBB->getParent()
             ->getInfo<HaydnMachineFunctionInfo>()
@@ -1030,7 +1075,7 @@ void HaydnPostRASchedStrategy::materializeBundles(
   // Port of AIE materializeEmptyBundles + applyBundles, Top zone only.
   // Cycle ownership (exact no-split Format E encode):
   // * empty cycle → NOP at rolling position (before next real cycle / term)
-  // * single MI → leave standalone here; HaydnFinalizeBundle wraps + stamps
+  // * single MI → identity-compatible closed-cycle member; Finalize wraps
   // * 2-3 free MIs legal → commitOneProductCycle (one bake site)
   // * 2-3 free MIs illegal → leave sequential (recovery, not a pack law)
   for (unsigned Idx = 0; Idx < Bundles.size(); ++Idx) {
@@ -1047,8 +1092,9 @@ void HaydnPostRASchedStrategy::materializeBundles(
       ++NumIdleCyclesMaterialized;
       continue;
     }
-    if (CB.Instrs.size() == 1)
+    if (CB.Instrs.size() == 1) {
       continue;
+    }
 
     materializeExactNoSplitCycle(MBB, CB.Instrs, DAG, /*IsTop=*/true);
   }
@@ -1058,8 +1104,7 @@ void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
   // AIE port of AIEPostRASchedStrategy::materializeMultiOpcodeInstrs
   // (AIEMachineScheduler.cpp:1121-1139): when HR selected a format-member
   // opcode (commitPlacementForEmit → setAlternateDescriptor), bake it into
-  // the MachineInstr via setDesc. Product is Format E only; members are the
-  // residual `_S*` placement peers used until live Format E entry Insts land.
+  // the MachineInstr via identity setDesc. Product is Format E only.
   //
   // End-state (AIEMachineScheduler.cpp:1081-1082 +
   // AIEAlternateDescriptors.h:74): SelectedAltDescs.clear() after setDesc.
@@ -1071,28 +1116,17 @@ void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
 
   auto MaterializePseudo = [&](MachineInstr &MI) {
     // AIE parity (AIEMachineScheduler.cpp:1126-1132): unconditional
-    // MI.setDesc when getSelectedOpcode is present. AIE alts share operand
-    // structure by construction (AIEAlternateDescriptors.h:64-68); Haydn
-    // members now match logical NumOperands/NumDefs (S_SW_BREV_*_S* / BREV
-    // load *_LD_S* tied shapes). No shape-gate, no MCFlags write.
+    // MI.setDesc when getSelectedOpcode is present. Haydn overlay gates
+    // on memberDescCompatible + keep-map rewrite: CB load/store logicals
+    // swap operand order onto the tied member (cbr_sel position differs),
+    // so raw setDesc would put an imm on a tied register slot
+    // (MachineVerifier abort). A pair with no keep map keeps its logical
+    // Desc for the multi-MI commit's fail-closed second line.
     // INLINEASM is never a format-member logical — leave it alone.
     if (MI.isInlineAsm())
       return;
-    if (std::optional<unsigned> AltOpcode = AltDescs.getSelectedOpcode(&MI)) {
-      // AIE setDesc is unconditional (members share logical operand
-      // shape). Haydn Format E members drop tied acc / vestigial uses;
-      // rewrite from the keep-map. Slot comes from the format desc, not
-      // an `_S*` postfix.
-      const MCSlotKind Kind = haydnDefaultMCFormats().getSlotKind(*AltOpcode);
-      if (haydn::bundle::formatECompositeSlotIsE2(Kind) ||
-          haydn::bundle::formatECompositeSlotIsE3(Kind)) {
-        // Keep-map rewrite only. Raw setDesc on a 5-op CB / 3-op WBARWUA
-        // logical leaves an imm in a register slot (cbr_sel vs dest2).
-        if (memberDescCompatible(MI, *AltOpcode, *HII))
-          rewriteFieldSlotToMember(MI, *AltOpcode, *HII);
-      } else
-        MI.setDesc(HII->get(*AltOpcode));
-    }
+    if (std::optional<unsigned> AltOpcode = AltDescs.getSelectedOpcode(&MI))
+      bakeFormatEMemberDesc(MI, *AltOpcode, *HII);
   };
 
   // AIE asserts top==bottom for PostRA; Haydn PostGenericScheduler is

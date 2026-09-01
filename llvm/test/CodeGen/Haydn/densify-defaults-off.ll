@@ -20,6 +20,9 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.h --check-prefix=HWDEF
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=HWASSERT
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=HWFLAG
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=S2DEF
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSchedMutations.h --check-prefix=IBDEF
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSchedMutations.cpp --check-prefix=IBFLAG
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFeatures.td --check-prefix=FEAT
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/CMakeLists.txt --check-prefix=CMAKE
 ; REQUIRES: asserts
@@ -44,10 +47,27 @@
 ; Deleted densify (no flags): PostPipeliner, InterBlock, Role B, formMACs,
 ; LoadStoreOpt form/phase2.
 
-; Flip sites are constexpr true (2026-08-22, both); cl::init follows each helper.
+; Flip sites: hwloop/SMS constexpr true (2026-08-22); -haydn-sms2 constexpr
+; true since the G004 flip 2026-08-27 (trimmed: sms2-only arm measured
+; CM -3.76% / DH -0.86%); the three -haydn-postra-* edge mutations stay
+; constexpr false (combined arm super-additively regressive: CM +33.38%,
+; DH +12.18%). cl::init follows each helper.
 ; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
 ; HWASSERT: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; HWFLAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
+; S2DEF: haydnLateConvergenceProductDefaultEnabled()
+; S2DEF: return true;
+; S2DEF: "haydn-sms2", cl::Hidden,
+; S2DEF: cl::init(haydnLateConvergenceProductDefaultEnabled()),
+; IBDEF: haydnPostRAInterblockProductDefaultEnabled() { return false; }
+; IBDEF: haydnPostRARegionEndEdgesProductDefaultEnabled() { return false; }
+; IBDEF: haydnPostRAWAWEdgesProductDefaultEnabled() { return false; }
+; IBFLAG: haydn-postra-region-end-edges",
+; IBFLAG: cl::init(haydnPostRARegionEndEdgesProductDefaultEnabled())
+; IBFLAG: haydn-postra-interblock",
+; IBFLAG: cl::init(haydnPostRAInterblockProductDefaultEnabled())
+; IBFLAG: haydn-postra-waw-edges",
+; IBFLAG: cl::init(haydnPostRAWAWEdgesProductDefaultEnabled())
 ; FEAT: ISA capability only
 ; FEAT: hardwareLoopsProductDefaultEnabled
 ; CMAKE: regeneration is an explicit developer step

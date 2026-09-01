@@ -78,7 +78,7 @@ define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr noc
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r5, r0, 1 }
-; CHECK-NEXT:    { nop; nop; max32 r4, r4, r5 }
+; CHECK-NEXT:    { nop; max32 r4, r4, r5 }
 ; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r4 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; nop }
@@ -86,16 +86,18 @@ define void @vadd_streaming(ptr nocapture %a, ptr nocapture readonly %b, ptr noc
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    // Label of block must be emitted
 ; CHECK-NEXT:  .LLhwloop_start0:
-; CHECK-NEXT:    { ld32 r5, r3, 0; ld32 r4, r2, 0 }
+; CHECK-NEXT:    { ld32 r4, r2, 0; ld32 r5, r3, 0 }
 ; CHECK-NEXT:    { addi32 r2, r2, 4; addi32 r3, r3, 4 }
 ; CHECK-NEXT:    { nop; add32 r4, r4, r5 }
-; CHECK-NEXT:    { nop; s_sw_post_imm r4, r1, 1 }
 ; CHECK-NEXT:  .LLhwloop_end0:
-; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; s_sw_post_imm r4, r1, 1 }
 ; CHECK-NEXT:  // %bb.2: // %exit
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; P4 golden S_SW_POST_IMM Data_Latency=1: no writeback dest-read window, so
+; no end-window stall parcels — the store IS the inclusive END cycle and the
+; label anchors at it.
 ; Independent slt32 (trip) + add32 (load-use) share a cycle; store packs
 ; with the remaining pointer bump. slt32/bnez stay the SMS signature.
 entry:

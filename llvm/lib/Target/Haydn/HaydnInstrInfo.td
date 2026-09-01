@@ -860,15 +860,23 @@ def SLE64 : HaydnInst<0, (outs), (ins DR64:$rs1, DR64:$rs2),
 
 // Scalar 64-bit SFR conditional move (unary DR64 → reads SFR, sets dst).
 // 2026-08-21 itinerary re-map: golden Available = ALU0|ALU1|ALU2.
+// M23 tied old-dest: golden Behavior `rtd = cond ? rsd : rtd` READS rtd
+// (DR_Read_Port ∩ DR_Write_Port = rtd), so the MI models the RMW with a
+// tied $rd_old input exactly like X2MOVT32. The IR intrinsic is unary (no
+// fallthrough arg); the selector seeds $rd_old undef from the destination
+// (IR semantics of the preserved value: whatever rtd holds — the hardware
+// read is the machine truth). AsmString keeps the golden 2-op spelling.
 let hasSideEffects = 0, Uses = [SFR], isCodeGenOnly = 0, isPseudo = 1,
     Itinerary = Slot012_ALU in {
-def MOVT64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
+def MOVT64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rd_old, DR64:$rs1),
                        "movt64\t$rd, $rs1", []> {
+  let Constraints = "$rd = $rd_old";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
-def MOVF64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rs1),
+def MOVF64 : HaydnInst<0, (outs DR64:$rd), (ins DR64:$rd_old, DR64:$rs1),
                        "movf64\t$rd, $rs1", []> {
+  let Constraints = "$rd = $rd_old";
   let TSFlags{2-0} = 0b110;
   let TSFlags{4-3} = 0b01;
 }
@@ -1374,17 +1382,27 @@ def LD32_POST : FmtLSPostInc<0x48, (outs GPR32:$rt, GPR32:$rs_wb),
 
 // D_SDW_POST_IMM rtd, rs, imm6 — store 64b rtd to [rs], then rs += (imm6<<3).
 // HiFi analog: ae_s64.ip.
+// Golden Data_Latency=1 for the rs writeback (instruction_type_index.json
+// D_SDW_POST_IMM): Slot0_LS_WbLat (OperandCycles [1]); memory-edge pair
+// unchanged. Loads LD32_POST/LD64_POST keep Slot1_LD [2] (golden lat=2).
 let mayStore = 1, mayLoad = 0, Constraints = "$rs = $rs_wb" in
 def ST64_POST : FmtLSPostInc<0x49, (outs GPR32:$rs_wb),
                               (ins DR64:$rt, GPR32:$rs, simm6:$scaled_imm),
-                              "st64_post\t$rt, $rs, $scaled_imm", []>;
+                              "st64_post\t$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS_WbLat;
+}
 
 // S_SW_POST_IMM rt, rs, imm6 — store 32b rt to [rs], then rs += (imm6<<2).
 // HiFi analog: ae_s32.ip / C-language *p++ = x.
+// Golden Data_Latency=1 for the rs writeback (instruction_type_index.json
+// S_SW_POST_IMM): Slot0_LS_WbLat (OperandCycles [1]); memory-edge pair
+// unchanged. Loads LD32_POST/LD64_POST keep Slot1_LD [2] (golden lat=2).
 let mayStore = 1, mayLoad = 0, Constraints = "$rs = $rs_wb" in
 def ST32_POST : FmtLSPostInc<0x4A, (outs GPR32:$rs_wb),
                               (ins GPR32:$rt, GPR32:$rs, simm6:$scaled_imm),
-                              "st32_post\t$rt, $rs, $scaled_imm", []>;
+                              "st32_post\t$rt, $rs, $scaled_imm", []> {
+  let Itinerary = Slot0_LS_WbLat;
+}
 
 //===----------------------------------------------------------------------===//
 // Lane stores: store one 32-bit lane of a DR64 to memory.
@@ -1815,11 +1833,20 @@ def X4FF2MUL16S : HaydnInst<4, (outs DR64:$rd, DR64:$rtd2),
 
 // 2026-08-21 itinerary re-map: golden MOVEI_H/MOVEI_L/ZERO_DR Available =
 // ALU0|ALU1|ALU2 (previously NoItinerary — no unit reservation).
+// M23 tied old-dest: golden Behavior `rtd = {imm32, rtd[31:00]}` (MOVEI_H;
+// MOVEI_L symmetric) READS the unwritten half of rtd
+// (DR_Read_Port ∩ DR_Write_Port = rtd), so the MI carries a tied $rd_old
+// input like MOVT64. The IR intrinsic is imm-only; the selector seeds
+// $rd_old undef from the destination. AsmString keeps the golden spelling.
 let TSFlags = 14, Itinerary = Slot012_ALU in {
-def MOVEI_H : HaydnInst<4, (outs DR64:$rd),
-    (ins simm32_movei:$imm32), "movei_h\t$rd, $imm32", []>;
-def MOVEI_L : HaydnInst<4, (outs DR64:$rd),
-    (ins simm32_movei:$imm32), "movei_l\t$rd, $imm32", []>;
+def MOVEI_H : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rd_old, simm32_movei:$imm32),
+    "movei_h\t$rd, $imm32", []> {
+  let Constraints = "$rd = $rd_old";
+}
+def MOVEI_L : HaydnInst<4, (outs DR64:$rd), (ins DR64:$rd_old, simm32_movei:$imm32),
+    "movei_l\t$rd, $imm32", []> {
+  let Constraints = "$rd = $rd_old";
+}
 }
 
 let isPseudo = 0, TSFlags = 14, Itinerary = Slot012_ALU in

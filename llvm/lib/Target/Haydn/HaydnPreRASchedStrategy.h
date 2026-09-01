@@ -328,12 +328,19 @@ public:
     return IsZOL && StageCount <= 1u;
   }
 
-  /// ZOL: prologue peels need MinTripCount > PrologueCount; MinTripCount==0
-  /// (unknown/unbounded) refuses every multi-stage schedule (AIE canAcceptII).
+  /// ZOL: prologue peels need MinTripCount > PrologueCount when the trip is
+  /// a compile-time constant; MinTripCount==0 (unknown/unbounded) refuses
+  /// every multi-stage schedule (AIE canAcceptII). CB-166: a runtime trip
+  /// REGISTER (HasRuntimeTripReg — the count feeding LoopStart $src) makes
+  /// the per-prologue dynamic guard emittable (Hexagon J2_loop0r law), so
+  /// the static MinTripCount bound no longer refuses.
   static bool smsZOLRejectsMinTrip(bool IsZOL, unsigned PrologueCount,
-                                   int64_t MinTripCount) {
-    return IsZOL && (MinTripCount == 0 ||
-                     static_cast<int64_t>(PrologueCount) >= MinTripCount);
+                                   int64_t MinTripCount,
+                                   bool HasRuntimeTripReg = false) {
+    if (!IsZOL || HasRuntimeTripReg)
+      return false;
+    return MinTripCount == 0 ||
+           static_cast<int64_t>(PrologueCount) >= MinTripCount;
   }
 
   /// Pure RA pressure-set excess: any MaxSetPressure[i] > Limits[i].
@@ -363,11 +370,13 @@ public:
       bool IsZOL, unsigned PrologueCount, int64_t MinTripCount,
       bool PressureExcess,
       unsigned MaxStageCount = productSMSMaxStageCount,
-      bool TrackRegPressure = productSMSTrackRegPressureDefault) {
+      bool TrackRegPressure = productSMSTrackRegPressureDefault,
+      bool HasRuntimeTripReg = false) {
     const unsigned StageCount = PrologueCount + 1u;
     if (smsZOLRejectsSingleStage(IsZOL, StageCount))
       return true;
-    if (smsZOLRejectsMinTrip(IsZOL, PrologueCount, MinTripCount))
+    if (smsZOLRejectsMinTrip(IsZOL, PrologueCount, MinTripCount,
+                             HasRuntimeTripReg))
       return true;
     if (smsStageCountExceedsMax(StageCount, MaxStageCount))
       return true;
@@ -381,10 +390,11 @@ public:
       bool IsZOL, unsigned PrologueCount, int64_t MinTripCount,
       bool PressureExcess,
       unsigned MaxStageCount = productSMSMaxStageCount,
-      bool TrackRegPressure = productSMSTrackRegPressureDefault) {
+      bool TrackRegPressure = productSMSTrackRegPressureDefault,
+      bool HasRuntimeTripReg = false) {
     return !smsShouldUseScheduleFailsClosed(IsZOL, PrologueCount, MinTripCount,
                                             PressureExcess, MaxStageCount,
-                                            TrackRegPressure);
+                                            TrackRegPressure, HasRuntimeTripReg);
   }
 
   /// Product shouldUseSchedule fail-close including StageCount1 containment.
@@ -395,13 +405,14 @@ public:
       bool PressureExcess,
       unsigned MaxStageCount = productSMSMaxStageCount,
       bool TrackRegPressure = productSMSTrackRegPressureDefault,
-      unsigned ContainmentMax = productSMSContainmentMaxStageCount) {
+      unsigned ContainmentMax = productSMSContainmentMaxStageCount,
+      bool HasRuntimeTripReg = false) {
     const unsigned StageCount = PrologueCount + 1u;
     if (smsProductStageCountExceedsContainment(StageCount, ContainmentMax))
       return true;
     return smsShouldUseScheduleFailsClosed(IsZOL, PrologueCount, MinTripCount,
                                            PressureExcess, MaxStageCount,
-                                           TrackRegPressure);
+                                           TrackRegPressure, HasRuntimeTripReg);
   }
 
   /// Inverse of smsProductShouldUseScheduleFailsClosed.
@@ -410,10 +421,11 @@ public:
       bool PressureExcess,
       unsigned MaxStageCount = productSMSMaxStageCount,
       bool TrackRegPressure = productSMSTrackRegPressureDefault,
-      unsigned ContainmentMax = productSMSContainmentMaxStageCount) {
+      unsigned ContainmentMax = productSMSContainmentMaxStageCount,
+      bool HasRuntimeTripReg = false) {
     return !smsProductShouldUseScheduleFailsClosed(
         IsZOL, PrologueCount, MinTripCount, PressureExcess, MaxStageCount,
-        TrackRegPressure, ContainmentMax);
+        TrackRegPressure, ContainmentMax, HasRuntimeTripReg);
   }
 
   //===--------------------------------------------------------------------===//

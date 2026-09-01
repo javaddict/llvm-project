@@ -110,18 +110,15 @@ define i64 @test_dr64_many_copies(i64 %a, i64 %b, i64 %c, i64 %d) nounwind {
 ; CHECK-NEXT:    { nop; st64 d8, r1, 3 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; sext32t64 d4, r1 }
-; CHECK-NEXT:    { nop; nop; slli64 d4, d4, 32 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
-; CHECK-NEXT:    { nop; sext32t64 d5, r1; srli64 d4, d4, 32 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 3 }
-; CHECK-NEXT:    { nop; sext32t64 d0, r1; add64 d8, d0, d4 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 4 }
-; CHECK-NEXT:    { nop; sext32t64 d4, r1; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d5, d5, 32 }
-; CHECK-NEXT:    { nop; srli64 d5, d5, 32; slli64 d4, d4, 32 }
-; CHECK-NEXT:    { nop; add64 d10, d2, d0; srli64 d4, d4, 32 }
-; CHECK-NEXT:    { nop; add64 d9, d1, d5; or64 d0, d8, d8 }
-; CHECK-NEXT:    { nop; nop; add64 d11, d3, d4 }
+; CHECK-NEXT:    { nop; sext32t64 d5, r1; slli64 d4, d4, 32 }
+; CHECK-NEXT:    { srli64 d4, d4, 32; addi32 r1, r0, 3 }
+; CHECK-NEXT:    { slli64 d5, d5, 32; sext32t64 d0, r1; add64 d8, d0, d4 }
+; CHECK-NEXT:    { slli64 d0, d0, 32; addi32 r1, r0, 4 }
+; CHECK-NEXT:    { sext32t64 d4, r1; srli64 d0, d0, 32; srli64 d5, d5, 32 }
+; CHECK-NEXT:    { nop; add64 d10, d2, d0; slli64 d4, d4, 32 }
+; CHECK-NEXT:    { nop; or64 d0, d8, d8; srli64 d4, d4, 32 }
+; CHECK-NEXT:    { nop; add64 d11, d3, d4; add64 d9, d1, d5 }
 ; CHECK-NEXT:    { nop; jal lr, use_i64 }
 ; CHECK-NEXT:    { nop; nop; or64 d0, d9, d9 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

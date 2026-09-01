@@ -6,7 +6,7 @@
 ; RUN:     -O0 -verify-machineinstrs -haydn-sms2 < %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=LOOP
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -O0 -debug-pass=Structure < %s -o /dev/null 2>&1 \
+; RUN:     -O0 -debug-pass=Structure -haydn-sms2=0 < %s -o /dev/null 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=OFFPIPE
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -O0 -haydn-sms2 -debug-pass=Structure < %s -o /dev/null 2>&1 \
@@ -71,6 +71,8 @@ e:
 ; LOOP-LABEL: conv_o0_optnone:
 ; LOOP: jalr
 
+; OFFPIPE pins the flag-DISABLED pipeline (G004 trim 2026-08-27: -haydn-sms2
+; is product default ON, so the bare default now contains the driver).
 ; OFFPIPE-NOT: Haydn Late Layout Convergence Loop
 
 ; ONPIPE: Machine Sanitizer Binary Metadata
@@ -86,4 +88,5 @@ e:
 ; EXHAUST: report_fatal_error(
 ; EXHAUST-NEXT: "HaydnLateConvergence: bounded repair loop exhausted " +
 
-; FLAG: "haydn-sms2", cl::Hidden, cl::init(false),
+; FLAG: "haydn-sms2", cl::Hidden,
+; FLAG-NEXT: cl::init(haydnLateConvergenceProductDefaultEnabled()),

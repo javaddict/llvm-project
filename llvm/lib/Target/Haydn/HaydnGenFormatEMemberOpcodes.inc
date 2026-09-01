@@ -9,7 +9,7 @@
 // Overlay-SHA256: 276dea569f8761e81bb3d17e041a4f74911d34ba6f30711939a293519ac531fc
 #ifdef GET_FORMAT_E_MEMBER_OPCODES
 #undef GET_FORMAT_E_MEMBER_OPCODES
-static constexpr unsigned FormatEMemberOpcodeCount = 4294u;
+static constexpr unsigned FormatEMemberOpcodeCount = 4310u;
 static constexpr unsigned FormatEMemberOpcodes[] = {
   Haydn::NOP, // NOP_E2_E0_ALU0_SFR
   Haydn::MOVESFR2GPR_E2_E0_ALU0_SFR,
@@ -838,6 +838,14 @@ static constexpr unsigned FormatEMemberOpcodes[] = {
   Haydn::S_SB_POST_REG_E2_E0_LOADSTORE0_RR,
   Haydn::S_SB_WITH_REG_E2_E0_LOADSTORE0_RR,
   Haydn::S_SB_PRE_REG_E2_E0_LOADSTORE0_RR,
+  Haydn::NOP, // NOP_E2_E0_LOADSTORE0_AR_CBR
+  Haydn::PLTWWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR,
+  Haydn::PLQHWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_LTWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_LQHWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_STWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_SQHWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR,
+  Haydn::WBARWUA_CB_E2_E0_LOADSTORE0_AR_CBR,
   Haydn::NOP, // NOP_E2_E1_ALU1_RI20
   Haydn::ADDI32_E2_E1_ALU1_RI20,
   Haydn::ADDI32S_E2_E1_ALU1_RI20,
@@ -2404,6 +2412,14 @@ static constexpr unsigned FormatEMemberOpcodes[] = {
   Haydn::S_SB_POST_REG_E3_E0_LOADSTORE0_RR,
   Haydn::S_SB_WITH_REG_E3_E0_LOADSTORE0_RR,
   Haydn::S_SB_PRE_REG_E3_E0_LOADSTORE0_RR,
+  Haydn::NOP, // NOP_E3_E0_LOADSTORE0_AR_CBR
+  Haydn::PLTWWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR,
+  Haydn::PLQHWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_LTWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_LQHWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_STWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR,
+  Haydn::D_SQHWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR,
+  Haydn::WBARWUA_CB_E3_E0_LOADSTORE0_AR_CBR,
   Haydn::NOP, // NOP_E3_E1_MAC0_R
   Haydn::X4ENERGY16_E3_E1_MAC0_R,
   Haydn::X4CMUL16_E3_E1_MAC0_R,
@@ -4311,7 +4327,7 @@ static_assert(sizeof(FormatEMemberOpcodes)/sizeof(FormatEMemberOpcodes[0]) == Fo
 
 #ifdef GET_FORMAT_E_MEMBER_TO_LOGICAL
 #undef GET_FORMAT_E_MEMBER_TO_LOGICAL
-static constexpr unsigned FormatEMemberToLogicalCount = 4168u;
+static constexpr unsigned FormatEMemberToLogicalCount = 4182u;
 static_assert(FormatEMemberToLogicalCount > 0u, "member to logical pin");
 unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) {
   switch (Opcode) {
@@ -4599,12 +4615,18 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::D_LHW_WITH_REG_E3_E1_LOAD1_RR:
   case Haydn::D_LHW_WITH_REG_E3_E2_LOAD1_RR:
     return Haydn::D_LHW_WITH_REG;
+  case Haydn::D_LQHWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR:
+  case Haydn::D_LQHWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR:
+    return Haydn::D_LQHWUA_CB_POST;
   case Haydn::D_LQHWUA_POST_E2_E0_LOADSTORE0_AR:
   case Haydn::D_LQHWUA_POST_E2_E1_LOAD1_AR:
   case Haydn::D_LQHWUA_POST_E3_E0_LOADSTORE0_AR:
   case Haydn::D_LQHWUA_POST_E3_E1_LOAD1_AR:
   case Haydn::D_LQHWUA_POST_E3_E2_LOAD1_AR:
     return Haydn::D_LQHWUA_POST;
+  case Haydn::D_LTWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR:
+  case Haydn::D_LTWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR:
+    return Haydn::D_LTWUA_CB_POST;
   case Haydn::D_LTWUA_POST_E2_E0_LOADSTORE0_AR:
   case Haydn::D_LTWUA_POST_E2_E1_LOAD1_AR:
   case Haydn::D_LTWUA_POST_E3_E0_LOADSTORE0_AR:
@@ -4695,9 +4717,15 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::D_SHW_WITH_REG_E2_E0_LOADSTORE0_RR:
   case Haydn::D_SHW_WITH_REG_E3_E0_LOADSTORE0_RR:
     return Haydn::D_SHW_WITH_REG;
+  case Haydn::D_SQHWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR:
+  case Haydn::D_SQHWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR:
+    return Haydn::D_SQHWUA_CB_POST;
   case Haydn::D_SQHWUA_POST_E2_E0_LOADSTORE0_AR:
   case Haydn::D_SQHWUA_POST_E3_E0_LOADSTORE0_AR:
     return Haydn::D_SQHWUA_POST;
+  case Haydn::D_STWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR:
+  case Haydn::D_STWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR:
+    return Haydn::D_STWUA_CB_POST;
   case Haydn::D_STWUA_POST_E2_E0_LOADSTORE0_AR:
   case Haydn::D_STWUA_POST_E3_E0_LOADSTORE0_AR:
     return Haydn::D_STWUA_POST;
@@ -7144,6 +7172,12 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::PLDWWUA_POST_E3_E1_LOAD1_AR:
   case Haydn::PLDWWUA_POST_E3_E2_LOAD1_AR:
     return Haydn::PLDWWUA_POST;
+  case Haydn::PLQHWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR:
+  case Haydn::PLQHWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR:
+    return Haydn::PLQHWUA_CB_POST;
+  case Haydn::PLTWWUA_CB_POST_E2_E0_LOADSTORE0_AR_CBR:
+  case Haydn::PLTWWUA_CB_POST_E3_E0_LOADSTORE0_AR_CBR:
+    return Haydn::PLTWWUA_CB_POST;
   case Haydn::POPCOUNT32_E2_E0_ALU0_R:
   case Haydn::POPCOUNT32_E3_E0_ALU0_R:
   case Haydn::POPCOUNT32_E3_E0_ALU2_R:
@@ -7972,6 +8006,9 @@ unsigned llvm::haydn::format_e::lookupGeneratedMemberToLogical(unsigned Opcode) 
   case Haydn::WBARWUA_E2_E0_LOADSTORE0_AR:
   case Haydn::WBARWUA_E3_E0_LOADSTORE0_AR:
     return Haydn::WBARWUA;
+  case Haydn::WBARWUA_CB_E2_E0_LOADSTORE0_AR_CBR:
+  case Haydn::WBARWUA_CB_E3_E0_LOADSTORE0_AR_CBR:
+    return Haydn::WBARWUA_CB;
   case Haydn::WFITBDTBDTBD_E2_E0_ALU0_HINT:
   case Haydn::WFITBDTBDTBD_E3_E0_ALU0_HINT:
   case Haydn::WFITBDTBDTBD_E3_E1_ALU0_HINT:

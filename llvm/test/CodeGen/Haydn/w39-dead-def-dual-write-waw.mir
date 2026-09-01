@@ -62,9 +62,9 @@ body:             |
     ; commit probe; the root sequentializes in schedule order.
     ; COMMIT-LABEL: name: dead_dual_write_rejects
     ; COMMIT-NOT: BUNDLE
-    ; COMMIT: $r4 = ADD32 $r0, killed $r1
-    ; COMMIT-NEXT: dead $r4 = XOR32 killed $r2, killed $r3
-    ; COMMIT-NEXT: $r9 = ADD32 killed $r5, $r5
+    ; COMMIT: $r4 = ADD32{{(_E2_[^ ]+)?}} $r0, killed $r1
+    ; COMMIT-NEXT: dead $r4 = XOR32{{(_E2_[^ ]+)?}} killed $r2, killed $r3
+    ; COMMIT-NEXT: $r9 = ADD32{{(_E2_[^ ]+)?}} killed $r5, $r5
     BUNDLE implicit-def $r4, implicit-def dead $r4, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
       $r4 = ADD32 $r0, $r1
       dead $r4 = XOR32 $r2, $r3

@@ -13,5 +13,7 @@ python3 llvm/lib/Target/Haydn/FormatE/family_core.py --check --family e96
 python3 llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py --check --family e96
 python3 llvm/lib/Target/Haydn/FormatE/generate_sched_records.py --check --family e96
 # generate_sched_records.py also verifies HaydnGenPerOpResources.inc
-# (M18 per-op import: covered=806 uncovered=44 complete_model=0).
+# (M18 per-op import: covered=854 uncovered=3 complete_model=0 — the
+# shell-name map imports compiler spellings from their owning golden rows;
+# NOP/WFI/WFITBDTBDTBD stay uncovered by design).
 echo "umbrella generated-source check passed (e96)"

@@ -29,11 +29,19 @@
 // that entry budget. Local prefix growth still runs the bounded loop;
 // whole-function byte totals are not a prefix proof.
 //
-// Termination: branch forms only promote (short cond/B -> inverted+near /
-// indirect long form), HWLoops only demote (SET_* -> software loop), and
-// padding is regenerated (not accumulated) each iteration. The bound is
-// MaxIterations = (#conditional branches + #hardware-loop setups) + 2;
-// exhaustion of the bound without a fixed point is a hard diagnostic.
+// Termination: HWLoops only demote (SET_* -> software loop; growth is a
+// hard diagnostic), padding is regenerated (not accumulated) each
+// iteration, and the census (per-MBB bytes + per-prefix charges) must
+// reach a fixed point. Indirect (JALR long-form) promotion is
+// IRREVERSIBLE: the TII guards (analyzeBranch returns unanalyzable at
+// JALR; removeBranch keeps LUI+ADDI32_W+JALR_W sites intact top-level
+// and bundled) close every swap-back path, so IndirectCount is
+// non-decreasing. The historical gcc_layout t018 swap-back narrative
+// (ad8bbc4ac8c9) predates those guards and is stale; the
+// #indirect-sites term in the bound is dead slack, retained because it
+// is slack-safe. The bound is MaxIterations = (#conditional branches +
+// #hardware-loop setups + #indirect sites) + 2; exhaustion of the bound
+// without a fixed point is a hard diagnostic.
 //
 // Every mutator is an existing pass instantiated fresh per iteration — there
 // is no second scheduler, no fingerprint, no accumulated pad state, and no

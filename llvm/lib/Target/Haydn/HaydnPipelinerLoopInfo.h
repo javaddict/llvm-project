@@ -97,8 +97,18 @@ class HaydnPipelinerLoopInfo : public TargetInstrInfo::PipelinerLoopInfo {
   MachineInstr *LoopStart = nullptr;
   // AIE MinTripCount peer (AIEBasePipelinerLoopInfo). 0 = unknown/unbounded.
   // ZOL SMS is only safe when MinTripCount is known and large enough to cover
-  // prologue stages without a dynamic guard (ZOL cannot reverse its exit).
+  // prologue stages without a dynamic guard (ZOL cannot reverse its exit) —
+  // OR when ZOLTripReg below carries the runtime count register feeding
+  // LoopStart (CB-166: the Hexagon J2_loop0r dynamic-guard law; the
+  // per-prologue condition is emitted on that register in
+  // createTripCountGreaterCondition).
   int64_t MinTripCount = 0;
+  // Runtime trip-count register feeding LoopStart $src (invalid when the
+  // trip is a compile-time constant; then only the static MinTripCount law
+  // applies). The value in this register is exactly what SET_HWLOOP_F2_W
+  // consumes at Role A expansion, so a guard on it tests the count the
+  // hardware decrements — the iteration-count correctness invariant.
+  Register ZOLTripReg;
 
 public:
   HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
@@ -111,10 +121,11 @@ public:
   // ZOL constructor — for loops already in hardware-loop form.
   HaydnPipelinerLoopInfo(MachineFunction *MF, const HaydnInstrInfo *HII,
                          MachineInstr *EndLoop, MachineInstr *LoopStart,
-                         int64_t MinTripCount)
+                         int64_t MinTripCount,
+                         Register ZOLTripReg = Register())
       : MF(MF), HII(HII), EndLoop(EndLoop), CmpMI(nullptr), InvertMI(nullptr),
         TripCountReg(), IsZOL(true), LoopStart(LoopStart),
-        MinTripCount(MinTripCount) {}
+        MinTripCount(MinTripCount), ZOLTripReg(ZOLTripReg) {}
 
   bool shouldIgnoreForPipelining(const MachineInstr *MI) const override;
 

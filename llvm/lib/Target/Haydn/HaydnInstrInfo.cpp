@@ -3059,28 +3059,45 @@ static bool isHaydnCondBranch(unsigned Opc) {
   return isHaydnCondBranch1Reg(Opc) || isHaydnCondBranch2Reg(Opc);
 }
 
-// True if \p LoopBB has a PHI whose latch-incoming is defined by another PHI
-// in the same block (shift-register / delay-line chain).
-// Classic ModuloScheduleExpander mis-rewrites such chains into epilog PHIs
-// that use a same-block PHI result as a predecessor live-in, e.g.:
-// bb.epilog:
-// %A = PHI %x, %pred,...
-// %B = PHI %A, %pred,...; %A is not live-out of %pred
-// That breaks SSA; LiveVariables later asserts
-// "Can't find reaching def for virtreg". Prefer declining SMS over incorrect
-// code (correctness > SWPS). Observed on NatureDSP 32x16 FIR
-// (bkfir32x16 / bkfira32x16 / fir_xcorr32x16 / firdec32x16 / firinterp32x16)
-// where sliding-window delay PHIs form PHI→PHI latch edges. Bisect:
-// enable-pipeliner=0 avoids the crash; -haydn-enable-hwloops=0 does not.
-static bool hasShiftRegisterPhiChain(MachineBasicBlock *LoopBB) {
+// True if \p LoopBB has a PHI chain the classic ModuloScheduleExpander
+// cannot prove expandable: a latch-incoming defined by another PHI in the
+// same block whose chain never grounds in a def inside the loop body
+// (an ungrounded / cyclic shift register).
+//
+// CB-166 law (2026-08-27): the init-era blanket reject of EVERY
+// phi-of-phi latch edge also rejected every sliding-window FIR loop
+// (J1=J2, J2=J3 delay lines) — the exact shape SMS exists to pipeline —
+// so loads never rode with dual-MAC bodies. The classic expander in this
+// tree DOES walk phi-referencing-another-phi in updateInstruction
+// (ModuloSchedule.cpp "If the Phi references another Phi" Indirects loop,
+// grounded by getInitPhiReg defaults), and true PHI cycles are already
+// rejected upstream by MachinePipeliner::canPipelineLoop -> hasPHICycle.
+// Fail closed only on the ungrounded remainder: a latch chain that
+// cycles or whose definition leaves the loop block.
+static bool hasUngroundedPhiChain(MachineBasicBlock *LoopBB) {
   MachineRegisterInfo &MRI = LoopBB->getParent()->getRegInfo();
   for (const MachineInstr &MI : LoopBB->phis()) {
     Register LatchIn = getPHILatchIncoming(MI, LoopBB);
     if (!LatchIn.isVirtual())
       continue;
+    // Walk the latch chain. Every hop must stay a PHI of this block; the
+    // walk grounds when the next value is defined by a non-PHI inside the
+    // loop (the body def the expander clones per stage). A revisit is a
+    // cycle (hasPHICycle also rejects it upstream; the local guard keeps
+    // this law self-contained), and a def outside the block is not
+    // expandable from here.
+    SmallPtrSet<const MachineInstr *, 8> Seen;
     const MachineInstr *Def = MRI.getVRegDef(LatchIn);
-    if (Def && Def->isPHI() && Def->getParent() == LoopBB)
-      return true;
+    while (Def && Def->isPHI() && Def->getParent() == LoopBB) {
+      if (!Seen.insert(Def).second)
+        return true; // phi cycle through the latch chain
+      Register Next = getPHILatchIncoming(*Def, LoopBB);
+      if (!Next.isVirtual())
+        break; // physical/unknown latch operand — leave to the expander
+      Def = MRI.getVRegDef(Next);
+      if (Def && Def->getParent() != LoopBB)
+        return true; // chain definition leaves the loop block
+    }
   }
   return false;
 }
@@ -3140,9 +3157,9 @@ static bool analyzeSimpleLoop(MachineBasicBlock *LoopBB,
   InvertMI = nullptr;
   TripCountReg = Register();
 
-  // Decline SMS on shift-register PHI chains — see hasShiftRegisterPhiChain.
-  if (hasShiftRegisterPhiChain(LoopBB)) {
-    LLVM_DEBUG(dbgs() << "SMS: reject loop with shift-register PHI chain "
+  // Decline SMS on ungrounded PHI chains — see hasUngroundedPhiChain.
+  if (hasUngroundedPhiChain(LoopBB)) {
+    LLVM_DEBUG(dbgs() << "SMS: reject loop with ungrounded PHI chain "
                          "(ModuloScheduleExpander PHI rewrite unsafe)\n");
     return false;
   }
@@ -3423,10 +3440,20 @@ std::optional<int64_t> getHaydnConstantImm(Register R,
 
 // AIE ZeroOverheadLoop::accept MinTripCount derivation:
 // pragma/CL min trip, else constant feeding LoopStart.
-// Without a known MinTripCount > 1, ZOL SMS is refused (cannot guard).
+// Without a known MinTripCount > 1, ZOL SMS is refused (cannot guard) —
+// UNLESS the LoopStart count operand is a runtime value (CB-166): then the
+// expander guard contract can emit a dynamic per-prologue condition on that
+// register (Hexagon J2_loop0r law, HexagonInstrInfo.cpp
+// HexagonPipelinerLoopInfo::createTripCountGreaterCondition), and
+// OutTripReg below carries it. The register is the value SET_HWLOOP_F2_W
+// will consume (Role A expansion reads LoopStart operand 0), so the guard
+// tests exactly the count the hardware will decrement.
 int64_t computeZOLMinTripCount(MachineInstr *LoopStartMI,
-                               MachineBasicBlock *LoopBB) {
+                               MachineBasicBlock *LoopBB,
+                               Register *OutTripReg = nullptr) {
   int64_t MinTC = 0;
+  if (OutTripReg)
+    *OutTripReg = Register();
 
   // Optional floor from -haydn-loop-min-tripcount (AIE aie-loop-min-tripcount).
   if (HaydnLoopMinTripCount > 0)
@@ -3437,10 +3464,15 @@ int64_t computeZOLMinTripCount(MachineInstr *LoopStartMI,
       LoopStartMI->getOperand(0).isReg()) {
     const MachineRegisterInfo &MRI =
         LoopStartMI->getParent()->getParent()->getRegInfo();
-    if (auto C = getHaydnConstantImm(LoopStartMI->getOperand(0).getReg(), MRI)) {
+    Register Src = LoopStartMI->getOperand(0).getReg();
+    if (auto C = getHaydnConstantImm(Src, MRI)) {
       // LoopStart adj is the SMS delta (starts 0); InitVal is the HW trip.
       if (*C > MinTC)
         MinTC = *C;
+    } else if (OutTripReg && Src.isVirtual()) {
+      // Runtime trip: the count register is guard-able (dynamic law above).
+      // Fail closed when its def is not reachable in this function.
+      *OutTripReg = MRI.getVRegDef(Src) ? Src : Register();
     }
   }
 
@@ -3868,9 +3900,9 @@ HaydnInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
         return nullptr;
       }
     }
-    // Same PHI-chain hazard as the naive path (hasShiftRegisterPhiChain).
-    if (hasShiftRegisterPhiChain(LoopBB)) {
-      LLVM_DEBUG(dbgs() << "SMS: reject ZOL loop with shift-register PHI chain "
+    // Same PHI-chain hazard as the naive path (hasUngroundedPhiChain).
+    if (hasUngroundedPhiChain(LoopBB)) {
+      LLVM_DEBUG(dbgs() << "SMS: reject ZOL loop with ungrounded PHI chain "
                            "(ModuloScheduleExpander PHI rewrite unsafe)\n");
       return nullptr;
     }
@@ -3888,18 +3920,26 @@ HaydnInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
           // Analyze every well-formed ZOL loop (LoopStart + PseudoLoopEnd).
           // MinTripCount may be 0 (variable trip / unknown) or small: that is
           // NOT an analyze failure. shouldUseSchedule refuses multi-stage SMS
-          // when MinTC is unknown or too small to cover peeled prologues
-          // (ZOL cannot emit a dynamic guard). This preserves the analyzability
-          // contract (swpipeline-zol-countable-analyzable.ll) while keeping
-          // SMS product-safe for memcpy-class variable-trip loops.
-          int64_t MinTC = computeZOLMinTripCount(&MI, LoopBB);
+          // when MinTC is unknown or too small to cover peeled prologues AND
+          // no runtime trip register is available for a dynamic guard
+          // (CB-166: a runtime count register makes the per-prologue guard
+          // emittable — the Hexagon J2_loop0r law — so the static MinTC gate
+          // no longer refuses). This preserves the analyzability contract
+          // (swpipeline-zol-countable-analyzable.ll) while keeping SMS
+          // product-safe for memcpy-class variable-trip loops.
+          Register ZOLTripReg;
+          int64_t MinTC = computeZOLMinTripCount(&MI, LoopBB, &ZOLTripReg);
           if (MinTC <= 1) {
             LLVM_DEBUG(dbgs() << "ZOL: analyze OK but MinTripCount=" << MinTC
-                              << " (SMS schedules gated in shouldUseSchedule)\n");
+                              << (ZOLTripReg.isValid()
+                                      ? " (runtime trip reg; dynamic guard "
+                                        "available in shouldUseSchedule)\n"
+                                      : " (SMS schedules gated in "
+                                        "shouldUseSchedule)\n"));
           }
           MachineFunction *MF = LoopBB->getParent();
-          return std::make_unique<HaydnPipelinerLoopInfo>(MF, this, Term, &MI,
-                                                           MinTC);
+          return std::make_unique<HaydnPipelinerLoopInfo>(
+              MF, this, Term, &MI, MinTC, ZOLTripReg);
         }
       }
     }

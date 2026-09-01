@@ -172,9 +172,9 @@ define i32 @test_complex(i32 %x, i32 %y) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { addi32 r4, r1, 10; mull r3, r2, r3 }
-; CHECK-NEXT:    { nop; and32 r1, r1, r2; sub32 r3, r4, r3 }
+; CHECK-NEXT:    { addi32 r4, r1, 10; addi32 r3, r0, 3 }
+; CHECK-NEXT:    { nop; and32 r1, r1, r2; mull r3, r2, r3 }
+; CHECK-NEXT:    { nop; sub32 r3, r4, r3 }
 ; CHECK-NEXT:    { nop; or32 r1, r3, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -316,8 +316,7 @@ define i32 @test_clz(i32 %a) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 32 }
+; CHECK-NEXT:    { addi32 r2, r0, 32; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r3, r2, r3 }
 ; CHECK-NEXT:  .LBB15_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
