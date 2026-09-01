@@ -18,9 +18,9 @@ define i32 @while_i64_ne_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 2 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 7 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; beqz r0, .LBB0_1 }
@@ -72,9 +72,9 @@ define i32 @while_i64_sge_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 2 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 7 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; beqz r0, .LBB1_1 }
@@ -127,9 +127,9 @@ define i32 @while_i64_sle_loop(i64 %x) {
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 2 } // 8-byte Folded Spill
 ; CHECK-NEXT:    // 8-byte Spill
-; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 7 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; beqz r0, .LBB2_1 }

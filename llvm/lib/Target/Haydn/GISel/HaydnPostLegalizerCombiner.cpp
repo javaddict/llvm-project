@@ -1168,6 +1168,328 @@ void applyLaneStore(MachineInstr &Store, MachineRegisterInfo &MRI,
   Store.eraseFromParent();
 }
 
+//===----------------------------------------------------------------------===//
+// DR64 pair-load promotion (REPORT_bkfir_compiler_opt.md §7 ask #3).
+//
+// System model: the pack object is one little-endian s64 value formed from
+// two same-base i32 memory words. Ordinary C builds DR64 operands as
+// 2x scalar load + ALU pack (ld32 + sext32t64/slli64/or64); the AE C form
+// gets one D_LDW* pair load per AE_L32X2_XC intrinsic. This combine gives
+// the ordinary-C idiom the same single wide G_LOAD the intrinsic path
+// lowers to; selection/alignment/folding stay in the existing G_LOAD path
+// (one mechanism — no format or slot reasoning here).
+//
+// Closed conditions (all must hold; any failure = no change):
+//   1. Dst is a scalar s64.
+//   2. G_OR operands (either commute order) split into a 32-bit-invariant
+//      high half — ext(load hi) shifted left by exactly 32 — and a
+//      zext'd low half (ext(load lo)).
+//   3. Both words: plain G_LOAD, s32, non-volatile, non-atomic, MMO
+//      align >= 8, one non-dbg use, addressed off ONE shared virtual base
+//      register at constant byte offsets (offset 0 allowed: the base may
+//      itself be a variable-index address; the high word sits at +4).
+//   4. Non-zero pair offset must be encodable in the golden D_LDW* RI6
+//      law EA = rs + (imm6 << 3) — a multiple of 8 within signed imm6<<3 —
+//      so Base+offset+4 rides the same base register.
+//   5. Golden D_LDW* alignment law: EA = Base + pair offset must be
+//      8-byte aligned (instruction_type_index.json "Required_Alignment"
+//      for the D_LDW* family: "the value rs + (imm6 << 3) should be
+//      aligned 8-byte"). We cannot see the runtime base, so require both
+//      source MMOs align >= 8 (the same IR guarantee the selector's LD64
+//      path relies on). Under-aligned pairs fail closed and keep the
+//      scalar LD32 sequence.
+//   6. Both loads and the G_OR in one MBB; no load-fold barrier (store,
+//      call, unmodeled side effect) strictly between the earliest and
+//      latest of the three.
+//   7. The pair address G_PTR_ADD (the LOW word's, at non-zero offset)
+//      dominates the high load, so the merged access at the earlier
+//      program point still sees pre-store memory.
+//
+// Apply: one G_LOAD Dst, PairAddr, MMO(load (s64) at the low word's
+// address, align 8) inserted at the LOW load; the OR/shift/ext chain, both
+// scalar loads, and the dead G_PTR_ADD of the absorbed word are erased.
+// The wide load then flows through the EXISTING paths unchanged: the AGU
+// rule of this same pass folds the address (G_HAYDN_PREINC_LOAD) and
+// selection emits the golden D_LDW* pair load (d_ldw_pre_imm/reg,
+// d_ldw_post_imm, or LD64 with folded offset).
+//===----------------------------------------------------------------------===//
+
+struct HaydnPairLoadInfo {
+  MachineInstr *LowLoad = nullptr;
+  MachineInstr *HighLoad = nullptr;
+  MachineInstr *PairPtrAdd = nullptr; // pair-base G_PTR_ADD (null = Base)
+  Register Base;                      // shared base register
+  int64_t PairOffBytes = 0;           // low-word byte offset from Base
+};
+
+// The high operand must be the pair's upper word: its bits [31:0] must be
+// shift-invariant (only bits [63:32] may reach the G_OR). Accept
+// G_SEXT/G_ZEXT/G_ANYEXT of the s32 load (extension makes [31:0] of the
+// extended value copy the load's sign/zero image; the shift then discards
+// the low word entirely). A plain unextended s64 use is rejected: the load
+// word would occupy bits [31:0] of the OR.
+static bool isUpperWordInvariant(Register R, MachineRegisterInfo &MRI,
+                                 Register &ExtSrc) {
+  auto DefSrc = getDefSrcRegIgnoringCopies(R, MRI);
+  if (!DefSrc)
+    return false;
+  unsigned Opc = DefSrc->MI->getOpcode();
+  if (Opc != TargetOpcode::G_SEXT && Opc != TargetOpcode::G_ZEXT &&
+      Opc != TargetOpcode::G_ANYEXT)
+    return false;
+  // The load destination is the extension's source operand (the ext's dst
+  // reaches the shift; its operand is the loaded word).
+  ExtSrc = DefSrc->MI->getOperand(1).getReg();
+  return true;
+}
+
+// Scalar-word access shape of one operand: plain s32 G_LOAD with a
+// constant-offset same-base address.
+struct PairLoadWord {
+  MachineInstr *Load = nullptr;
+  MachineInstr *PtrAdd = nullptr; // may be null (offset 0)
+  Register Base;
+  int64_t OffBytes = 0;
+};
+
+static bool matchPairLoadWord(Register R, MachineRegisterInfo &MRI,
+                              PairLoadWord &Word) {
+  if (!R.isVirtual())
+    return false;
+  MachineInstr *L = MRI.getVRegDef(R);
+  if (!L || L->getOpcode() != TargetOpcode::G_LOAD)
+    return false;
+  if (!MRI.hasOneNonDBGUse(R))
+    return false;
+  if (L->memoperands_empty())
+    return false;
+  for (MachineMemOperand *MMO : L->memoperands()) {
+    if (MMO->isVolatile() || MMO->isAtomic())
+      return false;
+    if (MMO->getAlign() < Align(8))
+      return false;
+    auto Sz = MMO->getSize();
+    if (!Sz.hasValue() || Sz.getValue() != 4)
+      return false;
+  }
+
+  // Address shape: the word lives at Base + OffBytes where Base is one
+  // shared register and OffBytes a compile-time constant. Three spellings:
+  //   G_PTR_ADD(Base, C)          — off != 0 (or C == 0 spelling)
+  //   COPY(G_PTR_ADD(Base, C))    — same, through a pointer copy
+  //   Base itself                 — off == 0 (the report's p[i] form after
+  //                                 the variable base is computed once)
+  // A variable index (G_PTR_ADD with non-constant offset) is NOT a word of
+  // a shared-base pair — reject so the caller never widens across an
+  // address it cannot re-derive on the base register.
+  Register PtrReg = L->getOperand(1).getReg();
+  if (!PtrReg.isVirtual())
+    return false;
+  MachineInstr *Ptr = MRI.getVRegDef(PtrReg);
+  if (!Ptr)
+    return false;
+  if (Ptr->getOpcode() == TargetOpcode::COPY) {
+    Register CopySrc = Ptr->getOperand(1).getReg();
+    if (!CopySrc.isVirtual())
+      return false;
+    MachineInstr *CopyDef = MRI.getVRegDef(CopySrc);
+    if (!CopyDef)
+      return false;
+    Ptr = CopyDef;
+    PtrReg = CopySrc;
+  }
+  if (Ptr->getOpcode() == TargetOpcode::G_PTR_ADD &&
+      getPtrAddConstBytes(*Ptr, MRI, Word.OffBytes)) {
+    Word.PtrAdd = Ptr;
+    Word.Base = Ptr->getOperand(1).getReg();
+  } else {
+    // Bare base register: offset 0 — either a plain pointer vreg or a
+    // variable-offset G_PTR_ADD whose result IS the shared pair address
+    // (the report's p[i] form). PtrReg is the pair address; only its
+    // register identity is used below.
+    Word.OffBytes = 0;
+    Word.PtrAdd = nullptr;
+    Word.Base = PtrReg;
+  }
+  if (!Word.Base.isVirtual())
+    return false;
+  Word.Load = L;
+  return true;
+}
+
+bool matchCombinePairLoad(MachineInstr &MI, MachineRegisterInfo &MRI,
+                          const CombinerHelper &Helper,
+                          HaydnPairLoadInfo &Info) {
+  assert(MI.getOpcode() == TargetOpcode::G_OR);
+  Register Dst = MI.getOperand(0).getReg();
+  if (!MRI.getType(Dst).isScalar() ||
+      MRI.getType(Dst).getSizeInBits() != 64)
+    return false;
+
+  Register OpA = MI.getOperand(1).getReg();
+  Register OpB = MI.getOperand(2).getReg();
+  if (!OpA.isVirtual() || !OpB.isVirtual())
+    return false;
+
+  // Low word: zext(load lo) contributes exactly the low 32 bits.
+  // High word: ext(load hi) shifted left by exactly 32. The OR operands
+  // commute — try (A=hi, B=lo) then (A=lo, B=hi).
+  PairLoadWord Lo, Hi;
+  bool Matched = false;
+  for (bool Swapped : {false, true}) {
+    Register OpHi = Swapped ? OpB : OpA;
+    Register OpLo = Swapped ? OpA : OpB;
+    auto LoDef = getDefSrcRegIgnoringCopies(OpLo, MRI);
+    if (!LoDef || LoDef->MI->getOpcode() != TargetOpcode::G_ZEXT)
+      continue;
+    auto HiDef = getDefSrcRegIgnoringCopies(OpHi, MRI);
+    if (!HiDef || HiDef->MI->getOpcode() != TargetOpcode::G_SHL)
+      continue;
+    MachineInstr *Shl = HiDef->MI;
+    auto ShAmt =
+        getIConstantVRegValWithLookThrough(Shl->getOperand(2).getReg(), MRI);
+    if (!ShAmt || ShAmt->Value.getSExtValue() != 32)
+      continue;
+    Register HiExtSrc;
+    if (!isUpperWordInvariant(Shl->getOperand(1).getReg(), MRI, HiExtSrc))
+      continue;
+    if (!matchPairLoadWord(LoDef->MI->getOperand(1).getReg(), MRI, Lo))
+      continue;
+    if (!matchPairLoadWord(HiExtSrc, MRI, Hi))
+      continue;
+    Matched = true;
+    break;
+  }
+  if (!Matched)
+    return false;
+
+  // Same base, adjacent words.
+  if (Lo.Base != Hi.Base)
+    return false;
+  if (Hi.OffBytes != Lo.OffBytes + 4)
+    return false;
+
+  // Non-zero pair offset must be encodable in the golden D_LDW* RI6 law
+  // EA = rs + (imm6 << 3): a multiple of 4 within signed imm6<<3, so the
+  // high word's +4 rides the same base register. Offset 0 (the report's
+  // variable-index form: low word at the computed base, high at +4) needs
+  // no offset at all and is always encodable.
+  if (Lo.OffBytes != 0) {
+    if ((Lo.OffBytes % 4) != 0 || !strideFitsScaledImm6(Lo.OffBytes, 3))
+      return false;
+    // Golden D_LDW* alignment: EA = Base + pair offset must be 8-byte
+    // aligned. The offset must be a multiple of 8 so the promoted access
+    // stays on the golden law whenever Base itself is 8-aligned (per the
+    // MMO align >= 8 requirement above).
+    if ((Lo.OffBytes % 8) != 0)
+      return false;
+  }
+  // The pair address is anchored at the LOW word: its pointer is the s64
+  // window start. For offset-0 pairs the low word's base is the pair
+  // address (the high word's +4 PtrAdd dies with the wide load).
+  MachineInstr *PairPtrAdd = Lo.PtrAdd;
+
+  // Same block, and no memory barrier among the three instructions.
+  MachineInstr *Earliest = &MI;
+  MachineInstr *Latest = &MI;
+  for (MachineInstr *Candidate : {Lo.Load, Hi.Load}) {
+    if (Candidate->getParent() != MI.getParent())
+      return false;
+    if (Helper.dominates(*Candidate, *Earliest))
+      Earliest = Candidate;
+    if (!Helper.dominates(*Candidate, *Latest))
+      Latest = Candidate;
+  }
+  for (auto I = std::next(Earliest->getIterator()); I != Latest->getIterator();
+       ++I) {
+    if (I->isLoadFoldBarrier())
+      return false;
+  }
+
+  // Pair address must dominate both loads: the low word's G_PTR_ADD (when
+  // the pair sits at a non-zero offset) must dominate the high load, so the
+  // widened access at the earlier program point cannot cross an intervening
+  // store. For offset-0 pairs the base register is already the pair address.
+  if (PairPtrAdd && !Helper.dominates(*PairPtrAdd, *Hi.Load))
+    return false;
+
+  Info.LowLoad = Lo.Load;
+  Info.HighLoad = Hi.Load;
+  Info.PairPtrAdd = PairPtrAdd;
+  Info.Base = Lo.Base;
+  Info.PairOffBytes = Lo.OffBytes;
+  return true;
+}
+
+void applyCombinePairLoad(MachineInstr &MI, MachineRegisterInfo &MRI,
+                          MachineIRBuilder &B, GISelChangeObserver &Observer,
+                          HaydnPairLoadInfo &Info) {
+  Register Dst = MI.getOperand(0).getReg();
+  MachineFunction &MF = *MI.getMF();
+  B.setInstrAndDebugLoc(*Info.LowLoad);
+
+  // Wide MMO (load (s64), align >= 8 per the golden D_LDW* law): copy the
+  // LOW word's MMO widened to s64, anchored at the low word's address —
+  // exactly the address the s64 load reads (PairAddr below), so the 8-byte
+  // alias window is [PairAddr, PairAddr+8).
+  MachineMemOperand *MMO;
+  if (Info.LowLoad->memoperands_empty()) {
+    MMO = MF.getMachineMemOperand(MachinePointerInfo(),
+                                  MachineMemOperand::MONone, LLT::scalar(64),
+                                  Align(8));
+  } else {
+    const MachineMemOperand *SrcMMO = *Info.LowLoad->memoperands_begin();
+    MMO = MF.getMachineMemOperand(SrcMMO, /*Offset=*/0, LLT::scalar(64));
+  }
+  Register PairAddr =
+      Info.PairPtrAdd ? Info.PairPtrAdd->getOperand(0).getReg() : Info.Base;
+  B.buildLoad(Dst, PairAddr, *MMO);
+
+  LLVM_DEBUG(dbgs() << "Haydn postleg combine pair-load off="
+                    << Info.PairOffBytes << " base " << Info.Base << "\n");
+
+  // Erase the dead chain upward from the OR: OR <- SHL <- ext and the two
+  // loads (all one-use per the matcher). The absorbed word's G_PTR_ADD is
+  // dead unless it is the surviving pair address.
+  SmallVector<MachineInstr *, 8> Dead;
+  Dead.push_back(&MI);
+  for (Register R :
+       {MI.getOperand(1).getReg(), MI.getOperand(2).getReg()}) {
+    MachineInstr *Cur = MRI.getVRegDef(R);
+    while (Cur && !llvm::is_contained(Dead, Cur) &&
+           MRI.use_nodbg_empty(Cur->getOperand(0).getReg()) &&
+           (Cur->getOpcode() == TargetOpcode::G_SHL ||
+            Cur->getOpcode() == TargetOpcode::G_ZEXT ||
+            Cur->getOpcode() == TargetOpcode::G_SEXT ||
+            Cur->getOpcode() == TargetOpcode::G_ANYEXT ||
+            Cur->getOpcode() == TargetOpcode::G_LOAD)) {
+      Dead.push_back(Cur);
+      Register Next = Cur->getOperand(1).getReg();
+      MachineInstr *PtrAdd = nullptr;
+      if (Cur->getOpcode() == TargetOpcode::G_LOAD) {
+        Register PtrReg = Cur->getOperand(1).getReg();
+        if (PtrReg.isVirtual())
+          PtrAdd = MRI.getVRegDef(PtrReg);
+      }
+      if (PtrAdd && PtrAdd->getOpcode() == TargetOpcode::G_PTR_ADD &&
+          PtrAdd != Info.PairPtrAdd &&
+          MRI.use_nodbg_empty(PtrAdd->getOperand(0).getReg()))
+        Dead.push_back(PtrAdd);
+      Cur = Cur->getOpcode() == TargetOpcode::G_LOAD
+                ? nullptr
+                : (Next.isVirtual() ? MRI.getVRegDef(Next) : nullptr);
+    }
+  }
+  Observer.erasingInstr(MI);
+  MI.eraseFromParent();
+  for (MachineInstr *D : llvm::reverse(llvm::drop_begin(Dead))) {
+    if (D->getParent()) {
+      Observer.erasingInstr(*D);
+      D->eraseFromParent();
+    }
+  }
+}
+
 
 //===----------------------------------------------------------------------===//
 // HaydnPostLegalizerCombinerImpl

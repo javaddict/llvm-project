@@ -87,7 +87,13 @@ CSR_LY2_LOGICALS = frozenset({"CSRR"})
 # 2026-08-21 itinerary re-map: Slot2_LS retired — golden assigns every
 # former S2 memory row to LOADSTORE0/LOAD1 units (Slot0_LS/Slot01_LD), so
 # no instruction books it and the class left the Sched enum.
-MEMORY_ITIN_NAMES = ("Slot0_LS", "Slot1_LD", "Slot01_LD")
+# 2026-08-21 latency P3: Slot0_LS_WbLat joins the published memory set
+# (store-with-writeback family). Its OperandCycles drop to 1 (golden
+# Data_Latency=1 for the writeback register) but the MemoryCycle pair
+# stays (0, Data_Latency-1): the memory access itself keeps the
+# conservative store→load spacing — the register latency and the memory
+# edge are different facts and only the former is golden-1.
+MEMORY_ITIN_NAMES = ("Slot0_LS", "Slot1_LD", "Slot01_LD", "Slot0_LS_WbLat")
 
 
 @dataclass(frozen=True)
@@ -163,11 +169,21 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
 
     Slot12_MAC_AccFirst remains as the FmtALU64Acc Itinerary= alias; OperandCycles
     use only published 1/2. The two 5-cycle AccLat classes are omitted.
+    2026-08-21 latency P3: golden per-op Data_Latency=1 families get their
+    own rows — store-with-writeback (Slot0_LS_WbLat) and non-accumulating
+    multiplies (Slot12_MAC_MulLat + per-slot member rows). Assignment is
+    golden-derived row-by-row in generate_format_e_records.py (the
+    instruction_type_index Data_Latency admission mechanism); this table
+    only publishes the numbers.
     """
     u = {name: name for name in surf.units}
     l1, l2, l17 = surf.latency_1, surf.latency_2, surf.sincos_conservative
     mac_wb = (l2, l1, l1, l2)
     mac_acc = (l2, l2, l1, l1)
+    # Fresh-dest multiply: golden Data_Latency=1 (result next bundle) with
+    # plain early-read sources — the wb/acc asymmetric shapes do not apply
+    # because no operand is an accumulator tie.
+    mac_mul_lat1 = (l1, l1, l1, l1)
     # first=0 issue cycle; last=LoadLatency-1. Same numbers the hand switch
     # used; not a new latency invent. AIE MemoryCycles First/Last overlay.
     mem_first = 0
@@ -176,6 +192,15 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
         PublishedItin("Slot0_ALU", (u["ALU0"],), (l1,)),
         PublishedItin(
             "Slot0_LS", (u["LOADSTORE0"],), (l2,), mem_first, mem_last
+        ),
+        # Store-with-writeback: the rs writeback register is golden
+        # Data_Latency=1 (available next bundle). The MemoryCycle pair
+        # stays (0, Data_Latency-1) so store→load memory edges keep the
+        # conservative spacing — register latency and the memory edge are
+        # separate facts and only the former is golden-1 (2026-08-21
+        # latency P3, audit_latency.md mismatch #3).
+        PublishedItin(
+            "Slot0_LS_WbLat", (u["LOADSTORE0"],), (l1,), mem_first, mem_last
         ),
         PublishedItin("Slot12_ALU_SinCosLat", (u["ALU1"], u["ALU2"]), (l17,)),
         # Fixed Data_Latency=2 DSP unary (LOG2/EXP2/RECIP/SQRT) on their
@@ -200,6 +225,17 @@ def published_itineraries(surf: GoldenLatencySurface) -> Tuple[PublishedItin, ..
         PublishedItin("Slot1_ALU_SinCosLat", (u["ALU1"],), (l17,)),
         PublishedItin("Slot12_MAC", (u["MAC0"], u["MAC1"]), mac_wb),
         PublishedItin("Slot12_MAC_AccFirst", (u["MAC0"], u["MAC1"]), mac_acc),
+        # Non-accumulating multiplies, golden Data_Latency=1 (fresh dest
+        # next bundle): logical menu + per-slot member rows mirroring the
+        # AccFirst split. Members with the wb shape would stall every
+        # mul→use chain one extra cycle and inflate RecMII (2026-08-21
+        # latency P3, audit_latency.md mismatch #4 — the lat-1 set is
+        # derived per-row from golden, never a family list).
+        PublishedItin(
+            "Slot12_MAC_MulLat", (u["MAC0"], u["MAC1"]), mac_mul_lat1
+        ),
+        PublishedItin("Slot1_MAC_MulLat", (u["MAC0"],), mac_mul_lat1),
+        PublishedItin("Slot2_MAC_MulLat", (u["MAC1"],), mac_mul_lat1),
         PublishedItin("Slot1_MAC", (u["MAC0"],), mac_wb),
         PublishedItin("Slot2_ALU", (u["ALU2"],), (l1,)),
         PublishedItin("Slot2_ALU_SinCosLat", (u["ALU2"],), (l17,)),
@@ -307,6 +343,13 @@ def emit_sched_records_inc(
         "def Slot0_ALU_CsrLat : InstrItinClass;\n"
         "def Slot1_ALU_CsrLat : InstrItinClass;\n"
         "def Slot2_ALU_CsrLat : InstrItinClass;\n"
+        "// Golden Data_Latency=1 classes (2026-08-21 latency P3): store\n"
+        "// writeback register + fresh-dest multiplies. Same ownership split\n"
+        "// as DspLat/CsrLat — class defs and InstrItinData rows live here.\n"
+        "def Slot0_LS_WbLat : InstrItinClass;\n"
+        "def Slot12_MAC_MulLat : InstrItinClass;\n"
+        "def Slot1_MAC_MulLat : InstrItinClass;\n"
+        "def Slot2_MAC_MulLat : InstrItinClass;\n"
         "\n"
         f"def HaydnItineraries : ProcessorItineraries<\n"
         f"  [{fu}],\n"

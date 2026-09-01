@@ -3125,6 +3125,10 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     case Intrinsic::haydn_d_sw_l_post_reg:
     case Intrinsic::haydn_d_sw_l_pre_imm:
     case Intrinsic::haydn_d_sw_l_pre_reg:
+    // ISA-65 fused round-sat-store POST: single-ret writeback store, same
+    // routing class as the Golden LS POST/PRE stores above.
+    case Intrinsic::haydn_d_sw_f64rs_post_imm:
+    case Intrinsic::haydn_d_sw_f64rs_post_reg:
     case Intrinsic::haydn_s_sb_post_imm:
     case Intrinsic::haydn_s_sb_post_reg:
     case Intrinsic::haydn_s_sb_pre_imm:
@@ -3164,6 +3168,10 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     case Intrinsic::haydn_d_sw_h_with_reg:
     case Intrinsic::haydn_d_sw_l_with_imm:
     case Intrinsic::haydn_d_sw_l_with_reg:
+    // ISA-65 fused round-sat-store WITH: void base+offset store, same
+    // routing class as the Golden LS WITH_* stores above.
+    case Intrinsic::haydn_d_sw_f64rs_with_imm:
+    case Intrinsic::haydn_d_sw_f64rs_with_reg:
     case Intrinsic::haydn_s_sb_with_imm:
     case Intrinsic::haydn_s_sb_with_reg:
     case Intrinsic::haydn_s_shw_with_imm:
@@ -4118,9 +4126,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   //===-----------------------------------------------------------------===
   case haydn_addbrba32: return selectBinary(BREV32, GPR32RegClass);
 
-  // ABS32S is a binary instruction format but unary intrinsic.
-  // The instruction takes (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2)
-  // but the intrinsic is unary. Duplicate the source register.
+  // ABS32S is dest+src (logical matches Format E members); the intrinsic
+  // is unary.
   case haydn_abs32s: {
     Register SrcReg = I.getOperand(2).getReg();
     if (DstReg.isVirtual())
@@ -4129,7 +4136,6 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(SrcReg, GPR32RegClass, MRI);
     MachineInstr *MI = MIB.buildInstr(ABS32S)
                            .addDef(DstReg)
-                           .addReg(SrcReg)
                            .addReg(SrcReg);
     if (!constrainSelectedInstRegOperands(*MI, TII, TRI, RBI))
       return false;
@@ -6268,7 +6274,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_d_sw_l_post_imm:
   case haydn_d_sw_l_post_reg:
   case haydn_d_sw_l_pre_imm:
-  case haydn_d_sw_l_pre_reg: {
+  case haydn_d_sw_l_pre_reg:
+  case haydn_d_sw_f64rs_post_imm:
+  case haydn_d_sw_f64rs_post_reg: {
     // DR64 data writeback stores.
     Register WbReg = I.getOperand(0).getReg();
     Register Data = I.getOperand(2).getReg();
@@ -6292,6 +6300,10 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     case Intrinsic::haydn_d_sw_l_post_reg: Opc = D_SW_L_POST_REG; break;
     case Intrinsic::haydn_d_sw_l_pre_imm:  Opc = D_SW_L_PRE_IMM;  IsImm = true; break;
     case Intrinsic::haydn_d_sw_l_pre_reg:  Opc = D_SW_L_PRE_REG;  break;
+    // ISA-65 fused round-sat-store (LOADSTORE0): single-ret writeback, same
+    // shape as d_sw_l POST (simm6 scaled element index, DR64 data).
+    case Intrinsic::haydn_d_sw_f64rs_post_imm: Opc = D_SW_F64RS_POST_IMM; IsImm = true; break;
+    case Intrinsic::haydn_d_sw_f64rs_post_reg: Opc = D_SW_F64RS_POST_REG; break;
     default:
       return false;
     }
@@ -6526,7 +6538,9 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_d_sw_h_with_imm:
   case haydn_d_sw_h_with_reg:
   case haydn_d_sw_l_with_imm:
-  case haydn_d_sw_l_with_reg: {
+  case haydn_d_sw_l_with_reg:
+  case haydn_d_sw_f64rs_with_imm:
+  case haydn_d_sw_f64rs_with_reg: {
     // void store: op0=id, op1=data, op2=base, op3=off (G_INTRINSIC_W_SIDE_EFFECTS)
     Register Data = I.getOperand(1).getReg();
     Register Base = I.getOperand(2).getReg();
@@ -6544,12 +6558,17 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     case Intrinsic::haydn_d_sw_h_with_reg: Opc = D_SW_H_WITH_REG; break;
     case Intrinsic::haydn_d_sw_l_with_imm: Opc = D_SW_L_WITH_IMM; break;
     case Intrinsic::haydn_d_sw_l_with_reg: Opc = D_SW_L_WITH_REG; break;
+    // ISA-65 fused round-sat-store (LOADSTORE0): void base+offset store,
+    // same shape as d_sw_l WITH (DR64 data, simm6 scaled element index).
+    case Intrinsic::haydn_d_sw_f64rs_with_imm: Opc = D_SW_F64RS_WITH_IMM; break;
+    case Intrinsic::haydn_d_sw_f64rs_with_reg: Opc = D_SW_F64RS_WITH_REG; break;
     default: break;
     }
     bool IsImm = (IntrID == Intrinsic::haydn_d_sdw_with_imm ||
                   IntrID == Intrinsic::haydn_d_shw_with_imm ||
                   IntrID == Intrinsic::haydn_d_sw_h_with_imm ||
-                  IntrID == Intrinsic::haydn_d_sw_l_with_imm);
+                  IntrID == Intrinsic::haydn_d_sw_l_with_imm ||
+                  IntrID == Intrinsic::haydn_d_sw_f64rs_with_imm);
     if (IsImm) {
       int64_t OffImm = 0;
       if (!getConstOpSExt(I.getOperand(3), OffImm))

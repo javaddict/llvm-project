@@ -120,6 +120,24 @@ TEST(HaydnHWLoopContractsTest, DualZoneExitReadyPadCoversIntervening) {
   }
 }
 
+// W61 tail credit (AIE RegionEndEdges LoopSetupDistance - ZOLBundlesCount
+// analog): the SET-MBB tail — size-bearing parcels from region end through
+// the first terminator — lies between the SET cycle and HWLR_BEGIN on every
+// activation path, so the in-region ExitSU edge only owes the remainder.
+TEST(HaydnHWLoopContractsTest, SetupGapAfterTailCreditArithmetic) {
+  EXPECT_EQ(setupGapAfterTailCredit(0), SetupIssueDistance);
+  // One tail parcel (explicit B to header) credits one cycle.
+  EXPECT_EQ(setupGapAfterTailCredit(1), SetupIssueDistance - 1u);
+  EXPECT_EQ(setupGapAfterTailCredit(InterveningCycles), 1u);
+  // Tail covers the whole distance: region owes nothing.
+  EXPECT_EQ(setupGapAfterTailCredit(SetupIssueDistance), 0u);
+  // Clamp: never under-reserves, never wraps.
+  EXPECT_EQ(setupGapAfterTailCredit(10u), 0u);
+  // Monotone non-increasing in the credit.
+  for (unsigned T = 0; T < 8u; ++T)
+    EXPECT_LE(setupGapAfterTailCredit(T + 1u), setupGapAfterTailCredit(T));
+}
+
 TEST(HaydnHWLoopContractsTest, MinSetupBytesFromProductParcel) {
   // Timing law is the cycle pair; bytes follow product EncodedBytes only.
   EXPECT_EQ(static_cast<unsigned>(ProductParcelBytes),

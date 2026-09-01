@@ -365,6 +365,11 @@ bool HaydnTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
   case Intrinsic::haydn_d_sw_l_pre_reg:
   case Intrinsic::haydn_d_sw_l_with_imm:
   case Intrinsic::haydn_d_sw_l_with_reg:
+  // ISA-65 fused round-sat-store: stores the 32-bit saturated lane (mem32).
+  case Intrinsic::haydn_d_sw_f64rs_post_imm:
+  case Intrinsic::haydn_d_sw_f64rs_post_reg:
+  case Intrinsic::haydn_d_sw_f64rs_with_imm:
+  case Intrinsic::haydn_d_sw_f64rs_with_reg:
     return setHaydnMemIntrinsic(Info, I, MVT::i32, 1, StoreF);
 
   // Dual-halfword into DR / halfword stores: 16-bit element (scale 2).

@@ -316,11 +316,10 @@ define i32 @deep_pressure(i32 %a0, i32 %a1, i32 %a2, i32 %a3,
 ; CHECK-NEXT:    .cfi_offset r11, -16
 ; CHECK-NEXT:    .cfi_offset fp, -20
 ; CHECK-NEXT:    .cfi_offset lr, -24
-; CHECK-NEXT:    { nop; move32 fp, r3; move32 r11, r2 }
+; CHECK-NEXT:    { st32 r7, sp, 3; move32 r11, r2; move32 fp, r3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; move32 r9, r5; move32 r8, r4 }
 ; CHECK-NEXT:    { nop; move32 r10, r6 }
-; CHECK-NEXT:    { nop; st32 r7, sp, 3 } // 4-byte Folded Spill
-; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill

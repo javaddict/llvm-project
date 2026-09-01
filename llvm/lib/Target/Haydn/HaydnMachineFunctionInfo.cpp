@@ -23,6 +23,9 @@ MachineFunctionInfo *HaydnMachineFunctionInfo::clone(
   // clone/outline: keys point into the source MF and would retain stale
   // setDesc/placement state (phase firewall).
   Copy->AltDescs.clear();
+  // G005 remark observations are per-function KPI, not placement truth:
+  // never remap them into the outlined copy.
+  Copy->SMSLoopRecords.clear();
   // Durable SMS kernel metadata is MBB-keyed: remap into DestMF, drop
   // entries whose source block was not cloned.
   DenseMap<const MachineBasicBlock *, SMSSWPSInfo> Remapped;

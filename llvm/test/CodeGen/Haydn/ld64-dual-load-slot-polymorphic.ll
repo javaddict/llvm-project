@@ -70,9 +70,8 @@ define void @triple_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-NEXT:    { ld32 r1, r1, 0; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; ld32 r3, r5, 0 }
-; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 2; add64 d0, d0, d1 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r4, r2, 4 }

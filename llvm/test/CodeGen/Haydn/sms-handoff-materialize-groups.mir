@@ -8,19 +8,24 @@
 # RUN:   | FileCheck %s --check-prefix=GROUPS
 # REQUIRES: asserts
 
-# Role: Option C pre-RA multi-stage containment (no SMS BUNDLE freeze).
-# First run: matrix_sum IR finds stages>=2; product containment rejects it.
-# Second run: dual-load MAC MIR stays bare logical (no multi-member BUNDLE).
-# The MAC MIR is format-ResMII-bound stages=1, so it cannot own the
-# StageCount>1 reject pin. SMS-RESMII overestimate on the IR body is
-# metrics-only (analyzeLoop continues).
+# Role: pre-RA multi-stage no-freeze contract (no SMS BUNDLE freeze).
+# First run: matrix_sum IR finds stages>=2. W68.1: the soft schedule is now
+# ACCEPTED at product defaults (generic pre-RA multi-stage owns soft loops),
+# but it stays a BARE-LOGICAL proposal — no multi-member SMS BUNDLE freeze,
+# no BundleFormatRowID / CompletionStateID, no logical BUNDLE materialization
+# pre-RA (the durable no-freeze contract, held under the accept). The old
+# Option A StageCount>1 reject that used to own the first run is gone for
+# soft loops. Second run: dual-load MAC MIR stays bare logical (no
+# multi-member BUNDLE). The MAC MIR is format-ResMII-bound stages=1.
+# SMS-RESMII overestimate on the IR body is metrics-only (analyzeLoop
+# continues).
 
 # PIPE-NOT: SMS-HOOK: reject
 # PIPE-NOT: SMS-HANDOFF: reject
 # PIPE-NOT: analyzeLoopForPipelining fail-closed
 # PIPE-DAG: Schedule Found? 1 (II={{[1-9][0-9]*}})
-# PIPE-DAG: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-# PIPE-DAG: Target rejected schedule
+# PIPE-DAG: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
+# PIPE-NOT: SMS-SHOULDUSE: reject multi-stage
 # PIPE-NOT: SMS-SHOULDUSE: accept multi-stage durable
 # PIPE-NOT: SMS-HANDOFF: materialize cycle={{[0-9]+}} members={{[2-9]|[1-9][0-9]+}} logical BUNDLE
 # PIPE-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}

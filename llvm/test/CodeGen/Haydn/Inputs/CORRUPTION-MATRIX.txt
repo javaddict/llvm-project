@@ -15,8 +15,9 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    MF0 INERT; R15 leftover docs stay outside this code track; product flags stay OFF;
    P20(a) LatencyStalls in addPreSched2; late Finalize/Verify after BR at every
    opt level; containment + PF/JM force-fail
-   inventories pinned; combined dual-ON QUALIFY waits for T2+T4; no PRODUCT_ON;
-   hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are live XFAIL;
+   inventories pinned; combined dual-ON G004 matrix qualified 2026-08-22;
+   product defaults ON (hwloop 9a1c0a128c7e, SMS cbd39b38437a);
+   hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are GREEN;
    no DecisionGuard revive; no second format pipeline)
 Audited backend baseline: 98890c529be92fa35b3a1bc39270bf919eee395e
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
@@ -59,7 +60,7 @@ DG0 DecisionGuard product registry remains absent by design.
 | hwloop residual   | residual SET_HWLOOP past ban    | vf5-residual-set-hwloop-ban.mir + vf5-residual-set-hwloop-reg-ban.mir | landed |
 | hwloop demote     | live body demote without soft edge | hwloop-demote-fatal-live.mir               | landed    |
 | Retained-loop incomplete | fatal pre-mutation reject | hwloop-rolea-preflight-reject.mir             | landed    |
-| XFAIL ledger drift| live XFAIL without owned row    | check_xfail_ledger.py / selfcheck.ll (TOTAL=5) | landed    |
+| XFAIL ledger drift| live XFAIL without owned row    | check_xfail_ledger.py / selfcheck.ll (TOTAL=1 since 2026-08-22 G004) | landed    |
 | s96 G_ANYEXT hang | unmerge/lshr/store re-enters ANYEXT | phase-firewall-s96-anyext.ll              | landed    |
 | hasFP adjustsStack | force FP on every ADJCALLSTACK caller | phase-firewall-hasfp-adjusts-stack.ll   | landed    |
 | MaxParcels short pad | align 256 stops at 16 parcels / 288 | phase-firewall-align-maxparcels.ll        | landed    |
@@ -94,7 +95,7 @@ DG0 DecisionGuard product registry remains absent by design.
 | T7-RT committed install | HEAD install_haydn_sysroot.sh unbound | record_haydn_artifact_set committed check | residual OPEN |
 | T-ABI4 R0 ISR invent | treat R0 borrow windows as interrupt-safe | topics/runtime T-ABI4 residual; no restore emitter | residual |
 | T-ABI6 i128 invent | treat IR i128 split as C ABI | Sema-reject; IR residual; no product i128 CC | residual |
-| T-ABI10 screening invent | treat naked/interrupt/stack-protector/byval-inreg as product | fail-closed / unscreened residual | residual |
+| T-ABI10 screening invent | treat naked/interrupt/stack-protector/byval-inreg as product | naked is a product seat (naked-fn.ll: asm-only body, zero compiler instructions); interrupt/stack-protector/byval-inreg fail-closed / unscreened residual | residual |
 | T-ABI11 builtin invent | treat unselectable C builtins as product | remaining declared-legal residual | residual |
 | T-ABI12 inline-asm invent | treat 'd'/imm/mem as product constraint | Clang 'r' only; 'd' Sema-reject | residual |
 | T-ABI9 executed QUALIFY | treat monorepo compile/link as executed matrix | run_abi_conformance_matrix.sh compile/link only | residual |
@@ -105,11 +106,11 @@ DG0 DecisionGuard product registry remains absent by design.
 | M16 T-TI5 baseline invent | treat leftover II/fill as QUALIFY | pattern_gate.sh leftover table | residual |
 | M16 T-TI6 randomized invent | treat frozen-28 yarpgen as a fuzz gate | YARPGEN_MANIFEST informational | residual |
 | return-value write    | silent SetReturnValueObject   | ABISysV_haydn R1/D0 write (RISC-V port)       | landed    |
-| product hwloop ON | default EnableHaydnHardwareLoops true | sms-f41-containment-product-pin.ll POLICY-NOT set_hwloop | product OFF |
-| product SMS ON    | default productDefaultEnabled true | sms-f41-containment-product-pin.ll POLICY-NOT swps multi-stage | product OFF |
+| product hwloop ON | default EnableHaydnHardwareLoops true | post-park tests assert ON | product ON since 9a1c0a128c7e |
+| product SMS ON    | default productDefaultEnabled true | post-park tests assert ON | product ON since cbd39b38437a |
 | F41 knob as policy | containment-max lift becomes product | sms-f41-containment-product-pin.ll PRODUCT reject | test-only |
 | F41 ZOL knob follow | ZOL bound follows containment-max | sms-f41-zol-containment-knobrefuse.ll ZOL reject | refuse |
-| dual-ON PRODUCT_ON | combined matrix claimed closed  | FAULT-INJECTION-SEATS combined table WAITING  | forbidden |
+| dual-ON PRODUCT_ON | combined matrix claimed closed  | G004 matrix green 2026-08-22 (6263252247d6) | landed |
 
 Physical multistage lifetime / post-mutation / rollback seats (host present)
 -------------------------------------------------------------------------------
@@ -138,8 +139,9 @@ Independent QUALIFY is T2/T4. Combined dual-ON QUALIFY waits.
 Combined-interaction QUALIFY matrix (G-MULTISTAGE-HWLOOP)
 ---------------------------------------------------------
 Both features may be forced ON only under a single compiler/sysroot/BundleSim
-artifact after independent T2 and T4 arms pass. Required evidence stays
-OPEN / WAITING on this track. No PRODUCT_ON.
+artifact after independent T2 and T4 arms pass. Required evidence
+CLOSED 2026-08-22 (G004 dual-ON matrix, gates 20260822_131145/154447/
+161920 clang-hash MATCH); both defaults ON.
 
 | Seat         | Defect if dual-ON is claimed closed early                          | Status                |
 |--------------|--------------------------------------------------------------------|-----------------------|

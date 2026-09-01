@@ -5,7 +5,8 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
   T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed;
   W54 D1000 and W55 nine-file stay LANDED; P13 waves stay gated on R13;
   Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
-  flip sites stay false until independent T2+T4 QUALIFY then combined matrix;
+  flip sites FLIPPED 2026-08-22 after full qualification (hwloop 9a1c0a128c7e,
+  SMS cbd39b38437a; combined pin stays assert-only false; see STATUS 2026-08-22);
   T8-EVID leftover retained)
   (AR0 leftovers are inventory, not a product registry: PIPE-20 phase-firewall
    inventory closed — no pre-RA BUNDLE / member / setDesc / row;
@@ -15,8 +16,9 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    MF0 INERT; R15 leftover docs stay outside this code track; product flags stay OFF;
    P20(a) LatencyStalls in addPreSched2; late Finalize/Verify after BR at every
    opt level; containment + PF/JM force-fail
-   inventories pinned; combined dual-ON QUALIFY waits for T2+T4; no PRODUCT_ON;
-   hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are live XFAIL;
+   inventories pinned; combined dual-ON G004 matrix qualified 2026-08-22;
+   product defaults ON (hwloop 9a1c0a128c7e, SMS cbd39b38437a);
+   hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are GREEN;
    no DecisionGuard revive; no second format pipeline)
 Audited backend baseline: 98890c529be92fa35b3a1bc39270bf919eee395e
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
@@ -59,7 +61,7 @@ policy pins only.
 | Inverse FormatID corruption  | G-E96-END-TO-END         | haydn-verify-bundles           | bundle-corruption-matrix.mir NO-IMM/BAD-ID |
 | Inverse member capacity      | G-E96-END-TO-END         | haydn-verify-bundles           | E2-OVER/OVER-ISSUE (landed)                |
 | Inverse completion match     | G-E96-END-TO-END         | haydn-verify-bundles           | BAD-COMP (landed)                          |
-| Unexplained XFAIL drift      | G-TEST-EVIDENCE          | ledger vs live XFAIL set       | check_xfail_ledger.py + selfcheck (TOTAL=5) |
+| Unexplained XFAIL drift      | G-TEST-EVIDENCE          | ledger vs live XFAIL set       | check_xfail_ledger.py + selfcheck (TOTAL=1 since 2026-08-22 G004) |
 | s96 G_ANYEXT legalizer loop  | G-TEST-EVIDENCE          | HaydnLegalizerInfo custom ANYEXT | phase-firewall-s96-anyext.ll (landed)     |
 | hasFP adjustsStack force     | G-TEST-EVIDENCE          | hasFPImpl + getCallFrameSPAdj  | phase-firewall-hasfp-adjusts-stack.ll (landed) |
 | emitCodeAlignment MaxParcels | G-TEST-EVIDENCE          | HaydnMCELFStreamer idle pad    | phase-firewall-align-maxparcels.ll (landed) |
@@ -99,8 +101,8 @@ policy pins only.
 | Product coverage aggregate   | G-TEST-EVIDENCE          | monorepo product_coverage_pin  | ledger+ARTIFACT+NatureDSP+lit seats (product_coverage_pin.sh) |
 | libc strcpy/strncmp residual | G-LIBRARY-COVERAGE       | llvm-libc string exactness     | classified residual (codegen; no libc rebuild) |
 | LLDB return-value write      | G-DEBUG-OBSERVABILITY    | ABISysV_haydn SetReturnValueObject | R1 <=4B / D0 8B; RISC-V ARG1 port; no GPR pair |
-| Product hwloop flag OFF      | G-HWLOOP-POLICY          | EnableHaydnHardwareLoops init  | post-pipeliner-default-equals-off.ll OFF/HWON; densify-defaults-off.ll; no PRODUCT_ON |
-| Product multi-stage flag OFF | G-MULTISTAGE-POLICY      | productDefaultEnabled() false  | post-pipeliner-default-equals-off.ll OFF/SMSON; densify-defaults-off.ll SMSONLY; no PRODUCT_ON |
+| Product hwloop flag ON       | G-HWLOOP-POLICY          | EnableHaydnHardwareLoops init  | flipped 9a1c0a128c7e 2026-08-22; park tests rebaselined to ON |
+| Product multi-stage flag ON  | G-MULTISTAGE-POLICY      | productDefaultEnabled() true   | flipped cbd39b38437a 2026-08-22; park tests rebaselined to ON |
 | F41 product containment=1    | G-MULTISTAGE-POLICY      | productSMSContainmentMaxStageCount | sms-f41-containment-product-pin.ll PRODUCT |
 | F41 ZOL ignores containment knob | G-HWLOOP-POLICY / F41 | ZOL bound pinned to product=1  | sms-f41-zol-containment-knobrefuse.ll ZOL |
 
@@ -148,11 +150,11 @@ combined QUALIFY. This track pins the OFF state only.
 
 | Order | Goal                    | Flip site                                         | Current                                      |
 |-------|-------------------------|---------------------------------------------------|----------------------------------------------|
-| 1     | Independent SCEV hwloop | evidence only                                     | PARTIAL — flip still closed                  |
-| 2     | Independent multi-stage | evidence only                                     | OPEN — T3 QUALIFY                            |
-| 3     | G-MULTISTAGE-HWLOOP     | evidence only (dual-ON artifact)                  | WAITING — T3 then T6 independent QUALIFY     |
-| 4     | G-HWLOOP-POLICY         | EnableHaydnHardwareLoops cl::init(false)          | BLOCKED — remains false; no PRODUCT_ON       |
-| 5     | G-MULTISTAGE-POLICY     | HaydnMultiStageSMS::productDefaultEnabled()       | BLOCKED — returns false; no PRODUCT_ON       |
+| 1     | Independent SCEV hwloop | evidence only                                     | CLOSED 2026-08-22 — bkfir 160/160 bit-exact  |
+| 2     | Independent multi-stage | evidence only                                     | CLOSED 2026-08-22 — T4 cost-0 + II parity    |
+| 3     | G-MULTISTAGE-HWLOOP     | evidence only (dual-ON artifact)                  | CLOSED 2026-08-22 — G004 matrix green        |
+| 4     | G-HWLOOP-POLICY         | EnableHaydnHardwareLoops cl::init(true)           | FLIPPED 9a1c0a128c7e (2026-08-22)            |
+| 5     | G-MULTISTAGE-POLICY     | HaydnMultiStageSMS::productDefaultEnabled()       | FLIPPED cbd39b38437a (2026-08-22)            |
 
 Combined-interaction QUALIFY matrix (G-MULTISTAGE-HWLOOP)
 ---------------------------------------------------------
@@ -160,7 +162,7 @@ Required evidence with both product paths forced ON on one artifact.
 All seven seats stay OPEN / WAITING on this track. Do not treat
 hwloop-multistage-combined-*.ll dual-ON force-fail cmps as a product
 default flip or as closed combined QUALIFY. Those four files are live
-XFAIL (ledger TOTAL=5) owned by G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE.
+XFAIL (ledger TOTAL=1 since 2026-08-22 G004) owned by G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE.
 
 | Seat         | Proof with hardware loops + multi-stage both enabled              | Status                         |
 |--------------|--------------------------------------------------------------------|--------------------------------|
@@ -209,5 +211,6 @@ Scaffolding rule: implement the real AIE-aligned multistage host; do not
 fake it with the retired Stage-0 PostPipeliner/InterBlock path, a pre-RA
 BUNDLE, late physical semantic rediscovery, force-coissue, Fixup semantic
 peel repair, or invented golden padding. The policy flip is an ordered
-follow-on after independent then combined qualification. No PRODUCT_ON
-on this track.
+follow-on after independent then combined qualification. EXECUTED
+2026-08-22: both defaults ON (see ordered table); combined pin stays
+assert-only false.

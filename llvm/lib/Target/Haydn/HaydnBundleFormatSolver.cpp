@@ -19,6 +19,7 @@
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/ADT/bit.h"
 #include <algorithm>
@@ -458,9 +459,13 @@ llvm::haydn::bundle::assignMemberOpcodesForSettledRow(
   std::call_once(Once, [] {
     const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
     RecIdxByOpcode.assign(MII.getNumOpcodes(), -1);
-    for (unsigned Mid = 0; Mid < haydn::format_e::FormatEMemberCount &&
-                           Mid < FormatEMemberOpcodeCount;
-         ++Mid) {
+    // Both generated catalogs carry the same member count today (4294), but
+    // they are independent headers — std::min keeps each bound authoritative
+    // for its own table without a logical-operator tautology when the two
+    // constants are equal (clang-tidy misc-redundant-expression).
+    const unsigned MemberBound = std::min(haydn::format_e::FormatEMemberCount,
+                                          FormatEMemberOpcodeCount);
+    for (unsigned Mid = 0; Mid < MemberBound; ++Mid) {
       const unsigned Opc = FormatEMemberOpcodes[Mid];
       if (Opc != 0 && Opc < RecIdxByOpcode.size())
         RecIdxByOpcode[Opc] = static_cast<int>(Mid);
@@ -592,4 +597,29 @@ bool llvm::haydn::bundle::cycleMembersExceedPortBudget(
   // so later working callers can share haydnCycleMembersExceedPortBudget
   // with verifyCommittedBundle.
   return haydnCycleMembersExceedPortBudget(Instrs);
+}
+
+
+unsigned llvm::haydn::bundle::countKernelIssueParcels(
+    const MachineBasicBlock &MBB) {
+  // G002 II-parity shared counter (declaration: HaydnBundle.h). Mirrors the
+  // AsmPrinter AchievedII filters exactly: one parcel per BUNDLE root, one
+  // per bare real MI; meta/debug/CFI/implicit-def/kill/inline-asm never
+  // issue. Callers: HaydnAsmPrinter::emitSMSSWPSComments and
+  // HaydnMultiStageSMS::countRealizedKernelParcels — never a second walk.
+  // G004: the ZOL terminator pseudo (PseudoLoopEnd) never issues either —
+  // FixupHwLoops consumes it as the HWLR END marker. At the AsmPrinter seat
+  // it is already gone (no change); at the multistage seat (pre-Fixup) it
+  // must not count, else every Form-B kernel reports realized-II = II + 1
+  // and rolls back.
+  unsigned Parcels = 0;
+  for (const MachineInstr &MI : MBB) {
+    if (MI.isBundle())
+      ++Parcels;
+    else if (!MI.isMetaInstruction() && !MI.isDebugInstr() &&
+             !MI.isCFIInstruction() && !MI.isImplicitDef() && !MI.isKill() &&
+             !MI.isInlineAsm() && MI.getOpcode() != Haydn::PseudoLoopEnd)
+      ++Parcels;
+  }
+  return Parcels;
 }

@@ -1,14 +1,18 @@
 # RUN: rm -rf %t && split-file %s %t
+#
+# 2026-08-22 hwloop product-default flip split: preflight failures with a
+# body-resolvable shape (Header+PLE parsed) now DEMOTE to the software loop
+# (Hexagon keep-legal shape) instead of fatal — fatal is reserved for
+# unresolvable retained state, where demoteHardwareLoopToSoftware cannot
+# parse the body either and erase-only would leave a dangling PseudoLoopEnd
+# (silent infinite loop). Arms reclassified live at the flip commit.
+#
+
+# FATAL arms — unresolvable retained state / malformed LoopStart:
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   %t/trip_r0.mir -o - 2>&1 | FileCheck %s --check-prefix=TRIP
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
-# RUN:   %t/body_with_call.mir -o - 2>&1 | FileCheck %s --check-prefix=CALL
-# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
-# RUN:   %t/multi_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=MEXIT
-# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   %t/nested_setup.mir -o - 2>&1 | FileCheck %s --check-prefix=NEST
-# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
-# RUN:   %t/multi_ple.mir -o - 2>&1 | FileCheck %s --check-prefix=MPLE
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   %t/missing_self_edge.mir -o - 2>&1 | FileCheck %s --check-prefix=SELF
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
@@ -17,34 +21,85 @@
 # RUN:   %t/non_successor_body.mir -o - 2>&1 | FileCheck %s --check-prefix=NSUCC
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   %t/incomplete_operands.mir -o - 2>&1 | FileCheck %s --check-prefix=OPS
-# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
-# RUN:   %t/cond_early_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=CEXIT
-# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
-# RUN:   %t/multibb_early_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=MBEXIT
-# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
-# RUN:   %t/hwlr_csr.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
 
-# Role: MIR — incomplete Role-A retained seats reject fail-closed before mutation.
-# Covers trip reg / call / multi-exit / nested setup / multi-PLE / missing
-# self-edge / missing PLE / non-successor layout invent (successor-only body) /
-# pre-PLE conditional early-exit (golden Constraints: branches must not leave
-# an active hwloop before HWLR_END; one non-self successor so this is not MEXIT)
-# / multi-BB Header successor that never reaches Latch (same reject string) /
-# unpublished HWLR CSR write in the retained body (SET-only program).
+# DEMOTE arms — body-resolvable shape: software loop restored, no ZOL residue.
+# prologepilog precedes haydn-hwloops (product pipeline order: PEI runs in
+# addMachineLateOptimization territory, hwloops in addPreSched2) so the demote
+# stack-counter sink has its PEI-created PostRAScratchFI. That matters for
+# body_with_call: the counter must live across the body call, so
+# isSoundDemoteCounter refuses every call-regmask-clobbered caller-saved GPR
+# and every ABI-CSR this prologue does not save (post-PEI, unsaved = never
+# repaired) — the trip goes to the stack-counter FI (ST32 in preheader;
+# LD32/SUBI32/ST32/BNEZ in latch, all after the last call).
+# REGRESSION (2026-08-22): before the counter-ownership law the demoter
+# picked the call-clobbered trip reg itself; -verify-machineinstrs reported
+# "Using an undefined physical register" on the BUNDLE implicit use because
+# a regmask clobber is invisible to an explicit-def-only walk — silent wrong
+# trip at runtime. The verify flags below are load-bearing.
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/body_with_call.mir -o - 2>&1 | FileCheck %s --check-prefix=DM-CALL
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/multi_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=DM-MEXIT
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/multi_ple.mir -o - 2>&1 | FileCheck %s --check-prefix=DM-MPLE
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/cond_early_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=DM-CEXIT
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/multibb_early_exit.mir -o - 2>&1 | FileCheck %s --check-prefix=DM-MBEXIT
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/hwlr_csr.mir -o - 2>&1 | FileCheck %s --check-prefix=DM-HWLR
+
+# Role: MIR — incomplete Role-A retained seats.
+# FATAL class (unresolvable/malformed): trip reg / nested setup / missing
+# self-edge / missing PLE / non-successor layout invent (successor-only body)
+# / incomplete LoopStart operands — the retained seat never becomes a
+# half-expanded SET.
+# DEMOTE class (body-resolvable): call / multi-exit / multi-PLE / pre-PLE
+# conditional early-exit (golden Constraints: branches must not leave an
+# active hwloop before HWLR_END) / multi-BB Header successor that never
+# reaches Latch / unpublished HWLR CSR write (SET-only program) — not
+# ZOL-able, demote to software loop.
 
 # TRIP: incomplete Role-A retained state rejected before mutation
 # TRIP: trip reg not a physical GPR
-# CALL: body contains call/indirect/return
-# MEXIT: body must have exactly one non-self exit
-# NEST: body contains nested LoopStart/SET_HWLOOP
-# MPLE: body must carry exactly one PseudoLoopEnd
-# SELF: body missing self back-edge
+# NEST: incomplete Role-A retained state rejected before mutation
+# SELF: incomplete Role-A retained state rejected before mutation
 # NOPLE: no body MBB
 # NSUCC: no body MBB
-# OPS: incomplete LoopStart operands
-# CEXIT: body contains early-exit branch before PseudoLoopEnd
-# MBEXIT: body contains early-exit branch before PseudoLoopEnd
-# HWLR: body contains unpublished HWLR CSR write
+# OPS: incomplete Role-A retained state
+
+# DM-CALL: SUBI32{{.*}}, 1
+# DM-CALL: BNEZ{{.*}} %bb.1
+# DM-CALL-NOT: SET_HWLOOP
+# DM-CALL-NOT: LoopStart
+# DM-CALL-NOT: PseudoLoopEnd
+# DM-MEXIT: SUBI32{{.*}}, 1
+# DM-MEXIT: BNEZ{{.*}} %bb.1
+# DM-MEXIT-NOT: SET_HWLOOP
+# DM-MEXIT-NOT: PseudoLoopEnd
+# DM-MPLE: SUBI32{{.*}}, 1
+# DM-MPLE: BNEZ{{.*}} %bb.1
+# DM-MPLE-NOT: SET_HWLOOP
+# DM-MPLE-NOT: PseudoLoopEnd
+# DM-CEXIT: SUBI32{{.*}}, 1
+# DM-CEXIT: BNEZ{{.*}} %bb.1
+# DM-CEXIT-NOT: SET_HWLOOP
+# DM-CEXIT-NOT: PseudoLoopEnd
+# DM-MBEXIT: SUBI32{{.*}}, 1
+# DM-MBEXIT: BNEZ{{.*}}
+# DM-MBEXIT-NOT: SET_HWLOOP
+# DM-MBEXIT-NOT: PseudoLoopEnd
+# DM-HWLR: SUBI32{{.*}}, 1
+# DM-HWLR: BNEZ{{.*}} %bb.1
+# DM-HWLR-NOT: SET_HWLOOP
+# DM-HWLR-NOT: PseudoLoopEnd
+# DM-HWLR-NOT: CSRW
 
 #--- trip_r0.mir
 --- |

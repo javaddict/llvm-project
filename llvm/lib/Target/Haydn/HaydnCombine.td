@@ -221,9 +221,26 @@ def form_lane_store : GICombineRule<
   (apply [{ applyLaneStore(*${root}, MRI, B, Observer, ${matchinfo}); }])
 >;
 
+// DR64 pair-load promotion (REPORT_bkfir_compiler_opt.md §7 ask #3):
+// two same-base constant-offset i32 loads packed into an s64 as
+// (sext/zext(hi) << 32) | zext(lo) — the bkfir pure/v4 software-pack idiom —
+// become ONE G_LOAD (s64) from the pair base. The D_LDW* / LD64 selection,
+// 8-byte alignment law, and offset folding stay in the existing selector
+// path (one mechanism, no side table): the wide G_LOAD is exactly what
+// `AE_L32X2_XC` lowers to, so ordinary C gets the pair load for free.
+// Fail-closed: adjacency / domination / barrier checks fail → no change.
+def pair_load_matchdata : GIDefMatchData<"HaydnPairLoadInfo">;
+def form_pair_load : GICombineRule<
+  (defs root:$root, pair_load_matchdata:$matchinfo),
+  (match (wip_match_opcode G_OR):$root,
+         [{ return matchCombinePairLoad(*${root}, MRI, Helper, ${matchinfo}); }]),
+  (apply [{ applyCombinePairLoad(*${root}, MRI, B, Observer, ${matchinfo}); }])
+>;
+
 def haydn_post_target_combines : GICombineGroup<[
   form_lane_store,
   form_agu_inc_mem,
+  form_pair_load,
 ]>;
 
 // Post-legalizer combiner for Haydn.

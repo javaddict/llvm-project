@@ -1,22 +1,25 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms=false \
-; RUN:   < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=0 -haydn-enable-multistage-sms=false \
+; RUN:   < %s | FileCheck %s --check-prefix=HWOFF
 
-; Role: semantic — independent Role-A qualification while product
-; defaults stay OFF. HWON force-enables hardware loops with multi-stage
-; SMS explicitly OFF. Combined dual-ON and default-ON stay out of scope.
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+
+; Role: semantic — independent Role-A qualification under the product
+; default (ON since 2026-08-22), multi-stage SMS explicitly OFF.
+; HWOFF keeps the explicit-OFF residual. Combined dual-ON stays out of
+; scope here.
 
 define i32 @const_trip(ptr %p) {
 ; DEFAULT-LABEL: const_trip:
-; DEFAULT-NOT: set_hwloop
-; DEFAULT: bnez
-; HWON-LABEL: const_trip:
 ; Inner product selector only; never a free CSR program of HWLR.
-; HWON: set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT: csrw
-; HWON-NOT: bnez
+; DEFAULT: set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT: csrw
+; DEFAULT-NOT: bnez
+; HWOFF-LABEL: const_trip:
+; HWOFF-NOT: set_hwloop
+; HWOFF: bnez
 entry:
   br label %loop
 loop:
@@ -33,10 +36,10 @@ exit:
 
 define i32 @runtime_trip(ptr %p, i32 %n) {
 ; DEFAULT-LABEL: runtime_trip:
-; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: runtime_trip:
-; HWON: set_hwloop_f2 0,
-; HWON-NOT: csrw
+; DEFAULT: set_hwloop_f2 0,
+; DEFAULT-NOT: csrw
+; HWOFF-LABEL: runtime_trip:
+; HWOFF-NOT: set_hwloop
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %pre, label %exit
@@ -59,8 +62,8 @@ declare void @side_effect(i32)
 define void @call_reject(i32 %n) {
 ; DEFAULT-LABEL: call_reject:
 ; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: call_reject:
-; HWON-NOT: set_hwloop
+; HWOFF-LABEL: call_reject:
+; HWOFF-NOT: set_hwloop
 entry:
   br label %loop
 loop:
@@ -75,9 +78,9 @@ exit:
 
 define i32 @multibb_decline(ptr %p, ptr %q, i32 %n) {
 ; DEFAULT-LABEL: multibb_decline:
-; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: multibb_decline:
-; Latch-only multi-BB is the measured SCEV/CFG extension: HWON arms one
+; Latch-only multi-BB is the measured SCEV/CFG extension: DEFAULT arms one
+; HWOFF-LABEL: multibb_decline:
+; HWOFF-NOT: set_hwloop
 ; Role-A SET. Never two SETs.
 ; HWON: set_hwloop_f2 0,
 ; HWON-NOT: set_hwloop{{.*}}set_hwloop
@@ -106,12 +109,12 @@ exit:
 ; Nest matrix: multi-BB outer remains soft; single-BB inner may form Role A.
 define i32 @nested_inner_only(ptr noalias %a, i32 %n, i32 %m) {
 ; DEFAULT-LABEL: nested_inner_only:
-; DEFAULT-NOT: set_hwloop
+; DEFAULT: set_hwloop_f2 0,
+; DEFAULT-NOT: csrw
 ; DEFAULT: jalr
-; HWON-LABEL: nested_inner_only:
-; HWON: set_hwloop_f2 0,
-; HWON-NOT: csrw
-; HWON: jalr
+; HWOFF-LABEL: nested_inner_only:
+; HWOFF-NOT: set_hwloop
+; HWOFF: jalr
 entry:
   %cmp.n = icmp sgt i32 %n, 0
   br i1 %cmp.n, label %outer.preheader, label %exit
@@ -148,8 +151,8 @@ exit:
 define i32 @zero_trip_decline(ptr %p) {
 ; DEFAULT-LABEL: zero_trip_decline:
 ; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: zero_trip_decline:
-; HWON-NOT: set_hwloop
+; HWOFF-LABEL: zero_trip_decline:
+; HWOFF-NOT: set_hwloop
 entry:
   br label %loop
 loop:
@@ -169,8 +172,8 @@ exit:
 define i32 @trip1_const_soft(ptr %p) {
 ; DEFAULT-LABEL: trip1_const_soft:
 ; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: trip1_const_soft:
-; HWON-NOT: set_hwloop
+; HWOFF-LABEL: trip1_const_soft:
+; HWOFF-NOT: set_hwloop
 entry:
   br label %loop
 loop:
@@ -188,10 +191,10 @@ exit:
 ; Constant trip=2 is the small fixed-trip Role-A floor that does arm SET.
 define i32 @trip2_const_form(ptr %p) {
 ; DEFAULT-LABEL: trip2_const_form:
-; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: trip2_const_form:
-; HWON: set_hwloop_f2 0,
-; HWON-NOT: csrw
+; DEFAULT: set_hwloop_f2 0,
+; DEFAULT-NOT: csrw
+; HWOFF-LABEL: trip2_const_form:
+; HWOFF-NOT: set_hwloop
 entry:
   br label %loop
 loop:
@@ -211,10 +214,10 @@ exit:
 ; HWLR CSR.
 define void @multibb_latch_stores(ptr %dst, ptr readonly %src, i32 %n) {
 ; DEFAULT-LABEL: multibb_latch_stores:
-; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: multibb_latch_stores:
-; HWON: set_hwloop_f2 0,
-; HWON-NOT: csrw
+; DEFAULT: set_hwloop_f2 0,
+; DEFAULT-NOT: csrw
+; HWOFF-LABEL: multibb_latch_stores:
+; HWOFF-NOT: set_hwloop
 entry:
   %cmp = icmp sgt i32 %n, 0
   br i1 %cmp, label %header, label %exit
@@ -244,8 +247,8 @@ exit:
 define i32 @multiexit_decline(ptr readonly %src, i32 %n, i32 %k) {
 ; DEFAULT-LABEL: multiexit_decline:
 ; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: multiexit_decline:
-; HWON-NOT: set_hwloop
+; HWOFF-LABEL: multiexit_decline:
+; HWOFF-NOT: set_hwloop
 entry:
   br label %header
 header:

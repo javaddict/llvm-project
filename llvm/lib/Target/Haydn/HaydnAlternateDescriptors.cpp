@@ -15,8 +15,8 @@
 // GET_FORMAT_E_MODE_ONLY_NAMES) — never a hand-transcribed name switch with
 // count-only pins and a silent ProductFormatMask fallback on golden drift.
 // One mechanism: peel the residual/member spelling to the golden logical
-// (peelLogicalOpcodeName, StripWide=false), then classify against the
-// generated sets.
+// (peelLogicalOpcodeName, StripWide=true — unified with the residual
+// classifier by be22ec604d9e), then classify against the generated sets.
 //
 //===----------------------------------------------------------------------===//
 

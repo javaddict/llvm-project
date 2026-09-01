@@ -33,7 +33,7 @@
 ; CAP: cycleViolatesNamedSameCycleLaws
 
 ; PORT-DAG: Every explicit operand field
-; PORT-DAG: MOVE32 rd,rs,rs is 2R1W
+; PORT-DAG: MOVE32 rd,rs is 1R1W
 ; PORT-DAG: haydnHasAdmittedPerOpResourceRecords() { return false; }
 ; PORT-DAG: haydnMemoryObjectWaitCyclesAdmitted() { return false; }
 ; PORT-DAG: HAYDN_NAMED_SAME_CYCLE_LAWS_TAG

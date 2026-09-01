@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Product path is SCEV-proven retained-state expand only. Product default
-// -haydn-enable-hwloops is OFF.
+// -haydn-enable-hwloops is ON (qualified 2026-08-22).
 //
 // Sole product entry when the flag is on:
 //   1. Generic IR HardwareLoops + Haydn TTI prove trip/CFG (innermost
@@ -41,6 +41,7 @@
 #include "HaydnHWLoopDemote.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
+#include "HaydnPortModel.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "HaydnTargetMachine.h"
@@ -50,6 +51,8 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
@@ -97,10 +100,10 @@ static_assert(MaxHWLoopStartOffsetBytes > 0 && MaxHWLoopEndOffsetBytes > 0,
               "hwloop offset ceilings must stay positive");
 static_assert(productParcelBytes().Value > 0,
               "product parcel EncodedBytes must be positive");
-static_assert(!llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
-              "hardware-loop product default stays OFF until independent "
-              "then combined qualification and a separate policy-only flip");
-// Inserted only when EnableHaydnHardwareLoops (product default OFF).
+static_assert(llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
+              "hardware-loop product default is ON (2026-08-22 "
+              "qualification); re-parking requires new failing evidence");
+// Inserted only when EnableHaydnHardwareLoops (product default ON).
 // AIE inserts HardwareLoops unconditionally at O1+
 // (AIE2TargetMachine.cpp:81-82, :234-235). FeatureHWLoop is ISA only.
 
@@ -294,18 +297,13 @@ static void resolveRoleABody(MachineInstr *LS, MachineBasicBlock *&Header,
 }
 
 static bool isNestedRoleASetupOpcode(const MachineInstr &MI) {
-  const unsigned Opc = MI.getOpcode();
-  switch (haydn::format_e::logicalOpcodeOrSelf(Opc)) {
-  case Haydn::LoopStart:
-  case Haydn::SET_HWLOOP:
-  case Haydn::SET_HWLOOP_REG:
-  case Haydn::SET_HWLOOP_W:
-  case Haydn::SET_HWLOOP_F2_W:
-  case Haydn::SET_HWLOOP_REG_W:
-    return true;
-  default:
-    return false;
-  }
+  // Tii family membership (W64 QW2). Reject-site, fail-closed: adding the
+  // bare golden SET_HWLOOP_F2 logical (previously name-peel-only at TII,
+  // absent here) only refuses more bodies — it is a setup form under the MC
+  // same-sel law (HaydnMCChecker starts_with("SET_HWLOOP")) and a nested
+  // one inside a ZOL body is illegal for the same reason as the rest.
+  return haydnClassifyHwloopSetupOpcode(MI.getOpcode()) !=
+         HaydnHwloopSetupFamily::None;
 }
 
 [[noreturn]] static void rejectIncompleteRoleA(MachineInstr *LS, MachineBasicBlock *Body,
@@ -572,12 +570,16 @@ static unsigned countFollowingSizeBearing(const MachineInstr &SetMI,
     if (I->isMetaInstruction() || I->isDebugInstr() || I->isImplicitDef() ||
         I->isKill())
       continue;
-    if (I->isTerminator() && !I->isCall())
-      break;
     unsigned Bytes = TII.getInstSizeInBytes(*I);
     if (Bytes == 0)
       continue;
     FollowingBundles += ceilProductParcels(Bytes);
+    // W61: count the first size-bearing terminator, then stop — same rule as
+    // Fixup countFollowingBundles and the scheduler tail credit
+    // (countSizeBearingTailParcels). The B/cond to the header executes on
+    // every activation path and the byte-law walk (StartOff) charges it.
+    if (I->isTerminator())
+      break;
   }
   return FollowingBundles;
 }
@@ -665,7 +667,25 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
 
     std::string Why;
     if (!preflightRoleABody(Header, Latch, Preheader, PLE, Why)) {
-      rejectIncompleteRoleA(LS, Header, PLE, Why);
+      // Shape-preflight failure splits into two classes:
+      //  * body-resolvable shape (Header+PLE parsed; early-exit branch,
+      //    body call, multi-exit, nested setup, oversize geometry): the
+      //    loop is simply not ZOL-able — demote to the software loop,
+      //    exactly like the oversize-body path below. While the flag was
+      //    product-OFF only explicit opt-in ever reached the fatal, so it
+      //    was invisible; default-ON makes demote the default action.
+      //  * unresolvable retained state (no Header / no PLE on the body):
+      //    demoteHardwareLoopToSoftware cannot parse the body either and
+      //    erases LoopStart erase-only, leaving a dangling PseudoLoopEnd
+      //    with no counter and no back-edge — silent infinite loop. That
+      //    class stays fatal (same refuse-erase-only law as the demoter's
+      //    own refuseUnparseable).
+      const bool BodyResolvable = Header && PLE;
+      if (!BodyResolvable ||
+          !demoteHardwareLoopToSoftware(*LS, *TII))
+        rejectIncompleteRoleA(LS, Header, PLE, Why);
+      Changed = true;
+      continue;
     }
 
     haydn::hwloop::LoopBlockSet LoopBlocks;
@@ -762,15 +782,22 @@ static bool expandRoleALoopStarts(MachineFunction &MF) {
 }
 
 bool HaydnHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
-  // Product insert is EnableHaydnHardwareLoops (default OFF). hasHWLoop()
-  // is ISA capability only — +hwloop does not flip product policy.
-  // Never skipFunction here: product-off is the pipeline insert gate.
+  // Product insert is EnableHaydnHardwareLoops (default ON since the
+  // 2026-08-22 qualification). hasHWLoop() is ISA capability only —
+  // +hwloop does not flip product policy.
+  // Never skipFunction here: the cl flag is the pipeline insert gate.
   const auto &STI = MF.getSubtarget<HaydnSubtarget>();
   if (!STI.hasHWLoop())
     return false;
 
   LLVM_DEBUG(dbgs() << "HaydnHWLoops: Running on " << MF.getName()
                     << " (Role A expand only; post-RA rediscovery deleted)\n");
+
+  // Frame-deadline law: when this pass runs it is the first Haydn pass
+  // after PEI (before HaydnExpandPseudos). Earliest-wins snapshot; the
+  // demote below must never grow the frame past it.
+  MF.getInfo<HaydnMachineFunctionInfo>()->takeFrameFreezeSnapshot(
+      MF.getFrameInfo());
 
   bool Changed = false;
   Changed |= stripEmptyZeroOverheadLoops(MF);
@@ -800,6 +827,7 @@ using haydn::hwloop::emitExactLateDef;
 using haydn::hwloop::eraseInstrSafe;
 using haydn::hwloop::eraseSetMemberAndRecommitSiblings;
 using haydn::hwloop::isLiveMBB;
+using haydn::hwloop::isSoundDemoteCounter;
 using haydn::hwloop::materializeTripCount;
 using haydn::hwloop::pickCounterReg;
 using haydn::hwloop::regClobberedNonCountdownIn;
@@ -1092,14 +1120,62 @@ bool llvm::demoteHardwareLoopToSoftware(
   bool InstallSoftLoop = false;
   bool UseStackCounter = false;
   int StackCounterFI = -1;
+  // CB-162 value-preserve: set when the live trip value was saved to the
+  // demote-save FI and must be reloaded into Prefer at the loop exit.
+  bool PendingSaveRestore = false;
+  int SaveFI = -1;
+  MCRegister SaveFrameReg;
+  int64_t SaveElem = 0;
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const HaydnFrameLowering *TFL = ST.getFrameLowering();
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
 
   auto canUsePreferAsCounter = [&]() -> bool {
-    return Prefer.isPhysical() && Prefer != Haydn::R0 && Prefer != Haydn::R13 &&
-           Prefer != Haydn::R15 &&
-           !regClobberedNonCountdownIn(Prefer, LoopBlocks);
+    if (!Prefer.isPhysical() || Prefer == Haydn::R0 || Prefer == Haydn::R13 ||
+        Prefer == Haydn::R15)
+      return false;
+    if (regClobberedNonCountdownIn(Prefer, LoopBlocks))
+      return false;
+    // Dead-after-loop law (CB-162): the ZOL SET only READS the trip
+    // register, but the software demote DESTROYS it (SUBI32 countdown to
+    // zero). RA may keep a value live in Prefer across the loop for later
+    // users (bkfir16x16 stored descriptor M from the same register the
+    // h-fill loop counted down). Prefer is a sound countdown only when it
+    // is dead on every exit edge: live-in of each exit-successor block must
+    // not contain it. Live-after-exit → the free-counter materialize path
+    // below copies the trip into an untouched register instead.
+    {
+      const TargetRegisterInfo &TRI = *ST.getRegisterInfo();
+      for (const MachineBasicBlock *B : LoopBlocks) {
+        if (!B)
+          continue;
+        for (const MachineBasicBlock *S : B->successors()) {
+          if (LoopBlocks.contains(S))
+            continue;
+          // Live-in(S): live-out(S) stepped backward over all of S.
+          LivePhysRegs LPR(TRI);
+          LPR.addLiveOuts(*S);
+          for (const MachineInstr &MI : llvm::reverse(*S))
+            LPR.stepBackward(MI);
+          if (LPR.contains(Prefer.asMCReg())) {
+            LLVM_DEBUG(dbgs() << DebugPrefix
+                              << ": demote Prefer "
+                              << printReg(Prefer, &TRI)
+                              << " live after loop exit ("
+                              << printMBBReference(*S)
+                              << ") — need copy/materialize counter\n");
+            return false;
+          }
+        }
+      }
+    }
+    // Counter ownership law (calls / callee-saved): see isSoundDemoteCounter.
+    // Live range starts at the SET site — RA proved Prefer live up to here;
+    // the preheader tail and the loop blocks are demote's responsibility.
+    MachineBasicBlock::const_iterator From(
+        topLevelForLayout(SetMI).getIterator());
+    return isSoundDemoteCounter(Prefer.asMCReg(), LoopBlocks, Preheader, From,
+                                MF, *ST.getRegisterInfo());
   };
 
   auto resolveScratchFI = [&]() -> int {
@@ -1190,14 +1266,32 @@ bool llvm::demoteHardwareLoopToSoftware(
       // PseudoLoopEnd. No spill-free candidate → refuse demote (caller
       // fatal ladder), never fall back to a spill bracket.
       const ArrayRef<Register> NoExclude;
+      // CB-162 value-preserve: when Prefer is live after the loop (the
+      // reason no GPR countdown was sound), Prefer itself is a VALID latch
+      // scratch — the demote saves its value to the dedicated save FI
+      // before the loop and reloads it at the exit (below). The only
+      // exclusion stays R0 (XOR-zero clobbers the soft-zero law).
+      const bool PreferLiveAfterLoop = Prefer.isPhysical();
       LatchScr = findPostRAScratchNoSpill(
           *Latch, Latch->end(), /*PreferNotR12=*/true, {Header, Exit},
-          Prefer.isPhysical() ? ArrayRef<Register>{Prefer} : NoExclude);
+          (Prefer.isPhysical() && !PreferLiveAfterLoop)
+              ? ArrayRef<Register>{Prefer} : NoExclude);
+      if (!LatchScr.isPhysical() && Prefer.isPhysical() &&
+          Prefer != Haydn::R0 && Prefer != Haydn::R13 &&
+          Prefer != Haydn::R15) {
+        LatchScr = Prefer;
+        LLVM_DEBUG(dbgs() << DebugPrefix
+                          << ": demote latch scratch = Prefer "
+                          << printReg(Prefer)
+                          << " (value saved to demote-save FI, restored at "
+                             "exit)\n");
+      }
       Register PreheaderScr;
       if (HasImm)
         PreheaderScr = findPostRAScratchNoSpill(
             *Preheader, Ins, /*PreferNotR12=*/true, {},
-            Prefer.isPhysical() ? ArrayRef<Register>{Prefer} : NoExclude);
+            (Prefer.isPhysical() && !PreferLiveAfterLoop)
+                ? ArrayRef<Register>{Prefer} : NoExclude);
       if (!(LatchScr.isPhysical() &&
             (!HasImm || PreheaderScr.isPhysical()))) {
         LLVM_DEBUG(dbgs() << DebugPrefix
@@ -1210,6 +1304,56 @@ bool llvm::demoteHardwareLoopToSoftware(
                           << "); never a spill bracket over the counter\n");
         return false;
       }
+
+      // CB-162 value-preserve slot: share the PostRAScratchFI word when it
+      // is disjoint from the counter FI (counter prefers the dedicated
+      // BranchRelaxation scratch). The rare both-map-to-PostRA case uses the
+      // dedicated HwLoopDemoteSaveFI reserved pre-PEI
+      // (HaydnFrameLowering::processFunctionBeforeFrameFinalized — frame
+      // deadline: no post-PEI CreateStackObject). Same word-aligned simm6
+      // element law either way.
+      const int PostRASaveFI = FuncInfo->getPostRAScratchFI();
+      if (PostRASaveFI >= 0 && PostRASaveFI != StackCounterFI) {
+        SaveFI = PostRASaveFI;
+      } else {
+        SaveFI = FuncInfo->getHwLoopDemoteSaveFI();
+        if (SaveFI < 0) {
+          // Fail closed: the pre-PEI reservation should have covered every
+          // function whose hwloop setup survived to this post-RA pass.
+          // Reaching here means a setup opcode appeared after frame
+          // finalization — a pipeline-contract violation, not a slot miss.
+          report_fatal_error(
+              "Haydn: hwloop demote needs HwLoopDemoteSaveFI after frame "
+              "finalization (pre-PEI reservation missed a live setup)",
+              /*GenCrashDiag=*/false);
+        }
+      }
+      Register SaveFrameRegReg;
+      int64_t SaveOff = TFL->getFrameIndexReference(MF, SaveFI, SaveFrameRegReg)
+                            .getFixed();
+      if ((SaveOff % 4) != 0 || !isInt<6>(SaveOff / 4) ||
+          SaveFrameRegReg != FrameReg) {
+        LLVM_DEBUG(dbgs() << DebugPrefix
+                          << ": demote refused — save FI#" << SaveFI
+                          << " offset " << SaveOff
+                          << " not a word-aligned simm6 element on the "
+                             "counter frame register\n");
+        return false;
+      }
+      SaveFrameReg = SaveFrameRegReg;
+      SaveElem = SaveOff / 4;
+      // Save the live trip value BEFORE the countdown can destroy it.
+      // (HasImm forms have no live Prefer to preserve.)
+      if (!HasImm) {
+        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
+                      [&](MachineInstrBuilder MIB) {
+                        MIB.addReg(Prefer).addReg(SaveFrameReg)
+                            .addImm(SaveElem);
+                      });
+      }
+      // Reload lands at the exit after the latch rewrite (Exit block
+      // entry); recorded here, emitted below once Exit is final.
+      PendingSaveRestore = !HasImm;
 
       if (HasImm) {
         // Materialize imm into the probed spill-free temp, then store to FI.
@@ -1370,6 +1514,22 @@ bool llvm::demoteHardwareLoopToSoftware(
     // B has no PlacementAlternatives (wrap-only Format E singleton commit).
     emitExactLate(*Latch, Latch->end(), DL, TII, Haydn::B,
                   [&](MachineInstrBuilder MIB) { MIB.addMBB(Exit); });
+  }
+
+  // CB-162 value-preserve: reload the saved trip value into Prefer at the
+  // exit entry — the latch countdown (or Prefer-as-latch-scratch) destroyed
+  // the in-register copy. Exact-commit singleton at Exit begin, before any
+  // of Exit's own code, so every later user reads the original value.
+  if (PendingSaveRestore && isLiveMBB(MF, Exit)) {
+    emitExactLateDef(*Exit, Exit->begin(), DL, TII, Haydn::LD32, Prefer,
+                     [&](MachineInstrBuilder MIB) {
+                       MIB.addReg(SaveFrameReg).addImm(SaveElem);
+                     });
+    if (!Exit->isLiveIn(Prefer))
+      Exit->addLiveIn(Prefer);
+    LLVM_DEBUG(dbgs() << DebugPrefix << ": demote restored live trip "
+                      << printReg(Prefer) << " from save FI#" << SaveFI
+                      << " at exit " << printMBBReference(*Exit) << "\n");
   }
 
 #ifndef NDEBUG

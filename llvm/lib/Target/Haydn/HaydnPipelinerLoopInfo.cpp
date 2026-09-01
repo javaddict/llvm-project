@@ -10,13 +10,15 @@
 // Peer: AIEBasePipelinerLoopInfo.cpp (helpers getInstrSequence 408-429,
 // collectLiveInRegs 431-456, canAllocate 458-518, ZeroOverheadLoop
 // shouldUseSchedule 826-835 / canAcceptII 839-847).
-// shouldUseSchedule polarity is unchanged; product multi-stage SMS stays
-// post-RA only (pre-RA StageCount>1 containment).
+// W68.1: the generic MachinePipeliner is the product multi-stage owner for
+// BOTH soft and ZOL loops (PPS-3 bound; the W59 defer seam is retired —
+// one engine, no routing). No format/member witness crosses RA (D493).
 //
 //===----------------------------------------------------------------------===//
 
 #include "HaydnPipelinerLoopInfo.h"
 #include "Haydn.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnHWLoopContracts.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnPortModel.h"
@@ -70,20 +72,18 @@ static cl::opt<bool> ForceSMSPressureReject(
              "shouldUseSchedule as if canAllocateSMS failed (spill-pressure "
              "fail-closed pin). Default OFF — never product policy."));
 
-// F41: pre-RA StageCount containment bound as a test/bisect knob. The
-// PRODUCT value is 1 (pure helper productSMSContainmentMaxStageCount; Option
-// A: pre-RA accepts only soft StageCount==1, multi-stage is post-RA only).
-// Larger values exist solely so lit can drive a found multi-stage soft
-// schedule through the classic ModuloScheduleExpander
-// (createTripCountGreaterCondition guards + setPreheader + adjustTripCount)
-// and pin the F41 soft no-mutation contract under -verify-machineinstrs —
-// never product policy.
+// F41: pre-RA StageCount containment bound as a test/bisect knob, shared by
+// BOTH loop forms (W68.1: form-uniform). The PRODUCT value is the PPS-3
+// max-stage bound (generic MachinePipeliner owns soft and ZOL multi-stage
+// alike); smaller values restore the historic StageCount==1 Option A
+// containment for bisect — the value the post-RA-host ZOL tests use to keep
+// exercising that engine while it still exists.
 static cl::opt<unsigned> HaydnSMSContainmentMax(
     "haydn-sms-containment-max", cl::Hidden,
-    cl::init(HaydnPreRASchedStrategy::productSMSContainmentMaxStageCount),
+    cl::init(HaydnPreRASchedStrategy::productSMSSoftContainmentMaxStageCount),
     cl::desc("F41 test/bisect: max StageCount the pre-RA containment accepts "
-             "(1 = product Option A; larger values exercise the classic "
-             "expander soft trip-count path. Never product policy)."));
+             "for BOTH soft and ZOL loops (product = the PPS-3 max-stage "
+             "bound; 1 restores the historic Option A containment)."));
 
 
 namespace {
@@ -262,8 +262,9 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
 
   // Stage-0 PostPipeliner is deleted. AIE ZeroOverheadLoop::preferPostPipeliner
   // (AIEBasePipelinerLoopInfo.cpp:770-834) routes some ZOL to PostPipeliner;
-  // Haydn's post-RA host is the only multi-stage owner, so this pre-RA path
-  // never defers to a retired Stage-0 engine.
+  // Haydn's post-RA host (HaydnMultiStageSMS) is the only multi-stage owner,
+  // so the W59 routing seam below defers ZOL candidates to THAT engine
+  // (decline-and-defer), never to the retired Stage-0 engine.
 
   // For ZOL loops, reject single-stage schedules (StageCount <= 1).
   // A single-stage schedule has no pipeline overlap -- it just adds
@@ -303,6 +304,14 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
     return false;
   }
 
+  // W59 routing seam RETIRED (W68.1): its reason to exist was "pre-RA never
+  // accepts multi-stage, so ZOL candidates must reach the post-RA host
+  // unpolluted." With ZOL multi-stage qualified on the generic path below,
+  // pre-RA IS the multi-stage owner for both forms and a decline-and-defer
+  // would split one loop between two engines. The post-RA HaydnMultiStageSMS
+  // host itself is scheduled for deletion after this qualification (the F41
+  // knob at 1 bisects the whole lift down for both arms).
+
   // PPS-3: AIE canAcceptII stage-count gate (into shouldUseSchedule — this
   // LLVM has no PipelinerLoopInfo::canAcceptII virtual). Reject schedules
   // with too many stages; high stage count forces many prologue/epilogue
@@ -332,19 +341,14 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
     return false;
   }
 
-  // Option A containment: reject every pre-RA StageCount > 1 (ZOL and soft
-  // counted alike). Closes the inverted ZOL multi-stage gate: ZOL single-stage
-  // is rejected above, multi-stage is rejected here, so pre-RA ZOL SMS never
-  // expands bare multi-stage. Product multi-stage is post-RA only; freeze must
-  // not cross RA.
-  // F41 knob scope: -haydn-sms-containment-max may lift the bound ONLY for
-  // soft counted loops (bisect the classic-expander trip-count path). ZOL
-  // multi-stage stays unconditionally contained — its expansion law is owned
-  // by the post-RA HaydnMultiStageSMS host (LoopStart/PseudoLoopEnd
-  // interplay), never by this pre-RA path.
-  const unsigned ContainmentMax =
-      IsZOL ? HaydnPreRASchedStrategy::productSMSContainmentMaxStageCount
-            : HaydnSMSContainmentMax;
+  // W68.1 containment: the generic MachinePipeliner owns multi-stage for BOTH
+  // soft and ZOL loops (classic ModuloScheduleExpander; ZOL adds the
+  // LoopStart $adj edit + static guard via MinTripCount > PrologueCount),
+  // bounded by the PPS-3 max-stage gate. The F41 knob bisects the bound DOWN
+  // for both forms (1 restores the historic Option A single-stage
+  // containment). ZOL's own AIE-peer gates above (single-stage reject,
+  // MinTripCount guard) remain the ZOL law; no freeze crosses RA (D493).
+  const unsigned ContainmentMax = HaydnSMSContainmentMax;
   if (StageCount > ContainmentMax) {
     DEBUG_WITH_TYPE("pipeliner", {
       dbgs() << "SMS-SHOULDUSE: reject multi-stage stages=" << StageCount
@@ -371,15 +375,18 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
     return false;
   }
 
-  // Release-visible polarity pin: pure product StageCount1 helper agrees that
-  // this soft StageCount==1 schedule is the only remaining accept path. Flag
-  // specials (force-pressure / containment-max lift) already returned above,
-  // so at product defaults this accept is exactly the helper's complement.
+  // Release-visible polarity pin: pure product containment helper agrees
+  // this schedule is the only remaining accept path. Flag specials
+  // (force-pressure / containment-max override) already returned above, so
+  // at product defaults this accept is exactly the helper's complement.
+  // W68.1: the bound is form-uniform (soft == ZOL == PPS-3), so the pin
+  // passes the knob's ContainmentMax for both forms.
   if (HaydnSMSContainmentMax ==
-          HaydnPreRASchedStrategy::productSMSContainmentMaxStageCount &&
+          HaydnPreRASchedStrategy::productSMSSoftContainmentMaxStageCount &&
       HaydnPreRASchedStrategy::smsProductShouldUseScheduleFailsClosed(
           IsZOL, PrologueCount, MinTripCount, /*PressureExcess=*/false,
-          HaydnSMSMaxStageCount, HaydnSMSTrackRegPressure))
+          HaydnSMSMaxStageCount, HaydnSMSTrackRegPressure,
+          HaydnSMSContainmentMax))
     report_fatal_error(
         "Haydn SMS shouldUseSchedule pure product containment polarity desync",
         /*GenCrashDiag=*/false);
@@ -397,19 +404,47 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   }
   ++NumSMSSharedResourceRecordConsumes;
 
-  // Accept remaining product StageCount == 1 schedules as bare logical MIs
-  // only (legal kernel-only / no-overlap; post-RA host owns NStages>=2).
-  // Under the F41 test knob -haydn-sms-containment-max>1, soft multi-stage
-  // is driven through the classic expander — same bare-logical law;
-  // ZOL can never reach here lifted, its bound is pinned to 1 above.
-  // Soft counted residual (proven trip count; AIE DownCountLoop peer) — not
-  // approximate (limit-init)/step invent. Metrics-only; no pre-RA cycle groups.
+  // Accept remaining schedules as bare logical MIs only — soft counted
+  // residual (proven trip count; AIE DownCountLoop peer) and qualified ZOL
+  // multi-stage (static guard; LoopStart $adj edit) alike. Not approximate
+  // (limit-init)/step invent. Metrics-only; no pre-RA cycle groups.
   // Geometry cost is recorded for final parcels (kernel II + body pad); setup
-  // floor is never an II proxy.
+  // floor is never an II proxy. The accept-line tail names the LIVE
+  // containment bound (product PPS-3 vs F41 bisect override); log truth
+  // only, the bound itself is the ContainmentMax selection above.
+  // The contract's only pre-RA format API, consumed here as the advisory
+  // proposal-ranking metric for an accepted schedule. It prices the loop body
+  // (the SMS DAG's real SUnits) against the golden-admitted format table:
+  // coverage in at least one available row, then the E3-widest format-union
+  // cycle floor. Advisory only — metrics live on this accept remark, no cycle
+  // group or selected row crosses RA (D493/PIPE-20). A body with an uncovered
+  // logical would have failed the build-time schema check; nullopt here is
+  // fail-closed log truth, never an accept/reject input.
   DEBUG_WITH_TYPE("pipeliner", {
+    SmallVector<MachineInstr *, 16> Body;
+    for (const SUnit &SU : SSD.SUnits) {
+      const MachineInstr *BMI = SU.getInstr();
+      // The staging ignore set (loop-control chain + ZOL setup) is not part
+      // of the per-iteration body the advisory prices.
+      if (!BMI || shouldIgnoreForPipelining(BMI))
+        continue;
+      Body.push_back(const_cast<MachineInstr *>(BMI));
+    }
+    std::optional<CycleEstimate> Advisory =
+        estimateCyclesAcrossAvailableFormats(Body);
+    dbgs() << "SMS-SHOULDUSE: advisory cycles="
+           << (Advisory ? std::to_string(Advisory->Cycles) : "uncovered")
+           << " (estimateCyclesAcrossAvailableFormats; format-union E3 floor; "
+              "advisory, not emitted-II truth)\n";
     dbgs() << "SMS-SHOULDUSE: accept stages=" << StageCount << " II=" << II
            << " (metrics-only; bare logical MIs; proven counted residual; "
-              "no pre-RA cycle groups; StageCount1 product containment)\n";
+              "no pre-RA cycle groups; "
+           << (ContainmentMax ==
+                       HaydnPreRASchedStrategy::
+                           productSMSSoftContainmentMaxStageCount
+                   ? "product containment (PPS-3 bound)"
+                   : "containment-max override (bisect down)")
+           << ")\n";
     dbgs() << "SMS-SHOULDUSE: final-parcel cost kernel=" << KernelParcels
            << " body_pad=" << BodyPadParcels
            << " final_body=" << FinalBodyParcels
@@ -418,6 +453,55 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
            << " not used as II floor)\n";
   });
   return true;
+}
+
+std::optional<CycleEstimate>
+HaydnPipelinerLoopInfo::estimateCyclesAcrossAvailableFormats(
+    ArrayRef<MachineInstr *> Body) const {
+  using namespace haydn::format_e;
+
+  // Packable Format E entries only: loop control (the caller passes body
+  // instructions; a terminator in the set still must not be counted as a
+  // packable entry), PHIs, and metadata (debug/CFI/kill/position/implicit-def
+  // markers) occupy no Format E entry and contribute no cycles.
+  auto isPackableBodyMI = [](const MachineInstr &MI) {
+    return !MI.isDebugInstr() && !MI.isPosition() && !MI.isKill() &&
+           !MI.isImplicitDef() && !MI.isCFIInstruction() && !MI.isPHI() &&
+           !MI.isTerminator();
+  };
+
+  // Coverage: the golden-admitted table must admit the logical name in at
+  // least one non-NOP row. findAltSpan is the one generated coverage oracle
+  // (non-NOP logicals only); a miss means an RA-legal tuple with no alternate
+  // — a build-time schema gap, surfaced as nullopt (fail closed), never a
+  // silently invented cycle number.
+  const TargetInstrInfo &TII = *HII;
+  unsigned Packable = 0;
+  for (MachineInstr *MI : Body) {
+    if (!MI || !isPackableBodyMI(*MI))
+      continue;
+    // Coverage keys on the golden catalog token, not the raw TableGen def
+    // name: post-inc / load-store families use catalog occupancy names
+    // (LD32 -> S_LW_WITH_IMM etc.), the same normalization
+    // peelLogicalOpcodeName applies everywhere else.
+    const std::string CatalogName =
+        peelLogicalOpcodeName(TII.getName(MI->getOpcode()));
+    if (!findAltSpan(CatalogName.c_str()))
+      return std::nullopt;
+    ++Packable;
+  }
+
+  // Format-union issue-cycle lower bound: pack the packable entries at the
+  // admitted widest (E3) row entry capacity — one issue cycle per pack. The
+  // widest row minimizes the bound, so this is the advisory floor over all
+  // available formats; it reveals no particular format/row/alternate and is
+  // not emitted-II truth. Zero packable instructions cost one architectural
+  // cycle (the minimum nonempty packet).
+  const FamilyRecords Fam = getDefaultFamilyRecords();
+  const unsigned EntryCount = Fam.E3EntryCapacity ? Fam.E3EntryCapacity : 1u;
+  const unsigned Cycles =
+      std::max(1u, (Packable + EntryCount - 1u) / EntryCount);
+  return CycleEstimate{Cycles};
 }
 
 std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
@@ -468,7 +552,6 @@ std::optional<bool> HaydnPipelinerLoopInfo::createTripCountGreaterCondition(
     BuildMI(&MBB, BranchDL, HII->get(Haydn::LOADI32), CmpReg).addImm(TC + 1);
   } else {
     BuildMI(&MBB, BranchDL, HII->get(Haydn::LUI), CmpReg)
-        .addReg(Haydn::R0)
         .addImm(((static_cast<uint32_t>(TC + 1) + 0x8000) >> 16) & 0xFFFF);
     BuildMI(&MBB, BranchDL, HII->get(Haydn::ADDI32_W), CmpReg)
         .addReg(CmpReg)

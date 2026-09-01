@@ -35,6 +35,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/Register.h"
 #include "llvm/IR/DebugLoc.h"
+#include "llvm/MC/MCRegister.h"
 
 #include <cstdint>
 
@@ -44,6 +45,7 @@ class HaydnInstrInfo;
 class HaydnSubtarget;
 class MachineFunction;
 class TargetInstrInfo;
+class TargetRegisterInfo;
 
 namespace haydn {
 namespace hwloop {
@@ -171,7 +173,24 @@ bool regMentionedInBlocks(Register Reg, const LoopBlockSet &Blocks);
 
 /// True if \p Reg is defined in \p Blocks by a non-countdown op (load dest,
 /// move, etc.). Pure residual countdown (Reg+=-1 / Reg-=1) is allowed.
+/// Regmask-only clobbers (body calls) are invisible here — counter ownership
+/// is decided by isSoundDemoteCounter.
 bool regClobberedNonCountdownIn(Register Reg, const LoopBlockSet &Blocks);
+
+/// Counter-ownership law for a software-loop demote on \p Reg whose live
+/// range is the loop blocks plus the preheader tail from \p PreheaderFrom.
+/// The tail may contain ordinary setup-distance work after SET (SET is not
+/// a scheduling boundary); any def/use of \p Reg there refuses the register.
+/// ABI callee-saved: usable iff this function's prologue actually saves it
+/// (CalleeSavedInfo — demote runs post-PEI, an unsaved CSR write is never
+/// repaired and silently breaks our caller; saved ⇒ also call-safe).
+/// Caller-saved: usable iff no call on the range clobbers it (regmask-based;
+/// clobber = corrupted trip). Stack-counter demote is the sink on refusal.
+bool isSoundDemoteCounter(MCPhysReg Reg, const LoopBlockSet &Blocks,
+                          const MachineBasicBlock *Preheader,
+                          MachineBasicBlock::const_iterator PreheaderFrom,
+                          const MachineFunction &MF,
+                          const TargetRegisterInfo &TRI);
 
 /// True if \p MI is a residual countdown step of \p Reg: generic
 /// HardwareLoops LoopDec, or a leftover Prefer+=-1 / Prefer-=1 whose

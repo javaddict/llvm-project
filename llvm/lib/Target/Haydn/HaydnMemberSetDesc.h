@@ -15,6 +15,7 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNMEMBERSETDESC_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNMEMBERSETDESC_H
 
+#include "HaydnFormatERecords.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace llvm {
@@ -22,10 +23,11 @@ namespace llvm {
 class MachineInstr;
 class TargetInstrInfo;
 
-/// True when \p Name is a generated Format E private member.
-inline bool isGeneratedFormatEMemberName(StringRef Name) {
-  return Name.contains("_E2_") || Name.contains("_E3_");
-}
+// isGeneratedFormatEMemberName moved to HaydnFormatERecords.h (W64 QW3):
+// one canonical member-name test for CodeGen and MCTargetDesc — the
+// MCTargetDesc clone had drifted to contains_insensitive. This header
+// re-exports nothing; including HaydnFormatERecords.h makes the canonical
+// inline visible to this header's users.
 
 /// True when FieldSlot/logical explicit operands have a keep-map onto
 /// \p MemberOpc (same closed drop rules as Finalize cutover).

@@ -65,8 +65,11 @@ M5 T-ABI4 R0 invariant: borrow windows are not interrupt-safe;
 M5 T-ABI6 i128: C __int128 Sema-rejects; IR i128 split is not a
     product C ABI. TLI CanLowerReturn refuses i128/half/bfloat.
     Do not invent a documented i128 calling convention.
-M5 T-ABI10 screening: naked / interrupt / stack-protector / byval-inreg
-    stay fail-closed or unscreened residual; not a product ABI.
+M5 T-ABI10 screening: naked is a product seat (naked-fn.ll: default C
+    CC, asm-only body owns control flow, zero compiler instructions —
+    product libc setjmp/longjmp). Interrupt / stack-protector /
+    byval-inreg stay fail-closed or unscreened residual; not a product
+    ABI.
 M5 T-ABI11 remaining declared-legal / unselectable C builtins
     (__builtin_frame_address, readcyclecounter, …) stay residual.
 M5 T-ABI12 inline-asm: Clang 'r' only; 'd' / imm / mem stay residual.

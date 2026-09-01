@@ -9,9 +9,6 @@
 ; RUN:     -verify-machineinstrs -o /dev/null %t/interrupt.ll 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=ISR
 ; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -o /dev/null %t/naked.ll 2>&1 \
-; RUN:     | FileCheck %s --check-prefix=NAKED
-; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -o /dev/null %t/ssp.ll 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=SSP
 ; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
@@ -57,7 +54,9 @@
 ; Role: semantic — advertised ABI fail-closed residuals.
 ; i128 has no product CC (reject before splitToValueTypes invents 2×i64).
 ; half is not a CC type (soft-float product is float/double).
-; interrupt / naked / ssp have no ISR or protector ABI.
+; interrupt / ssp have no ISR or protector ABI.
+; naked is a product seat (positive shape in naked-fn.ll): default C CC,
+; asm-only body owns control flow.
 ; inreg / nest / swift* / byref are not Haydn seats (were silently ignored).
 ; Formal byval is the defined stack-indirect pointer path (not fail-closed).
 ; legal musttail sibcall is JAL_W_MSP (musttail-reject.ll);
@@ -82,12 +81,6 @@ define void @i128_caller() {
 ;--- interrupt.ll
 define void @isr() "interrupt"="machine" {
   ; ISR: {{unable to lower arguments|unable to lower function|unable to lower|failed to lower}}
-  ret void
-}
-
-;--- naked.ll
-define void @naked_fn() naked {
-  ; NAKED: {{unable to lower arguments|unable to lower function|unable to lower|failed to lower}}
   ret void
 }
 

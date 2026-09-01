@@ -11,7 +11,7 @@
 ; recordSWPSAnnotation still reported the assumed II (II lie).
 ; Fix: format infeasibility rejects/retries the II; accept remarks carry
 ; measured-II equal to the searched II; SWPS annotation is stamped only
-; after ParcelsCommitted == II. Product default stays OFF.
+; after ParcelsCommitted == II. 2026-08-22 SMS product-default flip rebaseline (default ON).
 ;
 ; Analysis-only (hang-containment): materialize is not required to pin
 ; the remark contract. An accept must print measured-II=N with the same
@@ -25,7 +25,7 @@
 ; RMK: resource-bias=slot-windows
 ; RMK: {{accepted II=|exhausted:|rejected:}}
 ; RMK: qualify-or-cut
-; RMK: product-off
+; RMK: product-on
 ; RMK-NOT: sequential (preflight)
 ;
 ; ACC: accepted II=[[II:[0-9]+]]

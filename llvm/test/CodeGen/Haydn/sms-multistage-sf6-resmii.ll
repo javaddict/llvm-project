@@ -1,5 +1,6 @@
 ; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-multistage-sms -haydn-multistage-sms-analysis-only \
+; RUN:     -haydn-sms-containment-max=1 \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.rmk | FileCheck %s --check-prefix=ASM
 ; RUN: FileCheck %s --check-prefix=RMK < %t.rmk
@@ -7,6 +8,14 @@
 ; ResMII (row-capacity + per-slot) and RecMII are live before StartII.
 ; An empty window still reports ResMII; it must never sequentialize.
 ; Product default stays OFF.
+;
+; W68.1: generic pre-RA SMS now owns soft multi-stage at product defaults, so
+; this loop would otherwise be expanded pre-RA and the post-RA engine (the
+; subject of this analysis pin) would re-analyze an already-expanded shape
+; (kind=not-candidate). -haydn-sms-containment-max=1 (the F41 bisect knob)
+; restores the historic single-stage soft containment so the loop reaches the
+; post-RA engine UNexpanded and its ResMII/RecMII analysis machinery is
+; exercised. ZOL multi-stage is unaffected by the knob.
 ;
 ; ASM-LABEL: sf6_resmii:
 ; ASM: jalr

@@ -217,8 +217,8 @@ define [2 x i64] @array_i64() {
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 222 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
-; CHECK-NEXT:    { nop; addi32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 r3, r1, 4 }

@@ -562,6 +562,19 @@ inline unsigned logicalOpcodeOrSelf(unsigned Opcode) {
 
 } // namespace format_e
 } // namespace haydn
+
+/// True when \p Name is a generated Format E private member name (carries
+/// the `_E2_` / `_E3_` mode marker). ONE canonical test (W64 QW3): the
+/// former clone in MCTargetDesc/HaydnMCFormats.cpp used
+/// contains_insensitive and had silently drifted from this case-SENSITIVE
+/// law — generated member names are uppercase, so a lowercase `_e2_` hit
+/// is never a member. Callers that must also reject residual FieldSlot
+/// `*_S<digits>` names compose with the residual-name predicate; this
+/// answers member-ness only.
+inline bool isGeneratedFormatEMemberName(StringRef Name) {
+  return Name.contains("_E2_") || Name.contains("_E3_");
+}
+
 } // namespace llvm
 
 // MemberId / logical indexes over the independently sorted FormatEInverse

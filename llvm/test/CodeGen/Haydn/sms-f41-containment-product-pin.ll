@@ -8,9 +8,9 @@
 ; RUN:     < %s | FileCheck %s --check-prefix=POLICY
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -O2 -stop-after=pipeliner -verify-machineinstrs \
-; RUN:     -haydn-sms-containment-max=3 -haydn-pipeliner-track-regpressure=false \
+; RUN:     -haydn-sms-containment-max=1 -haydn-pipeliner-track-regpressure=false \
 ; RUN:     -debug-only=pipeliner < %s -o /dev/null 2>&1 \
-; RUN:     | FileCheck %s --check-prefix=LIFTED
+; RUN:     | FileCheck %s --check-prefix=CONTAINED
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms=false \
@@ -30,11 +30,14 @@
 ; expander-path contract; ZOL lift-refusal is pinned by
 ; sms-f41-zol-containment-knobrefuse.ll).
 ;
-; Product hardware-loop and multi-stage flags stay OFF on this file.
+; 2026-08-22 SMS product-default flip rebaseline: the SMS default is now
+; ON, so every no-flag / explicit-false arm on this file pins the explicit
+; OFF contract (-haydn-enable-multistage-sms=false); the POSTRA-SMS arm
+; (explicit ON) now prints product-on. Product hardware-loop stays ON.
 ; The no-flag product-default pin lives in
 ; post-pipeliner-default-equals-off.ll (this body hangs past the
-; generic pipeliner). Combined dual-ON qualify waits for T2 then T5
-; then this matrix; this file does not claim that matrix closed.
+; generic pipeliner). Combined dual-ON qualify landed 2026-08-22 (G004);
+; this file does not claim that matrix.
 ; Product / POLICY / LIFTED still stop after the generic pipeliner so the
 ; containment pin stays independent of RA. POSTRA-ORD / POSTRA-SMS run
 ; through RA + post-RA (T4 hang-root is capped): ordinary list-schedule
@@ -42,36 +45,38 @@
 ; parcels-per-iter == searched II. POLICY checks pre-RA MIR: no SET_HWLOOP
 ; and no SWPS metadata.
 ;
-; Bug class guarded: the knob exists ONLY to drive a found soft multi-stage
-; schedule through the classic expander for lit verification. Three invariants:
-;   1. PRODUCT (no flag): soft StageCount>1 is still containment-rejected
-;      before any MIR mutation (Option A law; pre-RA multi-stage is post-RA
-;      only). Same body as sms-multistage-naive-handoff-off-reject.ll, which
-;      pins this reject today — this file adds the lifted contrast arm.
-;   2. POLICY (explicit enable flags false): pre-RA MIR has no hardware-loop
-;      SET and no multi-stage SWPS annotation. If this fails a product
-;      default flipped ON.
-;   3. LIFTED (containment=3, pressure gate off for decision determinism):
-;      the organic soft multi-stage schedule is ACCEPTED and driven through
-;      the classic expander; the F41 soft adjustTripCount no-op line fires;
-;      -verify-machineinstrs stays clean (no dangling vreg from an adjusted
-;      trip def inserted into the MBB the expander erases). -stop-after keeps
-;      the run scoped to the pipeliner (the expander contract under test).
-; If (1) fails the knob became product policy; if (2) fails a product
-; default flipped; if (3) fails the F41 fix or the expander soft path
-; regressed.
+; Bug class guarded: the knob bisects the pre-RA SOFT StageCount containment
+; bound (W68.1: product bound = PPS-3 max-stage, generic MachinePipeliner owns
+; soft multi-stage). Three invariants:
+;   1. PRODUCT (no flag): the soft StageCount>1 schedule is now ACCEPTED at
+;      product defaults (W68.1: generic pre-RA multi-stage owns soft loops up
+;      to the PPS-3 bound; ZOL stays contained). The body is the same
+;      matrix_sum soft residual this file has always used.
+;   2. POLICY (explicit enable flags false): pre-RA MIR is pipelined (soft
+;      multi-stage accepted) but has no hardware-loop SET — ZOL is off and the
+;      accepted soft schedule is bare logical MIs (no pre-RA cycle groups).
+;   3. CONTAINED (containment=1, pressure gate off for decision determinism):
+;      the knob restores the historic Option A single-stage soft containment,
+;      so the organic soft multi-stage schedule is now REJECTED by
+;      containment before any MIR mutation. The F41 bisect knob is still the
+;      sole product-bound override (product policy no longer routes through
+;      it). -stop-after keeps the run scoped to the pipeliner.
+; If (1) fails the product soft multi-stage bound regressed; if (2) fails a
+; ZOL/enable default flipped; if (3) fails the F41 knob no longer bisects the
+; soft bound.
 
-; PRODUCT: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-; PRODUCT-NOT: SMS-SHOULDUSE: accept
+; PRODUCT: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
+; PRODUCT: SMS-TC: soft adjustTripCount delta={{-?[0-9]+}} is a structural no-op
+; PRODUCT-NOT: SMS-SHOULDUSE: reject multi-stage
+; PRODUCT-NOT: Reading virtual register without a def
 
 ; POLICY-NOT: SET_HWLOOP
 ; POLICY-NOT: swps
 ; POLICY: RET
 
-; LIFTED-NOT: SMS-SHOULDUSE: reject multi-stage
-; LIFTED: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}}
-; LIFTED: SMS-TC: soft adjustTripCount delta={{-?[0-9]+}} is a structural no-op
-; LIFTED-NOT: Reading virtual register without a def
+; CONTAINED: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
+; CONTAINED-NOT: SMS-SHOULDUSE: accept
+; CONTAINED-NOT: SMS-TC: soft adjustTripCount
 ;
 ; POSTRA-ORD: sms_f41_containment_pin:
 ; POSTRA-ORD: jalr
@@ -82,7 +87,7 @@
 ; POSTRA-SMS-ASM: jalr
 ; POSTRA-SMS: {{accepted II=|exhausted:|rejected:}}
 ; POSTRA-SMS: qualify-or-cut
-; POSTRA-SMS: product-off
+; POSTRA-SMS: product-on
 ; POSTRA-SMS: nat-ipc=measured-miss
 ; POSTRA-SMS: no-competitive-ipc
 ; POSTRA-SMS: no-stage0-ib-pp

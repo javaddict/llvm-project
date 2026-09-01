@@ -5,14 +5,15 @@
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=HANDOFF
 # REQUIRES: asserts
 
-# Role: MIR — MOVE32-class MI-versus-descriptor SMS port / placement differential pin: MOVE32 is tablegen'd (outs rd), (ins rs1, rs2).
+# Role: MIR — MOVE32-class SMS port / placement pin: MOVE32 is tablegen'd (outs rd), (ins rs) — dest+src schema (W68.0b).
 
-# MOVE32-class MI-versus-descriptor SMS port / placement differential pin:
-#   MOVE32 is tablegen'd (outs rd), (ins rs1, rs2). copyPhysReg emits
-#   MOVE32 rd, rs, rs. Per-field port law counts both source fields
-#   (2R1W) on the MI path; descriptor shape is the same 2R1W so
-#   desc_overcounts_mi=0. SMS-PORT metrics log the agreement; SMS-HOOK
-#   does not reject (not an operand-dependent format predicate).
+# MOVE32-class SMS port / placement pin:
+#   MOVE32 is tablegen'd (outs rd), (ins rs) — the W68.0b dest+src
+#   schema; copyPhysReg emits MOVE32 rd, rs. The MI and the descriptor
+#   agree at 1R1W, so the former repeated-source differential
+#   (mi_repeated_src vs desc_shape) is structurally moot. SMS-PORT
+#   metrics log the agreement; SMS-HOOK does not reject (not an
+#   operand-dependent format predicate).
 #
 #   Body: three independent MOVE32 (format greedy=exhaustive=1). Write pool
 #   2W forces DFA ResMII ≥ 2 under the MI path (same as port-forced ADD32).
@@ -27,10 +28,10 @@
 # PORT-NOT: SMS-HANDOFF: reject
 # PORT-NOT: Unable to analyzeLoop
 # PORT: SMS-RESMII: body_ops=3 greedy=1 exhaustive=1 overestimate=0
-# PORT: SMS-PORT: move32-class ops=3 desc_shape=2R1W mi_repeated_src=2R1W desc_overcounts_mi=0
+# PORT: SMS-PORT: move32-class ops=3 desc_shape=1R1W mi_repeated_src=1R1W desc_overcounts_mi=0
 # PORT: SMS-HANDOFF: metrics-only freeze
 # PORT: SMS-HANDOFF: qual-kernel body_ops=3 coissue_packable=1 exact_packable=1 exhaustive=1
-# MI-path ResMII ≥ 2 (3 writes under 2W); per-field reads match the descriptor.
+# MI-path ResMII ≥ 2 (3 writes under 2W); logical shape is dest+src.
 # PORT: Return Res MII:{{[2-9]|[1-9][0-9]+}}
 
 --- |
@@ -91,11 +92,11 @@ body:             |
     %5:gpr32 = PHI %1, %bb.1, %6, %bb.2
     %7:gpr32 = PHI %2, %bb.1, %8, %bb.2
     %9:gpr32 = PHI %3, %bb.1, %10, %bb.2
-    ; Three independent MOVE32 with repeated sources (copyPhysReg shape).
-    ; Per-field: MI and descriptor are both 2R1W.
-    %6:gpr32 = MOVE32 %5, %5
-    %8:gpr32 = MOVE32 %7, %7
-    %10:gpr32 = MOVE32 %9, %9
+    ; Three independent MOVE32 (copyPhysReg shape: dest+src, 1R1W).
+    ; MI and descriptor agree.
+    %6:gpr32 = MOVE32 %5
+    %8:gpr32 = MOVE32 %7
+    %10:gpr32 = MOVE32 %9
     PseudoLoopEnd %bb.2
 
   bb.3.exit:

@@ -171,19 +171,21 @@ inline HaydnCyclePortDemand countHaydnPortsFromMI(const MachineInstr &MI) {
 //===----------------------------------------------------------------------===//
 // MOVE32-class MI-versus-descriptor port / placement shapes (SMS ownership)
 //===----------------------------------------------------------------------===//
-// MOVE32 is tablegen'd as (outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2) so the
-// MCInstrDesc always exposes one def + two use slots. copyPhysReg emits
-// `MOVE32 rd, rs, rs`. PortModel MI accounting charges each explicit
-// field, so that form is 2R1W — the same demand as descriptor-only
-// placement (estimateHaydnPortsFromDesc / ResourceCycle MID overload).
+// MOVE32 is tablegen'd as (outs GPR:$rd), (ins GPR:$rs1) — dest+src,
+// matching the Format E member shape. copyPhysReg emits `MOVE32 rd, rs`.
+// PortModel MI accounting charges each explicit field, so that form is
+// 1R1W — the same demand as descriptor-only placement
+// (estimateHaydnPortsFromDesc / ResourceCycle MID overload).
 // One law: every explicit GPR read operand reserves one read port.
-// Names stay so SMS-PORT logging / packing probes keep compiling.
+// MOVE32 is dest+src (1R1W); names stay so SMS-PORT logging / packing
+// probes keep compiling.
 
-/// MI PortModel demand for MOVE32 rd, rs, rs (per-field, no identity dedup).
-inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprReads = 2;
+/// MI PortModel demand for MOVE32 rd, rs (dest+src logical matching Format E
+/// members; 1R1W).
+inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprReads = 1;
 inline constexpr unsigned HaydnMove32ClassMiRepeatedSrcGprWrites = 1;
-/// Descriptor-only shape (1 def + 2 use slots) with no same-reg identity.
-inline constexpr unsigned HaydnMove32ClassDescShapeGprReads = 2;
+/// Descriptor shape is the same dest+src form.
+inline constexpr unsigned HaydnMove32ClassDescShapeGprReads = 1;
 inline constexpr unsigned HaydnMove32ClassDescShapeGprWrites = 1;
 
 /// True when descriptor-shape reads strictly overcount the MI repeated-src

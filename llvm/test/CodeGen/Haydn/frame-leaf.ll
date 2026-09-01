@@ -65,7 +65,9 @@ define i32 @i32_leaf_multi(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; CHECK-NEXT:    { nop; nop }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply): the
+; mull -> sub32 consumer now issues in the NEXT parcel; the old all-NOP
+; stall parcel is gone. Rebaselined; instruction stream is unchanged.
 ; CHECK-NEXT:    { nop; sub32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

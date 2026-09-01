@@ -616,11 +616,11 @@ HaydnHazardRecognizer::buildCandidate(const MachineInstr &MI) const {
                    });
   }
 
-  auto [Reads, Writes] = countGPRPorts(MI);
+  auto [Reads, Writes] = countGPRPorts(MI, PortMRI);
   Candidate.setGPRPorts(Reads, Writes);
-  auto [DRReads, DRWrites] = countDRPorts(MI);
+  auto [DRReads, DRWrites] = countDRPorts(MI, PortMRI);
   Candidate.setDRPorts(DRReads, DRWrites);
-  auto [ARReads, ARWrites] = countARPorts(MI);
+  auto [ARReads, ARWrites] = countARPorts(MI, PortMRI);
   Candidate.setARPorts(ARReads, ARWrites);
   auto [SFRReads, SFRWrites] = countSFRPorts(MI);
   Candidate.setSFRPorts(SFRReads, SFRWrites);
@@ -647,11 +647,11 @@ bool HaydnHazardRecognizer::checkConflict(
   HaydnFuncUnitWrapper IssueOnly;
   IssueOnly.setIssueCountOne();
   IssueOnly.setSlots(occupancySlots(MI));
-  auto [Reads, Writes] = countGPRPorts(MI);
+  auto [Reads, Writes] = countGPRPorts(MI, PortMRI);
   IssueOnly.setGPRPorts(Reads, Writes);
-  auto [DRReads, DRWrites] = countDRPorts(MI);
+  auto [DRReads, DRWrites] = countDRPorts(MI, PortMRI);
   IssueOnly.setDRPorts(DRReads, DRWrites);
-  auto [ARReads, ARWrites] = countARPorts(MI);
+  auto [ARReads, ARWrites] = countARPorts(MI, PortMRI);
   IssueOnly.setARPorts(ARReads, ARWrites);
   auto [SFRReads, SFRWrites] = countSFRPorts(MI);
   IssueOnly.setSFRPorts(SFRReads, SFRWrites);
@@ -735,11 +735,11 @@ void HaydnHazardRecognizer::enterResources(
   HaydnFuncUnitWrapper IssueOnly;
   IssueOnly.setIssueCountOne();
   IssueOnly.setSlots(occupancySlots(MI));
-  auto [Reads, Writes] = countGPRPorts(MI);
+  auto [Reads, Writes] = countGPRPorts(MI, PortMRI);
   IssueOnly.setGPRPorts(Reads, Writes);
-  auto [DRReads, DRWrites] = countDRPorts(MI);
+  auto [DRReads, DRWrites] = countDRPorts(MI, PortMRI);
   IssueOnly.setDRPorts(DRReads, DRWrites);
-  auto [ARReads, ARWrites] = countARPorts(MI);
+  auto [ARReads, ARWrites] = countARPorts(MI, PortMRI);
   IssueOnly.setARPorts(ARReads, ARWrites);
   auto [SFRReads, SFRWrites] = countSFRPorts(MI);
   IssueOnly.setSFRPorts(SFRReads, SFRWrites);

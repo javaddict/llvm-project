@@ -8,12 +8,14 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFeatures.td --check-prefix=FEAT
 ;
 ; Role: semantic — T7-SOURCE-ALIGN owner-slice pins. Single AIE lifecycle
-; ledger in TargetMachine; no product-default flip; P19 CMake is env/-D only;
-; Auto.td is hand-maintained via Generic include; EnsureTerminators never
-; skipFunction. P13 source waves stay gated while `_S*` FieldSlot defs remain.
+; ledger in TargetMachine; hwloop product default flipped ON 2026-08-22
+; (qualified independent + combined; see HaydnTargetMachine.h); P19 CMake
+; is env/-D only; Auto.td is hand-maintained via Generic include;
+; EnsureTerminators never skipFunction. P13 source waves stay gated while
+; `_S*` FieldSlot defs remain.
 
-; HWDEF: hardwareLoopsProductDefaultEnabled() { return false; }
-; HWFLAG-DAG: static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
+; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
+; HWFLAG-DAG: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; HWFLAG-DAG: "haydn-enable-hwloops"
 ; HWFLAG-DAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
 ; LATE: Late Finalize+Verify after BR at every opt level (same Finalize/Verify).

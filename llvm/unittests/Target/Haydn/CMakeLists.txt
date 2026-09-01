@@ -26,9 +26,11 @@ add_llvm_target_unittest(HaydnTests
   HaydnBundlePlanTest.cpp
   HaydnBundleTest.cpp
   HaydnBundleVerifyTest.cpp
+  HaydnEstimateCyclesTest.cpp
   HaydnFormatERecordsTest.cpp
   HaydnFormatOrderingTest.cpp
   HaydnFormatRegistryTest.cpp
+  HaydnFrameFreezeTest.cpp
   HaydnHWLoopContractsTest.cpp
   HaydnHazardRecognizerTest.cpp
   HaydnIntraCycleRAWTest.cpp

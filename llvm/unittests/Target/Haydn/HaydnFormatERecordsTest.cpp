@@ -584,3 +584,74 @@ TEST(HaydnFormatERecords, SFRWriterMembersDeclareImplicitSFRDef) {
         << "member lost implicit SFR def: " << Opc;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Direct-setDesc identity (runtime second layer). The generator's
+// check_setdesc_identity owns the build-time law; this walks the same
+// generated ledger at the MCInstrDesc level so a stale .inc cannot pass
+// build-time checking and fail runtime shape parity.
+// ---------------------------------------------------------------------------
+namespace {
+
+// Keep in sync with EXPECTED_IDENTITY_DIVERGENT in
+// llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py: CSRR
+// (decoder-parity 3-op shell), the UA/CB golden families pending the
+// CB-151 reshape, and the retained SET_HWLOOP_REG ZOL pseudo. Hand-asm
+// shells (isAsmParserOnly, e.g. D_LDW_CB_IMM) are exempt at generation
+// time by flag; the Desc-level walk has no flags, so they are named here.
+std::set<std::string> identityDivergentAllowSet() {
+  return {
+      "CSRR",
+      "D_LDW_CB_IMM",
+      "D_LQHWUA_POST",
+      "D_LTWUA_POST",
+      "D_SQHWUA_POST",
+      "D_STWUA_POST",
+      "SET_HWLOOP_REG",
+      "WBARWUA",
+  };
+}
+
+} // namespace
+
+TEST(HaydnFormatERecords, DirectSetDescIdentityOverLedger) {
+  using llvm::haydn::format_e::lookupGeneratedMemberToLogical;
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  const auto Allow = identityDivergentAllowSet();
+  unsigned Pairs = 0;
+  unsigned Divergent = 0;
+  std::set<std::string> DivergentNames;
+  for (unsigned MemberOpc = 0; MemberOpc != Haydn::INSTRUCTION_LIST_END;
+       ++MemberOpc) {
+    const unsigned LogicalOpc = lookupGeneratedMemberToLogical(MemberOpc);
+    if (!LogicalOpc || LogicalOpc == MemberOpc)
+      continue;
+    const MCInstrDesc &L = MII.get(LogicalOpc);
+    const MCInstrDesc &M = MII.get(MemberOpc);
+    ++Pairs;
+    bool ShapeEqual = L.getNumOperands() == M.getNumOperands() &&
+                      L.getNumDefs() == M.getNumDefs();
+    for (unsigned I = 0; ShapeEqual && I != L.getNumOperands(); ++I) {
+      const MCOperandInfo &LI = L.operands()[I];
+      const MCOperandInfo &MI = M.operands()[I];
+      if (LI.OperandType != MI.OperandType || LI.RegClass != MI.RegClass)
+        ShapeEqual = false;
+      else if ((L.getOperandConstraint(I, MCOI::TIED_TO) == -1) !=
+               (M.getOperandConstraint(I, MCOI::TIED_TO) == -1))
+        ShapeEqual = false;
+    }
+    if (ShapeEqual)
+      continue;
+    ++Divergent;
+    const std::string Name = MII.getName(LogicalOpc).str();
+    DivergentNames.insert(Name);
+    EXPECT_TRUE(Allow.count(Name))
+        << "new setDesc identity divergence: " << Name << " vs "
+        << MII.getName(MemberOpc)
+        << " (operands/defs/OpInfo differ; align the logical TableGen "
+           "schema and re-pin the census)";
+  }
+  EXPECT_GT(Pairs, 4000u) << "ledger walk lost its member pairs";
+  EXPECT_EQ(DivergentNames, Allow)
+      << "divergent census drifted from the pinned allow set";
+}

@@ -89,7 +89,14 @@ std::string haydnCatalogOccupancyName(StringRef Raw);
 /// AIEMCFormats.h:376-379). ABS64-class holes have a matcher-visible unsuffixed
 /// logical; `ABS64_S1` is not that logical.
 bool haydnIsResidualFieldSlotName(StringRef Name);
-/// Generated Format E member spelling (`*_E2_*` / `*_E3_*`).
+/// Parser/refusal spelling of a generated Format E member (`_E2_` / `_E3_`
+/// mode marker), matched CASE-INSENSITIVELY. This is a hostile-input
+/// classification law, NOT member identity: the AsmParser must refuse a
+/// user-typed `add32_e2_e0_alu0_rr` with the precise "private placement
+/// opcode" error, and what the user typed can be any case. Opcode-name
+/// member identity (canonical, always-uppercase names) is the
+/// case-SENSITIVE llvm::isGeneratedFormatEMemberName in
+/// HaydnFormatERecords.h — do not conflate the two (W64 QW3).
 bool haydnIsGeneratedMemberName(StringRef Name);
 
 /// RelocLayout ValueShift for Format E HWLR Off1/Off2 word fields.

@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -stop-after=haydn-verify-bundles \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -stop-after=haydn-verify-bundles \
 ; RUN:   < %s | FileCheck %s
 ; REQUIRES: haydn-registered-target
 ;

@@ -257,6 +257,34 @@ static_assert(InterveningCycles + 1 == SetupIssueDistance,
 /// SetupIssueDistance. New code should prefer InterveningCycles by name.
 inline constexpr unsigned MinSetupBundles = InterveningCycles;
 
+/// W61 scheduler tail credit (AIE RegionEndEdges
+/// LoopSetupDistance - ZOLBundlesCount analog): the in-region SET→ExitSU
+/// edge latency owed after crediting the SET-MBB tail parcels — the
+/// size-bearing parcels between the scheduling region's end and the first
+/// terminator (the unconditional B to the header, a guarding conditional
+/// branch, call-boundary parcels). Those parcels lie between the SET cycle
+/// and HWLR_BEGIN on every activation path, so the region only owes the
+/// remainder of SetupIssueDistance. AIE credits ZOL body bundles because
+/// its law runs to LEND; the golden Haydn law runs to BEGIN
+/// (VLIW_Engine_Compiler_Constraints "Setup Timing"), so the credit is the
+/// tail, never body parcels. Following/StartOff walks count the same first
+/// size-bearing terminator so the credit is not re-padded post-sched.
+inline constexpr unsigned setupGapAfterTailCredit(unsigned TailParcels) {
+  return TailParcels >= SetupIssueDistance ? 0
+                                           : SetupIssueDistance - TailParcels;
+}
+
+static_assert(setupGapAfterTailCredit(0) == SetupIssueDistance,
+              "no tail: region owes the full distance");
+static_assert(setupGapAfterTailCredit(1) == SetupIssueDistance - 1,
+              "one tail parcel (unconditional B preheader) credits one cycle");
+static_assert(setupGapAfterTailCredit(InterveningCycles) == 1,
+              "two tail parcels leave the SET cycle itself to the region");
+static_assert(setupGapAfterTailCredit(SetupIssueDistance) == 0,
+              "tail covers the whole distance: region owes nothing");
+static_assert(setupGapAfterTailCredit(10) == 0,
+              "over-credit clamps at zero, never under-reserves");
+
 // Min setup distance in bytes (InterveningCycles × product EncodedBytes).
 // Single EncodedBytes path; AIE sums Format->getSize(). Timing law is the
 // cycle pair above, not this byte product under a mixed-width fantasy.

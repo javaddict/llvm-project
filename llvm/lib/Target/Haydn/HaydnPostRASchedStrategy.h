@@ -121,6 +121,19 @@ public:
   // HaydnScheduleDAGMI::exitRegion.
   void leaveRegion(const SUnit &ExitSU);
 
+  /// G004 D493 seam: the multi-stage SMS plan committed this MBB's parcels
+  /// (kernel bundles + cycle-ordered idle NOPs) inside schedule(); the
+  /// ordinary zones are stale relative to that mutation. leaveRegion /
+  /// leaveMBB must not re-materialize bundles or re-pad idle cycles for a
+  /// committed MBB — the multistage plan is the placement authority.
+  void noteMultistageCommitted(MachineBasicBlock *MBB) {
+    if (MBB)
+      MultistageCommittedMBBs.insert(MBB);
+  }
+  bool multistageCommitted(MachineBasicBlock *MBB) const {
+    return MBB && MultistageCommittedMBBs.contains(MBB);
+  }
+
 private:
   // A single cycle's worth of instructions, in MBB order. Empty Instrs means
   // an idle cycle (materialized as a rolling-position NOP). Product format is
@@ -193,6 +206,10 @@ private:
   // 866) — leaveRegion must not compute bundles for those, because the DAG's
   // SUnits/region iterators are stale from the previous region.
   bool RegionWasScheduled = false;
+
+  // G004 D493 seam: MBBs whose parcels the multi-stage plan committed;
+  // leaveRegion/leaveMBB defer to that authority (see noteMultistageCommitted).
+  SmallPtrSet<MachineBasicBlock *, 4> MultistageCommittedMBBs;
 
   // Per-pick memo of ready-subset auction scores. Cleared after every emit
   // so a later pick cannot reuse a stale Available/base snapshot.

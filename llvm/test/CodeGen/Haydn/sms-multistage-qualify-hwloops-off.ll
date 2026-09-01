@@ -15,7 +15,7 @@
 ; Same-artifact QUALIFY with hardware loops OFF. Realized parcels-per-iter
 ; must equal searched II on every accepted kernel (SF3). Resource-bias
 ; windows (SF9) and epilogue scoreboard pre-seed (SF10) are named. SWPS
-; is observe-only. Product default stays OFF (P20(i) seated, not flipped).
+; is observe-only. 2026-08-22 SMS product-default flip rebaseline (default ON).
 ;
 ; ASM-LABEL: qualify_hwloops_off:
 ; ASM: jalr
@@ -24,7 +24,7 @@
 ; RMK-DAG: no-seq-fallback
 ; RMK-DAG: accepted II=
 ; RMK-DAG: qualify-or-cut
-; RMK-DAG: product-off
+; RMK-DAG: product-on
 ; RMK-DAG: swpsolver=unavailable
 ; RMK-DAG: hwloop-combined=off
 ; RMK-DAG: nat-ipc=measured-miss
@@ -42,7 +42,7 @@
 ; MATRMK-NOT: sequential (preflight)
 ; MATRMK: accepted II=
 ; MATRMK: qualify-or-cut
-; MATRMK: product-off
+; MATRMK: product-on
 ; MATRMK: {{peel-order=modulo-cycle|epilogue-preseed=}}
 
 define i32 @qualify_hwloops_off(ptr nocapture readonly %a,

@@ -19,37 +19,39 @@
 ; Combined dual-ON qualify waits for independent hwloop and multi-stage
 ; qualify tracks.
 ;
-; Bug class guarded: the F41 knob lifts the pre-RA StageCount containment
-; for SOFT counted loops only (expander-path lit vehicle). ZOL multi-stage
-; must stay contained even with the knob lifted: the ZOL expansion law
-; (LoopStart $adj / PseudoLoopEnd interplay with the expander's cloned
-; terminators) is owned by the post-RA HaydnMultiStageSMS host. The code
-; pins the ZOL bound to productSMSContainmentMaxStageCount=1 regardless of
-; the knob. If this pin fails, the knob has opened an unowned pre-RA ZOL
-; multi-stage expansion path — silent wrong code risk (ZOL cannot emit a
-; dynamic guard).
+; Bug class guarded: the F41 knob bisects the form-uniform containment bound
+; DOWN (W68.1). At the knob value 1 the historic Option A refuse is restored
+; for BOTH forms; at 3 (== product) ZOL accepts through its static
+; MinTripCount guard. What must never regress: ZOL accepting with an
+; UNKNOWN trip (no dynamic guard is possible — pinned in
+; HaydnHazardRecognizerTest PreRASMSZOLMultiStageLiftPolarity), and the
+; knob value 1 always refusing multi-stage for both forms.
 ;
 ; Test design:
-;   Policy arm (+hwloop attr, flags false): does not enable product
-;     hardware loops. Soft containment still rejects StageCount>1; asm
-;     has no SET and no multi-stage SWPS annotation.
+;   Policy arm (+hwloop attr, hwloop FLAG false): does not enable product
+;     hardware loops, so the loop is SOFT. W68.1: soft multi-stage is now
+;     ACCEPTED at product defaults (generic MachinePipeliner owns it); the
+;     accepted schedule is bare logical MIs, so the asm has no SET and no
+;     multi-stage SWPS annotation. This arm is the soft-accept contrast to
+;     the ZOL-refuse arm below.
 ;   ZOL arm: constant-trip MAC body whose ZOL MinTripCount (16) passes
 ;     the ZOL MinTC gate, so the ONLY remaining reject surface is the
-;     containment itself — same shape as sms-zol-multistage-containment.ll,
-;     but with the knob lifted to 3 to prove refusal. PASS = the reject
-;     line still fires. If the ZOL bound silently followed the knob, the
-;     loop would expand a bare pre-RA multi-stage ZOL kernel (no dynamic
-;     guard possible). Multi-stage product stays explicitly false.
+;     ZOL containment itself — same shape as
+;     sms-zol-multistage-containment.ll, but with the knob lifted to 3 to
+;     prove refusal. PASS = the reject line still fires. If the ZOL bound
+;     silently followed the knob, the loop would expand a bare pre-RA
+;     multi-stage ZOL kernel (no dynamic guard possible). Multi-stage
+;     product stays explicitly false.
 
-; POLICY: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-; POLICY-NOT: SMS-SHOULDUSE: accept
-; POLICY-NOT: SMS-TC: soft adjustTripCount
+; POLICY: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
+; POLICY: SMS-TC: soft adjustTripCount delta={{-?[0-9]+}} is a structural no-op
+; POLICY-NOT: SMS-SHOULDUSE: reject multi-stage
 ; POLICY-ASM-NOT: set_hwloop
 ; POLICY-ASM-NOT: #<swps> stages={{[2-9]|[1-9][0-9]+}}
 ; POLICY-ASM: jalr
 
-; ZOL: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-; ZOL-NOT: SMS-SHOULDUSE: accept
+; ZOL: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
+; ZOL-NOT: SMS-SHOULDUSE: reject multi-stage
 ; ZOL-NOT: SMS-TC: soft adjustTripCount
 
 define i32 @sms_f41_zol_knobrefuse(ptr nocapture readonly %a,

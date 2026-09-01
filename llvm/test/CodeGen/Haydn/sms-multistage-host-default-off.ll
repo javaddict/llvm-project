@@ -1,4 +1,7 @@
-; Host present, product default OFF. Band 2S: checkConflict books Format E
+; Host present; 2026-08-22 SMS product-default flip rebaseline: default is
+; now ON (qualified independent + combined), so the default arm below runs
+; the engine fail-closed (this body exhausts; no accept/stage/swps stamp).
+; Band 2S: checkConflict books Format E
 ; Slots and asks isFormatAvailable / getFormatOrNull / productCovers (AIE
 ; FuncUnitWrapper::conflict). Sequential fallback is not a legal accept;
 ; SWPS is observe-only unless measured-II equals searched II.
@@ -21,7 +24,7 @@
 ; ANALYSIS-NOT: #<swps>
 ; ANALYSIS: jalr
 ; ANRMK-NOT: Sequential
-; ANRMK: qualify-or-cut: seated product-off host-live
+; ANRMK: qualify-or-cut: seated product-on host-live
 ; ANRMK: swpsolver=unavailable
 ; ANRMK: hwloop-combined=off
 ; FORCE-LABEL: add_loop:

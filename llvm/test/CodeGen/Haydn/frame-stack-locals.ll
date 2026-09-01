@@ -132,9 +132,8 @@ define i64 @mixed_locals(i32 %a, i64 %b) {
 ; CHECK-NEXT:    { st32 r3, sp, 2; ld32 r1, r1, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 3; sext32t64 d0, r2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload

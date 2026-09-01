@@ -123,7 +123,10 @@ TEST_F(HaydnMemoryCycleTest, FirstLastMemoryCycleTables) {
 
   // 2026-08-21 itinerary re-map: Slot2_LS retired (golden re-mapped its last
   // user D_LQHWUA_POST to Slot01_LD); published memory set is three.
-  for (unsigned SC : {Slot0_LS, Slot1_LD, Slot01_LD}) {
+  // 2026-08-21 latency P3: Slot0_LS_WbLat joins — writeback REGISTER is
+  // golden Data_Latency=1 (OperandCycles [1]) but the memory pair stays
+  // (0,1): register latency and the memory edge are separate facts.
+  for (unsigned SC : {Slot0_LS, Slot0_LS_WbLat, Slot1_LD, Slot01_LD}) {
     auto First = II.getFirstMemoryCycle(SC);
     auto Last = II.getLastMemoryCycle(SC);
     ASSERT_TRUE(First.has_value()) << "SC=" << SC;

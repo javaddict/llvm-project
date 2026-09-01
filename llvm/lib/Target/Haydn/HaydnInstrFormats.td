@@ -506,6 +506,25 @@ class FmtI<bits<6> opcode, dag outs, dag ins, string asmstr,
   let Inst{15 - 0} = imm;
 }
 
+// Dest+imm I-type: residual Inst rs field is 0. Peer: RISCVInstrInfo.td LUI
+// (outs GPR:$rd), (ins uimm20_lui). Format E LUI members are dest+imm12.
+class FmtIDestImm<bits<6> opcode, dag outs, dag ins, string asmstr,
+                  list<dag> pattern>
+    : HaydnInst<4, outs, ins, asmstr, pattern> {
+  let TSFlags{2-0} = 0b111;
+  let TSFlags{4-3} = 0b01;
+  let Itinerary = Slot012_ALU;
+
+  bits<4> rd;
+  bits<16> imm;
+
+  let Inst{31, 30} = 0b01;
+  let Inst{29 - 24} = opcode;
+  let Inst{23 - 20} = rd;
+  let Inst{19 - 16} = 0;
+  let Inst{15 - 0} = imm;
+}
+
 // Load/Store format (Slot 0): R-type with memory operand
 class FmtLS<bits<8> opcode, dag outs, dag ins, string asmstr,
             list<dag> pattern>

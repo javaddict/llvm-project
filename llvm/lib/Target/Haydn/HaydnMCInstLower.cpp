@@ -37,8 +37,14 @@ using namespace llvm;
 #define DEBUG_TYPE "haydn-mcinstlower"
 
 static bool isHwloopWideSetup(const MachineInstr &MI) {
-  // Inverse / public opcode only. Residual FieldSlot `*_S*` names are not
-  // recovered into SET_HWLOOP (AIE MultiSlot alts, AIEMCFormats.h:376-379).
+  // Wide-setup lowering law — NOT family-identical (see
+  // haydnClassifyHwloopSetupOpcode): (Residual ∪ Expanded) minus
+  // SET_HWLOOP_REG_W / bare SET_HWLOOP_F2 (no MBB operand rewrite path)
+  // and minus LoopStart (never lowers — expanders must install the final
+  // SET first). Membership differs per-opcode by operand shape, so keep
+  // explicit. Inverse / public opcode only. Residual FieldSlot `*_S*`
+  // names are not recovered into SET_HWLOOP (AIE MultiSlot alts,
+  // AIEMCFormats.h:376-379).
   const unsigned Opc = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
   return Opc == Haydn::SET_HWLOOP_W || Opc == Haydn::SET_HWLOOP_F2_W ||
          Opc == Haydn::SET_HWLOOP || Opc == Haydn::SET_HWLOOP_REG;

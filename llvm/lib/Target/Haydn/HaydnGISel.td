@@ -130,11 +130,11 @@ def : Pat<(i32 (mulhu GPR32:$rs1, GPR32:$rs2)),
 
 //===----------------------------------------------------------------------===//
 // Scalar abs — s32 / s64. Non-saturating ABS32/ABS64 (= llvm.abs).
-// ABS32 format has 2 ins (rs2 unused); duplicate source like abs32s Pat.
+// ABS32 logical is dest+src, matching Format E members.
 // Logical opcodes only — post-RA setDesc commits ABS32_S* / ABS64_S* members.
 //===----------------------------------------------------------------------===//
 
-def : Pat<(i32 (abs GPR32:$rs)), (ABS32 GPR32:$rs, GPR32:$rs)>;
+def : Pat<(i32 (abs GPR32:$rs)), (ABS32 GPR32:$rs)>;
 def : Pat<(i64 (abs DR64:$rs)), (ABS64 DR64:$rs)>;
 
 // Integer cmp Pats: SDAG setcc type inference fails on GPR32 multi-VT class

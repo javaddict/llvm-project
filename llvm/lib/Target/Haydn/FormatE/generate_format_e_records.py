@@ -874,6 +874,486 @@ def emit_records_inc(
     return "\n".join(lines) + "\n"
 
 
+#//===---------------------------------------------------------------------===//
+# Direct-setDesc identity check (build-time, generator-side)
+#//===---------------------------------------------------------------------===//
+#
+# Contract: every compiler-reachable logical opcode must be operand-shape
+# IDENTICAL to every generated Format E member reachable by a late
+# MI.setDesc — same operand count, same def count, same per-index kind,
+# same tie index-pair set, same execution flags. No runtime permutation
+# table, no SemanticCompatibilityID, no emitted records: the check fails
+# generation closed and the census below ratchets monotonically toward
+# empty as logical schemas are aligned.
+#
+# This block parses the LOGICAL TableGen side (class defaults, prefix
+# lets, def headers) and compares against the member shape the generator
+# itself constructs (layouts + operand_fields). Hand-assembly-only defs
+# (isCodeGenOnly/isAsmParserOnly) are exempt: they never ride setDesc in
+# the compiler lane.
+
+TD_OP_RE = re.compile(r"([A-Za-z0-9_]+):\$([A-Za-z0-9_]+)")
+TD_DEF_RE = re.compile(r"^def\s+([A-Za-z0-9_]+)\s*:")
+TD_CLASS_RE = re.compile(r"^class\s+([A-Za-z0-9_]+)\b")
+TD_PARENT_RE = re.compile(r":\s*([A-Za-z0-9_]+)\s*<")
+TD_LET_IN_RE = re.compile(r"\blet\b(.+)\bin\s*\{")
+TD_LET_SEMI_RE = re.compile(r"\blet\s+([A-Za-z0-9_]+)\s*=\s*(.+?)\s*;")
+
+# Ratchet: compiler-reachable logicals still divergent from their members.
+# Monotone shrink only — a logical leaving the set requires re-pinning
+# (smaller); any NEW name fails generation immediately.
+#
+# Current membership rationale:
+#   * CSRR — decoder-parity 3-op logical (shared FmtCSR shell); the
+#     standalone member fill path owns the shape difference.
+#   * D_L*UA_POST / D_S*UA_POST / WBARWUA — golden UA/CB families whose
+#     fat logical shape is the CB-151 reshape decision (member carries the
+#     correct wire shape).
+#   * SET_HWLOOP_REG — retained ZOL pseudo (brtarget MBB operands) that
+#     expands through exact-commit lowering, never a bare setDesc.
+EXPECTED_IDENTITY_DIVERGENT: frozenset = frozenset({
+    "CSRR",
+    "D_LQHWUA_POST",
+    "D_LTWUA_POST",
+    "D_SQHWUA_POST",
+    "D_STWUA_POST",
+    "SET_HWLOOP_REG",
+    "WBARWUA",
+})
+
+
+@dataclass
+class TDInstOp:
+    cls: str
+    name: str
+    is_def: bool
+
+
+@dataclass
+class TDInstSchema:
+    name: str
+    ops: Tuple[TDInstOp, ...]
+    ties: Tuple[Tuple[str, str], ...]
+    itinerary: str
+    may_load: int = 0
+    may_store: int = 0
+    is_branch: int = 0
+    is_terminator: int = 0
+    is_call: int = 0
+    is_indirect_branch: int = 0
+    is_commutable: int = 0
+    has_side_effects: int = 0
+    is_barrier: int = 0
+    implicit_defs: Tuple[str, ...] = ()
+    implicit_uses: Tuple[str, ...] = ()
+    is_codegen_only: int = 0
+    is_asm_parser_only: int = 0
+
+
+def _strip_td_line(raw: str) -> str:
+    out: List[str] = []
+    in_str = False
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch == '"':
+            in_str = not in_str
+            out.append(ch)
+            i += 1
+            continue
+        if not in_str and ch == "/" and i + 1 < len(raw) and raw[i + 1] == "/":
+            break
+        out.append(ch)
+        i += 1
+    return "".join(out).rstrip()
+
+
+def _split_td_props(blob: str) -> Dict[str, str]:
+    props: Dict[str, str] = {}
+    depth = 0
+    token: List[str] = []
+    in_str = False
+    for ch in blob:
+        if ch == '"':
+            in_str = not in_str
+            token.append(ch)
+            continue
+        if not in_str:
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth = max(0, depth - 1)
+            elif ch == "," and depth == 0:
+                piece = "".join(token).strip()
+                token = []
+                if "=" in piece:
+                    k, v = piece.split("=", 1)
+                    props[k.strip()] = v.strip()
+                continue
+        token.append(ch)
+    piece = "".join(token).strip()
+    if piece and "=" in piece:
+        k, v = piece.split("=", 1)
+        props[k.strip()] = v.strip()
+    return props
+
+
+def _parse_name_list(value: str) -> Tuple[str, ...]:
+    inner = value.strip()
+    if inner.startswith("[") and inner.endswith("]"):
+        inner = inner[1:-1]
+    names = [n.strip() for n in inner.split(",") if n.strip()]
+    return tuple(names)
+
+
+def _parse_ties(value: str) -> Tuple[Tuple[str, str], ...]:
+    raw = value.strip().strip('"')
+    if not raw:
+        return ()
+    out: List[Tuple[str, str]] = []
+    for part in raw.split(","):
+        if "=" not in part:
+            continue
+        a, b = part.split("=", 1)
+        out.append((a.strip().lstrip("$"), b.strip().lstrip("$")))
+    return tuple(out)
+
+
+def _apply_td_props(base: Dict[str, Any], props: Dict[str, str]) -> Dict[str, Any]:
+    cur = dict(base)
+    for key, val in props.items():
+        low = val.lower()
+        if key == "Itinerary":
+            cur["itinerary"] = val.strip()
+        elif key == "mayLoad":
+            cur["may_load"] = 0 if low in ("0", "false") else 1
+        elif key == "mayStore":
+            cur["may_store"] = 0 if low in ("0", "false") else 1
+        elif key == "isBranch":
+            cur["is_branch"] = 0 if low in ("0", "false") else 1
+        elif key == "isTerminator":
+            cur["is_terminator"] = 0 if low in ("0", "false") else 1
+        elif key == "isCall":
+            cur["is_call"] = 0 if low in ("0", "false") else 1
+        elif key == "isIndirectBranch":
+            cur["is_indirect_branch"] = 0 if low in ("0", "false") else 1
+        elif key == "isCommutable":
+            cur["is_commutable"] = 0 if low in ("0", "false") else 1
+        elif key == "hasSideEffects":
+            cur["has_side_effects"] = 0 if low in ("0", "false") else 1
+        elif key == "isBarrier":
+            cur["is_barrier"] = 0 if low in ("0", "false") else 1
+        elif key == "isCodeGenOnly":
+            cur["is_codegen_only"] = 0 if low in ("0", "false") else 1
+        elif key == "isAsmParserOnly":
+            cur["is_asm_parser_only"] = 0 if low in ("0", "false") else 1
+        elif key == "Defs":
+            cur["implicit_defs"] = _parse_name_list(val)
+        elif key == "Uses":
+            cur["implicit_uses"] = _parse_name_list(val)
+        elif key == "Constraints":
+            cur["ties"] = _parse_ties(val)
+    return cur
+
+
+def _extract_dags(header: str) -> Tuple[List[TDInstOp], List[TDInstOp]]:
+    def grab(tag: str) -> str:
+        token = f"({tag}"
+        start = header.find(token)
+        if start < 0:
+            return ""
+        depth = 0
+        for i, ch in enumerate(header[start:]):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return header[start : start + i + 1]
+        return ""
+
+    def ops(blob: str, is_def: bool) -> List[TDInstOp]:
+        if not blob:
+            return []
+        found = TD_OP_RE.findall(blob)
+        return [TDInstOp(cls=c, name=n, is_def=is_def) for c, n in found]
+
+    return ops(grab("outs"), True), ops(grab("ins"), False)
+
+
+def _empty_schema_props() -> Dict[str, Any]:
+    return {
+        "itinerary": "NoItinerary",
+        "may_load": 0,
+        "may_store": 0,
+        "is_branch": 0,
+        "is_terminator": 0,
+        "is_call": 0,
+        "is_indirect_branch": 0,
+        "is_commutable": 0,
+        "has_side_effects": 0,
+        "is_barrier": 0,
+        "implicit_defs": (),
+        "implicit_uses": (),
+        "ties": (),
+        "is_codegen_only": 0,
+        "is_asm_parser_only": 0,
+    }
+
+
+def parse_td_schemas(
+    text: str,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, TDInstSchema]]:
+    """Parse class defaults and named instruction schemas from TD text.
+
+    Handles prefix `let ... in { }` groups, single-def `let ...;` bodies,
+    and class-default inheritance (one parent level, enough for the
+    Haydn logical shells)."""
+    class_defaults: Dict[str, Dict[str, Any]] = {
+        "Instruction": _empty_schema_props(),
+        "HaydnInst": _empty_schema_props(),
+    }
+    schemas: Dict[str, TDInstSchema] = {}
+    lines = [_strip_td_line(ln) for ln in text.splitlines()]
+    depth = 0
+    let_stack: List[Tuple[int, Dict[str, str]]] = []
+    pending_let: Dict[str, str] = {}
+    let_buf: List[str] = []
+    i = 0
+    n = len(lines)
+
+    def active_props() -> Dict[str, str]:
+        merged: Dict[str, str] = {}
+        for _, props in let_stack:
+            merged.update(props)
+        merged.update(pending_let)
+        return merged
+
+    def take_header(start: int, first: str) -> Tuple[str, int]:
+        buf = [first]
+        j = start
+        while j < n:
+            joined = "\n".join(buf)
+            if "> {" in joined or re.search(r">\s*;", joined):
+                return joined, j
+            j += 1
+            if j < n:
+                buf.append(lines[j])
+        return "\n".join(buf), start
+
+    while i < n:
+        ln = lines[i]
+        if let_buf or (ln.strip().startswith("let ") and "let " in ln):
+            let_buf.append(ln)
+            joined = " ".join(let_buf)
+            if re.search(r"\bin\s*\{", joined):
+                let_m = TD_LET_IN_RE.search(joined)
+                props = _split_td_props(let_m.group(1) if let_m else joined)
+                opens = joined.count("{") - joined.count("}")
+                depth += opens
+                let_stack.append((depth, props))
+                let_buf = []
+                i += 1
+                continue
+            if re.search(r"\bin\s*$", joined):
+                head = re.sub(r"^let\s+", "", joined)
+                head = re.sub(r"\bin\s*$", "", head)
+                pending_let = _split_td_props(head)
+                let_buf = []
+                i += 1
+                continue
+            if "in" not in joined:
+                i += 1
+                continue
+            let_buf = []
+        class_m = TD_CLASS_RE.match(ln.strip())
+        def_m = TD_DEF_RE.match(ln.strip())
+        if class_m:
+            header, end_i = take_header(i, ln)
+            parent_m = TD_PARENT_RE.search(header)
+            parent = parent_m.group(1) if parent_m else "Instruction"
+            props = dict(class_defaults.get(parent, _empty_schema_props()))
+            body_lines: List[str] = []
+            j = end_i
+            local_depth = header.count("{") - header.count("}")
+            started = local_depth > 0
+            while j + 1 < n and (not started or local_depth > 0):
+                j += 1
+                raw = lines[j]
+                local_depth += raw.count("{") - raw.count("}")
+                started = True
+                body_lines.append(raw)
+                if started and local_depth <= 0:
+                    break
+            body = "\n".join(body_lines)
+            for sm in TD_LET_SEMI_RE.finditer(body):
+                props = _apply_td_props(props, {sm.group(1): sm.group(2)})
+            class_defaults[class_m.group(1)] = props
+            depth += header.count("{") - header.count("}")
+            for raw in body_lines:
+                depth += raw.count("{") - raw.count("}")
+            while let_stack and let_stack[-1][0] > depth:
+                let_stack.pop()
+            i = j + 1 if body_lines else end_i + 1
+            continue
+        if def_m:
+            header, end_i = take_header(i, ln)
+            parent_m = TD_PARENT_RE.search(header)
+            parent = parent_m.group(1) if parent_m else "HaydnInst"
+            props = dict(class_defaults.get(parent, _empty_schema_props()))
+            props = _apply_td_props(props, active_props())
+            outs, ins = _extract_dags(header)
+            body_lines = []
+            j = end_i
+            local_depth = header.count("{") - header.count("}")
+            if local_depth > 0:
+                while j + 1 < n and local_depth > 0:
+                    j += 1
+                    raw = lines[j]
+                    local_depth += raw.count("{") - raw.count("}")
+                    body_lines.append(raw)
+                    if local_depth <= 0:
+                        break
+            for sm in TD_LET_SEMI_RE.finditer("\n".join(body_lines)):
+                props = _apply_td_props(props, {sm.group(1): sm.group(2)})
+            name = def_m.group(1)
+            schemas[name] = TDInstSchema(
+                name=name,
+                ops=tuple(outs + ins),
+                ties=tuple(props.get("ties") or ()),
+                itinerary=str(props.get("itinerary") or "NoItinerary"),
+                may_load=int(props.get("may_load") or 0),
+                may_store=int(props.get("may_store") or 0),
+                is_branch=int(props.get("is_branch") or 0),
+                is_terminator=int(props.get("is_terminator") or 0),
+                is_call=int(props.get("is_call") or 0),
+                is_indirect_branch=int(props.get("is_indirect_branch") or 0),
+                is_commutable=int(props.get("is_commutable") or 0),
+                has_side_effects=int(props.get("has_side_effects") or 0),
+                is_barrier=int(props.get("is_barrier") or 0),
+                implicit_defs=tuple(props.get("implicit_defs") or ()),
+                implicit_uses=tuple(props.get("implicit_uses") or ()),
+                is_codegen_only=int(props.get("is_codegen_only") or 0),
+                is_asm_parser_only=int(props.get("is_asm_parser_only") or 0),
+            )
+            pending_let = {}
+            depth += header.count("{") - header.count("}")
+            for raw in body_lines:
+                depth += raw.count("{") - raw.count("}")
+            while let_stack and let_stack[-1][0] > depth:
+                let_stack.pop()
+            i = j + 1 if body_lines else end_i + 1
+            continue
+        depth += ln.count("{") - ln.count("}")
+        while let_stack and let_stack[-1][0] > depth:
+            let_stack.pop()
+        i += 1
+    return class_defaults, schemas
+
+
+def load_logical_schemas(
+    td_dir: Path, extra_texts: Sequence[str]
+) -> Dict[str, TDInstSchema]:
+    texts: List[str] = []
+    for fn in (
+        "HaydnInstrFormats.td",
+        "HaydnInstrFormatsC.td",
+        "HaydnInstrInfo.td",
+        "HaydnGISel.td",
+        "HaydnPseudos.td",
+    ):
+        path = td_dir / fn
+        if path.is_file():
+            texts.append(path.read_text(encoding="utf-8"))
+    texts.extend(extra_texts)
+    schemas: Dict[str, TDInstSchema] = {}
+    for text in texts:
+        _classes, found = parse_td_schemas(text)
+        schemas.update(found)
+    return schemas
+
+
+def _td_op_is_reg(cls: str) -> bool:
+    c = cls.strip().lower()
+    return c in (
+        "gpr32", "gpr", "dr64", "dr", "ar", "ar64", "sfr",
+    )
+
+
+def _td_tie_index_pairs(schema: TDInstSchema) -> List[Tuple[int, int]]:
+    names = {op.name: i for i, op in enumerate(schema.ops)}
+    pairs: List[Tuple[int, int]] = []
+    for a, b in schema.ties:
+        if a in names and b in names:
+            pairs.append((names[a], names[b]))
+    return sorted(pairs)
+
+
+def check_setdesc_identity(
+    cat: Catalog,
+    member_schemas: Dict[str, TDInstSchema],
+    logical_schemas: Dict[str, TDInstSchema],
+    member_to_logical: Dict[str, str],
+) -> List[str]:
+    """Errors for compiler-reachable logical/member pairs that are not
+    operand-shape identical. Members are read from the EMITTED member TD
+    (members_td, parsed back with parse_td_schemas — the exact text
+    TableGen consumes), so outs/ins/ties parity with the real Desc is
+    guaranteed. Empty list = goal state."""
+    errors: List[str] = []
+    for member_symbol, logical in sorted(member_to_logical.items()):
+        l_schema = logical_schemas.get(logical)
+        m_schema = member_schemas.get(member_symbol)
+        if l_schema is None or m_schema is None:
+            # collect_member_to_logical skips non-opcode logicals
+            # fail-closed; a missing member schema means the symbol is not
+            # in the emitted members text (NOP rows) — nothing to compare.
+            continue
+        if l_schema.is_codegen_only or l_schema.is_asm_parser_only:
+            continue
+        l_ops = l_schema.ops
+        m_ops = m_schema.ops
+        if len(l_ops) != len(m_ops):
+            errors.append(
+                f"{logical} vs {member_symbol}: operand count "
+                f"{len(l_ops)} vs {len(m_ops)}"
+            )
+            continue
+        for idx, (lo, mo) in enumerate(zip(l_ops, m_ops)):
+            lk = "reg" if _td_op_is_reg(lo.cls) else "imm"
+            mk = "reg" if _td_op_is_reg(mo.cls) else "imm"
+            if lk != mk or lo.is_def != mo.is_def:
+                errors.append(
+                    f"{logical} vs {member_symbol}: operand {idx} "
+                    f"{lk}{'d' if lo.is_def else 'u'} vs "
+                    f"{mk}{'d' if mo.is_def else 'u'}"
+                )
+                break
+        else:
+            if _td_tie_index_pairs(l_schema) != _td_tie_index_pairs(m_schema):
+                errors.append(
+                    f"{logical} vs {member_symbol}: tie index pairs "
+                    f"{_td_tie_index_pairs(l_schema)} vs "
+                    f"{_td_tie_index_pairs(m_schema)}"
+                )
+    return errors
+
+
+def identity_divergent_census(
+    cat: Catalog,
+    member_schemas: Dict[str, TDInstSchema],
+    logical_schemas: Dict[str, TDInstSchema],
+    member_to_logical: Dict[str, str],
+) -> List[str]:
+    """Sorted logical names that have at least one non-identity placement."""
+    divergent = set()
+    for err in check_setdesc_identity(
+        cat, member_schemas, logical_schemas, member_to_logical
+    ):
+        divergent.add(err.split(" vs ")[0])
+    return sorted(divergent)
+
+
 def operand_signature(rec: MemberRecord, layouts: Dict[int, TypeLayout]) -> str:
     lay = layouts[rec.layout_id]
     parts = []
@@ -1216,6 +1696,24 @@ CSR_LY2_ITINERARY = {
     "ALU0": "Slot0_ALU_CsrLat",
     "ALU1": "Slot1_ALU_CsrLat",
     "ALU2": "Slot2_ALU_CsrLat",
+}
+
+# Golden Data_Latency = 1 surfaces (2026-08-21 latency P3,
+# gaps/audit_latency.md mismatch #3/#4 + the post-landing correction):
+# store-with-writeback registers and fresh-dest (non-accumulating)
+# multiplies. The member sets are DERIVED PER-ROW from golden
+# instruction_type_index Pipeline_Info (load_store_writeback_logicals /
+# load_mul_lat1_logicals) — never the audit's family list, which the
+# correction falsified for the mul side (X4MUL16/X2FMUL32*/X2CMUL32X16*/
+# F2MULZAA* are golden lat-2 and stay 2; tightening a golden-2 row would
+# be aggressive-wrong silent code on this no-interlock machine).
+# Itinerary rows: Slot0_LS_WbLat (LOADSTORE0, OperandCycles [1],
+# MemoryCycle pair unchanged) and Slot12_MAC_MulLat + per-slot member
+# rows (OperandCycles [1,1,1,1]) published by generate_sched_records.py.
+STWB_ITINERARY = "Slot0_LS_WbLat"
+MUL_LAT1_ITINERARY = {
+    "MAC0": "Slot1_MAC_MulLat",
+    "MAC1": "Slot2_MAC_MulLat",
 }
 
 BRANCH_LOGICALS = frozenset(
@@ -1574,17 +2072,90 @@ def load_sfr_writers(index_path: Path) -> set:
     return writers
 
 
+def load_store_writeback_logicals(index_path: Path) -> set:
+    """Golden store-writeback latency-1 law (2026-08-21 latency P3,
+    gaps/audit_latency.md mismatch #3): a STORE-side logical whose golden
+    GPR_Write_Port alias is also in GPR_Read_Port updates and reads its
+    base pointer, and golden Pipeline_Info pins that writeback register
+    at Data_Latency=1 (available next bundle — only the loaded value of
+    the load siblings is latency 2). Derived from
+    instruction_type_index.json — no hand list. Census: 38 logicals
+    (the POST/PRE/BREV/CB D_S*/S_S* writeback stores incl. the two
+    UA suffix families). Excludes WBARWUA (AR-domain writeback, no GPR
+    port overlap — P4 residual, stays Slot0_LS) and every load
+    (Data_Latency=2). Members of these logicals publish
+    Slot0_LS_WbLat (OperandCycles [1], MemoryCycle pair unchanged)."""
+    idx = json.loads(index_path.read_text(encoding="utf-8"))
+    wb: set = set()
+    for type_recs in idx.values():
+        for rec in type_recs:
+            name = rec.get("Instruction")
+            if not name:
+                continue
+            key = _logical_key(name)
+            if not _is_store_logical(key):
+                continue
+            writes = set(rec.get("GPR_Write_Port") or [])
+            reads = set(rec.get("GPR_Read_Port") or [])
+            lat = (rec.get("Pipeline_Info") or {}).get("Data_Latency")
+            if writes & reads and lat == 1:
+                wb.add(key)
+    return wb
+
+
+def load_mul_lat1_logicals(index_path: Path) -> set:
+    """Golden fresh-dest multiply latency-1 law (2026-08-21 latency P3,
+    gaps/audit_latency.md mismatch #4 + the post-landing correction): a
+    MAC-unit logical with golden Data_Latency=1 AND no accumulator tie
+    (no bank's Write_Port alias appears in its Read_Port — the
+    load_accumulator_ties law) produces a fresh dest available next
+    bundle. Derived per-row from instruction_type_index.json — no hand
+    list; the audit's family list is falsified (X4MUL16/X2FMUL32*/
+    X2CMUL32X16*/F2MULZAA* and every accumulator-tied row are golden
+    lat-2 and must NOT be tightened). Census: 67 logicals. Members
+    publish Slot12_MAC_MulLat / per-slot MulLat rows."""
+    idx = json.loads(index_path.read_text(encoding="utf-8"))
+    mul1: set = set()
+    for type_recs in idx.values():
+        for rec in type_recs:
+            name = rec.get("Instruction")
+            if not name:
+                continue
+            avail = rec.get("Available") or []
+            if isinstance(avail, str):
+                avail = [avail]
+            if "MAC0" not in avail and "MAC1" not in avail:
+                continue
+            lat = (rec.get("Pipeline_Info") or {}).get("Data_Latency")
+            if lat != 1:
+                continue
+            tied = False
+            for bank in ("GPR", "DR", "AR", "SFR"):
+                writes = set(rec.get(f"{bank}_Write_Port") or [])
+                reads = set(rec.get(f"{bank}_Read_Port") or [])
+                if writes & reads:
+                    tied = True
+                    break
+            if not tied:
+                mul1.add(_logical_key(name))
+    return mul1
+
+
 def classify_member_flags(
     rec: MemberRecord,
     accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None,
     sfr_writers: Optional[set] = None,
+    store_writeback: Optional[set] = None,
+    mul_lat1: Optional[set] = None,
 ) -> MemberEmitFlags:
     """Map unit/type/logical onto a published itinerary and closed flags.
 
     Itinerary comes from the already-published R5 class for `rec.unit`
-    (SIN_COS/ARCTAN override via logical name). Load/store/branch flags
-    come from golden unit + logical; hasSideEffects=1 only for CSR / WFI /
-    hwloop / SFR / AR / CB types, control-transfer, or unknown.
+    (SIN_COS/ARCTAN override via logical name; golden Data_Latency=1
+    store-writeback / fresh-dest multiply overrides via the golden-derived
+    member sets). Load/store/branch flags come from golden unit + logical;
+    hasSideEffects=1 only for CSR / WFI / hwloop / SFR / AR / CB types,
+    control-transfer, or unknown.
     """
     key = _logical_key(rec.logical)
     if key in SINCOS_LOGICALS:
@@ -1608,6 +2179,23 @@ def classify_member_flags(
                 f"error: {rec.member_symbol}: {key} unit {rec.unit} has no "
                 "published CsrLat itinerary"
             )
+    elif (
+        store_writeback is not None
+        and key in store_writeback
+        and rec.unit == "LOADSTORE0"
+    ):
+        # Golden Data_Latency=1 store-writeback register (latency P3):
+        # the rs writeback is available next bundle; MemoryCycle pair
+        # stays conservative on the WbLat class.
+        itinerary = STWB_ITINERARY
+    elif (
+        mul_lat1 is not None
+        and key in mul_lat1
+        and rec.unit in MUL_LAT1_ITINERARY
+    ):
+        # Golden Data_Latency=1 fresh-dest multiply (latency P3): members
+        # pin one MAC unit and keep the lat-1 OperandCycles shape.
+        itinerary = MUL_LAT1_ITINERARY[rec.unit]
     elif (
         accum_ties is not None
         and len(accum_ties.get(key, ())) == 1
@@ -1881,6 +2469,8 @@ def emit_members_td_inc(
     accum_ties: Optional[Dict[str, Tuple[str, ...]]] = None,
     sfr_writers: Optional[set] = None,
     dr_readonly: Optional[set] = None,
+    store_writeback: Optional[set] = None,
+    mul_lat1: Optional[set] = None,
 ) -> str:
     """LIVE TableGen format-member Inst defs — included by HaydnFormatE.td.
 
@@ -2124,7 +2714,9 @@ def emit_members_td_inc(
         outs_dag = f"(outs {outs})" if outs else "(outs)"
         ins_dag = f"(ins {ins})" if ins else "(ins)"
 
-        flags = classify_member_flags(rec, accum_ties, sfr_writers)
+        flags = classify_member_flags(
+            rec, accum_ties, sfr_writers, store_writeback, mul_lat1
+        )
         let = flags.let_line()
         if constraints:
             if not let.endswith(" in {"):
@@ -2943,6 +3535,8 @@ def emit_logical_defs_td_inc(
     accum_ties: Dict[str, Tuple[str, ...]],
     behaviors: Dict[str, str],
     gpr_ports: Dict[str, Dict[str, list]],
+    store_writeback: Optional[set] = None,
+    mul_lat1: Optional[set] = None,
 ) -> Tuple[str, set, set]:
     """HaydnInst logical defs for golden logicals with no hand def.
 
@@ -3093,15 +3687,29 @@ def emit_logical_defs_td_inc(
         # placements), mirroring the Available set. MAC symmetric MAC0+MAC1;
         # dual-load LOADSTORE0+LOAD1 gets the Slot01_LD menu; accumulating
         # (tied) MACs keep acc-read-late AccFirst timing (CB-152c).
+        # 2026-08-21 latency P3: golden Data_Latency=1 overrides from the
+        # per-row golden sets — fresh-dest multiplies take the MulLat menu
+        # (OperandCycles [1,1,1,1]) and store-with-writeback logicals take
+        # Slot0_LS_WbLat (writeback register next-bundle, MemoryCycle pair
+        # unchanged). Golden lat-2 rows keep the wb/AccFirst shapes.
         uset = {(cat.members[mid].unit) for mid in mids}
         if "MAC0" in uset or "MAC1" in uset:
-            itin = "Slot12_MAC_AccFirst" if is_acc else "Slot12_MAC"
+            if is_acc:
+                itin = "Slot12_MAC_AccFirst"
+            elif _logical_key(logical) in mul_lat1:
+                itin = "Slot12_MAC_MulLat"
+            else:
+                itin = "Slot12_MAC"
         elif uset == {"LOADSTORE0", "LOAD1"}:
             itin = "Slot01_LD"
         elif "LOAD1" in uset:
             itin = "Slot1_LD"
         elif "LOADSTORE0" in uset:
-            itin = "Slot0_LS"
+            itin = (
+                STWB_ITINERARY
+                if _logical_key(logical) in store_writeback
+                else "Slot0_LS"
+            )
         elif uset == {"ALU0"}:
             # Golden Available = ALU0 only (e.g. SET_HWLOOP_F2 HWLRIIR):
             # do not book ALU1/ALU2 the op cannot occupy (2026-08-21
@@ -3831,6 +4439,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Verify committed outputs, XLSX/JSON parity, canonical RT (no write)",
     )
     ap.add_argument(
+        "--print-identity-census",
+        action="store_true",
+        help="Print the sorted divergent-logical census for re-pinning "
+        "EXPECTED_IDENTITY_DIVERGENT (no write)",
+    )
+    ap.add_argument(
         "--emit-mnemonic-roundtrip",
         action="store_true",
         help="Write test/MC/Haydn/format-e-mnemonic-roundtrip.s (also written "
@@ -3942,7 +4556,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         "R": _r.get("GPR_Read_Port") or [],
                     }
     logical_defs_td, emitted_tied, emitted_defs_keys = emit_logical_defs_td_inc(
-        cat, family, hand_logicals, full_accum_ties, behaviors, gpr_ports
+        cat,
+        family,
+        hand_logicals,
+        full_accum_ties,
+        behaviors,
+        gpr_ports,
+        load_store_writeback_logicals(index_path),
+        load_mul_lat1_logicals(index_path),
     )
     overlay_authored, overlay_unavail = load_authored_catalog_overlay(
         AUTHORED_OVERLAY_PATH
@@ -4012,9 +4633,65 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"({sorted(dr_readonly)}) — re-audit member DR-wire "
             "direction (gaps/audit_shapes.md Scalar trio)"
         )
+    # 2026-08-21 latency P3: golden Data_Latency=1 member sets, derived
+    # per-row from instruction_type_index (never a family list — the
+    # audit's mul list was falsified by the post-landing correction).
+    # Measured pins: a regen that changes either census must be re-audited
+    # against golden before the itineraries move.
+    store_writeback = load_store_writeback_logicals(index_path)
+    if len(store_writeback) != 38:
+        raise SystemExit(
+            "error: golden store-writeback lat-1 census changed "
+            f"({len(store_writeback)}): {sorted(store_writeback)} — "
+            "re-audit Slot0_LS_WbLat coverage (gaps/audit_latency.md #3)"
+        )
+    mul_lat1 = load_mul_lat1_logicals(index_path)
+    if len(mul_lat1) != 67:
+        raise SystemExit(
+            "error: golden fresh-dest multiply lat-1 census changed "
+            f"({len(mul_lat1)}): {sorted(mul_lat1)} — re-audit "
+            "Slot12_MAC_MulLat coverage (gaps/audit_latency.md #4 "
+            "correction: only per-row JSON lat-1 + no accumulator tie)"
+        )
     members_td = emit_members_td_inc(
-        cat, family, accum_ties, sfr_writers, dr_readonly
+        cat,
+        family,
+        accum_ties,
+        sfr_writers,
+        dr_readonly,
+        store_writeback,
+        mul_lat1,
     )
+    # Direct-setDesc identity law: every compiler-reachable logical must be
+    # operand-shape identical to every generated member. Members are parsed
+    # back from the emitted members_td (exact TableGen input). Ratchet: the
+    # divergent census must only shrink; growth fails generation in BOTH
+    # emit and --check modes.
+    _m_classes, member_schemas = parse_td_schemas(members_td)
+    logical_schemas = load_logical_schemas(
+        out_dir, [logical_defs_td] if logical_defs_td else []
+    )
+    census = identity_divergent_census(
+        cat, member_schemas, logical_schemas, member_to_logical
+    )
+    census_set = set(census)
+    if args.print_identity_census:
+        for name in census:
+            print(name)
+        return 0
+    if census_set - EXPECTED_IDENTITY_DIVERGENT:
+        raise SystemExit(
+            "error: new setDesc identity divergence (logicals grew the "
+            f"census): {sorted(census_set - EXPECTED_IDENTITY_DIVERGENT)} "
+            "— fix the logical TableGen schema before the member, or "
+            "re-audit EXPECTED_IDENTITY_DIVERGENT"
+        )
+    fixed = EXPECTED_IDENTITY_DIVERGENT - census_set
+    if fixed:
+        print(
+            "note: setDesc identity ratchet: logicals now aligned (re-pin "
+            f"the census): {sorted(fixed)}"
+        )
     member_opcodes = emit_member_opcodes_inc(cat, member_to_logical, family)
     mnemonic_rt = emit_mnemonic_roundtrip_s(cat, family)
     mnemonic_rt_path = mnemonic_roundtrip_path(out_dir, family.mnemonic_roundtrip_s)

@@ -87,7 +87,7 @@ body:             |
     $r0 = frame-setup XOR32 $r0, $r0
     $r13 = frame-setup SUBI32 $r13, 8
     frame-setup CFI_INSTRUCTION def_cfa_offset 8
-    $r1 = LUI $r0, @g
+    $r1 = LUI @g
     $r1 = ADDI32_W $r1, @g
     $r2 = ADDI32_W $r0, -31
     $r3 = ADDI32 $r1, 44

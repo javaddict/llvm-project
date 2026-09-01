@@ -1,0 +1,53 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+
+# REGRESSION TEST: hard-root recommit of a row-MIXED member set must
+# recommit (not sequentialize) via the single-shot rematcher.
+#
+# Bug: canCoissueProductCycle / commitExactMultiMIProductCycle rejected any
+# cycle with cycleHasMixedFormatEModes BEFORE resolveMixedMemberCycleOnce
+# could run. A hard BUNDLE root whose children were baked independently onto
+# both rows (one FMULAA32X16 on the E3 row MAC1, the other on the E2 row
+# MAC1 — row-mixed AND unit-duplicated) was therefore sequentialized into
+# two singleton parcels at leaveMBB instead of being rematched onto one
+# coherent row with distinct MAC units. The fix applies the hard mixed-row
+# reject only to the POST-rematch member set in all three commit surfaces
+# (one law): the rematcher peels members to logicals
+# (productSolveLogicalOpcode) and exact-re-solves onto a single row.
+#
+# Test design: two independent FMULAA32X16_H1_L0 accumulators (d0 += d2*d4,
+# d1 += d3*d4) pre-baked onto deliberately mismatched rows/units
+# (E3_E2_MAC1 and E2_E1_MAC1 — exactly the per-MI greedy-bake shape the bug
+# produced). leaveMBB must dissolve + recommit both into ONE two-member
+# bundle on one coherent row. If the early reject returns, the two MACs
+# sequentialize as bare instructions and the BUNDLE CHECKs fail.
+
+--- |
+  define void @hardroot_mixed_row_mac_recommit() { ret void }
+...
+---
+name:            hardroot_mixed_row_mac_recommit
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d0, $d1, $d2, $d3, $d4, $r15
+
+    ; CHECK-LABEL: name: hardroot_mixed_row_mac_recommit
+    ; CHECK: liveins: $d0, $d1, $d2, $d3, $d4, $r15
+    ; CHECK-NEXT: {{  $}}
+    ; Row-mixed pair recommits as ONE bundle on one coherent row: both
+    ; members carry the SAME E2/E3 mode marker with distinct MAC units.
+    ; CHECK-NEXT: BUNDLE {{.*}} {
+    ; CHECK-DAG: $d0 = FMULAA32X16_H1_L0_E{{[23]}}_E{{[0-2]}}_MAC{{[01]}}_RR {{.*}}$d2, {{.*}}$d4
+    ; CHECK-DAG: $d1 = FMULAA32X16_H1_L0_E{{[23]}}_E{{[0-2]}}_MAC{{[01]}}_RR {{.*}}$d3, {{.*}}$d4
+    ; Row coherence: the two mode markers must be IDENTICAL (one parcel).
+    ; CHECK-NOT: FMULAA32X16_H1_L0_E2_{{.*}}FMULAA32X16_H1_L0_E3_
+    ; CHECK: }
+    ; CHECK-NEXT: RET implicit $r15
+    BUNDLE implicit-def $d0, implicit-def $d1, implicit $d2, implicit $d3, implicit $d4 {
+      $d0 = FMULAA32X16_H1_L0_E3_E2_MAC1_RR killed $d0, $d2, $d4
+      $d1 = FMULAA32X16_H1_L0_E2_E1_MAC1_RR killed $d1, $d3, $d4
+    }
+    RET implicit $r15

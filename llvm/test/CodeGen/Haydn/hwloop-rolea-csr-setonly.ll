@@ -1,30 +1,33 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=0 < %s | FileCheck %s --check-prefix=HWOFF
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -filetype=obj -o %t.o < %s
+; RUN:   -mattr=+hwloop -filetype=obj -o %t.o < %s
+
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
 
 ; Role: semantic — product programs HWLR only through SET_HWLOOP with a
 ; product selector. Free CSR invent for HWLR_BEGIN/END/COUNT is unavailable.
-; DEFAULT OFF must stay soft; HWON may arm set_hwloop_f2 but must never emit
-; free CSR writes (csrw) to program loop state. filetype=obj proves the
-; supported Off1/Off2 reloc encodes on the matching artifact.
+; DEFAULT (ON since 2026-08-22) arms set_hwloop_f2 but must never emit
+; free CSR writes (csrw) to program loop state; HWOFF stays soft.
+; filetype=obj proves the supported Off1/Off2 reloc encodes on the
+; matching artifact.
 
 target triple = "haydn-unknown-elf"
 
 define i32 @csr_setonly_sum(ptr readonly %p, i32 %n) nounwind {
 ; DEFAULT-LABEL: csr_setonly_sum:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: csr_setonly_sum:
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: csr_setonly_sum:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF:       jalr
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %loop, label %exit

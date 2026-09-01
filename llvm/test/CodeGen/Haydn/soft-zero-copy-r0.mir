@@ -67,9 +67,9 @@ body:             |
     liveins: $r1, $r2, $r15
 
     ; MOVE32 into R0 is a copy via isCopyInstrImpl — keep (reserved dest).
-    ; CHECK: $r0 = MOVE32 $r1, $r1
+    ; CHECK: $r0 = MOVE32 $r1
     ; CHECK: $r0 = ADDI32 $r2, 0
-    $r0 = MOVE32 $r1, $r1
+    $r0 = MOVE32 $r1
     $r0 = ADDI32 $r2, 0, implicit-def dead $sfr
     RET implicit $r15
 ...

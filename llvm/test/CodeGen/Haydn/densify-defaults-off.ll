@@ -40,11 +40,16 @@
 ; RUN: FileCheck %s --check-prefix=SMSRMK < %t.sms.rmk
 ; REQUIRES: asserts
 
-; Role: semantic — product defaults keep hardware-loop formation and
-; multi-stage SMS OFF. Densify / zombie passes stay deleted (not merely
-; default-OFF). Dual-ON is flag-forced evidence only: Role-A insert/expand/
-; fixup appear, deleted densify stays absent, multi-stage remains inside
-; PostRA (no extra Structure pass, no product default flip). Late
+; 2026-08-22 SMS product-default flip rebaseline: SMS default is now ON
+; (the hwloop default flipped earlier the same day). Product default runs
+; BOTH engines; on this body SMS exhausts fail-closed — qualify-or-cut
+; remarks are legal default output, accept/stage/swps stamps are not.
+
+; Role: semantic — product defaults form hardware loops AND run multi-stage
+; SMS (both ON since 2026-08-22). Densify / zombie passes stay
+; deleted (not merely default-OFF). Dual-ON is flag-forced evidence only:
+; Role-A insert/expand/fixup appear, deleted densify stays absent,
+; multi-stage remains inside PostRA (no extra Structure pass). Late
 ; Finalize+Verify after BranchRelaxation is product default (same
 ; Finalize/Verify; not a second packer). FeatureHWLoop is ISA only.
 
@@ -55,11 +60,11 @@
 ; Deleted densify (no flags): PostPipeliner, InterBlock, Role B, formMACs,
 ; LoadStoreOpt form/phase2.
 
-; Flip sites stay constexpr false; cl::init follows the helpers.
-; HWDEF: hardwareLoopsProductDefaultEnabled() { return false; }
-; HWASSERT: static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
+; Flip sites are constexpr true (2026-08-22, both); cl::init follows each helper.
+; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
+; HWASSERT: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; HWFLAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
-; SMSDEF: productDefaultEnabled() { return false; }
+; SMSDEF: productDefaultEnabled() { return true; }
 ; SMSFLAG: cl::init(HaydnMultiStageSMS::productDefaultEnabled())
 ; FEAT: ISA capability only
 ; FEAT: hardwareLoopsProductDefaultEnabled
@@ -67,14 +72,12 @@
 ; CMAKE-NOT: ENV{HOME}
 ; CMAKE-NOT: HaydnFormatERecordsCheck
 
-; PIPE-NOT:      Hardware Loop Insertion
+; Product default: hardware loops ON (2026-08-22), multi-stage SMS OFF.
+; PIPE:      Hardware Loop Insertion
 ; PIPE-NOT:      Haydn Load/Store Optimizer
 ; PIPE-NOT:      Haydn early post-increment pseudo expansion
+; PIPE:      Haydn Hardware Loop Expansion
 ; PIPE:      Haydn pseudo instruction expansion pass
-; Product defaults: hardware loops and multi-stage SMS stay OFF.
-; PIPE-NOT:      Haydn Hardware Loop Detection
-; PIPE-NOT:      Haydn Hardware Loop Expansion
-; PIPE-NOT:      Haydn Hardware Loop Fixup
 ; PIPE:      PostRA Machine Instruction Scheduler
 ; PIPE-NEXT:      Haydn Exposed-Pipeline Latency Stalls
 ; PIPE-NEXT:      Haydn Bundle Finalization
@@ -82,7 +85,8 @@
 ; PIPE-NOT:      Haydn Circular Buffer Detection
 ; PIPE-NOT:      Haydn Redundant Copy Elimination
 ; PIPE:      Branch relaxation pass
-; PIPE-NOT:      Haydn Hardware Loop Fixup
+; PIPE-NEXT:      Haydn Hardware Loop Fixup
+; PIPE-NEXT:      Branch relaxation pass
 ; PIPE-NEXT:      Haydn Bundle Finalization
 ; PIPE-NEXT:      Haydn Bundle Invariant Verifier
 
@@ -101,14 +105,13 @@
 ; DUAL-NOT:      Haydn PostPipeliner
 ; DUAL-NOT:      Haydn InterBlock
 
-; +hwloop attr does not flip product policy.
-; ATTR-NOT:      Hardware Loop Insertion
-; ATTR-NOT:      Haydn Hardware Loop Detection
-; ATTR-NOT:      Haydn Hardware Loop Expansion
-; ATTR-NOT:      Haydn Hardware Loop Fixup
+; +hwloop attr does not flip product policy (already ON by default).
+; ATTR:      Hardware Loop Insertion
+; ATTR:      Haydn Hardware Loop Expansion
 ; ATTR:      PostRA Machine Instruction Scheduler
 ; ATTR:      Branch relaxation pass
-; ATTR-NOT:      Haydn Hardware Loop Fixup
+; ATTR-NEXT:      Haydn Hardware Loop Fixup
+; ATTR-NEXT:      Branch relaxation pass
 ; ATTR-NEXT:      Haydn Bundle Finalization
 ;
 ; Independent force-ON: each CLI flag arms only its own path. AIE inserts
@@ -133,17 +136,19 @@
 ; is ISA only. AIE inserts HardwareLoops at O1+ (AIE2TargetMachine.cpp:81-82)
 ; and EnableAIEHardwareLoops cl::init(true) (AIEBaseTargetTransformInfo.cpp:24-26).
 ; Hexagon defaults ON via DisableHardwareLoops (HexagonTargetMachine.cpp:47-48).
-; Haydn stays OFF until independent QUALIFY then two policy-only patches.
+; Haydn defaults ON since the 2026-08-22 qualifications (hwloop, then SMS).
 ; OFFASM-LABEL: sum_loop:
-; OFFASM-NOT:   set_hwloop
+; OFFASM:       set_hwloop
 ; OFFASM-NOT:   #<swps>
 ; OFFASM:       jalr
+; Default arm: both engines ON — the loop IS a combined candidate
+; ("[candidate hwloop-combined=on]" tag is legal); this body exhausts
+; fail-closed, so no accept/stage/swps stamp may appear.
 ; OFFRMK-NOT: accepted II=
 ; OFFRMK-NOT: MultiStageStageMBB
-; OFFRMK-NOT: hwloop-combined=on
-; OFFRMK-NOT: qualify-or-cut
+; OFFRMK-NOT: swps measured-II=
 ; ATTRASM-LABEL: sum_loop:
-; ATTRASM-NOT:   set_hwloop
+; ATTRASM:       set_hwloop
 ; ATTRASM:       jalr
 ; HWASM-LABEL: sum_loop:
 ; HWASM:       set_hwloop
@@ -152,7 +157,7 @@
 ; SMSASM-LABEL: sum_loop:
 ; SMSASM-NOT:   set_hwloop
 ; SMSASM:       jalr
-; SMSRMK: product-off
+; SMSRMK: product-on
 ; SMSRMK: hwloop-combined=off
 ; SMSRMK-NOT: hwloop-combined=on
 

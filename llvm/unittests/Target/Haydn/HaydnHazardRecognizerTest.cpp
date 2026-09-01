@@ -1026,45 +1026,45 @@ TEST(HaydnPortModelTest, PreRASMSHandoffPackabilityOracleSurface) {
 }
 
 TEST(HaydnPortModelTest, PreRAMove32ClassMiVsDescPortDifferential) {
-  // REGRESSION TEST REBASE (2026-08-21). Pre-RA surface for the MOVE32-class
-  // port law. The owning layer unified GPR port charging to per-field in
-  // 0ad0d5d64088 (2026-08-18): every explicit GPR operand field reserves one
-  // port — no same-register identity dedup. MOVE32 rd, rs, rs is 2R1W on the
-  // MI PortModel path (list-sched / CreateTargetMIHazardRecognizer IsPreRA)
-  // AND on the descriptor path (SMS MID placement peer). The pre-rebase
-  // expectations (MI dedup to 1R1W, descriptor overcount, descriptor blowing
-  // the 4R pool at N=3 while MI fit) pinned a dedup countGPRPorts never
-  // performed. Pins here agree with HaydnResourceCycle.cpp static_asserts and
-  // the lit doc-pin sched-resource-truth-homes.s (= 2).
+  // REGRESSION TEST REBASE (W68.0b, 2026-08-25). Pre-RA surface for the
+  // MOVE32-class port law. The logical MOVE32 schema is dest+src (1R1W) on
+  // the MI PortModel path (list-sched / CreateTargetMIHazardRecognizer
+  // IsPreRA) AND on the descriptor path (SMS MID placement peer) — the
+  // duplicated second source is gone, so the MI-vs-descriptor differential
+  // is retired (both paths identical). The pre-rebase expectations (2R1W
+  // with the repeated source) pinned a form that no longer exists. Pins
+  // here agree with HaydnResourceCycle.cpp static_asserts and the lit
+  // doc-pin sched-resource-truth-homes.s (= 1).
   using S = HaydnPreRASchedStrategy;
   EXPECT_FALSE(S::move32ClassDescOvercountsMiPorts());
-  EXPECT_EQ(S::move32ClassMiRepeatedSrcGprReads, 2u);
+  EXPECT_EQ(S::move32ClassMiRepeatedSrcGprReads, 1u);
   EXPECT_EQ(S::move32ClassMiRepeatedSrcGprWrites, 1u);
-  EXPECT_EQ(S::move32ClassDescShapeGprReads, 2u);
+  EXPECT_EQ(S::move32ClassDescShapeGprReads, 1u);
   EXPECT_EQ(S::move32ClassDescShapeGprWrites, 1u);
 
-  // Synthetic descriptor-shape classifier (1 def + 2 uses) matches constants.
+  // Synthetic descriptor-shape classifier (1 def + 1 use) matches constants.
   {
     HaydnCyclePortDemand D;
     haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/true, D);
-    haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
     haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
     EXPECT_EQ(D.GPRReads, S::move32ClassDescShapeGprReads);
     EXPECT_EQ(D.GPRWrites, S::move32ClassDescShapeGprWrites);
   }
 
-  // N=2: both models fit one cycle (4R2W exactly at both GPR pools).
+  // N=2: both models fit one cycle (2R2W, inside both GPR pools).
   EXPECT_EQ(S::move32ClassMiRepeatedSrcPortLowerBoundResMII(2), 1u);
   EXPECT_EQ(S::move32ClassDescShapePortLowerBoundResMII(2), 1u);
   EXPECT_FALSE(S::move32ClassDescSaturatesReadPoolEarlier(2));
 
-  // N=3: both pools blow together (6R > 4R and 3W > 2W) — the retired
-  // saturates-earlier differential is never true under the per-field law.
+  // N=3: the write pool is the binding constraint (3W > 2W) while reads
+  // still fit (3R <= 4R) — the saturates-earlier differential is never
+  // true when both paths are 1R1W.
   EXPECT_EQ(S::move32ClassMiRepeatedSrcPortLowerBoundResMII(3), 2u);
   EXPECT_EQ(S::move32ClassDescShapePortLowerBoundResMII(3), 2u);
   EXPECT_FALSE(S::move32ClassDescSaturatesReadPoolEarlier(3));
-  EXPECT_GT(3u * S::move32ClassMiRepeatedSrcGprReads, HAYDN_GPR_READ_PORTS);
-  EXPECT_GT(3u * S::move32ClassDescShapeGprReads, HAYDN_GPR_READ_PORTS);
+  EXPECT_LE(3u * S::move32ClassMiRepeatedSrcGprReads, HAYDN_GPR_READ_PORTS);
+  EXPECT_LE(3u * S::move32ClassDescShapeGprReads, HAYDN_GPR_READ_PORTS);
+  EXPECT_GT(3u * S::move32ClassMiRepeatedSrcGprWrites, HAYDN_GPR_WRITE_PORTS);
 
   // Format-only three MOVE32 still report product ResMII 1 (slots, no ports).
   unsigned FormatOnly[] = {Haydn::MOVE32, Haydn::MOVE32, Haydn::MOVE32};
@@ -1427,6 +1427,87 @@ TEST(HaydnPortModelTest, PreRASMSShouldUseScheduleFailCloseSurface) {
         /*IsZOL=*/false, /*Prologue=*/1, /*MinTrip=*/0,
         /*PressureExcess=*/false));
   }
+}
+
+//===----------------------------------------------------------------------===//
+// W59 SMS loop-routing seam — defer-to-post-RA-multistage (pre-RA surface)
+//===----------------------------------------------------------------------===//
+// REGRESSION TEST (W68.1): ZOL multi-stage lift polarity. The W59
+// decline-AND-DEFER routing predicate (smsDeferToPostRAMultiStage) is
+// RETIRED together with its reason to exist ("pre-RA never accepts
+// multi-stage"): with ZOL multi-stage qualified on the generic
+// MachinePipeliner, one engine owns every loop form and routing would split
+// it in two. What must never regress is the form-uniform containment law and
+// the ZOL-specific AIE-peer gates that remain the ZOL law:
+//   * containment bound is the PPS-3 max-stage gate for BOTH forms, and the
+//     F41 knob's historic Option A value (1) bisects the whole lift down;
+//   * ZOL single-stage still rejects (no overlap);
+//   * ZOL multi-stage accepts ONLY with a static MinTripCount guard
+//     (MinTripCount > PrologueCount; unknown trip refuses every schedule —
+//     ZOL cannot emit a dynamic guard);
+//   * the fail-closed polarity helper agrees with every one of these.
+
+TEST(HaydnPortModelTest, PreRASMSZOLMultiStageLiftPolarity) {
+  using S = HaydnPreRASchedStrategy;
+
+  // Form-uniform product bound = PPS-3; historic Option A value survives
+  // only as the F41 bisect-down constant.
+  EXPECT_EQ(S::productSMSSoftContainmentMaxStageCount, 3u);
+  EXPECT_EQ(S::productSMSSoftContainmentMaxStageCount,
+            S::productSMSMaxStageCount);
+  EXPECT_EQ(S::productSMSContainmentMaxStageCount, 1u);
+
+  // Containment helper: form-uniform bound admits NS<=3, refuses NS=4.
+  EXPECT_FALSE(S::smsProductStageCountExceedsContainment(
+      3, S::productSMSSoftContainmentMaxStageCount));
+  EXPECT_TRUE(S::smsProductStageCountExceedsContainment(
+      4, S::productSMSSoftContainmentMaxStageCount));
+  // F41 bisect-down value restores Option A (refuse NS>=2).
+  EXPECT_TRUE(S::smsProductStageCountExceedsContainment(
+      2, S::productSMSContainmentMaxStageCount));
+
+  // ZOL single-stage reject (no overlap) — unchanged AIE peer law.
+  EXPECT_TRUE(S::smsZOLRejectsSingleStage(/*IsZOL=*/true, /*StageCount=*/1));
+  EXPECT_FALSE(S::smsZOLRejectsSingleStage(false, 1));
+
+  // ZOL MinTripCount guard: unknown trip (0) refuses everything; static
+  // guard requires MinTripCount > PrologueCount.
+  EXPECT_TRUE(S::smsZOLRejectsMinTrip(true, /*PrologueCount=*/1,
+                                      /*MinTripCount=*/0));
+  EXPECT_TRUE(S::smsZOLRejectsMinTrip(true, 2, 2));   // 2 >= 2: no guard room
+  EXPECT_FALSE(S::smsZOLRejectsMinTrip(true, 1, 2));  // 1 < 2: guardable
+  EXPECT_FALSE(S::smsZOLRejectsMinTrip(true, 1, 3));
+
+  // Combined product polarity at the form-uniform bound.
+  // Soft multi-stage NS=2 accepts (counted residual; structural adjust).
+  EXPECT_FALSE(S::smsProductShouldUseScheduleFailsClosed(
+      /*IsZOL=*/false, /*PrologueCount=*/1, /*MinTripCount=*/0,
+      /*PressureExcess=*/false, S::productSMSMaxStageCount,
+      S::productSMSTrackRegPressureDefault,
+      S::productSMSSoftContainmentMaxStageCount));
+  // ZOL multi-stage NS=2 accepts with static guard (MinTripCount 16 > 1).
+  EXPECT_FALSE(S::smsProductShouldUseScheduleFailsClosed(
+      /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/16,
+      /*PressureExcess=*/false, S::productSMSMaxStageCount,
+      S::productSMSTrackRegPressureDefault,
+      S::productSMSSoftContainmentMaxStageCount));
+  // ZOL multi-stage refuses with unknown trip.
+  EXPECT_TRUE(S::smsProductShouldUseScheduleFailsClosed(
+      /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/0,
+      /*PressureExcess=*/false, S::productSMSMaxStageCount,
+      S::productSMSTrackRegPressureDefault,
+      S::productSMSSoftContainmentMaxStageCount));
+  // F41 bisect down: both forms refuse multi-stage at bound 1.
+  EXPECT_TRUE(S::smsProductShouldUseScheduleFailsClosed(
+      /*IsZOL=*/false, /*PrologueCount=*/1, /*MinTripCount=*/0,
+      /*PressureExcess=*/false, S::productSMSMaxStageCount,
+      S::productSMSTrackRegPressureDefault,
+      S::productSMSContainmentMaxStageCount));
+  EXPECT_TRUE(S::smsProductShouldUseScheduleFailsClosed(
+      /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/16,
+      /*PressureExcess=*/false, S::productSMSMaxStageCount,
+      S::productSMSTrackRegPressureDefault,
+      S::productSMSContainmentMaxStageCount));
 }
 
 //===----------------------------------------------------------------------===//
@@ -2971,54 +3052,50 @@ TEST_F(HaydnBundleBoundaryTest, WP2_TiedMacChildStillRootOnlyBoundary) {
 
 TEST_F(HaydnBundleBoundaryTest, PreRAMove32MiVsDescPortsAndIsPreRAHR) {
   // Live MI vs table-backed MID for MOVE32-class, plus pre-RA HR factory.
-  // REGRESSION TEST REBASE (2026-08-21): per-field port law (0ad0d5d64088) —
-  // CreateTargetMIHazardRecognizer(IsPreRA) installs HaydnHazardRecognizer
-  // that charges PortModel MI ports per explicit field (2R1W for
-  // MOVE32 rd,rs,rs — both use fields occupy a read port), identical to the
-  // descriptor shape; never setDesc/member opcodes.
+  // REGRESSION TEST REBASE (W68.0b, 2026-08-25): logical MOVE32 is dest+src
+  // (1R1W) — CreateTargetMIHazardRecognizer(IsPreRA) installs
+  // HaydnHazardRecognizer that charges PortModel MI ports per explicit
+  // field, identical to the descriptor shape; never setDesc/member opcodes.
   const HaydnInstrInfo &II = TII();
   DebugLoc DL;
   MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
   MF->push_back(MBB);
 
-  // MOVE32 R2, R1, R1 — canonical repeated-source move (copyPhysReg shape).
+  // MOVE32 R2, R1 — canonical copyPhysReg shape (dest+src).
   MachineInstr *MoveRepeated =
       BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MOVE32), Haydn::R2)
-          .addReg(Haydn::R1)
           .addReg(Haydn::R1)
           .getInstr();
   auto [MiR, MiW] = countGPRPorts(*MoveRepeated);
   EXPECT_EQ(MiR, HaydnPreRASchedStrategy::move32ClassMiRepeatedSrcGprReads);
   EXPECT_EQ(MiW, HaydnPreRASchedStrategy::move32ClassMiRepeatedSrcGprWrites);
-  EXPECT_EQ(MiR, 2u);
+  EXPECT_EQ(MiR, 1u);
   EXPECT_EQ(MiW, 1u);
 
-  // Distinct sources: MI and descriptor agree at 2R1W (no identity overcount).
+  // Second move with a different source/dest: MI and descriptor agree at
+  // 1R1W (dest+src schema — no repeated-source form exists anymore).
   MachineInstr *MoveDistinct =
       BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::MOVE32), Haydn::R3)
-          .addReg(Haydn::R1)
           .addReg(Haydn::R4)
           .getInstr();
   auto [MiR2, MiW2] = countGPRPorts(*MoveDistinct);
-  EXPECT_EQ(MiR2, 2u);
+  EXPECT_EQ(MiR2, 1u);
   EXPECT_EQ(MiW2, 1u);
 
-  // Table-backed MCInstrDesc: NumDefs=1, two GPR uses → descriptor 2R1W always.
+  // Table-backed MCInstrDesc: NumDefs=1, one GPR use → descriptor 1R1W.
   const MCInstrDesc &MID = II.get(Haydn::MOVE32);
   EXPECT_EQ(MID.getNumDefs(), 1u);
-  EXPECT_GE(MID.getNumOperands(), 3u);
+  EXPECT_GE(MID.getNumOperands(), 2u);
   HaydnCyclePortDemand Desc = estimateHaydnPortsFromDesc(MID);
   EXPECT_EQ(Desc.GPRReads,
             HaydnPreRASchedStrategy::move32ClassDescShapeGprReads);
   EXPECT_EQ(Desc.GPRWrites,
             HaydnPreRASchedStrategy::move32ClassDescShapeGprWrites);
-  EXPECT_EQ(Desc.GPRReads, 2u);
+  EXPECT_EQ(Desc.GPRReads, 1u);
   EXPECT_EQ(Desc.GPRWrites, 1u);
-  // Per-field law: descriptor and MI paths agree for repeated sources too
-  // (no identity overcount — both charge every explicit use field).
+  // Dest+src law: descriptor and MI paths agree (both are the wire shape).
   EXPECT_EQ(Desc.GPRReads, MiR);
   EXPECT_EQ(Desc.GPRWrites, MiW);
-  // Distinct-source MI matches descriptor shape (parity when no repeated reg).
   EXPECT_EQ(Desc.GPRReads, MiR2);
   EXPECT_EQ(Desc.GPRWrites, MiW2);
 

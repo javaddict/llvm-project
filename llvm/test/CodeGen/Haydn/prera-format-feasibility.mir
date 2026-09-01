@@ -24,9 +24,10 @@
 #    Three independent GPR writes force multi-cycle packing (port ResMII ≥ 2
 #    under 2W) even though Full has three slots — CreateTargetMIHazardRecognizer
 #    IsPreRA charges PortModel; see vreg_three_writes_port_limit Hazard.
-# 4. Repeated sources (MOVE32) and tied use/def (MOVT32) charge each explicit
-#    field. MOVE32 rd,rs,rs is 2R1W on the MI path — same as the descriptor
-#    shape. Pre-RA HR uses only the MI path (no identity-dedup port model).
+# 4. MOVE32 is dest+src (1R1W; W68.0b logical/member schema agreement — the
+#    former repeated-source form is gone, so the dedup premise is moot) and
+#    tied use/def (MOVT32) still charges each explicit field. Pre-RA HR uses
+#    only the MI path (no identity-dedup port model).
 # 5. Flexible (ADD32 Slot012) vs constrained (ST32 Slot0) keep distinct
 #    FieldSlots footprints; tryAdd tracks occupancy without setDesc.
 # 6. Reverse constrained→flex (ST then ADD) and flex→constrained both stay
@@ -135,9 +136,9 @@ body:             |
 ...
 ---
 # ============================================================================
-# Test 2: MOVE32 repeated-source is 2R1W (per-field; no identity dedup).
-# Pre-RA HR uses PortModel MI accounting only. Descriptor-only shape is the
-# same 2R1W. No member setDesc.
+# Test 2: MOVE32 is dest+src (1R1W — logical/member schema agreement).
+# Pre-RA HR uses PortModel MI accounting only. Descriptor shape is the
+# same 1R1W. No member setDesc.
 # ============================================================================
 name:            vreg_move32_dedup
 tracksRegLiveness: true
@@ -150,8 +151,8 @@ body:             |
     ; CHECK-NEXT: {{  $}}
     ; CHECK-NEXT: [[COPY:%[0-9]+]]:gpr32 = COPY $r1
     ; CHECK-NEXT: [[COPY1:%[0-9]+]]:gpr32 = COPY $r2
-    ; CHECK-NEXT: [[MOVE32_:%[0-9]+]]:gpr32 = MOVE32 [[COPY]], [[COPY]], implicit-def dead $sfr
-    ; CHECK-NEXT: [[MOVE32_1:%[0-9]+]]:gpr32 = MOVE32 [[COPY1]], [[COPY1]], implicit-def dead $sfr
+    ; CHECK-NEXT: [[MOVE32_:%[0-9]+]]:gpr32 = MOVE32 [[COPY]], implicit-def dead $sfr
+    ; CHECK-NEXT: [[MOVE32_1:%[0-9]+]]:gpr32 = MOVE32 [[COPY1]], implicit-def dead $sfr
     ; CHECK-NEXT: [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[MOVE32_]], [[MOVE32_1]], implicit-def dead $sfr
     ; CHECK-NEXT: $r0 = COPY [[ADD32_]]
     ; CHECK-NEXT: RET implicit $r0, implicit $r15
@@ -161,8 +162,8 @@ body:             |
     ; DBG-NEXT: {{  $}}
     ; DBG-NEXT: [[COPY:%[0-9]+]]:gpr32 = COPY $r1
     ; DBG-NEXT: [[COPY1:%[0-9]+]]:gpr32 = COPY $r2
-    ; DBG-NEXT: [[MOVE32_:%[0-9]+]]:gpr32 = MOVE32 [[COPY]], [[COPY]], implicit-def dead $sfr
-    ; DBG-NEXT: [[MOVE32_1:%[0-9]+]]:gpr32 = MOVE32 [[COPY1]], [[COPY1]], implicit-def dead $sfr
+    ; DBG-NEXT: [[MOVE32_:%[0-9]+]]:gpr32 = MOVE32 [[COPY]], implicit-def dead $sfr
+    ; DBG-NEXT: [[MOVE32_1:%[0-9]+]]:gpr32 = MOVE32 [[COPY1]], implicit-def dead $sfr
     ; DBG-NEXT: [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[MOVE32_]], [[MOVE32_1]], implicit-def dead $sfr
     ; DBG-NEXT: $r0 = COPY [[ADD32_]]
     ; DBG-NEXT: RET implicit $r0, implicit $r15
@@ -172,21 +173,21 @@ body:             |
     ; PREGREEDY-NEXT: {{  $}}
     ; PREGREEDY-NEXT: [[COPY:%[0-9]+]]:gpr32 = COPY $r1
     ; PREGREEDY-NEXT: [[COPY1:%[0-9]+]]:gpr32 = COPY $r2
-    ; PREGREEDY-NEXT: [[MOVE32_:%[0-9]+]]:gpr32 = MOVE32 [[COPY]], [[COPY]], implicit-def dead $sfr
-    ; PREGREEDY-NEXT: [[MOVE32_1:%[0-9]+]]:gpr32 = MOVE32 [[COPY1]], [[COPY1]], implicit-def dead $sfr
+    ; PREGREEDY-NEXT: [[MOVE32_:%[0-9]+]]:gpr32 = MOVE32 [[COPY]], implicit-def dead $sfr
+    ; PREGREEDY-NEXT: [[MOVE32_1:%[0-9]+]]:gpr32 = MOVE32 [[COPY1]], implicit-def dead $sfr
     ; PREGREEDY-NEXT: [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[MOVE32_]], [[MOVE32_1]], implicit-def dead $sfr
     ; PREGREEDY-NEXT: $r0 = COPY [[ADD32_]]
     ; PREGREEDY-NEXT: RET implicit $r0, implicit $r15
     %0:gpr32 = COPY $r1
     %1:gpr32 = COPY $r2
-    ; MOVE32 modeled as rd, rs, rs — PortModel MI path is 2R/1W per-field.
-    %2:gpr32 = MOVE32 %0:gpr32, %0:gpr32, implicit-def dead $sfr
-    %3:gpr32 = MOVE32 %1:gpr32, %1:gpr32, implicit-def dead $sfr
+    ; MOVE32 modeled as rd, rs — PortModel MI path is 1R/1W (dest+src).
+    %2:gpr32 = MOVE32 %0:gpr32, implicit-def dead $sfr
+    %3:gpr32 = MOVE32 %1:gpr32, implicit-def dead $sfr
     %4:gpr32 = ADD32 %2:gpr32, %3:gpr32, implicit-def dead $sfr
     $r0 = COPY %4:gpr32
     RET implicit $r0, implicit $r15
 
-  ; MI path (pre-RA HR): repeated-source MOVE32 is 2R/1W, matching descriptor.
+  ; MI path (pre-RA HR): MOVE32 is 1R/1W (dest+src), matching descriptor.
 
 ...
 ---

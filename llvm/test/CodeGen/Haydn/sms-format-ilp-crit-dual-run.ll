@@ -201,12 +201,9 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; PROD-NEXT:    // =>This Inner Loop Header: Depth=1
 ; PROD-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; PROD-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; PROD-NEXT:    { nop; add32 r7, r7, r12 }
-; PROD-NEXT:    { nop; addi32 r6, r6, 1 }
-; PROD-NEXT:    { nop; add32 r7, r7, r8 }
-; PROD-NEXT:    { nop; addi32 r2, r2, 4 }
-; PROD-NEXT:    { nop; slt32 r12, r6, r4 }
-; PROD-NEXT:    { nop; addi32 r1, r1, 4 }
+; PROD-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
+; PROD-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }
+; PROD-NEXT:    { slt32 r12, r6, r4; addi32 r1, r1, 4 }
 ; PROD-NEXT:    { nop; add32 r5, r5, r7 }
 ; PROD-NEXT:    { nop; bnez r12, .LBB0_1 }
 ; PROD-NEXT:  // %bb.2: // %exit
@@ -230,10 +227,8 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; GEN-NEXT:    // =>This Inner Loop Header: Depth=1
 ; GEN-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; GEN-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; GEN-NEXT:    { nop; add32 r7, r7, r12 }
-; GEN-NEXT:    { nop; addi32 r6, r6, 1 }
-; GEN-NEXT:    { nop; add32 r7, r7, r8 }
-; GEN-NEXT:    { nop; addi32 r2, r2, 4 }
+; GEN-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
+; GEN-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }
 ; GEN-NEXT:    { nop; slt32 r7, r6, r4; add32 r5, r5, r7 }
 ; GEN-NEXT:    { nop; addi32 r1, r1, 4 }
 ; GEN-NEXT:    { nop; bnez r7, .LBB0_1 }
@@ -258,10 +253,8 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; RP-NEXT:    // =>This Inner Loop Header: Depth=1
 ; RP-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; RP-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; RP-NEXT:    { nop; add32 r7, r7, r12 }
-; RP-NEXT:    { nop; addi32 r6, r6, 1 }
-; RP-NEXT:    { nop; add32 r7, r7, r8 }
-; RP-NEXT:    { nop; addi32 r2, r2, 4 }
+; RP-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
+; RP-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }
 ; RP-NEXT:    { nop; slt32 r7, r6, r4; add32 r5, r5, r7 }
 ; RP-NEXT:    { nop; addi32 r1, r1, 4 }
 ; RP-NEXT:    { nop; bnez r7, .LBB0_1 }
@@ -286,12 +279,9 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; ASM-NEXT:    { nop; s_lw_post_imm r8, r3, 1 }
-; ASM-NEXT:    { nop; add32 r7, r7, r12 }
-; ASM-NEXT:    { nop; addi32 r6, r6, 1 }
-; ASM-NEXT:    { nop; add32 r7, r7, r8 }
-; ASM-NEXT:    { nop; addi32 r2, r2, 4 }
-; ASM-NEXT:    { nop; slt32 r12, r6, r4 }
-; ASM-NEXT:    { nop; addi32 r1, r1, 4 }
+; ASM-NEXT:    { add32 r7, r7, r12; addi32 r6, r6, 1 }
+; ASM-NEXT:    { add32 r7, r7, r8; addi32 r2, r2, 4 }
+; ASM-NEXT:    { slt32 r12, r6, r4; addi32 r1, r1, 4 }
 ; ASM-NEXT:    { nop; add32 r5, r5, r7 }
 ; ASM-NEXT:    { nop; bnez r12, .LBB0_1 }
 ; ASM-NEXT:  // %bb.2: // %exit

@@ -15,6 +15,7 @@
 #include "Haydn.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnBundleMaterialize.h"
+#include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnHWLoopContracts.h"
 #include "HaydnHazardRecognizer.h"
@@ -62,20 +63,14 @@ namespace {
 const MachineInstr &unwrapBundleControlFlow(const MachineInstr &MI) {
   if (!MI.isBundle())
     return MI;
-  const MachineBasicBlock *MBB = MI.getParent();
-  if (!MBB)
-    return MI;
-  for (MachineBasicBlock::const_instr_iterator I =
-           std::next(MI.getIterator()),
-                                              E = MBB->instr_end();
-       I != E && I->isInsideBundle(); ++I) {
-    // IgnoreBundle: query the child itself, not nested AnyInBundle.
-    if (I->isBranch(MachineInstr::IgnoreBundle) ||
-        I->isReturn(MachineInstr::IgnoreBundle) ||
-        I->isIndirectBranch(MachineInstr::IgnoreBundle) ||
-        I->isCall(MachineInstr::IgnoreBundle) ||
-        I->isBarrier(MachineInstr::IgnoreBundle))
-      return *I;
+  // IgnoreBundle: query the child itself, not nested AnyInBundle.
+  for (const MachineInstr *C : haydn::bundle::members(MI)) {
+    if (C->isBranch(MachineInstr::IgnoreBundle) ||
+        C->isReturn(MachineInstr::IgnoreBundle) ||
+        C->isIndirectBranch(MachineInstr::IgnoreBundle) ||
+        C->isCall(MachineInstr::IgnoreBundle) ||
+        C->isBarrier(MachineInstr::IgnoreBundle))
+      return *C;
   }
   return MI;
 }
@@ -303,15 +298,9 @@ void HaydnInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   // lane extract as MOVE32_DR_L/_H (see HaydnInstructionSelector.cpp
   // G_UNMERGE_VALUES), so no generic cross-bank COPY should survive to here.
   if (Haydn::GPR32RegClass.contains(DestReg, SrcReg)) {
-    // GPR32 → GPR32: MOVE32 rd, rs, rs (register move).
-    // The .td models MOVE32 with two source operands ($rs1, $rs2) because the
-    // R-type encoding (FmtALU32) has separate rs1/rs2 bit fields, and both
-    // must be populated for a deterministic encoding. copyPhysReg therefore
-    // passes SrcReg twice. Each explicit field reserves one GPR read port
-    // (2R1W). OR32 rd, rs, rs is a true two-source op; MOVE32 remains the
-    // canonical copy form.
+    // GPR32 → GPR32: MOVE32 rd, rs. Peer: AIE2InstrInfo.cpp MOVScl dest,
+    // src. Logical and Format E members are dest+src.
     BuildMI(MBB, MI, DL, get(Haydn::MOVE32), DestReg)
-        .addReg(SrcReg, getKillRegState(KillSrc))
         .addReg(SrcReg, getKillRegState(KillSrc));
     return;
   }
@@ -338,7 +327,7 @@ HaydnInstrInfo::isCopyInstrImpl(const MachineInstr &MI) const {
   default:
     return std::nullopt;
   case Haydn::MOVE32:
-    // Canonical GPR move: MOVE32 rd, rs, rs (rs2 mirrors rs1 for encoding).
+    // Canonical GPR move: MOVE32 rd, rs.
     if (MI.getNumOperands() < 2 || !MI.getOperand(0).isReg() ||
         !MI.getOperand(1).isReg())
       return std::nullopt;
@@ -972,13 +961,10 @@ unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
       // Classify children: branch vs real coissue vs padding (meta/NOP/debug).
       SmallVector<MachineInstr *, 4> BranchKids;
       unsigned RealNonBranch = 0;
-      MachineBasicBlock::instr_iterator Child =
-          std::next(Top.getIterator());
-      MachineBasicBlock::instr_iterator End = MBB.instr_end();
-      for (; Child != End && Child->isInsideBundle(); ++Child) {
+      for (MachineInstr *Child : haydn::bundle::members(Top)) {
         if (isControlFlowChild(*Child) &&
             Child->isBranch(MachineInstr::IgnoreBundle)) {
-          BranchKids.push_back(&*Child);
+          BranchKids.push_back(Child);
           continue;
         }
         if (isTerminatorCyclePadding(*Child))
@@ -1009,16 +995,13 @@ unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
       // stamp would let MC serialize the pre-strip Format E identity.
       Count += BranchKids.size();
       SmallVector<MachineInstr *, 4> Keep;
-      MachineBasicBlock::instr_iterator ChildIt =
-          std::next(Top.getIterator());
-      MachineBasicBlock::instr_iterator ChildEnd = MBB.instr_end();
-      for (; ChildIt != ChildEnd && ChildIt->isInsideBundle(); ++ChildIt) {
-        if (isControlFlowChild(*ChildIt) &&
-            ChildIt->isBranch(MachineInstr::IgnoreBundle))
+      for (MachineInstr *Child : haydn::bundle::members(Top)) {
+        if (isControlFlowChild(*Child) &&
+            Child->isBranch(MachineInstr::IgnoreBundle))
           continue;
-        if (isTerminatorCyclePadding(*ChildIt))
+        if (isTerminatorCyclePadding(*Child))
           continue;
-        Keep.push_back(&*ChildIt);
+        Keep.push_back(Child);
       }
 
       auto unbundleMI = [](MachineInstr *MI) {
@@ -1278,9 +1261,12 @@ static void withDR64PackBase(MachineBasicBlock &MBB,
     HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(R.Off);
     Register Cur = Haydn::R0;
     for (const HaydnMatInt::Inst &MatInst : Seq) {
-      BuildMI(MBB, I, DL, TII.get(MatInst.Opc), Base)
-          .addReg(Cur)
-          .addImm(MatInst.Imm);
+      // LUI is dest+imm (logical matches Format E members).
+      MachineInstrBuilder MIB =
+          BuildMI(MBB, I, DL, TII.get(MatInst.Opc), Base);
+      if (MatInst.Opc != Haydn::LUI)
+        MIB.addReg(Cur);
+      MIB.addImm(MatInst.Imm);
       Cur = Base;
     }
     BuildMI(MBB, I, DL, TII.get(Haydn::ADD32), Base)
@@ -1441,12 +1427,16 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     Register CurrentReg = Haydn::R0;
     for (const HaydnMatInt::Inst &MatInst : Seq) {
       switch (MatInst.Opc) {
-      default:
-        // ADDI32 / LUI / ADDI32_W / ORI32_W: (rd, rs, imm)
-        BuildMI(MBB, MBBI, DL, get(MatInst.Opc), DstReg)
-            .addReg(CurrentReg)
-            .addImm(MatInst.Imm);
+      default: {
+        // LUI is dest+imm (logical matches Format E members); the rest of
+        // the sequence is (rd, rs, imm).
+        MachineInstrBuilder MIB =
+            BuildMI(MBB, MBBI, DL, get(MatInst.Opc), DstReg);
+        if (MatInst.Opc != Haydn::LUI)
+          MIB.addReg(CurrentReg);
+        MIB.addImm(MatInst.Imm);
         break;
+      }
       case Haydn::SLLI32:
         BuildMI(MBB, MBBI, DL, get(Haydn::SLLI32), DstReg)
             .addReg(CurrentReg)
@@ -1511,9 +1501,13 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(V);
       Register Cur = Haydn::R0;
       for (size_t I = 0; I < Seq.size(); ++I) {
-        BuildMI(MBB, MBBI, DL, get(Seq[I].Opc), Target)
-            .addReg(Cur)
-            .addImm(Seq[I].Imm);
+        // LUI is dest+imm (logical matches Format E members); the rest of
+        // the sequence is (rd, rs, imm).
+        MachineInstrBuilder MIB =
+            BuildMI(MBB, MBBI, DL, get(Seq[I].Opc), Target);
+        if (Seq[I].Opc != Haydn::LUI)
+          MIB.addReg(Cur);
+        MIB.addImm(Seq[I].Imm);
         Cur = Target;
       }
     };
@@ -1703,23 +1697,12 @@ bool HaydnInstrInfo::isHardwareLoopSetupOpcode(unsigned Opc) const {
   // Logical / wide catalog forms. Keep this the sole opcode list for
   // mutations + Fixup (HWLOOP-SU). Hexagon matches architectural LOOP
   // opcodes directly (HexagonFixupHwLoops.cpp isHardwareLoop). Generated
-  // members resolve through the inverse; residual FieldSlots through peel.
-  switch (haydnLogicalOpcode(Opc)) {
-  case Haydn::SET_HWLOOP:
-  case Haydn::SET_HWLOOP_REG:
-  case Haydn::SET_HWLOOP_W:
-  case Haydn::SET_HWLOOP_F2_W:
-  case Haydn::SET_HWLOOP_REG_W:
-  case Haydn::LoopStart:
-    return true;
-  default:
-    break;
-  }
-  const std::string Log =
-      haydn::format_e::peelLogicalOpcodeName(getName(Opc));
-  return StringRef(Log).equals_insensitive("SET_HWLOOP") ||
-         StringRef(Log).equals_insensitive("SET_HWLOOP_F2") ||
-         StringRef(Log).equals_insensitive("SET_HWLOOP_REG");
+  // members resolve through the inverse (inside the classifier).
+  // Tii family membership — the old peel-name fallback's only live member
+  // (bare golden SET_HWLOOP_F2) is Expanded in the family enum, so the
+  // fallback is subsumed and deleted (W64 QW2).
+  return haydnClassifyHwloopSetupOpcode(Opc) !=
+         HaydnHwloopSetupFamily::None;
 }
 
 bool HaydnInstrInfo::isHardwareLoopSetupInstr(const MachineInstr &MI) const {
@@ -1727,31 +1710,38 @@ bool HaydnInstrInfo::isHardwareLoopSetupInstr(const MachineInstr &MI) const {
 }
 
 bool HaydnInstrInfo::isHardwareLoopRegTripOpcode(unsigned Opc) const {
+  // Reg-trip law — NOT family-identical (see
+  // haydnClassifyHwloopSetupOpcode): it is Residual∩{SET_HWLOOP_REG} ∪
+  // (Expanded∖{SET_HWLOOP_W}) ∪ {LoopStart}; no single family level
+  // expresses it. Keep explicit. The peel-name fallback's only live member
+  // (bare golden SET_HWLOOP_F2) is now an Expanded switch case (W64 QW2).
   switch (haydnLogicalOpcode(Opc)) {
   case Haydn::SET_HWLOOP_REG:
+  case Haydn::SET_HWLOOP_F2:
   case Haydn::SET_HWLOOP_F2_W:
   case Haydn::SET_HWLOOP_REG_W:
   case Haydn::LoopStart:
     return true;
   default:
-    break;
+    // Dead fallback deleted (W64 QW2): SET_HWLOOP_REG / SET_HWLOOP_REG_*
+    // members invert through haydnLogicalOpcode first, and `*_S*` peel is
+    // refused, so a name-based second chance is unreachable.
+    return false;
   }
-  const std::string Log =
-      haydn::format_e::peelLogicalOpcodeName(getName(Opc));
-  return StringRef(Log).equals_insensitive("SET_HWLOOP_REG") ||
-         StringRef(Log).equals_insensitive("SET_HWLOOP_F2");
 }
 
 bool HaydnInstrInfo::isHardwareLoopImmTripOpcode(unsigned Opc) const {
+  // Imm-trip law — NOT family-identical (see
+  // haydnClassifyHwloopSetupOpcode): exactly Residual∩{SET_HWLOOP} ∪
+  // Expanded∩{SET_HWLOOP_W}; every other family member is reg-trip or F2.
+  // Keep explicit.
   switch (haydnLogicalOpcode(Opc)) {
   case Haydn::SET_HWLOOP:
   case Haydn::SET_HWLOOP_W:
     return true;
   default:
-    break;
+    return false;
   }
-  return StringRef(haydn::format_e::peelLogicalOpcodeName(getName(Opc)))
-      .equals_insensitive("SET_HWLOOP");
 }
 
 bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
@@ -2029,9 +2019,7 @@ void HaydnInstrInfo::insertIndirectBranch(
                          MachineBasicBlock::iterator InsertPt, Register Dst,
                          MachineBasicBlock *JumpDest) -> MachineInstr * {
     MachineInstr *Lui =
-        BuildMI(InsMBB, InsertPt, DL, get(Haydn::LUI), Dst)
-            .addReg(Haydn::R0)
-            .addMBB(JumpDest);
+        BuildMI(InsMBB, InsertPt, DL, get(Haydn::LUI), Dst).addMBB(JumpDest);
     BuildMI(InsMBB, InsertPt, DL, get(Haydn::ADDI32_W), Dst)
         .addReg(Dst)
         .addMBB(JumpDest);
@@ -2137,17 +2125,14 @@ static unsigned namedLateLayoutGrowthBytes(const MachineInstr &MI,
   };
 
   if (MI.isBundle()) {
-    const MachineBasicBlock *MBB = MI.getParent();
-    if (!MBB)
+    if (!MI.getParent())
       return 0;
     SmallVector<unsigned, 3> Members;
-    for (MachineBasicBlock::const_instr_iterator I =
-             std::next(MI.getIterator());
-         I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
-      if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
+    for (const MachineInstr *C : haydn::bundle::members(MI)) {
+      if (C->isMetaInstruction() || C->isDebugInstr() || C->isPosition())
         continue;
-      Members.push_back(I->getOpcode());
-      chargeOpcode(I->getOpcode());
+      Members.push_back(C->getOpcode());
+      chargeOpcode(C->getOpcode());
     }
     if (Members.size() > 1 &&
         !haydn::bundle::opcodesHaveFormatEUnitCover(Members, TII))
@@ -2299,7 +2284,7 @@ ScheduleHazardRecognizer *HaydnInstrInfo::CreateTargetMIHazardRecognizer(
   // Port demand is MRI-correct via HaydnPortModel (vreg regclass → GPR/DR/AR
   // bank), so three independent GPR writes cannot share one cycle under 2W
   // even when Full has three slots. MOVE32-class MI path charges each
-  // explicit field (rd,rs,rs → 2R1W), matching descriptor-only estimates
+  // explicit field (rd,rs → 1R1W), matching descriptor-only estimates
   // used by SMS MID placement. Pre-RA list-sched uses the MI path only.
   // Matching-frontier / packability oracles on PreRASchedStrategy are
   // metrics-only: they never materialize durable BUNDLE roots. Post-RA alone
@@ -2342,8 +2327,12 @@ bool HaydnInstrInfo::isPublishedMemoryItinerary(unsigned SchedClass) {
   // ExactLatencies fatality).
   // 2026-08-21 itinerary re-map: Slot2_LS retired (golden assigns every
   // former S2 memory row to LOADSTORE0/LOAD1); the published set is three.
+  // 2026-08-21 latency P3: Slot0_LS_WbLat joins — store-writeback stores
+  // keep the conservative memory pair (0, Data_Latency-1) while the
+  // writeback REGISTER is golden Data_Latency=1.
   switch (SchedClass) {
   case Haydn::Sched::Slot0_LS:
+  case Haydn::Sched::Slot0_LS_WbLat:
   case Haydn::Sched::Slot1_LD:
   case Haydn::Sched::Slot01_LD:
     return true;

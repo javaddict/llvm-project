@@ -246,9 +246,7 @@ define i64 @test_mixed_callee_saves(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-NEXT:    { nop; addi32 r5, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d9, r5, 0 }
 ; CHECK-NEXT:    { nop; st64 d8, r5, 1 }
-; CHECK-NEXT:    { nop; move32 r8, r2 }
-; CHECK-NEXT:    { nop; move32 r9, r3 }
-; CHECK-NEXT:    { nop; nop; or64 d8, d0, d0 }
+; CHECK-NEXT:    { move32 r8, r2; move32 r9, r3; or64 d8, d0, d0 }
 ; CHECK-NEXT:    { nop; or64 d9, d1, d1; move32 r10, r4 }
 ; CHECK-NEXT:    { nop; jal lr, use_i32 }
 ; CHECK-NEXT:    { nop; move32 r11, r1 }

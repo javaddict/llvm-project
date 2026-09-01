@@ -52,8 +52,8 @@ define void @i32_only_allocas() {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { nop; addi32 r1, sp, 12 }
-; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 r3, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }

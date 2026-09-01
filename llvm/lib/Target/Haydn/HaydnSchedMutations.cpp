@@ -22,6 +22,7 @@
 
 #include "HaydnSchedMutations.h"
 #include "Haydn.h"
+#include "HaydnBundleVerify.h"
 #include "HaydnHWLoopContracts.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineScheduler.h"
@@ -426,6 +427,36 @@ class MemoryEdges : public ScheduleDAGMutation {
 // Post-RA: ZOL setup → ExitSU distance (AIE LoopSetupDistance peer)
 //===----------------------------------------------------------------------===//
 
+// Size-bearing parcels in [RegionEnd, MBB end) — the SET-MBB tail that
+// already lies between the SET cycle and HWLR_BEGIN on every activation
+// path (the unconditional B to the header, a guarding conditional branch,
+// call-boundary parcels). Walks up to AND INCLUDING the first size-bearing
+// non-call terminator, then stops: execution leaves the block at that
+// terminator on every path that reaches BEGIN (so it and everything before
+// it executes), while parcels beyond it may be unreachable (an
+// unconditional-B tail) and must not be credited. Same size oracle and same
+// stop rule as Fixup countFollowingBundles so scheduler credit and
+// post-sched Following agree.
+static unsigned countSizeBearingTailParcels(ScheduleDAGInstrs &DAG,
+                                            const HaydnInstrInfo &TII) {
+  MachineBasicBlock *MBB = getDAGMBB(&DAG);
+  if (!MBB)
+    return 0;
+  unsigned Parcels = 0;
+  for (auto I = DAG.end(), E = MBB->end(); I != E; ++I) {
+    if (I->isMetaInstruction() || I->isDebugInstr() || I->isImplicitDef() ||
+        I->isKill() || I->isPosition())
+      continue; // zero-size classes never carry a product cycle
+    unsigned Bytes = TII.getInstSizeInBytes(*I);
+    if (Bytes == 0)
+      continue;
+    Parcels += haydn::bundle::ceilProductParcels(Bytes);
+    if (I->isTerminator())
+      break; // first terminator counted; parcels beyond may be unreachable
+  }
+  return Parcels;
+}
+
 // AIE (AIEBaseSubtarget PostRA mutator): setup instrs raise ExitSU latency so
 // the region end is far enough after writing LS/LE/LC. Haydn freeze:
 //   SetupIssueDistance = 3  (= AIE LoopSetupDistance peer for SET→BEGIN)
@@ -451,19 +482,47 @@ class MemoryEdges : public ScheduleDAGMutation {
 // regions skipped by the list scheduler never see this flush; Fixup still
 // residual-pads (exact-commit NOPs) for those and for short useful-window
 // fill.
+//
+// W61 boundary-tail credit (AIE RegionEndEdges LoopSetupDistance -
+// ZOLBundlesCount analog; golden Constraints "Setup Timing": SET issues at
+// or before bundle t-3 where t = HWLR_BEGIN): HWLR_BEGIN = PC_SET + off1
+// is LAYOUT arithmetic, so every size-bearing parcel between the SET cycle
+// and BEGIN counts toward the distance — including the preheader tail
+// parcels that follow this scheduling region ([RegionEnd, MBB end): the
+// unconditional B to the header, call-boundary parcels). AIE credits ZOL
+// body bundles because its law runs to LEND; Haydn's law runs to BEGIN, so
+// the credit is the SET-MBB tail. Credit is conservative: only parcels
+// certainly between SET and BEGIN in layout order (StartMBB must follow
+// Pre in layout or Fixup demotes; parcels of any intervening MBBs are not
+// credited). Fixup countFollowingBundles counts the same tail (terminator
+// parcels included) so the credit is not re-padded post-sched.
 class ZOLSetupExitLatency : public ScheduleDAGMutation {
   void apply(ScheduleDAGInstrs *DAG) override {
     const auto *HII = static_cast<const HaydnInstrInfo *>(DAG->TII);
     SUnit &ExitSU = DAG->ExitSU;
     // AIE LoopSetupDistance peer: Cycle(BEGIN) - Cycle(SET) lower bound.
-    const unsigned MinGap = haydn::hwloop::SetupIssueDistance;
     static_assert(haydn::hwloop::SetupIssueDistance ==
                       haydn::hwloop::InterveningCycles + 1,
                   "ExitSU latency must be Following floor + 1");
+    // W61 credit: SET-MBB tail parcels between region end and BEGIN are
+    // layout-certain to cover part of the distance; the in-region ExitSU
+    // edge only owes the remainder (AIE LoopSetupDistance - ZOLBundlesCount
+    // analog). Computed lazily — only for regions that actually hold a SET
+    // (zero walk cost when hwloop is off / region has no setup).
+    unsigned TailParcels = 0;
+    bool TailCounted = false;
+    auto MinGapFor = [&]() -> unsigned {
+      if (!TailCounted) {
+        TailParcels = countSizeBearingTailParcels(*DAG, *HII);
+        TailCounted = true;
+      }
+      return haydn::hwloop::setupGapAfterTailCredit(TailParcels);
+    };
     for (SUnit &SU : DAG->SUnits) {
       MachineInstr *MI = SU.getInstr();
       if (!MI || !HII->isHardwareLoopSetupInstr(*MI))
         continue;
+      const unsigned MinGap = MinGapFor();
       // Raise latency on existing Artificial Exit edge, or create one.
       // Forward edge: SU → ExitSU with latency MinGap (SetupIssueDistance).
       // Succs (not Preds) drive ExitSU.TopReadyCycle on top-down release.
@@ -482,13 +541,15 @@ class ZOLSetupExitLatency : public ScheduleDAGMutation {
       // Reverse ExitSU.Preds edge is a distinct SDep (AIE RegionEndEdges note).
       // Lift stale short Preds through MinGap then store MinGap-1 so bot-up
       // region length covers SetupIssueDistance when SET is critical; never
-      // shorten a longer reverse edge (RaisedForward - 1).
+      // shorten a longer reverse edge (RaisedForward - 1). MinGap == 0 (tail
+      // already covers the whole distance) needs no reverse lift: the tail,
+      // not the region, satisfies the law.
       for (SDep &PredEdge : ExitSU.Preds) {
         if (PredEdge.getSUnit() != &SU || !PredEdge.isArtificial())
           continue;
         unsigned Lat = PredEdge.getLatency();
         unsigned RaisedForward = std::max(Lat, MinGap);
-        PredEdge.setLatency(RaisedForward - 1);
+        PredEdge.setLatency(RaisedForward > 0 ? RaisedForward - 1 : 0);
       }
       // Re-stamp Succs to MinGap after reverse edits so top-down ExitReady
       // cannot under-pad if a later pass mirrored Pred→Succ.
@@ -576,13 +637,8 @@ public:
   unsigned operator()(const MachineInstr &MI) const {
     unsigned Latency = 0;
     if (MI.isBundle()) {
-      const MachineBasicBlock *MBB = MI.getParent();
-      if (MBB) {
-        for (MachineBasicBlock::const_instr_iterator I =
-                 std::next(MI.getIterator());
-             I != MBB->instr_end() && I->isBundledWithPred(); ++I)
-          Latency = std::max(Latency, (*this)(*I));
-      }
+      for (const MachineInstr *C : haydn::bundle::members(MI))
+        Latency = std::max(Latency, (*this)(*C));
       return Latency;
     }
     const unsigned SrcClass = MI.getDesc().getSchedClass();
@@ -610,9 +666,39 @@ class RegionEndEdges : public ScheduleDAGMutation {
     SUnit &ExitSU = DAG->ExitSU;
     MaxLatencyFinder MaxLatency(DAG);
 
-    // Drop existing ExitSU preds and rebuild (AIE pattern).
-    while (!ExitSU.Preds.empty())
-      ExitSU.removePred(ExitSU.Preds.back());
+    // Drop existing ExitSU preds and rebuild (AIE pattern). Resync the Succs
+    // mirror latency first: ZOLSetupExitLatency runs before this mutation and
+    // deliberately leaves the SET edge pair latency-asymmetric (Preds =
+    // Succs - 1, bot-up same-cycle convention); SUnit::removePred mirrors
+    // via operator== which compares latency and would assert on the
+    // mismatched pair. The edge is being deleted; the rebuild re-adds it
+    // with the RegionEndEdges convention below.
+    while (!ExitSU.Preds.empty()) {
+      SDep &PredEdge = ExitSU.Preds.back();
+      SUnit *N = PredEdge.getSUnit();
+      SDep Mirror = PredEdge;
+      Mirror.setSUnit(&ExitSU);
+      for (SDep &S : N->Succs) {
+        if (S.overlaps(Mirror)) {
+          S.setLatency(PredEdge.getLatency());
+          break;
+        }
+      }
+      ExitSU.removePred(PredEdge);
+    }
+
+    // W61 credit: same SET-MBB tail crediting as ZOLSetupExitLatency so the
+    // rebuild (when enabled) does not drop the credited gap back to the flat
+    // SetupIssueDistance. Computed lazily like ZOLSetupExitLatency.
+    unsigned TailParcels = 0;
+    bool TailCounted = false;
+    auto SetupGapFor = [&]() -> unsigned {
+      if (!TailCounted) {
+        TailParcels = countSizeBearingTailParcels(*DAG, *HII);
+        TailCounted = true;
+      }
+      return haydn::hwloop::setupGapAfterTailCredit(TailParcels);
+    };
 
     for (SUnit &SU : DAG->SUnits) {
       MachineInstr &MI = *SU.getInstr();
@@ -621,11 +707,11 @@ class RegionEndEdges : public ScheduleDAGMutation {
       if (DelaySlots)
         EdgeLatency = std::max(EdgeLatency, DelaySlots + 1);
       // AIE: ZOL setup raises ExitSU latency so region end is after the
-      // min setup→BEGIN gap (Haydn: SetupIssueDistance; Following =
-      // InterveningCycles = distance-1). All logical/wide/member forms.
+      // min setup→BEGIN gap (Haydn: SetupIssueDistance less the SET-MBB
+      // tail credit; Following = InterveningCycles = distance-1). All
+      // logical/wide/member forms.
       if (HII->isHardwareLoopSetupInstr(MI))
-        EdgeLatency =
-            std::max(EdgeLatency, haydn::hwloop::SetupIssueDistance);
+        EdgeLatency = std::max(EdgeLatency, SetupGapFor());
 
       SDep ExitDep(&SU, SDep::Artificial);
       ExitDep.setLatency(EdgeLatency);

@@ -121,7 +121,7 @@
 ; CMAKE-NOT: BUNDLESIM_GOLDEN_DIR
 
 ; Highest existing ISA file is ISA-63; the next new file is ISA-64.
-; ISANEXT: next new file is `ISA-64`
+; ISANEXT: next new file is `ISA-66`
 
 ; Closed T1-ALIGN schema: PacketFormats full-cover only (AIEBundle.h:150-156).
 ; SCHEMA: no empty-cover first-match and no E2

@@ -12,7 +12,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 \
 ; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
-; RUN:     -haydn-multistage-sms-analysis-only \
+; RUN:     -haydn-multistage-sms-analysis-only -haydn-sms-containment-max=1 \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.postra.rmk | FileCheck %s --check-prefix=POSTRA-ASM
 ; RUN: FileCheck %s --check-prefix=POSTRA < %t.postra.rmk
@@ -20,6 +20,7 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -O2 \
 ; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
+; RUN:     -haydn-sms-containment-max=1 \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.mat.rmk | FileCheck %s --check-prefix=MAT-ASM
 ; RUN: FileCheck %s --check-prefix=MAT < %t.mat.rmk
@@ -37,7 +38,20 @@
 ; hwloops OFF: ordinary list-schedule+commit completes; SMS analysis and
 ; materialize either exhaust/reject (recorded capped-reject QoR on this
 ; dense MAC body) or accept with parcels-per-iter == searched II.
-; Product multi-stage stays OFF.
+; Product multi-stage flipped ON 2026-08-22 (SMS product-default flip
+; rebaseline): ORD-ASM keeps the explicit flag-off pin; POSTRA/MAT force
+; SMS ON explicitly and print product-on. This dense MAC body still
+; exhausts (recorded capped-reject QoR) — same remark class, new policy
+; string.
+;
+; W68.1: generic pre-RA SMS now owns soft multi-stage at product defaults,
+; so the SWP/ASM arms (no containment knob) show the loop ACCEPTED and
+; expanded pre-RA — the "Schedule Found? 1" pin is the durable contract
+; (SMS finds a schedule, no scalar fallback). The POSTRA/MAT arms scope
+; -haydn-sms-containment-max=1 (the F41 bisect knob) so the loop reaches
+; the post-RA engine UNexpanded and its analysis/materialize machinery
+; stays exercised (its kind=not-candidate on the expanded shape would
+; otherwise vacate these pins). ZOL multi-stage is unaffected by the knob.
 ;
 ; Why this is contract-only (no brittle bundle body): the D999 no-forwarding
 ; fix changes SMS placement to call the operand-aware MI overload of
@@ -71,7 +85,7 @@
 ; POSTRA: resource-bias=slot-windows
 ; POSTRA: {{accepted II=|exhausted:|rejected:}}
 ; POSTRA: qualify-or-cut
-; POSTRA: product-off
+; POSTRA: product-on
 ; POSTRA: nat-ipc=measured-miss
 ; POSTRA: no-competitive-ipc
 ; POSTRA: no-stage0-ib-pp
@@ -82,7 +96,7 @@
 ; MAT-ASM: jalr
 ; MAT: {{accepted II=|exhausted:|rejected:|preflight reject:}}
 ; MAT: qualify-or-cut
-; MAT: product-off
+; MAT: product-on
 ; MAT: nat-ipc=measured-miss
 ; MAT-NOT: sequential (preflight)
 ;

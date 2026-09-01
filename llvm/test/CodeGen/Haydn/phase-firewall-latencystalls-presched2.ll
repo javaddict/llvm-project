@@ -22,24 +22,27 @@ define i32 @f(i32 %a, i32 %b) {
   ret i32 %t
 }
 
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+; O0 keeps no hwloop passes (IR HardwareLoops inserts at O1+, AIE-faithful).
 ; O0-NOT:      Hardware Loop Insertion
 ; O0:      PostRA Machine Instruction Scheduler
 ; O0-NEXT:      Haydn Exposed-Pipeline Latency Stalls
 ; O0-NEXT:      Haydn Bundle Finalization
 ; O0-NEXT:      Haydn Bundle Invariant Verifier
+; O0 late lane: BR -> Finalize directly (no hwloop passes at O0).
 ; O0:      Branch relaxation pass
-; O0-NOT:      Haydn Hardware Loop Fixup
 ; O0-NEXT:      Haydn Bundle Finalization
 ; O0-NEXT:      Haydn Bundle Invariant Verifier
 
-; O2-NOT:      Hardware Loop Insertion
+; O2:      Hardware Loop Insertion
 ; O2-NOT:      Haydn Hardware Loop Detection
 ; O2:      PostRA Machine Instruction Scheduler
 ; O2-NEXT:      Haydn Exposed-Pipeline Latency Stalls
 ; O2-NEXT:      Haydn Bundle Finalization
 ; O2-NEXT:      Haydn Bundle Invariant Verifier
 ; O2:      Branch relaxation pass
-; O2-NOT:      Haydn Hardware Loop Fixup
+; O2-NEXT:      Haydn Hardware Loop Fixup
+; O2-NEXT:      Branch relaxation pass
 ; O2-NEXT:      Haydn Bundle Finalization
 ; O2-NEXT:      Haydn Bundle Invariant Verifier
 

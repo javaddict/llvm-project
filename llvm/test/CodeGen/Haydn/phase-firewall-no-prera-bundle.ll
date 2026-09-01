@@ -63,7 +63,7 @@
 ; STATS-NOT: haydn-prera-sched{{.*}}invented private placement opcodes
 ; STATS-NOT: haydn-post-ra-sched{{.*}}residual alternate descriptor leaks
 ; ADMIT: HaydnPostRASched: resource-admission per_op_records=0 competitive_claims=0
-; PREADMIT: HaydnPreRASched: product StageCount1 containment max_stages=1 resource_admission_closed=1
+; PREADMIT: HaydnPreRASched: product containment max_stages=3(soft+zol) resource_admission_closed=1
 ; ASM-LABEL: ordinary_ilp_three_add:
 ; ASM: {
 ; ASM: add32

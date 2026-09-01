@@ -284,8 +284,7 @@ define i32 @test_gpr_copy_elim_stress() nounwind {
 ; CHECK-NEXT:    { nop; st32 r9, r1, 4 }
 ; CHECK-NEXT:    { nop; st32 r8, r1, 5 }
 ; CHECK-NEXT:    { nop; jal lr, get_i32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 3; xor32 r0, r0, r0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; jal lr, get_i32 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }

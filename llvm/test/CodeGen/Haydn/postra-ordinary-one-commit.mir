@@ -111,7 +111,7 @@ body:             |
     ; CHECK-NOT: BUNDLE
     ; CHECK-DAG: LUI
     ; CHECK-DAG: ADD32
-    $r1 = LUI $r0, 1
+    $r1 = LUI 1
     $r4 = ADD32 $r2, $r3
     $r0 = COPY $r4
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

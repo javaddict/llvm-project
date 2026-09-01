@@ -17,8 +17,9 @@
 ; REQUIRES: haydn-registered-target
 ;
 ; Role: IR — park in-order incomplete SchedMachineModel (MicroOpBufferSize=0,
-; LoopMicroOpBufferSize=0, CompleteModel=0, IssueWidth=E3). Product
-; multi-stage SMS and hardware loops stay OFF. AIE1 in-order peer
+; LoopMicroOpBufferSize=0, CompleteModel=0, IssueWidth=E3). 2026-08-22
+; product-default flips: hardware loops AND multi-stage SMS are ON
+; (each qualified independent + combined). AIE1 in-order peer
 ; (aie1/AIE1Schedule.td:258); do not adopt AIE2PS buffer=1000 here.
 
 define i32 @inorder_seat(i32 %a, i32 %b) {
@@ -32,25 +33,27 @@ define i32 @inorder_seat(i32 %a, i32 %b) {
 ; MODEL-DAG: let CompleteModel = 0
 ; MODEL-NOT: let CompleteModel = 1
 
-; PIN: static_assert(!HaydnMultiStageSMS::productDefaultEnabled()
+; 2026-08-22 SMS product-default flip rebaseline: default assert is now
+; positive (re-parking requires new failing evidence).
+; PIN: static_assert(HaydnMultiStageSMS::productDefaultEnabled()
 ; PIN: static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled()
-; PIN: static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
+; PIN: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; PIN: pinHaydnInOrderIncompleteSchedModel
 ; PIN: SM.MicroOpBufferSize != 0
 ; PIN: SM.isComplete()
 ; PIN: SM.IssueWidth != Haydn::ISSUE_SLOT_COUNT
 ; PIN: pinHaydnInOrderIncompleteSchedModel(*C->MF)
 
-; SMSDEF: productDefaultEnabled() { return false; }
-; HWDEF: hardwareLoopsProductDefaultEnabled() { return false; }
-; HWPIN: static_assert(!llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
+; SMSDEF: productDefaultEnabled() { return true; }
+; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
+; HWPIN: static_assert(llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 
 ; CHECK: add32
 ; CHECK-NOT: #<swps>
 ; CHECK-NOT: set_hwloop
+; PASSES: Hardware Loop Insertion
+; PASSES-NOT: Haydn Hardware Loop Detection
 ; PASSES: PostRA Machine Instruction Scheduler
 ; PASSES-NOT: InterBlock
 ; PASSES-NOT: PostPipeliner
-; PASSES-NOT: Hardware Loop Insertion
-; PASSES-NOT: Haydn Hardware Loop Detection
-; PASSES-NOT: Haydn Hardware Loop Fixup
+; PASSES: Haydn Hardware Loop Fixup

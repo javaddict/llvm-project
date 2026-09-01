@@ -62,7 +62,10 @@ llvm-mc -triple=haydn-unknown-elf -filetype=obj < test.s | llvm-objdump -d -
 
 ## Notes
 
-- Tests are spec-driven per `HaydnInstrInfo.td`
-- Binary encodings follow the hypothesized format (see `HaydnInstrFormats.td`)
-- Relocation types will be added in Stream B (MC layer completion)
-- These tests correspond to Stream A1 (Core instruction set) and MVB milestone
+- Tests are golden-driven: binary encodings are generated from the
+  authoritative Format E layout pair
+  `~/haydn-plans/Database/golden/format_e_bit_layout_v2_1.{json,xlsx}`
+  via the CodeGenFormat backend (D394); never hand-hypothesized
+- Relocation kinds live in `HaydnRelocLayout` (single geometry authority;
+  GE96-03 branch/call = byte PC+imm, hwloop imm <<2)
+- Retired "Stream A1/B" and "MVB milestone" vocabulary: see STATUS.md

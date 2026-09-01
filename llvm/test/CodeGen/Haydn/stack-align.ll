@@ -25,8 +25,8 @@ define void @test_multi_alloca() {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; addi32 r1, sp, 20 }
-; CHECK-NEXT:    { nop; addi32 r2, sp, 16 }
 ; CHECK-NEXT:    { nop; addi32 r4, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 16 }
 ; CHECK-NEXT:    { nop; st32 r4, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
@@ -224,8 +224,8 @@ define void @test_align_5xi32() {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; addi32 r1, sp, 28 }
-; CHECK-NEXT:    { nop; addi32 r2, sp, 24 }
 ; CHECK-NEXT:    { nop; addi32 r6, r0, 1 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 24 }
 ; CHECK-NEXT:    { nop; st32 r6, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }

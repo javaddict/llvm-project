@@ -1,27 +1,31 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | \
 ; RUN:   FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
-; RUN:   -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -haydn-enable-hwloops=0 < %s | FileCheck %s --check-prefix=HWOFF
 
-; Role: smoke — SET_HWLOOP MCInst emission (not raw-text) while product
-; default stays OFF. DEFAULT is the software residual. HWON must lower
-; the retained LoopStart to a typed set_hwloop_f2 MCInst with start/end
-; labels and a trip-count register (never a raw-text mnemonic dump).
+;; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+; DEFAULT pins ON emission; HWOFF keeps the explicit-OFF residual.
+
+; Role: smoke — SET_HWLOOP MCInst emission (not raw-text) under the
+; product default (ON since 2026-08-22). DEFAULT must lower the retained
+; LoopStart to a typed set_hwloop_f2 MCInst with start/end labels and a
+; trip-count register (never a raw-text mnemonic dump). HWOFF is the
+; software residual.
 
 define i32 @hwloop_stub_simple(ptr %p) {
 ; DEFAULT-LABEL: hwloop_stub_simple:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT:   set_hwloop_f2 1,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; DEFAULT:       bnez
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: hwloop_stub_simple:
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT:   set_hwloop_f2 1,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: hwloop_stub_simple:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF:       bnez
+; HWOFF:       jalr
 entry:
   br label %loop
 

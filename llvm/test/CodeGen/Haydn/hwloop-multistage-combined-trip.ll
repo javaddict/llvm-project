@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-multistage-sms=false \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=false -haydn-enable-multistage-sms=false \
 ; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.off.rmk | FileCheck %s --check-prefix=OFF
 ; RUN: FileCheck %s --allow-empty --check-prefix=OFFRMK < %t.off.rmk
@@ -33,13 +33,10 @@
 ; RUN:   2>%t.sms.rmk | FileCheck %s --check-prefix=SMSONLY
 ; RUN: FileCheck %s --allow-empty --check-prefix=SMSONLY-RMK < %t.sms.rmk
 
-; XFAIL: *
-; Dual-ON combined trip seat stays expected-fail until T3 independent
-; SMS QUALIFY (hardware loops off, parcels==II), then T6 independent
-; SCEV-proven hwloop QUALIFY (multi-stage off), then this dual-ON
-; retained-trip / COUNT / selector matrix. Product defaults stay
-; off. Do not treat this file as a default flip.
-; Analysis-only currently exhausts II instead of accepting.
+; 2026-08-22 G004 dual-ON qualification LANDED: XFAIL removed. Retained
+; trip / COUNT / selector arms accept and materialize with II parity.
+; Product default for -haydn-enable-multistage-sms stays OFF (the dual
+; arms force the flags explicitly).
 
 ; Role: semantic — combined trip QUALIFY seat. Product defaults OFF.
 ; SCEV-proven path only; never post-RA rediscovery. HWON arms
@@ -104,7 +101,7 @@ loop:
   %s.n = add i32 %s, %t3
   %i.n = add i32 %i, 1
   %c = icmp ult i32 %i.n, %n
-  br i1 %c, label %loop, label %exit
+  br i1 %c, label %loop, label %exit, !llvm.loop !2
 exit:
   %r = phi i32 [ 0, %entry ], [ %s.n, %loop ]
   ret i32 %r
@@ -203,3 +200,9 @@ exit:
 
 !0 = distinct !{!0, !1}
 !1 = !{!"llvm.loop.unroll.disable"}
+; 2026-08-22 G004: same AIE-shaped min-trip floor as the matrix test —
+; dual-ON acceptance needs a provable min trip (peel depth NStages-1 runs
+; real iterations; unproven runtime trip fails closed exactly like AIE
+; PostPipeliner candidates without min-trip MD).
+!2 = distinct !{!2, !3}
+!3 = !{!"llvm.loop.itercount.range", i32 8}

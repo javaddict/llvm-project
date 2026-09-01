@@ -32,8 +32,7 @@ define i32 @cond_mul(i32 %n, i32 %h, i32 %x) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
-; CHECK-NEXT:    { nop; andi32 r5, r1, 1 }
-; CHECK-NEXT:    { nop; mull r1, r2, r3 }
+; CHECK-NEXT:    { mull r1, r2, r3; andi32 r5, r1, 1 }
 ; CHECK-NEXT:    { nop; seq32 r3, r5, r4 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

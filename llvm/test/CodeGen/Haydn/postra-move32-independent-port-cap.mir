@@ -1,11 +1,11 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
 # REQUIRES: haydn-registered-target
 #
-# Role: MIR — MOVE32 rd,rs,rs is 2R1W per field (no identity dedup).
-# Two MOVE32 sit at 4R2W. An independent store is +2R0W (6R) and must
-# not join that cycle. Same-reg dedup would see 1+1+2=4R and accept the
-# triple. Peer: AIEHazardRecognizer.cpp books itinerary resources with
-# no operand-identity dedup.
+# Role: MIR — two MOVE32 (1R1W each after the dest+src schema) plus an
+# independent store (2R0W) sit at exactly 4R2W: the packet is admitted
+# by the GPR read cap. The port cap alone must admit it; nothing here
+# relies on identity dedup. Peer: AIEHazardRecognizer.cpp books
+# itinerary resources with no operand-identity dedup.
 #
 # Companion: countgprports-mir.mir (two MOVE32 still pack);
 # postra-move32-per-field-ports.mir (RAW-confounded store of $r2).
@@ -36,16 +36,17 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r4, $r5
 
-    ; Per-field: two logical MOVE32 + store is 6R. Identity dedup would
-    ; see 4R and accept the triple. After member bake each MOVE32 is 1R,
-    ; so the probe must use the logical MI fields (2R each) before bake.
+    ; Two MOVE32 (1R each) plus an independent store (2R) is exactly 4R2W:
+    ; at cap, port-admissible (ceil(4/4)=1). The greedy packer forms a
+    ; 2-wide (MOVE32+store) here; the port cap no longer rejects the mix.
     ; CHECK-LABEL: name: two_move32_plus_independent_store
-    ; CHECK: MOVE32
-    ; CHECK: S_SW_WITH_IMM
-    ; CHECK: MOVE32
-    ; CHECK-NOT: BUNDLE{{.*}}MOVE32{{.*}}MOVE32{{.*}}S_SW
-    $r2 = MOVE32 $r0, $r0, implicit-def dead $sfr
-    $r3 = MOVE32 $r1, $r1, implicit-def dead $sfr
+    ; CHECK: BUNDLE
+    ; CHECK: MOVE32_E3_E1_ALU1_R
+    ; CHECK: S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6
+    ; CHECK: }
+    ; CHECK: MOVE32_E3_E2_ALU2_R
+    $r2 = MOVE32 $r0, implicit-def dead $sfr
+    $r3 = MOVE32 $r1, implicit-def dead $sfr
     ST32 $r4, $r5, 0 :: (store (s32))
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
 ...

@@ -23,6 +23,7 @@ HaydnInstrInfo::getFirstMemoryCycle(unsigned SchedClass) const {
   switch (SchedClass) {
   default: return {};
   case Haydn::Sched::Slot0_LS: return 0; // Slot0_LS
+  case Haydn::Sched::Slot0_LS_WbLat: return 0; // Slot0_LS_WbLat
   case Haydn::Sched::Slot1_LD: return 0; // Slot1_LD
   case Haydn::Sched::Slot01_LD: return 0; // Slot01_LD
   }
@@ -41,6 +42,7 @@ HaydnInstrInfo::getLastMemoryCycle(unsigned SchedClass) const {
   switch (SchedClass) {
   default: return {};
   case Haydn::Sched::Slot0_LS: return 1; // Slot0_LS
+  case Haydn::Sched::Slot0_LS_WbLat: return 1; // Slot0_LS_WbLat
   case Haydn::Sched::Slot1_LD: return 1; // Slot1_LD
   case Haydn::Sched::Slot01_LD: return 1; // Slot01_LD
   }

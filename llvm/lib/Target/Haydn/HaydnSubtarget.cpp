@@ -165,6 +165,18 @@ void HaydnSubtarget::adjustSchedDependency(
   if (Dep.getKind() != SDep::Data)
     return;
 
+  // No-forwarding floor (2026-08-21 latency P3): the itinerary edge formula
+  // is DefCycle - UseCycle + 1, so a def booked at operand cycle 1 feeding a
+  // use operand booked at cycle 2 (AccFirst acc reads, the late wb-shape
+  // operand) computes an ENGAGED ZERO. That is the exact latency-0 collapse
+  // class banned since 4f54cc3f (MOVE32_DR→SEXT muldf3 densify): a zero
+  // Data edge lets a true-RAW producer and consumer share a ReadyCycle,
+  // which the no-interlock hardware cannot honor. The documented law
+  // "Data edges must keep latency >= 1" is enforced here — the ONE floor
+  // for every Data edge, not a per-family case.
+  if (Dep.getLatency() < 1)
+    Dep.setLatency(1);
+
   // Architectural Data_Latency is left intact for every Data edge, including
   // load→use (itinerary 2). Schedulers must see the true ISA latency so II
   // and density are measurable; empty-cycle materialization and the

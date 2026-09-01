@@ -2078,6 +2078,22 @@ def int_haydn_d_sw_l_with_imm : Haydn_Intrinsic<"haydn_d_sw_l_with_imm",
 def int_haydn_d_sw_l_with_reg : Haydn_Intrinsic<"haydn_d_sw_l_with_reg",
     [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
     [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
+// ISA-65 fused round-sat-store (LOADSTORE0): the FIR/IIR drain op.
+//   mem32[rs] = SATQ1.31(({rtd[63],rtd} + 2^15) >>> 16); rs += imm6<<2 (REG: += rs2)
+// Same shape as the d_sw_h/d_sw_l family above: POST returns the AGU-updated
+// base, WITH is the void base+offset form; imm is the simm6 element index.
+def int_haydn_d_sw_f64rs_post_imm : Haydn_Intrinsic<"haydn_d_sw_f64rs_post_imm",
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_f64rs_post_reg : Haydn_Intrinsic<"haydn_d_sw_f64rs_post_reg",
+    [llvm_ptr_ty], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_f64rs_with_imm : Haydn_Intrinsic<"haydn_d_sw_f64rs_with_imm",
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<2>>, IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
+def int_haydn_d_sw_f64rs_with_reg : Haydn_Intrinsic<"haydn_d_sw_f64rs_with_reg",
+    [], [llvm_i64_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrWriteMem, IntrArgMemOnly, NoCapture<ArgIndex<1>>, IntrHasSideEffects, IntrWillReturn]>;
 // Multi-result AGU writeback load: {data, new_ptr} = op(base, off).
 // No ClangBuiltin auto-map — frexp _pair builtin (EmitHaydnBuiltinExpr).
 def int_haydn_s_lbs_post_imm : DefaultAttrsIntrinsic<

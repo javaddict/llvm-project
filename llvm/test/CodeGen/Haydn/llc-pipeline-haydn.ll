@@ -131,9 +131,9 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Modulo Software Pipelining
 
 ; =============================================================================
-; Opt1+ - IR HardwareLoops default-OFF; PostLegalizer + PostSelect; PreRA MIS; dual-sched pack
+; Opt1+ - IR HardwareLoops default-ON (2026-08-22 flip); PostLegalizer + PostSelect; PreRA MIS; dual-sched pack
 ; =============================================================================
-; O123-NOT:      Hardware Loop Insertion
+; O123:      Hardware Loop Insertion
 ; O123:      HaydnPreLegalizerCombiner
 ; O123:      Legalizer
 ; O123:      HaydnPostLegalizerCombiner
@@ -175,10 +175,12 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Sole MBP (addBlockPlacement empty - no second placement after pack):
 ; O123-NOT:      Branch Probability Basic Block Placement
-; PreEmit - BR then late Finalize/Verify at product default
-; (Fixup + second BR still hwloops-ON only)
+; PreEmit - BR then late Finalize/Verify at product default.
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON,
+; so the late lane runs Fixup + second BR before the final commit.
 ; O123:      Branch relaxation pass
-; O123-NOT:      Haydn Hardware Loop Fixup
+; O123-NEXT:      Haydn Hardware Loop Fixup
+; O123-NEXT:      Branch relaxation pass
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Densify/quarantine absent at product defaults (W0.1):
@@ -250,10 +252,11 @@ define i32 @f(i32 %a, i32 %b) {
 ; CORR-DAG: AR0 leftovers are inventory, not a product registry
 ; CORR-DAG: DecisionGuard registry stays absent
 ; CORR-DAG: no host / no force-fail invent
-; HWDEF: hardwareLoopsProductDefaultEnabled() { return false; }
+; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
 ; HWFLAG: "haydn-enable-hwloops"
 ; HWFLAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
-; SMSDEF: productDefaultEnabled() { return false; }
+; 2026-08-22 SMS product-default flip rebaseline: default ON.
+; SMSDEF: productDefaultEnabled() { return true; }
 ; O0POST: enablePostRAMachineScheduler() const override { return true; }
 ; ENSURE: never call skipFunction
 ; W49: ensureSoftZeroR0Clean
@@ -283,5 +286,5 @@ define i32 @f(i32 %a, i32 %b) {
 ; W51-DAG: OPEN_BLOCKED
 ; W51-DAG: no invent
 ; R15 leftover: monorepo CLAUDE.md is a symlink; ISA-next is 64.
-; ISANEXT: **ISA-63**
-; ISANEXT: next new file is `ISA-64`
+; ISANEXT: **ISA-65**
+; ISANEXT: next new file is `ISA-66`

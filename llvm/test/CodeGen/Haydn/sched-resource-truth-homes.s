@@ -41,7 +41,7 @@
 # NOT CompleteModel=1, NOT LatencyStalls merge).
 #
 # PORT: Every explicit operand field
-# PORT: MOVE32 rd,rs,rs is 2R1W
+# PORT: MOVE32 rd,rs is 1R1W
 # PORT: haydnClassifySoloIssueOpcode
 # PORT: logicalOpcodeOrSelf
 # PORT: Log == Haydn::ARCTAN || Log == Haydn::SIN_COS
@@ -53,11 +53,11 @@
 # PORT: haydnMemoryObjectWaitCyclesAdmitted
 # PORT: Each explicit operand field reserves one port
 # PORT: Per-field: every explicit GPR
-# PORT: Logical MOVE32 rd, rs, rs is 2R1W
+# PORT: Logical MOVE32 rd, rs is 1R1W
 #
 # RC: SFR 2R/1W
 # RC: haydnChargeDescNamedSfrPorts
-# RC: HaydnMove32ClassMiRepeatedSrcGprReads = 2
+# RC: HaydnMove32ClassMiRepeatedSrcGprReads = 1
 # RC: inline bool isHaydnSMSAloneOpcode
 # RC: return haydnOpcodeIssuesAloneInCycle(Opcode)
 # RC-NOT: Opcode == Haydn::ARCTAN || Opcode == Haydn::SIN_COS

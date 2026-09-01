@@ -10,8 +10,8 @@
 // AIE PostPipeliner scheduling core (NodeInfo windows, two-copy DAG,
 // fitInInterval) plus Haydn transaction wrapper: PF-*/JM-* seats,
 // snapshot/rollback, distinct prologue/kernel/epilogue MBBs, exact-E96
-// commit tail, golden HR overlay. Product default OFF. Host seated
-// (not pruned): search is live under the explicit flag only.
+// commit tail, golden HR overlay. Product default ON (2026-08-22
+// qualification). Host seated (not pruned).
 //
 //===----------------------------------------------------------------------===//
 
@@ -66,6 +66,12 @@ bool parseHaydnMultiStageForceFailSeat(StringRef Name, bool &IsPreflight,
                                        unsigned &SeatIndex);
 
 class HaydnMultiStageStrategy;
+
+/// G005: emit the canonical per-loop II/NS remark for EVERY single-MBB
+/// loop of \p MF (layout order, one line each) from the post-RA host's
+/// finalizeSchedule seat. AIE emitLoopRemarks peer
+/// (AIEInterBlockScheduling.cpp:322-405) with the Haydn ZOL census overlay.
+void emitHaydnSMSLoopRemarks(MachineFunction &MF);
 
 /// AIE `AIE::SlotCounts` (`AIESlotCounts.h:23-74`, `AIESlotCounts.cpp:16-133`).
 /// Overlay: Haydn FieldSlots / MCSlotInfo conflict-set bits (3 issue slots).
@@ -300,15 +306,16 @@ public:
   bool hasValidPlan() const { return HasValidPlan; }
   const char *getLastRejectReason() const { return LastRejectReason; }
 
-  /// Product default stays off. The host is seated (not pruned): format-aware
-  /// search is live under the explicit flag. Independent same-artifact QUALIFY,
-  /// combined hwloop interaction, and the policy flip remain later.
-  /// AIE constructs PostPipeliner from InterBlock
-  /// (AIEInterBlockScheduling.cpp:1563) with no product-off seat; Haydn
-  /// overlays the same core behind this flag (HaydnMachineScheduler.cpp:33-36).
+  /// Product default ON (2026-08-22 qualification): independent leg closed
+  /// (T4 capped-reject cost measured ZERO on all DSP kernels; II parity
+  /// realized==searched verified; JM-seat rollback byte-identity 15/15) and
+  /// the combined hwloop matrix is green (dual-ON II=6 stages=2 full parity,
+  /// value byte-identical; G004). AIE constructs PostPipeliner from
+  /// InterBlock (AIEInterBlockScheduling.cpp:1563) unconditionally - the
+  /// flip converges on the peer's construct-on shape.
   /// AIE tryApproaches ends in SWPSolver (AIESWPSolver.cpp); Haydn does not
   /// ship LLVM_WITH_Z3 / pragma-II, so that arm stays unavailable.
-  static constexpr bool productDefaultEnabled() { return false; }
+  static constexpr bool productDefaultEnabled() { return true; }
   static constexpr bool productHostSeated() { return true; }
   static constexpr bool productSWPSolverAvailable() { return false; }
   static constexpr bool productHwloopCombinedEnabled() { return false; }
@@ -326,6 +333,18 @@ private:
   MachineInstr *TripCountDef = nullptr;
   bool IsSoftCounted = false;
   Register SoftTripReg;
+  /// G002 II-parity: the Form-C (soft-countdown) latch branch. The back-edge
+  /// conditional (BNEZ_W/BEQZ_W on the compare chain) is a REAL parcel
+  /// consumer the ordinary DAG never sees (isSchedulingBoundary: isBranch).
+  /// Unmodeled, it lands after the kernel as its own parcel and every
+  /// accepted loop realizes II+1 parcels. AIE models the hwloop-end
+  /// terminator as an ordinary scoreboard candidate
+  /// (AIEPostPipeliner isPostPipelineCandidate); Haydn's soft form is this
+  /// MI, appended to the two-copy graph so Earliest/resource/oracle/commit
+  /// treat it like any body node — one mechanism, no side model.
+  MachineInstr *LatchBranch = nullptr;
+  /// Two-copy node index of LatchBranch (Body.size() when present, else -1).
+  int LatchBranchNode = -1;
   std::vector<SUnit *> Body;
   HaydnMultiStageScheduleInfo Sched;
   SmallVector<HaydnMultiStageLCDEdge, 16> LCDEdges;
@@ -339,7 +358,23 @@ private:
   int LastUnscheduled = -1;
   int ScoreboardSize = 0;
   int II = 1;
+  /// G005 floor honesty: true once any tryII attempt started (tryII sets
+  /// II at entry). Distinguishes a reached search floor (report II) from
+  /// a pre-search decline (II still holds the clearPlan reset 1 — report
+  /// 0 and fall back to the realized body parcel count).
+  bool IIAttempted = false;
   int NStages = 0;
+  /// G007 SEF peel (SF10): true when the trip gate accepted an otherwise
+  /// insufficient trip by dropping an entirely side-effect-free stage-0
+  /// (AIE peelSideEffectFree, AIEPostPipeliner.cpp:1630-1676). Deferred
+  /// PendingRotation analog: set optimistically at the trip gate, kept
+  /// only when scheduleOtherIterations validates, restored otherwise in
+  /// scheduleWithStrategy. Drives EpiBase=2 (AIE
+  /// visitPipelineSchedule :1736-1740) and the retained prologue peel
+  /// depth; trip adjust -(NStages-1) then uses the reduced NStages.
+  bool SEFStagePeeled = false;
+  /// Pre-peel NStages for the deferred restore (0 = no peel in flight).
+  int NStagesSEFBackup = 0;
   int LinearLength = 0;
   int RecMII = 0;
   int LastResMII = 0;
@@ -372,6 +407,10 @@ private:
   int MeasuredII = 0;
   /// Winning tryPipeApproaches lattice name (Config / IterCountSlack).
   const char *LastStrategyName = nullptr;
+  /// G002 II-parity: realized parcels-per-iteration measured on the
+  /// committed kernel (countRealizedKernelParcels). Reported by the accept
+  /// remark next to the searched II; equal on every accept (fail-close).
+  int RealizedIIReported = 0;
   /// AIE SWPSolver is Z3. Haydn does not ship LLVM_WITH_Z3 or
   /// pragma-II; the seat is fail-closed ("unavailable"), never a second
   /// solver.
@@ -387,7 +426,25 @@ private:
   unsigned placementOpcode(const MachineInstr &MI) const;
   bool pinTransientMembers();
   bool peelSideEffectFree();
+  /// G007 SEF peel: stage count of the PLACEMENT domain. Node Stage
+  /// fields, the prologue/epilogue Cycle filters, and every placement
+  /// certificate observe the pre-peel geometry — with a peeled SEF
+  /// stage-0 that is NStages + 1 (the peel decrements NStages for
+  /// pipeline arithmetic only: trip adjust, epilogue stage loop bound,
+  /// NS reporting). One accounting per domain; no seat mixes the two.
+  int placementStageSpan() const { return NStages + (SEFStagePeeled ? 1 : 0); }
   bool buildTwoCopyGraph(ScheduleDAGMI &Host);
+  /// G004 member-latency parity: re-price two-copy Data edges from the
+  /// pinned member's itinerary dest cycles (logical MULL is ALU [1]; the
+  /// MAC member is [2]). Search and the realized dest-window replay must
+  /// agree, else materialize rolls back realized-II != II.
+  void upgradeTwoCopyMemberLatencies();
+  /// G004 stall-inclusive realized cost: replay the PLANNED kernel parcel
+  /// stream through the shared dest-window model; steady-state pad count
+  /// per iteration (-1 = replay not formable). II search rejects II when
+  /// Planned + Pads != II so the machine's HaydnLatencyStalls NOPs can
+  /// never push the realized stream past the promised II.
+  int plannedKernelDestWindowPads() const;
   void destroyTwoCopyGraph();
   void computeForward();
   bool computeBackward();
@@ -433,6 +490,25 @@ private:
   /// visitPipelineSection (M=0..II-1, one bundle each). 0 if any cycle
   /// is not a single parcel (II lie).
   int countPlannedParcels() const;
+  /// G002 II-parity: realized parcels-per-iteration of the committed kernel
+  /// MBB — the SAME walk the AsmPrinter AchievedII stamp uses (bundle root or
+  /// bare real MI = one parcel), plus the Form-C latch-branch parcel when it
+  /// is not inside a committed bundle, plus the dest-window stall pads the
+  /// realized stream will incur (LatencyStalls' exact HR replay). The accept
+  /// certificate fails closed when this != II (reject + II retry, SF3 law).
+  int countRealizedKernelParcels() const;
+  /// True when two-copy node \p I is the Form-C latch branch.
+  bool isLatchBranchIdx(int I) const { return I == LatchBranchNode; }
+  /// MI for two-copy node \p I (body SUnit or the latch branch itself).
+  MachineInstr *nodeInstr(int I) const {
+    if (isLatchBranchIdx(I))
+      return LatchBranch;
+    return Body[I]->getInstr();
+  }
+  /// Node count including the latch branch when present.
+  int nodeCount() const {
+    return static_cast<int>(Body.size()) + (LatchBranch ? 1 : 0);
+  }
   /// F44: no may-alias store→load pair inside one modulo-cycle pack group
   /// (golden Constraints:67; hardware raises on overlap). Fail closed.
   bool certificatePackAlias() const;

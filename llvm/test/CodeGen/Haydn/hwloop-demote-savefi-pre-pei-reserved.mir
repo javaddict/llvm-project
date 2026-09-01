@@ -1,0 +1,97 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+
+# Role: MIR — frame-deadline law: the hwloop-demote save home is reserved
+# before frame finalization; the post-RA demote never CreateStackObject.
+#
+# REGRESSION TEST: when a hwloop setup survives to the post-RA fixup and the
+# demote needs a value-preserve home, every candidate FI must already exist
+# (reserved in HaydnFrameLowering::processFunctionBeforeFrameFinalized). The
+# demote's save home shares PostRAScratchFI when it is disjoint from the
+# stack-counter home; the rare same-home case uses the dedicated
+# pre-reserved slot. This test pins the normal path: full-frame function
+# (scavenging slot exists) keeps the shared home and the frame does NOT grow
+# a dedicated demote slot.
+#
+# Bug this pins: the demote used to lazily CreateStackObject AFTER frame
+# offsets were final, changing stack size post-PEI (untracked by the frame,
+# invisible to the epilogue). The lazy path is now a fatal; reservation is
+# pre-PEI only.
+#
+# What breaks if the bug returns: the demote save ST32/LD32 pair addresses a
+# slot the frame layout never accounted for, or the compiler fatals with
+# "HwLoopDemoteSaveFI after frame finalization".
+
+--- |
+  define dso_local void @demote_savefi_pre_pei(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            demote_savefi_pre_pei
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+
+    ST32 renamable $r1, $r13, 0
+
+  bb.3.exit:
+    RET implicit $r15
+
+...
+# CHECK-NOT: {{.*: demote refused}}
+# CHECK-NOT: report_fatal_error
+# Demote ran (soft edge installed) and no frame growth was needed:
+# Frame is exactly the framed-function 8 bytes (no extra demote slot):
+# the value-preserve save shares the already-reserved PostRA scratch home.
+# CHECK: frame-setup SUBI32 $r13, 8
+# The demoted countdown loop uses the pre-reserved FI homes.
+# CHECK: ST32
+# CHECK: BNEZ

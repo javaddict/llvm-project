@@ -13,6 +13,7 @@
 
 #include "HaydnAsmPrinter.h"
 #include "Haydn.h"
+#include "HaydnBundle.h"
 #include "HaydnBundlePlan.h"
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
@@ -252,17 +253,11 @@ void HaydnAsmPrinter::emitSMSSWPSComments(const MachineBasicBlock &MBB) {
   if (!Info)
     return;
 
-  // Achieved II ≈ number of product parcels (issue cycles) in the kernel.
-  unsigned AchievedII = 0;
-  for (const MachineInstr &MI : MBB) {
-    if (MI.isBundle())
-      ++AchievedII;
-    else if (!MI.isMetaInstruction() && !MI.isDebugInstr() &&
-             !MI.isCFIInstruction() && !MI.isImplicitDef() && !MI.isKill() &&
-             !MI.isInlineAsm())
-      // Unbundled real MI still issues as one parcel on Haydn.
-      ++AchievedII;
-  }
+  // Achieved II = number of product parcels (issue cycles) in the kernel.
+  // G002 II-parity: shared counter with the multistage qualify certificate
+  // (Haydn::countKernelIssueParcels) — one mechanism, two seats; never a
+  // second walk.
+  unsigned AchievedII = haydn::bundle::countKernelIssueParcels(MBB);
   if (AchievedII == 0)
     AchievedII = Info->ScheduledII;
 

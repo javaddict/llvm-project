@@ -88,6 +88,8 @@
 #include <utility>
 
 namespace llvm {
+
+class MachineBasicBlock;
 /// Process-wide default FormatInterface. Haydn has one concrete variant.
 /// AIE peer: AIE2InstrInfo.cpp:59-64 holds `const AIE2MCFormats AIE2Formats`
 /// on TII::FormatInterface (`AIEBaseInstrInfo.h:885 getFormatInterface`).
@@ -956,6 +958,14 @@ private:
   SmallVector<CycleCandidateSet, 16> Cycles;
 };
 
+
+/// G002 II-parity: the ONE realized-parcel counter for a kernel MBB. An
+/// architectural issue parcel is one BUNDLE root, or one bare non-meta real
+/// MI not yet wrapped. Same filters as the AsmPrinter AchievedII stamp —
+/// the multistage qualify seat (HaydnMultiStageSMS::
+/// countRealizedKernelParcels) and the #<swps> stamp both call this; a
+/// second counter anywhere is a hard-constraint #7 defect.
+unsigned countKernelIssueParcels(const MachineBasicBlock &MBB);
 
 } // namespace bundle
 } // namespace haydn

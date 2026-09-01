@@ -664,6 +664,25 @@ def _check_ledger_family_column(text: str) -> None:
     _table_family_column(
         text, "FormatESetDescLedger", "HaydnGenFormatESetDescLedger.inc"
     )
+    # Inverted firewall: the ledger is placement provenance only. Runtime
+    # compatibility machinery (semantic-compat IDs, interned permutation
+    # tables, frontier solvers) is forbidden — direct setDesc identity is
+    # enforced at generation time by check_setdesc_identity.
+    for banned in (
+        "SemanticCompatibilityID",
+        "OperandConstraintID",
+        "ResourceClassID",
+        "TimingClassID",
+        "FormatESemanticCompatRec",
+        "PlacementAlternative",
+        "solveBundleFrontier",
+    ):
+        if banned in text:
+            raise SystemExit(
+                f"error: HaydnGenFormatESetDescLedger.inc must not contain "
+                f"{banned} (runtime compatibility machinery is banned; the "
+                "identity check owns direct-setDesc legality)"
+            )
 
 
 def _check_family_sched_handle(text: str) -> None:

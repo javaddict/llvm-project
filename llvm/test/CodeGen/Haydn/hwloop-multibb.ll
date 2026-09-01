@@ -2,25 +2,29 @@
 ; RUN:   -mattr=+hwloop -stop-before=haydn-finalize-mi-bundles < %s | \
 ; RUN:   FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -stop-before=haydn-finalize-mi-bundles < %s | \
-; RUN:   FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=0 -stop-before=haydn-finalize-mi-bundles < %s | \
+; RUN:   FileCheck %s --check-prefix=HWOFF
+
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+; DEFAULT pins Role-A formation; HWOFF keeps the explicit-OFF residual.
 
 ; Role: semantic — multi-BB Role-A CFG extension (measured latch-only diamond).
-; Product default OFF: no set_hwloop. HWON forms Role A on an innermost
+; Product default (ON since 2026-08-22) forms Role A on an innermost
 ; single-latch/single-exit diamond (never post-RA rediscovery). Multi-exit
-; stays declined. Combined SMS+hwloop and default-ON stay out of scope.
+; stays declined. HWOFF keeps the software residual coverage. Combined
+; SMS+hwloop stays out of scope here.
 
 target triple = "haydn-unknown-elf"
 
 ; Multi-BB body with stores in both arms — resists if-conversion.
 ; Innermost single-latch/single-exit diamond is the measured SCEV/CFG
-; overlay of AIE's all-multi-BB decline. Product default stays OFF.
+; overlay of AIE's all-multi-BB decline. Product default is ON.
 define void @multibb_side_effect_stores(ptr %dst, ptr readonly %src, i32 %n) nounwind {
 ; DEFAULT-LABEL: name: multibb_side_effect_stores
-; DEFAULT-NOT:   SET_HWLOOP
+; DEFAULT:       SET_HWLOOP
 ;
-; HWON-LABEL: name: multibb_side_effect_stores
-; HWON:       SET_HWLOOP
+; HWOFF-LABEL: name: multibb_side_effect_stores
+; HWOFF-NOT:   SET_HWLOOP
 entry:
   br label %loop
 
@@ -52,15 +56,15 @@ exit:
 }
 
 ; Two-way branch with arithmetic in each arm. Latch-only overlay (or
-; if-converted single-BB) may arm one Role-A SET under HWON. DEFAULT stays
+; if-converted single-BB) arms one Role-A SET under the product default (ON). HWOFF stays
 ; soft. Never two SETs.
 define i32 @multibb_arith_arms(ptr readonly %src, i32 %n, i32 %k) nounwind {
 ; DEFAULT-LABEL: name: multibb_arith_arms
-; DEFAULT-NOT:   SET_HWLOOP
+; DEFAULT:       SET_HWLOOP
+; DEFAULT-NOT:   SET_HWLOOP{{.*}}SET_HWLOOP
 ;
-; HWON-LABEL: name: multibb_arith_arms
-; HWON:       SET_HWLOOP
-; HWON-NOT:   SET_HWLOOP{{.*}}SET_HWLOOP
+; HWOFF-LABEL: name: multibb_arith_arms
+; HWOFF-NOT:   SET_HWLOOP
 entry:
   br label %loop
 
@@ -93,13 +97,13 @@ exit:
   ret i32 %acc.next
 }
 
-; Multi-exit stays declined (early exit != latch). Soft under HWON.
+; Multi-exit stays declined (early exit != latch). Soft even under default ON.
 define i32 @multibb_early_exit(ptr readonly %src, i32 %n, i32 %k) nounwind {
 ; DEFAULT-LABEL: name: multibb_early_exit
 ; DEFAULT-NOT:   SET_HWLOOP
 ;
-; HWON-LABEL: name: multibb_early_exit
-; HWON-NOT:   SET_HWLOOP
+; HWOFF-LABEL: name: multibb_early_exit
+; HWOFF-NOT:   SET_HWLOOP
 entry:
   br label %loop
 

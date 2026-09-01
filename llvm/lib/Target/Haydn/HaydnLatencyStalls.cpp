@@ -12,6 +12,7 @@
 
 #include "HaydnLatencyStalls.h"
 #include "Haydn.h"
+#include "HaydnBundleVerify.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnPortModel.h"
@@ -138,12 +139,15 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
     HaydnHazardRecognizer DestHR(&TII, Itin, /*IsPreRA=*/false);
     DestHR.Reset();
 
-    auto insertStalls = [&](MachineBasicBlock::iterator InsertPt, DebugLoc DL,
-                            unsigned Stalls, StringRef Why, bool Unexpected) {
+    auto insertStalls = [&](MachineBasicBlock::iterator InsertPt,
+                            [[maybe_unused]] DebugLoc DL, unsigned Stalls,
+                            StringRef Why, bool Unexpected) {
       LLVM_DEBUG(dbgs() << "HaydnLatencyStalls: " << Stalls
                         << " stall bundle(s) " << Why << "\n");
       for (unsigned I = 0; I < Stalls; ++I)
-        BuildMI(MBB, InsertPt, DL, TII.get(Haydn::NOP));
+        // W64 QW5: one NOP-insertion mechanism — TII.insertNoop (Hexagon
+        // peer), not a second local BuildMI site.
+        TII.insertNoop(MBB, InsertPt);
       NumStallBundles += Stalls;
       if (AuditUnexpected && Unexpected) {
         NumUnexpectedOptStallBundles += Stalls;
@@ -180,10 +184,8 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
       // a bundle child — that would split the packet.
       MachineBasicBlock::iterator InsertPt = MBB.getFirstTerminator();
       if (InsertPt != MBB.end()) {
-        MachineBasicBlock::instr_iterator II = InsertPt.getInstrIterator();
-        while (II != MBB.instr_begin() && II->isBundledWithPred())
-          --II;
-        InsertPt = MachineBasicBlock::iterator(II);
+        if (MachineInstr *Root = haydn::bundle::bundleRootOf(*InsertPt))
+          InsertPt = MachineBasicBlock::iterator(Root->getIterator());
       }
       insertStalls(InsertPt, DebugLoc(), Leak,
                    ("at exit of bb." + Twine(MBB.getNumber())).str(),

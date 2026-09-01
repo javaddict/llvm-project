@@ -25,7 +25,7 @@
 // register as port-free. Classification uses MachineRegisterInfo regclass
 // facts (BankRC.hasSubClassEq(RC)) so GPR32/DR64/AR vregs charge the same
 // pooled demand as equivalent physregs. Every explicit operand field
-// reserves one port (MOVE32 rd,rs,rs is 2R1W). Tied use/defs still charge
+// reserves one port (MOVE32 rd,rs is 1R1W). Tied use/defs still charge
 // independently (one R + one W). Unknown regs (no class yet) stay
 // existential / uncounted.
 //
@@ -270,6 +270,46 @@ enum class HaydnSoloIssueClass : uint8_t {
   CsrwSetHwloop, // CSRW 0x20-0x25 must not share a cycle with SET_HWLOOP
 };
 
+/// SET_HWLOOP opcode family (W64 QW2). The three overlapping lists are
+/// DIFFERENT LAWS (T1): ResidualLaw = pre-expansion shells only
+/// (ExpandPseudos rewrites them to _W forms); ExpandedLaw = residual plus
+/// the wide committed forms HardwareLoops/TII reason about — including bare
+/// golden logical SET_HWLOOP_F2 (HWLRIIR), which no generated member
+/// inverts to (SET_HWLOOP_F2_* members resolve to SET_HWLOOP_F2_W) and
+/// which the old Setup/RegTrip name-peel fallbacks admitted; TiiLaw =
+/// ExpandedLaw plus LoopStart (TII isHardwareLoopSetup* serves mutation +
+/// Fixup, which must also see LoopStart). MCInstLower excludes LoopStart
+/// (wide-setup lowering is encode-only). One shared bool anywhere = a
+/// silent dropped encode.
+enum class HaydnHwloopSetupFamily : uint8_t {
+  None = 0,
+  Residual,  // SET_HWLOOP, SET_HWLOOP_REG (pre-expansion shells)
+  Expanded,  // + SET_HWLOOP_F2, SET_HWLOOP_W, SET_HWLOOP_F2_W,
+             //   SET_HWLOOP_REG_W
+  Tii,       // + LoopStart (mutation/Fixup population)
+};
+
+/// Classify one hwloop-setup opcode. Accepts raw or already-logical
+/// opcodes: the member peel (logicalOpcodeOrSelf) is idempotent, and
+/// generated SET_HWLOOP_* members invert to their wide logical forms.
+inline HaydnHwloopSetupFamily
+haydnClassifyHwloopSetupOpcode(unsigned Opcode) {
+  switch (haydn::format_e::logicalOpcodeOrSelf(Opcode)) {
+  case Haydn::SET_HWLOOP:
+  case Haydn::SET_HWLOOP_REG:
+    return HaydnHwloopSetupFamily::Residual;
+  case Haydn::SET_HWLOOP_F2:
+  case Haydn::SET_HWLOOP_W:
+  case Haydn::SET_HWLOOP_F2_W:
+  case Haydn::SET_HWLOOP_REG_W:
+    return HaydnHwloopSetupFamily::Expanded;
+  case Haydn::LoopStart:
+    return HaydnHwloopSetupFamily::Tii;
+  default:
+    return HaydnHwloopSetupFamily::None;
+  }
+}
+
 /// Logical-opcode classify. Format E members peel at the HR / Materialize
 /// sites; this list stays the logical identity only.
 inline HaydnSoloIssueClass haydnClassifySoloIssueOpcode(unsigned Opcode) {
@@ -278,17 +318,12 @@ inline HaydnSoloIssueClass haydnClassifySoloIssueOpcode(unsigned Opcode) {
     return HaydnSoloIssueClass::SinCosArctan;
   if (Log == Haydn::LUI || Log == Haydn::ADDI32_W)
     return HaydnSoloIssueClass::LuiAddiE0;
-  switch (Log) {
-  case Haydn::SET_HWLOOP:
-  case Haydn::SET_HWLOOP_REG:
-  case Haydn::SET_HWLOOP_W:
-  case Haydn::SET_HWLOOP_F2_W:
-  case Haydn::SET_HWLOOP_REG_W:
-  case Haydn::LoopStart:
+  // Tii membership: bare SET_HWLOOP_F2 joins the CSRW-conflict class here
+  // (the MC checker string law starts_with("SET_HWLOOP") already covers
+  // it — this closes the compiler-side gap; fail-closed direction).
+  if (haydnClassifyHwloopSetupOpcode(Log) != HaydnHwloopSetupFamily::None)
     return HaydnSoloIssueClass::CsrwSetHwloop;
-  default:
-    return HaydnSoloIssueClass::None;
-  }
+  return HaydnSoloIssueClass::None;
 }
 
 /// LUI / ADDI32_W e0-alone (HI12/LO20 FieldLsb). Same peel as HR
@@ -639,6 +674,49 @@ haydnPortMRI(const MachineInstr &MI, const MachineRegisterInfo *MRI) {
   return nullptr;
 }
 
+/// Shared bank-port counting loop (QW1): the one loop body behind
+/// countGPRPorts / countDRPorts / countARPorts / countSFRPorts. Counts read
+/// and write ports for every register operand whose bank matches \p
+/// BankPredFn. Reads and writes charge independently (tied use/def = one R +
+/// one W); dead and undef operands still occupy their port (binding laws
+/// stated at the count*Ports wrappers). Implicit operands are charged only
+/// when \p ChargeImplicits — the SFR CB-161 law; GPR/DR/AR desc implicits
+/// are ABI clobbers, not same-cycle RF port traffic. \p BankPredFn takes
+/// (Register, const MachineRegisterInfo *); the SFR delegation adapts the
+/// MRI-less isHaydnSFRPortReg with a lambda.
+///
+/// \p MRI is pre-resolved by the wrapper — this loop never calls getMF()
+/// (see the comment in the body for the parentless-clone law).
+/// \returns {Reads, Writes} port demand for the instruction.
+template <typename BankPred>
+inline std::pair<unsigned, unsigned>
+countBankPorts(const MachineInstr &MI, BankPred BankPredFn,
+               bool ChargeImplicits, const MachineRegisterInfo *MRI) {
+  // MRI is pre-resolved by the wrapper; this loop never calls getMF() —
+  // parentless epilogue peel clones (HaydnPostRAMultiStage off-side
+  // replay) have no MachineFunction.
+  unsigned Reads = 0, Writes = 0;
+  // Per-field: every explicit bank use/def operand reserves one port; a
+  // register that is 0 is not a bank member (the predicates also reject it).
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || (MO.isImplicit() && !ChargeImplicits))
+      continue;
+    Register Reg = MO.getReg();
+    if (Reg == 0)
+      continue;
+    if (!BankPredFn(Reg, MRI))
+      continue;
+    // Undef uses still occupy the encoded read port (MOVT32 dest-read).
+    const bool IsUse = MO.isUse();
+    const bool IsDef = MO.isDef();
+    if (IsUse)
+      ++Reads;
+    if (IsDef)
+      ++Writes;
+  }
+  return {Reads, Writes};
+}
+
 // Count GPR32 read and write port usage for an instruction.
 // DR64 accesses use a separate register file with own ports — not counted.
 // Per-instruction accounting rules:
@@ -658,16 +736,11 @@ haydnPortMRI(const MachineInstr &MI, const MachineRegisterInfo *MRI) {
 // charges 3R and BundleSim rejects the pack. RAW/WAW still skip undef
 // (no incoming value). Peer: AIE AIEHazardRecognizer.cpp books itinerary
 // resources with no undef-use skip; Hexagon packet walks are per operand.
-// 3. **Each explicit operand field reserves one port.** MOVE32 is modeled
-// with two source operands (`$rs1`, `$rs2`) for the R-type encoding and
-// `copyPhysReg` emits `MOVE32 rd, rs, rs`. Golden Constraints count
-// physical-port arbitration, not value identity: `rs1==rs2` does not
-// prove the two fields share a port. Charge 2R1W so the MI path matches
-// the descriptor shape. A 1-read exception needs a golden fact that is
-// not published. Peer: AIEHazardRecognizer.cpp books itinerary resources
-// with no operand-identity dedup; Hexagon packet port walks are per
-// operand. Under-count can accept a bundle hardware rejects (2×MOVE32 +
-// one extra GPR read looks like 3R after dedup, 5R per-field).
+// 3. **Each explicit operand field reserves one port.** MOVE32 is dest+src
+// (logical matches Format E members) and `copyPhysReg` emits
+// `MOVE32 rd, rs` — 1R1W on both the MI path and the descriptor shape.
+// Peer: AIEHazardRecognizer.cpp books itinerary resources with no
+// operand-identity dedup; Hexagon packet port walks are per operand.
 // 4. **No R0 exemption.** R0 is soft-zero, not hardwired (HaydnRegisterInfo):
 // silicon does not force R0==0 and does not discard R0 traffic. A MatInt
 // ADDI rd,R0,imm still reads the R0 file port; XOR32 R0,R0,R0 restore and
@@ -681,37 +754,18 @@ haydnPortMRI(const MachineInstr &MI, const MachineRegisterInfo *MRI) {
 inline std::pair<unsigned, unsigned>
 countGPRPorts(const MachineInstr &MI,
               const MachineRegisterInfo *MRI = nullptr) {
-  MRI = haydnPortMRI(MI, MRI);
-  unsigned Reads = 0, Writes = 0;
   // Per-field: every explicit GPR use/def operand reserves one port.
   // Tied use/def of one register still charge independently (one R + one W).
-  // Logical MOVE32 rd, rs, rs is 2R1W (two use fields). Generated Format E
-  // members expose one source field and therefore charge 1R — that is the
-  // member encoding, not a return of identity dedup.
+  // MOVE32 rd, rs is 1R1W (dest+src logical, same field shape as the
+  // generated Format E members).
   //
-  // Skip implicit operands: call ABI clobbers (JAL_W/JALR_W regmask +
+  // ChargeImplicits=false: call ABI clobbers (JAL_W/JALR_W regmask +
   // implicit-def of every CSR) are not same-cycle RF port traffic. Counting
   // them as writes made a lone JAL_W exceed 2W and assert in
   // ResourceManager::calculateResMIIDFA (pr28982a/b SMS ResMII). Hardware
   // ports only see explicit data-path operands; tied use/def are explicit.
-  for (const MachineOperand &MO : MI.operands()) {
-    if (!MO.isReg() || MO.isImplicit())
-      continue;
-    Register Reg = MO.getReg();
-    if (Reg == 0)
-      continue;
-    if (!isHaydnGPRPortReg(Reg, MRI))
-      continue;
-
-    // Undef uses still occupy the encoded read port (MOVT32 dest-read).
-    const bool IsUse = MO.isUse();
-    const bool IsDef = MO.isDef();
-    if (IsUse)
-      ++Reads;
-    if (IsDef)
-      ++Writes;
-  }
-  return {Reads, Writes};
+  return countBankPorts(MI, isHaydnGPRPortReg, /*ChargeImplicits=*/false,
+                        haydnPortMRI(MI, MRI));
 }
 
 // Count DR64 read and write port usage for an instruction. DR64 is a separate
@@ -733,26 +787,10 @@ countGPRPorts(const MachineInstr &MI,
 inline std::pair<unsigned, unsigned>
 countDRPorts(const MachineInstr &MI,
              const MachineRegisterInfo *MRI = nullptr) {
-  MRI = haydnPortMRI(MI, MRI);
-  unsigned Reads = 0, Writes = 0;
-  for (const MachineOperand &MO : MI.operands()) {
-    // Same as countGPRPorts: skip ABI/implicit clobbers (not RF port traffic).
-    if (!MO.isReg() || MO.isImplicit())
-      continue;
-    Register Reg = MO.getReg();
-    if (Reg == 0)
-      continue;
-    if (!isHaydnDRPortReg(Reg, MRI))
-      continue;
-
-    const bool IsUse = MO.isUse();
-    const bool IsDef = MO.isDef();
-    if (IsUse)
-      ++Reads;
-    if (IsDef)
-      ++Writes;
-  }
-  return {Reads, Writes};
+  // ChargeImplicits=false — same law as countGPRPorts: skip ABI/implicit
+  // clobbers (not RF port traffic).
+  return countBankPorts(MI, isHaydnDRPortReg, /*ChargeImplicits=*/false,
+                        haydnPortMRI(MI, MRI));
 }
 
 // Count AR (aligned-register) read and write port usage for an instruction.
@@ -763,26 +801,10 @@ countDRPorts(const MachineInstr &MI,
 inline std::pair<unsigned, unsigned>
 countARPorts(const MachineInstr &MI,
              const MachineRegisterInfo *MRI = nullptr) {
-  MRI = haydnPortMRI(MI, MRI);
-  unsigned Reads = 0, Writes = 0;
-  for (const MachineOperand &MO : MI.operands()) {
-    // Same as countGPRPorts: skip ABI/implicit clobbers (not RF port traffic).
-    if (!MO.isReg() || MO.isImplicit())
-      continue;
-    Register Reg = MO.getReg();
-    if (Reg == 0)
-      continue;
-    if (!isHaydnARPortReg(Reg, MRI))
-      continue;
-
-    const bool IsUse = MO.isUse();
-    const bool IsDef = MO.isDef();
-    if (IsUse)
-      ++Reads;
-    if (IsDef)
-      ++Writes;
-  }
-  return {Reads, Writes};
+  // ChargeImplicits=false — same law as countGPRPorts: skip ABI/implicit
+  // clobbers (not RF port traffic).
+  return countBankPorts(MI, isHaydnARPortReg, /*ChargeImplicits=*/false,
+                        haydnPortMRI(MI, MRI));
 }
 
 // True when the descriptor names SFR as an implicit def or use.
@@ -830,27 +852,20 @@ bool haydnIsPrivateFormatEMemberOpcode(unsigned Opcode);
 inline std::pair<unsigned, unsigned>
 countSFRPorts(const MachineInstr &MI,
               const MachineRegisterInfo *MRI = nullptr) {
-  (void)MRI;
-  unsigned Reads = 0, Writes = 0;
-  const bool ChargeImplicits =
+  (void)MRI; // SFR classification never consulted MRI — the parameter is
+             // accepted for signature symmetry with the other counters and
+             // is never dereferenced or resolved. Passing MRI=nullptr (not
+             // haydnPortMRI) keeps this path getMF()-free: parentless
+             // epilogue peel clones (HaydnPostRAMultiStage off-side replay)
+             // have no MachineFunction, and pre-QW1 countSFRPorts never
+             // called getMF() either.
+  return countBankPorts(
+      MI, [](Register Reg, const MachineRegisterInfo *) {
+        return isHaydnSFRPortReg(Reg);
+      },
       haydnDescNamesSfrPort(MI) ||
-      haydnIsPrivateFormatEMemberOpcode(MI.getOpcode());
-  for (const MachineOperand &MO : MI.operands()) {
-    if (!MO.isReg())
-      continue;
-    if (MO.isImplicit() && !ChargeImplicits)
-      continue;
-    Register Reg = MO.getReg();
-    if (!isHaydnSFRPortReg(Reg))
-      continue;
-    const bool IsUse = MO.isUse();
-    const bool IsDef = MO.isDef();
-    if (IsUse)
-      ++Reads;
-    if (IsDef)
-      ++Writes;
-  }
-  return {Reads, Writes};
+          haydnIsPrivateFormatEMemberOpcode(MI.getOpcode()),
+      /*MRI=*/nullptr);
 }
 
 } // end namespace llvm

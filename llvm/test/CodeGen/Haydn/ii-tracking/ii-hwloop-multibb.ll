@@ -1,18 +1,21 @@
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s --check-prefix=DEFAULT
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
+; RUN:   -haydn-enable-hwloops=0 < %s | FileCheck %s --check-prefix=HWOFF
 
-; Role: semantic — product default OFF: a multi-BB diamond stays a software
-; loop. Measured HWON Role-A expand is pinned by hwloop-multibb.ll.
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
 
-; REGRESSION TEST: product `-haydn-enable-hwloops` is OFF. TTI may accept an
-; innermost single-latch/single-exit diamond, but the expand pass is not in
-; the product pipeline, so this shape must stay a compare-and-branch
-; back-edge. Opening the product flag is a separate policy change.
+; Role: semantic — under the product default (ON since 2026-08-22) an
+; innermost single-latch/single-exit diamond forms a Role-A hardware loop
+; (measured expand pinned by hwloop-multibb.ll). HWOFF keeps the
+; explicit-OFF software back-edge shape.
 
 define void @ii_hwloop_multibb(ptr %dst, ptr readonly %src, i32 %n) {
-; CHECK-LABEL: ii_hwloop_multibb:
-; CHECK-NOT:   set_hwloop
-; Software back-edge (form may be fused blt_w or slt+bnez — either is fine).
-; CHECK:       {{blt|bnez|beqz}}
+; DEFAULT-LABEL: ii_hwloop_multibb:
+; DEFAULT:       set_hwloop_f2 0,
+; Software back-edge under OFF (form may be fused blt_w or slt+bnez).
+; HWOFF-LABEL: ii_hwloop_multibb:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       {{blt|bnez|beqz}}
 entry:
   br label %loop
 

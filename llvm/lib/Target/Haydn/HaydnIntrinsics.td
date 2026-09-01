@@ -96,8 +96,8 @@ def : Pat<(v2i32 (ssubsat DR64:$a, DR64:$b)), (X2SUB32S DR64:$a, DR64:$b)>;
 def : Pat<(v4i16 (saddsat DR64:$a, DR64:$b)), (X4ADD16S DR64:$a, DR64:$b)>;
 def : Pat<(v4i16 (ssubsat DR64:$a, DR64:$b)), (X4SUB16S DR64:$a, DR64:$b)>;
 
-// ABS32S uses FmtALU32 with 2 GPR32 ins (rs1 is source, rs2 unused)
-def : Pat<(int_haydn_abs32s GPR32:$a),  (ABS32S GPR32:$a, GPR32:$a)>;
+// ABS32S is dest+src (logical matches Format E members)
+def : Pat<(int_haydn_abs32s GPR32:$a),  (ABS32S GPR32:$a)>;
 def : Pat<(int_haydn_neg32s GPR32:$a),  (NEG32S GPR32:$a)>;
 def : Pat<(int_haydn_abs64s DR64:$a),   (ABS64S DR64:$a)>;
 def : Pat<(int_haydn_neg64s DR64:$a),   (NEG64S DR64:$a)>;

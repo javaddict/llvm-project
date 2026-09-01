@@ -564,6 +564,18 @@ public:
   HaydnAlternateDescriptors *getAlternateDescriptors() const {
     return AltDescs;
   }
+  /// Off-side replay MRI context. Port counters (countGPRPorts & friends)
+  /// resolve an instruction's MachineFunction through MI.getParent() to get
+  /// the MRI; ClonedMachineInstrs checked BEFORE insertion into an MBB have
+  /// no parent and MachineInstr::getMF() derefs null. Multi-stage epilogue
+  /// preseed probes such clones — set the owning MF's MRI for that replay.
+  /// Null (default) preserves the parent-derived path.
+  void setPortMRIContext(const MachineRegisterInfo *MRI) { PortMRI = MRI; }
+  const MachineRegisterInfo *getPortMRIContext() const { return PortMRI; }
+  /// Itinerary view for placement-time latency queries (G004 residue
+  /// dest-window law reads architectural def latencies off the same
+  /// ItinData the scoreboard uses).
+  const InstrItineraryData *getItineraryData() const { return ItinData; }
   // Stage-relative enter: book issue ports + each stage at relative ring
   // cycle. Stages use selected AltDesc member schedclass when stamped
   // (post-rematch), else the logical opcode schedclass.
@@ -576,6 +588,8 @@ private:
   const TargetInstrInfo *TII;
   const InstrItineraryData *ItinData;
   bool IsPreRA;
+  // Off-side replay MRI (parentless clones; see setPortMRIContext).
+  const MachineRegisterInfo *PortMRI = nullptr;
   // slice 2a: function alt-descriptor side-map (non-owning). Null in
   // tests / when no MF context.
   HaydnAlternateDescriptors *AltDescs = nullptr;

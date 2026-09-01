@@ -45,6 +45,7 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include <iterator>
 #include <optional>
 #include <string>
 
@@ -87,6 +88,56 @@ bool isPadNopOpcode(unsigned Opc);
 /// Collect non-meta, non-pad child opcodes of a BUNDLE root (membership).
 SmallVector<unsigned, 3>
 collectBundleMemberOpcodes(const MachineInstr &BundleRoot);
+
+/// Range-style member iteration for a BUNDLE root (W64 QW6 one-mechanism
+/// walk). Returns the member MachineInstrs of \p Root in order; skips
+/// nothing (callers filter meta/debug/pad as their law requires — the
+/// walks differ in skip rules, so the helper carries none).
+/// Use collectBundleMemberOpcodes for opcodes-only.
+inline SmallVector<const MachineInstr *, 3> members(const MachineInstr &Root) {
+  SmallVector<const MachineInstr *, 3> Out;
+  const MachineBasicBlock *MBB = Root.getParent();
+  if (!MBB)
+    return Out;
+  for (MachineBasicBlock::const_instr_iterator It = std::next(Root.getIterator());
+       It != MBB->instr_end() && It->isBundledWithPred(); ++It)
+    Out.push_back(&*It);
+  return Out;
+}
+
+/// Mutable member iteration — same walk as members(const MachineInstr &).
+inline SmallVector<MachineInstr *, 3> members(MachineInstr &Root) {
+  SmallVector<MachineInstr *, 3> Out;
+  MachineBasicBlock *MBB = Root.getParent();
+  if (!MBB)
+    return Out;
+  for (MachineBasicBlock::instr_iterator It = std::next(Root.getIterator());
+       It != MBB->instr_end() && It->isBundledWithPred(); ++It)
+    Out.push_back(&*It);
+  return Out;
+}
+
+/// Bundle root of a bundled instruction (W64 QW6 walk-back): walks
+/// isBundledWithPred back to the BUNDLE header. Returns nullptr when \p MI
+/// is not inside a bundle.
+inline const MachineInstr *bundleRootOf(const MachineInstr &MI) {
+  if (!MI.isBundledWithPred())
+    return nullptr;
+  MachineBasicBlock::const_instr_iterator It = MI.getIterator();
+  while (It->isBundledWithPred())
+    --It;
+  return &*It;
+}
+
+/// Mutable bundleRootOf — same walk, mutable result.
+inline MachineInstr *bundleRootOf(MachineInstr &MI) {
+  if (!MI.isBundledWithPred())
+    return nullptr;
+  MachineBasicBlock::instr_iterator It = MI.getIterator();
+  while (It->isBundledWithPred())
+    --It;
+  return &*It;
+}
 
 /// True when a BUNDLE root has at least one pad-NOP child.
 bool bundleHasPadNop(const MachineInstr &BundleRoot);

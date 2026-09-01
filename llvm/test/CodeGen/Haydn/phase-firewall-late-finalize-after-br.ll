@@ -20,6 +20,13 @@ define i32 @f(i32 %a, i32 %b) {
   ret i32 %t
 }
 
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+; Product default: Fixup + second BR before the late Finalize+Verify lane.
+
+; O2 forms the IR hwloop (O0 keeps none; IR HardwareLoops inserts at O1+).
+; O2: Hardware Loop Insertion
+; O2-NOT: Haydn Hardware Loop Detection
+
 ; No Finalize/Verify before PostRA (phase firewall).
 ; COMMON-NOT: Haydn Bundle Finalization
 ; COMMON: PostRA Machine Instruction Scheduler
@@ -28,17 +35,16 @@ define i32 @f(i32 %a, i32 %b) {
 ; COMMON-NEXT: Haydn Bundle Invariant Verifier
 ; COMMON: Branch relaxation pass
 
-; Product default: no Fixup; late Finalize+Verify immediately after BR.
+; O0 keeps no hwloop passes; O2 arms Fixup + second BR in the late lane.
 ; O0-NOT: Haydn Hardware Loop Fixup
 ; O0-NEXT: Haydn Bundle Finalization
 ; O0-NEXT: Haydn Bundle Invariant Verifier
-; O2-NOT: Hardware Loop Insertion
-; O2-NOT: Haydn Hardware Loop Detection
-; O2-NOT: Haydn Hardware Loop Fixup
+; O2-NEXT: Haydn Hardware Loop Fixup
+; O2-NEXT: Branch relaxation pass
 ; O2-NEXT: Haydn Bundle Finalization
 ; O2-NEXT: Haydn Bundle Invariant Verifier
 
-; Forced-ON still inserts Fixup + second BR before the same late lane.
+; Explicit-ON arm is now redundant with the default (kept as forced evidence).
 ; HWON: Haydn Hardware Loop Fixup
 ; HWON: Branch relaxation pass
 ; HWON-NEXT: Haydn Bundle Finalization

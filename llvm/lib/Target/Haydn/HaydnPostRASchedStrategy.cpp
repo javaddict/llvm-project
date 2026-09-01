@@ -29,6 +29,7 @@
 #include "HaydnBundle.h"
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
+#include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
@@ -154,11 +155,7 @@ static unsigned countMultiMemberHardRoots(MachineBasicBlock &MBB) {
   for (MachineInstr &MI : MBB) {
     if (!MI.isBundle())
       continue;
-    unsigned Kids = 0;
-    for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-         I != MBB.instr_end() && I->isBundledWithPred(); ++I)
-      ++Kids;
-    if (Kids >= 2)
+    if (haydn::bundle::members(MI).size() >= 2)
       ++Count;
   }
   return Count;
@@ -450,6 +447,15 @@ void HaydnPostRASchedStrategy::leaveMBB() {
   // Sequentialize is recovery after the product coissue probe rejects —
   // not a second packing authority. Multi-member seam latency replay is
   // not a hard-root freeze path.
+  // G004 D493 seam: a multi-stage-committed MBB already holds its final
+  // parcels (kernel bundles + cycle-ordered idle NOPs). Re-materializing
+  // from the stale ordinary zones would insert stray NOPs past the kernel.
+  if (multistageCommitted(CurrentMBB)) {
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: leaveMBB defers to multistage "
+                         "plan bb." << CurrentMBB->getNumber() << "\n");
+    MBBBundles.clear();
+    return;
+  }
   if (CurrentMBB) {
     // Snapshot multi-member children present before free pack. Seam latency
     // replay applies only to residual shells (and their ordinary multi-MI
@@ -458,10 +464,7 @@ void HaydnPostRASchedStrategy::leaveMBB() {
     for (MachineInstr &MI : *CurrentMBB) {
       if (!MI.isBundle() || MI.isBundledWithPred())
         continue;
-      SmallVector<MachineInstr *, 3> Kids;
-      for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-           I != CurrentMBB->instr_end() && I->isBundledWithPred(); ++I)
-        Kids.push_back(&*I);
+      SmallVector<MachineInstr *, 3> Kids = haydn::bundle::members(MI);
       if (Kids.size() >= 2)
         PreExistingMultiMembers.insert(Kids.begin(), Kids.end());
     }
@@ -476,8 +479,8 @@ void HaydnPostRASchedStrategy::leaveMBB() {
     commitOrSequentializeUnstampedMultiMemberBundles(*CurrentMBB);
     // Own only the current MBB. Predecessor re-probe after leave was a
     // wrong-layer repair for post-pipeliner mutating already-left MBBs;
-    // post-pipeliner is default OFF and must preflight/commit whole-loop
-    // itself (no cross-MBB callback repair).
+    // post-pipeliner must preflight/commit whole-loop itself (no
+    // cross-MBB callback repair).
     if (!PreExistingMultiMembers.empty())
       replayMultiMemberSeamHazards(*CurrentMBB, PreExistingMultiMembers);
     HaydnAlternateDescriptors &AltDescs =
@@ -1093,11 +1096,7 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
   for (MachineInstr &MI : MBB) {
     if (!MI.isBundle() || MI.isBundledWithPred())
       continue;
-    unsigned Kids = 0;
-    for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-         I != MBB.instr_end() && I->isBundledWithPred(); ++I)
-      ++Kids;
-    if (Kids >= 2)
+    if (haydn::bundle::members(MI).size() >= 2)
       Roots.push_back(&MI);
   }
 
@@ -1105,10 +1104,7 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
     if (!Root || !Root->getParent())
       continue;
 
-    SmallVector<MachineInstr *, 3> Kids;
-    for (MachineBasicBlock::instr_iterator I = std::next(Root->getIterator());
-         I != MBB.instr_end() && I->isBundledWithPred(); ++I)
-      Kids.push_back(&*I);
+    SmallVector<MachineInstr *, 3> Kids = haydn::bundle::members(*Root);
     if (Kids.size() < 2)
       continue;
 
@@ -1171,10 +1167,9 @@ static void collectCycleMembers(MachineInstr &Head,
   if (!MBB)
     return;
   if (Head.isBundle()) {
-    for (MachineBasicBlock::instr_iterator I = std::next(Head.getIterator());
-         I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
-      if (!isBundleSkippable(*I))
-        Members.push_back(&*I);
+    for (MachineInstr *K : haydn::bundle::members(Head)) {
+      if (!isBundleSkippable(*K))
+        Members.push_back(K);
     }
     return;
   }
@@ -1223,15 +1218,12 @@ void HaydnPostRASchedStrategy::replayMultiMemberSeamHazards(
   for (MachineInstr &MI : MBB) {
     if (!MI.isBundle() || MI.isBundledWithPred())
       continue;
-    unsigned Kids = 0;
-    bool IsPre = false;
-    for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-         I != MBB.instr_end() && I->isBundledWithPred(); ++I) {
-      ++Kids;
-      if (PreExistingMultiMembers.contains(&*I))
-        IsPre = true;
-    }
-    if (Kids >= 2 && IsPre)
+    SmallVector<MachineInstr *, 3> Kids = haydn::bundle::members(MI);
+    bool IsPre = llvm::any_of(
+        Kids, [&PreExistingMultiMembers](const MachineInstr *K) {
+          return PreExistingMultiMembers.contains(K);
+        });
+    if (Kids.size() >= 2 && IsPre)
       MultiMemberRoots.insert(&MI);
   }
   if (MultiMemberRoots.empty())

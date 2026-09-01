@@ -2,10 +2,14 @@
 # RUN:   -run-pass=haydn-hwloops,postmisched,haydn-fixup-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
-# Role: MIR — After Fixup free-lift-only tryShorten (never moves remat/SET), remat ADDI Dest must stay next to SET using Dest — no LDU16 Dest between them.
+# Role: MIR — Fixup never reorders user code (free-lift leg deleted
+# 2026-08-22, topics/hwloop PM2), so remat ADDI Dest must stay next to
+# SET using Dest — no LDU16 Dest between them.
 
-# After Fixup free-lift-only tryShorten (never moves remat/SET), remat ADDI Dest must
-# stay next to SET using Dest — no LDU16 Dest between them.
+# Fixup pads and demotes only (never moves remat/SET or any other MI —
+# the AIE peer law: timing is satisfied by NOP padding, not reordering),
+# so remat ADDI Dest must stay next to SET using Dest — no LDU16 Dest
+# between them.
 #
 # CHECK-LABEL: name: fixup_preserves_remat_count
 # Remat def and real-wide SET stay adjacent (possibly inside/ending a BUNDLE).

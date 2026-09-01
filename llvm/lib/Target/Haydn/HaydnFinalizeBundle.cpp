@@ -532,6 +532,12 @@ bool fieldSlotCompatibleWithMember(
   if (Name.equals_insensitive("SET_HWLOOP") ||
       Name.equals_insensitive("SET_HWLOOP_REG") ||
       Name.equals_insensitive("SET_HWLOOP_F2"))
+    // Residual-shell + bare-golden-F2 member ban — NOT family-identical
+    // (see haydnClassifyHwloopSetupOpcode): the _W wide forms share the
+    // Expanded family with bare SET_HWLOOP_F2 but MUST cut over to
+    // members (reloc SET_HWLOOP*_W path below); only the pre-expansion
+    // shells and the bare F2 peel-identity stay verifier-banned. Keep
+    // explicit (raw names, pre-peel, by design).
     return false;
   const std::string Log = haydn::format_e::peelLogicalOpcodeName(Name);
   if (hasRelocatableOperand(MI) && isWideResidualName(TII.getName(Opc)) &&
@@ -1081,18 +1087,14 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
       // AIEFinalizeBundle.cpp:49-56 is identity on already-bundled roots).
       SmallVector<unsigned, 3> ChildOpcs;
       bool SawCutoverSrc = false;
-      if (const MachineBasicBlock *P = MI.getParent()) {
-        for (MachineBasicBlock::const_instr_iterator I =
-                 std::next(MI.getIterator());
-             I != P->instr_end() && I->isBundledWithPred(); ++I) {
-          if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
-            continue;
-          if (haydn::bundle::isPadNopOpcode(I->getOpcode()))
-            continue;
-          ChildOpcs.push_back(I->getOpcode());
-          if (mustResolveToFormatEMember(I->getOpcode(), TII))
-            SawCutoverSrc = true;
-        }
+      for (const MachineInstr *C : haydn::bundle::members(MI)) {
+        if (C->isMetaInstruction() || C->isDebugInstr() || C->isPosition())
+          continue;
+        if (haydn::bundle::isPadNopOpcode(C->getOpcode()))
+          continue;
+        ChildOpcs.push_back(C->getOpcode());
+        if (mustResolveToFormatEMember(C->getOpcode(), TII))
+          SawCutoverSrc = true;
       }
       if (!Row) {
         // Missing-row: residual logicals need a row so cutover can bind

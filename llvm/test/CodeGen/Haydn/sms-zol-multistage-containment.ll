@@ -5,17 +5,18 @@
 ; RUN: FileCheck %s --check-prefix=ASM < %t.s
 ; REQUIRES: asserts
 
-; Role: Option A / peer-law residual — ZOL multi-stage never expands pre-RA.
-; Constant trip keeps MinTripCount high enough to pass the ZOL MinTC gate so
-; StageCount>1 containment is the reject surface (closes inverted ZOL
-; multi-stage gate). Product multi-stage is post-RA only. Geometry floors
-; are metrics-only here. Soft residual path (flag off) is sms-pli-*/sms-multistage-*.
+; Role: W68.1 LIFT pin — ZOL multi-stage expands on the generic pre-RA
+; MachinePipeliner at product defaults. Constant trip 16 gives the static
+; MinTripCount guard (16 > PrologueCount), the classic expander peels
+; prologue/kernel/epilog, and adjustTripCount edits LoopStart $adj. The
+; asm still carries no #<swps> annotation pre-RA and no durable freeze
+; crosses RA (D493); the F41 knob at 1 restores the historic refuse
+; (pinned by the CONTAINED arm of sms-f41-containment-product-pin.ll).
 
 ; SWP: SMS-HANDOFF: metrics-only freeze
 ; SWP-DAG: Schedule Found? 1
-; SWP-DAG: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-; SWP-DAG: ZOL: geometry floors MinBodyBundles=3 SetupIssueDistance=3 InterveningCycles=2
-; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
+; SWP-DAG: SMS-SHOULDUSE: accept stages={{[2-9]}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
+; SWP-NOT: SMS-SHOULDUSE: reject multi-stage
 ; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
 
 ; ASM-LABEL: zol_mac_body:

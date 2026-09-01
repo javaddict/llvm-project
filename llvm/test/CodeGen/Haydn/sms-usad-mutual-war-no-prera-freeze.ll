@@ -11,12 +11,16 @@
 
 ; Role: WP0 reduction — usad/ssad mutual-WAR class has no pre-RA SMS freeze.
 ; Residual usad-run/ssad-run MEMORY_FAULT at O2: multi-stage SMS hard BUNDLE
-; pre-RA + RA mutual cyclic Anti broke loop exit. Option C: reject StageCount>1
-; pre-RA; no multi-member SMS BUNDLE freeze.
+; pre-RA + RA mutual cyclic Anti broke loop exit. Option C: no multi-member
+; SMS BUNDLE freeze pre-RA. W68.1: generic pre-RA SMS now ACCEPTS the soft
+; multi-stage schedule at product defaults (the old Option A StageCount>1
+; containment is gone for soft loops), but it is still a bare-logical
+; proposal — the durable no-freeze contract (no multi-member BUNDLE, no
+; BundleFormatRowID / CompletionStateID stamping) is pinned by the PIPE and
+; ASM arms below and must hold under the accept too.
 ;
 ; SWP: Schedule Found? 1
-; SWP: SMS-SHOULDUSE: reject multi-stage stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (pre-RA StageCount>1 containment; post-RA multi-stage only)
-; SWP: Target rejected schedule
+; SWP: SMS-SHOULDUSE: accept stages={{[2-9]|[1-9][0-9]+}} II={{[0-9]+}} (metrics-only; bare logical MIs; proven counted residual; no pre-RA cycle groups; product containment (PPS-3 bound))
 ; SWP-NOT: SMS-SHOULDUSE: accept multi-stage durable
 ; SWP-NOT: SMS-HANDOFF: materialize done groups={{[1-9][0-9]*}}
 

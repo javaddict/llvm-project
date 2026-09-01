@@ -23,6 +23,11 @@
 #     meets InterveningCycles) without unbundling.
 #   set_then_hard_stale — bare final SET then stale hard root; postmisched
 #     recommit + Fixup Following pads; hard-root root ops stay rebuilt.
+#     REBASELINE 2026-08-23 (W61 tail credit): the Following walk now counts
+#     the first size-bearing terminator (RET on the fallthrough path to the
+#     loop target), so SET + hard root + RET = 3 parcels = SetupIssueDistance
+#     and the old single-NOP pad is correctly gone. Same QoR delta class as
+#     hwloop-su-tail-credit.mir.
 #
 # W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
 # operands on ALU members were removed (ALU descs carry no implicit SFR def;
@@ -162,9 +167,6 @@ body:             |
   ; FIX-NEXT:   liveins: $r0, $r1, $r2, $r3, $r15
   ; FIX-NEXT: {{  $}}
   ; FIX-NEXT:   SET_HWLOOP_W 0, %bb.1, %bb.1, 3, implicit-def dead $sfr
-  ; FIX-NEXT:   BUNDLE 0, 0 {
-  ; FIX-NEXT:     NOP
-  ; FIX-NEXT:   }
   ; FIX-NEXT:   BUNDLE 1, 0, implicit-def $r5, implicit-def $r4, implicit killed $r2, implicit killed $r3, implicit $r0, implicit killed $r1 {
   ; FIX-NEXT:     $r5 = ADD32_E3_E1_ALU1_RR killed $r2, killed $r3
   ; FIX-NEXT:     $r4 = ADD32_E3_E0_ALU2_RR $r0, killed $r1

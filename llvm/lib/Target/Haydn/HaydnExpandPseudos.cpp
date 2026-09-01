@@ -30,6 +30,7 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnExpandPseudos.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMatInt.h"
@@ -255,6 +256,14 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
   // cycle-forming residuals are a product emission gate, not quality.
   TII = MF.getSubtarget<HaydnSubtarget>().getInstrInfo();
 
+  // Frame-deadline law: this is the first unconditional Haydn pass after
+  // PEI froze the frame. Snapshot the object count and stack size; every
+  // later Haydn mutation (this pass included) is checked against it by
+  // HaydnVerifyBundles at both seats. Earliest-wins: a snapshot from an
+  // earlier post-PEI seat is kept.
+  MF.getInfo<HaydnMachineFunctionInfo>()->takeFrameFreezeSnapshot(
+      MF.getFrameInfo());
+
   bool Modified = false;
   for (MachineBasicBlock &MBB : MF)
     Modified |= expandMBB(MBB);
@@ -431,9 +440,13 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
     HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(AddrOp.getImm());
     Register Cur = Haydn::R0;
     for (const HaydnMatInt::Inst &MatInst : Seq) {
-      BuildMI(MBB, MI, DL, TII->get(MatInst.Opc), DstReg)
-          .addReg(Cur)
-          .addImm(MatInst.Imm);
+      // LUI is dest+imm (logical matches Format E members); the rest of the
+      // sequence is (rd, rs, imm).
+      MachineInstrBuilder MIB =
+          BuildMI(MBB, MI, DL, TII->get(MatInst.Opc), DstReg);
+      if (MatInst.Opc != Haydn::LUI)
+        MIB.addReg(Cur);
+      MIB.addImm(MatInst.Imm);
       Cur = DstReg;
     }
     MI.eraseFromParent();
@@ -442,9 +455,7 @@ bool HaydnExpandPseudos::expandLOAD_ADDR(MachineBasicBlock &MBB,
 
   if (AddrOp.isGlobal() || AddrOp.isSymbol() || AddrOp.isCPI() ||
       AddrOp.isBlockAddress() || AddrOp.isJTI()) {
-    BuildMI(MBB, MI, DL, TII->get(Haydn::LUI), DstReg)
-        .addReg(Haydn::R0)
-        .add(AddrOp);
+    BuildMI(MBB, MI, DL, TII->get(Haydn::LUI), DstReg).add(AddrOp);
     BuildMI(MBB, MI, DL, TII->get(Haydn::ADDI32_W), DstReg)
         .addReg(DstReg)
         .add(AddrOp);

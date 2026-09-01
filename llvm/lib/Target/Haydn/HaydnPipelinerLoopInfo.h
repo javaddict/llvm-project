@@ -32,6 +32,26 @@ class HaydnInstrInfo;
 class SwingSchedulerDAG;
 class SMSchedule;
 
+/// Advisory pre-RA format-union cycle estimate (contracts/pipeline.md, "the
+/// only pre-RA format API"). Cycles is a lower bound on the body's issue
+/// cycles packed at the admitted widest row (E3) entry capacity: it answers
+/// "does this logical body have coverage in at least one available Format E
+/// format" (via nullopt) and gives a conservative cycle floor for proposal
+/// ranking. It is NOT emitted-II truth with virtual registers: the final
+/// physical schedule may be worse, and that delta is QoR evidence, not a
+/// correctness failure.
+///
+/// Deliberately witness-free: it carries only a cycle count, never the
+/// format, row, alternate, placement, or bytes, so no selected row/entry/unit
+/// or container that could later reveal them crosses RA. SEAM for W68.2
+/// constraint bundle formats (which must preserve the chosen phase): price the
+/// estimate per (format, phase) by widening this record additively — today the
+/// admitted family is phase-free E96 (E2/E3 both 12 bytes), so the scalar
+/// E3-widest union bound is complete.
+struct CycleEstimate {
+  unsigned Cycles;
+};
+
 // Target-specific loop info for the MachinePipeliner (Swing Modulo Scheduling).
 // Mirrors the ARM structure (see ARMBaseInstrInfo.cpp): identify the loop's
 // conditional terminator (EndLoop) and the comparison instruction that sets
@@ -111,6 +131,24 @@ public:
   // (test/bisect through the classic expander); ZOL multi-stage stays
   // unconditionally contained (post-RA HaydnMultiStageSMS owns it).
   bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
+
+  /// Advisory format-union cycle estimate for the pre-RA body \p Body (the
+  /// contract's only pre-RA format API). Returns nullopt when any packable
+  /// body instruction has no coverage in any available Format E row (fail
+  /// closed — an RA-legal tuple with no alternate is a schema gap, surfaced,
+  /// not silently estimated). Coverage is proven from the generated
+  /// golden-admitted format table (findAltSpan: a non-NOP alternate span
+  /// means the logical name is encodable in at least one row), never from a
+  /// selected row/entry/unit. The cycle bound packs the packable instructions
+  /// at the admitted widest (E3) row entry capacity — one cycle per pack —
+  /// and is a conservative floor for proposal ranking, not emitted-II truth.
+  /// Loop-control, PHIs, and metadata (debug/CFI/kill/position) instructions
+  /// are not packable Format E entries and are excluded from the bound.
+  ///
+  /// \param Body body instructions to estimate (typically the loop's real
+  /// instructions in program order).
+  std::optional<CycleEstimate> estimateCyclesAcrossAvailableFormats(
+      ArrayRef<MachineInstr *> Body) const;
 
   std::optional<bool>
   createTripCountGreaterCondition(int TC, MachineBasicBlock &MBB,

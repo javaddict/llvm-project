@@ -79,32 +79,34 @@ static cl::opt<bool> EnableHaydnPostSelectOptimize(
 // CopyElim/ConditionOptimizer deleted; MCP(UseCopyInstr) replaces them.
 // Hardware-loop product default. AIE inserts HardwareLoops unconditionally
 // at O1+ (AIE2TargetMachine.cpp:81-82). Hexagon defaults ON via
-// DisableHardwareLoops (HexagonTargetMachine.cpp:48-49). Haydn stays OFF
-// until independent SMS QUALIFY (hwloops OFF, parcels==II), independent
-// SCEV-proven hwloop QUALIFY (SMS OFF), then the combined
-// trip/CFG/prologue/kernel/epilogue matrix, then a separate policy-only
-// flip of hardwareLoopsProductDefaultEnabled(). This wave does not flip.
-// Force-ON is CLI only. SCEV-proven IR + retained-state expansion only;
-// late physical semantic rediscovery is deleted. Never revive pre-RA
-// multi-member SMS BUNDLE or force-coissue.
+// DisableHardwareLoops (HexagonTargetMachine.cpp:48-49). Haydn flipped ON
+// 2026-08-22 after the two qualification legs the park-pin demanded:
+// independent (hwloop only: ILSS bkfir gate 160/160 bit-exact, zero hangs,
+// 2.6-12.7% bundle win) and combined (hwloop + multi-stage SMS forced ON:
+// 160/160 after the FixupHwLoops lift-legality fix closed the 32x32 M=8
+// undefined-register miscompile; the lift mechanism itself was then
+// deleted by the 2026-08-22 PM2 peer-verified realignment — see the
+// HaydnFixupHwLoops.cpp file header). SCEV-proven IR + retained-state
+// expansion only; late physical semantic rediscovery is deleted. Never
+// revive pre-RA multi-member SMS BUNDLE or force-coissue.
 // Multi-stage product default is not this flag; it lives on
-// HaydnMultiStageSMS::productDefaultEnabled() and is not flipped here.
-// Combined hwloop+SMS stays productHwloopCombinedEnabled() (false). Do not
-// add a pipeline-owner cl::init(true) for either. Stage-0 PostPipeliner /
-// InterBlock stay deleted (tombstone above). Finalize/Verify never call
-// skipFunction — do not reopen that skip.
-static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
-              "hardware-loop product default stays OFF until independent "
-              "then combined qualification and a separate policy-only flip");
+// HaydnMultiStageSMS::productDefaultEnabled() (ON since its own
+// 2026-08-22 qualification). Combined hwloop+SMS stays productHwloopCombinedEnabled()
+// (false). Stage-0 PostPipeliner / InterBlock stay deleted (tombstone
+// above). Finalize/Verify never call skipFunction — do not reopen that skip.
+static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
+              "hardware-loop product default is ON after the 2026-08-22 "
+              "independent + combined qualification; this assert pins the "
+              "policy against accidental re-parking without evidence");
 static cl::opt<bool> EnableHaydnHardwareLoops(
     "haydn-enable-hwloops",
     cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()),
     cl::Hidden,
     cl::desc("Enable the SCEV-proven Haydn hardware-loop path; late physical "
              "semantic rediscovery is deleted. Product default follows "
-             "HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(); remains "
-             "OFF until independent then combined qualification and a "
-             "separate policy-only flip."));
+             "HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(); "
+             "qualified ON 2026-08-22 (independent + combined legs, ILSS "
+             "gate 160/160 bit-exact each)."));
 // Pack/Finalize/Verify are unconditional (Finalize/Verify never skip).
 // ExpandPseudos is unconditional product legalization.
 // The old -haydn-enable-expand-pseudos product-disable switch is retired:
@@ -200,8 +202,9 @@ HaydnTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
   // Post-RA pack owner: bundle formation in leaveRegion/leaveMBB
   // (HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HaydnHazardRecognizer).
   // Multi-stage SMS (HaydnPostRAMultiStage / HaydnMultiStageSMS) hooks inside
-  // HaydnScheduleDAGMI::schedule after ordinary convergence; product default OFF
-  // (-haydn-enable-multistage-sms). That default is not flipped here.
+  // HaydnScheduleDAGMI::schedule after ordinary convergence; product default
+  // ON since the 2026-08-22 qualification (-haydn-enable-multistage-sms).
+  // That default is not flipped here.
   // UAF inapplicable: never instantiates VLIWMachineScheduler.
   return createHaydnPostRAScheduler(C);
 }
@@ -224,7 +227,7 @@ namespace {
 // Post-RA: EnsureTerminators * (addPostRegAlloc, pre-PEI)
 // addPreSched2 (AIE2TargetMachine.cpp:229-244):
 // DeadMI (O1); MBP (O1) BEFORE HardwareLoops;
-// HardwareLoops (O1, product default OFF); ExpandPseudos *;
+// HardwareLoops (O1, product default ON); ExpandPseudos *;
 // PostMachineScheduler/HaydnPostRA pack * (sole pack, all levels);
 // HaydnLatencyStalls * (Haydn overlay: RAW net; stall NOPs committed next);
 // HaydnFinalizeBundle * + HaydnVerifyBundles * (AIE FinalizeBundle :243)

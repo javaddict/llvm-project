@@ -738,3 +738,87 @@ TEST(HaydnBundleMaterializeTest, ScoreOnlyTwinMatchesFullAuction) {
     check(Base1, Wide);
   }
 }
+
+//===----------------------------------------------------------------------===//
+// MAC twin coherent-row exact solve (quad-mac-coissue regression)
+//===----------------------------------------------------------------------===//
+
+// REGRESSION TEST (quad-mac-coissue): two same-logical MAC accumulators must
+// exact-solve onto ONE coherent Format E row with distinct MAC units.
+//
+// Bug: canCoissueProductCycle / commitExactMultiMIProductCycle rejected a
+// row-mixed member set (cycleHasMixedFormatEModes) BEFORE
+// resolveMixedMemberCycleOnce could rematch it onto one row, so the four
+// FMULAA32X16 of the quad-accumulator loop each landed in their own parcel.
+// The rematcher peels members to logicals (productSolveLogicalOpcode) and
+// exact-re-solves; this pins the solve half of that contract: the OUTPUT
+// members must all carry one Mode (E2 or E3 row) and injective MAC units
+// (MAC0 vs MAC1 — golden seven-unit injectivity law).
+TEST(HaydnBundleMaterializeTest, ExactSolveDualMacTwinCoherentRow) {
+  HaydnMCFormats Fmts;
+  // Two FMULAA32X16_H1_L0 accumulators (the quad4acc.c shape).
+  unsigned Ops[] = {Haydn::FMULAA32X16_H1_L0, Haydn::FMULAA32X16_H1_L0};
+  auto Exact = exactSolveProductOpcodes(Ops, Fmts);
+  ASSERT_TRUE(Exact.has_value());
+  ASSERT_EQ(Exact->MemberOpcodes.size(), 2u);
+  EXPECT_TRUE(Exact->Plan.isProductLegal());
+
+  // Coherence: every member sits on the SAME row as the plan (CB-153b law).
+  const bool PlanE3 = Exact->Plan.Row == BundleFormatRowID::E96ThreeEntry;
+  for (unsigned M : Exact->MemberOpcodes) {
+    const MCSlotKind Kind = Fmts.getSlotKind(M);
+    if (PlanE3)
+      EXPECT_TRUE(formatECompositeSlotIsE3(Kind));
+    else
+      EXPECT_TRUE(formatECompositeSlotIsE2(Kind));
+  }
+
+  // Unit injectivity under one row: peel names, the two members must seat on
+  // distinct MAC units (MAC0 vs MAC1). Member names spell the unit:
+  // FMULAA32X16_H1_L0_E2_E0_MAC0_RR vs ..._E2_E1_MAC1_RR (E2 row), or
+  // E3_E1_MAC0 vs E3_E2_MAC1 (E3 row).
+  SmallVector<StringRef, 2> Names;
+  for (unsigned M : Exact->MemberOpcodes)
+    Names.push_back(haydnOpcodeName(M));
+  EXPECT_NE(Names[0], Names[1]) << "unit-duplicated MAC members";
+  for (StringRef N : Names) {
+    EXPECT_TRUE(N.contains("_MAC0_") || N.contains("_MAC1_"))
+        << "member " << N << " is not a MAC-unit member";
+    if (PlanE3)
+      EXPECT_TRUE(N.contains("_E3_")) << "E3 plan with E2 member " << N;
+    else
+      EXPECT_TRUE(N.contains("_E2_")) << "E2 plan with E3 member " << N;
+  }
+  EXPECT_TRUE((Names[0].contains("_MAC0_") && Names[1].contains("_MAC1_")) ||
+              (Names[0].contains("_MAC1_") && Names[1].contains("_MAC0_")))
+      << "members do not use distinct MAC units";
+
+  // The row-mixed INPUT (per-MI greedy bake) must rematch to the same law:
+  // peel + resolve is one mechanism, single-shot.
+  unsigned MixedOps[] = {Haydn::FMULAA32X16_H1_L0_E3_E2_MAC1_RR,
+                         Haydn::FMULAA32X16_H1_L0_E2_E1_MAC1_RR};
+  auto Remixed = exactSolveProductOpcodes(MixedOps, Fmts);
+  ASSERT_TRUE(Remixed.has_value());
+  ASSERT_EQ(Remixed->MemberOpcodes.size(), 2u);
+  const bool RemixE3 = Remixed->Plan.Row == BundleFormatRowID::E96ThreeEntry;
+  SmallVector<StringRef, 2> RemixNames;
+  for (unsigned M : Remixed->MemberOpcodes) {
+    const MCSlotKind Kind = Fmts.getSlotKind(M);
+    EXPECT_TRUE(RemixE3 ? formatECompositeSlotIsE3(Kind)
+                        : formatECompositeSlotIsE2(Kind));
+    RemixNames.push_back(haydnOpcodeName(M));
+  }
+  EXPECT_NE(RemixNames[0], RemixNames[1]) << "rematch unit-duplicated MACs";
+  EXPECT_TRUE((RemixNames[0].contains("_MAC0_") &&
+               RemixNames[1].contains("_MAC1_")) ||
+              (RemixNames[0].contains("_MAC1_") &&
+               RemixNames[1].contains("_MAC0_")))
+      << "rematch does not use distinct MAC units";
+  // Row coherence held on input members too (post-rematch set never mixes).
+  for (StringRef N : RemixNames) {
+    if (RemixE3)
+      EXPECT_TRUE(N.contains("_E3_")) << "E3 plan with E2 member " << N;
+    else
+      EXPECT_TRUE(N.contains("_E2_")) << "E2 plan with E3 member " << N;
+  }
+}

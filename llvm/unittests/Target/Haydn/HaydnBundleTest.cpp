@@ -1269,8 +1269,8 @@ TEST(HaydnBundleTest, SMSSoftExitQoRFloorsAndExactPack) {
     EXPECT_EQ(RC::softExitIIFloor(Ops, 0, 0), 2u);
   }
 
-  // MOVE32-class MI path: 3×2R1W (per-field, 0ad0d5d64088) → port floor 2;
-  // format-only still 1.
+  // MOVE32-class MI path: 3×1R1W (dest+src; write pool 3W > 2W is the
+  // binding constraint) → port floor 2; format-only still 1.
   {
     unsigned Ops[] = {Haydn::MOVE32, Haydn::MOVE32, Haydn::MOVE32};
     EXPECT_EQ(computeExhaustiveProductResMII(Ops), 1u);
@@ -1496,61 +1496,60 @@ TEST(HaydnBundleTest, VF3_PortAwareResMIIReadCapAndAlone) {
 // MOVE32-class MI-versus-descriptor SMS port / placement differential
 //===----------------------------------------------------------------------===//
 //
-// REGRESSION TEST REBASE (2026-08-21). The owning layer unified the GPR
-// port law to per-field charging in 0ad0d5d64088 (2026-08-18): every
-// explicit GPR operand field reserves one read/write port — no same-register
-// identity dedup. MOVE32 rd, rs, rs is therefore 2R1W on the MI path
-// (countGPRPorts / countHaydnPortsFromMI / ResMII MI packing) AND on the
-// descriptor path (estimateHaydnPortsFromDesc / ResourceCycle MID overload):
-// copyPhysReg emits rs twice because the FmtALU32 encoding has two physical
-// source fields (rs1/rs2), and the register file sees both read ports.
-//
-// The pre-rebase expectations here (MI dedup to 1R1W, descriptor overcount,
-// descriptor saturating the 4R pool earlier) pinned a dedup the MI
-// accounting never actually performed — even the pre-reshape countGPRPorts
-// walked operands per-field. If a dedup law is ever reintroduced, the
-// static_asserts in HaydnResourceCycle.cpp and the lit doc-pin
-// sched-resource-truth-homes.s (HaydnMove32ClassMiRepeatedSrcGprReads = 2)
-// fire alongside these tests — fix the owning layer, not the pins.
+// REGRESSION TEST REBASE (W68.0b, 2026-08-25). The logical MOVE32 schema is
+// now dest+src ((outs GPR:$rd), (ins GPR:$rs)); copyPhysReg emits
+// `MOVE32 rd, rs`. The former duplicated second source (rs1==rs2 of the
+// FmtALU32 R encoding) no longer exists on the logical opcode, so both
+// paths (countGPRPorts / countHaydnPortsFromMI / ResMII MI packing and
+// estimateHaydnPortsFromDesc / ResourceCycle MID overload) are 1R1W and
+// structurally identical — the MI-vs-descriptor differential is retired
+// (there is nothing to differ). The per-field law itself is unchanged: any
+// future opcode that repeats a source field still charges each field. If a
+// second source operand is ever re-added, the static_asserts in
+// HaydnResourceCycle.cpp and the lit doc-pin sched-resource-truth-homes.s
+// (HaydnMove32ClassMiRepeatedSrcGprReads = 1) fire alongside these tests —
+// fix the owning layer, not the pins.
 
 TEST(HaydnBundleTest, SMS_Move32ClassMiVsDescPortShapes) {
   EXPECT_FALSE(haydnMove32ClassDescOvercountsMiPorts());
-  EXPECT_EQ(HaydnMove32ClassMiRepeatedSrcGprReads, 2u);
+  EXPECT_EQ(HaydnMove32ClassMiRepeatedSrcGprReads, 1u);
   EXPECT_EQ(HaydnMove32ClassMiRepeatedSrcGprWrites, 1u);
-  EXPECT_EQ(HaydnMove32ClassDescShapeGprReads, 2u);
+  EXPECT_EQ(HaydnMove32ClassDescShapeGprReads, 1u);
   EXPECT_EQ(HaydnMove32ClassDescShapeGprWrites, 1u);
 
-  // Synthetic descriptor shape via classifier (1 def + 2 uses) ≡ constants.
+  // Synthetic descriptor shape via classifier (1 def + 1 use) ≡ constants.
   // (Table-backed estimateHaydnPortsFromDesc needs a real MCInstrDesc table
   // entry; the MF peer lives on HaydnBundleBoundaryTest. Live packing below
   // uses the same demand helpers ResourceCycle MID/MI overloads charge.)
   HaydnCyclePortDemand D;
   haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/true, D);
   haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
-  haydnClassifyPortBankClassID(Haydn::GPR32RegClassID, /*IsDef=*/false, D);
   EXPECT_EQ(D.GPRReads, HaydnMove32ClassDescShapeGprReads);
   EXPECT_EQ(D.GPRWrites, HaydnMove32ClassDescShapeGprWrites);
   EXPECT_EQ(D.GPRReads, haydnMove32ClassDescShapeDemand().GPRReads);
   EXPECT_EQ(D.GPRWrites, haydnMove32ClassDescShapeDemand().GPRWrites);
 
-  // MI repeated-src helpers match constants (2R1W, per-field).
+  // MI demand helpers match constants (1R1W, dest+src).
   EXPECT_EQ(haydnMove32ClassMiRepeatedSrcDemand().GPRReads,
             HaydnMove32ClassMiRepeatedSrcGprReads);
   EXPECT_EQ(haydnMove32ClassMiRepeatedSrcDemand().GPRWrites,
             HaydnMove32ClassMiRepeatedSrcGprWrites);
   EXPECT_EQ(haydnMove32ClassDescShapeDemand().GPRReads,
             haydnMove32ClassMiRepeatedSrcDemand().GPRReads)
-      << "per-field law: MI and descriptor paths see the same read demand";
+      << "dest+src law: MI and descriptor paths see the same read demand";
 }
 
 TEST(HaydnBundleTest, SMS_Move32ClassPlacementDescMoreConservativeThanMI) {
-  // Rebased 2026-08-21 (see SMS_Move32ClassMiVsDescPortShapes header): both
-  // shapes are 2R1W, so placement (MID) and MI paths leave identical
-  // residual capacity. The conservative-differential probes now pin the
-  // unified law: after one MOVE32-class reserve, 2R headroom remains under
-  // HAYDN_GPR_READ_PORTS=4 — a 3R0W probe is rejected on BOTH paths.
+  // Rebased W68.0b (see SMS_Move32ClassMiVsDescPortShapes header): both
+  // shapes are 1R1W (dest+src), so placement (MID) and MI paths leave
+  // identical residual capacity. The conservative-differential probes pin
+  // the unified law: after one MOVE32-class reserve, 3R headroom remains
+  // under HAYDN_GPR_READ_PORTS=4 — a 3R0W probe fits BOTH paths (also
+  // pinned), and only a 4R0W probe is rejected on BOTH paths.
+  HaydnCyclePortDemand FitsRead;
+  FitsRead.GPRReads = 3;
   HaydnCyclePortDemand HeavyRead;
-  HeavyRead.GPRReads = 3;
+  HeavyRead.GPRReads = 4;
 
   {
     HaydnResourceCycle RC;
@@ -1560,9 +1559,12 @@ TEST(HaydnBundleTest, SMS_Move32ClassPlacementDescMoreConservativeThanMI) {
                                 haydnMove32ClassMiRepeatedSrcDemand());
     EXPECT_EQ(RC.getPortDemand().GPRReads,
               HaydnMove32ClassMiRepeatedSrcGprReads);
+    EXPECT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, FitsRead))
+        << "dest+src MOVE32 (1R) leaves 3R; a 3R probe fits the MI path "
+           "under HAYDN_GPR_READ_PORTS=4";
     EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, HeavyRead))
-        << "per-field MOVE32 (2R) leaves only 2R; 3R probe must fail the "
-           "MI path too under HAYDN_GPR_READ_PORTS=4";
+        << "dest+src MOVE32 (1R) leaves only 3R; 4R probe must fail the "
+           "MI path under HAYDN_GPR_READ_PORTS=4";
   }
   {
     HaydnResourceCycle RC;
@@ -1571,8 +1573,10 @@ TEST(HaydnBundleTest, SMS_Move32ClassPlacementDescMoreConservativeThanMI) {
     RC.reserveByOpcodeWithPorts(Haydn::MOVE32,
                                 haydnMove32ClassDescShapeDemand());
     EXPECT_EQ(RC.getPortDemand().GPRReads, HaydnMove32ClassDescShapeGprReads);
+    EXPECT_TRUE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, FitsRead))
+        << "Desc-shape MOVE32 (1R) leaves 3R; a 3R probe fits placement";
     EXPECT_FALSE(RC.canReserveByOpcodeWithPorts(Haydn::ADD32, HeavyRead))
-        << "Desc-shape MOVE32 leaves only 2R; 3R probe must fail placement";
+        << "Desc-shape MOVE32 leaves only 3R; 4R probe must fail placement";
   }
 }
 
@@ -2095,8 +2099,11 @@ TEST(HaydnBundleTest, SMS_FormatAcceptance_MIDPathAgreesWithOpcode) {
 } // namespace
 
 TEST(HaydnBundleTest, PostRAMultiStageHostPins) {
-  EXPECT_FALSE(HaydnMultiStageSMS::productDefaultEnabled());
-  EXPECT_FALSE(EnableHaydnMultiStageSMS);
+  // 2026-08-22 SMS product-default flip (G006): default ON after
+  // qualification (T4 accept + II parity + rollback + combined matrix);
+  // cl::init follows productDefaultEnabled().
+  EXPECT_TRUE(HaydnMultiStageSMS::productDefaultEnabled());
+  EXPECT_TRUE(EnableHaydnMultiStageSMS);
   EXPECT_EQ(HaydnMultiStageSMS::preflightSeatNames().size(), 8u);
   EXPECT_EQ(HaydnMultiStageSMS::journalSeatNames().size(), 7u);
   EXPECT_STREQ(HaydnMultiStageSMS::preflightSeatNames()[0], "PF-CFG");

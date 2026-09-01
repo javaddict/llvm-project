@@ -1,33 +1,37 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=0 < %s | FileCheck %s --check-prefix=HWOFF
+
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+; DEFAULT pins set_hwloop_f2 formation with START/END geometry; HWOFF is
+; the explicit-OFF soft residual.
 
 ; Role: semantic — Role-A executed iteration/memory/value oracle kernels.
-; DEFAULT OFF soft residual; HWON set_hwloop_f2 formation with START/END geometry.
+; DEFAULT (product, ON) set_hwloop_f2 formation with START/END geometry.
 ; Product selector is innermost 0; HWLR is programmed only through SET
 ; (never free CSR 0x20-0x25). Off1/Off2 reloc is PC+(uimm<<2) via START/END
 ; labels. Freestanding BundleSim guest_exit=0 under flag ON/OFF for the same
-; shapes (value oracles; store-fill + sum proves memory then value under HWON
-; with set_hwloop only when enabled).
+; shapes (value oracles; store-fill + sum proves memory then value with
+; set_hwloop under the ON default; HWOFF covers the disabled shape).
 
 target triple = "haydn-unknown-elf"
 
 define i32 @oracle_sum_runtime(ptr readonly %p, i32 %n) nounwind {
 ; DEFAULT-LABEL: oracle_sum_runtime:
-; DEFAULT-NOT:   set_hwloop
-; DEFAULT:       bnez
+; Setup floor: SET then intervening size-bearing parcels before BEGIN.
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NEXT:  {{.*}}nop
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
+; Inclusive END strictly after START labels in emission order.
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: oracle_sum_runtime:
-; Setup floor: SET then intervening size-bearing parcels before BEGIN.
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NEXT:  {{.*}}nop
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; Inclusive END strictly after START labels in emission order.
-; HWON:       jalr
+; HWOFF-LABEL: oracle_sum_runtime:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       bnez
+; HWOFF:       jalr
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %loop, label %exit
@@ -47,20 +51,20 @@ exit:
 
 define i32 @oracle_store_then_sum(ptr %p, i32 %n) nounwind {
 ; DEFAULT-LABEL: oracle_store_then_sum:
-; DEFAULT-NOT:   set_hwloop
+; Memory then value: store loop arms SET, then sum loop arms SET.
+; DEFAULT:       set_hwloop_f2 0,
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
+; DEFAULT:       set_hwloop_f2 0,
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: oracle_store_then_sum:
-; Memory then value: store loop arms SET, then sum loop arms SET.
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: oracle_store_then_sum:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       jalr
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %store.loop, label %sum.guard
@@ -91,15 +95,15 @@ exit:
 
 define i32 @oracle_countdown_sum(ptr readonly %p, i32 %n) nounwind {
 ; DEFAULT-LABEL: oracle_countdown_sum:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: oracle_countdown_sum:
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: oracle_countdown_sum:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       jalr
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %loop, label %exit
@@ -120,16 +124,16 @@ exit:
 
 define i32 @oracle_imm8_sum(ptr readonly %p) nounwind {
 ; DEFAULT-LABEL: oracle_imm8_sum:
-; DEFAULT-NOT:   set_hwloop
+; Fixed trip: SET + START/END geometry.
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: oracle_imm8_sum:
-; Fixed trip: SET + START/END geometry.
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: oracle_imm8_sum:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       jalr
 entry:
   br label %loop
 loop:
@@ -145,18 +149,18 @@ exit:
   ret i32 %s.next
 }
 
-; Boundary fixed trip=2 (smallest constant that forms Role A under HWON).
+; Boundary fixed trip=2 (smallest constant that forms Role A).
 define i32 @oracle_trip2_sum(ptr readonly %p) nounwind {
 ; DEFAULT-LABEL: oracle_trip2_sum:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: oracle_trip2_sum:
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: oracle_trip2_sum:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       jalr
 entry:
   br label %loop
 loop:
@@ -175,19 +179,19 @@ exit:
 ; Memory geometry: copy src→dst then sum dst (iteration + memory + value).
 define i32 @oracle_copy_sum(ptr readonly %src, ptr %dst, i32 %n) nounwind {
 ; DEFAULT-LABEL: oracle_copy_sum:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0,
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
+; DEFAULT:       set_hwloop_f2 0,
+; DEFAULT-NOT:   csrw
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: oracle_copy_sum:
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   csrw
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: oracle_copy_sum:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       jalr
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %copy.loop, label %exit
@@ -217,17 +221,17 @@ exit:
 }
 
 ; Measured multi-BB Role-A extension: innermost diamond, latch is the
-; unique exit. Stores in both arms resist if-conversion. HWON arms SET
-; only; never a free HWLR CSR. Product default stays OFF.
+; unique exit. Stores in both arms resist if-conversion. DEFAULT arms SET
+; only; never a free HWLR CSR. Product default is ON.
 define void @oracle_multibb_latch_stores(ptr %dst, ptr readonly %src, i32 %n) nounwind {
 ; DEFAULT-LABEL: oracle_multibb_latch_stores:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0,
+; DEFAULT-NOT:   csrw
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: oracle_multibb_latch_stores:
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   csrw
-; HWON:       jalr
+; HWOFF-LABEL: oracle_multibb_latch_stores:
+; HWOFF-NOT:   set_hwloop
+; HWOFF:       jalr
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %header, label %exit

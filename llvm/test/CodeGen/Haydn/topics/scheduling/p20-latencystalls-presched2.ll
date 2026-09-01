@@ -9,15 +9,19 @@
 ; REQUIRES: haydn-registered-target
 ;
 ; Role: IR — LatencyStalls sits in addPreSched2 after PostMachineScheduler
-; and before the first Finalize+Verify. Product default (hwloops OFF) still
-; runs late Finalize/Verify after BranchRelaxation (same Finalize/Verify).
-; Multi-stage SMS and Stage-0 IB/PP stay absent.
+; and before the first Finalize+Verify. Product default (hwloops ON since
+; 2026-08-22) runs late Finalize/Verify after BranchRelaxation (same
+; Finalize/Verify). Multi-stage SMS and Stage-0 IB/PP stay absent.
 
 define i32 @p20_seat(i32 %a, i32 %b) {
   %t = add i32 %a, %b
   ret i32 %t
 }
 
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+; O2 forms IR hwloop; O0 keeps none (IR HardwareLoops inserts at O1+).
+; O2: Hardware Loop Insertion
+; O2-NOT: Haydn Hardware Loop Detection
 ; COMMON: PostRA Machine Instruction Scheduler
 ; COMMON-NEXT: Haydn Exposed-Pipeline Latency Stalls
 ; COMMON-NEXT: Haydn Bundle Finalization
@@ -26,9 +30,8 @@ define i32 @p20_seat(i32 %a, i32 %b) {
 ; COMMON-NOT: InterBlock
 ; COMMON-NOT: PostPipeliner
 ; O0-NOT: Haydn Hardware Loop Fixup
-; O2-NOT: Hardware Loop Insertion
-; O2-NOT: Haydn Hardware Loop Detection
-; O2-NOT: Haydn Hardware Loop Fixup
+; O0-NEXT: Haydn Bundle Finalization
+; O2-NEXT: Haydn Hardware Loop Fixup
 ; HWON: Haydn Hardware Loop Fixup
 ; HWON: Haydn Bundle Finalization
 ; HWON: Haydn Bundle Invariant Verifier

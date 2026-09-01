@@ -1,13 +1,17 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s
 
-; Role: semantic — residual / FixupHwLoops tryShortenStartOffset must not reverse preheader reduction order when moving MIs before SET_HWLOOP.
+; Role: semantic — Fixup must not reverse preheader reduction order (historically the tryShortenStartOffset lift bug; the lift is now deleted).
 
-; residual / FixupHwLoops tryShortenStartOffset must not reverse
-; preheader reduction order when moving MIs before SET_HWLOOP.
+; FixupHwLoops must not reverse preheader reduction order.
 ;
-; Bug: repeatedly splicing the *last* post-SET MI before SET reversed
+; Bug (historical, pre-2026-08-22): the tryShortenStartOffset free lift
+; repeatedly spliced the *last* post-SET MI before SET, which reversed
 ; MAX32 chains so the loop live-in held an intermediate max (sim exit 138
-; vs host 145). Fix: move the *first* post-SET MI so relative order holds.
+; vs host 145). The interim fix moved the *first* post-SET MI; the PM2
+; peer-verified realignment then deleted the lift mechanism outright
+; (Fixup never reorders user code — AIE pads, never reorders). The
+; contract this pins — reduction order preserved into any hwloop seat —
+; is mechanism-independent and stays load-bearing.
 ;
 ; This is the full unrolled argmax + proximity count from
 ; benchmarks/compiler_bugs/cb44_o2_stale_cond_max_reduce.c (noinline datav).

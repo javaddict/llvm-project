@@ -1,21 +1,21 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -stop-before=regallocfast \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -stop-before=regallocfast \
 ; RUN:   < %s | FileCheck %s --check-prefix=PRERA
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-before=greedy \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-before=greedy \
 ; RUN:   < %s | FileCheck %s --check-prefix=PRERA
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -stop-before=postmisched \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -stop-before=postmisched \
 ; RUN:   < %s | FileCheck %s --check-prefix=THRU
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-before=postmisched \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-before=postmisched \
 ; RUN:   < %s | FileCheck %s --check-prefix=THRU
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -stop-after=postmisched \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -stop-after=postmisched \
 ; RUN:   < %s | FileCheck %s --check-prefix=PACK
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-after=postmisched \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-after=postmisched \
 ; RUN:   < %s | FileCheck %s --check-prefix=SKIP-OPTNONE
-; RUN: llc -mtriple=haydn-unknown-elf -O0 -stop-after=haydn-verify-bundles \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 -stop-after=haydn-verify-bundles \
 ; RUN:   < %s | FileCheck %s --check-prefix=PLAIN
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-after=haydn-verify-bundles \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-after=haydn-verify-bundles \
 ; RUN:   < %s | FileCheck %s --check-prefix=OPT
-; RUN: llc -mtriple=haydn-unknown-elf -O0 < %s | FileCheck %s --check-prefix=ASM-O0
-; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s --check-prefix=ASM
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s --check-prefix=ASM-O0
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s --check-prefix=ASM
 
 ; Role: ownership — product-shape pin for plain O0 vs skipFunction-skipped
 ; optnone committed-cycle formation (target-local no-reorder Finalize/Verify).

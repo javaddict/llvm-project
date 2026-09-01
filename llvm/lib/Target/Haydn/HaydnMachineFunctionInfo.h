@@ -17,7 +17,9 @@
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include <string>
 
 namespace llvm {
 
@@ -96,6 +98,24 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // -1 when not reserved.
   int BranchRelaxationScratchFI = -1;
 
+  // Permanent 4-byte in-frame save slot for hwloop-demote value preservation
+  // (CB-162): when the demoted loop's trip register is live after the loop
+  // and no free GPR countdown exists, the trip value is stored here before
+  // the loop and reloaded at the exit. Kept DISJOINT from PostRAScratchFI
+  // (which holds the demote stack-counter) so the two never collide.
+  // Reserved lazily by HaydnHardwareLoops demote; -1 when not reserved.
+  int HwLoopDemoteSaveFI = -1;
+
+  // Frame-freeze snapshot (frame-deadline law): taken by the first
+  // unconditional Haydn post-PEI pass (HaydnExpandPseudos; when the hwloop
+  // pass runs first it snapshots too — earliest wins) and enforced by
+  // HaydnVerifyBundles at both seats. MachineFrameInfo has no upstream
+  // "finalized" flag; NumObjects is strictly monotone under Create*, and
+  // StackSize is written exactly once by PEI, so the pair detects any
+  // post-snapshot object creation or stack-size change. -1 = not yet taken.
+  int64_t FrameFreezeNumObjects = -1;
+  int64_t FrameFreezeStackSize = -1;
+
   // Transient post-RA alt-descriptor side-map (not durable placement).
   // HaydnHazardRecognizer records chosen member opcodes during post-RA
   // scheduling; leaveRegion materialize reads then clear()s it
@@ -116,9 +136,37 @@ public:
     unsigned ScheduledII = 0;  ///< Accepted initiation interval.
   };
 
+  /// G005 canonical per-loop KPI record — the post-RA multistage engine's
+  /// outcome for ONE loop it attempted, written by
+  /// HaydnMultiStageSMS::tryAfterOrdinarySchedule and read back
+  /// function-late by emitHaydnSMSLoopRemarks (the per-region Host dies
+  /// before the canonical remark fires). Observation only — never
+  /// placement truth; the decline seat reuses the LastRejectReason
+  /// vocabulary verbatim.
+  struct SMSLoopRecord {
+    /// "accepted" | "accepted-analysis" | "declined" | "not-candidate"
+    /// (shape never candidated, or G009 pragma-disable user veto — the
+    /// latter carries seat=pragma-disable).
+    const char *Kind = nullptr;
+    /// Accepted: searched II (== realized, G002 certificate). Declined:
+    /// last II the search reached (0 = failed before any II attempt).
+    int II = 0;
+    /// Pipeline stage count (0 when never scheduled).
+    int NS = 0;
+    /// Decline seat (LastRejectReason); not-candidate carries a seat only
+    /// for the G009 pragma-disable veto; null otherwise.
+    const char *Reason = nullptr;
+    /// Committed prologue/epilogue MBBs when an accept materialized them.
+    MachineBasicBlock *PrologueMBB = nullptr;
+    MachineBasicBlock *EpilogueMBB = nullptr;
+  };
+
 private:
   // Key by MBB pointer (stable through layout; numbers are renumbered).
   DenseMap<const MachineBasicBlock *, SMSSWPSInfo> SMSLoopInfos;
+  // G005 engine-outcome records, keyed the same way. Cleared in clone():
+  // remark observations must not cross function outlining.
+  DenseMap<const MachineBasicBlock *, SMSLoopRecord> SMSLoopRecords;
 
 public:
   HaydnMachineFunctionInfo(const Function &F, const TargetSubtargetInfo *STI);
@@ -191,6 +239,43 @@ public:
   void setBranchRelaxationScratchFI(int FI) { BranchRelaxationScratchFI = FI; }
   //@}
 
+  // \name Hwloop-demote live-trip save slot (CB-162).
+  //@{
+  int getHwLoopDemoteSaveFI() const { return HwLoopDemoteSaveFI; }
+  void setHwLoopDemoteSaveFI(int FI) { HwLoopDemoteSaveFI = FI; }
+  //@}
+
+  // \name Frame-freeze snapshot (frame-deadline law).
+  //@{
+  /// True when the snapshot was taken (first post-PEI Haydn pass).
+  bool hasFrameFreezeSnapshot() const {
+    return FrameFreezeNumObjects >= 0;
+  }
+  /// Take the snapshot if absent; returns false when one already exists
+  /// with DIFFERENT values (impossible: the counters are monotone/once).
+  void takeFrameFreezeSnapshot(const MachineFrameInfo &MFI) {
+    if (hasFrameFreezeSnapshot())
+      return;
+    FrameFreezeNumObjects = static_cast<int64_t>(MFI.getNumObjects());
+    FrameFreezeStackSize = static_cast<int64_t>(MFI.getStackSize());
+  }
+  /// Frame-freeze violation description, or empty when the frame is
+  /// unchanged since the snapshot (or no snapshot was taken — MIR tests
+  /// that skip the post-PEI passes stay legal).
+  std::string frameFreezeViolation(const MachineFrameInfo &MFI) const {
+    if (!hasFrameFreezeSnapshot())
+      return {};
+    if (static_cast<int64_t>(MFI.getNumObjects()) == FrameFreezeNumObjects &&
+        static_cast<int64_t>(MFI.getStackSize()) == FrameFreezeStackSize)
+      return {};
+    return ("frame grew after the post-PEI snapshot: objects " +
+            std::to_string(FrameFreezeNumObjects) + "->" +
+            std::to_string(MFI.getNumObjects()) + ", stack " +
+            std::to_string(FrameFreezeStackSize) + "->" +
+            std::to_string(MFI.getStackSize()));
+  }
+  //@}
+
   // slice 2a: alt-descriptor side-map access. The HR records; the
   // finalizer reads.
   HaydnAlternateDescriptors &getAltDescs() { return AltDescs; }
@@ -200,10 +285,26 @@ public:
     SMSLoopInfos[KernelBB] = std::move(Info);
   }
 
+  /// \name G005 canonical per-loop KPI records.
+  //@{
+  void recordSMSLoopRecord(const MachineBasicBlock *KernelBB,
+                           SMSLoopRecord Record) {
+    SMSLoopRecords[KernelBB] = Record;
+  }
+
+  const SMSLoopRecord *getSMSLoopRecord(const MachineBasicBlock *KernelBB) const {
+    auto It = SMSLoopRecords.find(KernelBB);
+    return It == SMSLoopRecords.end() ? nullptr : &It->second;
+  }
+  //@}
+
   /// Drop kernel SMS metadata. Used by post-RA multi-stage JM-META rollback
   /// so a failed transaction cannot leak `#<swps>` into the ordinary baseline.
+  /// Also drops the G005 record: a rolled-back attempt must not be reported
+  /// as accepted (the decline path re-records it).
   void eraseSMSLoop(const MachineBasicBlock *KernelBB) {
     SMSLoopInfos.erase(KernelBB);
+    SMSLoopRecords.erase(KernelBB);
   }
 
   const SMSSWPSInfo *getSMSLoop(const MachineBasicBlock *KernelBB) const {

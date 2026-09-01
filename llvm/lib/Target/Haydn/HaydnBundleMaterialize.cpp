@@ -142,8 +142,12 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
   // after this reject is recovery, not a second pack authority.
   if (cycleViolatesNamedSameCycleLaws(Instrs))
     return false;
-  if (cycleHasMixedFormatEModes(Instrs))
-    return false;
+
+  // NOTE: no input-side cycleHasMixedFormatEModes reject here. A row-mixed
+  // member set is exactly the input resolveMixedMemberCycleOnce exists for
+  // (per-MI greedy bake prefers members independently); the hard mixed-row
+  // law is enforced on the POST-rematch member set below, after the bake
+  // arms have had their one shot at a coherent row.
 
   // SET_HWLOOP must not share a cycle with a producer of its trip/Off regs
   // (snapshot no-forwarding: WAR samples stale trip; RAW needs forwarding).
@@ -214,6 +218,16 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs) {
     }
   }
 
+  // Hard mixed-row law on the POST-rematch member set: an E2 member and an
+  // E3 member cannot share one parcel. Checked after the arms above so a
+  // row-mixed input (per-MI greedy bake) still gets its one coherent-row
+  // rematch shot; a still-mixed set here means the rematch failed to bind
+  // the cycle onto a single row — fail closed to sequential parcels.
+  if (cycleHasMixedFormatEModes(Instrs)) {
+    restoreDescs();
+    return false;
+  }
+
   Haydn::MachineBundle Bundle(&Fmts);
   for (MachineInstr *MI : Instrs) {
     if (!Bundle.canAdd(MI)) {
@@ -253,8 +267,10 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
     if (MI->isInlineAsm())
       return false;
   }
-  if (cycleHasMixedFormatEModes(Instrs))
-    return false;
+
+  // NOTE: no input-side cycleHasMixedFormatEModes reject here — the same law
+  // as canCoissueProductCycle: a row-mixed member set is the rematch input;
+  // the hard mixed-row reject applies to the POST-rematch member set below.
 
   MachineBasicBlock *MBB = Instrs.front()->getParent();
   if (!MBB || !MBB->getParent())
@@ -383,6 +399,14 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs) {
     }
   }
 
+  // Hard mixed-row law on the POST-rematch member set (same law as
+  // canCoissueProductCycle): an E2 member and an E3 member cannot share one
+  // parcel. Rematch already ran above; a still-mixed set cannot commit.
+  if (cycleHasMixedFormatEModes(Instrs)) {
+    restoreTxn();
+    return false;
+  }
+
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   Haydn::MachineBundle Bundle(&Fmts);
   for (MachineInstr *MI : Instrs) {
@@ -475,11 +499,7 @@ bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
   if (!MBB.getParent())
     return false;
 
-  SmallVector<MachineInstr *, 3> Kids;
-  for (MachineBasicBlock::instr_iterator I =
-           std::next(BundleRoot.getIterator());
-       I != MBB.instr_end() && I->isBundledWithPred(); ++I)
-    Kids.push_back(&*I);
+  SmallVector<MachineInstr *, 3> Kids = haydn::bundle::members(BundleRoot);
 
   if (Kids.size() < 2 || Kids.size() > Haydn::ISSUE_SLOT_COUNT)
     return false;

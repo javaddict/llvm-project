@@ -1,0 +1,24 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-expand-pseudos,haydn-verify-bundles %s -o - \
+# RUN:   | FileCheck %s
+
+# Role: MIR — frame-deadline law wiring: HaydnExpandPseudos (first
+# unconditional post-PEI seat) takes the frame snapshot and
+# HaydnVerifyBundles enforces it. A trivial function expands and verifies
+# with an unchanged frame: the pass pair must run clean (no fatal), proving
+# the snapshot/violation plumbing does not false-trip on the identity path.
+# Growth detection itself is unit-sealed in HaydnFrameFreezeTest.
+#
+# CHECK: frame_freeze_identity
+# CHECK: RET
+
+---
+name:            frame_freeze_identity
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    RET implicit $r15
+
+...

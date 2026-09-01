@@ -30,9 +30,9 @@ using llvm::haydnMemoryObjectWaitCyclesAdmitted;
 using llvm::haydnSchedCompleteModelPin;
 static_assert(HAYDN_SFR_READ_PORTS == 2 && HAYDN_SFR_WRITE_PORTS == 1,
               "SFR port law is 2R/1W");
-static_assert(llvm::HaydnMove32ClassMiRepeatedSrcGprReads == 2 &&
-                  llvm::HaydnMove32ClassDescShapeGprReads == 2,
-              "MOVE32 rd,rs,rs is 2R on MI and descriptor paths");
+static_assert(llvm::HaydnMove32ClassMiRepeatedSrcGprReads == 1 &&
+                  llvm::HaydnMove32ClassDescShapeGprReads == 1,
+              "MOVE32 rd,rs is 1R on MI and descriptor paths");
 static_assert(!llvm::haydnMove32ClassDescOvercountsMiPorts(),
               "per-field MOVE32 has no MI-versus-descriptor read gap");
 static_assert(!haydnMemoryObjectWaitCyclesAdmitted(),

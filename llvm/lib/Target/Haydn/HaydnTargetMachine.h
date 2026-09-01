@@ -44,8 +44,12 @@ public:
   // Product default for the SCEV-proven hardware-loop path. AIE inserts
   // HardwareLoops unconditionally at O1+ (AIE2TargetMachine.cpp:81-82);
   // Hexagon defaults ON via DisableHardwareLoops (HexagonTargetMachine.cpp:48-49).
-  // Haydn stays OFF until independent then combined qualification.
-  static constexpr bool hardwareLoopsProductDefaultEnabled() { return false; }
+  // Qualified ON 2026-08-22: independent leg (160/160 ILSS gate bit-exact,
+  // zero hangs) and combined leg with multi-stage SMS forced ON (160/160
+  // after the FixupHwLoops lift-legality fix; the lift itself was later
+  // deleted by the PM2 peer realignment — Fixup pads/demotes only).
+  // Multi-stage SMS is independently ON (productDefaultEnabled()).
+  static constexpr bool hardwareLoopsProductDefaultEnabled() { return true; }
 
   /// Sole production ObjectEncodingProfile (E96). Not a runtime selector flip.
   haydn::format::ObjectEncodingProfileID getObjectEncodingProfileID() const {

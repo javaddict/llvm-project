@@ -20,6 +20,7 @@
 #include "HaydnVerifyBundles.h"
 #include "Haydn.h"
 #include "HaydnBundleVerify.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -173,6 +174,20 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
   // Committed-cycle inverse is mandatory for optnone and every other function.
   // A skipFunction-skipped function with a noncanonical cycle must still fail
   // here — never an MC uncommitted/unverified escape hatch.
+
+  // Frame-deadline law: PEI froze object offsets and stack size; the first
+  // post-PEI Haydn pass snapshotted both (HaydnExpandPseudos). Any later
+  // frame-object creation or stack-size change is a pipeline-contract
+  // violation. No snapshot (MIR fixtures bypassing the post-PEI lane)
+  // stays legal.
+  if (std::string Violation =
+          MF.getInfo<HaydnMachineFunctionInfo>()->frameFreezeViolation(
+              MF.getFrameInfo());
+      !Violation.empty()) {
+    report_fatal_error(
+        Twine("HaydnVerifyBundles: ") + MF.getName() + ": " + Violation,
+        /*GenCrashDiag=*/false);
+  }
 
   // Local registry wrapper (same type as haydnDefaultMCFormats in
   // HaydnBundleFormatSolver.h:96-99) — this pass must not include the

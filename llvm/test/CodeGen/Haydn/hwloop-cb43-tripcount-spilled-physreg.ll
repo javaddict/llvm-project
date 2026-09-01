@@ -1,35 +1,37 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -O1 < %s | FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -O1 -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -O1 -haydn-enable-hwloops=0 < %s | FileCheck %s --check-prefix=HWOFF
+
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
 
 ; Role: semantic — SCEV-proven trip must stay 16 when nearby constants
 ; share physregs (not collapse to 1 via last-def of a later 255 mask).
-; Product default OFF: DEFAULT is the software counted residual.
-; HWON arms both counted loops as Role-A SET sel=0 with the trip
-; materialised as 16. Never free HWLR CSR. Never late physical
+; Product default (ON since 2026-08-22) arms both counted loops as
+; Role-A SET sel=0 with the trip materialised as 16; HWOFF is the
+; software counted residual. Never free HWLR CSR. Never late physical
 ; rediscovery of the trip from the spilled last-def.
 
 define dso_local i32 @main() local_unnamed_addr #0 {
 ; DEFAULT-LABEL: main:
-; DEFAULT-NOT:   set_hwloop
+; Trip 16 is materialised once and reused by both SETs (not 1 via last-def).
+; DEFAULT:       addi32 {{.*}}, 16
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT:   set_hwloop_f2 1,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; DEFAULT:       bnez
-; DEFAULT:       bnez
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: main:
-; Trip 16 is materialised once and reused by both SETs (not 1 via last-def).
-; HWON:       addi32 {{.*}}, 16
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT:   set_hwloop_f2 1,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: main:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF:       bnez
+; HWOFF:       bnez
+; HWOFF:       jalr
 entry:
   %v = alloca [16 x i32], align 4
   br label %for.body

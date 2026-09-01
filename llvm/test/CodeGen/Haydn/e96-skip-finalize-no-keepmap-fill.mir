@@ -4,11 +4,13 @@
 # RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
 # RUN:   -filetype=obj %t/st64.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=ST64
 # RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
-# RUN:   -filetype=obj %t/move32-3op.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=MOVE32
-# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
-# RUN:   -filetype=obj %t/move32-bundle.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=MOVE32B
-# RUN: not llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
 # RUN:   -filetype=obj %t/mixed.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=MIXED
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/move32-3op.mir -o %t/move32-3op.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t/move32-3op.o | FileCheck %s --check-prefix=M32
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t/move32-bundle.mir -o %t/move32-bundle.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t/move32-bundle.o | FileCheck %s --check-prefix=M32B
 # RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
 # RUN:   -filetype=obj %t/typed.mir -o %t.typed.o
 # RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.typed.o | FileCheck %s --check-prefix=TYPED
@@ -20,17 +22,25 @@
 # hole drop only (hand-asm `{ add32; xor32 }` and `{ move32 r0, r1 }` still
 # place). Dual ADD32+XOR32 is E2 e0-only — skip-Finalize cannot rebind.
 # Store-last ST64 is LOADSTORE0 e0-only — skip-Finalize cannot rebind onto
-# membership e2. Unbundled MOVE32 3-op (rd, rs1, rs2) must not reconstruct
-# the 2-op member via trailing-use drop — that keep-map is Finalize only.
-# Bundled MOVE32 3-op and mixed MemberId+logical are skip-Finalize leaks:
-# encodeBundle refuses DFS/fill. typed: generated MOVE32_E2_E0_ALU0_R
-# already wire-shaped. encodeSlotSubInst stays serialize-only.
+# membership e2. W68.0b made logical MOVE32 dest+src (wire-shaped), so the
+# former trailing-rs2 leak class is closed at MIR parse (the verifier
+# rejects an extra explicit operand); the unbundled and bundled logical
+# forms below serialize typed directly. Mixed MemberId+logical is still a
+# skip-Finalize leak: encodeBundle refuses DFS/fill. typed: generated
+# MOVE32_E2_E0_ALU0_R already wire-shaped. encodeSlotSubInst stays
+# serialize-only.
 #
 # EXTRA: is not a generated Format E member{{.*}}refuse skip-Finalize
 # ST64: is not a generated Format E member{{.*}}refuse skip-Finalize
-# MOVE32: one-parcel placement failed{{.*}}refuse sequential E2 singleton split
-# MOVE32B: is not a generated Format E member{{.*}}refuse skip-Finalize
 # MIXED: is not a generated Format E member{{.*}}refuse skip-Finalize
+# M32-LABEL: <skip_finalize_move32_trailing_rs2>:
+# M32: move32
+# M32: jalr
+# M32-NOT: <unknown>
+# M32B-LABEL: <skip_finalize_move32_bundle>:
+# M32B: move32
+# M32B: jalr
+# M32B-NOT: <unknown>
 # TYPED-LABEL: <skip_finalize_move32_memberid>:
 # TYPED: move32
 # TYPED: jalr
@@ -81,8 +91,8 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
-    liveins: $r0, $r1, $r15
-    $r2 = MOVE32 $r0, $r1, implicit-def dead $sfr
+    liveins: $r1, $r15
+    $r2 = MOVE32 $r1, implicit-def dead $sfr
     RET implicit $r15
 
 #--- move32-bundle.mir
@@ -95,9 +105,9 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
-    liveins: $r0, $r1, $r15
-    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
-      $r2 = MOVE32 $r0, $r1, implicit-def dead $sfr
+    liveins: $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r1 {
+      $r2 = MOVE32 $r1, implicit-def dead $sfr
     }
     RET implicit $r15
 

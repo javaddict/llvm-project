@@ -58,10 +58,12 @@ static void emitMaterializeImm32(MachineBasicBlock &MBB,
   HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Imm);
   Register Current = Haydn::R0;
   for (const HaydnMatInt::Inst &Inst : Seq) {
-    BuildMI(MBB, MBBI, DL, TII->get(Inst.Opc), Dst)
-        .addReg(Current)
-        .addImm(Inst.Imm)
-        .setMIFlag(FrameFlag);
+    // LUI is dest+imm (logical matches Format E members).
+    MachineInstrBuilder MIB =
+        BuildMI(MBB, MBBI, DL, TII->get(Inst.Opc), Dst);
+    if (Inst.Opc != Haydn::LUI)
+      MIB.addReg(Current);
+    MIB.addImm(Inst.Imm).setMIFlag(FrameFlag);
     Current = Dst;
   }
 }
@@ -514,7 +516,8 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Allocate stack space first, then save CSRs into the new frame. Saves sit
   // above the updated SP so they are not in the unallocated region. This is
-  // stack discipline, not an ISR ABI: interrupt/naked remain fail-closed.
+  // stack discipline, not an ISR ABI: interrupt stays fail-closed. Naked
+  // never reaches here — generic PEI skips insertPrologEpilogCode for Naked.
   // SUBI32 R13, R13, AlignedStackSize
   if (AlignedStackSize != 0) {
     // If the stack size fits in simm16, use single instruction
@@ -1069,12 +1072,16 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
   const Align StackAlign = getStackAlign();
   const Function &F = MF.getFunction();
 
-  // Interrupt / naked / stack-protector / i128 / half / inreg / nest /
-  // swift* / byref have no product frame/CC seat. CallLowering rejects the
-  // IR path first; this is the PEI last line if those attributes still
-  // reach layout. ISR stays fail-closed (no CC_ISR). Legal musttail
-  // sibcall is JAL_W_MSP / JALR_W_MSP; ineligible musttail stays
-  // fail-closed at CallLowering. AIE1ISelLowering.cpp:964 rejects
+  // Interrupt / stack-protector / i128 / half / inreg / nest / swift* /
+  // byref have no product frame/CC seat. CallLowering rejects the IR path
+  // first; this is the PEI last line if those attributes still reach
+  // layout. ISR stays fail-closed (no CC_ISR). Naked is a product seat:
+  // generic PEI never inserts prologue/epilogue or CSR code for Naked
+  // (PrologEpilogInserter.cpp spillCalleeSavedRegs /
+  // insertPrologEpilogCode), so this hook contributes only scavenging
+  // frame indexes that an asm-only body never references (naked-fn.ll).
+  // Legal musttail sibcall is JAL_W_MSP / JALR_W_MSP; ineligible musttail
+  // stays fail-closed at CallLowering. AIE1ISelLowering.cpp:964 rejects
   // interrupt at return lowering; RISCV has a CC_ISR analog only when
   // an ISR vector exists.
   auto IsUnsupportedCCType = [](Type *Ty) {
@@ -1082,13 +1089,13 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
       return IT->getBitWidth() > 64;
     return Ty->isHalfTy() || Ty->isBFloatTy() || Ty->isFP128Ty();
   };
-  if (F.hasFnAttribute("interrupt") || F.hasFnAttribute(Attribute::Naked) ||
+  if (F.hasFnAttribute("interrupt") ||
       F.hasFnAttribute(Attribute::StackProtect) ||
       F.hasFnAttribute(Attribute::StackProtectReq) ||
       F.hasFnAttribute(Attribute::StackProtectStrong) ||
       IsUnsupportedCCType(F.getReturnType())) {
     report_fatal_error(
-        "Haydn: interrupt/naked/stack-protector/i128 have no product frame ABI",
+        "Haydn: interrupt/stack-protector/i128 have no product frame ABI",
         /*GenCrashDiag=*/false);
   }
   for (const Argument &Arg : F.args()) {
@@ -1160,6 +1167,44 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
     if (FuncInfo->getBranchRelaxationScratchFI() < 0)
       FuncInfo->setBranchRelaxationScratchFI(FI);
   }
+
+  // CB-162: hwloop-demote live-trip save home defaults to the shared
+  // PostRAScratchFI word (reserved in determineCalleeSaves; every framed
+  // function has it). The demote's stack-counter home is
+  // BranchRelaxationScratchFI when present — just created above — so the
+  // two normally stay disjoint without frame growth. A dedicated slot is
+  // needed only in the rare both-map-to-PostRA case (no scavenging slot, so
+  // the counter home is also PostRAScratchFI). Frame deadline rule: every
+  // possible demotion home is reserved HERE, before
+  // calculateFrameObjectOffsets — the post-RA demote (HaydnHardwareLoops)
+  // must never CreateStackObject. Guarded on an actual hwloop setup so
+  // loop-free leaf functions pay no frame growth.
+  if (FuncInfo->getHwLoopDemoteSaveFI() < 0) {
+    const HaydnInstrInfo &HII = *ST.getInstrInfo();
+    const int PostRASaveFI = FuncInfo->getPostRAScratchFI();
+    int CounterFI = FuncInfo->getBranchRelaxationScratchFI();
+    if (CounterFI < 0)
+      CounterFI = PostRASaveFI;
+    const bool SharedHomeDisjoint =
+        PostRASaveFI >= 0 && PostRASaveFI != CounterFI;
+    bool HasHWLoopSetup = false;
+    for (const MachineBasicBlock &ScanBB : MF) {
+      for (const MachineInstr &ScanMI : ScanBB) {
+        if (HII.isHardwareLoopSetupOpcode(ScanMI.getOpcode())) {
+          HasHWLoopSetup = true;
+          break;
+        }
+      }
+      if (HasHWLoopSetup)
+        break;
+    }
+    if (HasHWLoopSetup && !SharedHomeDisjoint) {
+      int FI = MF.getFrameInfo().CreateStackObject(/*Size=*/4,
+                                                   /*Alignment=*/Align(4),
+                                                   /*SpillSlot=*/true);
+      FuncInfo->setHwLoopDemoteSaveFI(FI);
+    }
+  }
 }
 
 void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
@@ -1230,6 +1275,10 @@ void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                                  /*SpillSlot=*/true);
     FuncInfo->setPostRAScratchFI(FI);
   }
+
+  // CB-162 note: the hwloop-demote save home decision lives at the end of
+  // processFunctionBeforeFrameFinalized (after the BranchRelaxation scratch
+  // slot above exists). This block deliberately reserves nothing.
 
   // Permanent 8-byte in-frame pack slot for DR64 construction from two GPR32
   // halves (LOADI64 both-halves-nonzero constants; MOV_GPR_TO_DR64 two-live-

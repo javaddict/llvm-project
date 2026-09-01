@@ -14,14 +14,17 @@
 #   hwloop-demote-false-erase-fatal.mir.
 #
 # demote_uimm6: spacer MBB between preheader and header makes StartOff > 252
-# even with only InterveningCycles (=3) NOPs after SET. Shorten cannot pull
-# spacer MIs into the preheader, so the product path demotes: SET_HWLOOP_W is
+# even with only InterveningCycles (=3) NOPs after SET. Nothing moves MIs
+# across MBBs, so the product path demotes: SET_HWLOOP_W is
 # erased and the latch gets a countable back-edge (subi32 + bnez_w).
 #
-# shorten_uimm6: many NOPs after SET in the *same* preheader — StartOff would
-# exceed uimm6, but shorten moves them before SET while keeping Following >=
-# InterveningCycles (3; SetupIssueDistance=4). SET_HWLOOP_W is retained
-# (both product and debug-off).
+# shorten_uimm6 (rebaselined 2026-08-22, topics/hwloop PM2): many NOPs after
+# SET in the *same* preheader — StartOff (20 NOPs = 240 B) sits past the
+# 216 B safe margin but INSIDE the 252 B hard uimm6 field. The former
+# free-lift "shorten" leg is deleted (no peer reorders user code for
+# hwloop timing); the loop survives on the hard-limit re-check alone.
+# SET_HWLOOP_W is retained (both product and debug-off) — the hard-field
+# outcome, not a lift, is the pinned contract.
 
 --- |
   define dso_local void @demote_uimm6(ptr nocapture writeonly %out) {
@@ -125,8 +128,9 @@ body:             |
 
     $r0 = frame-setup XOR32 $r0, $r0
     SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
-    ; 20 NOPs after SET (320 B) — over uimm6; shorten pulls them before SET
-    ; leaving ≥3 for t−3.
+    ; 20 NOPs after SET (240 B) — past the 216 B safe margin but inside the
+    ; 252 B hard uimm6 field; nothing reorders MIs (lift deleted), so the
+    ; SET survives on the hard-limit re-check.
     NOP
     NOP
     NOP

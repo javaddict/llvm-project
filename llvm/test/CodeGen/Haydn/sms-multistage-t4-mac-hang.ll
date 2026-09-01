@@ -1,12 +1,14 @@
 ; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-analysis-only \
+; RUN:     -haydn-sms-containment-max=1 \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.rmk | FileCheck %s --check-prefix=ASM
 ; RUN: FileCheck %s --check-prefix=RMK < %t.rmk
 ; RUN: llc -global-isel-abort=1 -mtriple=haydn -mattr=-hwloop -O2 -verify-machineinstrs \
 ; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
 ; RUN:     -stop-before=haydn-finalize-mi-bundles \
+; RUN:     -haydn-sms-containment-max=1 \
 ; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.mat.rmk | FileCheck %s --check-prefix=MAT
 ; RUN: FileCheck %s --check-prefix=MATRMK < %t.mat.rmk
@@ -14,18 +16,24 @@
 ; T4 hang-root was Latest-to--inf and LastEarliestPusher cycles on dense
 ; MAC DAGs (bkfir). Those walks are capped; this smaller MAC body runs
 ; through RA + post-RA so QUALIFY is not stuck behind the generic
-; pipeliner stop-after. Product default stays OFF.
+; pipeliner stop-after. 2026-08-22 SMS product-default flip rebaseline (default ON).
+; W68.1: generic pre-RA SMS now owns soft multi-stage at product defaults, so
+; this loop would otherwise be expanded pre-RA and the post-RA engine (the
+; subject of both analysis and materialize pins) would re-analyze an
+; already-expanded shape (kind=not-candidate). -haydn-sms-containment-max=1
+; (the F41 bisect knob) restores the historic single-stage soft containment
+; so the loop reaches the post-RA engine UNexpanded. ZOL is unaffected.
 ;
 ; ASM-LABEL: t4_mac:
 ; ASM: jalr
 ; RMK: resource-bias=slot-windows
 ; RMK: {{accepted II=|exhausted:|rejected:}}
 ; RMK: qualify-or-cut
-; RMK: product-off
+; RMK: product-on
 ; RMK-NOT: sequential (preflight)
 ; MAT: name: t4_mac
 ; MATRMK: {{accepted II=|exhausted:|rejected:|preflight reject:}}
-; MATRMK: product-off
+; MATRMK: product-on
 
 define i32 @t4_mac(ptr nocapture readonly %a, ptr nocapture readonly %b,
                    i32 %n) {

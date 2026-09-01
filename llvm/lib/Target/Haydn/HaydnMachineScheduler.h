@@ -14,7 +14,7 @@
 //
 // Post-RA: HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HazardRecognizer
 // (sole owner of final VLIW pack in leaveRegion/leaveMBB).
-// Multi-stage SMS (HaydnPostRAMultiStage) optional after ordinary convergence; default OFF.
+// Multi-stage SMS (HaydnPostRAMultiStage) optional after ordinary convergence; default ON.
 //
 // Do NOT revive VLIWMachineScheduler / ConvergingVLIWScheduler (UAF).
 // Do NOT use bare GenericScheduler via nullptr factory fallback.
@@ -61,6 +61,9 @@ public:
   void exitRegion() override;
   void finishBlock() override;
   void schedule() override;
+  /// G005: function-late seat for the canonical per-loop II/NS remark
+  /// (every region scheduled, every multistage attempt journaled).
+  void finalizeSchedule() override;
 };
 
 // Create the post-RA scheduler DAG for Haydn.

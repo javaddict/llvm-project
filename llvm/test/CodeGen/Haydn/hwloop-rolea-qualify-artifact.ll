@@ -2,20 +2,23 @@
 ; RUN:   -mattr=+hwloop -haydn-enable-multistage-sms=false < %s | \
 ; RUN:   FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms=false \
-; RUN:   < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=0 -haydn-enable-multistage-sms=false \
+; RUN:   < %s | FileCheck %s --check-prefix=HWOFF
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms=false \
+; RUN:   -mattr=+hwloop -haydn-enable-multistage-sms=false \
 ; RUN:   -filetype=obj -o %t.o < %s
 ; RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | \
 ; RUN:   FileCheck %s --check-prefix=OBJ
 ; RUN: llvm-readobj -r %t.o | FileCheck %s --check-prefix=RELOC
 ;
-; Role: semantic — independent SCEV-proven QUALIFY while product default
-; stays OFF and multi-stage SMS is explicitly OFF. CSR / selector / reloc /
-; fault seats on one artifact.
-; Off path: no set_hwloop and no csrw to unpublished HWLR window.
-; On path: SET_HWLOOP_F2 sel=0 only; START before END; no free CSR program.
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON.
+
+; Role: semantic — independent SCEV-proven QUALIFY under the product
+; default (ON since 2026-08-22), multi-stage SMS explicitly OFF. CSR /
+; selector / reloc / fault seats on one artifact.
+; On path (DEFAULT): SET_HWLOOP_F2 sel=0 only; START before END; no free
+; CSR program.
+; Off path (HWOFF): no set_hwloop and no csrw to unpublished HWLR window.
 ; Object: encoded set_hwloop_f2 with resolved Off1/Off2 immediates; no
 ; csrw 0x20-0x25. Local Off1/Off2 resolve in-object (PC+(uimm<<2)).
 ; Reloc: never the retired HWLoopOffset alias. Ordinary branch relocs
@@ -29,20 +32,20 @@ target triple = "haydn-unknown-elf"
 
 define i32 @qualify_runtime_sum(ptr readonly %p, i32 %n) nounwind {
 ; DEFAULT-LABEL: qualify_runtime_sum:
-; DEFAULT-NOT:   set_hwloop
+; Setup floor: SET then intervening size-bearing parcels before BEGIN.
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NEXT:  {{.*}}nop
+; DEFAULT-NOT:   set_hwloop_f2 1,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
+; Inclusive END strictly after START labels in emission order.
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: qualify_runtime_sum:
-; Setup floor: SET then intervening size-bearing parcels before BEGIN.
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NEXT:  {{.*}}nop
-; HWON-NOT:   set_hwloop_f2 1,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; Inclusive END strictly after START labels in emission order.
-; HWON:       jalr
+; HWOFF-LABEL: qualify_runtime_sum:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF:       jalr
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %loop, label %exit
@@ -60,16 +63,16 @@ exit:
   ret i32 %r
 }
 
-; Innermost latch-only diamond: measured multi-BB Role A under HWON.
+; Innermost latch-only diamond: measured multi-BB Role A under the ON default.
 define void @qualify_multibb_latch(ptr %dst, ptr readonly %src, i32 %n) nounwind {
 ; DEFAULT-LABEL: qualify_multibb_latch:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0,
+; DEFAULT-NOT:   set_hwloop_f2 1,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
 ;
-; HWON-LABEL: qualify_multibb_latch:
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   set_hwloop_f2 1,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF-LABEL: qualify_multibb_latch:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %loop, label %exit
@@ -100,8 +103,8 @@ declare void @side_effect(i32)
 define void @qualify_call_fault(i32 %n) nounwind {
 ; DEFAULT-LABEL: qualify_call_fault:
 ; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: qualify_call_fault:
-; HWON-NOT: set_hwloop
+; HWOFF-LABEL: qualify_call_fault:
+; HWOFF-NOT: set_hwloop
 entry:
   br label %loop
 loop:
@@ -117,8 +120,8 @@ exit:
 define void @qualify_zero_trip_fault(ptr %p) nounwind {
 ; DEFAULT-LABEL: qualify_zero_trip_fault:
 ; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: qualify_zero_trip_fault:
-; HWON-NOT: set_hwloop
+; HWOFF-LABEL: qualify_zero_trip_fault:
+; HWOFF-NOT: set_hwloop
 entry:
   br i1 false, label %loop, label %exit
 loop:
@@ -132,12 +135,12 @@ exit:
 ; Trip=1 is typically unrolled or left soft; trip=4 stays a real ZOL body.
 define void @qualify_trip_const4(ptr %p) nounwind {
 ; DEFAULT-LABEL: qualify_trip_const4:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0,
+; DEFAULT-NOT:   set_hwloop_f2 1,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; HWON-LABEL: qualify_trip_const4:
-; HWON:       set_hwloop_f2 0,
-; HWON-NOT:   set_hwloop_f2 1,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF-LABEL: qualify_trip_const4:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
 entry:
   br label %loop
 loop:
@@ -156,19 +159,19 @@ exit:
 ; this is the measured inner-only overlay (never Role B rediscovery).
 define i32 @qualify_nested_inner_only(ptr noalias %a, i32 %n, i32 %m) nounwind {
 ; DEFAULT-LABEL: qualify_nested_inner_only:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT:   set_hwloop_f2 1,
+; DEFAULT-NOT:   set_hwloop_f2 2,
+; DEFAULT-NOT:   set_hwloop_f2 3,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: qualify_nested_inner_only:
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT:   set_hwloop_f2 1,
-; HWON-NOT:   set_hwloop_f2 2,
-; HWON-NOT:   set_hwloop_f2 3,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: qualify_nested_inner_only:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF:       jalr
 entry:
   %cmp.n = icmp sgt i32 %n, 0
   br i1 %cmp.n, label %outer.preheader, label %exit
@@ -205,8 +208,8 @@ exit:
 define i32 @qualify_early_exit_fault(ptr readonly %src, i32 %n, i32 %k) nounwind {
 ; DEFAULT-LABEL: qualify_early_exit_fault:
 ; DEFAULT-NOT: set_hwloop
-; HWON-LABEL: qualify_early_exit_fault:
-; HWON-NOT: set_hwloop
+; HWOFF-LABEL: qualify_early_exit_fault:
+; HWOFF-NOT: set_hwloop
 entry:
   %cmp0 = icmp sgt i32 %n, 0
   br i1 %cmp0, label %loop, label %exit

@@ -1,10 +1,10 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-before=postmisched \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-before=postmisched \
 ; RUN:   -verify-machineinstrs < %s -o - \
 ; RUN:   | FileCheck %s --check-prefix=PRE
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stop-after=postmisched \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stop-after=postmisched \
 ; RUN:   -verify-machineinstrs < %s -o - \
 ; RUN:   | FileCheck %s --check-prefix=POST
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -stats -verify-machineinstrs \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -stats -verify-machineinstrs \
 ; RUN:   < %s -o /dev/null 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=STATS
 

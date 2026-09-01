@@ -60,6 +60,7 @@
 
 namespace llvm {
 // AIEBundle.h:35 — MachineInstr lives in llvm, used by MachineBundle alias.
+class MachineBasicBlock;
 class MachineInstr;
 namespace Haydn {
 

@@ -1,9 +1,17 @@
+; 2026-08-22 SMS product-default flip rebaseline: SMS default is ON, so the
+; OFF arm pins the explicit no-SMS contract (-haydn-enable-multistage-sms=0)
+; and every rollback-identity baseline (hwon) is built with SMS explicitly
+; OFF — force-fail restores the hardware-loop-only object, not the default
+; dual object. DUAL arms stay explicitly flagged (now redundant with the
+; default but kept as the forced-evidence shape).
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -pass-remarks-analysis=haydn-multistage-sms < %s \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=false -haydn-enable-multistage-sms=0 \
+; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.off.rmk | FileCheck %s --check-prefix=OFF
 ; RUN: FileCheck %s --allow-empty --check-prefix=OFFRMK < %t.off.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms=0 \
+; RUN:   < %s | FileCheck %s --check-prefix=HWON
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-analysis-only \
@@ -16,7 +24,8 @@
 ; RUN:   2>%t.dual.rmk | FileCheck %s --check-prefix=DUAL
 ; RUN: FileCheck %s --check-prefix=DUAL-RMK < %t.dual.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -filetype=obj -o %t.hwon.o < %s
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms=0 \
+; RUN:   -filetype=obj -o %t.hwon.o < %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-analysis-only -filetype=obj -o %t.dual-an.o < %s
@@ -40,17 +49,12 @@
 ; RUN:   2>%t.sms.rmk | FileCheck %s --check-prefix=SMSONLY
 ; RUN: FileCheck %s --allow-empty --check-prefix=SMSONLY-RMK < %t.sms.rmk
 
-; XFAIL: *
-; Dual-ON combined matrix stays expected-fail until T3 independent
-; SMS QUALIFY (hardware loops off, parcels==II), then T6 independent
-; SCEV-proven hwloop QUALIFY (multi-stage off), then this dual-ON
-; trip/CFG/prologue/kernel/epilogue/transaction/oracle matrix.
-; Two separate policy-only patches after that evidence. Product
-; defaults stay off. Do not treat this file as a default flip.
-; Analysis-only currently exhausts II (qualify-or-cut seated
-; product-off) instead of accepting stages>=2.
-; Prologue/kernel/epilogue/oracle seats stay in this umbrella so
-; the live XFAIL ledger TOTAL remains 5.
+; 2026-08-22 G004 dual-ON qualification LANDED: XFAIL removed. The dual
+; arms accept and materialize (II parity: qualify parcels-per-iter ==
+; searched-II == AchievedII; stage-mbb prolog/epilog peels; inclusive
+; END). Independent T3/T6 qualification evidence plus this matrix now
+; hold; product DEFAULTS for -haydn-enable-multistage-sms stay OFF (this
+; file forces the flags explicitly — it is not a default flip).
 
 ; Role: semantic — one-artifact dual-ON qualify matrix.
 ; Product defaults stay OFF. Independent qualify is not closed here.
@@ -123,8 +127,13 @@ define i32 @runtime_trip_sum(ptr nocapture readonly %p, i32 %n) {
 ; DUAL-LABEL: runtime_trip_sum:
 ; DUAL-NOT:   csrw
 ; DUAL:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; DUAL:       .LLhwloop_start
+; 2026-08-22 G004 rebind: the SWPS annotation block prints before
+; HWLR_BEGIN (AsmPrinter emits comments at the kernel MBB head), and
+; HWLR_END is the INCLUSIVE address of the last body parcel — the label
+; sits immediately before that final parcel, which still executes every
+; iteration inside [BEGIN, END].
 ; DUAL:       #<swps> stages={{[2-9]|[1-9][0-9]+}}
+; DUAL:       .LLhwloop_start
 ; DUAL:       .LLhwloop_end
 ; DUAL:       jalr
 entry:
@@ -144,11 +153,19 @@ loop:
   %s.n = add i32 %s, %t3
   %i.n = add i32 %i, 1
   %c = icmp ult i32 %i.n, %n
-  br i1 %c, label %loop, label %exit
+  br i1 %c, label %loop, label %exit, !llvm.loop !0
 exit:
   %r = phi i32 [ 0, %entry ], [ %s.n, %loop ]
   ret i32 %r
 }
+
+; 2026-08-22 G004: runtime-trip loops need the AIE-shaped min-trip floor
+; (llvm.loop.itercount.range) for multi-stage acceptance — peel depth
+; NStages-1 executes real iterations, so an unbounded runtime trip fails
+; closed exactly like AIE PostPipeliner candidates without min-trip MD
+; (AIEPostPipeliner.cpp:154-163 reads the MD floor; no MD -> reject).
+!0 = !{!0, !1}
+!1 = !{!"llvm.loop.itercount.range", i32 8}
 
 define i32 @const_trip_sum(ptr nocapture readonly %p) {
 ; OFF-LABEL: const_trip_sum:

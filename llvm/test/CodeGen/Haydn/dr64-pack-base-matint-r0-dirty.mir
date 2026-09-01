@@ -53,9 +53,10 @@ body:             |
     ; CHECK: $r0 = frame-setup XOR32 $r0, $r0
     ; CHECK: $r0 = ADDI32_W $r1, 99
     ; Local restore immediately before MatInt seed. Dest of LUI is the
-    ; scavenged pack base, never R0 (NeedsZeroBase / Base != R0).
+    ; scavenged pack base, never R0 (NeedsZeroBase / Base != R0). LUI is
+    ; dest+imm (W68.0b): no R0 seed operand.
     ; CHECK-NEXT: $r0 = XOR32 $r0, $r0
-    ; CHECK-NEXT: $[[BASE:r[1-9]|r1[0-2]]] = LUI $r0,
+    ; CHECK-NEXT: $[[BASE:r[1-9]|r1[0-2]]] = LUI 4095
     ; CHECK-NOT: $r0 = LUI
     ; CHECK: $[[BASE]] = ADDI32_W $[[BASE]],
     ; CHECK: $[[BASE]] = ADD32 $r{{[0-9]+}}, $[[BASE]]

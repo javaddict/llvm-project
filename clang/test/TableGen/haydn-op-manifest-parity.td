@@ -16,11 +16,16 @@
 // CHECK-DAG: HAYDN_OP_PUB,arctan,arctan,__builtin_haydn_arctan,ARCTAN,,Pure,,2,1:0:15,int(int64_t_ int)
 
 // Feature-gated State UA preload: pldwwua features=agu, Effect=State, ar_sel Imm.
-// Architectural AR file is AR0/AR1; ImmCheck legal domain is 0..1 (fail-closed).
-// CHECK-DAG: HAYDN_OP_PUB,pldwwua,pldwwua,__builtin_haydn_pldwwua,PLDWWUA_POST,,State,agu,2,0:0:1,void(int_ void const*)
+// ImmCheck legal domain is 0..3 (2-bit ar_sel encoding; CB-149 restored
+// ImmCheck0_3 — Sema surface; decode-side 2/3 policy stays with GE96-09).
+// CHECK-DAG: HAYDN_OP_PUB,pldwwua,pldwwua,__builtin_haydn_pldwwua,PLDWWUA_POST,,State,agu,2,0:0:3,void(int_ void const*)
 
 // Golden ordinary memory: Effect=Mem (WITH load).
 // CHECK-DAG: HAYDN_OP_PUB,d_lw_with_imm,d_lw_with_imm,__builtin_haydn_d_lw_with_imm,{{[^,]+}},,Mem,
+
+// ISA-65 fused round-sat-store (Effect=Mem; POST writeback + WITH, simm6).
+// CHECK-DAG: HAYDN_OP_PUB,d_sw_f64rs_post_imm,d_sw_f64rs_post_imm,__builtin_haydn_d_sw_f64rs_post_imm,D_SW_F64RS_POST_IMM,,Mem,,3,2:-32:31,void*(int64_t_ void*_ int)
+// CHECK-DAG: HAYDN_OP_PUB,d_sw_f64rs_with_imm,d_sw_f64rs_with_imm,__builtin_haydn_d_sw_f64rs_with_imm,D_SW_F64RS_WITH_IMM,,Mem,,3,2:-32:31,void(int64_t_ void*_ int)
 
 // AE bag stays unpublished (C0.5 fail-closed default).
 // CHECK-DAG: HAYDN_OP_UNPUB,{{[a-z0-9_]+}},{{[a-z0-9_]+}},__builtin_ae_{{[a-z0-9_]+}},

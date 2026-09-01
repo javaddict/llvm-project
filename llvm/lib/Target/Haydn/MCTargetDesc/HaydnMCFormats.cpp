@@ -103,6 +103,12 @@ bool haydnIsResidualFieldSlotName(StringRef Name) {
 }
 
 bool haydnIsGeneratedMemberName(StringRef Name) {
+  // Parser/refusal law (W64 QW3): CASE-INSENSITIVE by design — this classifies
+  // what a user TYPED (any case) so the AsmParser refuses member-form
+  // spellings with the precise "private placement opcode" error. Opcode-name
+  // member identity is the case-sensitive canonical
+  // llvm::isGeneratedFormatEMemberName (HaydnFormatERecords.h); the two are
+  // different laws and both are single-sourced.
   return Name.contains_insensitive("_E2_") ||
          Name.contains_insensitive("_E3_");
 }

@@ -307,7 +307,8 @@ define i32 @test_macq31(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulssh r2, r2, r3 }
-; CHECK-NEXT:    { nop; nop }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -324,7 +325,8 @@ define i32 @test_mac32(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; CHECK-NEXT:    { nop; nop }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

@@ -6,9 +6,6 @@
 ; RUN:     -verify-machineinstrs -o /dev/null %t/interrupt.ll 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=ISR
 ; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
-; RUN:     -verify-machineinstrs -o /dev/null %t/naked.ll 2>&1 \
-; RUN:     | FileCheck %s --check-prefix=NAKED
-; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -o /dev/null %t/ssp.ll 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=SSP
 ; RUN: not --crash llc -mtriple=haydn-unknown-elf -global-isel-abort=1 \
@@ -31,8 +28,9 @@
 ;
 ; Role: semantic — advertised frame/CC seats that have no product ABI
 ; fail closed at CallLowering (first firewall). i128 is not a CC type
-; (reject before splitToValueTypes invents 2xi64). interrupt / naked /
-; stack-protector have no ISR or protector ABI. inreg / nest / swift* /
+; (reject before splitToValueTypes invents 2xi64). interrupt /
+; stack-protector have no ISR or protector ABI. naked is a product seat
+; (positive shape in naked-fn.ll). inreg / nest / swift* /
 ; byref have no Haydn seat. half is storage/libcall, not a CC type.
 ; musttail stays fail-closed separately. Soft tail is ordinary JAL_W + RET.
 ;
@@ -48,12 +46,6 @@ define i128 @i128_formal(i128 %x) {
 ;--- interrupt.ll
 define void @isr() "interrupt"="machine" {
   ; ISR: {{unable to lower arguments|unable to lower function|unable to lower|failed to lower}}
-  ret void
-}
-
-;--- naked.ll
-define void @naked_fn() naked {
-  ; NAKED: {{unable to lower arguments|unable to lower function|unable to lower|failed to lower}}
   ret void
 }
 

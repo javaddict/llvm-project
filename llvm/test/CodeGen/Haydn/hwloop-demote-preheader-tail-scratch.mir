@@ -1,0 +1,119 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+
+# Role: MIR — software demote must not scavenge a GPR that the preheader
+# tail still defines after SET.
+#
+# SET is not a scheduling boundary; following address materialization in
+# the same preheader is legal setup distance. pickCounterReg's LivePhysRegs
+# snapshot at SET can still see $r3 as free while the tail later does
+# `$r3 = ADDI32_W $r13, …`. Using $r3 as the countdown then clobbers the
+# trip (va-arg-22 -O2: SUBI/BNEZ on a frame pointer → MEMORY_FAULT).
+#
+# Shape: imm SET_HWLOOP_W + spacer forces range demote. Every pickCounterReg
+# GPR except $r3 is mentioned in the loop body; $r3 is mentioned only in the
+# preheader tail. After the tail-liveness check, no GPR is sound → stack
+# counter (same closed window as hwloop-demote-stackcounter-freescratch.mir).
+# $r3 is free at the latch (not a loop live-in), so it is a valid
+# spill-free latch scratch for the stack counter — that is not the same
+# as a GPR countdown, which would SUBI32 $r3 without a frame load.
+
+--- |
+  define dso_local void @demote_preheader_tail_scratch(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            demote_preheader_tail_scratch
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+    ; Tail scratch after SET (legal Following work). $r3 is not live into
+    ; the loop and is not mentioned there — old pickCounterReg would take it.
+    $r3 = ADDI32_W $r13, 16
+    ST32 $r3, $r1, 1
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    $r7 = XOR32 $r1, $r2, implicit-def dead $sfr
+    ST32 $r7, $r2, 0
+    $r1 = XOR32 $r1, $r1
+    $r2 = XOR32 $r2, $r2
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    ST32 $r1, $r2, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: demote_preheader_tail_scratch
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopDec
+# CHECK-NOT: LoopJNZ
+#
+# Preheader tail scratch must not become the GPR countdown (that would
+# materialize the trip into $r3 from $r0/$r13-as-zero before this ADDI).
+# CHECK: $r3 = ADDI32_W $r13, 16
+#
+# CHECK-LABEL: bb.2.body:
+# Stack-counter window: load from the frame, decrement, store, terminator.
+# A GPR countdown on $r3 would SUBI32 $r3 without a preceding frame load.
+# CHECK: $r3 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r3 = SUBI32{{.*}}$r3, 1
+# CHECK: S_SW_WITH_IMM{{.*}}$r3, $r13
+# CHECK: BNEZ{{.*}}$r3
+# CHECK-LABEL: bb.3.exit:

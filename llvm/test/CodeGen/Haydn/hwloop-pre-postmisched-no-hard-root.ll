@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -haydn-enable-hwloops -mattr=+hwloop -O2 \
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -haydn-enable-hwloops -mattr=+hwloop -O2 \
 ; RUN:   -stop-before=postmisched %s -o - | FileCheck %s
 
 ; Role: MIR — Pre-SMS-HANDOFF / exact no-split qualification: production post-RA entry must not see a pre-existing hard BUNDLE root.

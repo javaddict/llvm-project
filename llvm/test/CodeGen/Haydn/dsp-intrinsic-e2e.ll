@@ -100,15 +100,23 @@ define i64 @conditional_mac(i64 %a, i64 %b, i64 %c, i32 %flag) {
 ;Dot product loop (DSP in a loop)
 ; Note: The array loads are optimized away by the compiler; the loop body
 ; contains the multiply-accumulate on registers already in DR64.
+; REBASELINED 2026-08-22 (topics/hwloop PM2 AIE decline-list port): the
+; loop body's only call is llvm.haydn.mul64.ss.ll — a target intrinsic
+; that selects INLINE (mul64.ll ISel pattern, IntrinsicsHaydn.td) — so
+; the AIE-shaped TTI call scan now correctly lets the loop through and
+; it arms a hardware loop (set_hwloop_f2; the old software-loop pins
+; slt32/bnez die with the IV compare). The fail-closed intrinsic policy
+; (only llvm.haydn.* + no-code annotations pass) keeps every generic
+; FP-math intrinsic declined; this rebaseline is the intentional
+; improvement, not a CHECK relaxation.
 define i64 @dot_product(ptr %a, ptr %b, i32 %n) {
 ; CHECK-LABEL: dot_product:
 ; CHECK-DAG: sext32t64
 ; CHECK-DAG: slli64
 ; CHECK-DAG: srli64
-; CHECK-DAG: slt32
+; CHECK-DAG: set_hwloop_f2
 ; CHECK-DAG: mul64.ll
 ; CHECK-DAG: add64
-; CHECK-DAG: bnez
 entry:
   br label %loop
 

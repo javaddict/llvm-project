@@ -33,6 +33,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "haydn-ensure-terminators"
@@ -80,6 +81,16 @@ bool HaydnEnsureTerminators::runOnMachineFunction(MachineFunction &MF) {
     // when the terminator is a fallthrough with no MI. Only true dead-ends
     // (no CFG successors) need an artificial terminator.
     if (!MBB.succ_empty())
+      continue;
+
+    // Naked law (see hasUnsupportedFnABI in HaydnCallLowering): the asm
+    // body owns control flow with its own jalr_w; the compiler contributes
+    // zero instructions. Clang lowers an asm-only naked body to
+    // `INLINEASM; unreachable`, which lands here as a dead-end — do not
+    // invent a RET parcel after the body's own return (naked-fn.ll).
+    // Generic PEI skips prologue/epilogue for Naked, so nothing else will
+    // terminate this block either: the last asm parcel is the final word.
+    if (MBB.getParent()->getFunction().hasFnAttribute(Attribute::Naked))
       continue;
 
     if (MBB.getFirstTerminator() != MBB.end())

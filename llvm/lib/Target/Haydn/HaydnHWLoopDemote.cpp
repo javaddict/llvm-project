@@ -16,6 +16,7 @@
 
 #include "HaydnHWLoopDemote.h"
 #include "HaydnBundleMaterialize.h"
+#include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnPortModel.h"
@@ -23,6 +24,7 @@
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -311,10 +313,9 @@ void haydn::hwloop::eraseSetMemberAndRecommitSiblings(
   SmallVector<MachineInstr *, 3> Keep;
   if (SetMI.isBundledWithPred() || SetMI.isBundledWithSucc()) {
     MachineInstr *Root = &*getBundleStart(SetMI.getIterator());
-    for (MachineBasicBlock::instr_iterator I = std::next(Root->getIterator());
-         I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
-      if (&*I != &SetMI)
-        Keep.push_back(&*I);
+    for (MachineInstr *K : haydn::bundle::members(*Root)) {
+      if (K != &SetMI)
+        Keep.push_back(K);
     }
     // Dissolve every child from the old root before erasing the header so no
     // pass observes a half-unbundled multi-member shell.
@@ -474,6 +475,119 @@ bool haydn::hwloop::regClobberedNonCountdownIn(Register Reg,
   return false;
 }
 
+// A demote counter's live range: the loop blocks (every one lies on a
+// def->latch-BNEZ path — collectLoopBlocks is reverse-reachable from the
+// latch) plus the preheader tail from the materialize point.
+// Law — this function must OWN the register across that range:
+//  * ABI callee-saved (R8-R11/R14/D8-D15): owned iff this function's
+//    prologue actually saves it (CalleeSavedInfo; demote runs post-PEI at
+//    both seats — formation addPreSched2 and fixup addPreEmit — so an
+//    unsaved CSR write is never later repaired: silent breakage of OUR
+//    caller's live value). Saved ⇒ also call-safe: callees restore it and
+//    our epilogue restores the caller's value.
+//  * caller-saved: freely owned by the callee, but any call on the range
+//    clobbers it mid-loop (corrupted trip). A call's clobbers are regmask
+//    operands — invisible to the explicit-def walk above (verifier:
+//    "Using an undefined physical register"; runtime: wrong loop bound).
+// No qualifying register ⇒ the stack-counter demote path (PostRAScratchFI
+// home; latch scratch defined entirely after the last call) is the sink.
+bool haydn::hwloop::isSoundDemoteCounter(
+    MCPhysReg Reg, const LoopBlockSet &Blocks, const MachineBasicBlock *Preheader,
+    MachineBasicBlock::const_iterator PreheaderFrom, const MachineFunction &MF,
+    const TargetRegisterInfo &TRI) {
+  // Preheader tail after SET/LoopStart still executes with the software
+  // counter live. Following work is legal ZOL setup distance (SET is not a
+  // scheduling boundary), so a GPR scavenged as free at the SET site may
+  // still be defined as address scratch before the header. Using it as the
+  // countdown leaves the trip clobbered (va-arg-22 -O2: r3 = sp+off then
+  // SUBI/BNEZ r3 → MEMORY_FAULT). Skip the setup MI and its bundle.
+  if (Preheader && PreheaderFrom != Preheader->end()) {
+    bool PastSetup = false;
+    bool InSetupBundle = false;
+    for (const MachineInstr &MI : Preheader->instrs()) {
+      if (!PastSetup) {
+        if (&MI == &*PreheaderFrom) {
+          PastSetup = true;
+          InSetupBundle = MI.isBundle() || MI.isBundledWithSucc();
+        }
+        continue;
+      }
+      if (InSetupBundle) {
+        if (MI.isBundledWithPred())
+          continue;
+        InSetupBundle = false;
+      }
+      if (MI.isMetaInstruction() || MI.isDebugInstr() ||
+          MI.isCFIInstruction() || MI.isImplicitDef() || MI.isKill() ||
+          MI.isBundle())
+        continue;
+      for (const MachineOperand &MO : MI.operands()) {
+        if (MO.isReg() && MO.getReg().isPhysical() &&
+            TRI.regsOverlap(MO.getReg(), Reg))
+          return false;
+      }
+    }
+  }
+
+  // ABI CSR membership: the save list is the inter-procedural contract.
+  bool IsABICalleeSaved = false;
+  for (const MCPhysReg *CSR = TRI.getCalleeSavedRegs(&MF); CSR && *CSR; ++CSR)
+    if (*CSR == Reg)
+      IsABICalleeSaved = true;
+
+  if (IsABICalleeSaved) {
+    for (const CalleeSavedInfo &CI : MF.getFrameInfo().getCalleeSavedInfo())
+      if (CI.getReg() == Reg)
+        return true;
+    return false;
+  }
+
+  // Caller-saved: refuse when any call on the counter's live range fails to
+  // preserve it. A call with no regmask at all is underdescribed: refuse.
+  auto callOnRangeClobbers = [&]() -> bool {
+    for (const MachineBasicBlock *MBB : Blocks) {
+      if (!MBB)
+        continue;
+      for (const MachineInstr &MI : MBB->instrs()) {
+        if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isBundle() ||
+            !MI.isCall())
+          continue;
+        bool HasRegMask = false;
+        bool Preserved = false;
+        for (const MachineOperand &MO : MI.operands()) {
+          if (!MO.isRegMask())
+            continue;
+          HasRegMask = true;
+          if (!MO.clobbersPhysReg(Reg))
+            Preserved = true;
+        }
+        if (!HasRegMask || !Preserved)
+          return true;
+      }
+    }
+    if (!Preheader)
+      return false;
+    for (auto It = PreheaderFrom; It != Preheader->end(); ++It) {
+      const MachineInstr &MI = *It;
+      if (MI.isMetaInstruction() || MI.isDebugInstr() || !MI.isCall())
+        continue;
+      bool HasRegMask = false;
+      bool Preserved = false;
+      for (const MachineOperand &MO : MI.operands()) {
+        if (!MO.isRegMask())
+          continue;
+        HasRegMask = true;
+        if (!MO.clobbersPhysReg(Reg))
+          Preserved = true;
+      }
+      if (!HasRegMask || !Preserved)
+        return true;
+    }
+    return false;
+  };
+  return !callOnRangeClobbers();
+}
+
 void haydn::hwloop::stripResidualCountdown(const LoopBlockSet &Blocks,
                                            Register Reg) {
   if (!Reg.isPhysical())
@@ -499,11 +613,18 @@ Register haydn::hwloop::pickCounterReg(
   // 1) not mentioned in any CFG loop block (lc_dp_lis: layout range missed
   //    latch earlier in the function — CFG Blocks is required);
   // 2) available at the SET insert point (LivePhysRegs — AIE/RISC-V style
-  //    post-RA scavenge, not "first preferred even if live").
+  //    post-RA scavenge, not "first preferred even if live");
+  // 3) owned by this function across the counter's live range (preheader
+  //    tail defs/uses after SET, call regmask clobbers / unsaved-CSR):
+  //    isSoundDemoteCounter, same law as Prefer;
+  // 4) dead on every loop exit edge (CB-162): the software countdown
+  //    destroys the register; a value live for later users (the bkfir16x16
+  //    descriptor NBLK/M fields) must never be the countdown.
   // Fail-closed: return invalid Register rather than Prefer/R11 when both
   // are live (old code clobbered live-through temps under demote).
   const TargetRegisterInfo &TRI = *ST.getRegisterInfo();
   const MachineRegisterInfo &MRI = Preheader.getParent()->getRegInfo();
+  const MachineFunction &MF = *Preheader.getParent();
 
   LivePhysRegs LPR(TRI);
   LPR.addLiveOuts(Preheader);
@@ -512,12 +633,44 @@ Register haydn::hwloop::pickCounterReg(
     LPR.stepBackward(*II);
   }
 
+  // Live-in of a loop-exit successor, derived from its live-out stepped
+  // backward over its instructions (MBB live-in lists alone are stale this
+  // late; the backward walk is the same authority LivePhysRegs uses).
+  auto liveInContains = [&](const MachineBasicBlock &S, MCPhysReg R) -> bool {
+    LivePhysRegs SuccLPR(TRI);
+    SuccLPR.addLiveOuts(S);
+    for (const MachineInstr &MI : llvm::reverse(S))
+      SuccLPR.stepBackward(MI);
+    return SuccLPR.contains(R);
+  };
+
   auto isUsable = [&](Register R) -> bool {
     if (!R.isPhysical() || R == Haydn::R0 || R == Haydn::R13 || R == Haydn::R15)
       return false;
     if (MRI.isReserved(R))
       return false;
     if (regMentionedInBlocks(R, Blocks))
+      return false;
+    for (const MachineBasicBlock *B : Blocks) {
+      if (!B)
+        continue;
+      for (const MachineBasicBlock *S : B->successors()) {
+        if (Blocks.contains(S))
+          continue;
+        if (liveInContains(*S, R.asMCReg())) {
+          LLVM_DEBUG(dbgs()
+                     << DebugPrefix << ": pickCounterReg reject "
+                     << printReg(R, &TRI) << " live after loop exit ("
+                     << printMBBReference(*S) << ")\n");
+          return false;
+        }
+      }
+    }
+    // Counter ownership law (calls / callee-saved): the materialize point is
+    // InsertPt — the range is the preheader tail from there plus the blocks.
+    if (!isSoundDemoteCounter(R.asMCReg(), Blocks, &Preheader,
+                              MachineBasicBlock::const_iterator(InsertPt), MF,
+                              TRI))
       return false;
     if (!LPR.available(MRI, R))
       return false;

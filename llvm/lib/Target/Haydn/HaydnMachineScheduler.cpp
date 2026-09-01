@@ -30,12 +30,16 @@
 
 using namespace llvm;
 
-static_assert(!HaydnMultiStageSMS::productDefaultEnabled(),
-              "multi-stage product default stays off");
+static_assert(HaydnMultiStageSMS::productDefaultEnabled(),
+              "multi-stage product default is ON (2026-08-22 "
+              "qualification: T4 accept + II parity + rollback + combined "
+              "matrix); re-parking requires new failing evidence");
 static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled(),
               "combined hwloop+SMS is not product");
-static_assert(!HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
-              "hardware-loop product default stays OFF; not flipped here");
+static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
+              "hardware-loop product default is ON (2026-08-22 "
+              "qualification; multi-stage SMS is independently ON via "
+              "productDefaultEnabled())");
 
 /// Live tblgen SchedMachineModel pin. AIE1 is in-order
 /// (`aie1/AIE1Schedule.td:258` MicroOpBufferSize=0, CompleteModel=0).
@@ -57,12 +61,33 @@ static void pinHaydnInOrderIncompleteSchedModel(const MachineFunction &MF) {
 
 void HaydnScheduleDAGMI::schedule() {
   // Shared post-RA host: ordinary list schedule first (rollback baseline),
-  // then optional transactional multi-stage mode (product default OFF).
+  // then optional transactional multi-stage mode (product default ON since
+  // the 2026-08-22 qualification).
   ScheduleDAGMI::schedule();
   if (EnableHaydnMultiStageSMS) {
     HaydnMultiStageSMS Host;
-    (void)Host.tryAfterOrdinarySchedule(*this);
+    if (Host.tryAfterOrdinarySchedule(*this)) {
+      // G004 D493 seam: the multi-stage plan committed this region's
+      // parcels (kernel bundle + cycle-ordered idle NOPs). leaveRegion
+      // would then re-materialize bundles from the ORDINARY zones — now
+      // stale relative to the mutated MIR — and insert stray idle NOPs
+      // past the committed kernel. Mark the block so leaveRegion defers:
+      // the multistage plan is the placement authority for this MBB.
+      if (auto *S = static_cast<HaydnPostRASchedStrategy *>(SchedImpl.get()))
+        S->noteMultistageCommitted(BB);
+    }
   }
+}
+
+void HaydnScheduleDAGMI::finalizeSchedule() {
+  // G005: the canonical per-loop II/NS remark fires exactly once per
+  // function, after every region scheduled and every multistage attempt
+  // journaled into HMFI — one deterministic line per single-MBB loop in
+  // layout order (AIE InterBlockScheduling::leaveFunction seat). This DAG
+  // is only constructed for the post-RA host, so the census never races a
+  // pre-RA scheduler.
+  emitHaydnSMSLoopRemarks(MF);
+  ScheduleDAGMI::finalizeSchedule();
 }
 
 bool HaydnScheduleDAGMI::successorsAreScheduled(

@@ -4687,6 +4687,32 @@ def d_sw_l_with_reg : HaydnBuiltin<"void(int64_t, void*, int)"> {
   let Mnemonic = "D_SW_L_WITH_REG";
   let Semantics = "Golden LS D_SW_L_WITH_REG.";
 }
+def d_sw_f64rs_post_imm : HaydnBuiltin<"void*(int64_t, void*, int)"> {
+  let PublicName = "d_sw_f64rs_post_imm";
+  let PublicPrototype = "void*(int64_t, void*, int)";
+  let Mnemonic = "D_SW_F64RS_POST_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "fused round-saturate-store with post-immediate AGU update: mem32[rs] = SATQ1.31(({rtd[63],rtd} + 2^15) >>> 16); rs += imm6 << 2. Returns updated base.";
+}
+def d_sw_f64rs_post_reg : HaydnBuiltin<"void*(int64_t, void*, int)"> {
+  let PublicName = "d_sw_f64rs_post_reg";
+  let PublicPrototype = "void*(int64_t, void*, int)";
+  let Mnemonic = "D_SW_F64RS_POST_REG";
+  let Semantics = "fused round-saturate-store with post-register AGU update: mem32[rs] = SATQ1.31(({rtd[63],rtd} + 2^15) >>> 16); rs += rs2. Returns updated base.";
+}
+def d_sw_f64rs_with_imm : HaydnBuiltin<"void(int64_t, void*, int)"> {
+  let PublicName = "d_sw_f64rs_with_imm";
+  let PublicPrototype = "void(int64_t, void*, int)";
+  let Mnemonic = "D_SW_F64RS_WITH_IMM";
+  let ImmChecks = [ImmCheck<2, ImmCheckSimm6>];
+  let Semantics = "fused round-saturate-store, base+offset addressing (no writeback): mem32[rs] = SATQ1.31(({rtd[63],rtd} + 2^15) >>> 16).";
+}
+def d_sw_f64rs_with_reg : HaydnBuiltin<"void(int64_t, void*, int)"> {
+  let PublicName = "d_sw_f64rs_with_reg";
+  let PublicPrototype = "void(int64_t, void*, int)";
+  let Mnemonic = "D_SW_F64RS_WITH_REG";
+  let Semantics = "fused round-saturate-store, base+register addressing (no writeback): mem32[rs] = SATQ1.31(({rtd[63],rtd} + 2^15) >>> 16).";
+}
 def s_lbs_post_imm_pair : HaydnPairBuiltin<"int(void**, void const*, int)"> {
   let PublicName = "s_lbs_post_imm";
   let PublicPrototype = "haydn_sld_t(void const*, int)";

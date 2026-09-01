@@ -53,9 +53,10 @@
 // is post-RA only).
 //
 // MOVE32-class ports (pre-RA surface): every explicit operand field
-// reserves one port. `MOVE32 rd, rs, rs` is 2R1W on the MI path and the
-// descriptor path. Pre-RA HR always takes the MI path. Sibling SMS owns
-// ResourceCycle packing under the same demand.
+// reserves one port. `MOVE32 rd, rs` is 1R1W on the MI path and the
+// descriptor path (dest+src logical, matching Format E members). Pre-RA HR
+// always takes the MI path. Sibling SMS owns ResourceCycle packing under
+// the same demand.
 //
 // Generic-pass dual-run baseline (plan §8.3 / §8.4 #11): Full-only product
 // ranking (matching-frontier ON, finer RP ON, isavail-delay OFF) must match
@@ -289,8 +290,20 @@ public:
   /// Product max total stages (prologue stages + 1). AIE LoopMaxStageCount peer.
   static constexpr unsigned productSMSMaxStageCount = 3;
 
-  /// Product pre-RA SMS containment: soft StageCount == 1 only. Multi-stage is
-  /// post-RA greenfield work; pre-RA rejects StageCount > 1 before mutation.
+  /// Product pre-RA SMS containment: the generic MachinePipeliner owns
+  /// multi-stage for BOTH soft and ZOL loops (W68.1; qualified on the
+  /// sms-multistage corpus + BundleSim A/B, including the ZOL
+  /// LoopStart-$adj/static-guard/classic-expander law); the bound matches the
+  /// PPS-3 max-stage gate. ZOL keeps its own AIE-peer gates
+  /// (smsZOLRejectsSingleStage / smsZOLRejectsMinTrip) — those, not
+  /// containment, are the ZOL law.
+  static constexpr unsigned productSMSSoftContainmentMaxStageCount =
+      productSMSMaxStageCount;
+
+  /// Historic Option A containment bound (StageCount==1 only). No longer a
+  /// product bound for any loop form; it survives as the F41
+  /// -haydn-sms-containment-max=1 bisect-down value that restores the
+  /// pre-W68.1 single-stage behavior for both soft and ZOL arms.
   static constexpr unsigned productSMSContainmentMaxStageCount = 1;
 
   /// Product default for the spill-pressure gate (AIE track-regpressure peer).
@@ -668,16 +681,16 @@ public:
   //===--------------------------------------------------------------------===//
   // MOVE32-class ports — pre-RA ownership pin (per-field)
   //===--------------------------------------------------------------------===//
-  // MCInstrDesc shape for MOVE32 is (outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2):
-  // NumDefs=1, two register uses. Every explicit field reserves one port, so
-  // MOVE32 rd, rs, rs is 2R1W on the MI path and the descriptor path.
+  // MCInstrDesc shape for MOVE32 is (outs GPR:$rd), (ins GPR:$rs1):
+  // dest+src, matching Format E members. Every explicit field reserves one
+  // port, so MOVE32 rd, rs is 1R1W on the MI path and the descriptor path.
   // CreateTargetMIHazardRecognizer(IsPreRA) uses only the MI path.
 
-  /// MI PortModel demand for MOVE32 rd, rs, rs (per-field, no identity dedup).
-  static constexpr unsigned move32ClassMiRepeatedSrcGprReads = 2;
+  /// MI PortModel demand for MOVE32 rd, rs.
+  static constexpr unsigned move32ClassMiRepeatedSrcGprReads = 1;
   static constexpr unsigned move32ClassMiRepeatedSrcGprWrites = 1;
-  /// Descriptor-only shape (1 def + 2 use slots) with no same-reg identity.
-  static constexpr unsigned move32ClassDescShapeGprReads = 2;
+  /// Descriptor shape is the same dest+src form.
+  static constexpr unsigned move32ClassDescShapeGprReads = 1;
   static constexpr unsigned move32ClassDescShapeGprWrites = 1;
 
   /// Retired: both paths are 2R1W (per-field).

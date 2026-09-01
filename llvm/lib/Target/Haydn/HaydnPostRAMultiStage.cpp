@@ -14,6 +14,7 @@
 
 #include "HaydnPostRAMultiStage.h"
 #include "Haydn.h"
+#include "HaydnBundle.h"
 #include "HaydnBundleMaterialize.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
@@ -49,7 +50,10 @@
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/Operator.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -65,7 +69,15 @@ namespace {
 class HaydnTwoCopySchedGraph final : public ScheduleDAGInstrs {
 public:
   HaydnTwoCopySchedGraph(MachineFunction &MF, const MachineLoopInfo *MLI)
-      : ScheduleDAGInstrs(MF, MLI, /*RemoveKillFlags=*/true) {}
+      : ScheduleDAGInstrs(MF, MLI, /*RemoveKillFlags=*/true) {
+    // G002 II-parity: the Form-C latch branch joins the two-copy body as an
+    // ordinary node (AIE isPostPipelineCandidate peer). This scratch graph
+    // is dep-analysis only (never emitted), and the branch is data-ordered
+    // against the compare chain by its register reads, so the terminator
+    // responsibility stated by the base-class flag is discharged here: the
+    // node's Earliest/Latest cannot cross its producers.
+    CanHandleTerminators = true;
+  }
   void schedule() override {}
 };
 } // namespace
@@ -102,6 +114,89 @@ namespace llvm {
 static bool cycleViolatesHRSameCycleLaws(const HaydnHazardRecognizer &HR,
                                          const MachineInstr &Cand,
                                          ArrayRef<const MachineInstr *> Occ);
+
+// G004 residue dest-window law — placement seat of the shared stall model
+// (HaydnLatencyStalls / countRealizedKernelParcels / plannedKernelDest-
+// WindowPads). The sequential machine stream must keep every same-register
+// read at least Data_Latency parcels after the def; modulo form over the
+// kernel residues: for each placed def at residue D with latency L > 1, a
+// reader of that reg may sit only at residue R with (R-D+II)%II >= L (the
+// ==0 same-parcel case is owned by the same-cycle RAW/WAR laws), and
+// symmetrically this candidate's L>1 defs exclude placed readers within
+// L-1 residues AFTER the def. Same dead-def / status-reg exclusions as
+// bookDestReadWindow. Booking opcode (pinned member) via the HR AltDescs.
+static bool
+residueDestWindowConflict(const MachineInstr &Cand, int CandResidue,
+                          ArrayRef<const MachineInstr *> Occ,
+                          ArrayRef<int> Residues, int II,
+                          const HaydnHazardRecognizer &HR) {
+  const TargetRegisterInfo *TRI =
+      Cand.getMF() ? Cand.getMF()->getSubtarget().getRegisterInfo() : nullptr;
+  auto latOfDefs = [&](const MachineInstr &MI,
+                       SmallVectorImpl<std::pair<Register, unsigned>> &Out) {
+    for (unsigned OpIdx = 0, E = MI.getNumOperands(); OpIdx != E; ++OpIdx) {
+      const MachineOperand &MO = MI.getOperand(OpIdx);
+      if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+        continue;
+      if (MO.isDead() || haydnIsSimplifiableReservedReg(MO.getReg()))
+        continue;
+      const unsigned Lat = HaydnHazardRecognizer::architecturalDefLatency(
+          HR.getItineraryData(), MI, OpIdx);
+      if (Lat > 1)
+        Out.emplace_back(MO.getReg(), Lat);
+    }
+  };
+  auto readsOf = [&](const MachineInstr &MI,
+                     SmallVectorImpl<Register> &Out) {
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isReg() && MO.getReg() && (MO.isUse() || (MO.isDef() && MO.getSubReg())))
+        Out.push_back(MO.getReg());
+    }
+  };
+  auto overlaps = [&](Register A, Register B) {
+    if (A == B)
+      return true;
+    return TRI && A.isPhysical() && B.isPhysical() && TRI->regsOverlap(A, B);
+  };
+  // Placed defs constrain the candidate's reads.
+  SmallVector<std::pair<Register, unsigned>, 6> Defs;
+  SmallVector<Register, 6> Reads;
+  readsOf(Cand, Reads);
+  for (size_t J = 0; J < Occ.size(); ++J) {
+    Defs.clear();
+    latOfDefs(*Occ[J], Defs);
+    if (Defs.empty() || Residues[J] < 0)
+      continue;
+    for (Register R : Reads)
+      for (const auto &[DR, Lat] : Defs) {
+        if (!overlaps(R, DR))
+          continue;
+        const int Dist = (CandResidue - Residues[J] + II) % II;
+        if (Dist > 0 && Dist < static_cast<int>(Lat))
+          return true;
+      }
+  }
+  // The candidate's defs constrain placed readers.
+  Defs.clear();
+  latOfDefs(Cand, Defs);
+  if (!Defs.empty()) {
+    for (size_t J = 0; J < Occ.size(); ++J) {
+      if (Residues[J] < 0)
+        continue;
+      Reads.clear();
+      readsOf(*Occ[J], Reads);
+      for (Register R : Reads)
+        for (const auto &[DR, Lat] : Defs) {
+          if (!overlaps(R, DR))
+            continue;
+          const int Dist = (Residues[J] - CandResidue + II) % II;
+          if (Dist > 0 && Dist < static_cast<int>(Lat))
+            return true;
+        }
+    }
+  }
+  return false;
+}
 
 /// AIE `PostPipelinerStrategy` (`AIEPostPipeliner.h:157-212`) with Haydn HR.
 class HaydnMultiStageStrategy {
@@ -161,17 +256,29 @@ public:
       if (!HR.canPlaceModulo(MI, Mod))
         continue;
       SmallVector<const MachineInstr *, 4> Occ;
+      SmallVector<int, 8> Residues;
       for (int K = 0; K < SI.NInstr; ++K) {
         if (!SI[K].Scheduled)
           continue;
-        if ((SI[K].Cycle % InitiationInterval) != Mod)
-          continue;
         if (K < 0 || static_cast<unsigned>(K) >= DAG.SUnits.size())
           continue;
-        if (MachineInstr *OMI = DAG.SUnits[K].getInstr())
+        if (MachineInstr *OMI = DAG.SUnits[K].getInstr()) {
           Occ.push_back(OMI);
+          Residues.push_back(SI[K].Cycle % InitiationInterval);
+        }
       }
       if (cycleViolatesHRSameCycleLaws(HR, MI, Occ))
+        continue;
+      // G004 residue dest-window law (placement seat of the shared stall
+      // model): the sequential machine replay (HaydnLatencyStalls) inserts
+      // a NOP whenever a read lands within Data_Latency-1 parcels after a
+      // def of the same reg. Modulo form: for every already-placed def at
+      // residue D (lat L>1), a reader of that reg must sit at residue R
+      // with (R - D + II) % II == 0 excluded by the same-cycle laws or
+      // >= L; symmetric for a placed reader after this def. Keeps the
+      // search from accepting II values the machine pads past.
+      if (residueDestWindowConflict(MI, Mod, Occ, Residues, InitiationInterval,
+                                    HR))
         continue;
       if (!HR.checkConflict(Scoreboard, MI, Mod))
         return C;
@@ -199,6 +306,67 @@ static bool isSideEffectFreeMI(const MachineInstr *MI) {
     return false;
   return !MI->mayStore() && !MI->hasUnmodeledSideEffects() && !MI->isCall() &&
          !MI->isInlineAsm() && !MI->isBranch() && !MI->isReturn();
+}
+
+/// G007 SEF-peel closed condition (the Haydn analog of AIE
+/// `isSideEffectFree`, AIEPostPipeliner.cpp:184-215 — but see the load
+/// clause: AIE relies on "out-of-bounds loads do not cause an exception",
+/// an exemption golden gives Haydn NOWHERE. Golden
+/// VLIW_Engine_Compiler_Constraints.md §Circular Buffer: an access whose
+/// address leaves [CBR_BEGIN, CBR_END] is *undefined behavior*; no
+/// golden text declares plain loads non-faulting. So the Haydn law is
+/// strictly narrower: a load may execute one EXTRA instance only when its
+/// address is LOOP-INVARIANT — every register it reads that feeds the
+/// address must be live-in to the loop MBB. An invariant address reads
+/// the same legal bytes the legal iterations read; the extra instance
+/// cannot fault. A streaming base (post-inc pointer, CB rs_wb, a carried
+/// GPR) is defined INSIDE the loop, so its extra instance would fetch
+/// past the stream end (or past the CB window) — fail closed. Stores are
+/// never peelable (an extra store is observable). Additional Haydn
+/// hardening beyond AIE: the MI must have no implicit operands (AIE
+/// FIFO-state law, restated) and no def may overlap a live-in (an extra
+/// def would clobber the carried value) or a live-out of the loop MBB
+/// (an extra def would corrupt the value the exit path reads — AIE's
+/// live-in check restated for the peel's write side).
+static bool isSEFPeelableMI(const MachineInstr &MI,
+                            const MachineBasicBlock &LoopBB,
+                            const TargetRegisterInfo &TRI) {
+  if (!isSideEffectFreeMI(&MI))
+    return false;
+  if (MI.getNumImplicitOperands() != 0)
+    return false;
+  // Live-out approximation for a single-MBB loop: any physreg defined by
+  // a non-dead def in the body may carry a value out (the exit block and
+  // any use after the loop observe the last write). An extra peeled
+  // instance re-writes it after that last write — refuse.
+  SmallVector<Register, 4> BodyDefs;
+  for (const MachineInstr &BMI : LoopBB)
+    for (const MachineOperand &MO : BMI.operands())
+      if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical() &&
+          !MO.isDead() && !is_contained(BodyDefs, MO.getReg()))
+        BodyDefs.push_back(MO.getReg());
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.getReg().isPhysical() || MO.getReg() == Haydn::R0)
+      continue;
+    const Register Reg = MO.getReg();
+    if (MO.isDef()) {
+      // Def overlapping a live-in clobbers a carried value.
+      if (any_of(LoopBB.liveins(),
+                 [&](const MachineBasicBlock::RegisterMaskPair &P) {
+                   return TRI.regsOverlap(Reg, P.PhysReg);
+                 }))
+        return false;
+      // Def overlapping any body def may shadow a live-out write.
+      for (Register D : BodyDefs)
+        if (D != Reg && TRI.regsOverlap(Reg, D))
+          return false;
+      continue;
+    }
+    // Use feeding a load address must be live-in (invariant addressing).
+    if (MI.mayLoad() && !LoopBB.isLiveIn(Reg))
+      return false;
+  }
+  return true;
 }
 
 /// AIE `IterCountSlackStrategy` (`AIEPostPipeliner.cpp:1156-1190`).
@@ -448,9 +616,8 @@ cl::opt<bool> EnableHaydnMultiStageSMS(
     cl::desc(
         "Enable the post-RA multi-stage software pipeliner "
         "(HaydnMultiStageSMS). Product default follows "
-        "HaydnMultiStageSMS::productDefaultEnabled() (false). The host is "
-        "seated, not pruned; independent then combined qualification and a "
-        "policy-only flip remain later."));
+        "HaydnMultiStageSMS::productDefaultEnabled() (true since the "
+        "2026-08-22 qualification). The host is seated, not pruned."));
 
 cl::opt<bool> HaydnMultiStageSMSAnalysisOnly(
     "haydn-multistage-sms-analysis-only", cl::Hidden, cl::init(false),
@@ -486,19 +653,21 @@ static const char *const JournalNames[] = {
     "JM-ALLOC", "JM-SPLICE", "JM-COMMIT", "JM-TRIP",
     "JM-LIVE",  "JM-ALT",    "JM-META"};
 
-static_assert(!HaydnMultiStageSMS::productDefaultEnabled(),
-              "multi-stage product default stays off");
+static_assert(HaydnMultiStageSMS::productDefaultEnabled(),
+              "multi-stage product default is ON (2026-08-22 "
+              "qualification); re-parking requires new failing evidence");
 static_assert(HaydnMultiStageSMS::productHostSeated(),
               "multi-stage host stays seated");
 static_assert(!HaydnMultiStageSMS::productSWPSolverAvailable(),
               "SWPSolver lattice is not product");
 static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled(),
-              "combined hwloop+SMS is not product");
+              "combined hwloop+SMS is not the product configuration "
+              "(dual-ON is: hwloop and SMS qualify and run independently; "
+              "combining one loop into both is not product)");
 // Pipeline owner does not flip this default (HaydnTargetMachine.cpp).
-// Independent then combined qualification and a policy-only flip remain later.
 
 StringRef HaydnMultiStageSMS::productPolicyRemark() {
-  return "qualify-or-cut: seated product-off host-live "
+  return "qualify-or-cut: seated product-on host-live " 
          "swpsolver=unavailable hwloop-combined=off "
          "nat-ipc=measured-miss no-competitive-ipc no-stage0-ib-pp";
 }
@@ -806,7 +975,10 @@ static bool isSkippableBodyMI(const MachineInstr &MI) {
 }
 
 // LoopStart (IR ZOL) or any product SET_HWLOOP form (logical/wide/member).
-static bool isHwLoopSetup(const MachineInstr &MI) {
+// G004: the prolog-liveness certificate no longer keys on the setup
+// position (clones execute after the WHOLE preheader in the distinct
+// PrologMBB); retained for future setup-relative queries.
+[[maybe_unused]] static bool isHwLoopSetup(const MachineInstr &MI) {
   const auto *TII = MI.getMF()->getSubtarget<HaydnSubtarget>().getInstrInfo();
   return TII->isHardwareLoopSetupInstr(MI);
 }
@@ -1020,6 +1192,65 @@ loopMDMinTripCount(const MachineBasicBlock &LoopBB) {
 }
 
 //===----------------------------------------------------------------------===//
+// G009 loop-pipeline pragma oracle (one read mechanism)
+//===----------------------------------------------------------------------===//
+
+/// G009 pragma strings. Same names the generic pre-RA MachinePipeliner
+/// parses (MachinePipeliner.cpp setPragmaPipelineOptions) and the AIE
+/// fork reads (AIELoopUtils LLVMLoopInitiationInterval) — the user-facing
+/// vocabulary is target-independent.
+static constexpr StringLiteral PipelinePragmaDisable =
+    "llvm.loop.pipeline.disable";
+static constexpr StringLiteral PipelinePragmaII =
+    "llvm.loop.pipeline.initiationinterval";
+
+/// G009: pragma facts read once per loop from the loop header's backedge
+/// terminator MD (the same access law loopMDMinTripCount uses). Hexagon
+/// parses these in setPragmaPipelineOptions; AIE reads the II in
+/// isPostPipelineCandidate. Closed conditions:
+///   - disable   — operand 0 is the string, value ignored (Hexagon shape:
+///                 !{!"llvm.loop.pipeline.disable", i1 true}).
+///   - II        — operand 1 must be a ConstantInt >= 1 (Hexagon asserts
+///                 exactly this); malformed/absent = absent.
+/// Per-loop reset law (Hexagon swp-pragma-disable-bug): facts are
+/// re-read per loop and never carried across regions.
+struct LoopPipelinePragma {
+  bool Disable = false;
+  int II = 0; // 0 = not set
+};
+
+static LoopPipelinePragma loopPipelinePragma(const MachineBasicBlock &LoopBB) {
+  LoopPipelinePragma P;
+  const BasicBlock *BB = LoopBB.getBasicBlock();
+  if (!BB)
+    return P;
+  const Instruction *Term = BB->getTerminator();
+  if (!Term)
+    return P;
+  const MDNode *LoopID = Term->getMetadata(LLVMContext::MD_loop);
+  if (!LoopID)
+    return P;
+  for (unsigned I = 1, E = LoopID->getNumOperands(); I < E; ++I) {
+    const MDNode *MD = dyn_cast<MDNode>(LoopID->getOperand(I));
+    if (!MD || MD->getNumOperands() < 1)
+      continue;
+    const MDString *S = dyn_cast<MDString>(MD->getOperand(0));
+    if (!S)
+      continue;
+    if (S->getString() == PipelinePragmaDisable) {
+      P.Disable = true;
+    } else if (S->getString() == PipelinePragmaII &&
+               MD->getNumOperands() == 2) {
+      if (const auto *C =
+              mdconst::dyn_extract_or_null<ConstantInt>(MD->getOperand(1)))
+        if (C->getSExtValue() >= 1)
+          P.II = static_cast<int>(C->getSExtValue());
+    }
+  }
+  return P;
+}
+
+//===----------------------------------------------------------------------===//
 // Candidate / ResMII
 //===----------------------------------------------------------------------===//
 
@@ -1068,6 +1299,195 @@ static bool isTwoCopyLCDDep(const SDep &Dep) {
   return false;
 }
 
+//===----------------------------------------------------------------------===//
+// G008: cross-iteration memory disambiguation (AIE aliasAcrossVirtualUnrolls
+// port; AIEBaseAliasAnalysis.cpp:780+, consumer AIEMachineScheduler.cpp:
+// 1820-1836). Fail-closed everywhere.
+//===----------------------------------------------------------------------===//
+
+/// G008 constant-offset strip: given an MMO's IR pointer value, peel noop
+/// pointer casts and single-index constant GEPs (GEPOperator only — the
+/// recurrent-phi recurrence step is modeled separately by the caller) down
+/// to the stream base. Returns {base, totalConstantByteOffset} where the
+/// offset is the sum of accumulated GEP byte offsets; fail-closed
+/// (std::nullopt) on any non-constant index, multi-index GEP, or when the
+/// walk exceeds the bounded depth (AIE BaseObjectSearchLimit analog).
+static std::optional<std::pair<const Value *, int64_t>>
+peelConstGEPToBase(const Value *V, const DataLayout &DL, unsigned Depth = 0) {
+  constexpr unsigned SearchLimit = 32;
+  if (Depth > SearchLimit)
+    return std::nullopt;
+  if (const auto *GEP = dyn_cast<const GEPOperator>(V)) {
+    // Single constant index only (AIE getGEPConstantOffset law): a
+    // multi-index or variable-index GEP is unproven → fail closed.
+    if (GEP->getNumIndices() != 1 || !GEP->hasAllConstantIndices())
+      return std::nullopt;
+    APInt Offset(DL.getPointerSizeInBits(GEP->getPointerAddressSpace()), 0);
+    if (!GEP->accumulateConstantOffset(DL, Offset))
+      return std::nullopt;
+    auto Inner = peelConstGEPToBase(GEP->getPointerOperand(), DL, Depth + 1);
+    if (!Inner)
+      return std::nullopt;
+    const int64_t ByteOff = Offset.getSExtValue();
+    // Overflow discipline: the accumulated byte offset must stay in range.
+    const int64_t Sum = Inner->second + ByteOff;
+    if ((ByteOff > 0 && Inner->second > 0 && Sum < 0) ||
+        (ByteOff < 0 && Inner->second < 0 && Sum > 0))
+      return std::nullopt;
+    return std::make_pair(Inner->first, Sum);
+  }
+  if (const auto *Cast = dyn_cast<const CastInst>(V))
+    if (Cast->isNoopCast(DL))
+      return peelConstGEPToBase(Cast->getOperand(0), DL, Depth + 1);
+  return std::make_pair(V, static_cast<int64_t>(0));
+}
+
+/// G008 stride of a recurrent pointer PHI: the byte distance the stream base
+/// advances per iteration. Proved when the PHI is 2-incoming loop-recurrent
+/// and the backedge value is the phi (or a constant GEP off it, folded by
+/// peelConstGEPToBase's offset law) with a SINGLE constant byte step, i.e.
+/// the classic LSR post-increment stream shape `p.n = gep p, C`. The step is
+/// returned as an exact byte stride; sign kept. Fail-closed otherwise.
+static std::optional<int64_t>
+recurrentPhiByteStride(const PHINode &Phi, const DataLayout &DL) {
+  if (Phi.getNumIncomingValues() != 2 || !Phi.getType()->isPointerTy())
+    return std::nullopt;
+  // Recurrent: exactly one incoming edge is the backedge (same block).
+  const unsigned Back = Phi.getIncomingBlock(0) == Phi.getParent() ? 0 : 1;
+  if (Phi.getIncomingBlock(1 - Back) == Phi.getParent())
+    return std::nullopt; // both edges self — not the modeled shape
+  const Value *Step = Phi.getIncomingValue(Back);
+  // p.n = gep p, C  →  strip the GEP; remainder must be the phi itself.
+  auto Peeled = peelConstGEPToBase(Step, DL);
+  if (!Peeled || Peeled->first != &Phi)
+    return std::nullopt;
+  return Peeled->second;
+}
+
+/// G008 the ONE cross-iteration disambiguation law (Haydn seat of AIE
+/// aliasAcrossVirtualUnrolls): two memory operations whose IR pointer values
+/// reduce to the SAME recurrent stream base (same PHI, byte stride S > 0)
+/// alias at iteration distance d only if their windows
+///   A_i  = [B + i*S + OA, +Wa)      B_{i+d} = [B + (i+d)*S + OB, +Wb)
+/// intersect. With Δ = OB − OA the separation is sep(d) = Δ + d*S, strictly
+/// increasing in d (S > 0), so the all-distances condition is exact:
+///   NoAlias iff sep(1) >= Wa  (already past A's window, and growing)
+///            or the first d0 with sep(d0) >= Wa jumps clean over B's
+///               lower side: sep(d0-1) <= -Wb.
+/// (If sep(1) < Wa and no such clean jump exists, some distance lands
+/// inside (−Wb, Wa) and the pair MAYS alias.) This covers the classic
+/// streaming tilings: Δ=0, S=Wa=Wb=4 → sep(1)=4 >= Wa → NoAlias; and the
+/// delayed-stream case Δ=−16 (store x[i], load x[i+4]) likewise.
+///
+/// Soundness (why dropping the edge cannot miscompile): the pruned edges are
+/// Order/MayAliasMem chain edges in the SCRATCH two-copy analysis graph
+/// (never the committed schedule). The predicate only ever returns NoAlias
+/// from a proof over closed constant data (PHI-recurrent base identity,
+/// constant GEP byte offsets, exact MMO widths). Anything unproven keeps the
+/// conservative edge — the removal set is a subset of the provably-false
+/// dependence set, so the LCD/RecMII floor computed from the pruned graph is
+/// still a legal schedule's floor. Both windows are assumed non-empty
+/// (LocationSize has a positive fixed value).
+static bool crossIterationNoAlias(const MachineInstr &MIa,
+                                  const MachineInstr &MIb,
+                                  const DataLayout &DL) {
+  const MachineMemOperand *MMOa =
+      MIa.memoperands().size() == 1 ? MIa.memoperands().front() : nullptr;
+  const MachineMemOperand *MMOb =
+      MIb.memoperands().size() == 1 ? MIb.memoperands().front() : nullptr;
+  if (!MMOa || !MMOb)
+    return false; // 0 or >1 MMOs: unproven
+  if (!MIa.mayStore() && !MIb.mayStore())
+    return false; // load/load: no chain edge exists anyway
+  if (MMOa->isVolatile() || MMOb->isVolatile() || MMOa->isAtomic() ||
+      MMOb->isAtomic())
+    return false;
+  const LocationSize Wa = MMOa->getSize();
+  const LocationSize Wb = MMOb->getSize();
+  if (!Wa.hasValue() || Wa.isScalable() || !Wb.hasValue() || Wb.isScalable())
+    return false; // unknown/imprecise width: unproven
+  const Value *PtrA = MMOa->getValue();
+  const Value *PtrB = MMOb->getValue();
+  if (!PtrA || !PtrB)
+    return false;
+
+  auto RootA = peelConstGEPToBase(PtrA, DL);
+  auto RootB = peelConstGEPToBase(PtrB, DL);
+  if (!RootA || !RootB)
+    return false;
+  // Distinct identified bases already resolve same-iteration via IR AA;
+  // this law only needs the same-phi stream case.
+  if (RootA->first != RootB->first)
+    return false;
+  const auto *Phi = dyn_cast<const PHINode>(RootA->first);
+  if (!Phi)
+    return false;
+
+  auto Stride = recurrentPhiByteStride(*Phi, DL);
+  if (!Stride || *Stride <= 0)
+    return false;
+  const int64_t S = *Stride;
+  const int64_t WidthA = static_cast<int64_t>(Wa.getValue().getFixedValue());
+  const int64_t WidthB = static_cast<int64_t>(Wb.getValue().getFixedValue());
+  if (WidthA <= 0 || WidthB <= 0)
+    return false;
+  const int64_t Delta = RootB->second - RootA->second;
+  // sep(d) = Delta + d*S, d >= 1, strictly increasing (S > 0).
+  const int64_t Sep1 = Delta + S;
+  if (Sep1 >= WidthA)
+    return true; // already disjoint at d=1 and widening
+  // First distance at/after which B clears A's window: d0 = ceil((Wa-Delta)/S)
+  // (>= 2 here because Sep1 < Wa). Use int64 ceiling without overflow: the
+  // operands are object-size-bounded.
+  const int64_t Numer = WidthA - Delta;
+  const int64_t D0 = (Numer + S - 1) / S;
+  if (D0 < 2)
+    return false; // arithmetic surprise: fail closed
+  // Disjoint iff the last distance still below A's window is at/below -Wb
+  // (clean jump over the open interval (-Wb, Wa)).
+  const int64_t SepBefore = Delta + (D0 - 1) * S;
+  return SepBefore <= -WidthB;
+}
+
+/// G008 seat of the law: after buildSchedGraph prunes nothing, walk every
+/// copy-0 → copy-1 normal-memory edge and drop those whose endpoint pair the
+/// law proves disjoint at every iteration distance. One mechanism, applied
+/// at the same two-copy seam the LCD collector reads — there is no second
+/// aliasing path (the un-pruned edges keep the conservative stateless-AA
+/// answer). Mirrors AIE's mayAlias override being consulted only in the
+/// Pipelining stage of the two-copy graph build (AIEMachineScheduler.cpp:
+/// 1820-1836): same graph, same seat, same fail-closed posture.
+static void pruneProvableCrossCopyMemEdges(ScheduleDAGInstrs &G, int NInstr) {
+  const DataLayout &DL = G.MF.getFunction().getDataLayout();
+  for (int K = 0; K < NInstr; ++K) {
+    const MachineInstr *SrcMI = G.SUnits[K].getInstr();
+    if (!SrcMI)
+      continue;
+    SmallVector<SDep, 8> Drop;
+    for (const SDep &Dep : G.SUnits[K].Succs) {
+      if (!Dep.isNormalMemory())
+        continue;
+      SUnit *Dst = Dep.getSUnit();
+      if (!Dst || Dst->isBoundaryNode())
+        continue;
+      const int S = static_cast<int>(Dst->NodeNum);
+      if (S < NInstr || S >= 2 * NInstr)
+        continue;
+      const MachineInstr *DstMI = Dst->getInstr();
+      if (!DstMI)
+        continue;
+      if (crossIterationNoAlias(*SrcMI, *DstMI, DL))
+        Drop.push_back(Dep);
+    }
+    for (SDep &SuccDep : Drop) {
+      SUnit *Dst = SuccDep.getSUnit();
+      SDep PredDep = SuccDep;
+      PredDep.setSUnit(&G.SUnits[K]);
+      Dst->removePred(PredDep);
+    }
+  }
+}
+
 /// Drop Barrier/Artificial Order from copy 0 onto copy 1 so RecMII/windows
 /// see AIE-shaped LCDs, not "every earlier MI precedes every later clone".
 static void pruneTwoCopySeamArtifacts(ScheduleDAGInstrs &G, int NInstr) {
@@ -1093,6 +1513,142 @@ static void pruneTwoCopySeamArtifacts(ScheduleDAGInstrs &G, int NInstr) {
   }
 }
 
+void HaydnMultiStageSMS::upgradeTwoCopyMemberLatencies() {
+  // G004 member-latency parity — see buildTwoCopyGraph. Edges are priced
+  // from logical descriptors by buildSchedGraph; a pinned member can carry
+  // a longer dest Data_Latency (MULL: ALU [1] vs MAC [2]). Re-price Data
+  // edges from the SOURCE SU's pinned member: the member's itinerary
+  // operand-cycle max, clamped by the same restriction the HR port model
+  // applies (clampPublishedDataLatency). Anti/Output keep their 0-latency
+  // ordering semantics. Only upgrades — never shortens an edge.
+  if (!TwoCopyDAG || !DAG)
+    return;
+  const InstrItineraryData *Itin =
+      DAG->MF.getSubtarget().getInstrItineraryData();
+  if (!Itin || Itin->isEmpty())
+    return;
+  const HaydnInstrInfo *TII =
+      DAG->MF.getSubtarget<HaydnSubtarget>().getInstrInfo();
+  for (SUnit &SU : TwoCopyDAG->SUnits) {
+    MachineInstr *MI = SU.getInstr();
+    if (!MI)
+      continue;
+    auto It = MemberPin.find(MI);
+    if (It == MemberPin.end())
+      continue;
+    const MCInstrDesc &MemberDesc = TII->get(It->second);
+    const unsigned SchedClass = MemberDesc.getSchedClass();
+    // Same per-def pricing as HaydnHazardRecognizer::bookDestReadWindow:
+    // dest operand cycle, dead defs and status regs excluded (they never
+    // open a read window), clampPublishedDataLatency applied.
+    unsigned MemberLat = 1;
+    for (unsigned OpIdx = 0, E = MI->getNumOperands(); OpIdx != E; ++OpIdx) {
+      const MachineOperand &MO = MI->getOperand(OpIdx);
+      if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+        continue;
+      if (MO.isDead() || haydnIsSimplifiableReservedReg(MO.getReg()))
+        continue;
+      if (std::optional<unsigned> Cycle =
+              Itin->getOperandCycle(SchedClass, OpIdx))
+        if (*Cycle != 0)
+          MemberLat = std::max(
+              MemberLat,
+              haydn::restriction::clampPublishedDataLatency(*Cycle));
+    }
+    for (SDep &Dep : SU.Succs) {
+      if (Dep.getKind() != SDep::Data)
+        continue;
+      if (Dep.getLatency() >= MemberLat)
+        continue;
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: member-latency upgrade SU="
+                        << SU.NodeNum << " -> " << Dep.getSUnit()->NodeNum
+                        << " " << Dep.getLatency() << " -> " << MemberLat
+                        << " : " << *MI);
+      Dep.setLatency(MemberLat);
+      // Succs and the destination's Preds hold SEPARATE SDep copies; keep
+      // both sides of the edge at the same latency so backward walks
+      // (computeBackward / LCD latest) price identically to forward ones.
+      SUnit *Dst = Dep.getSUnit();
+      if (!Dst || Dst->isBoundaryNode())
+        continue;
+      for (SDep &PredDep : Dst->Preds) {
+        if (PredDep.getSUnit() == &SU && PredDep.getKind() == SDep::Data &&
+            PredDep.getLatency() < MemberLat)
+          PredDep.setLatency(MemberLat);
+      }
+    }
+  }
+}
+
+int HaydnMultiStageSMS::plannedKernelDestWindowPads() const {
+  // G004 stall-inclusive realized cost — see tryII. Replays the PLANNED
+  // kernel stream (KernelByMod groups in parcel order, warm-up replays to
+  // reach steady state) through a scratch HaydnHazardRecognizer using the
+  // same dest-window model as HaydnLatencyStalls / countRealizedKernelParcels
+  // (destWindowStallNeed / advanceDestWindows / emitForDestWindow — one
+  // mechanism, three seats). Returns the steady-state per-iteration pad
+  // count, or -1 when the replay cannot be formed. Logical descs are used
+  // pre-commit; the post-commit realized certificate (member-baked descs)
+  // remains authoritative and fail-closed.
+  if (!LoopBB || !DAG || II < 1)
+    return -1;
+  const auto *ST = &DAG->MF.getSubtarget();
+  if (!ST->getInstrItineraryData() || ST->getInstrItineraryData()->isEmpty())
+    return 0;
+  HaydnHazardRecognizer DestHR(ST->getInstrInfo(),
+                               ST->getInstrItineraryData(),
+                               /*IsPreRA=*/false);
+  DestHR.Reset();
+  const int N = nodeCount();
+  SmallVector<SmallVector<const MachineInstr *, 4>, 8> Groups(II);
+  for (int I = 0; I < N; ++I) {
+    if (!Sched[I].Scheduled)
+      return -1;
+    const MachineInstr *MI = nodeInstr(I);
+    if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
+      continue;
+    const int Mod = Sched[I].ModuloCycle;
+    if (Mod < 0 || Mod >= II)
+      return -1;
+    Groups[Mod].push_back(MI);
+  }
+  auto replayOnce = [&](int &Pads) -> bool {
+    Pads = 0;
+    for (int M = 0; M < II; ++M) {
+      // Every kernel modulo cycle is a parcel (SF3 complete-cycle policy):
+      // an empty group is an IDLE NOP (materialize commits one) — it still
+      // retires one pipeline step, so advance the windows for it too. The
+      // machine's finalized stream retires that step; skipping it here
+      // would falsely inflate the pad count.
+      unsigned Stalls = 0;
+      for (const MachineInstr *MI : Groups[M])
+        Stalls = std::max(Stalls, DestHR.destWindowStallNeed(*MI));
+      if (Stalls)
+        LLVM_DEBUG({
+          dbgs() << "HaydnMultiStageSMS: planned pad=" << Stalls
+                 << " at parcel " << M << ":";
+          for (const MachineInstr *MI : Groups[M])
+            dbgs() << " " << *MI;
+        });
+      for (unsigned K = 0; K < Stalls; ++K)
+        DestHR.advanceDestWindows();
+      DestHR.advanceDestWindows();
+      for (const MachineInstr *MI : Groups[M])
+        DestHR.emitForDestWindow(*MI);
+      Pads += static_cast<int>(Stalls);
+    }
+    return true;
+  };
+  // Warm-up replays reach the steady-state register pattern (stage overlap
+  // fully populated); the horizon bounds transient decay.
+  const int Warmups = std::max(1, DestHR.getConflictHorizon() / std::max(1, II) + 1);
+  int Pads = 0;
+  for (int R = 0; R < Warmups; ++R)
+    if (!replayOnce(Pads))
+      return -1;
+  return Pads;
+}
+
 void HaydnMultiStageSMS::destroyTwoCopyGraph() {
   if (TwoCopyDAG) {
     for (SUnit &SU : TwoCopyDAG->SUnits)
@@ -1112,7 +1668,12 @@ void HaydnMultiStageSMS::destroyTwoCopyGraph() {
 
 bool HaydnMultiStageSMS::buildTwoCopyGraph(ScheduleDAGMI &Host) {
   destroyTwoCopyGraph();
-  NInstr = static_cast<int>(Body.size());
+  // G002 II-parity: the Form-C latch branch rides as the LAST node of each
+  // copy (program order — the branch terminates the block), so dep walks,
+  // resource windows, and the modulo oracle see its slot demand and its
+  // reader latency on the compare chain like any body node.
+  LatchBranchNode = LatchBranch ? static_cast<int>(Body.size()) : -1;
+  NInstr = static_cast<int>(Body.size()) + (LatchBranch ? 1 : 0);
   if (NInstr < 2)
     return false;
 
@@ -1127,6 +1688,9 @@ bool HaydnMultiStageSMS::buildTwoCopyGraph(ScheduleDAGMI &Host) {
       }
       TwoCopyMBB->insert(TwoCopyMBB->end(), MF.CloneMachineInstr(MI));
     }
+    if (LatchBranch)
+      TwoCopyMBB->insert(TwoCopyMBB->end(),
+                         MF.CloneMachineInstr(LatchBranch));
   }
 
   auto Graph = std::make_unique<HaydnTwoCopySchedGraph>(MF, /*MLI=*/nullptr);
@@ -1147,6 +1711,11 @@ bool HaydnMultiStageSMS::buildTwoCopyGraph(ScheduleDAGMI &Host) {
 
   TwoCopyDAG = std::move(Graph);
   pruneTwoCopySeamArtifacts(*TwoCopyDAG, NInstr);
+  // G008: drop provably-false cross-iteration memory edges (same recurrent
+  // stream, disjoint windows at every distance) BEFORE LCD collection so
+  // RecMII/windows/II search see the sharpened dependence set. Fail-closed:
+  // unproven pairs keep the conservative edge.
+  pruneProvableCrossCopyMemEdges(*TwoCopyDAG, NInstr);
   Sched.init(NInstr);
 
   LCDEdges.clear();
@@ -1301,7 +1870,7 @@ bool HaydnMultiStageSMS::proveLivePhysNoSpillSubreg() const {
   const TargetRegisterInfo *TRI = DAG->MF.getSubtarget().getRegisterInfo();
   if (!TRI)
     return false;
-  const int N = static_cast<int>(Body.size());
+  const int N = nodeCount(); // G002: node space includes the latch branch
   SmallVector<int, 16> Order;
   for (int I = 0; I < N; ++I) {
     if (!Sched[I].Scheduled)
@@ -1316,7 +1885,7 @@ bool HaydnMultiStageSMS::proveLivePhysNoSpillSubreg() const {
 
   SmallVector<std::pair<Register, int>, 16> OpenDefs;
   for (int Idx : Order) {
-    MachineInstr *MI = Body[Idx]->getInstr();
+    MachineInstr *MI = nodeInstr(Idx);
     if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
       continue;
     const int C = Sched[Idx].Cycle;
@@ -1424,10 +1993,9 @@ bool HaydnMultiStageSMS::computeLivePhysFixpoint() {
 
   if (NStages < 2)
     return true;
-  MachineBasicBlock::iterator PrologInsertPt = Preheader->getFirstTerminator();
-  for (MachineInstr &MI : *Preheader)
-    if (isHwLoopSetup(MI))
-      PrologInsertPt = std::next(MI.getIterator());
+  // G004: peel clones live in the distinct PrologMBB (whole-preheader
+  // successor). Observe liveness at preheader exit, not just-post-setup.
+  MachineBasicBlock::iterator PrologInsertPt = Preheader->end();
   return certificatePrologLiveness(PrologInsertPt) && certificateEpilogUses();
 }
 
@@ -1442,11 +2010,11 @@ bool HaydnMultiStageSMS::resourcesConverged(
   VerifyOracle.init(static_cast<unsigned>(II), haydnDefaultMCFormats());
   ResourceScoreboard<HaydnFuncUnitWrapper> Scoreboard;
   Scoreboard.config(0, II - 1);
-  const int N = static_cast<int>(Body.size());
+  const int N = nodeCount(); // G002: node space includes the latch branch
   for (int I = 0; I < N; ++I) {
     if (!Sched[I].Scheduled)
       return false;
-    MachineInstr *MI = Body[I]->getInstr();
+    MachineInstr *MI = nodeInstr(I);
     if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
       continue;
     const int Mod = Sched[I].ModuloCycle;
@@ -1491,9 +2059,13 @@ bool HaydnMultiStageSMS::preflightTrip() {
 bool HaydnMultiStageSMS::preflightStage() {
   if (forceFailPreflight(HaydnMultiStagePreflightSeat::PF_STAGE)) { LastRejectReason="PF-STAGE-force"; return false; }
   if (!HasValidPlan || NStages < 1) return false;
+  // G007: placement-domain bound — the node Stage fields hold the PRE-peel
+  // geometry (the SEF peel decrements NStages for pipeline arithmetic
+  // only). See placementStageSpan().
+  const int Span = placementStageSpan();
   for (int I = 0; I < NInstr; ++I) {
     const HaydnMultiStageNodeInfo &N = Sched[I];
-    if (!N.Scheduled || N.Stage < 0 || N.Stage >= NStages ||
+    if (!N.Scheduled || N.Stage < 0 || N.Stage >= Span ||
         N.ModuloCycle < 0 || N.ModuloCycle >= II)
       return false;
   }
@@ -1537,8 +2109,13 @@ bool HaydnMultiStageSMS::preflightAlt() {
   // member pin so placement saw real unit/entry geometry. Untracked
   // opcodes (no PlacementAlternatives) never consult the solver.
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
-  for (SUnit *SU : Body) {
-    MachineInstr *MI = SU->getInstr();
+  SmallVector<MachineInstr *, 32> PinChecks;
+  for (SUnit *SU : Body)
+    if (MachineInstr *MI = SU->getInstr())
+      PinChecks.push_back(MI);
+  if (LatchBranch)
+    PinChecks.push_back(LatchBranch);
+  for (MachineInstr *MI : PinChecks) {
     if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
       continue;
     const unsigned Log = MI->getOpcode();
@@ -1611,8 +2188,8 @@ bool HaydnMultiStageSMS::runPreflight() {
 bool HaydnMultiStageSMS::runSMSPeriodicCertificate(bool PostRewriteStillValid) const {
   if (!HasValidPlan || II < 1) return false;
   SmallVector<SMSCertPhaseOp, 16> Ops;
-  for (int I = 0, N = (int)Body.size(); I < N; ++I) {
-    MachineInstr *MI = Body[I]->getInstr();
+  for (int I = 0, N = nodeCount(); I < N; ++I) { // G002 latch included
+    MachineInstr *MI = nodeInstr(I);
     if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI)) continue;
     SMSCertPhaseOp Op;
     Op.NormalizedPhase = (unsigned)Sched[I].ModuloCycle;
@@ -1658,6 +2235,41 @@ bool HaydnMultiStageSMS::isCandidate(MachineBasicBlock &LoopBlock) {
     IsSoftCounted = true;
     if (!isSoftCountdownBump(*TripCountDef, SoftTripReg))
       SoftTripReg = Register();
+    // G002 II-parity: Form C's latch branch is a real parcel consumer.
+    // Discover it now; buildTwoCopyGraph appends it as the last two-copy
+    // node so the II search budgets its issue slot and reader latency
+    // (AIE isPostPipelineCandidate treats the hwloop-end terminator the
+    // same way). Exactly one conditional self-targeting terminator;
+    // anything more complex fails closed.
+    LatchBranch = nullptr;
+    for (MachineInstr &MI : LoopBlock.terminators()) {
+      if (!MI.isBranch() || MI.isUnconditionalBranch() || isZOLTerminator(MI))
+        continue;
+      bool TargetsSelf = false;
+      bool TargetsOther = false;
+      for (const MachineOperand &MO : MI.operands()) {
+        if (MO.isMBB()) {
+          if (MO.getMBB() == &LoopBlock)
+            TargetsSelf = true;
+          else
+            TargetsOther = true;
+        }
+      }
+      if (!TargetsSelf)
+        continue;
+      if (LatchBranch || TargetsOther) {
+        LatchBranch = nullptr;
+        break;
+      }
+      LatchBranch = &MI;
+    }
+    if (!LatchBranch) {
+      LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: soft countdown without a "
+                           "single conditional self-latch branch\n");
+      return false;
+    }
+  } else {
+    LatchBranch = nullptr;
   }
 
   // 3. Shape checks.
@@ -1755,6 +2367,11 @@ int HaydnMultiStageSMS::getResMII(MachineBasicBlock &LoopBlock) const {
       if (MachineInstr *MI = SU->getInstr())
         pushBodyOp(*MI);
     }
+    // G002 II-parity: the Form-C latch branch consumes a real issue slot
+    // every iteration; ResMII must price it (AIE getSlotCounts counts the
+    // hwloop-end terminator the same way).
+    if (LatchBranch)
+      pushBodyOp(*LatchBranch);
   } else {
     for (const MachineInstr &MI : LoopBlock)
       pushBodyOp(MI);
@@ -2167,8 +2784,32 @@ bool HaydnMultiStageSMS::scheduleFirstIteration(
       return false;
     SUnit &SU = TwoCopyDAG->SUnits[N];
     MachineInstr *const MI = SU.getInstr();
-    const int Earliest = Strategy.earliest(SU);
-    const int Latest = Strategy.latest(SU);
+    int Earliest = Strategy.earliest(SU);
+    int Latest = Strategy.latest(SU);
+    // G002 II-parity: the Form-C latch branch must issue in the kernel's
+    // FINAL parcel — it is the block terminator, so any earlier modulo
+    // position would branch out mid-kernel. Closed form: allowed cycles
+    // are exactly {II-1 + k*II}; clamp the window to the first allowed
+    // cycle >= Earliest and cap Latest at that same residue class. With
+    // the branch inside the last parcel, realized parcels == II holds by
+    // construction instead of by post-hoc luck.
+    if (isLatchBranchIdx(N)) {
+      int Target = II - 1;
+      while (Target < Earliest)
+        Target += II;
+      if (Target > Latest) {
+        LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: latch branch cannot reach "
+                             "modulo cycle II-1 (earliest "
+                          << Target << " > latest " << Latest << ")\n");
+        return false;
+      }
+      // The latch has no mobility: pin to the FIRST legal cycle in the
+      // residue class {II-1 + k*II}. fitInInterval scans a unit-stride
+      // range, so the window must be exactly one cycle to keep the
+      // residue; later residues only add stages (peel), never density.
+      Earliest = Target;
+      Latest = Target;
+    }
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: place " << N << " in ["
                       << Earliest << "," << Latest << "]\n");
     if (Earliest > Latest) {
@@ -2246,11 +2887,14 @@ bool HaydnMultiStageSMS::scheduleFirstIteration(
   // A legal single-stage schedule is kernel-only — no manufactured
   // overlap. Materialize skips peel MBBs when NStages==1.
   // Trip is an II-search constraint: insufficient static trip rejects
-  // this II so a later II (fewer stages) can still win. Auto-applying
-  // peelSideEffectFree here without AIE cycle rotation would drop an
-  // epilogue completion (wrong last-iteration late stages). The SEF
-  // helper stays available; rotation is the remaining SF10 optional.
-  if (!hasSufficientTripCount()) {
+  // this II so a later II (fewer stages) can still win — UNLESS the AIE
+  // peelSideEffectFree relaxation (AIEPostPipeliner.cpp:1690) applies:
+  // stage 0 entirely SEF under the closed Haydn condition and trip
+  // covers NStages-1. G007: the SEF decision is DEFERRED — the flag and
+  // the decremented NStages stand only if scheduleOtherIterations
+  // validates on the pre-rotation cycles; scheduleWithStrategy clears
+  // them on refusal (refusal over repair, AIE :1081-1087 analog).
+  if (!hasSufficientTripCount() && !peelSideEffectFree()) {
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: trip < NStages=" << NStages
                       << " — reject II (retry)\n");
     return false;
@@ -2359,9 +3003,31 @@ bool HaydnMultiStageSMS::scheduleOtherIterations(
 }
 
 bool HaydnMultiStageSMS::scheduleWithStrategy(HaydnMultiStageStrategy &S) {
-  if (!scheduleFirstIteration(S))
+  if (!scheduleFirstIteration(S)) {
+    // A deferred SEF peel from a FAILED first-iteration attempt must not
+    // leak into the next lattice run (resetPipeSchedule does not own it).
+    SEFStagePeeled = false;
+    if (NStagesSEFBackup > 0)
+      NStages = NStagesSEFBackup;
+    NStagesSEFBackup = 0;
     return false;
-  return scheduleOtherIterations(S);
+  }
+  if (!scheduleOtherIterations(S)) {
+    // AIE Info.resetRotation() analog (:1076): the SEF peel was applied
+    // optimistically at the trip gate; validation failed, so restore the
+    // pre-peal NStages and clear the flag. Refusal over repair — the
+    // schedule is never re-labeled to rescue a peel.
+    SEFStagePeeled = false;
+    if (NStagesSEFBackup > 0)
+      NStages = NStagesSEFBackup;
+    NStagesSEFBackup = 0;
+    return false;
+  }
+  // PendingRotation application site (AIE scheduleWithStrategy
+  // :1081-1087): the peel stands. With NSEF==II (whole-stage SEF — see
+  // peelSideEffectFree) the AIE rotation is II-NSEF = 0, so there is no
+  // cycle shift to apply: validation already saw the final cycles.
+  return true;
 }
 
 bool HaydnMultiStageSMS::tryPipeApproaches(HaydnHazardRecognizer &HR) {
@@ -2451,9 +3117,14 @@ bool HaydnMultiStageSMS::computeASAPEarliest() {
 
 bool HaydnMultiStageSMS::tryII(int TryII, HaydnHazardRecognizer &HR) {
   assert(TryII >= 1);
+  // G007: each II attempt starts from a clean SEF state — a peel that a
+  // previous attempt's certificates rejected must not leak into this one.
+  SEFStagePeeled = false;
+  NStagesSEFBackup = 0;
   if (TryII < RecMII)
     return false;
   II = TryII;
+  IIAttempted = true;
   // SF2: HR occupancySlots / resolveBookingOpcode read the transient pin
   // so checkConflict books the same member SlotSet the oracle searched.
   // Restore the function-lifetime map on every exit of this attempt.
@@ -2537,9 +3208,41 @@ bool HaydnMultiStageSMS::tryII(int TryII, HaydnHazardRecognizer &HR) {
     ++ResourceRetryCount;
     return false;
   }
+  // G004 stall-inclusive realized cost (II-search seat of the same law the
+  // post-commit realized-II certificate enforces): replay the planned kernel
+  // parcel stream through the shared dest-window model (HaydnLatencyStalls
+  // walk) BEFORE accepting this II. A schedule whose steady-state stream
+  // needs stall pads does not achieve II — reject here so the search retries
+  // a larger II instead of committing and rolling back (or silently running
+  // II+1). Register reuse across stages can shadow an in-flight def (load
+  // $r2 at M0 vs the ADD32 $r2 the M1 reader actually consumes from M4) —
+  // the sequential stall model cannot see iteration affinity, so this is
+  // priced as a real pad: the machine replay (HaydnLatencyStalls) will
+  // insert exactly that NOP. Post-commit countRealizedKernelParcels stays
+  // the final certificate with member-baked descs (never weakened).
+  if (const int Pads = plannedKernelDestWindowPads(); Pads < 0 ||
+                                                       Planned + Pads != II) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: reject stall-inclusive II="
+                      << (Planned + std::max(Pads, 0)) << " != II=" << II
+                      << " pads=" << Pads << "\n");
+    HasValidPlan = false;
+    ++ResourceRetryCount;
+    return false;
+  }
   MeasuredII = Planned;
-  LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: tryII success II=" << II
-                    << " NStages=" << NStages << "\n");
+  LLVM_DEBUG({
+    dbgs() << "HaydnMultiStageSMS: tryII success II=" << II
+           << " NStages=" << NStages << "\n";
+    for (int I = 0, N = nodeCount(); I < N; ++I) {
+      dbgs() << "  SU=" << I << " cycle=" << Sched[I].Cycle
+             << " mod=" << Sched[I].ModuloCycle
+             << " stage=" << Sched[I].Stage << " : ";
+      if (MachineInstr *MI = nodeInstr(I))
+        MI->print(dbgs());
+      else
+        dbgs() << "(null)\n";
+    }
+  });
   return true;
 }
 
@@ -2681,6 +3384,15 @@ static void stepPhysLiveness(const MachineInstr &MI, Register Reg,
 // after earlier prolog clones). Checking only isLiveIn is insufficient
 // LoopStart often kills the trip-count reg, and loop-carried pointer regs
 // may share that physreg after RA.
+//
+// Observation point (G004 2026-08-22): NStages>=2 materialize places peel
+// clones in a DISTINCT PrologMBB whose single predecessor is the preheader —
+// clones execute AFTER the entire preheader, not after the hwloop setup.
+// The certificate therefore walks the WHOLE preheader: InsertPt is only the
+// earliest point where a clone's uses must already be defined WITHIN the
+// preheader (uses of values the preheader itself computes, like a loop
+// constant materialized after SET); values live at preheader exit are live
+// at PrologMBB entry by definition. Callers pass Preheader->end().
 static bool prologUsesAreAvailable(
     MachineBasicBlock &Preheader, MachineBasicBlock::iterator InsertPt,
     ArrayRef<MachineInstr *> ExistingProlog, const MachineInstr &Orig) {
@@ -2743,13 +3455,19 @@ static bool isSoftTripBumpMI(const MachineInstr &MI) {
 void HaydnMultiStageSMS::clearPlan() {
   HasValidPlan = false;
   II = 1;
+  IIAttempted = false;
   NStages = 0;
+  SEFStagePeeled = false;
+  NStagesSEFBackup = 0;
   LinearLength = 0;
   RecMII = 0;
   LastResMII = 0;
   ResourceRetryCount = 0;
   IsSoftCounted = false;
   SoftTripReg = Register();
+  LatchBranch = nullptr;
+  LatchBranchNode = -1;
+  RealizedIIReported = 0;
   PrologMBB = nullptr;
   EpilogMBB = nullptr;
   Body.clear();
@@ -2785,8 +3503,14 @@ bool HaydnMultiStageSMS::pinTransientMembers() {
   MemberPin.clear();
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   unsigned SlotOcc[Haydn::ISSUE_SLOT_COUNT] = {};
-  for (SUnit *SU : Body) {
-    MachineInstr *MI = SU->getInstr();
+  // G002: pin the latch branch too (it rides the same oracle/commit path).
+  SmallVector<MachineInstr *, 32> PinTargets;
+  for (SUnit *SU : Body)
+    if (MachineInstr *MI = SU->getInstr())
+      PinTargets.push_back(MI);
+  if (LatchBranch)
+    PinTargets.push_back(LatchBranch);
+  for (MachineInstr *MI : PinTargets) {
     if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
       continue;
     const unsigned Log = MI->getOpcode();
@@ -2825,27 +3549,91 @@ bool HaydnMultiStageSMS::pinTransientMembers() {
 
 bool HaydnMultiStageSMS::peelSideEffectFree() {
   // AIE PostPipeliner::peelSideEffectFree (AIEPostPipeliner.cpp:1630-1676).
-  // If stage 0 is entirely side-effect-free and trip covers NStages-1,
-  // drop that stage instead of rejecting the schedule.
-  if (NStages < 2 || !TwoCopyDAG)
+  // G007 full port (SF10 completion): if stage 0 is entirely
+  // side-effect-free under the CLOSED Haydn condition (isSEFPeelableMI)
+  // and the static trip covers NStages-1, drop that stage instead of
+  // rejecting the schedule.
+  //
+  // AIE arithmetic, restated exactly: AIE accepts when
+  //   Length - NSEF <= (NStages-1) * II
+  // where NSEF counts leading modulo cycles whose ENTIRE stage-0 group
+  // is SEF and Rotation = II - NSEF is deferred (applied only after
+  // scheduleOtherIterations succeeds — validation-before-commit; a
+  // rotation in flight must never be visible to validation, AIE
+  // scheduleWithStrategy :1081-1087). In BOTH engines Length is the
+  // first-iteration schedule length rounded up to an II multiple
+  // (Haydn: computeMinScheduleLength seeds ML=II and only grows it in II
+  // steps; commitCycle/Length max), and NStages = ceil(Length/II) — so
+  // the acceptance inequality forces NSEF == II, i.e. the WHOLE first
+  // stage SEF, and Rotation == 0. The deferred rotation is therefore
+  // rotation-free BY DERIVATION here, and the Haydn port encodes the
+  // full-stage form directly:
+  //   accept <=> every stage-0 node is SEF-peelable
+  //              && trip covers NStages-1 (peel eats one fewer stage).
+  // Semantics (AIE diagram, :1638-1646): with the SEF stage dropped from
+  // NStages, prologue peeling still runs NStages (pre-decrement) stages,
+  // so the LAST kernel iteration emits one EXTRA instance of every
+  // stage-0 (SEF) op while all non-SEF ops run exactly Trip times. The
+  // extra instance is unobservable by the isSEFPeelableMI conditions.
+  // The materialize overlay mirrors AIE's EpiBase=2 recognition
+  // (visitPipelineSchedule :1736-1740): the epilogue starts at stage 2
+  // whenever the SEF flag records a dropped stage-0.
+  if (NStages < 2 || !TwoCopyDAG || !LoopBB)
     return false;
   const int OneFewer = NStages - 1;
+  // A SEF drop to NS==1 would hit materialize's KernelOnly path, which
+  // never re-emits the SEF extra instance — refuse (peel keeps NS>=2).
+  if (OneFewer < 2)
+    return false;
   const int Saved = NStages;
   NStages = OneFewer;
   const bool TripOK = hasSufficientTripCount();
   NStages = Saved;
   if (!TripOK)
     return false;
-  for (int K = 0; K < NInstr; ++K) {
-    if (Sched[K].Stage != 0)
-      continue;
-    MachineInstr *MI = TwoCopyDAG->SUnits[K].getInstr();
-    if (!isSideEffectFreeMI(MI))
-      return false;
+  const TargetRegisterInfo *TRI =
+      LoopBB->getParent()->getSubtarget().getRegisterInfo();
+  if (!TRI || !Preheader)
+    return false;
+  // G007 round-3: the peel decision must validate the prologue it
+  // implies — the SAME law certificatePrologLiveness/materialize enforce
+  // post-hoc (one mechanism, decided at peel time). A stage-0 chain that
+  // reads a value produced in a LATER modulo position of stage 0/1 peels
+  // into a cross-iteration read: the clone would consume a stale
+  // preheader value (the observed PF-LIVE failure — AND32($r3,$r4) under
+  // an LD32->$r3 that sits at a later stage). Walk the SEF stage-0 group
+  // in PEEL EMISSION ORDER (S=0 filter, modulo-cycle ascending — the
+  // exact order materialize clones) and require every use live at that
+  // point: live at preheader exit, or defined by an earlier SEF clone.
+  // The soft-trip bump never clones (adjustSoftTripCount re-bases).
+  SmallVector<MachineInstr *, 8> SimulatedSEFProlog;
+  for (int M = 0; M < II; ++M) {
+    for (int K = 0; K < NInstr; ++K) {
+      if (Sched[K].Stage != 0 || Sched[K].ModuloCycle != M)
+        continue;
+      MachineInstr *MI = TwoCopyDAG->SUnits[K].getInstr();
+      if (!MI)
+        return false;
+      if (isLatchBranchIdx(K))
+        continue; // never peels (G002); carries no SEF obligation
+      if (isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
+        continue;
+      if (IsSoftCounted && isSoftTripBumpMI(*MI))
+        continue;
+      if (!isSEFPeelableMI(*MI, *LoopBB, *TRI))
+        return false;
+      if (!prologUsesAreAvailable(*Preheader, Preheader->end(),
+                                  SimulatedSEFProlog, *MI))
+        return false;
+      SimulatedSEFProlog.push_back(MI);
+    }
   }
   --NStages;
+  SEFStagePeeled = true;
+  NStagesSEFBackup = Saved;
   LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: peeled SEF stage, NStages="
-                    << NStages << "\n");
+                    << NStages << " (deferred: survives only if "
+                                 "scheduleOtherIterations validates)\n");
   return NStages >= 1;
 }
 
@@ -2924,14 +3712,24 @@ std::optional<int64_t> HaydnMultiStageSMS::provenMinTripCount() const {
   auto sufficient = [&](int64_t C) {
     return C >= Need && (C - PeelIters) >= 1;
   };
+  // The exact preheader constant is authoritative for EVERY trip form:
+  // soft countdown (trip-reg bump), LoopStart (count reg operand 0), and
+  // register-trip SET_HWLOOP forms (count reg operand 3). All three name a
+  // physical count register whose def chain is walkable in the dedicated
+  // preheader; MD/soak floors are fallbacks only.
   std::optional<int64_t> Exact;
-  if (IsSoftCounted) {
-    Register Trip;
-    if (!isSoftCountdownBump(*TripCountDef, Trip) || !Trip.isPhysical() ||
-        Trip == Haydn::R0)
-      return std::nullopt;
-    Exact = staticPhysTripConstant(Trip, *Preheader);
-  }
+  Register TripReg;
+  if (IsSoftCounted)
+    (void)isSoftCountdownBump(*TripCountDef, TripReg);
+  else if (TripCountDef->getOpcode() == Haydn::LoopStart)
+    TripReg = TripCountDef->getOperand(0).isReg()
+                  ? TripCountDef->getOperand(0).getReg()
+                  : Register();
+  else if (TripCountDef->getNumOperands() > 3 &&
+           TripCountDef->getOperand(3).isReg())
+    TripReg = TripCountDef->getOperand(3).getReg();
+  if (TripReg && TripReg.isPhysical())
+    Exact = staticPhysTripConstant(TripReg, *Preheader);
   if (Exact)
     return sufficient(*Exact) ? Exact : std::nullopt;
   std::optional<int64_t> MD = loopMDMinTripCount(*LoopBB);
@@ -2950,9 +3748,12 @@ bool HaydnMultiStageSMS::certificateTripAdjust() const {
 
 bool HaydnMultiStageSMS::certificateKernelPlan() const {
   assert(HasValidPlan && II >= 1);
-  const int N = static_cast<int>(Body.size());
+  // G002: node space includes the Form-C latch branch.
+  const int N = nodeCount();
   if (N < 2 || NStages < 1 || NStages > 4 || II < 1)
     return false;
+  // G007: placement-domain span — pre-peel geometry (placementStageSpan()).
+  const int Span = placementStageSpan();
 
   int MaxStage = 0;
   for (int I = 0; I < N; ++I) {
@@ -2960,31 +3761,58 @@ bool HaydnMultiStageSMS::certificateKernelPlan() const {
       return false;
     if (Sched[I].ModuloCycle < 0 || Sched[I].ModuloCycle >= II)
       return false;
-    if (Sched[I].Stage < 0 || Sched[I].Stage >= NStages)
+    if (Sched[I].Stage < 0 || Sched[I].Stage >= Span)
       return false;
     if (Sched[I].Cycle != Sched[I].Stage * II + Sched[I].ModuloCycle)
       return false;
     MaxStage = std::max(MaxStage, Sched[I].Stage);
   }
-  if (MaxStage + 1 != NStages)
+  if (MaxStage + 1 != Span)
     return false;
+
+  // G002: the latch branch must sit in the kernel's final modulo cycle —
+  // it is the block terminator; any other position branches mid-kernel.
+  if (LatchBranch) {
+    if (!isLatchBranchIdx(N - 1) || !Sched[N - 1].Scheduled)
+      return false;
+    if (Sched[N - 1].ModuloCycle != II - 1)
+      return false;
+  }
 
   // SF4: all placement-relevant kinds re-check the kernel (certificate,
   // not window). Data/memory already constrained placement; Anti/Output
-  // with unsigned latency 0 require Cycle[use] >= Cycle[def].
+  // with unsigned latency 0 require Cycle[use] >= Cycle[def]. Body nodes
+  // re-check their HOST SUnit preds (original semantics); the latch node
+  // has no host SUnit, so it re-checks its two-copy preds. Node matching
+  // is by MI identity — host and two-copy SUnit spaces differ.
   for (int I = 0; I < N; ++I) {
-    for (const SDep &Pred : Body[I]->Preds) {
+    const bool LatchI = isLatchBranchIdx(I);
+    for (const SDep &Pred :
+         LatchI ? TwoCopyDAG->SUnits[I].Preds : Body[I]->Preds) {
       if (Pred.getSUnit()->isBoundaryNode())
         continue;
       if (!isPlacementDep(Pred))
         continue;
-      for (int J = 0; J < N; ++J) {
-        if (Body[J] != Pred.getSUnit())
-          continue;
-        int Need = Sched[J].Cycle + static_cast<int>(Pred.getLatency());
-        if (Sched[I].Cycle < Need)
-          return false;
+      // Latch preds live in the two-copy SUnit space (NodeNum indexes it);
+      // body preds live in the host space (MI identity). Resolve J first-
+      // copy only — second-copy nodes are LCD carriers, re-checked by the
+      // LCD certificate.
+      int J = -1;
+      if (LatchI) {
+        const int PNum = static_cast<int>(Pred.getSUnit()->NodeNum);
+        if (PNum >= 0 && PNum < N)
+          J = PNum;
+      } else {
+        MachineInstr *PredMI = Pred.getSUnit()->getInstr();
+        for (int K = 0; K < N && J < 0; ++K)
+          if (nodeInstr(K) == PredMI)
+            J = K;
       }
+      if (J < 0)
+        continue;
+      int Need = Sched[J].Cycle + static_cast<int>(Pred.getLatency());
+      if (Sched[I].Cycle < Need)
+        return false;
     }
   }
 
@@ -2996,7 +3824,7 @@ bool HaydnMultiStageSMS::certificateKernelPlan() const {
     for (int I = 0; I < N; ++I) {
       if (Sched[I].ModuloCycle != M)
         continue;
-      MachineInstr *MI = Body[I]->getInstr();
+      MachineInstr *MI = nodeInstr(I);
       if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
         continue;
       ++Count;
@@ -3011,13 +3839,13 @@ bool HaydnMultiStageSMS::certificateExactCommitPlan() {
   ExactCommitPlan.assign(II, false);
   if (!HasValidPlan || II < 1)
     return false;
-  const int N = static_cast<int>(Body.size());
+  const int N = nodeCount();
   for (int M = 0; M < II; ++M) {
     SmallVector<MachineInstr *, 4> Group;
     for (int I = 0; I < N; ++I) {
       if (Sched[I].ModuloCycle != M)
         continue;
-      MachineInstr *MI = Body[I]->getInstr();
+      MachineInstr *MI = nodeInstr(I);
       if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
         continue;
       Group.push_back(MI);
@@ -3040,6 +3868,84 @@ bool HaydnMultiStageSMS::certificateExactCommitPlan() {
     ExactCommitPlan[M] = true;
   }
   return true;
+}
+
+int HaydnMultiStageSMS::countRealizedKernelParcels() const {
+  // G002 II-parity (certificate honesty): count what the realized stream
+  // will be, not what the plan promised. Three terms:
+  //   1. Committed kernel parcels — the SAME shared counter the AsmPrinter
+  //      AchievedII stamp uses (Haydn::countKernelIssueParcels; one
+  //      mechanism, two seats — hard constraint #7).
+  //   2. Dest-window stall pads — replay of HaydnLatencyStalls' exact walk
+  //      (destWindowStallNeed / advanceDestWindows / emitForDestWindow on a
+  //      scratch HR): the pads the next pass WILL insert inside the kernel.
+  //   (The Form-C latch branch needs no extra term: with G002 it rides the
+  //    kernel plan, so the shared counter sees its parcel in either the
+  //    bundled or the bare-singleton shape.)
+  if (!LoopBB)
+    return 0;
+  // The shared counter already covers every realized shape of the latch:
+  // bundled inside its modulo group's parcel, or a bare singleton (one
+  // parcel; Finalize wraps it later). No extra term — double-counting a
+  // bare latch was the first cut of this certificate.
+  unsigned Parcels = haydn::bundle::countKernelIssueParcels(*LoopBB);
+  LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: realized base parcels=" << Parcels
+                    << "\n");
+
+  // Term 2: LatencyStalls replay over the kernel cycles in program order.
+  // Identical structure to HaydnLatencyStalls::runOnMachineFunction's
+  // per-block loop: cycles are BUNDLE roots plus trailing bare MIs.
+  const auto *ST = DAG ? &DAG->MF.getSubtarget() : nullptr;
+  if (ST && ST->getInstrItineraryData() &&
+      !ST->getInstrItineraryData()->isEmpty()) {
+    HaydnHazardRecognizer DestHR(ST->getInstrInfo(),
+                                  ST->getInstrItineraryData(),
+                                  /*IsPreRA=*/false);
+    DestHR.Reset();
+    for (MachineBasicBlock::const_instr_iterator I = LoopBB->instr_begin(),
+                                                  E = LoopBB->instr_end();
+         I != E;) {
+      const MachineInstr &Head = *I;
+      MachineBasicBlock::const_instr_iterator Next = std::next(I);
+      if (Head.isBundledWithPred()) {
+        I = Next;
+        continue;
+      }
+      SmallVector<const MachineInstr *, 4> Members;
+      if (Head.isBundle()) {
+        I = Next;
+        while (I != E && I->isBundledWithPred()) {
+          if (!I->isMetaInstruction() && !I->isDebugInstr() && !I->isPosition())
+            Members.push_back(&*I);
+          I = std::next(I);
+        }
+      } else {
+        if (!Head.isMetaInstruction() && !Head.isDebugInstr() &&
+            !Head.isPosition())
+          Members.push_back(&Head);
+        I = Next;
+      }
+      if (Members.empty())
+        continue;
+      unsigned Stalls = 0;
+      for (const MachineInstr *MI : Members)
+        Stalls = std::max(Stalls, DestHR.destWindowStallNeed(*MI));
+      if (Stalls)
+        LLVM_DEBUG({
+          dbgs() << "HaydnMultiStageSMS: realized stall pad=" << Stalls
+                 << " before parcel: ";
+          for (const MachineInstr *MI : Members)
+            dbgs() << *MI;
+        });
+      for (unsigned K = 0; K < Stalls; ++K)
+        DestHR.advanceDestWindows();
+      DestHR.advanceDestWindows();
+      for (const MachineInstr *MI : Members)
+        DestHR.emitForDestWindow(*MI);
+      Parcels += Stalls;
+    }
+  }
+  return static_cast<int>(Parcels);
 }
 
 int HaydnMultiStageSMS::countPlannedParcels() const {
@@ -3071,13 +3977,13 @@ bool HaydnMultiStageSMS::certificatePackAlias() const {
   AAResults *AA =
       DAG ? static_cast<HaydnScheduleDAGMI *>(DAG)->getAliasAnalysis()
           : nullptr;
-  const int N = static_cast<int>(Body.size());
+  const int N = nodeCount(); // G002: node space includes the latch branch
   for (int M = 0; M < II; ++M) {
     SmallVector<MachineInstr *, 4> Group;
     for (int I = 0; I < N; ++I) {
       if (Sched[I].ModuloCycle != M)
         continue;
-      MachineInstr *MI = Body[I]->getInstr();
+      MachineInstr *MI = nodeInstr(I);
       if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
         continue;
       Group.push_back(MI);
@@ -3136,14 +4042,23 @@ bool HaydnMultiStageSMS::certificateLifetimesNoSpill() const {
 bool HaydnMultiStageSMS::certificateDistinctStageOccupancy() const {
   if (!HasValidPlan || NStages < 1 || Body.empty())
     return false;
-  SmallVector<bool, 4> Occupied(NStages, false);
+  // G007: placement-domain accounting — node Stage fields hold the PRE-peel
+  // geometry, so the occupancy walk covers the full placement span
+  // (placementStageSpan()). With a SEF-peeled stage-0, slot 0 is owned by
+  // the peel (empty, or entirely SEF — both safe to run extra times by
+  // isSEFPeelableMI) and is EXEMPT from the must-be-occupied law; the
+  // kernel's real stages 1..Span-1 must each be occupied (an empty real
+  // stage would mean a manufactured overlap, the exact anti-pattern this
+  // certificate exists to reject).
+  const int Span = placementStageSpan();
+  SmallVector<bool, 4> Occupied(Span, false);
   for (int I = 0; I < NInstr; ++I) {
     const HaydnMultiStageNodeInfo &N = Sched[I];
-    if (!N.Scheduled || N.Stage < 0 || N.Stage >= NStages)
+    if (!N.Scheduled || N.Stage < 0 || N.Stage >= Span)
       return false;
     Occupied[N.Stage] = true;
   }
-  for (int S = 0; S < NStages; ++S)
+  for (int S = SEFStagePeeled ? 1 : 0; S < Span; ++S)
     if (!Occupied[S])
       return false;
   return true;
@@ -3180,15 +4095,21 @@ void HaydnMultiStageSMS::recordSWPSAnnotation() const {
 // plausible loop live-out (live-in on ExitBB or defined somewhere in LoopBB).
 bool HaydnMultiStageSMS::certificateEpilogUses() const {
   assert(HasValidPlan && LoopBB && ExitBB);
-  const int N = static_cast<int>(Body.size());
-  const int EpiBase = 1;
+  const int N = nodeCount(); // G002: node space includes the latch branch
+  // G007 SEF peel (AIE visitPipelineSchedule :1736-1740): after dropping
+  // the SEF stage-0, NStages == NPrologueStages and the real pipeline
+  // starts at stage 1 — epilogue completions start at stage 2.
+  const int EpiBase = SEFStagePeeled ? 2 : 1;
   SmallVector<MachineInstr *, 8> Planned;
   for (int S = 0; S < NStages - 1; ++S) {
     for (int M = 0; M < II; ++M) {
       for (int I = 0; I < N; ++I) {
         if (Sched[I].ModuloCycle != M || Sched[I].Cycle < (EpiBase + S) * II)
           continue;
-        MachineInstr *Orig = Body[I]->getInstr();
+        // The latch branch never peels (G002).
+        if (isLatchBranchIdx(I))
+          continue;
+        MachineInstr *Orig = nodeInstr(I);
         if (!Orig || isSkippableBodyMI(*Orig) || isZOLTerminator(*Orig))
           continue;
         for (const MachineOperand &MO : Orig->operands()) {
@@ -3240,15 +4161,21 @@ bool HaydnMultiStageSMS::certificateEpilogUses() const {
 bool HaydnMultiStageSMS::certificatePrologLiveness(
     MachineBasicBlock::iterator PrologInsertPt) const {
   assert(HasValidPlan && Preheader);
-  const int N = static_cast<int>(Body.size());
-  const int NPrologStages = NStages - 1;
+  const int N = nodeCount(); // G002: node space includes the latch branch
+  // G007 SEF peel: the prologue carries the pre-drop peel depth — the SEF
+  // stage still peels in the MIR stream (only the trip arithmetic dropped
+  // it); epilogue geometry shifts instead (EpiBase=2).
+  const int NPrologStages = NStages - 1 + (SEFStagePeeled ? 1 : 0);
   SmallVector<MachineInstr *, 8> SimulatedProlog;
   for (int S = 0; S < NPrologStages; ++S) {
     for (int M = 0; M < II; ++M) {
       for (int I = 0; I < N; ++I) {
         if (Sched[I].ModuloCycle != M || Sched[I].Cycle >= (S + 1) * II)
           continue;
-        MachineInstr *Orig = Body[I]->getInstr();
+        // The latch branch never peels (G002).
+        if (isLatchBranchIdx(I))
+          continue;
+        MachineInstr *Orig = nodeInstr(I);
         // Soft trip bump is never cloned: adjustSoftTripCount's preheader
         // ADDI32 absorbs the peel deficit. Cloning it when uses happen to
         // be live would double-count (ADDI32 plus peeled decrements).
@@ -3288,6 +4215,8 @@ bool HaydnMultiStageSMS::emitEpilogueWithKernelPreseed(
   // (AIE MultiSlot materialize before scoreboard emit).
   HaydnAlternateDescriptors EpiAlts;
   for (int I = 0; I < NInstr; ++I) {
+    if (isLatchBranchIdx(I))
+      continue; // never peels; no pin needed
     MachineInstr *Orig = Body[I] ? Body[I]->getInstr() : nullptr;
     if (!Orig)
       continue;
@@ -3297,6 +4226,10 @@ bool HaydnMultiStageSMS::emitEpilogueWithKernelPreseed(
   }
   HaydnHazardRecognizer EpiHR(TII, ST.getInstrItineraryData(),
                               /*IsPreRA=*/false, &EpiAlts);
+  // Peel clones are probed BEFORE insertion (idle padding must precede the
+  // cycle's clones), so they have no MBB parent — port counters cannot
+  // derive MRI from getMF(). Supply the owning MF's register info.
+  EpiHR.setPortMRIContext(&DAG->MF.getRegInfo());
   ResourceScoreboard<HaydnFuncUnitWrapper> EpiSB;
   // AIE initializeTopScoreBoard (AIEMachineScheduler.cpp:427-433):
   // replay = ceil(LoopSize / getConflictHorizon()). Overlay: Haydn peels
@@ -3312,15 +4245,17 @@ bool HaydnMultiStageSMS::emitEpilogueWithKernelPreseed(
       for (int Idx : KernelByMod[M]) {
         if (Idx < 0 || Idx >= NInstr)
           continue;
-        if (MachineInstr *MI = Body[Idx]->getInstr())
+        if (MachineInstr *MI = nodeInstr(Idx))
           EpiHR.emitInScoreboard(EpiSB, *MI, 0);
       }
       EpiSB.advance();
     }
   }
 
-  const int N = static_cast<int>(Body.size());
-  const int EpiBase = 1;
+  const int N = nodeCount(); // G002: node space includes the latch branch
+  // G007 SEF peel: epilogue completions start at stage 2 (AIE
+  // visitPipelineSchedule :1736-1740 EpiBase recognition).
+  const int EpiBase = SEFStagePeeled ? 2 : 1;
   const int Cap = ConflictHorizon + II;
   size_t EpiIdx = 0;
   int PendingEmpty = 0;
@@ -3329,6 +4264,9 @@ bool HaydnMultiStageSMS::emitEpilogueWithKernelPreseed(
     EpiSB.advance();
   };
 
+  // G007 SEF peel: NStages-1 completions after the (retained) kernel
+  // stages — with EpiBase=2 the loop covers the same Cycle range the
+  // clone plan produced (stage 1..NStages of the pre-drop pipeline).
   for (int S = 0; S < NStages - 1; ++S) {
     for (int M = 0; M < II; ++M) {
       SmallVector<MachineInstr *, 4> Cycle;
@@ -3336,10 +4274,13 @@ bool HaydnMultiStageSMS::emitEpilogueWithKernelPreseed(
         if (Sched[I].ModuloCycle != M ||
             Sched[I].Cycle < (EpiBase + S) * II)
           continue;
+        // The latch branch never peels; EpilogMIs has no clone for it.
+        if (isLatchBranchIdx(I))
+          continue;
         if (EpiIdx >= EpilogMIs.size())
           return false;
         MachineInstr *Clone = EpilogMIs[EpiIdx++];
-        if (MachineInstr *Orig = Body[I]->getInstr()) {
+        if (MachineInstr *Orig = nodeInstr(I)) {
           auto Pin = MemberPin.find(Orig);
           if (Pin != MemberPin.end())
             EpiAlts.setAlternateDescriptor(Clone, Pin->second, *TII);
@@ -3395,6 +4336,11 @@ bool HaydnMultiStageSMS::materialize() {
     LastRejectReason = Why;
     OrdinarySnapshot.restore();
     OrdinarySnapshot.clear();
+    // The snapshot's eraseCreatedStageMBB deleted the created stage MBBs;
+    // the members must not outlive them (a decline record later journaling
+    // these pointers would hand emitHaydnSMSLoopRemarks freed memory).
+    PrologMBB = nullptr;
+    EpilogMBB = nullptr;
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: rollback — " << Why << "\n");
     if (LoopBB)
       emitRemark(*LoopBB, "MultiStageRollback",
@@ -3426,23 +4372,28 @@ bool HaydnMultiStageSMS::materialize() {
 
   // Compute prolog insert point and run off-side prolog/epilog certificates.
   // SF5: NStages==1 is kernel-only — no peel blocks, no trip peel.
-  MachineBasicBlock::iterator PrologInsertPt =
-      Preheader->getFirstTerminator();
-  for (MachineInstr &MI : *Preheader) {
-    if (isHwLoopSetup(MI))
-      PrologInsertPt = std::next(MI.getIterator());
-  }
+  // G004: clones are inserted into the distinct PrologMBB (created below as
+  // a whole-preheader successor), so the certificate observes preheader
+  // EXIT liveness — walking past every preheader def, the hwloop setup
+  // included. The old just-after-setup point rejected preheader constants
+  // materialized after SET (prolog use of $r4 "not live" although PrologMBB
+  // entry sees the def).
+  MachineBasicBlock::iterator PrologInsertPt = Preheader->end();
   if (NStages >= 2 && !certificatePrologLiveness(PrologInsertPt))
     return rejectCert("prolog-liveness");
   if (NStages >= 2 && !certificateEpilogUses())
     return rejectCert("epilog-uses");
 
-  const int N = static_cast<int>(Body.size());
+  // G002 II-parity: N includes the Form-C latch branch node — its parcel is
+  // the kernel's last (modulo II-1) and commits with that group.
+  const int N = static_cast<int>(Body.size()) + (LatchBranch ? 1 : 0);
   MachineFunction &MF = *LoopBB->getParent();
 
   // Build per-modulo-cycle kernel order: for cycle M, emit body nodes with
   // ModuloCycle==M sorted by Stage descending (older iteration first — read
-  // previous value before same-cycle WAR write of next).
+  // previous value before same-cycle WAR write of next). The latch branch
+  // carries the highest node index, so it splices LAST inside its group —
+  // the terminator ends the parcel.
   SmallVector<SmallVector<int, 4>, 8> KernelByMod(II);
   for (int I = 0; I < N; ++I)
     KernelByMod[Sched[I].ModuloCycle].push_back(I);
@@ -3458,7 +4409,13 @@ bool HaydnMultiStageSMS::materialize() {
   // SF10: AIE visitPipelineSection (AIEPostPipeliner.cpp:1697-1717) —
   // for each prologue stage S, for each modulo cycle M, emit nodes with
   // ModuloCycle==M && Cycle < (S+1)*II. NStages==1 is kernel-only.
-  const int NPrologStages = std::max(0, NStages - 1);
+  // G007 SEF peel: the prologue keeps the PRE-drop peel depth (AIE
+  // leaves NPrologueStages untouched in peelSideEffectFree — the peel
+  // stage exists in the MIR stream, it is only exempt from the trip
+  // arithmetic), so peel one extra stage whose content is exactly the
+  // SEF stage-0 group.
+  const int NPrologStages =
+      std::max(0, NStages - 1) + (SEFStagePeeled ? 1 : 0);
   SmallVector<MachineInstr *, 8> PrologMIs;
   auto discardOrphanClones = [&](SmallVectorImpl<MachineInstr *> &Clones) {
     for (MachineInstr *C : Clones)
@@ -3471,7 +4428,11 @@ bool HaydnMultiStageSMS::materialize() {
       for (int I = 0; I < N; ++I) {
         if (Sched[I].ModuloCycle != M || Sched[I].Cycle >= (S + 1) * II)
           continue;
-        MachineInstr *Orig = Body[I]->getInstr();
+        // The latch branch never peels — a cloned terminator in the prologue
+        // would corrupt the CFG (G002).
+        if (isLatchBranchIdx(I))
+          continue;
+        MachineInstr *Orig = nodeInstr(I);
         if (IsSoftCounted && isSoftTripBumpMI(*Orig)) {
           LLVM_DEBUG(dbgs()
                      << "HaydnMultiStageSMS: skip prolog peel "
@@ -3491,15 +4452,24 @@ bool HaydnMultiStageSMS::materialize() {
     }
   }
 
-  // Epilogue: nodes with Cycle >= (1+S)*II. Still off-side (not inserted).
+  // Epilogue: nodes with Cycle >= (EpiBase+S)*II. Still off-side (not
+  // inserted). The latch branch never peels (G002 — same law as the
+  // prologue). G007: with a peeled SEF stage the real pipeline starts at
+  // stage 1, so epilogue completions start at stage 2 (AIE
+  // visitPipelineSchedule :1736-1740).
   SmallVector<MachineInstr *, 8> EpilogMIs;
-  const int EpiBase = 1;
+  const int EpiBase = SEFStagePeeled ? 2 : 1;
+  // G007: NStages-1 epilogue stages with EpiBase=2 covers pre-drop
+  // stages 1..NStages — the SEF stage-0 has no epilogue work (it runs
+  // one extra instance in the last kernel iteration instead).
   for (int S = 0; S < NStages - 1; ++S) {
     for (int M = 0; M < II; ++M) {
       for (int I = 0; I < N; ++I) {
+        if (isLatchBranchIdx(I))
+          continue;
         if (Sched[I].ModuloCycle == M &&
             Sched[I].Cycle >= (EpiBase + S) * II) {
-          MachineInstr *Clone = MF.CloneMachineInstr(Body[I]->getInstr());
+          MachineInstr *Clone = MF.CloneMachineInstr(nodeInstr(I));
           clearKillFlags(Clone);
           EpilogMIs.push_back(Clone);
         }
@@ -3574,11 +4544,39 @@ bool HaydnMultiStageSMS::materialize() {
   SmallVector<MachineInstr *, 16> KernelOrder;
   for (int M = 0; M < II; ++M)
     for (int Idx : KernelByMod[M])
-      KernelOrder.push_back(Body[Idx]->getInstr());
+      KernelOrder.push_back(nodeInstr(Idx));
 
-  for (MachineInstr *MI : KernelOrder) {
-    clearKillFlags(MI);
-    LoopBB->splice(Anchor, LoopBB, MI->getIterator());
+  const TargetInstrInfo *KernelTII = MF.getSubtarget().getInstrInfo();
+  for (int M = 0; M < II; ++M) {
+    bool Real = false;
+    for (int Idx : KernelByMod[M]) {
+      MachineInstr *MI = nodeInstr(Idx);
+      if (MI && !isSkippableBodyMI(*MI) && !isZOLTerminator(*MI))
+        Real = true;
+    }
+    // G004 idle-parcel visibility: an EMPTY kernel modulo cycle is an idle
+    // parcel by the SF3 complete-cycle policy. Commit an explicit
+    // architectural NOP in cycle order so every downstream seat —
+    // HaydnLatencyStalls' window replay, FixupHwLoops geometry, the shared
+    // realized-parcel counter, and the final stream — retires the same
+    // pipeline step. Without the NOP the stall auditor sees no parcel
+    // between a Data_Latency=2 def and its consumer and pads an extra
+    // cycle the machine does not need (idle already retires it): realized
+    // parcels inflate and legal IIs reject.
+    if (!Real)
+      KernelTII->insertNoop(*LoopBB, Anchor);
+    for (int Idx : KernelByMod[M]) {
+      MachineInstr *MI = nodeInstr(Idx);
+      if (!MI)
+        continue;
+      clearKillFlags(MI);
+      // The latch branch IS the anchor terminator — splicing it before
+      // itself is a no-op move; it stays the block's last MI and commits
+      // inside its modulo group's parcel (G002).
+      if (LatchBranch && MI == LatchBranch)
+        continue;
+      LoopBB->splice(Anchor, LoopBB, MI->getIterator());
+    }
   }
   if (forceFailJournal(HaydnMultiStageJournalSeat::JM_SPLICE))
     return rollback("JM-SPLICE-force");
@@ -3597,10 +4595,13 @@ bool HaydnMultiStageSMS::materialize() {
   if (DAG) {
     const TargetInstrInfo *TII = DAG->MF.getSubtarget().getInstrInfo();
     auto &Alts = DAG->MF.getInfo<HaydnMachineFunctionInfo>()->getAltDescs();
-    for (SUnit *SU : Body) {
-      MachineInstr *MI = SU->getInstr();
-      if (!MI)
-        continue;
+    SmallVector<MachineInstr *, 32> StampTargets;
+    for (SUnit *SU : Body)
+      if (MachineInstr *MI = SU->getInstr())
+        StampTargets.push_back(MI);
+    if (LatchBranch)
+      StampTargets.push_back(LatchBranch);
+    for (MachineInstr *MI : StampTargets) {
       auto It = MemberPin.find(MI);
       if (It != MemberPin.end())
         Alts.setAlternateDescriptor(MI, It->second, *TII);
@@ -3611,7 +4612,7 @@ bool HaydnMultiStageSMS::materialize() {
   for (int M = 0; M < II; ++M) {
     SmallVector<MachineInstr *, 4> Group;
     for (int Idx : KernelByMod[M]) {
-      MachineInstr *MI = Body[Idx]->getInstr();
+      MachineInstr *MI = nodeInstr(Idx);
       if (!MI || isSkippableBodyMI(*MI) || isZOLTerminator(*MI))
         continue;
       Group.push_back(MI);
@@ -3626,6 +4627,20 @@ bool HaydnMultiStageSMS::materialize() {
       continue;
     }
     ArrayRef<MachineInstr *> Slice(Group.data(), Group.size());
+    // G004 pin-parity bake: commit's solver re-selects members from logical
+    // opcodes and can pick a DIFFERENT latency class than the placement pin
+    // (MULL pin = fresh-dest MulLat [1]; solver picked MAC1_RR = Slot12_MAC
+    // dest [2]) — search prices one Data_Latency, the machine realizes the
+    // other, and the stall pass pads past the promised II. Bake the PINNED
+    // member descs first so commit's as-is validation path checks the pin
+    // (one placement truth); an illegal pin falls through to the solver and
+    // the realized-II certificate still fails closed on any residue
+    // divergence. Rollback restores descs (restoreMIFromClone re-setDescs).
+    for (MachineInstr *MI : Group) {
+      auto Pin = MemberPin.find(MI);
+      if (Pin != MemberPin.end() && Pin->second != MI->getOpcode())
+        MI->setDesc(MF.getSubtarget().getInstrInfo()->get(Pin->second));
+    }
     if (!haydn::bundle::canCoissueProductCycle(Slice) ||
         !haydn::bundle::commitExactMultiMIProductCycle(Slice)) {
       return rollback("JM-COMMIT-restore");
@@ -3635,6 +4650,20 @@ bool HaydnMultiStageSMS::materialize() {
   if (static_cast<int>(ParcelsCommitted) != II)
     return rollback("measured-ii-mismatch");
   MeasuredII = static_cast<int>(ParcelsCommitted);
+  // G002 II-parity (certificate honesty): the SF3 certificate must hold on
+  // the REALIZED stream — committed parcels + the Form-C latch parcel when
+  // it stayed bare + the dest-window stall pads HaydnLatencyStalls will
+  // insert — not on the planned ExactCommitPlan modulo count (the old
+  // ParcelsCommitted == II check was true by construction). Mismatch =
+  // rollback + reject (SF3: never re-label, never seq fallback).
+  const int RealizedII = countRealizedKernelParcels();
+  if (RealizedII != II) {
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: realized-II=" << RealizedII
+                      << " != searched II=" << II << " — fail close\n");
+    LastRejectReason = "realized-ii-mismatch";
+    return rollback("realized-ii-mismatch");
+  }
+  RealizedIIReported = RealizedII;
   // F5: JM-COMMIT fires after exact commit, not at splice.
   if (forceFailJournal(HaydnMultiStageJournalSeat::JM_COMMIT))
     return rollback("JM-COMMIT-force");
@@ -3679,6 +4708,8 @@ bool HaydnMultiStageSMS::materialize() {
     return rollback("JM-META-force");
 
   for (int I = 0; I < N; ++I) {
+    if (isLatchBranchIdx(I))
+      continue; // no host SUnit; its parcel is committed with M_{II-1}
     SUnit *SU = Body[I];
     SU->isScheduled = true;
     SU->TopReadyCycle = static_cast<unsigned>(Sched[I].ModuloCycle);
@@ -3704,13 +4735,18 @@ bool HaydnMultiStageSMS::materialize() {
                    Twine(LastEpiloguePreseed ? "kernel-steady" : "none"));
   OrdinarySnapshot.clear();
   ++NumMultiStageSuccess;
+  // G004: the success path also echoes the policy seat so the committed
+  // stream carries the same observed hwloop-combined field the analyze /
+  // reject paths emit (commit-arm remark parity).
+  emitProductPolicy(*LoopBB);
   LLVM_DEBUG({
     dbgs() << "HaydnMultiStageSMS: materialize done II=" << II
            << " NStages=" << NStages
            << (IsSoftCounted ? " soft" : " zol")
            << " prolog=" << PrologMIs.size()
            << " epilog=" << EpilogMIs.size()
-           << " kernel_parcels=" << ParcelsCommitted << "\n";
+           << " kernel_parcels=" << ParcelsCommitted
+           << " realized_parcels=" << RealizedIIReported << "\n";
     dbgs() << "  Preheader:\n";
     for (auto &MI : *Preheader)
       dbgs() << "    " << MI;
@@ -3745,12 +4781,22 @@ void HaydnMultiStageSMS::emitRemark(MachineBasicBlock &MBB,
 }
 
 void HaydnMultiStageSMS::emitProductPolicy(MachineBasicBlock &MBB) const {
-  // Runtime echo of the compile-time seat. AIE SWPSolver is Z3
-  // (AIESWPSolver.cpp); Haydn never installs a second solver.
+  // Runtime echo of the compile-time seat, plus the OBSERVED combined
+  // state for this candidate: hwloop-combined=on exactly when the
+  // pipelined loop is a hardware-loop (ZOL) form — SET_HWLOOP/LoopStart
+  // trip setup — rather than a soft countdown. The static
+  // productHwloopCombinedEnabled() pin stays false (product policy);
+  // this field reports the per-loop interaction the remarks qualify.
+  // AIE SWPSolver is Z3 (AIESWPSolver.cpp); Haydn never installs a
+  // second solver.
   assert(!productSWPSolverAvailable() &&
          StringRef(LastSWPSolverStatus ? LastSWPSolverStatus : "") ==
              "unavailable");
-  emitRemark(MBB, "MultiStagePolicy", productPolicyRemark());
+  const bool CombinedOn = !IsSoftCounted && TripCountDef != nullptr;
+  emitRemark(MBB, "MultiStagePolicy",
+             Twine(productPolicyRemark()).concat(
+                 CombinedOn ? " [candidate hwloop-combined=on]"
+                            : " [candidate hwloop-combined=off]"));
 }
 
 //===----------------------------------------------------------------------===//
@@ -3776,6 +4822,22 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
     return false;
   }
   MachineBasicBlock &MBB = *MBBPtr;
+
+  // G009 user escape hatch, read at the candidate gate (the pragma's owning
+  // program point): llvm.loop.pipeline.disable is a hard veto — the loop is
+  // not a candidate for this engine. Kind stays not-candidate; the canonical
+  // G005 line carries seat=pragma-disable. Per-loop reset law: the pragma is
+  // re-read per region (loopPipelinePragma holds no cross-loop state), so
+  // two loops in one function cannot leak (Hexagon swp-pragma-disable-bug).
+  const LoopPipelinePragma Pragma = loopPipelinePragma(MBB);
+  if (Pragma.Disable) {
+    ++NumMultiStageFail;
+    LastRejectReason = "pragma-disable";
+    emitRemark(MBB, "MultiStageReject",
+               "rejected: llvm.loop.pipeline.disable (user veto)");
+    emitProductPolicy(MBB);
+    return false;
+  }
 
   if (!isCandidate(MBB)) {
     ++NumMultiStageFail;
@@ -3852,7 +4914,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
   if (TwoCopyDAG && DAG) {
     const TargetInstrInfo *PinTII = DAG->MF.getSubtarget().getInstrInfo();
     for (int K = 0; K < NInstr; ++K) {
-      MachineInstr *Orig = Body[K]->getInstr();
+      MachineInstr *Orig = nodeInstr(K);
       auto It = MemberPin.find(Orig);
       if (It == MemberPin.end())
         continue;
@@ -3868,6 +4930,16 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
         SearchAlts.setAlternateDescriptor(C1, Mem, *PinTII);
       }
     }
+    // G004 member-latency parity (SF2 latency axis): buildSchedGraph priced
+    // every edge from the LOGICAL descriptor (logical MULL is Slot012_ALU
+    // OperandCycles [1]), but commit realizes the PINNED member's itinerary
+    // (MULL_*_MAC*_RR is Slot12_MAC [2,1,1,2] — dest latency 2). Unpriced,
+    // the II search accepts II=5 while the realized dest-window replay
+    // needs a stall pad (realized-II=6) and rolls back. Re-price Data edges
+    // from the now-pinned clone members BEFORE any consumer (LCDEdges /
+    // RecMII / ASAP / fitInInterval) reads them — one mechanism on the
+    // shared edge truth so search and commit agree.
+    upgradeTwoCopyMemberLatencies();
   }
   RecMII = computeRecMII();
   int ResMII = getResMII(MBB);
@@ -3902,6 +4974,21 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
   if (IIHint > 0)
     StartII = static_cast<int>(IIHint);
 
+  // G009 II pin: llvm.loop.pipeline.initiationinterval N pins the search to
+  // EXACTLY II=N — the accepted schedule must report searched-II == N (AIE
+  // gates its solver to TargetII the same way; AIEPostPipeliner.cpp:165-172
+  // TargetII = ParsedInitiationInterval). No fallback search: if infeasible
+  // at N the engine declines with seat=pragma-ii-infeasible — never silently
+  // schedules some other II. The window clamp keeps the decline honest when
+  // N exceeds the list baseline (MaxII < N): StartII > MaxII fails closed
+  // as ii-window-empty, and an in-window failure lands on the pragma seat.
+  const bool IIPinnedByPragma = Pragma.II > 0;
+  if (IIPinnedByPragma) {
+    StartII = Pragma.II;
+    LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: pragma II pinned to " << StartII
+                      << "\n");
+  }
+
   bool Found = false;
   // SF5: II==LinearLength is a legal kernel-only schedule (AIE checkStages
   // accepts NS==1). SF6: search starts at ResMII even when that equals
@@ -3919,7 +5006,9 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
     return false;
   }
   const int ListBaseline = std::max(LinearLength, StartII);
-  const int MaxII = std::min(ListBaseline, MaxIISearch);
+  const int MaxII = IIPinnedByPragma
+                        ? StartII
+                        : std::min(ListBaseline, MaxIISearch);
   if (StartII > MaxII) {
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: StartII=" << StartII
                       << " > MaxII=" << MaxII << " (ListBaseline="
@@ -3932,7 +5021,7 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                    " MaxII=" + Twine(MaxII) + " ResMII=" + Twine(ResMII) +
                    " LinearLength=" + Twine(LinearLength) +
                    " pins=" + Twine((unsigned)MemberPin.size()) +
-                   " no-seq-fallback qualify-or-cut=seated product-off");
+                   " no-seq-fallback qualify-or-cut=seated product-on");
     emitProductPolicy(MBB);
     return false;
   }
@@ -3955,7 +5044,9 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
       break;
     }
   }
-  if (!Found && IIHint > 0) {
+  // The IIHint relaxation loop is a host-suggested-II mechanism; a pragma
+  // pin is a user contract, not a hint — never relax away from N.
+  if (!Found && IIHint > 0 && !IIPinnedByPragma) {
     for (int Try = ResMII; Try <= MaxII; ++Try) {
       if (static_cast<unsigned>(Try) == IIHint)
         continue;
@@ -3969,13 +5060,22 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
   if (!Found) {
     LLVM_DEBUG(dbgs() << "HaydnMultiStageSMS: no schedule found\n");
     ++NumMultiStageFail;
-    LastRejectReason = "ii-exhaustion";
-    emitRemark(MBB, "MultiStageExhaustion",
-               "exhausted: no feasible II in [" + Twine(StartII) + "," +
-                   Twine(MaxII) + "] ResMII=" + Twine(ResMII) +
-                   " LinearLength=" + Twine(LinearLength) +
-                   " pins=" + Twine((unsigned)MemberPin.size()) +
-                   " no-seq-fallback qualify-or-cut=seated product-off");
+    LastRejectReason =
+        IIPinnedByPragma ? "pragma-ii-infeasible" : "ii-exhaustion";
+    if (IIPinnedByPragma)
+      emitRemark(MBB, "MultiStageExhaustion",
+                 "exhausted: pragma II=" + Twine(Pragma.II) +
+                     " infeasible (ResMII=" + Twine(ResMII) +
+                     " RecMII=" + Twine(RecMII) +
+                     " LinearLength=" + Twine(LinearLength) +
+                     ") no-fallback-search pragma-pinned");
+    else
+      emitRemark(MBB, "MultiStageExhaustion",
+                 "exhausted: no feasible II in [" + Twine(StartII) + "," +
+                     Twine(MaxII) + "] ResMII=" + Twine(ResMII) +
+                     " LinearLength=" + Twine(LinearLength) +
+                     " pins=" + Twine((unsigned)MemberPin.size()) +
+                     " no-seq-fallback qualify-or-cut=seated product-on");
     emitProductPolicy(MBB);
     return false;
   }
@@ -4010,10 +5110,17 @@ bool HaydnMultiStageSMS::analyze(ScheduleDAGMI &TheDAG, unsigned IIHint) {
                  Twine(LastStrategyName ? LastStrategyName : "none") +
                  " resource-bias=" +
                  Twine(LastResourceBias ? "applied" : "idle") +
-                 " no-seq-fallback qualify-or-cut=seated product-off");
+                 // G007: surface the SEF relaxation so an accept that
+                 // owed its trip gate to a peeled SEF stage is auditable
+                 // (prologue-peel depth = stages; epilogue EpiBase=2).
+                 (SEFStagePeeled ? " sef-peel=1" : "") +
+                 " no-seq-fallback qualify-or-cut=seated product-on");
   emitRemark(MBB, "MultiStageQualify",
              "qualify parcels-per-iter=" + Twine(MeasuredII) +
-                 " searched-II=" + Twine(II));
+                 " searched-II=" + Twine(II) +
+                 (RealizedIIReported
+                      ? " realized-II=" + Twine(RealizedIIReported)
+                      : ""));
   emitRemark(MBB, "MultiStageSWPS",
              "swps observe-only measured-II=" + Twine(MeasuredII) +
                  " searched-II=" + Twine(II) + " no-asm-stamp");
@@ -4025,7 +5132,72 @@ bool HaydnMultiStageSMS::tryAfterOrdinarySchedule(ScheduleDAGMI &TheDAG,
                                                   unsigned IIHint) {
   if (!EnableHaydnMultiStageSMS)
     return false;
+  // G005: record the engine outcome for the canonical function-late per-loop
+  // remark. The Host dies with this region; HMFI carries the observation to
+  // the finalizeSchedule seat. Declines (analyze/preflight/forced/materialize
+  // rollback) carry the LastRejectReason seat vocabulary verbatim; accepts
+  // carry the searched II (== realized, G002 certificate) and stage count.
+  // Observation only — never placement truth (eraseSMSLoop stays the accept
+  // authority and also drops a stale record on JM-META rollback).
+  auto recordOutcome = [&](const char *Kind, const char *Reason) {
+    // isCandidate sets LoopBB only on success; declines before that point
+    // still deserve a record, so recover the region block the same way
+    // analyze does (ScheduleDAGInstrs::BB is protected).
+    MachineBasicBlock *RegionBB = LoopBB;
+    if (!RegionBB) {
+      if (!TheDAG.SUnits.empty() && TheDAG.SUnits[0].getInstr())
+        RegionBB = TheDAG.SUnits[0].getInstr()->getParent();
+      if (!RegionBB && TheDAG.begin() != TheDAG.end())
+        RegionBB = TheDAG.begin()->getParent();
+    }
+    if (!RegionBB)
+      return;
+    // A loop MBB split into several scheduling regions sees several engine
+    // attempts; an accept mutates the MBB (committed kernel parcels), so a
+    // later region's decline/not-candidate on the mutated body must never
+    // overwrite the loop's accepted outcome. Law: an accepted (or
+    // accepted-analysis) record is terminal — only declined-class records
+    // are overwritable.
+    if (const HaydnMachineFunctionInfo::SMSLoopRecord *Prev =
+            TheDAG.MF.getInfo<HaydnMachineFunctionInfo>()->getSMSLoopRecord(
+                RegionBB);
+        Prev && StringRef(Prev->Kind) != "declined" &&
+        StringRef(Prev->Kind) != "not-candidate")
+      return;
+    HaydnMachineFunctionInfo::SMSLoopRecord Rec;
+    Rec.Kind = Kind;
+    // Floor honesty, one rule: report the engine's II only when an II
+    // attempt actually ran (tryII sets IIAttempted; accepts always did).
+    // Otherwise 0 = "search never started" — the canonical emitter then
+    // reports the realized body parcel count (AIE unpipelined
+    // "body length as II" semantics; covers not-candidate and every
+    // pre-search decline, whose II still holds the clearPlan reset 1).
+    Rec.II = IIAttempted ? std::max(0, II) : 0;
+    Rec.NS = std::max(0, NStages);
+    Rec.Reason = Reason;
+    Rec.PrologueMBB = PrologMBB;
+    Rec.EpilogueMBB = EpilogMBB;
+    TheDAG.MF.getInfo<HaydnMachineFunctionInfo>()->recordSMSLoopRecord(
+        RegionBB, Rec);
+  };
   if (!analyze(TheDAG, IIHint)) {
+    // Spec vocabulary: a shape the engine never candidates is
+    // not-candidate (its canonical II is the realized body parcel count;
+    // seat is a declined-only field); every other analyze failure is a
+    // declined attempt carrying the reject seat. G009 exception: the
+    // pragma-disable veto is a not-candidate that NAMES its cause — the
+    // loop shape was never judged; the user withdrew it. The seat is
+    // diagnostic (identical treatment either way), so the exception keeps
+    // the G005 kind vocabulary closed while surfacing the pragma.
+    if (LastRejectReason &&
+        StringRef(LastRejectReason) == "not-candidate") {
+      recordOutcome("not-candidate", nullptr);
+    } else if (LastRejectReason &&
+               StringRef(LastRejectReason) == "pragma-disable") {
+      recordOutcome("not-candidate", "pragma-disable");
+    } else {
+      recordOutcome("declined", LastRejectReason);
+    }
     destroyTwoCopyGraph();
     return false;
   }
@@ -4038,11 +5210,13 @@ bool HaydnMultiStageSMS::tryAfterOrdinarySchedule(ScheduleDAGMI &TheDAG,
                      (LastRejectReason ? LastRejectReason : "unknown"));
       emitProductPolicy(*LoopBB);
     }
+    recordOutcome("declined", LastRejectReason);
     destroyTwoCopyGraph();
     return false;
   }
   if (HaydnMultiStageSMSAnalysisOnly) {
     ++NumMultiStageAnalysisAccept;
+    recordOutcome("accepted-analysis", nullptr);
     destroyTwoCopyGraph();
     return false;
   }
@@ -4051,9 +5225,156 @@ bool HaydnMultiStageSMS::tryAfterOrdinarySchedule(ScheduleDAGMI &TheDAG,
     if (LoopBB)
       emitRemark(*LoopBB, "MultiStageReject",
                  "forced certificate failure after preflight");
+    recordOutcome("declined", "forced-certificate-failure");
     return false;
   }
-  return materialize();
+  if (materialize()) {
+    recordOutcome("accepted", nullptr);
+    return true;
+  }
+  recordOutcome("declined", LastRejectReason);
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// G005 canonical per-loop II/NS remark (function-late, layout order)
+//===----------------------------------------------------------------------===//
+
+/// True when \p MBB is a single-MBB loop the canonical remark census must
+/// cover. Two closed rules (AIE emitLoopRemarks census + the Haydn ZOL
+/// overlay — AIE has no hardware-loop kernel shape, Haydn's Form-B body is
+/// not CFG-visible):
+///   1. AIE `isSingleMBBLoop` (AIELoopUtils.cpp:126-134): exactly one
+///      self successor edge and exactly one exit edge (Form C soft-counted
+///      latch).
+///   2. Haydn ZOL Form B: the MBB ends in PseudoLoopEnd (the HWLR END
+///      marker; iteration repeat lives in hardware) and its unique
+///      non-self predecessor carries a hardware-loop setup targeting this
+///      MBB — the same single-MBB SET law isCandidate enforces (multi-MB
+///      SET, start!=end, is excluded by construction).
+static bool isCanonicalSingleMBBLoop(MachineBasicBlock &MBB) {
+  int NumLoopEdges = 0;
+  int NumExitEdges = 0;
+  for (const MachineBasicBlock *S : MBB.successors()) {
+    if (S == &MBB)
+      ++NumLoopEdges;
+    else
+      ++NumExitEdges;
+  }
+  if (NumLoopEdges == 1 && NumExitEdges == 1)
+    return true;
+  // ZOL Form-B kernel: PLE terminator + unique non-self predecessor
+  // holding the setup. Fallthrough-only body (no self edge, no exit edge
+  // of its own); the loop is in the hardware, not the CFG.
+  if (NumLoopEdges != 0)
+    return false;
+  const auto Term = MBB.getFirstInstrTerminator();
+  if (Term == MBB.end() || !isZOLTerminator(*Term))
+    return false;
+  const MachineBasicBlock *PH = nullptr;
+  for (const MachineBasicBlock *P : MBB.predecessors()) {
+    if (P == &MBB)
+      continue;
+    if (PH)
+      return false;
+    PH = P;
+  }
+  if (!PH)
+    return false;
+  // Trip-facts law mirrored from isCandidate: a SET_HWLOOP form whose
+  // start MBB is this loop (setupTargetsLoop checks start==Loop; the
+  // engine additionally refuses start!=end, so a multi-MBB SET's inner
+  // block can pass here only to be reported kind=declined — never
+  // misreported as unpipelined), or a LoopStart (no MBB operands; the
+  // kernel starts at fallthrough = this block).
+  return llvm::any_of(*PH, [&](const MachineInstr &MI) {
+    return setupTargetsLoop(MI, MBB) ||
+           MI.getOpcode() == Haydn::LoopStart;
+  });
+}
+
+/// Emit the ONE canonical per-loop line for every single-MBB loop of \p MF,
+/// in MachineFunction layout order. Called from the post-RA host's
+/// finalizeSchedule (after every region scheduled and every engine attempt
+/// journaled), so ordering is deterministic and pointer-independent.
+/// Shape (M2/M18 KPI input; AIE emitPipelinerRemark tooling compat):
+///   HaydnMultiStageSMS: Schedule found II=<n> NS=<n> prologue=<n> parcels
+///   epilogue=<n> parcels kind=<k> [seat=<last-reject-reason>] loop=bb.<N>
+/// II semantics follow AIE: accepted = searched II (== realized, G002
+/// certificate); unpipelined/not-candidate = realized body parcel count
+/// ("body length as II" for tooling compatibility); declined = the II the
+/// search last reached (0 when it never scheduled an II).
+void llvm::emitHaydnSMSLoopRemarks(MachineFunction &MF) {
+  HaydnMachineFunctionInfo *HMFI = MF.getInfo<HaydnMachineFunctionInfo>();
+  MachineOptimizationRemarkEmitter ORE(MF, /*MBFI=*/nullptr);
+  for (MachineBasicBlock &MBB : MF) {
+    // Census: the CFG shape test, OR — for ACCEPTED loops only — the
+    // engine's own association. A staged (NS>=2) accept retargets the
+    // preheader edge to the created PrologMBB, so the loop header's
+    // unique non-self pred no longer carries the SET and the shape test
+    // alone would silently skip an accepted loop in the KPI output.
+    // Declined/not-candidate records are NOT emitted on census-miss:
+    // every scheduled region journals a record, and non-loop regions
+    // (entry/preheaders) would flood the KPI stream.
+    const HaydnMachineFunctionInfo::SMSLoopRecord *CensusRec =
+        HMFI->getSMSLoopRecord(&MBB);
+    const bool CensusAcceptFallback =
+        CensusRec && strcmp(CensusRec->Kind, "accepted") == 0;
+    if (!isCanonicalSingleMBBLoop(MBB) && !CensusAcceptFallback)
+      continue;
+    DebugLoc DL;
+    if (!MBB.empty())
+      DL = MBB.begin()->getDebugLoc();
+
+    int II = 0;
+    int NS = 0;
+    const char *Kind = "not-candidate";
+    const char *Seat = nullptr;
+    unsigned PrologueParcels = 0;
+    unsigned EpilogueParcels = 0;
+    if (const HaydnMachineFunctionInfo::SMSLoopRecord *Rec = CensusRec) {
+      Kind = Rec->Kind;
+      Seat = Rec->Reason;
+      II = Rec->II;
+      NS = Rec->NS;
+      if (Rec->PrologueMBB)
+        PrologueParcels =
+            haydn::bundle::countKernelIssueParcels(*Rec->PrologueMBB);
+      if (Rec->EpilogueMBB)
+        EpilogueParcels =
+            haydn::bundle::countKernelIssueParcels(*Rec->EpilogueMBB);
+    }
+    if (II <= 0) {
+      // Not-candidate, or a decline that never reached an II attempt:
+      // report the honest realized body length (AIE unpipelined-compat).
+      II = static_cast<int>(haydn::bundle::countKernelIssueParcels(MBB));
+    }
+
+    std::string LoopLabel;
+    {
+      raw_string_ostream OS(LoopLabel);
+      MBB.printName(OS, MachineBasicBlock::PrintNameIr);
+    }
+    // DiagnosticInfoOptimizationBase::operator<< accepts StringRef only
+    // (not Twine); build the message as a std::string directly (no local
+    // Twine — llvm-twine-local hazard class).
+    std::string MsgStorage;
+    {
+      raw_string_ostream OS(MsgStorage);
+      OS << "Schedule found II=" << II << " NS=" << NS
+         << " prologue=" << PrologueParcels << " parcels"
+         << " epilogue=" << EpilogueParcels << " parcels"
+         << " kind=" << Kind;
+      if (Seat)
+        OS << " seat=" << Seat;
+      OS << " loop=" << LoopLabel;
+    }
+    ORE.emit([&]() {
+      return MachineOptimizationRemarkAnalysis(DEBUG_TYPE, "LoopKPI", DL,
+                                               &MBB)
+             << StringRef(MsgStorage);
+    });
+  }
 }
 
 

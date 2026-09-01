@@ -23,26 +23,31 @@
 ; RUN: FileCheck %s --allow-empty --check-prefix=OFFRMK < %t.off.rmk
 ; REQUIRES: asserts
 
-; Product-off park at the pipeline owner until independent then combined
-; qualification. Hardware loops, post-RA multi-stage SMS, combined dual-ON,
-; Stage-0 PostPipeliner/InterBlock, and AR encodings 2/3 stay off. Native
-; X2CMUL stays selectable; unpublished AE bag stays off haydn.h.
-; AIE inserts HardwareLoops at O1+ (AIE2TargetMachine.cpp:81-82, :234-235);
-; Haydn overlays product-off. Finalize/Verify skipFunction stays closed.
+; Product park ledger, restamped for the 2026-08-22 flips: hardware
+; loops AND post-RA multi-stage SMS are now product ON (each qualified
+; independent + combined; SMS flipped same day, later). Combined
+; dual-ON qualification LANDED (G004); Stage-0 PostPipeliner/InterBlock
+; and AR encodings 2/3 stay off. Native X2CMUL stays selectable;
+; unpublished AE bag stays off haydn.h. AIE inserts HardwareLoops at O1+
+; (AIE2TargetMachine.cpp:81-82, :234-235); Haydn now matches that default.
+; Finalize/Verify skipFunction stays closed.
 
 ; TM-DAG: PostPipeliner Stage-0, InterBlock
-; TM-DAG: productHwloopCombinedEnabled() (false)
+; TM-DAG: Combined hwloop+SMS stays productHwloopCombinedEnabled()
 ; TM-DAG: skipFunction — do not reopen that skip
 ; TM-DAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
 ; TM-DAG: setCFIFixup(true)
 ; TM-DAG: Do not reopen skipFunction on Finalize/Verify
 
+; 2026-08-22 SMS product-default flip rebaseline: both static_asserts are
+; now positive (default ON; combined pin still negative — the combined
+; *policy* seat stays false while the qualified matrix is tracked in
+; hwloop-multistage-combined-*).
 ; SMS-DAG: cl::init(HaydnMultiStageSMS::productDefaultEnabled())
-; SMS-DAG: static_assert(!HaydnMultiStageSMS::productDefaultEnabled()
+; SMS-DAG: static_assert(HaydnMultiStageSMS::productDefaultEnabled()
 ; SMS-DAG: static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled()
-; SMS-DAG: Pipeline owner does not flip this default
 
-; HWLOOP-DAG: static_assert(!llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
+; HWLOOP-DAG: static_assert(llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; HWLOOP-DAG: Never skipFunction here
 ; HWLOOP-DAG: +hwloop does not flip product policy
 
@@ -63,21 +68,23 @@
 ; INTRIN-DAG: selectors 2/3 fail-closed at product
 ; INTRIN-DAG: do not invent AR2/AR3
 
-; PIPE-NOT:      Hardware Loop Insertion
+; PIPE:      Hardware Loop Insertion
 ; PIPE-NOT:      Haydn Hardware Loop Detection
-; PIPE-NOT:      Haydn Hardware Loop Expansion
-; PIPE-NOT:      Haydn Hardware Loop Fixup
+; PIPE:      Haydn Hardware Loop Expansion
 ; PIPE:      PostRA Machine Instruction Scheduler
+; PIPE:      Haydn Hardware Loop Fixup
 ; PIPE-NOT:      Haydn PostPipeliner
 ; PIPE-NOT:      Haydn InterBlock
 
 ; OFF-LABEL: add_loop:
-; OFF-NOT:   set_hwloop
+; OFF:   set_hwloop
 ; OFF-NOT:   #<swps>
 ; OFF:       jalr
+; Default arm (both engines ON): the combined-candidate tag is legal
+; remark output; this body exhausts fail-closed — no accept/stamp.
 ; OFFRMK-NOT: accepted II=
 ; OFFRMK-NOT: MultiStageStageMBB
-; OFFRMK-NOT: hwloop-combined=on
+; OFFRMK-NOT: swps measured-II=
 
 define i32 @add_loop(ptr nocapture readonly %a, i32 %n) {
 entry:

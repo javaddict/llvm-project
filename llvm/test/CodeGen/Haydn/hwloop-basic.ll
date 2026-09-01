@@ -1,27 +1,32 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop < %s | FileCheck %s --check-prefix=DEFAULT
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops < %s | FileCheck %s --check-prefix=HWON
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=0 < %s | FileCheck %s --check-prefix=HWOFF
 
-; Role: semantic — SCEV-proven constant-trip QUALIFY while product default
-; stays OFF. DEFAULT pins the software counted residual (no SET, no HWLR
-; CSR invent). HWON re-derives the ZOL contract: set_hwloop_f2 sel=0,
-; START before END, two intervening size-bearing parcels, no free CSR.
+; 2026-08-22 hwloop product-default flip rebaseline: default is now ON
+; (qualified independent + combined). DEFAULT pins the ZOL contract;
+; HWOFF keeps the explicit-OFF software-residual coverage.
+
+; Role: semantic — SCEV-proven constant-trip QUALIFY under the product
+; default (ON since 2026-08-22). DEFAULT re-derives the ZOL contract:
+; set_hwloop_f2 sel=0, START before END, two intervening size-bearing
+; parcels, no free CSR. HWOFF pins the software counted residual (no SET,
+; no HWLR CSR invent).
 
 define i32 @hwloop_basic(ptr %p) {
 ; DEFAULT-LABEL: hwloop_basic:
-; DEFAULT-NOT:   set_hwloop
+; DEFAULT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
+; DEFAULT-NOT:   set_hwloop_f2 1,
 ; DEFAULT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; DEFAULT:       bnez
+; DEFAULT:       .LLhwloop_start
+; DEFAULT:       .LLhwloop_end
 ; DEFAULT:       jalr
 ;
-; HWON-LABEL: hwloop_basic:
-; HWON:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
-; HWON-NOT:   set_hwloop_f2 1,
-; HWON-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; HWON:       .LLhwloop_start
-; HWON:       .LLhwloop_end
-; HWON:       jalr
+; HWOFF-LABEL: hwloop_basic:
+; HWOFF-NOT:   set_hwloop
+; HWOFF-NOT:   csrw{{.*}} 0x2{{[0-5]}}
+; HWOFF:       bnez
+; HWOFF:       jalr
 entry:
   br label %loop
 

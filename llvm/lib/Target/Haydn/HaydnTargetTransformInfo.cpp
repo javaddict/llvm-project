@@ -44,6 +44,9 @@ STATISTIC(NumHWLoopZeroTripDeclined,
           "Number of constant zero-trip loops declined for hardware loops");
 STATISTIC(NumHWLoopMultiExitDeclined,
           "Number of multi-exit loops declined for hardware loops");
+STATISTIC(NumHWLoopLibcallBodyDeclined,
+          "Number of loops declined for hardware loops because a body op "
+          "will lower to a libcall (AIE decline-list port)");
 STATISTIC(NumDensifyUnroll,
           "short streams given densify Partial/Runtime unroll");
 STATISTIC(NumSWPDefer,
@@ -102,6 +105,117 @@ std::optional<unsigned> loopIdEstimatedTrip(const Loop *L) {
 }
 
 } // namespace
+
+// Peer-declined loop-body ops (preventive fitness model, 2026-08-22
+// realignment per topics/hwloop PM2). Port of AIE's curated prediction
+// lists: isLoweredToCall (AIEBaseTargetTransformInfo.cpp:91-121 — memory
+// intrinsics + fmuladd + f64 minnum/maxnum + every non-intrinsic call)
+// and isAllowedInZOL (:123-182 — declines doubles, non-bfloat FP arith,
+// FDiv/FRem, FP conversions, int div/rem, and >32-bit mul).
+//
+// Haydn overlay — matched to THIS target's soft-float reality
+// (HaydnLegalizerInfo.cpp:618-725), not copied verbatim:
+//   * f32 AND f64 both decline: Haydn has no FPU at any width
+//     (G_FADD..G_FMINNUM libcallFor {S32,S64}); f32 loads/stores stay
+//     allowed (plain GPR/DR memory ops). AIE keeps f32 because it has an
+//     f32 unit; Haydn does not.
+//   * FP<->int converts and fptrunc/fpext f32<->f64 also libcall.
+//   * fmuladd declines (AIE :100-102): Haydn's G_FMA is in the bulk
+//     libcall set, and generic FMAD lowers to fmul+fadd libcalls.
+//   * int div/rem decline (AIE :167-170): G_SDIV..G_UDIVREM have no
+//     native form.
+//   * >32-bit integer MUL DOES NOT decline: unlike AIE's __muldi3
+//     (AIE :171-174), Haydn lowers G_MUL s64 via custom widen/schoolbook
+//     — never a libcall (HaydnLegalizerInfo.cpp:92-104). i128 decomposes
+//     generically to s64 G_MUL/G_UMULH partials. Keeping wide mul in ZOL
+//     is the measured Haydn law, not an oversight.
+//   * memcpy/memset/memmove intrinsics decline (AIE :93-98): Selection
+//     cannot prove they stay inline in every loop-body shape; a call in
+//     the body breaks the same-contract assumption as any other call.
+//
+// Fail-closed default (AIE's conservatism, :121 `return !F->isIntrinsic()`
+// inverted for bodies): when it is unclear whether an op lowers to a
+// call, DECLINE the loop. A wrongly-declined loop is a QoR loss; a
+// wrongly-accepted loop is the demote-late-call miscompile class this
+// list exists to prevent.
+static bool isAllowedInHwLoopBody(Instruction &I) {
+  Type *Ty = I.getType();
+  const auto ScalarIsFP = [](Type *T) {
+    return T && T->getScalarType()->isFloatingPointTy();
+  };
+  // Any FP arithmetic / compare / conversion libcalls on the soft-float
+  // path (f32 and f64 alike — HaydnLegalizerInfo.cpp:631-646, :668-678,
+  // :717-719). FP load/store/select/phi of FP values are plain moves and
+  // stay allowed.
+  switch (I.getOpcode()) {
+  case Instruction::FAdd:
+  case Instruction::FSub:
+  case Instruction::FMul:
+  case Instruction::FDiv:
+  case Instruction::FRem:
+  case Instruction::FNeg:
+    if (ScalarIsFP(Ty) || ScalarIsFP(I.getOperand(0)->getType()))
+      return false;
+    break;
+  case Instruction::FCmp: {
+    Type *CmpTy = I.getOperand(0)->getType();
+    if (ScalarIsFP(CmpTy))
+      return false;
+    break;
+  }
+  case Instruction::FPExt:
+  case Instruction::FPTrunc:
+  case Instruction::FPToSI:
+  case Instruction::FPToUI:
+  case Instruction::SIToFP:
+  case Instruction::UIToFP:
+    return false;
+  case Instruction::SDiv:
+  case Instruction::UDiv:
+  case Instruction::SRem:
+  case Instruction::URem:
+    // Int div/rem libcalls (HaydnLegalizerInfo.cpp:105-110).
+    return false;
+  default:
+    break;
+  }
+  // Intrinsics (AIE isLoweredToCall :91-121 analog, fail-closed):
+  // Haydn target intrinsics (llvm.haydn.*) all select inline — they exist
+  // solely as ISel patterns (IntrinsicsHaydn.td; e.g. mul64.ll,
+  // fmulaa32x16 in DSP loop bodies) and MUST stay allowed so MAC kernels
+  // arm ZOL. Annotation/debug intrinsics emit no machine code and pass.
+  // EVERY other intrinsic declines: the generic FP-math family
+  // (sqrt/pow/exp/log/sin/cos/fma/ceil/floor/round/trunc/nearbyint/
+  // minnum/maxnum/fmuladd) and f32/f64 memcpy/set/move lower to libcalls
+  // or .unsupported() on this target (HaydnLegalizerInfo.cpp:631-646,
+  // :668-678, :705-719) — an accepted seat would become a body call
+  // post-ISel, exactly the demote-late-call class this list prevents.
+  // Strictly no-less-conservative than the former blanket CallInst
+  // decline for every non-haydn intrinsic.
+  if (auto *CB = dyn_cast<CallBase>(&I)) {
+    if (const Function *F = CB->getCalledFunction()) {
+      if (F->isIntrinsic()) {
+        if (F->getName().starts_with("llvm.haydn."))
+          return true;
+        switch (F->getIntrinsicID()) {
+        // No machine code: annotation/debug/lifetime/assume class only.
+        case Intrinsic::dbg_declare:
+        case Intrinsic::dbg_value:
+        case Intrinsic::dbg_assign:
+        case Intrinsic::lifetime_start:
+        case Intrinsic::lifetime_end:
+        case Intrinsic::expect:
+        case Intrinsic::assume:
+        case Intrinsic::sideeffect:
+          return true;
+        default:
+          return false; // fail-closed: unlisted intrinsic ⇒ decline
+        }
+      }
+    }
+  }
+  return true;
+}
 
 void HaydnTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                             TTI::UnrollingPreferences &UP,
@@ -236,7 +350,8 @@ bool HaydnTTIImpl::isHardwareLoopProfitable(
     Loop *L, ScalarEvolution &SE, AssumptionCache &AC,
     TargetLibraryInfo *LibInfo, HardwareLoopInfo &HWLoopInfo) const {
   // Product ISA feature gate. Formation still requires -haydn-enable-hwloops
-  // (pass default OFF) so TTI acceptance alone never flips product policy.
+  // (pass default ON since the 2026-08-22 qualification) so TTI acceptance
+  // alone never flips product policy.
   if (!ST.hasHWLoop())
     return false;
 
@@ -315,20 +430,44 @@ bool HaydnTTIImpl::isHardwareLoopProfitable(
     }
   }
 
-  // Reject calls/callbr/va_arg and soft-libcall div/rem ops.
+  // Reject visible calls/callbr/va_arg, and — the AIE decline-list port
+  // (isLoweredToCall :91-121 / isAllowedInZOL :123-182, 2026-08-22
+  // topics/hwloop PM2) — every body op that WILL lower to a Haydn libcall
+  // on the soft-float path (f32/f64 arith+cmp+converts, int div/rem,
+  // memcpy/set/move, fmuladd). This eliminates the softfloat-late-call
+  // demote class at the same pipeline point AIE uses: IR, pre-ISel, where
+  // no new calls can appear after the decision. Fail-closed default: an
+  // op whose lowering is unsure declines the loop.
+  //
+  // Call handling follows AIE :337-344 exactly: an explicit call with a
+  // KNOWN callee that does not lower to a call may pass (that path stays
+  // conservative here — every non-intrinsic call still declines — but
+  // benign intrinsics must not be mistaken for calls). A call with an
+  // UNKNOWN callee (indirect) declines outright.
+  auto declineLibcallBody = [&]() {
+    ++NumHWLoopLibcallBodyDeclined;
+    LLVM_DEBUG(dbgs() << "Haydn HWLoop(IR): body op lowers to a call"
+                         " — declined\n");
+    return false;
+  };
   for (BasicBlock *BB : L->blocks()) {
     for (Instruction &I : *BB) {
-      if (isa<CallInst>(I) || isa<InvokeInst>(I) || isa<CallBrInst>(I))
-        return false;
+      if (isa<CallInst>(I) || isa<InvokeInst>(I) || isa<CallBrInst>(I)) {
+        const Function *F = cast<CallBase>(I).getCalledFunction();
+        if (!F || !F->isIntrinsic()) {
+          LLVM_DEBUG(dbgs() << "Haydn HWLoop(IR): body call — declined\n");
+          return false;
+        }
+        // Benign intrinsics survive to isAllowedInHwLoopBody, which
+        // declines the ones that lower to calls.
+        if (!isAllowedInHwLoopBody(I))
+          return declineLibcallBody();
+        continue;
+      }
       if (isa<VAArgInst>(I))
         return false;
-      if (I.getOpcode() == Instruction::SDiv ||
-          I.getOpcode() == Instruction::UDiv ||
-          I.getOpcode() == Instruction::SRem ||
-          I.getOpcode() == Instruction::URem ||
-          I.getOpcode() == Instruction::FDiv ||
-          I.getOpcode() == Instruction::FRem)
-        return false;
+      if (!isAllowedInHwLoopBody(I))
+        return declineLibcallBody();
     }
   }
 

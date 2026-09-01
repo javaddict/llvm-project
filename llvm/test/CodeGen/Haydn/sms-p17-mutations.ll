@@ -13,13 +13,13 @@
 ; (RegionEndEdges / WAWEdges / IncludeStages first brick). Force-ON must
 ; not crash or sequentialize independent ALU. P17(c): SWPSolver is Z3;
 ; Haydn does not ship LLVM_WITH_Z3, so the seat is fail-closed
-; (swpsolver=unavailable). Product default stays OFF.
+; (swpsolver=unavailable). 2026-08-22 SMS product-default flip rebaseline (default ON).
 ;
 ; ASM-LABEL: p17_mutations:
 ; ASM: jalr
 ; RMK: swpsolver=unavailable
 ; RMK: {{accepted II=|exhausted:|rejected:}}
-; RMK: product-off
+; RMK: product-on
 ; RMK-NOT: sequential (preflight)
 
 define i32 @p17_mutations(ptr nocapture readonly %a, ptr nocapture readonly %b,

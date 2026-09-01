@@ -80,7 +80,8 @@ define i32 @gep_array_of_struct(ptr %arr, i32 %idx) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 12 }
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; CHECK-NEXT:    { nop; nop }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; s_lw_pre_imm r1, r2, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

@@ -397,12 +397,20 @@ static bool isUnsupportedABIType(Type *Ty) {
   return Ty->isHalfTy() || Ty->isBFloatTy();
 }
 
-// Interrupt, naked, and stack-protector have no Haydn ABI. AIE rejects
-// interrupt at return lowering (AIE1ISelLowering.cpp:964). ISR stays
-// fail-closed (no CC_ISR). musttail uses JAL_W_MSP / JALR_W_MSP when
-// the call is a register-only sibcall.
+// Interrupt and stack-protector have no Haydn ABI. AIE rejects interrupt
+// at return lowering (AIE1ISelLowering.cpp:964). ISR stays fail-closed
+// (no CC_ISR). musttail uses JAL_W_MSP / JALR_W_MSP when the call is a
+// register-only sibcall.
+//
+// Naked is a supported product seat (RISCV model): the default C CC
+// lowers formals to unused vregs, clang guarantees an asm-only body, and
+// generic PEI skips frame/CSR/prologue/epilogue emission for Naked
+// (PrologEpilogInserter.cpp spillCalleeSavedRegs /
+// insertPrologEpilogCode). The compiler contributes no instructions
+// beyond mandatory terminators; the asm body owns control flow
+// (naked-fn.ll). Product libc setjmp/longjmp are this seat.
 static bool hasUnsupportedFnABI(const Function &F) {
-  if (F.hasFnAttribute("interrupt") || F.hasFnAttribute(Attribute::Naked))
+  if (F.hasFnAttribute("interrupt"))
     return true;
   return F.hasFnAttribute(Attribute::StackProtect) ||
          F.hasFnAttribute(Attribute::StackProtectReq) ||
@@ -494,6 +502,15 @@ bool HaydnCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
   if (isUnsupportedABIType(F.getReturnType()))
     return false;
 
+  // Naked law (see hasUnsupportedFnABI): the asm body owns control flow
+  // with its own jalr_w. The IR ret is the mandatory IR terminator, not an
+  // instruction — lower it to nothing so the compiler never emits a RET
+  // parcel after the body's own return (naked-fn.ll). Clang-canonical
+  // naked bodies end in unreachable and never reach here;
+  // HaydnEnsureTerminators holds the matching gate for that dead-end shape.
+  if (F.hasFnAttribute(Attribute::Naked))
+    return true;
+
   auto RetMI = MIRBuilder.buildInstrNoInsert(Haydn::RET);
 
   if (!FLI.CanLowerReturn) {
@@ -541,9 +558,11 @@ bool HaydnCallLowering::lowerFormalArguments(
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const DataLayout &DL = F.getDataLayout();
 
-  // Fail closed on non-C CC, interrupt/naked/ssp, i128, and nest/swift/
+  // Fail closed on non-C CC, interrupt/ssp, i128, and nest/swift/
   // byref/inalloca/inreg formals before mutation (IR attrs first so
-  // setArgFlags never asserts on unsupported seats).
+  // setArgFlags never asserts on unsupported seats). Naked is a product
+  // seat: formals lower through CC_Haydn into unused vregs (the asm-only
+  // body never reads them — naked-fn.ll).
   if (!isSupportedCallingConv(F.getCallingConv()))
     return false;
   if (hasUnsupportedFnABI(F))
@@ -746,7 +765,7 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   // Soft `tail` is an ordinary JAL_W + RET. musttail has no fallthrough —
   // lowerTailCall emits JAL_W_MSP / JALR_W_MSP when the call is a
   // register-only sibcall, otherwise fail closed (no ordinary-call
-  // fallthrough). Interrupt/naked/i128 stay fail-closed below.
+  // fallthrough). Interrupt/i128 stay fail-closed below.
   if (Info.IsMustTailCall)
     return lowerTailCall(MIRBuilder, Info);
   Info.IsTailCall = false;

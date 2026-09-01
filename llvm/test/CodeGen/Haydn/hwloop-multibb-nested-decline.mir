@@ -55,7 +55,7 @@ body:             |
     successors: %bb.2
     liveins: $r1, $r2, $r4, $r15
 
-    $r3 = MOVE32 $r2, $r2
+    $r3 = MOVE32 $r2
     ; Inner IR ZOL (will expand to SET sel=0, golden inner seat).
     LoopStart $r1, 0
     NOP

@@ -205,8 +205,8 @@ class Fmt48_WideBR_I12<bits<8> opcode, dag outs, dag ins, string asmstr,
 // SRAI64 remain live logical opcodes.
 //===----------------------------------------------------------------------===//
 
-// 48-bit WIDE DR-Imm RI6 format (shifts). TableGen size-6 shell; product encode is Format E member.
-// `rtd = rsd <shift> imm6` (rsd tied to rtd).
+// 48-bit WIDE DR-Imm RI6 format (shifts). TableGen size-6 shell; product
+// encode is Format E members with independent dest/src (no TIED_TO).
 class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
                        list<dag> pattern>
     : Haydn48WideBase<outs, ins, asmstr, pattern> {
@@ -215,11 +215,13 @@ class Fmt48_WideDR_RI6<bits<8> opcode, dag outs, dag ins, string asmstr,
   let Itinerary = Slot012_ALU;
   let TSFlags{2-0} = 0b110;
 
-  bits<4> rtd;            // DR64 destination (bits[15:12]); rsd tied
-  bits<6> imm;            // bits[47:42]
+  bits<4> rtd;
+  bits<4> rsd;
+  bits<6> imm;
 
   let Inst{47 - 42} = imm;
-  let Inst{41 - 16} = 0;  // spare (26b)
+  let Inst{41 - 20} = 0;
+  let Inst{19 - 16} = rsd;
   let Inst{15 - 12} = rtd;
   let Inst{11 - 4} = opcode;
   let Inst{3 - 0} = 0b1101;

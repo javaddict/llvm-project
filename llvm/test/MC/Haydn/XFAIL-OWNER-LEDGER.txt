@@ -1,3 +1,3 @@
 See llvm/test/CodeGen/Haydn/Inputs/XFAIL-OWNER-LEDGER.txt for the durable
 Haydn CodeGen+MC XFAIL owner/failure ledger (T5-AUTHORITY-TEST / G-TEST-EVIDENCE).
-Stamp: 2026-08-14 TOTAL=1 (live XFAIL = ar_sel GE96-09 only; GE96-03 closed).
+Stamp: 2026-08-23 TOTAL=1 (live XFAIL = ar_sel GE96-09 only; content unchanged since 2026-08-14; re-verified at cbd39b38437a).

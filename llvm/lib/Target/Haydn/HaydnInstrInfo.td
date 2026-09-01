@@ -137,9 +137,9 @@ def XORI32 : FmtI<0x26, (outs GPR32:$rd), (ins GPR32:$rs, uimm20:$imm),
 // Move / Load Immediate Instructions
 //===----------------------------------------------------------------------===//
 
-def MOVE32 : FmtALU32<0x08, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                      "move32\t$rd, $rs1",
-                      []> {
+def MOVE32 : FmtALU32Unary<0x08, (outs GPR32:$rd), (ins GPR32:$rs1),
+                           "move32\t$rd, $rs1",
+                           []> {
   let TSFlags{2-0} = 0b001;
 }
 
@@ -165,8 +165,8 @@ def ZERO_GPR : HaydnInst<0, (outs GPR32:$rd), (ins),
   let Itinerary = Slot012_ALU;
 }
 
-def LUI : FmtI<0x27, (outs GPR32:$rd), (ins GPR32:$rs, uimm12:$imm),
-              "lui\t$rd, $imm", []> {
+def LUI : FmtIDestImm<0x27, (outs GPR32:$rd), (ins uimm12:$imm),
+                      "lui\t$rd, $imm", []> {
   let TSFlags{2-0} = 0b001;
 }
 
@@ -221,14 +221,14 @@ def SLL32 : FmtALU32<0x0C, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
 // DSP / Miscellaneous Instructions
 //===----------------------------------------------------------------------===//
 
-def ABS32S : FmtALU32<0x0D, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                      "abs32s\t$rd, $rs1", []> {
+def ABS32S : FmtALU32Unary<0x0D, (outs GPR32:$rd), (ins GPR32:$rs1),
+                           "abs32s\t$rd, $rs1", []> {
   let TSFlags{2-0} = 0b001;
 }
 
-def ABS32 : FmtALU32<0x0E, (outs GPR32:$rd), (ins GPR32:$rs1, GPR32:$rs2),
-                     "abs32\t$rd, $rs1",
-                     []> {
+def ABS32 : FmtALU32Unary<0x0E, (outs GPR32:$rd), (ins GPR32:$rs1),
+                          "abs32\t$rd, $rs1",
+                          []> {
   let TSFlags{2-0} = 0b001;
 }
 
@@ -764,7 +764,9 @@ def X2MUL32 : FmtALU64_2Dest<0x5A, 0x00,
   // Available = MAC0|MAC1 (was Slot1_ALU — the DB "slot 1 only" note is
   // entry geometry, not a unit menu; unit-injectivity booking must reserve
   // the MAC family).
-  let Itinerary = Slot12_MAC;
+  // 2026-08-21 latency P3: golden Data_Latency=1 (fresh dual dest, no
+  // accumulator tie) — Slot12_MAC_MulLat (OperandCycles [1,1,1,1]).
+  let Itinerary = Slot12_MAC_MulLat;
   let TSFlags{2-0} = 0b010;
 }
 
@@ -1552,15 +1554,9 @@ def BLTZ_W  : Fmt48_WideBR_I12<0x2F, (outs), (ins GPR32:$rs, brtarget_wide_i12:$
 // defs (SLLI64/SRLI64/SRAI64) are KEPT as live logical opcodes.
 //===----------------------------------------------------------------------===//
 
-// AsmString is the DB 3-operand form (rtd, rsd, imm6) even though
-// Constraints force rtd==rsd. Printing only "$rtd, $imm" made clang -S
-// emit `slli64 d0, 32` while llvm-objdump (flex S1/S2 decode) prints
-// `slli64 d0, d0, 32`. BundleSim's.s path parses the DB syntax as
-// CC_D_DI (dr[o0]=f(dr[o1], imm[o2])); a 2-token form mis-binds imm as
-// rsd → wrong schoolbook half extract → cb50.s exit 96 vs host/ELF 21.
-// One mechanism: always print the 3-operand DB shape (matches ISS + objdump).
-// InstAlias keeps hand-written 2-op assembly working (in-place form).
-let Constraints = "$rtd = $rsd" in {
+// AsmString is the DB 3-operand form (rtd, rsd, imm6). Format E members
+// have independent dest/src fields (no TIED_TO); the logical matches, so
+// direct setDesc needs no tie drop.
 def SLLI64  : Fmt48_WideDR_RI6<0x50, (outs DR64:$rtd),
                                (ins DR64:$rsd, uimm6_dr:$imm),
                                "slli64\t$rtd, $rsd, $imm", []>;
@@ -1570,7 +1566,6 @@ def SRLI64  : Fmt48_WideDR_RI6<0x51, (outs DR64:$rtd),
 def SRAI64  : Fmt48_WideDR_RI6<0x52, (outs DR64:$rtd),
                                (ins DR64:$rsd, uimm6_dr:$imm),
                                "srai64\t$rtd, $rsd, $imm", []>;
-}
 // No InstAlias for the old 2-op print form: uimm6_dr is not an Operand
 // subclass usable in InstAlias result args. Hand asm can write the DB
 // 3-op form; CodeGen always prints 3-op after the AsmString fix above.
@@ -1699,7 +1694,9 @@ def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
   let Constraints = "$rs1 = $rs1_wb";
   // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
   // LOADSTORE0 (was Slot012_ALU).
-  let Itinerary = Slot0_LS;
+  // 2026-08-21 latency P3: golden Data_Latency=1 for the rs1 writeback —
+  // Slot0_LS_WbLat (OperandCycles [1]); memory-edge pair unchanged.
+  let Itinerary = Slot0_LS_WbLat;
 }
 
 let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
@@ -1709,7 +1706,9 @@ def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
   let Constraints = "$rs1 = $rs1_wb";
   // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
   // LOADSTORE0 (was Slot012_ALU).
-  let Itinerary = Slot0_LS;
+  // 2026-08-21 latency P3: golden Data_Latency=1 for the rs1 writeback —
+  // Slot0_LS_WbLat (OperandCycles [1]); memory-edge pair unchanged.
+  let Itinerary = Slot0_LS_WbLat;
 }
 
 //===----------------------------------------------------------------------===//

@@ -20,19 +20,20 @@
 # AND writes r1 — that's 2 read ports (r1, r2) and 1 write port (r1), not
 # "1 read, 0 writes" (the `else if` took the read branch and skipped the
 # write). This caused the packetizer to over-pack write-side conflicts.
-# 3. Each explicit operand field reserves one port. MOVE32 rd, rs, rs is
-# 2R1W — rs1==rs2 is not a port-sharing proof. Same-reg identity dedup
-# would under-count (2×MOVE32 + one extra GPR read looks like 3R after
-# dedup, 5R per-field).
+# 3. Each explicit operand field reserves one port. MOVE32 rd, rs is 1R1W
+# (logical dest+src schema W68.0b: descriptor and MI agree — the former
+# duplicated second source no longer exists, so the F14 same-reg dedup
+# premise is structurally moot for MOVE32). The per-field law itself is
+# unchanged: a future opcode that repeats a source field still charges
+# each field.
 #
 # GPR port budget: 4 read ports, 2 write ports (4R2W) shared across all 3 slots
 # (CLAUDE.md "Slot architecture" / hard constraint derived from register file).
 # DR64 uses a separate register file and does not consume GPR ports.
 #
 # Tests:
-# 1. Two MOVE32 (each 2R/1W per-field) → 4R/2W → MAY bundle.
-# A third GPR-reading op is 6R > 4R and must not join (see
-# postra-move32-per-field-ports.mir).
+# 1. Two MOVE32 (each 1R/1W) → 2R/2W → well inside 4R2W → MAY bundle.
+# Port headroom is no longer the binding constraint for two MOVE32.
 # 2. In-place ADD32 (read-write operand) → counts as BOTH a read and a write
 # of the same register, so two such ops = 2R+2W (distinct regs) bundling
 # is fine; but two ops sharing the read-write reg hit WAW.
@@ -40,8 +41,8 @@
 # must NOT bundle (3 writes > 2W limit).
 #
 # What breaks if the bugs reappear:
-# Test 1: two MOVE32 stay 4R2W (legal). Identity-dedup would wrongly accept
-# a third GPR-reading op into that cycle.
+# Test 1: two MOVE32 stay 2R2W (legal, with headroom). A per-field
+# undercount would admit GPR-read mixes beyond 4R.
 # Test 3: if dead-def counting regresses, three writes bundle illegally.
 
 --- |
@@ -51,13 +52,13 @@
 ...
 ---
 # ============================================================================
-# Test 1: MOVE32 per-field — two MOVE32 (rd, rs, rs) each count as 2R/1W.
+# Test 1: MOVE32 per-field — two MOVE32 (rd, rs) each count as 1R/1W.
 # ============================================================================
 #
 # Two independent MOVE32 instructions:
-# MOVE32 r2, r0, r0 -> 2 reads (r0, r0), 1 write (r2)
-# MOVE32 r3, r1, r1 -> 2 reads (r1, r1), 1 write (r3)
-# Total: 4R, 2W. At the 4R2W cap — still one legal cycle.
+# MOVE32 r2, r0 -> 1 read (r0), 1 write (r2)
+# MOVE32 r3, r1 -> 1 read (r1), 1 write (r3)
+# Total: 2R, 2W. Inside the 4R2W budget — one legal cycle.
 #
 name:            test1_move32_dedup
 alignment:       1
@@ -83,7 +84,7 @@ body:             |
   bb.0:
     liveins: $r0, $r1
 
-    ; Two MOVE32 (per-field: 4R/2W) -> may bundle (at the 4R cap).
+    ; Two MOVE32 (per-field: 2R/2W) -> may bundle (headroom to the 4R cap).
 
     ; CHECK-LABEL: name: test1_move32_dedup
     ; CHECK: liveins: $r0, $r1
@@ -91,8 +92,8 @@ body:             |
     ; CHECK: $r3 = MOVE32_E{{[23]}}_E{{[0-2]}}_ALU{{[012]}}_R {{(killed )?}}$r1, implicit-def dead $sfr
     ; CHECK: $r0 = COPY
     ; CHECK: $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    $r2 = MOVE32 $r0, $r0, implicit-def dead $sfr
-    $r3 = MOVE32 $r1, $r1, implicit-def dead $sfr
+    $r2 = MOVE32 $r0, implicit-def dead $sfr
+    $r3 = MOVE32 $r1, implicit-def dead $sfr
 
     $r0 = COPY $r2
     $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15

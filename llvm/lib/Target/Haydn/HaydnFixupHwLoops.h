@@ -49,8 +49,6 @@ private:
                       int64_t &StartOff, int64_t &EndOff,
                       MachineBasicBlock *&StartMBB,
                       MachineBasicBlock *&EndMBB) const;
-  bool tryShortenStartOffset(MachineInstr &SetMI, const HaydnInstrInfo &TII,
-                             int64_t &StartOff, int64_t &EndOff);
 };
 
 FunctionPass *createHaydnFixupHwLoopsPass();

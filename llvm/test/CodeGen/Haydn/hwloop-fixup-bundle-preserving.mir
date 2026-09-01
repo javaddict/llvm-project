@@ -13,9 +13,12 @@
 # Deficit pads are exact-committed singletons (BUNDLE + FormatID + member
 # NOP) so second BR sees committed EncodedBytes.
 #
-# demote_coissue: SET member erase only. Out-of-range Off1 (large spacer)
-# demotes to final-real SUBI32+BNEZ_W; coissued ADD32 must remain as a
-# non-empty product cycle (never whole-root unbundle that drops the ALU).
+# demote_coissue: REBASELINED 2026-08-22 (topics/hwloop PM2). The spacer
+# puts StartOff past the soft margin but inside the hard uimm6 field; the
+# former free lift (one NOP above the SET bundle) is deleted, so the SET
+# now survives on the hard-limit re-check and the coissued ADD32 stays in
+# the bundle. (Push the spacer past 252 B to exercise the actual demote —
+# see hwloop-fixup-demote-range.mir demote_uimm6, which owns that arm.)
 
 --- |
   define dso_local void @coissue_set() {
@@ -112,16 +115,22 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   ; CHECK-LABEL: name: demote_coissue
+  ; REBASELINED 2026-08-22 (topics/hwloop PM2): the former free lift moved
+  ; one NOP above the coissued SET bundle to shave StartOff below the soft
+  ; margin; with the lift deleted (no peer reorders user code), the NOPs
+  ; stay where the input put them and the SET survives on the hard-limit
+  ; re-check alone (StartOff 228 B <= 252 B uimm6). The bundle-preserving
+  ; contract (coissued SET+ADD cycle never unbundled) is unchanged.
   ; CHECK: bb.0.entry:
   ; CHECK-NEXT:   successors: %bb.1(0x80000000)
   ; CHECK-NEXT:   liveins: $r1, $r0, $r2, $r15
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
-  ; CHECK-NEXT:   NOP
   ; CHECK-NEXT:   BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
   ; CHECK-NEXT:     SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
   ; CHECK-NEXT:     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
   ; CHECK-NEXT:   }
+  ; CHECK-NEXT:   NOP
   ; CHECK-NEXT:   NOP
   ; CHECK-NEXT:   NOP
   ; CHECK-NEXT: {{  $}}
@@ -164,7 +173,8 @@ body:             |
     successors: %bb.1
 
     $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
-    ; Coissued SET + ADD. Spacer MBB forces StartOff past uimm6 → demote.
+    ; Coissued SET + ADD. Spacer MBB pushes StartOff past the soft margin
+    ; (hard field still holds — SET retained, no lift exists to move NOPs).
     BUNDLE 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
       $r2 = ADD32 $r0, $r1, implicit-def dead $sfr

@@ -485,11 +485,11 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
-    liveins: $r0, $r1, $r15
+    liveins: $r1, $r15
     ; CHECK-LABEL: name: cutover_move32_s2
     ; CHECK: MOVE32_E2_E0_ALU0_R
-    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
-      $r2 = MOVE32 $r0, $r1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r1 {
+      $r2 = MOVE32 $r1, implicit-def dead $sfr
     }
     RET implicit $r15
 
@@ -560,11 +560,11 @@ tracksRegLiveness: true
 noVRegs:         true
 body:             |
   bb.0:
-    liveins: $r0, $r15
+    liveins: $r15
     ; CHECK-LABEL: name: cutover_lui_s0
     ; CHECK: LUI_E2_E0_ALU0_I12
-    BUNDLE 0, 0, implicit-def $r1, implicit $r0 {
-      $r1 = LUI $r0, 1
+    BUNDLE 0, 0, implicit-def $r1 {
+      $r1 = LUI 1
     }
     RET implicit $r15
 

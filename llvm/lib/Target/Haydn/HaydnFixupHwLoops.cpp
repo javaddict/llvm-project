@@ -16,12 +16,14 @@
 //
 // Opt before RA; post-RA Fixup is correctness only.
 //
-// Count-unit law (reg trip SET_HWLOOP_REG): late remat owns
-//   Dest = Src + adj  →  SET …, Dest
-// Fixup must NEVER splice between remat and SET (splits the def→use).
-// Free lifts land *before the count-unit head* (remat if present).
-// Never lift a dangerous MI (defs remat Src / uses remat Dest). Prefer
-// demote / fatal over wrong trip at SET (CoreMark MEMORY_FAULT @ post-inc).
+// Peer-realignment 2026-08-22 (topics/hwloop PM2): no peer reorders user
+// code for hwloop timing. AIE reserves setup room via scheduler exit-edge
+// latency and satisfies byte distance by PADDING only — empty bundles
+// materialize NoOps (AIEMachineScheduler.cpp:843-859 insertNoop) and bundle
+// elongation NOP-fills (AIEMachineAlignment.cpp:62-101); the only MI AIE
+// ever moves is the branch for delay-slot distance. Hexagon's fixup is
+// offset math + extender opcode swap. The former free-lift rescue
+// (tryShortenStartOffset) is DELETED; Fixup never reorders user code.
 //
 // Product narrative: demote-first, NOT erase-only.
 // Generic HardwareLoops + Role A expand (HaydnHardwareLoops) already replaced
@@ -60,10 +62,12 @@
 // from the MI after the SET cycle. If Header is not after SET in layout,
 // Off is unknown → treat as range-bad.
 //
-// 3. Recoverability ladder (correctness only)
+// 3. Recoverability ladder (correctness only; peer-aligned 2026-08-22)
 // a. Pad setup gap only (deficit-only InterveningCycles NOPs after SET → BEGIN).
-// b. tryShortenStartOffset — free-only lifts before count unit (not SET
-//    alone); never across remat→SET; never dangerous peel.
+// b. padBodyToMinLaw — NOP-pad a short body up to MinBodyBundles before
+//    demoting (the AIE materializeNoop analog; never reorder user code —
+//    the former tryShortenStartOffset free-lift leg is deleted, see the
+//    file header).
 // c. demote (llvm::demoteHardwareLoopToSoftware) when hard Off1/Off2 illegal.
 // Soft-loop restore is *closed* (total, like AIE expand):
 // • Collect loop blocks by CFG (reverse from Latch to Header)
@@ -95,6 +99,7 @@
 #include "Haydn.h"
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
+#include "HaydnBundleVerify.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnHardwareLoops.h"
 #include "HaydnHWLoopContracts.h"
@@ -105,7 +110,6 @@
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -128,7 +132,6 @@ using haydn::hwloop::buildExactLate;
 using haydn::hwloop::finalizeExactLateSingleton;
 using haydn::hwloop::isLiveMBB;
 using haydn::hwloop::lateMemberOpcode;
-using haydn::hwloop::topLevelForLayout;
 
 #define DEBUG_TYPE "haydn-fixup-hwloops"
 
@@ -230,14 +233,20 @@ unsigned HaydnFixupHwLoops::countFollowingBundles(
       continue;
     if (I->isKill())
       continue;
-    // Terminator ends the preheader fallthrough region for counting.
-    if (I->isTerminator() && !I->isCall())
-      break;
     unsigned Bytes = TII.getInstSizeInBytes(*I);
     if (Bytes == 0)
       continue;
   // Parcel count via product EncodedBytes (generated Full Size).
     Bundles += haydn::bundle::ceilProductParcels(Bytes);
+    // W61: the first size-bearing terminator (the unconditional B to the
+    // header, a guarding conditional branch) is itself an intervening issue
+    // cycle between SET and BEGIN — it executes on every activation path and
+    // the byte-law walk (estimateMBBDistance → StartOff) already charges it.
+    // Count it, then stop: parcels past the first terminator may be skipped
+    // on a taken edge. Matches the scheduler tail credit
+    // (countSizeBearingTailParcels) so a credited gap is not re-padded here.
+    if (I->isTerminator())
+      break;
   }
   return Bundles;
 }
@@ -356,302 +365,6 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
   return true;
 }
 
-//===----------------------------------------------------------------------===//
-// Count unit + free-only Off1 shorten (correctness)
-//
-// Reg trip: Dest = Src+adj → SET …, Dest. Never insert between remat and SET.
-// HEAD bug: splice before SET after unbundle left peel between remat and SET
-// so SET latched data in Dest (MEMORY_FAULT). Splice before count-unit head;
-// refuse dangerous peel.
-//===----------------------------------------------------------------------===//
-
-static Register getHwloopCountReg(const MachineInstr &SetMI,
-                                  const HaydnInstrInfo &TII) {
-  unsigned Opc = SetMI.getOpcode();
-  if (TII.isHardwareLoopRegTripOpcode(Opc) && SetMI.getNumOperands() >= 4 &&
-      SetMI.getOperand(3).isReg())
-    return SetMI.getOperand(3).getReg();
-  // LoopStart residual: count in op0 (reg-trip shape).
-  if (Opc == Haydn::LoopStart && SetMI.getNumOperands() >= 1 &&
-      SetMI.getOperand(0).isReg())
-    return SetMI.getOperand(0).getReg();
-  return Register();
-}
-
-static bool miOrBundleDefines(const MachineInstr &MI, Register Reg) {
-  if (!Reg)
-    return false;
-  auto defs = [&](const MachineInstr &I) {
-    for (const MachineOperand &MO : I.operands())
-      if (MO.isReg() && MO.isDef() && MO.getReg() == Reg)
-        return true;
-    return false;
-  };
-  if (MI.isBundle()) {
-    for (const MachineInstr *I = MI.getNextNode();
-         I && I->isBundledWithPred(); I = I->getNextNode())
-      if (defs(*I))
-        return true;
-    return false;
-  }
-  return defs(MI);
-}
-
-// Remat ADDI that defs Count immediately before SET, else SET itself.
-// Elevate mid-bundle heads to the BUNDLE root so free lifts and
-// pads stay top-level (never unbundle a legal coissued SET cycle).
-static MachineInstr &getCountUnitHead(MachineInstr &SetMI,
-                                      const HaydnInstrInfo &TII) {
-  Register Count = getHwloopCountReg(SetMI, TII);
-  MachineInstr *Head = &SetMI;
-  if (Count) {
-    MachineBasicBlock *MBB = SetMI.getParent();
-  // SET may be mid-bundle after PostRA co-issue.
-    // Never construct MachineBasicBlock::iterator from a BUNDLE child
-    // (asserts isBundledWithPred). Elevate to the cycle root first.
-    MachineInstr &Top = topLevelForLayout(SetMI);
-    MachineBasicBlock::iterator It = Top.getIterator();
-    if (It != MBB->begin()) {
-      MachineBasicBlock::iterator PrevIt = std::prev(It);
-      while (PrevIt != MBB->begin() &&
-             (PrevIt->isMetaInstruction() || PrevIt->isDebugInstr() ||
-              PrevIt->isKill() || PrevIt->isImplicitDef()))
-        --PrevIt;
-      // Remat may be a BUNDLE containing only ADDI, bare ADDI, or coissued
-      // with SET inside the same BUNDLE (then Head stays the BUNDLE root).
-      if (miOrBundleDefines(*PrevIt, Count))
-        Head = &*PrevIt;
-      else if (miOrBundleDefines(Top, Count) && &Top != &SetMI)
-        Head = &Top; // remat coissued with SET in same cycle
-    }
-  }
-  return topLevelForLayout(*Head);
-}
-
-static void collectCountUnitExtLiveIns(const MachineInstr &Head,
-                                       const MachineInstr &SetMI,
-                                       SmallSet<Register, 8> &LiveIns) {
-  SmallSet<Register, 8> HeadDefs;
-  auto oneDef = [&](const MachineInstr &MI) {
-    for (const MachineOperand &MO : MI.operands())
-      if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical())
-        HeadDefs.insert(MO.getReg());
-  };
-  auto oneUse = [&](const MachineInstr &MI, SmallSet<Register, 8> &Uses) {
-    for (const MachineOperand &MO : MI.operands())
-      if (MO.isReg() && MO.isUse() && !MO.isImplicit() &&
-          MO.getReg().isPhysical())
-        Uses.insert(MO.getReg());
-  };
-  auto walk = [&](const MachineInstr &I, bool CollectDefs,
-                  SmallSet<Register, 8> *Uses) {
-    if (I.isBundle()) {
-      for (const MachineInstr *J = I.getNextNode();
-           J && J->isBundledWithPred(); J = J->getNextNode()) {
-        if (CollectDefs)
-          oneDef(*J);
-        else if (Uses)
-          oneUse(*J, *Uses);
-      }
-    } else {
-      if (CollectDefs)
-        oneDef(I);
-      else if (Uses)
-        oneUse(I, *Uses);
-    }
-  };
-  walk(Head, /*CollectDefs=*/true, nullptr);
-  SmallSet<Register, 8> Uses;
-  walk(Head, /*CollectDefs=*/false, &Uses);
-  if (&Head != &SetMI)
-    walk(SetMI, /*CollectDefs=*/false, &Uses);
-  LiveIns.clear();
-  for (Register U : Uses)
-    if (!HeadDefs.contains(U))
-      LiveIns.insert(U);
-}
-
-static void collectCountUnitHeadDefs(const MachineInstr &Head,
-                                     SmallSet<Register, 8> &Defs) {
-  Defs.clear();
-  auto one = [&](const MachineInstr &MI) {
-    for (const MachineOperand &MO : MI.operands())
-      if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical())
-        Defs.insert(MO.getReg());
-  };
-  if (Head.isBundle()) {
-    for (const MachineInstr *J = Head.getNextNode();
-         J && J->isBundledWithPred(); J = J->getNextNode())
-      one(*J);
-  } else {
-    one(Head);
-  }
-}
-
-template <unsigned N>
-static bool miOrBundleDefsAny(const MachineInstr &MI,
-                              const SmallSet<Register, N> &Regs) {
-  if (Regs.empty())
-    return false;
-  auto defs = [&](const MachineInstr &I) {
-    for (const MachineOperand &MO : I.operands())
-      if (MO.isReg() && MO.isDef() && Regs.contains(MO.getReg()))
-        return true;
-    return false;
-  };
-  if (MI.isBundle()) {
-    for (const MachineInstr *I = MI.getNextNode();
-         I && I->isBundledWithPred(); I = I->getNextNode())
-      if (defs(*I))
-        return true;
-    return false;
-  }
-  return defs(MI);
-}
-
-template <unsigned N>
-static bool miOrBundleUsesAny(const MachineInstr &MI,
-                              const SmallSet<Register, N> &Regs) {
-  if (Regs.empty())
-    return false;
-  auto uses = [&](const MachineInstr &I) {
-    for (const MachineOperand &MO : I.operands())
-      if (MO.isReg() && MO.isUse() && !MO.isImplicit() &&
-          Regs.contains(MO.getReg()))
-        return true;
-    return false;
-  };
-  if (MI.isBundle()) {
-    for (const MachineInstr *I = MI.getNextNode();
-         I && I->isBundledWithPred(); I = I->getNextNode())
-      if (uses(*I))
-        return true;
-    return false;
-  }
-  return uses(MI);
-}
-
-template <unsigned N, unsigned M>
-static bool isDangerousToLiftBeforeCountUnit(
-    const MachineInstr &MI, const SmallSet<Register, N> &ExtLiveIns,
-    const SmallSet<Register, M> &HeadDefs) {
-  // Def Src before remat → wrong trip. Use Dest before remat → use-before-def.
-  if (miOrBundleDefsAny(MI, ExtLiveIns))
-    return true;
-  if (miOrBundleUsesAny(MI, HeadDefs))
-    return true;
-  return false;
-}
-
-static void collectMiPhysDefUse(const MachineInstr &MI,
-                                SmallSet<Register, 16> &Defs,
-                                SmallSet<Register, 16> &Uses) {
-  auto one = [&](const MachineInstr &I) {
-    for (const MachineOperand &MO : I.operands()) {
-      if (!MO.isReg() || !MO.getReg().isPhysical())
-        continue;
-      if (MO.isDef())
-        Defs.insert(MO.getReg());
-      else if (MO.isUse() && !MO.isImplicit())
-        Uses.insert(MO.getReg());
-    }
-  };
-  if (MI.isBundle()) {
-    for (const MachineInstr *J = MI.getNextNode();
-         J && J->isBundledWithPred(); J = J->getNextNode())
-      one(*J);
-  } else {
-    one(MI);
-  }
-}
-
-// Free-only Off1 legality. Never split remat→SET. Never lift dangerous peel.
-// Order-preserving among free candidates: always take first free post-SET MI
-// (not last — reversing free MIs still breaks chains).
-bool HaydnFixupHwLoops::tryShortenStartOffset(MachineInstr &SetMI,
-                                              const HaydnInstrInfo &TII,
-                                              int64_t &StartOff,
-                                              int64_t &EndOff) {
-  if (StartOff < 0 || StartOff <= MaxOff1BytesSafe)
-    return false;
-
-  bool Changed = false;
-  MachineBasicBlock *MBB = SetMI.getParent();
-  MachineBasicBlock *StartMBB = nullptr;
-  MachineBasicBlock *EndMBB = nullptr;
-
-  MachineInstr &Head = getCountUnitHead(SetMI, TII);
-  SmallSet<Register, 8> ExtLiveIns;
-  SmallSet<Register, 8> HeadDefs;
-  collectCountUnitExtLiveIns(Head, SetMI, ExtLiveIns);
-  collectCountUnitHeadDefs(Head, HeadDefs);
-
-  while (StartOff > MaxOff1BytesSafe) {
-    unsigned Following = countFollowingBundles(SetMI, TII);
-    // Keep at least InterveningCycles after SET (Following > floor to lift one).
-    if (Following <= InterveningCycles)
-      break;
-
-    SmallSet<Register, 16> BarrierDefs;
-    SmallSet<Register, 16> BarrierUses;
-
-    MachineInstr *Cand = nullptr;
-    unsigned CandBundles = 0;
-    for (MachineBasicBlock::iterator I = nextBundleBoundary(SetMI),
-                                     E = MBB->end();
-         I != E; ++I) {
-      if (I->isMetaInstruction() || I->isDebugInstr() || I->isImplicitDef() ||
-          I->isKill())
-        continue;
-      if (I->isTerminator() && !I->isCall())
-        break;
-      unsigned Bytes = TII.getInstSizeInBytes(*I);
-      if (Bytes == 0)
-        continue;
-
-      const bool IsNop = I->getOpcode() == Haydn::NOP;
-      const bool UnitDanger =
-          !IsNop && isDangerousToLiftBeforeCountUnit(*I, ExtLiveIns, HeadDefs);
-      const bool CrossBarrier =
-          !IsNop && (miOrBundleUsesAny(*I, BarrierDefs) ||
-                     miOrBundleDefsAny(*I, BarrierUses));
-
-      if (UnitDanger || CrossBarrier) {
-        LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: skip dangerous/dependent "
-                             "(leave remat→SET intact): "
-                          << *I);
-        collectMiPhysDefUse(*I, BarrierDefs, BarrierUses);
-        continue;
-      }
-
-      Cand = &*I;
-  // Ceil by committed product EncodedBytes, not a dual magic 16.
-      CandBundles = haydn::bundle::ceilProductParcels(Bytes);
-      break;
-    }
-    if (!Cand || CandBundles == 0)
-      break;
-    if (Following - CandBundles < InterveningCycles)
-      break;
-
-    // Splice before count-unit head (remat), NEVER before SET alone.
-    MachineInstr &CurHead = getCountUnitHead(SetMI, TII);
-    MBB->splice(CurHead.getIterator(), MBB, Cand->getIterator());
-    Changed = true;
-    LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: free lift before count unit: "
-                      << *Cand);
-
-    if (!computeOffsets(SetMI, TII, StartOff, EndOff, StartMBB, EndMBB))
-      break;
-  }
-
-  // Do NOT sink trip-load+remat+SET past peel: peel leaves body live-ins in
-  // those physregs (e.g. r1 pointer). Moving LD32 trip after peel clobbers
-  // them → MEMORY_FAULT. If free lifts cannot fix Off1, demote (possibly
-  // stack-counter) instead.
-
-  return Changed;
-}
 
 bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
                                    const HaydnInstrInfo &TII) {
@@ -663,8 +376,8 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   const MachineFunction &MF = *Pre->getParent();
 
   // Bundle-preserving Fixup. Never unconditional unbundle of a legal
-  // coissued SET cycle. Layout helpers (nextBundleBoundary, getCountUnitHead,
-  // topLevelForLayout) walk around BUNDLE interiors; eraseHardwareLoopSetup
+  // coissued SET cycle. Layout helpers (nextBundleBoundary) walk around
+  // BUNDLE interiors; eraseHardwareLoopSetup
   // removes only the SET member via the shared recommit path.
 
   // Dead body / stale MBB operands (contract §1)
@@ -844,7 +557,8 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   auto rangeBad = [&](bool HardOff1Only) {
     if (StartOff < 0 || EndOff < 0)
       return true;
-    // Soft: try free lifts under safety margin. Hard: demote only past uimm6.
+    // Soft margin miss: NOP-pad + re-check (lift deleted). Hard past
+    // uimm6: demote.
     int64_t Off1Lim = HardOff1Only ? MaxOff1Bytes : MaxOff1BytesSafe;
     if (StartOff > Off1Lim)
       return true;
@@ -872,23 +586,23 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
   };
 
   if (rangeBad(/*HardOff1Only=*/false)) {
-    // Free-only lifts; remat→SET stays glued. No peel across count unit.
-    if (StartOff > MaxOff1BytesSafe)
-      Changed |= tryShortenStartOffset(SetMI, TII, StartOff, EndOff);
-
-    // Body may still be short after free lifts (or pad was blocked).
+    // Peer-aligned recovery (2026-08-22, topics/hwloop PM2): no peer reorders
+    // user code for hwloop timing — AIE pads (AIEMachineScheduler.cpp:843-859
+    // insertNoop; AIEMachineAlignment.cpp:62-101 elongation NOP fill) and
+    // never reorders user code for hwloop timing. The former free-lift leg
+    // (tryShortenStartOffset) is deleted; NOP-pad the body, then re-check.
     if (padBodyToMinLaw())
       Changed = true;
 
     if (!computeOffsets(SetMI, TII, StartOff, EndOff, StartMBB, EndMBB))
-      return recoverRangeOrOrder("computeOffsets failed after free lifts");
+      return recoverRangeOrOrder("computeOffsets failed after body pad");
 
     // Soft miss OK if hard uimm6 holds. Else demote (never break remat).
     if (rangeBad(/*HardOff1Only=*/true)) {
       LLVM_DEBUG(dbgs() << "HaydnFixupHwLoops: hard Off1 still bad startOff="
                         << StartOff << " endOff=" << EndOff
-                        << " (remat→SET intact; demote)\n");
-      return recoverRangeOrOrder("range still bad after free lifts only");
+                        << " (no lift — peer law; demote)\n");
+      return recoverRangeOrOrder("range still bad after NOP pad");
     }
   }
   // Second BranchRelaxation may still grow short PC-relative branches in
@@ -943,8 +657,7 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
     auto countBranchGrowthIn = [&](const MachineInstr &Probe) -> int64_t {
       int64_t G = 0;
       if (Probe.isBundle()) {
-        for (const MachineInstr *C = Probe.getNextNode();
-             C && C->isBundledWithPred(); C = C->getNextNode()) {
+        for (const MachineInstr *C : haydn::bundle::members(Probe)) {
           if (isStillRelaxableShortBranch(*C))
             G += MaxSingleBranchGrowthBytes;
         }
@@ -1027,11 +740,7 @@ static bool sequentializeIllegalHwloopTripCoissue(MachineFunction &MF,
     for (MachineInstr &MI : MBB) {
       if (!MI.isBundle() || MI.isBundledWithPred())
         continue;
-      unsigned Kids = 0;
-      for (MachineBasicBlock::instr_iterator I = std::next(MI.getIterator());
-           I != MBB.instr_end() && I->isBundledWithPred(); ++I)
-        ++Kids;
-      if (Kids >= 2)
+      if (haydn::bundle::members(MI).size() >= 2)
         Roots.push_back(&MI);
     }
   }
@@ -1040,10 +749,7 @@ static bool sequentializeIllegalHwloopTripCoissue(MachineFunction &MF,
     if (!Root || !Root->getParent())
       continue;
     MachineBasicBlock &MBB = *Root->getParent();
-    SmallVector<MachineInstr *, 3> Kids;
-    for (MachineBasicBlock::instr_iterator I = std::next(Root->getIterator());
-         I != MBB.instr_end() && I->isBundledWithPred(); ++I)
-      Kids.push_back(&*I);
+    SmallVector<MachineInstr *, 3> Kids = haydn::bundle::members(*Root);
     if (Kids.size() < 2)
       continue;
     if (!haydn::bundle::cycleMembersHaveHwloopTripConflict(Kids, TII, TRI))

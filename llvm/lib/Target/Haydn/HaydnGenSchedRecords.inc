@@ -39,6 +39,13 @@ def Slot012_ALU_CsrLat : InstrItinClass;
 def Slot0_ALU_CsrLat : InstrItinClass;
 def Slot1_ALU_CsrLat : InstrItinClass;
 def Slot2_ALU_CsrLat : InstrItinClass;
+// Golden Data_Latency=1 classes (2026-08-21 latency P3): store
+// writeback register + fresh-dest multiplies. Same ownership split
+// as DspLat/CsrLat — class defs and InstrItinData rows live here.
+def Slot0_LS_WbLat : InstrItinClass;
+def Slot12_MAC_MulLat : InstrItinClass;
+def Slot1_MAC_MulLat : InstrItinClass;
+def Slot2_MAC_MulLat : InstrItinClass;
 
 def HaydnItineraries : ProcessorItineraries<
   [LOADSTORE0, LOAD1, ALU0, ALU1, ALU2, MAC0, MAC1],
@@ -46,6 +53,7 @@ def HaydnItineraries : ProcessorItineraries<
   [
     InstrItinData<Slot0_ALU, [InstrStage<1, [ALU0]>], [1]>,
     InstrItinData<Slot0_LS, [InstrStage<1, [LOADSTORE0]>], [2]>,
+    InstrItinData<Slot0_LS_WbLat, [InstrStage<1, [LOADSTORE0]>], [1]>,
     InstrItinData<Slot12_ALU_SinCosLat, [InstrStage<1, [ALU1, ALU2]>], [17]>,
     InstrItinData<Slot12_ALU_DspLat, [InstrStage<1, [ALU1, ALU2]>], [2]>,
     InstrItinData<Slot1_ALU_DspLat, [InstrStage<1, [ALU1]>], [2]>,
@@ -61,6 +69,9 @@ def HaydnItineraries : ProcessorItineraries<
     InstrItinData<Slot1_ALU_SinCosLat, [InstrStage<1, [ALU1]>], [17]>,
     InstrItinData<Slot12_MAC, [InstrStage<1, [MAC0, MAC1]>], [2, 1, 1, 2]>,
     InstrItinData<Slot12_MAC_AccFirst, [InstrStage<1, [MAC0, MAC1]>], [2, 2, 1, 1]>,
+    InstrItinData<Slot12_MAC_MulLat, [InstrStage<1, [MAC0, MAC1]>], [1, 1, 1, 1]>,
+    InstrItinData<Slot1_MAC_MulLat, [InstrStage<1, [MAC0]>], [1, 1, 1, 1]>,
+    InstrItinData<Slot2_MAC_MulLat, [InstrStage<1, [MAC1]>], [1, 1, 1, 1]>,
     InstrItinData<Slot1_MAC, [InstrStage<1, [MAC0]>], [2, 1, 1, 2]>,
     InstrItinData<Slot2_ALU, [InstrStage<1, [ALU2]>], [1]>,
     InstrItinData<Slot2_ALU_SinCosLat, [InstrStage<1, [ALU2]>], [17]>,

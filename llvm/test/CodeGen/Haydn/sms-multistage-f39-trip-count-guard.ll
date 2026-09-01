@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-sms-containment-max=1 -O2 -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -mattr=+hwloop -haydn-enable-hwloops \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-analysis-only \
@@ -6,7 +6,7 @@
 ; RUN:   2>%t.var.rmk | FileCheck %s --check-prefix=ASM
 ; RUN: FileCheck %s --check-prefix=ACC < %t.var.rmk
 ; RUN: FileCheck %s --check-prefix=VAR < %t.var.rmk
-; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 \
+; RUN: llc -mtriple=haydn-unknown-elf -haydn-sms-containment-max=1 -O2 -global-isel-abort=1 \
 ; RUN:     -verify-machineinstrs -mattr=+hwloop -haydn-enable-hwloops \
 ; RUN:     -haydn-enable-multistage-sms \
 ; RUN:     -haydn-multistage-sms-analysis-only \

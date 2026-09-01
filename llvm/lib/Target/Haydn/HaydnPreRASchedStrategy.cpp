@@ -242,16 +242,18 @@ void HaydnPreRASchedStrategy::initialize(ScheduleDAGMI *DAGIn) {
 
 namespace {
 
-bool looksLikePrivatePlacementOpcodeName(StringRef Name) {
-  if (Name.empty())
-    return false;
-  if (Name.contains("_E2_") || Name.contains("_E3_"))
-    return true;
-  return Name.ends_with("_S0") || Name.ends_with("_S1") || Name.ends_with("_S2");
+/// Opcode-IDENTITY placement test (user directive 2026-08-24; W64 QW3):
+/// pre-RA reasons about opcodes, never opcode-NAME suffixes. `_S*`
+/// FieldSlots are retired (0 defs) and generated `_E*` members exist only
+/// after the exact post-RA commit — the firewall asks the inverse table
+/// whether an opcode IS a committed member
+/// (haydnIsPrivateFormatEMemberOpcode, HaydnBundleVerify.cpp), it never
+/// sniffs `_E2_` / `_E3_` / `_S*` spellings.
+bool isPrivatePlacementOpcode(unsigned Opcode) {
+  return haydnIsPrivateFormatEMemberOpcode(Opcode);
 }
 
 void snapshotPreRAPhaseFirewall(const MachineBasicBlock &MBB,
-                                const TargetInstrInfo *TII,
                                 unsigned &BundleRoots,
                                 unsigned &BundledMembers,
                                 unsigned &PrivatePlacementOps) {
@@ -263,9 +265,7 @@ void snapshotPreRAPhaseFirewall(const MachineBasicBlock &MBB,
       ++BundleRoots;
     if (MI.isBundledWithPred())
       ++BundledMembers;
-    if (!TII)
-      continue;
-    if (looksLikePrivatePlacementOpcodeName(TII->getName(MI.getOpcode())))
+    if (isPrivatePlacementOpcode(MI.getOpcode()))
       ++PrivatePlacementOps;
   }
 }
@@ -280,13 +280,10 @@ void HaydnPreRASchedStrategy::enterRegion(MachineBasicBlock *BB,
   PreRAEnterBundleRoots = 0;
   PreRAEnterBundledMembers = 0;
   PreRAEnterPrivatePlacementOps = 0;
-  if (CurMBB) {
-    const TargetInstrInfo *TII =
-        CurMBB->getParent()->getSubtarget().getInstrInfo();
-    snapshotPreRAPhaseFirewall(*CurMBB, TII, PreRAEnterBundleRoots,
+  if (CurMBB)
+    snapshotPreRAPhaseFirewall(*CurMBB, PreRAEnterBundleRoots,
                                PreRAEnterBundledMembers,
                                PreRAEnterPrivatePlacementOps);
-  }
   SUDelayerMap.assign(std::max(NumRegionInstrs, 1u), UnknownSUNum);
 }
 
@@ -302,28 +299,48 @@ void HaydnPreRASchedStrategy::leaveRegion(const SUnit & /*ExitSU*/) {
         report_fatal_error(
             "Haydn pre-RA product resource admission / certificate pins failed",
             /*GenCrashDiag=*/false);
-      // Product StageCount1 containment pin (soft StageCount == 1 only).
-      if (productSMSContainmentMaxStageCount != 1u ||
-          !smsProductStageCountExceedsContainment(/*StageCount=*/2) ||
-          smsProductStageCountExceedsContainment(/*StageCount=*/1) ||
-          !smsProductShouldUseScheduleFailsClosed(
-              /*IsZOL=*/false, /*PrologueCount=*/1, /*MinTripCount=*/0,
-              /*PressureExcess=*/false) ||
+      // Product containment pin (W68.1: form-uniform PPS-3 bound for soft
+      // AND ZOL; the historic Option A value 1 survives only as the F41
+      // bisect-down constant). ZOL multi-stage now accepts when its own
+      // AIE-peer gates pass (static MinTripCount guard) — pinned both ways.
+      if (productSMSSoftContainmentMaxStageCount != productSMSMaxStageCount ||
+          productSMSContainmentMaxStageCount != 1u ||
+          !smsProductStageCountExceedsContainment(
+              /*StageCount=*/productSMSSoftContainmentMaxStageCount + 1,
+              productSMSSoftContainmentMaxStageCount) ||
+          smsProductStageCountExceedsContainment(
+              /*StageCount=*/productSMSSoftContainmentMaxStageCount,
+              productSMSSoftContainmentMaxStageCount) ||
           !smsProductShouldUseScheduleAccepts(
-              /*IsZOL=*/false, /*PrologueCount=*/0, /*MinTripCount=*/0,
-              /*PressureExcess=*/false))
+              /*IsZOL=*/false, /*PrologueCount=*/1, /*MinTripCount=*/0,
+              /*PressureExcess=*/false, productSMSMaxStageCount,
+              productSMSTrackRegPressureDefault,
+              productSMSSoftContainmentMaxStageCount) ||
+          !smsProductShouldUseScheduleFailsClosed(
+              /*IsZOL=*/false, /*PrologueCount=*/3, /*MinTripCount=*/0,
+              /*PressureExcess=*/false, productSMSMaxStageCount,
+              productSMSTrackRegPressureDefault,
+              productSMSSoftContainmentMaxStageCount) ||
+          !smsProductShouldUseScheduleAccepts(
+              /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/16,
+              /*PressureExcess=*/false, productSMSMaxStageCount,
+              productSMSTrackRegPressureDefault,
+              productSMSSoftContainmentMaxStageCount) ||
+          !smsProductShouldUseScheduleFailsClosed(
+              /*IsZOL=*/true, /*PrologueCount=*/1, /*MinTripCount=*/0,
+              /*PressureExcess=*/false, productSMSMaxStageCount,
+              productSMSTrackRegPressureDefault,
+              productSMSSoftContainmentMaxStageCount))
         report_fatal_error(
-            "Haydn pre-RA product StageCount1 SMS containment pins failed",
+            "Haydn pre-RA product SMS containment pins failed",
             /*GenCrashDiag=*/false);
-      LLVM_DEBUG(dbgs() << "HaydnPreRASched: product StageCount1 containment "
-                           "max_stages=1 resource_admission_closed=1\n");
+      LLVM_DEBUG(dbgs() << "HaydnPreRASched: product containment "
+                           "max_stages=3(soft+zol) resource_admission_closed=1\n");
     }
-    const TargetInstrInfo *TII =
-        CurMBB->getParent()->getSubtarget().getInstrInfo();
     unsigned BundleRoots = 0;
     unsigned BundledMembers = 0;
     unsigned PrivatePlacementOps = 0;
-    snapshotPreRAPhaseFirewall(*CurMBB, TII, BundleRoots, BundledMembers,
+    snapshotPreRAPhaseFirewall(*CurMBB, BundleRoots, BundledMembers,
                                PrivatePlacementOps);
     if (BundleRoots > PreRAEnterBundleRoots) {
       ++NumPreRABUNDLEInvent;

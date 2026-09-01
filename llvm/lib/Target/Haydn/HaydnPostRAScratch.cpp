@@ -384,9 +384,11 @@ void llvm::emitFrameRelativeMemOp(MachineBasicBlock &MBB,
     HaydnMatInt::InstSeq Seq = HaydnMatInt::generate(Off);
     Register Cur = Haydn::R0;
     for (const HaydnMatInt::Inst &MatInst : Seq) {
-      BuildMI(MBB, I, DL, TII.get(MatInst.Opc), Tmp)
-          .addReg(Cur)
-          .addImm(MatInst.Imm);
+      // LUI is dest+imm (logical matches Format E members).
+      MachineInstrBuilder MIB = BuildMI(MBB, I, DL, TII.get(MatInst.Opc), Tmp);
+      if (MatInst.Opc != Haydn::LUI)
+        MIB.addReg(Cur);
+      MIB.addImm(MatInst.Imm);
       Cur = Tmp;
     }
     BuildMI(MBB, I, DL, TII.get(Haydn::ADD32), Tmp)

@@ -1,0 +1,95 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=postmisched -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=postmisched,haydn-fixup-hwloops -verify-machineinstrs %s \
+# RUN:   -o - | FileCheck %s --check-prefix=FIX
+
+# Role: MIR — W61 Off1 scheduler tail credit (AIE RegionEndEdges
+# LoopSetupDistance - ZOLBundlesCount analog) on a B-terminated preheader.
+#
+# REGRESSION TEST: the scheduler must PRICE the SET->BEGIN distance the
+# preheader tail already covers instead of NOP-padding the full
+# SetupIssueDistance in-region and letting Fixup discover the residue.
+#
+# Bug this pins (W61, GOALS 2026-08-23): ZOLSetupExitLatency raised the
+# ExitSU edge by the flat SetupIssueDistance even when the SET-MBB tail
+# (here: the explicit `B %bb.1` to the header) already supplies one of the
+# three SET->BEGIN issue cycles. Every B-terminated preheader paid one
+# extra in-region NOP parcel (old flat-law output: SET, ADD, NOP, B). AIE
+# credits ZOL body bundles against its setup->LEND law; Haydn's golden law
+# runs to BEGIN (Constraints "Setup Timing": SET issues at or before
+# bundle t-3, t = HWLR_BEGIN), so the credit is the SET-MBB tail (region
+# end through the first size-bearing terminator).
+#
+# Arithmetic here: tail = B = 1 parcel → in-region ExitSU edge =
+# SetupIssueDistance - 1 = 2. Region cycles: SET@0 (one-SFR-writer law
+# keeps SET before ADD), ADD@1 → ExitReady=2 already met, ZERO NOP pads.
+# Following after the SET cycle = ADD + B = 2 = InterveningCycles.
+# Cycle(BEGIN) - Cycle(SET) = 3 = SetupIssueDistance. If flat pricing
+# returns, one NOP reappears between ADD and B and this test fails.
+
+--- |
+  define void @tail_credit() { ret void }
+...
+---
+name:            tail_credit
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+
+    ; Independent ALU + SET so the list scheduler actually runs (single-MI
+    ; regions are skipped). No following work: the residue is pure NOP.
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+    ; Explicit B to the header: ONE size-bearing tail parcel. Execution
+    ; leaves bb.0 here on every activation path, so it counts toward the
+    ; SET->BEGIN distance (scheduler credit + Fixup Following alike).
+    B %bb.1
+
+  bb.1:
+    liveins: $r3, $r15
+    successors: %bb.2
+    $r1 = COPY $r3
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r1, $r15
+    $r1 = COPY $r1
+    RET implicit killed $r15, implicit $r1
+
+# Postmisched alone: bb.0 = SET cycle, ADD, B — no NOP parcel (the tail
+# credit covers what the flat law padded). SET/ADD order is scheduler's
+# choice (independent, one-SFR-writer law only keeps them sequential); the
+# pinned contract is ZERO NOP between the first of them and B.
+# CHECK-LABEL: name: tail_credit
+# CHECK: bb.0:
+# CHECK: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+# CHECK-NOT: NOP
+# CHECK: $r3 = ADD32{{(_E[0-9]+_E[0-9]+_ALU[0-9]_RR)?}} killed $r1, killed $r2, implicit-def dead $sfr
+# CHECK-NOT: NOP
+# CHECK: B %bb.1
+# CHECK: bb.1:
+
+# With Fixup in the pipeline: same shape — Fixup must NOT add deficit pads
+# (countFollowingBundles now counts B: Following = ADD + B = 2 =
+# InterveningCycles; deficit 0). The aligned census also matters for shapes
+# with NO in-region following work: pre-change the walk stopped at B
+# (Following = 0 < 2 → deficit NOPs) even though the byte law charges B.
+# FIX-LABEL: name: tail_credit
+# FIX: bb.0:
+# FIX: SET_HWLOOP{{[^ ]*}} 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+# FIX-NOT: NOP
+# FIX: $r3 = ADD32{{(_E[0-9]+_E[0-9]+_ALU[0-9]_RR)?}} killed $r1, killed $r2, implicit-def dead $sfr
+# FIX-NOT: NOP
+# FIX: B %bb.1
+# FIX: bb.1:

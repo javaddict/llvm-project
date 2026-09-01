@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-multistage-sms=false \
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops=false -haydn-enable-multistage-sms=false \
 ; RUN:   -pass-remarks-analysis=haydn-multistage-sms < %s \
 ; RUN:   2>%t.off.rmk | FileCheck %s --check-prefix=OFF
 ; RUN: FileCheck %s --allow-empty --check-prefix=OFFRMK < %t.off.rmk
@@ -18,7 +18,8 @@
 ; RUN:   2>%t.commit.rmk | FileCheck %s --check-prefix=COMMIT
 ; RUN: FileCheck %s --check-prefix=COMMIT-RMK < %t.commit.rmk
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
-; RUN:   -mattr=+hwloop -haydn-enable-hwloops -filetype=obj -o %t.hwon.o < %s
+; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms=0 \
+; RUN:   -filetype=obj -o %t.hwon.o < %s
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -global-isel-abort=1 -verify-machineinstrs \
 ; RUN:   -mattr=+hwloop -haydn-enable-hwloops -haydn-enable-multistage-sms \
 ; RUN:   -haydn-multistage-sms-force-fail-seat=PF-CFG -filetype=obj -o %t.pfcfg.o < %s
@@ -30,15 +31,14 @@
 ; RUN:   2>%t.sms.rmk | FileCheck %s --check-prefix=SMSONLY
 ; RUN: FileCheck %s --allow-empty --check-prefix=SMSONLY-RMK < %t.sms.rmk
 
-; XFAIL: *
-; Dual-ON combined CFG seat stays expected-fail until T3 independent
-; SMS QUALIFY (hardware loops off, parcels==II), then T6 independent
-; SCEV-proven hwloop QUALIFY (multi-stage off), then this dual-ON
-; preheader/BEGIN/END / latch-only overlay matrix. Product defaults
-; stay off. Do not treat this file as a default flip.
-; Analysis-only currently exhausts II instead of accepting.
+; 2026-08-22 G004 dual-ON qualification LANDED: XFAIL removed. The CFG
+; seat accepts and materializes with II parity; OFF arm rebound to
+; -haydn-enable-hwloops=false (product default flipped ON 2026-08-22).
+; 2026-08-22 SMS product-default flip rebaseline: SMS default is now ON,
+; so the rollback-identity baseline (hwon) is built with SMS explicitly
+; OFF; arms intending no-SMS keep their explicit =false/=0 flags.
 
-; Role: semantic — combined CFG QUALIFY seat. Product defaults OFF.
+; Role: semantic — combined CFG QUALIFY seat.
 ; SCEV-proven path only; never post-RA rediscovery. Single-BB and
 ; innermost latch-only diamonds may arm one SET (sel=0). Multi-exit,
 ; early-exit, and nested-outer stay declined. Dual-ON must keep the
@@ -95,8 +95,12 @@ define i32 @singlebb_preheader_geometry(ptr nocapture readonly %p, i32 %n) {
 ; COMMIT:       set_hwloop_f2 0, .LLhwloop_start{{[0-9]*}}, .LLhwloop_end{{[0-9]*}},
 ; COMMIT-NOT:   set_hwloop_f2 1,
 ; COMMIT-NOT:   csrw{{.*}} 0x2{{[0-5]}}
-; COMMIT:       .LLhwloop_start
+; 2026-08-22 G004 rebind: SWPS annotation prints at the kernel MBB head
+; (before HWLR_BEGIN); HWLR_END is the inclusive address of the last body
+; parcel (label immediately before it — that parcel still executes each
+; iteration inside [BEGIN, END]).
 ; COMMIT:       #<swps> stages={{[2-9]|[1-9][0-9]+}}
+; COMMIT:       .LLhwloop_start
 ; COMMIT:       .LLhwloop_end
 ; COMMIT:       jalr
 entry:
@@ -109,14 +113,28 @@ loop:
   %s = phi i32 [ 0, %pre ], [ %s.n, %loop ]
   %ge = getelementptr inbounds i32, ptr %p, i32 %i
   %v = load i32, ptr %ge, align 4
-  %s.n = add i32 %s, %v
+  ; 2026-08-22 G004: mul chain body (same shape as the matrix trip seat) —
+  ; the plain two-op sum accepts kernel-only (NStages=1, no peel MBBs) and
+  ; cannot exercise this seat's prologue/kernel/epilogue geometry contract.
+  %t0 = add i32 %v, 1
+  %t1 = mul i32 %t0, 3
+  %t2 = add i32 %t1, %v
+  %t3 = xor i32 %t2, %s
+  %s.n = add i32 %s, %t3
   %i.n = add i32 %i, 1
   %c = icmp ult i32 %i.n, %n
-  br i1 %c, label %loop, label %exit
+  br i1 %c, label %loop, label %exit, !llvm.loop !0
 exit:
   %r = phi i32 [ 0, %entry ], [ %s.n, %loop ]
   ret i32 %r
 }
+
+; 2026-08-22 G004: same AIE-shaped min-trip floor as the matrix test —
+; dual-ON acceptance needs a provable min trip (peel depth NStages-1 runs
+; real iterations; unproven runtime trip fails closed exactly like AIE
+; PostPipeliner candidates without min-trip MD).
+!0 = distinct !{!0, !1}
+!1 = !{!"llvm.loop.itercount.range", i32 8}
 
 ; Latch-only diamond: measured multi-BB Role A (AIE declines every
 ; multi-BB at AIEBaseTargetTransformInfo.cpp:317-320).
