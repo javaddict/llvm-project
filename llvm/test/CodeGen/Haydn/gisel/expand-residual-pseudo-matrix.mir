@@ -215,7 +215,7 @@ body:             |
   bb.0:
     liveins: $r1, $r15
     ; VAEND-NOT: VAEND
-    ; VAEND: RET
+    ; VAEND: {{RET|JALR}}
     VAEND $r1
     RET implicit $r15
 

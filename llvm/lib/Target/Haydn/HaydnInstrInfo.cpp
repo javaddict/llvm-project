@@ -34,6 +34,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -45,8 +47,13 @@
 #include "llvm/CodeGen/RegisterScavenging.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <optional>
 #include <vector>
 
@@ -107,6 +114,11 @@ bool isControlFlowChild(const MachineInstr &MI) {
 /// opcodes are identity. Missing generated members return the opcode itself
 /// only through logicalOpcodeOrSelf; lookupGeneratedMemberToLogical is 0.
 unsigned haydnLogicalOpcode(unsigned Opc) {
+  // Encoder peels `_MSP` flag clones onto the catalog logical.
+  if (Opc == Haydn::BEQZ_W_MSP)
+    return Haydn::BEQZ_W;
+  if (Opc == Haydn::JALR_MSP)
+    return Haydn::JALR;
   return haydn::format_e::logicalOpcodeOrSelf(Opc);
 }
 
@@ -144,6 +156,72 @@ bool isHaydnCondBranch2Reg(unsigned LogicalOpc) {
   default:
     return false;
   }
+}
+
+bool isHaydnIndirectJALR(unsigned LogicalOpc) {
+  return LogicalOpc == Haydn::JALR || LogicalOpc == Haydn::JALR_W;
+}
+
+bool isHaydnAddrMaterializeOpc(unsigned LogicalOpc) {
+  return LogicalOpc == Haydn::LUI || LogicalOpc == Haydn::ADDI32_W ||
+         LogicalOpc == Haydn::ADDI32;
+}
+
+// insertBranch is const; MachineBasicBlock::findBranchDebugLoc is not.
+// Walk back past debug/CFI (AIE/RISCV BuildMI(DL) overlay: never invent a
+// source location for a synthetic trampoline when the caller passed none).
+DebugLoc haydnInheritBranchDebugLoc(const MachineBasicBlock &MBB,
+                                    const DebugLoc &DL) {
+  if (DL)
+    return DL;
+  for (const MachineInstr &MI : llvm::reverse(MBB)) {
+    if (MI.isDebugInstr() || MI.isCFIInstruction())
+      continue;
+    if (MI.getDebugLoc())
+      return MI.getDebugLoc();
+    break;
+  }
+  return DL;
+}
+
+void haydnStampDebugLocOnNewInstrs(MachineBasicBlock &MBB, MachineInstr *LastOld,
+                                   const DebugLoc &DL) {
+  if (!DL)
+    return;
+  MachineBasicBlock::iterator I =
+      LastOld ? std::next(LastOld->getIterator()) : MBB.begin();
+  for (; I != MBB.end(); ++I) {
+    if (!I->getDebugLoc())
+      I->setDebugLoc(DL);
+  }
+}
+
+// Long-form LUI+ADDI32_W+JALR_W is inserted into a trampoline MBB that
+// BranchRelaxation already wired as Dest's predecessor (RISCV/AArch64
+// insertIndirectBranch: TII does not addSuccessor). Overlay Haydn
+// preservation the generic pass does not do at this seat:
+//   * Dest PHIs still name the original pred after replaceSuccessor;
+//   * RestoreBB needs Dest live-ins so the emergency reload is a legal
+//     fallthrough predecessor (BR recomputes after return);
+//   * spill/reload are FI stores (Haydn SP = R13) — CFA/CFI unchanged.
+void haydnPreserveLongFormJumpState(MachineBasicBlock &Trampoline,
+                                    MachineBasicBlock &NewDestBB,
+                                    MachineBasicBlock &RestoreBB,
+                                    bool JumpToRestore) {
+  if (Trampoline.pred_size() == 1) {
+    MachineBasicBlock *OrigPred = *Trampoline.pred_begin();
+    MachineBasicBlock *NewIncoming =
+        JumpToRestore ? &RestoreBB : &Trampoline;
+    if (OrigPred != NewIncoming && !OrigPred->isSuccessor(&NewDestBB))
+      NewDestBB.replacePhiUsesWith(OrigPred, NewIncoming);
+  }
+
+  if (!JumpToRestore)
+    return;
+
+  for (const MachineBasicBlock::RegisterMaskPair &LI : NewDestBB.liveins())
+    RestoreBB.addLiveIn(LI);
+  RestoreBB.sortUniqueLiveIns();
 }
 
 } // namespace
@@ -580,7 +658,8 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
     if (isPreISelGenericOpcode(CF.getOpcode()))
       return true;
 
-    unsigned Opc = haydnLogicalOpcode(CF.getOpcode());
+    const unsigned RawOpc = CF.getOpcode();
+    unsigned Opc = haydnLogicalOpcode(RawOpc);
 
     // Unconditional branches
     bool IsUnconditional = false;
@@ -590,6 +669,11 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
         CF.getOperand(0).isMBB()) {
       IsUnconditional = true;
       Target = CF.getOperand(0).getMBB();
+    } else if (RawOpc == Haydn::BEQZ_W_MSP && CF.getNumOperands() > 1 &&
+               CF.getOperand(1).isMBB()) {
+      // Uncond B clone: always a barrier jump, even if R0 is a live-in.
+      IsUnconditional = true;
+      Target = CF.getOperand(1).getMBB();
     } else if ((Opc == Haydn::JAL || Opc == Haydn::JAL_W) &&
                CF.getNumOperands() > 1 && CF.getOperand(0).isReg() &&
                CF.getOperand(0).getReg() == Haydn::R0 &&
@@ -616,11 +700,12 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
       continue; // Keep scanning backwards for a conditional branch
     }
 
-    // JALR / JALR_W — indirect branch, not analyzable as a terminator.
-    // Phase 1a: CodeGen selects JALR_W; legacy JALR kept for asm.
-    // If we already parsed a trailing branch sequence, this is mid-block
-    // material (should not happen for JALR) — stop and keep the analysis.
-    if (Opc == Haydn::JALR || Opc == Haydn::JALR_W) {
+    // JALR / JALR_W — long-form indirect, not analyzable as a short B/cond.
+    // Returning unanalyzable keeps insertBranch from rewriting the site to
+    // a PC-relative B (JALR sites never regress). Addr materialize (LUI /
+    // ADDI32_W) is not a terminator; walking into it falls through to the
+    // non-branch break below.
+    if (isHaydnIndirectJALR(Opc)) {
       if (!Cond.empty() || UncondTarget)
         break;
       return true;
@@ -652,16 +737,9 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
       return true;
     }
 
-    // Other barriers that are not analyzable as terminators. Mid-block after
-    // an already-parsed branch sequence: stop scanning, keep the analysis.
-    if (CF.isBarrier(MachineInstr::IgnoreBundle)) {
-      if (!Cond.empty() || UncondTarget)
-        break;
-      return true;
-    }
-
-    // Conditional branches (1 register). Logical opcode after generated
-    // member→logical inverse (covers residual `_S*` and Format E members).
+    // Conditional branches before the isBarrier early-out: generated
+    // Format E members may carry isBarrier on a cond opcode, and BR still
+    // has to rewrite the site. Logical opcode after member→logical inverse.
     if (isHaydnCondBranch1Reg(Opc)) {
       if (Cond.empty()) {
         if (CF.getNumOperands() < 2 || !CF.getOperand(1).isMBB())
@@ -734,7 +812,15 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
         return true;
       }
     } else {
-      // Not a branch — stop scanning.
+      // Other barriers that are not analyzable as terminators. Mid-block
+      // after an already-parsed branch sequence: stop scanning, keep the
+      // analysis. Evaluated after cond/hwloop so a generated member that
+      // carries isBarrier is still rewritten by BranchRelaxation.
+      if (CF.isBarrier(MachineInstr::IgnoreBundle)) {
+        if (!Cond.empty() || UncondTarget)
+          break;
+        return true;
+      }
       break;
     }
   }
@@ -858,11 +944,22 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
   // throughout the pipeline (MBP, BranchFolder, PreEmit BR) — must not form
   // BUNDLE roots before post-RA pack / late Finalize. Late Finalize wraps
   // residual bare reals after the fixed BR→Fixup→BR multipass.
+  //
+  // Short forms only (B / cond / hwloop latch). Long-form LUI+ADDI32_W+JALR_W
+  // is insertIndirectBranch; insertBranch must not emit JALR (branches only
+  // promote). CFG successors/probabilities stay with the caller
+  // (TargetInstrInfo.h:780-781; AIEBaseInstrInfo.cpp:271-307).
+  const DebugLoc UseDL = haydnInheritBranchDebugLoc(MBB, DL);
+
+  auto insertUncond = [&](MachineBasicBlock *Dest) -> MachineInstr & {
+    // Unconditional B is isBarrier=1 (HaydnPseudos.td). Catalog BEQZ_W is
+    // isConditionalBranch. Mid/closure Finalize expands leftover B to
+    // BEQZ_W_MSP after the last BranchRelaxation.
+    return *BuildMI(MBB, MBB.end(), UseDL, get(Haydn::B)).addMBB(Dest);
+  };
 
   if (Cond.empty()) {
-    // Unconditional branch — B pseudo (isBarrier=1). Survives analyzeBranch;
-    // expandPostRAPseudo / AsmPrinter lower to BEQZ_W R0 when still bare.
-    MachineInstr &MI = *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(TBB);
+    MachineInstr &MI = insertUncond(TBB);
     if (BytesAdded)
       *BytesAdded += getInstSizeInBytes(MI);
     return 1;
@@ -870,6 +967,8 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   // Conditional branch
   unsigned Opc = haydnLogicalOpcode(Cond[0].getImm());
+  assert(!isHaydnIndirectJALR(Opc) &&
+         "insertBranch emits short B/cond only; JALR is insertIndirectBranch");
 
   // Hardware-loop terminators. PseudoLoopEnd has no register operand
   // (Cond = [Imm] only); LoopJNZ has one register (Cond = [Imm, reg]).
@@ -877,12 +976,12 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
   // append an unconditional B to FBB after the conditional.
   // Meta zero-byte markers stay bare (getInstSizeInBytes → 0).
   if (Opc == Haydn::PseudoLoopEnd) {
-    MachineInstr &MI = *BuildMI(MBB, MBB.end(), DL, get(Opc)).addMBB(TBB);
+    MachineInstr &MI =
+        *BuildMI(MBB, MBB.end(), UseDL, get(Opc)).addMBB(TBB);
     if (BytesAdded)
       *BytesAdded += getInstSizeInBytes(MI);
     if (FBB) {
-      MachineInstr &BMI =
-          *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(FBB);
+      MachineInstr &BMI = insertUncond(FBB);
       if (BytesAdded)
         *BytesAdded += getInstSizeInBytes(BMI);
       return 2;
@@ -890,14 +989,13 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
     return 1;
   }
   if (Opc == Haydn::LoopJNZ) {
-    MachineInstr &MI = *BuildMI(MBB, MBB.end(), DL, get(Opc))
+    MachineInstr &MI = *BuildMI(MBB, MBB.end(), UseDL, get(Opc))
                             .addReg(Cond[1].getReg())
                             .addMBB(TBB);
     if (BytesAdded)
       *BytesAdded += getInstSizeInBytes(MI);
     if (FBB) {
-      MachineInstr &BMI =
-          *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(FBB);
+      MachineInstr &BMI = insertUncond(FBB);
       if (BytesAdded)
         *BytesAdded += getInstSizeInBytes(BMI);
       return 2;
@@ -907,7 +1005,7 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   if (FBB == nullptr) {
     // One-way conditional: if Cond, goto TBB; else fall through.
-    MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), DL, get(Opc));
+    MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), UseDL, get(Opc));
     if (isHaydnCondBranch1Reg(Opc)) {
       MIB.addReg(Cond[1].getReg());
     } else {
@@ -920,7 +1018,7 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
   }
 
   // Two-way conditional: if Cond, goto TBB; else goto FBB.
-  MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), DL, get(Opc));
+  MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), UseDL, get(Opc));
   if (isHaydnCondBranch1Reg(Opc)) {
     MIB.addReg(Cond[1].getReg());
   } else {
@@ -929,7 +1027,7 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
   MIB.addMBB(TBB);
   if (BytesAdded)
     *BytesAdded += getInstSizeInBytes(*MIB);
-  MachineInstr &BMI = *BuildMI(MBB, MBB.end(), DL, get(Haydn::B)).addMBB(FBB);
+  MachineInstr &BMI = insertUncond(FBB);
   if (BytesAdded)
     *BytesAdded += getInstSizeInBytes(BMI);
   return 2;
@@ -954,6 +1052,23 @@ unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
     // standard bundle iterators (same as analyzeBranch unwrap).
     MachineInstr &Top = *I;
     MachineInstr &CF = unwrapBundleControlFlow(Top);
+    unsigned CFOpc = haydnLogicalOpcode(CF.getOpcode());
+    // Long-form JALR is isIndirectBranch, not isBranch. Leave the whole
+    // LUI+ADDI32_W+JALR_W site (and any bundle that contains it) intact so
+    // a later insertBranch cannot shrink it back to B.
+    if (isHaydnIndirectJALR(CFOpc))
+      break;
+    if (Top.isBundle()) {
+      bool HasJALR = false;
+      for (const MachineInstr *Child : haydn::bundle::members(Top)) {
+        if (isHaydnIndirectJALR(haydnLogicalOpcode(Child->getOpcode()))) {
+          HasJALR = true;
+          break;
+        }
+      }
+      if (HasJALR)
+        break;
+    }
     if (!CF.isBranch(MachineInstr::IgnoreBundle))
       break;
 
@@ -1063,12 +1178,13 @@ unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
 
 bool HaydnInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
-  // Unconditional branches have an empty condition — there is nothing to
-  // reverse. Returning false tells BranchRelaxation that we cannot produce
-  // an inverted branch, so it will fall back to its own long-branch handling
-  // (e.g. inserting an indirect jump).
+  // Empty Cond is an unconditional site (Haydn::B / BEQZ_W R0). reverse
+  // returns true = cannot reverse (TargetInstrInfo.h). Returning false
+  // here told BranchRelaxation the invert succeeded, so
+  // fixupConditionalBranch did std::next(MBB) and crashed on the function
+  // sentinel when MBB was last.
   if (Cond.empty())
-    return false;
+    return true;
 
   unsigned Opc = haydnLogicalOpcode(Cond[0].getImm());
 
@@ -1345,6 +1461,88 @@ void HaydnInstrInfo::preserveCircularBufferWritebackDefs(
   }
 }
 
+static void rebuildAsJALR_W(MachineInstr &MI, const HaydnInstrInfo &TII,
+                            Register Rd, Register Rs, int64_t Imm) {
+  MachineFunction &MF = *MI.getParent()->getParent();
+  SmallVector<MachineOperand, 4> LiveOuts;
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.isUse())
+      continue;
+    Register R = MO.getReg();
+    if (!R || R == Rd || R == Rs)
+      continue;
+    LiveOuts.push_back(MO);
+  }
+  while (MI.getNumOperands())
+    MI.removeOperand(MI.getNumOperands() - 1);
+  MI.setDesc(TII.get(Haydn::JALR_W));
+  MI.addOperand(MF, MachineOperand::CreateReg(Rd, /*isDef=*/true));
+  MI.addOperand(MF, MachineOperand::CreateReg(Rs, /*isDef=*/false));
+  MI.addOperand(MF, MachineOperand::CreateImm(Imm));
+  for (const MachineOperand &MO : LiveOuts)
+    MI.addOperand(MF, MachineOperand::CreateReg(
+                          MO.getReg(), /*isDef=*/false, /*isImp=*/true,
+                          /*isKill=*/MO.isKill()));
+}
+
+MachineInstr *
+HaydnInstrInfo::expandRepresentationPseudo(MachineInstr &MI) const {
+  MachineBasicBlock &MBB = *MI.getParent();
+  switch (MI.getOpcode()) {
+  default:
+    return nullptr;
+
+  case Haydn::B: {
+    MachineBasicBlock *Target = nullptr;
+    SmallVector<MachineOperand, 4> ExtraImplicits;
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isMBB() && !Target) {
+        Target = MO.getMBB();
+        continue;
+      }
+      if (MO.isReg() && MO.isImplicit())
+        ExtraImplicits.push_back(MO);
+    }
+    if (!Target)
+      report_fatal_error("Haydn: B has no MBB operand",
+                         /*GenCrashDiag=*/false);
+    MachineInstrBuilder MIB =
+        BuildMI(MBB, MI, MI.getDebugLoc(), get(Haydn::BEQZ_W_MSP))
+            .addReg(Haydn::R0)
+            .addMBB(Target);
+    for (const MachineOperand &MO : ExtraImplicits)
+      MIB.add(MO);
+    MI.eraseFromParent();
+    return MIB.getInstr();
+  }
+
+  case Haydn::RET:
+    rebuildAsJALR_W(MI, *this, Haydn::R0, Haydn::R15, 0);
+    return &MI;
+
+  case Haydn::BR_JT: {
+    if (!(MI.getNumOperands() >= 1 && MI.getOperand(0).isReg()))
+      report_fatal_error("Haydn: BR_JT has no address register",
+                         /*GenCrashDiag=*/false);
+    rebuildAsJALR_W(MI, *this, Haydn::R0, MI.getOperand(0).getReg(), 0);
+    return &MI;
+  }
+
+  case Haydn::PseudoCALLIndirect: {
+    Register Rd = MI.getOperand(0).getReg();
+    Register Rs = MI.getOperand(1).getReg();
+    MachineInstrBuilder MIB =
+        BuildMI(MBB, MI.getIterator(), MI.getDebugLoc(), get(Haydn::JALR_MSP))
+            .addDef(Rd)
+            .addReg(Rs)
+            .addImm(0);
+    MI.eraseFromParent();
+    return MIB.getInstr();
+  }
+  }
+  llvm_unreachable("expandRepresentationPseudo switch");
+}
+
 bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   MachineBasicBlock &MBB = *MI.getParent();
   MachineBasicBlock::iterator MBBI = MI.getIterator();
@@ -1360,26 +1558,7 @@ bool HaydnInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // explicit slots. Do not BuildMI: JALR_W Defs include D0 and would
     // clobber the i64 return. RISCV expandPseudo_RET rebuilds JALR
     // x0, x1, 0 (RISCVInstrInfo.cpp).
-    MachineFunction &MF = *MBB.getParent();
-    SmallVector<MachineOperand, 4> LiveOuts;
-    for (const MachineOperand &MO : MI.operands()) {
-      if (!MO.isReg() || !MO.isUse())
-        continue;
-      Register R = MO.getReg();
-      if (!R || R == Haydn::R0 || R == Haydn::R15)
-        continue;
-      LiveOuts.push_back(MO);
-    }
-    while (MI.getNumOperands())
-      MI.removeOperand(MI.getNumOperands() - 1);
-    MI.setDesc(get(Haydn::JALR_W));
-    MI.addOperand(MF, MachineOperand::CreateReg(Haydn::R0, /*isDef=*/true));
-    MI.addOperand(MF, MachineOperand::CreateReg(Haydn::R15, /*isDef=*/false));
-    MI.addOperand(MF, MachineOperand::CreateImm(0));
-    for (const MachineOperand &MO : LiveOuts)
-      MI.addOperand(MF, MachineOperand::CreateReg(
-                            MO.getReg(), /*isDef=*/false, /*isImp=*/true,
-                            /*isKill=*/MO.isKill()));
+    rebuildAsJALR_W(MI, *this, Haydn::R0, Haydn::R15, 0);
     return true;
   }
 
@@ -1895,11 +2074,20 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   // Distance = |offset| + BranchRelaxSafetyBuffer after getInstSizeInBytes
   // has charged named late-layout growth. Inflate BrOffset away from zero,
   // then apply the reloc row. Default is BranchRelaxSafetyBufferBytes.
+  //
+  // Forward vs backward are named separately so the two directions cannot
+  // drift: a later promotion between src and dest grows a forward offset;
+  // an earlier promotion grows a backward |offset|. Each direction charges
+  // one insertIndirectBranch sequence (MaxSingleBranchGrowthBytes).
   const HaydnReloc::RelocFieldInfo &I = HaydnReloc::getRelocFieldInfo(
       HaydnReloc::RelocKind::WIDE_BranchSImm12);
-  int64_t Inflated = BrOffset >= 0
-                         ? BrOffset + (int64_t)BranchRelaxSafetyBuffer
-                         : BrOffset - (int64_t)BranchRelaxSafetyBuffer;
+  const int64_t ForwardGrowth = (int64_t)BranchRelaxSafetyBuffer;
+  const int64_t BackwardGrowth = (int64_t)BranchRelaxSafetyBuffer;
+  static_assert(haydn::hwloop::BranchRelaxSafetyBufferBytes ==
+                    haydn::hwloop::MaxSingleBranchGrowthBytes,
+                "TII range buffer is one long-form sequence");
+  int64_t Inflated =
+      BrOffset >= 0 ? BrOffset + ForwardGrowth : BrOffset - BackwardGrowth;
   int64_t Shifted = Inflated >> I.ValueShift;
   return I.IsSigned ? isIntN(I.FieldSize, Shifted)
                     : isUIntN(I.FieldSize, static_cast<uint64_t>(Shifted));
@@ -1943,6 +2131,26 @@ HaydnInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
     return Br.getOperand(0).getMBB();
   if (Opc == Haydn::LoopJNZ)
     return Br.getOperand(1).getMBB();
+
+  // Long-form JALR has no MBB operand; dest is on the LUI/ADDI32_W pair.
+  // Returning the dest keeps the site identifiable without treating JALR as
+  // a short PC-relative branch (isBranchOffsetInRange is always true).
+  if (isHaydnIndirectJALR(Opc)) {
+    const MachineInstr *Addr = Br.getPrevNode();
+    while (Addr && (Addr->isDebugInstr() || Addr->isCFIInstruction() ||
+                    Addr->isImplicitDef() || Addr->isKill()))
+      Addr = Addr->getPrevNode();
+    if (Addr) {
+      unsigned AOpc = haydnLogicalOpcode(Addr->getOpcode());
+      if (isHaydnAddrMaterializeOpc(AOpc)) {
+        for (const MachineOperand &MO : Addr->operands()) {
+          if (MO.isMBB())
+            return MO.getMBB();
+        }
+      }
+    }
+    return nullptr;
+  }
 
   llvm_unreachable("unhandled branch in getBranchDestBlock");
 }
@@ -1994,6 +2202,9 @@ void HaydnInstrInfo::insertIndirectBranch(
   const TargetRegisterInfo *TRI = ST.getRegisterInfo();
   auto *FuncInfo = MF->getInfo<HaydnMachineFunctionInfo>();
   auto II = MBB.end();
+  const DebugLoc UseDL = haydnInheritBranchDebugLoc(MBB, DL);
+  MachineInstr *LastOld =
+      MBB.empty() ? nullptr : &*std::prev(MBB.end());
 
   // Re-attach PEI-allocated emergency FI onto BranchRelaxation's fresh RS.
   int ScratchFI = FuncInfo->getBranchRelaxationScratchFI();
@@ -2019,8 +2230,8 @@ void HaydnInstrInfo::insertIndirectBranch(
                          MachineBasicBlock::iterator InsertPt, Register Dst,
                          MachineBasicBlock *JumpDest) -> MachineInstr * {
     MachineInstr *Lui =
-        BuildMI(InsMBB, InsertPt, DL, get(Haydn::LUI), Dst).addMBB(JumpDest);
-    BuildMI(InsMBB, InsertPt, DL, get(Haydn::ADDI32_W), Dst)
+        BuildMI(InsMBB, InsertPt, UseDL, get(Haydn::LUI), Dst).addMBB(JumpDest);
+    BuildMI(InsMBB, InsertPt, UseDL, get(Haydn::ADDI32_W), Dst)
         .addReg(Dst)
         .addMBB(JumpDest);
     return Lui;
@@ -2030,7 +2241,7 @@ void HaydnInstrInfo::insertIndirectBranch(
       [&](MachineBasicBlock &InsMBB, MachineBasicBlock::iterator InsertPt,
           Register Scratch, MachineBasicBlock *JumpDest) -> MachineInstr * {
     MachineInstr *First = emitMBBAddr(InsMBB, InsertPt, Scratch, JumpDest);
-    BuildMI(InsMBB, InsertPt, DL, get(Haydn::JALR_W))
+    BuildMI(InsMBB, InsertPt, UseDL, get(Haydn::JALR_W))
         .addReg(Scratch, RegState::Define)
         .addReg(Scratch)
         .addImm(0);
@@ -2049,9 +2260,12 @@ void HaydnInstrInfo::insertIndirectBranch(
 
     storeRegToStackSlot(MBB, InsertPt, ScratchPhys, /*IsKill=*/true, ScratchFI,
                         &Haydn::GPR32RegClass, Register());
-    // Post-PEI: fold FI now.
-    TRI->eliminateFrameIndex(std::prev(InsertPt), /*SpAdj=*/0,
-                             /*FIOperandNum=*/1);
+    // Post-PEI: fold FI now. ST32 to a pre-reserved FI does not change SP
+    // (Haydn SP = R13), so CFA/CFI in DestBB stays valid across RestoreBB.
+    MachineBasicBlock::iterator SpillI = std::prev(InsertPt);
+    if (UseDL && !SpillI->getDebugLoc())
+      SpillI->setDebugLoc(UseDL);
+    TRI->eliminateFrameIndex(SpillI, /*SpAdj=*/0, /*FIOperandNum=*/1);
 
     MachineBasicBlock *JumpDest = JumpToRestore ? &RestoreBB : &NewDestBB;
     emitIndirectJump(MBB, InsertPt, ScratchPhys, JumpDest);
@@ -2059,6 +2273,8 @@ void HaydnInstrInfo::insertIndirectBranch(
     if (JumpToRestore) {
       loadRegFromStackSlot(RestoreBB, RestoreBB.end(), ScratchPhys, ScratchFI,
                            &Haydn::GPR32RegClass, Register());
+      if (UseDL && !RestoreBB.back().getDebugLoc())
+        RestoreBB.back().setDebugLoc(UseDL);
       TRI->eliminateFrameIndex(RestoreBB.back(), /*SpAdj=*/0,
                                /*FIOperandNum=*/1);
     }
@@ -2078,6 +2294,9 @@ void HaydnInstrInfo::insertIndirectBranch(
       RS->setRegUsed(ScratchPhys);
       MRI.replaceRegWith(ScratchV, ScratchPhys);
       MRI.clearVirtRegs();
+      haydnStampDebugLocOnNewInstrs(MBB, LastOld, UseDL);
+      haydnPreserveLongFormJumpState(MBB, NewDestBB, RestoreBB,
+                                     /*JumpToRestore=*/false);
       return;
     }
 
@@ -2086,6 +2305,10 @@ void HaydnInstrInfo::insertIndirectBranch(
     MRI.clearVirtRegs();
     ScratchPhys = Haydn::R11;
     emitWithManualSpill(ScratchPhys, MBB.end(), /*JumpToRestore=*/true);
+    haydnStampDebugLocOnNewInstrs(MBB, nullptr, UseDL);
+    haydnStampDebugLocOnNewInstrs(RestoreBB, nullptr, UseDL);
+    haydnPreserveLongFormJumpState(MBB, NewDestBB, RestoreBB,
+                                   /*JumpToRestore=*/true);
     return;
   }
 
@@ -2095,11 +2318,18 @@ void HaydnInstrInfo::insertIndirectBranch(
   if (ScratchPhys.isValid()) {
     RS->setRegUsed(ScratchPhys);
     emitIndirectJump(MBB, II, ScratchPhys, &NewDestBB);
+    haydnStampDebugLocOnNewInstrs(MBB, LastOld, UseDL);
+    haydnPreserveLongFormJumpState(MBB, NewDestBB, RestoreBB,
+                                   /*JumpToRestore=*/false);
     return;
   }
 
   ScratchPhys = Haydn::R11;
   emitWithManualSpill(ScratchPhys, II, /*JumpToRestore=*/true);
+  haydnStampDebugLocOnNewInstrs(MBB, LastOld, UseDL);
+  haydnStampDebugLocOnNewInstrs(RestoreBB, nullptr, UseDL);
+  haydnPreserveLongFormJumpState(MBB, NewDestBB, RestoreBB,
+                                 /*JumpToRestore=*/true);
 }
 
 /// Named late-layout growth that generic BranchRelaxation cannot see as
@@ -2144,6 +2374,239 @@ static unsigned namedLateLayoutGrowthBytes(const MachineInstr &MI,
   return Extra;
 }
 
+namespace {
+
+bool haydnAsmStartsWith(const char *Str, StringRef Needle) {
+  return Needle.size() && strncmp(Str, Needle.data(), Needle.size()) == 0;
+}
+
+bool isHaydnAsmIdentStart(unsigned char C) {
+  return isAlpha(C) || C == '_' || C == '.';
+}
+
+bool isHaydnAsmIdentBody(unsigned char C) {
+  return isAlnum(C) || C == '_' || C == '.';
+}
+
+bool isPublicHaydnAsmMnemonic(const MCInstrInfo &MII, StringRef Tok) {
+  if (Tok.empty())
+    return false;
+  if (haydnIsGeneratedMemberName(Tok) || haydnIsResidualFieldSlotName(Tok))
+    return false;
+  for (unsigned Opc = 0, N = MII.getNumOpcodes(); Opc != N; ++Opc) {
+    StringRef Name = MII.getName(Opc);
+    if (Name.empty() || haydnIsGeneratedMemberName(Name) ||
+        haydnIsResidualFieldSlotName(Name))
+      continue;
+    if (Name.equals_insensitive(Tok))
+      return true;
+  }
+  return false;
+}
+
+// Exact Format E layout bytes for INLINEASM text, or nullopt if the text is
+// not an admitted typed sequence. Empty / comment-only is 0 (metadata).
+// Unbraced public mnemonic → one product parcel (MC wraps a bare logical as
+// a singleton row, HaydnMCCodeEmitter.cpp:445-496). Braced `{ ... }` → one
+// parcel (AsmParser one-packet emit, HaydnAsmParser.cpp:761-986). `.space N`
+// is the generic TII exact-byte directive (TargetInstrInfo.cpp:107-141).
+std::optional<unsigned> tryExactHaydnInlineAsmLayoutBytes(
+    const MCInstrInfo &MII, const char *Str, const MCAsmInfo &MAI) {
+  using haydn::bundle::productParcelBytes;
+  const unsigned Parcel = productParcelBytes().Value;
+  const char *const Sep = MAI.getSeparatorString();
+  const size_t SepLen = std::strlen(Sep);
+  unsigned Length = 0;
+
+  auto atSeparator = [&](const char *P) {
+    return SepLen && strncmp(P, Sep, SepLen) == 0;
+  };
+  auto atComment = [&](const char *P) {
+    return haydnAsmStartsWith(P, MAI.getCommentString());
+  };
+  auto skipSpaces = [](const char *&P) {
+    while (*P && *P != '\n' && isSpace(static_cast<unsigned char>(*P)))
+      ++P;
+  };
+  auto skipComment = [&](const char *&P) {
+    while (*P && *P != '\n' && !atSeparator(P))
+      ++P;
+  };
+  auto skipOperands = [&](const char *&P, int Depth) {
+    while (*P && *P != '\n') {
+      if (Depth == 0 && atSeparator(P))
+        return;
+      if (Depth > 0 && *P == '}')
+        return;
+      if (atComment(P)) {
+        skipComment(P);
+        return;
+      }
+      ++P;
+    }
+  };
+
+  const char *P = Str;
+  bool AtStmt = true;
+  int Depth = 0;
+  bool BraceHasMnemonic = false;
+  bool BraceOpen = false;
+  while (*P) {
+    if (*P == '\n' || (Depth == 0 && atSeparator(P))) {
+      AtStmt = true;
+      P += (*P == '\n') ? 1 : static_cast<int>(SepLen);
+      continue;
+    }
+    if (Depth > 0 && atSeparator(P)) {
+      P += SepLen;
+      AtStmt = true;
+      continue;
+    }
+    if (atComment(P)) {
+      skipComment(P);
+      AtStmt = false;
+      continue;
+    }
+    if (isSpace(static_cast<unsigned char>(*P))) {
+      ++P;
+      continue;
+    }
+
+    if (Depth > 0) {
+      if (*P == '{') {
+        ++Depth;
+        ++P;
+        AtStmt = false;
+        continue;
+      }
+      if (*P == '}') {
+        --Depth;
+        ++P;
+        if (Depth == 0) {
+          if (!BraceHasMnemonic)
+            return std::nullopt;
+          Length += Parcel;
+          BraceOpen = false;
+          BraceHasMnemonic = false;
+          AtStmt = true;
+        }
+        continue;
+      }
+      if (!AtStmt) {
+        ++P;
+        continue;
+      }
+      if (strncmp(P, ".space", 6) == 0)
+        return std::nullopt;
+      if (*P == '.') {
+        const char *Q = P;
+        while (*Q && isHaydnAsmIdentBody(static_cast<unsigned char>(*Q)))
+          ++Q;
+        const char *R = Q;
+        skipSpaces(R);
+        if (*R != ':')
+          return std::nullopt;
+        P = R + 1;
+        AtStmt = true;
+        continue;
+      }
+      if (!isHaydnAsmIdentStart(static_cast<unsigned char>(*P)))
+        return std::nullopt;
+      const char *TokStart = P;
+      ++P;
+      while (*P && isHaydnAsmIdentBody(static_cast<unsigned char>(*P)))
+        ++P;
+      StringRef Tok(TokStart, P - TokStart);
+      const char *R = P;
+      skipSpaces(R);
+      if (*R == ':') {
+        P = R + 1;
+        AtStmt = true;
+        continue;
+      }
+      if (!isPublicHaydnAsmMnemonic(MII, Tok))
+        return std::nullopt;
+      BraceHasMnemonic = true;
+      skipOperands(P, Depth);
+      AtStmt = false;
+      continue;
+    }
+
+    if (*P == '{') {
+      BraceOpen = true;
+      BraceHasMnemonic = false;
+      Depth = 1;
+      AtStmt = true;
+      ++P;
+      continue;
+    }
+    if (*P == '}')
+      return std::nullopt;
+
+    if (strncmp(P, ".space", 6) == 0) {
+      char *End = nullptr;
+      long SpaceSize = std::strtol(P + 6, &End, 10);
+      if (End == P + 6)
+        return std::nullopt;
+      SpaceSize = SpaceSize < 0 ? 0 : SpaceSize;
+      P = End;
+      skipSpaces(P);
+      if (*P && *P != '\n' && !atSeparator(P) && !atComment(P))
+        return std::nullopt;
+      Length += static_cast<unsigned>(SpaceSize);
+      AtStmt = false;
+      continue;
+    }
+
+    if (!isHaydnAsmIdentStart(static_cast<unsigned char>(*P)))
+      return std::nullopt;
+    const char *TokStart = P;
+    ++P;
+    while (*P && isHaydnAsmIdentBody(static_cast<unsigned char>(*P)))
+      ++P;
+    StringRef Tok(TokStart, P - TokStart);
+    const char *R = P;
+    skipSpaces(R);
+    if (*R == ':') {
+      P = R + 1;
+      AtStmt = true;
+      continue;
+    }
+    if (Tok.front() == '.' && !Tok.equals_insensitive(".space"))
+      return std::nullopt;
+    if (!isPublicHaydnAsmMnemonic(MII, Tok))
+      return std::nullopt;
+    Length += Parcel;
+    skipOperands(P, /*Depth=*/0);
+    AtStmt = false;
+  }
+  if (BraceOpen || Depth != 0)
+    return std::nullopt;
+  return Length;
+}
+
+} // namespace
+
+unsigned HaydnInstrInfo::getInlineAsmLength(
+    const char *Str, const MCAsmInfo &MAI,
+    const TargetSubtargetInfo *STI) const {
+  (void)STI;
+  if (!Str)
+    return 0;
+  std::optional<unsigned> Exact =
+      tryExactHaydnInlineAsmLayoutBytes(*this, Str, MAI);
+  if (!Exact) {
+    report_fatal_error(
+        Twine("Haydn: inline asm is not an exact typed Format E layout "
+              "sequence (public mnemonic / braced packet / .space N, or "
+              "empty metadata); opaque executable asm is rejected in "
+              "layout positions: ") +
+            Str,
+        /*GenCrashDiag=*/false);
+  }
+  return *Exact;
+}
+
 unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   // AIE-shaped size authority (AIE1InstrInfo.cpp:646-651 getSize; AIE
   // AIEBaseInstrInfo.cpp:549-557 Format->getSize on the composite):
@@ -2152,7 +2615,7 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   //   * bare real / multi-parcel pseudo → productParcelBytes() * N
   //   * child inside a BUNDLE → 0 (composite size is on the root)
   //   * pure meta / zero-size pseudos → 0
-  //   * INLINEASM / INLINEASM_BR → conservative getInlineAsmLength
+  //   * INLINEASM / INLINEASM_BR → exact typed getInlineAsmLength
   using haydn::bundle::committedEncodedBytes;
   using haydn::bundle::productParcelBytes;
   const unsigned B = productParcelBytes();
@@ -2170,16 +2633,17 @@ unsigned HaydnInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   if (MI.isInsideBundle())
     return 0;
 
-  // Opaque normal-LLVM exception: layout length only. Counts textual
-  // instructions × MaxInstLength (HaydnMCAsmInfo = product Full parcel).
-  // Empty side-effect barriers correctly charge 0. Must run before the
-  // isPseudo early-out (INLINEASM is a StandardPseudoInstruction).
+  // Exact typed layout length. Empty side-effect barriers charge 0. Must
+  // run before the isPseudo early-out (INLINEASM is a
+  // StandardPseudoInstruction). Opaque / untyped text is fatal — never
+  // MaxInstLength × statement count.
   if (MI.isInlineAsm()) {
     const MachineFunction *MF = MI.getMF();
     if (!MF || !MI.getNumOperands() || !MI.getOperand(0).isSymbol())
       return 0;
     return getInlineAsmLength(MI.getOperand(0).getSymbolName(),
-                              *MF->getTarget().getMCAsmInfo());
+                              *MF->getTarget().getMCAsmInfo(),
+                              &MF->getSubtarget());
   }
 
   // Pseudos that expand to one or more real parcels before/at emit.

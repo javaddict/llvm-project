@@ -314,13 +314,13 @@ rt_d_lhw_with_reg:
 
 # MNEM: d_lqhwua_post
 rt_d_lqhwua_post:
-{ nop; d_lqhwua_post d0, 0, r1, r2, 0 }
+{ nop; d_lqhwua_post 0, d0, r1 }
 # DIS-LABEL: <rt_d_lqhwua_post>:
 # DIS: {{[ \t]}}d_lqhwua_post{{[ \t,;]}}
 
 # MNEM: d_ltwua_post
 rt_d_ltwua_post:
-{ nop; d_ltwua_post d0, 0, r1, r2, 0 }
+{ nop; d_ltwua_post 0, d0, r1 }
 # DIS-LABEL: <rt_d_ltwua_post>:
 # DIS: {{[ \t]}}d_ltwua_post{{[ \t,;]}}
 
@@ -460,13 +460,13 @@ rt_d_shw_with_reg:
 
 # MNEM: d_sqhwua_post
 rt_d_sqhwua_post:
-{ nop; d_sqhwua_post d0, 0, r1, r2, 0 }
+{ nop; d_sqhwua_post 0, d0, r1 }
 # DIS-LABEL: <rt_d_sqhwua_post>:
 # DIS: {{[ \t]}}d_sqhwua_post{{[ \t,;]}}
 
 # MNEM: d_stwua_post
 rt_d_stwua_post:
-{ nop; d_stwua_post d0, 0, r1, r2, 0 }
+{ nop; d_stwua_post 0, d0, r1 }
 # DIS-LABEL: <rt_d_stwua_post>:
 # DIS: {{[ \t]}}d_stwua_post{{[ \t,;]}}
 
@@ -4136,7 +4136,7 @@ rt_transf64_l:
 
 # MNEM: wbarwua
 rt_wbarwua:
-{ nop; wbarwua 0, r1, 0 }
+{ nop; wbarwua 0, r1 }
 # DIS-LABEL: <rt_wbarwua>:
 # DIS: {{[ \t]}}wbarwua{{[ \t,;]}}
 

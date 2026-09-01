@@ -48,7 +48,7 @@ body:             |
     ; COMBINE-NOT: G_SHL
     ; COMBINE-NOT: G_ZEXT
     ; ISEL-LABEL: name: pair_pack_off8
-    ; ISEL: D_LDW_PRE_IMM {{.*}}, 1
+    ; ISEL: LD64 {{.*}}, 1
     ; ISEL-NOT: LD32
 ...
 
@@ -77,7 +77,7 @@ body:             |
     ; COMBINE: G_HAYDN_PREINC_LOAD {{.*}}(s64)
     ; COMBINE-NOT: G_OR
     ; ISEL-LABEL: name: pair_pack_sext_hi
-    ; ISEL: D_LDW_PRE_IMM {{.*}}, 1
+    ; ISEL: LD64 {{.*}}, 1
     ; ISEL-NOT: LD32
 ...
 

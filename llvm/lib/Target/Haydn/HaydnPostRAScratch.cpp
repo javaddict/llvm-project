@@ -194,8 +194,10 @@ bool llvm::insertSoftZeroR0AfterCalls(MachineFunction &MF,
                       << MBB->getNumber() << '\n');
   }
 
-  // After calls: JAL/JAL_W and PseudoCALLIndirect. Callee RET is
-  // JALR_W r0,lr which clobbers R0. Direct calls are JAL_W from CallLowering.
+  // After calls: JAL/JAL_W, PseudoCALLIndirect, and the W67 fnptr-call
+  // clone JALR_MSP (ExpandPseudos lowers PseudoCALLIndirect to it pre-S1).
+  // Callee RET is JALR_W r0,lr which clobbers R0. Direct calls are JAL_W
+  // from CallLowering.
   for (MachineBasicBlock &MBB : MF) {
     for (MachineBasicBlock::iterator MII = MBB.begin(), E = MBB.end();
          MII != E;) {
@@ -204,7 +206,7 @@ bool llvm::insertSoftZeroR0AfterCalls(MachineFunction &MF,
       unsigned Opc = MI.getOpcode();
       bool NeedsPostCallZero =
           Opc == Haydn::JAL || Opc == Haydn::JAL_W ||
-          Opc == Haydn::PseudoCALLIndirect;
+          Opc == Haydn::PseudoCALLIndirect || Opc == Haydn::JALR_MSP;
       if (!NeedsPostCallZero)
         continue;
       MachineBasicBlock::iterator Next = MII;

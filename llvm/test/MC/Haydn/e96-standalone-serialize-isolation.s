@@ -28,7 +28,7 @@
   { add32 r1, r2, r3 }
   { move32 r0, r1 }
   { add32 r4, r0, r1; xor32 r5, r2, r3 }
-  { d_lqhwua_post d0, 0, r1, r2, 0 }
+  { d_lqhwua_post 0, d0, r1 }
 
 # OBJ-LABEL: <.text>:
 # OBJ: {{.*}}0: {{.*}}add32

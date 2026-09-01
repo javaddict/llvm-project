@@ -1,19 +1,27 @@
-# UNSUPPORTED: true
-# Role: retired — Stage-0 inter-block scheduling deleted; not product coverage.
-# Do not count as product green. RUN is deliberately false so a dropped
-# RUN: false
-
-# Stage-0 Haydn inter-block scheduling (default OFF; ON needs explicit flag).
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -haydn-postra-region-end-edges %s -o - \
+# RUN:     | FileCheck %s --check-prefix=ON
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -haydn-postra-region-end-edges %s -o - \
+# RUN:     | FileCheck %s --check-prefix=S2
 #
-# Fixture: acyclic fallthrough Pred → Succ. Pred has a lone ADDI32; Succ has an
-# independent ADDI32 (different regs) plus a return. Without inter-block, each
-# BB schedules alone and the Succ ADDI stays in bb.1. With inter-block ON
-# the independent ADDI is pulled into bb.0 and co-issued into a BUNDLE with
-# Pred's ADDI — measurable cross-BB pack.
+# W68.2R conservative inter-block pin. Stage-0 next-block pack (the old
+# "pull independent Succ ADDI into Pred and co-issue") was deleted with
+# HC#0 walker/AIE InterBlockScheduling. Haydn's -haydn-postra-interblock
+# flag (default off) is a target-owned DDG / effective-latency cut only:
+# extra edges suppress reductions and are safe; it must NOT move an
+# independent successor ADDI into the predecessor.
 #
-# Scope note (see HaydnInterBlockScheduling.h): Stage-0 is acyclic fallthrough
-# pack only. ZOL exit→preheader hoist was removed (not in AIE; reject-contract
-# cost exceeded benefit). Full AIE fixpoint / residual scoreboard deferred.
+# Fixture: acyclic fallthrough Pred -> Succ. Pred has a lone ADDI32; Succ
+# has an independent ADDI32 (different regs) plus a return.
+#   * default-off: packing-identical S1 — each ADDI stays in its BB.
+#   * flag on: still no cross-BB pack (verify-clean).
+#   * two postmisched invocations (S1 then S2): whole-function reschedule
+#     still does not hoist Succ's ADDI into Pred.
 
 --- |
   define void @fallthrough_pack() { ret void }
@@ -46,20 +54,27 @@ body:             |
   ; OFF-NOT: $r7 = ADDI32
   ; OFF: bb.1:
   ; OFF: $r7 = ADDI32
-  ; OFF: JALR
+  ; OFF-NOT: BUNDLE
+  ; OFF-NOT: NOP
+  ; OFF: $r0 = COPY
+  ; OFF-NEXT: $r0 = JALR
 
   ; ON-LABEL: name: fallthrough_pack
   ; ON: bb.0:
-  ; Independent Succ ADDI pulled into Pred and co-issued.
-  ; ON: BUNDLE
-  ; ON-DAG: $r1 = ADDI32 $r0, 1
-  ; ON-DAG: $r7 = ADDI32
+  ; ON: $r1 = ADDI32 $r0, 1
+  ; ON-NOT: $r7 = ADDI32
   ; ON: bb.1:
-  ; ON-NOT: ADDI32
+  ; ON: $r7 = ADDI32
+  ; ON-NOT: BUNDLE
   ; ON: JALR
 
-  ; DBG: haydn-interblock: move
-  ; DBG: haydn-interblock: co-issued
+  ; S2-LABEL: name: fallthrough_pack
+  ; S2: bb.0:
+  ; S2: $r1 = ADDI32 $r0, 1
+  ; S2-NOT: $r7 = ADDI32
+  ; S2: bb.1:
+  ; S2: $r7 = ADDI32
+  ; S2: JALR
 
   bb.0:
     successors: %bb.1(0x80000000)

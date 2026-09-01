@@ -91,6 +91,23 @@ static MachineInstr *findPseudoLoopEnd(MachineBasicBlock *BB) {
   return nullptr;
 }
 
+static bool isPLETargetingHeader(const MachineInstr *MI,
+                                 const MachineBasicBlock *Header);
+
+/// The block's unique live successor, or null (zero, or ambiguous).
+static MachineBasicBlock *getLoneSuccessor(const MachineBasicBlock &BB) {
+  const MachineFunction *MF = BB.getParent();
+  MachineBasicBlock *Only = nullptr;
+  for (MachineBasicBlock *Succ : BB.successors()) {
+    if (!isLiveMBB(*MF, Succ))
+      continue;
+    if (Only)
+      return nullptr;
+    Only = Succ;
+  }
+  return Only;
+}
+
 MachineBasicBlock *haydn::hwloop::resolveBodyMBBCore(MachineInstr &SetMI) {
   const MachineFunction *MF =
       SetMI.getParent() ? SetMI.getParent()->getParent() : nullptr;
@@ -131,6 +148,24 @@ MachineBasicBlock *haydn::hwloop::resolveBodyMBBCore(MachineInstr &SetMI) {
       return Single;
     if (FoundHeader)
       return FoundHeader;
+    // Generic pre-RA SMS multi-stage peel shape (W68.1): the classic
+    // ModuloScheduleExpander inserts a PROLOGUE between the (new)
+    // preheader and the kernel — preheader -> prologue -> kernel(self
+    // latch, PseudoLoopEnd targets the kernel itself), with the LoopStart
+    // $adj already crediting the peeled iterations. The prologue carries
+    // the peeled iterations' real instructions and its trip guard, so it
+    // is NOT an empty continue-trampoline (those stay Fixup-only: walking
+    // them at formation would invent a body from layout). Proof here is
+    // CFG shape + real-prologue content, never layout order alone.
+    if (MachineBasicBlock *Only = getLoneSuccessor(*Pre)) {
+      if (!isContinueTrampolineBlock(Only)) {
+        if (MachineBasicBlock *Kernel = getLoneSuccessor(*Only)) {
+          MachineInstr *PLE = findPseudoLoopEnd(Kernel);
+          if (isPLETargetingHeader(PLE, Kernel))
+            return Kernel;
+        }
+      }
+    }
     // No unique-successor-without-proof fallback: a lone preheader
     // successor may be the exit (layout-only body is incomplete).
   }
@@ -473,6 +508,27 @@ bool haydn::hwloop::regClobberedNonCountdownIn(Register Reg,
     }
   }
   return false;
+}
+
+HwLoopDemoteSaveKind
+haydn::hwloop::demoteSavePlacement(bool PreferIsLatchScratch,
+                                   bool PreferRedefinedInBody) {
+  // The save/restore pair exists only when the demote's own latch-scratch
+  // window destroys Prefer's exit value; with any other scratch nothing
+  // installed touches Prefer and a reload would overwrite the live exit
+  // value (CB-165). Where the save runs is decided by which value must
+  // survive: the untouched trip (CB-162) or the body's final def.
+  if (!PreferIsLatchScratch)
+    return HwLoopDemoteSaveKind::NoSave;
+  return PreferRedefinedInBody ? HwLoopDemoteSaveKind::LatchEndSave
+                               : HwLoopDemoteSaveKind::PreheaderSave;
+}
+
+HwLoopDemoteSaveKind
+haydn::hwloop::demoteSavePlacement(Register Prefer, Register LatchScr,
+                                   const LoopBlockSet &Blocks) {
+  return demoteSavePlacement(/*PreferIsLatchScratch=*/LatchScr == Prefer,
+                             regClobberedNonCountdownIn(Prefer, Blocks));
 }
 
 // A demote counter's live range: the loop blocks (every one lies on a

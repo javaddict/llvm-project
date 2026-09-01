@@ -13,22 +13,27 @@
 #include "HaydnLatencyStalls.h"
 #include "Haydn.h"
 #include "HaydnBundleVerify.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnPortModel.h"
 #include "HaydnSubtarget.h"
+#include "MCTargetDesc/HaydnFormat.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
+#include <iterator>
 
 using namespace llvm;
 
@@ -37,6 +42,12 @@ using namespace llvm;
 STATISTIC(NumStallBundles, "Number of NOP stall bundles inserted");
 STATISTIC(NumUnexpectedOptStallBundles,
           "NOP stall bundles inserted at -O1+ (scheduler/late-mutation gap)");
+STATISTIC(NumRegeneratedStallParcels,
+          "Previous dest-window stall parcels stripped before re-insert");
+STATISTIC(NumStallBytesCharged,
+          "Layout bytes charged for inserted stalls via getInstSizeInBytes");
+STATISTIC(NumStallAlignPadBytes,
+          "Min bundle-address alignment remainder at stall insert prefixes");
 STATISTIC(NumLatencyStallResourceAdmissionPinsHeld,
           "Number of latency-stall functions that held fail-closed per-op "
           "resource admission (product closed until golden import)");
@@ -83,6 +94,118 @@ static void collectCycles(MachineBasicBlock &MBB,
   }
 }
 
+/// Logical NOP, including generated Format E members (AIE slot NOP overlay).
+static bool isLogicalNop(const MachineInstr &MI) {
+  return haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode()) == Haydn::NOP;
+}
+
+/// Dest-window stall identity. Scheduler/HWLoop insertNoop does not set
+/// NoMerge; only this pass marks parcels it owns so a later invocation can
+/// strip them (regenerate) without eating resource-idle NOPs.
+static bool isRegenerableStallParcel(const MachineInstr &MI) {
+  return isLogicalNop(MI) && MI.getFlag(MachineInstr::NoMerge);
+}
+
+static unsigned alignmentPadBytes(uint64_t Size) {
+  constexpr unsigned A = haydn::format::MinBundleAddressAlignBytes;
+  return unsigned((A - (Size % A)) % A);
+}
+
+static bool isRealCycleMember(const MachineInstr &MI) {
+  return !MI.isMetaInstruction() && !MI.isDebugInstr() && !MI.isPosition();
+}
+
+/// Strip stall parcels this pass previously inserted. All-NOP BUNDLEs whose
+/// real children all carry the stall pin are idle cycles we own (S2 may have
+/// wrapped a bare stall). Mixed BUNDLEs keep stall-flagged NOP children as
+/// legal format completion — they do not form extra issue cycles.
+static bool eraseRegeneratedStalls(MachineBasicBlock &MBB) {
+  bool Changed = false;
+  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E;) {
+    MachineInstr &MI = *I;
+    if (MI.isBundledWithPred()) {
+      ++I;
+      continue;
+    }
+    if (MI.isBundle()) {
+      bool AllStall = true;
+      bool AnyReal = false;
+      MachineBasicBlock::instr_iterator C = std::next(MI.getIterator());
+      while (C != MBB.instr_end() && C->isBundledWithPred()) {
+        if (isRealCycleMember(*C)) {
+          AnyReal = true;
+          if (!isRegenerableStallParcel(*C))
+            AllStall = false;
+        }
+        ++C;
+      }
+      MachineBasicBlock::iterator Next(C);
+      if (!AnyReal || !AllStall) {
+        I = Next;
+        continue;
+      }
+      SmallVector<MachineInstr *, 8> BundleMIs;
+      for (MachineBasicBlock::instr_iterator B = std::next(MI.getIterator());
+           B != MBB.instr_end() && B->isBundledWithPred();)
+        BundleMIs.push_back(&*B++);
+      for (MachineInstr *K : BundleMIs) {
+        if (isRegenerableStallParcel(*K))
+          ++NumRegeneratedStallParcels;
+        if (K->isBundledWithPred())
+          K->unbundleFromPred();
+        if (K->isBundledWithSucc())
+          K->unbundleFromSucc();
+        K->eraseFromParent();
+      }
+      MI.eraseFromParent();
+      Changed = true;
+      I = Next;
+      continue;
+    }
+    if (isRegenerableStallParcel(MI)) {
+      I = MBB.erase(I);
+      ++NumRegeneratedStallParcels;
+      Changed = true;
+      continue;
+    }
+    ++I;
+  }
+  return Changed;
+}
+
+/// Pin a freshly inserted stall: empty MMOs, inherited DebugLoc, no extra
+/// liveness, layout charge via the same getInstSizeInBytes range checks use.
+static unsigned pinStallParcel(MachineInstr &Nop, MachineFunction &MF,
+                               const TargetInstrInfo &TII, const DebugLoc &DL) {
+  Nop.setDebugLoc(DL);
+  Nop.setFlag(MachineInstr::NoMerge);
+  Nop.setMemRefs(MF, {});
+  if (Nop.getNumOperands() != 0)
+    report_fatal_error(
+        "Haydn latency stall NOP grew operands; liveness would be unspecified",
+        /*GenCrashDiag=*/false);
+  if (!Nop.memoperands_empty())
+    report_fatal_error(
+        "Haydn latency stall NOP carries MMOs; NOP is not a memory op",
+        /*GenCrashDiag=*/false);
+  const unsigned Bytes = TII.getInstSizeInBytes(Nop);
+  if (Bytes == 0)
+    report_fatal_error(
+        "Haydn latency stall charges 0 bytes via getInstSizeInBytes; "
+        "branch/HWLoop range checks would miss the prefix growth",
+        /*GenCrashDiag=*/false);
+  NumStallBytesCharged += Bytes;
+  return Bytes;
+}
+
+static uint64_t layoutBytesTo(MachineBasicBlock &MBB, const TargetInstrInfo &TII,
+                             MachineBasicBlock::iterator End) {
+  uint64_t Bytes = 0;
+  for (MachineBasicBlock::iterator I = MBB.begin(); I != End; ++I)
+    Bytes += TII.getInstSizeInBytes(*I);
+  return Bytes;
+}
+
 } // namespace
 
 char HaydnLatencyStalls::ID = 0;
@@ -127,6 +250,10 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
 
   for (MachineBasicBlock &MBB : MF) {
+    // Accumulate-vs-regenerate pin: drop this pass's previous stall parcels
+    // before recomputing dest-window need on the current inventory.
+    Changed |= eraseRegeneratedStalls(MBB);
+
     SmallVector<Cycle, 32> Cycles;
     collectCycles(MBB, Cycles);
     if (Cycles.empty())
@@ -139,15 +266,24 @@ bool HaydnLatencyStalls::runOnMachineFunction(MachineFunction &MF) {
     HaydnHazardRecognizer DestHR(&TII, Itin, /*IsPreRA=*/false);
     DestHR.Reset();
 
-    auto insertStalls = [&](MachineBasicBlock::iterator InsertPt,
-                            [[maybe_unused]] DebugLoc DL, unsigned Stalls,
-                            StringRef Why, bool Unexpected) {
+    auto insertStalls = [&](MachineBasicBlock::iterator InsertPt, DebugLoc DL,
+                            unsigned Stalls, StringRef Why, bool Unexpected) {
       LLVM_DEBUG(dbgs() << "HaydnLatencyStalls: " << Stalls
                         << " stall bundle(s) " << Why << "\n");
-      for (unsigned I = 0; I < Stalls; ++I)
-        // W64 QW5: one NOP-insertion mechanism — TII.insertNoop (Hexagon
-        // peer), not a second local BuildMI site.
+      for (unsigned I = 0; I < Stalls; ++I) {
+        // One NOP-insertion mechanism — TII.insertNoop (Hexagon
+        // HexagonInstrInfo.cpp:1667-1671 peer), not a second local BuildMI.
         TII.insertNoop(MBB, InsertPt);
+        MachineInstr &Nop = *std::prev(InsertPt);
+        pinStallParcel(Nop, MF, TII, DL);
+      }
+      // Prefix + min bundle-address remainder — same size interface range
+      // checks consume (getInstSizeInBytes), not a second byte model.
+      const uint64_t Prefix = layoutBytesTo(MBB, TII, InsertPt);
+      const unsigned AlignPad = alignmentPadBytes(Prefix);
+      NumStallAlignPadBytes += AlignPad;
+      LLVM_DEBUG(dbgs() << "  prefix=" << Prefix << " align-pad=" << AlignPad
+                        << "\n");
       NumStallBundles += Stalls;
       if (AuditUnexpected && Unexpected) {
         NumUnexpectedOptStallBundles += Stalls;

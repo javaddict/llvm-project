@@ -903,23 +903,22 @@ TD_LET_SEMI_RE = re.compile(r"\blet\s+([A-Za-z0-9_]+)\s*=\s*(.+?)\s*;")
 # Monotone shrink only — a logical leaving the set requires re-pinning
 # (smaller); any NEW name fails generation immediately.
 #
-# Current membership rationale:
-#   * CSRR — decoder-parity 3-op logical (shared FmtCSR shell); the
-#     standalone member fill path owns the shape difference.
-#   * D_L*UA_POST / D_S*UA_POST / WBARWUA — golden UA/CB families whose
-#     fat logical shape is the CB-151 reshape decision (member carries the
-#     correct wire shape).
-#   * SET_HWLOOP_REG — retained ZOL pseudo (brtarget MBB operands) that
-#     expands through exact-commit lowering, never a bare setDesc.
-EXPECTED_IDENTITY_DIVERGENT: frozenset = frozenset({
-    "CSRR",
-    "D_LQHWUA_POST",
-    "D_LTWUA_POST",
-    "D_SQHWUA_POST",
-    "D_STWUA_POST",
-    "SET_HWLOOP_REG",
-    "WBARWUA",
-})
+# Current membership rationale: EMPTY since 2026-08-26 (CB-151 reshape).
+# Every compiler-reachable logical is operand-shape identical to every
+# generated member it setDescs onto. Departures, all 2026-08-26:
+#   * SET_HWLOOP_REG — census parser now threads class defaults across
+#     include-ordered texts and ends a header at a body-opening `{`, so
+#     the HaydnPseudo class default isCodeGenOnly=1 reaches the def (the
+#     exemption matches the real TableGen surface; product creator emits
+#     SET_HWLOOP_F2_W directly).
+#   * CSRR — 3-op FmtCSR decoder-parity shell shrank to the catalog 2-op
+#     HaydnInst<0> isPseudo shape (FmtCSR deleted; Haydn32 trie was never
+#     consulted for decode).
+#   * D_L*UA_POST / D_S*UA_POST / WBARWUA — CB-151 reshape: logicals now
+#     carry the golden member wire shape (loads (rtd, rs_wb; ar_sel, rs),
+#     stores (rs_wb; ar_sel, rtd, rs), wbarwua (ar_sel, rs)); stride and
+#     dir_sel fold at ISel (golden: rs = rs+8, direction in rs[2:1]).
+EXPECTED_IDENTITY_DIVERGENT: frozenset = frozenset({})
 
 
 @dataclass
@@ -1103,16 +1102,24 @@ def _empty_schema_props() -> Dict[str, Any]:
 
 def parse_td_schemas(
     text: str,
+    class_defaults: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, TDInstSchema]]:
     """Parse class defaults and named instruction schemas from TD text.
 
     Handles prefix `let ... in { }` groups, single-def `let ...;` bodies,
     and class-default inheritance (one parent level, enough for the
-    Haydn logical shells)."""
-    class_defaults: Dict[str, Dict[str, Any]] = {
-        "Instruction": _empty_schema_props(),
-        "HaydnInst": _empty_schema_props(),
-    }
+    Haydn logical shells). class_defaults carries inherited class
+    defaults across separately-parsed texts (caller compiles one
+    include-ordered unit); None starts fresh."""
+    if class_defaults is None:
+        class_defaults = {
+            "Instruction": _empty_schema_props(),
+            "HaydnInst": _empty_schema_props(),
+        }
+    else:
+        class_defaults = dict(class_defaults)
+        class_defaults.setdefault("Instruction", _empty_schema_props())
+        class_defaults.setdefault("HaydnInst", _empty_schema_props())
     schemas: Dict[str, TDInstSchema] = {}
     lines = [_strip_td_line(ln) for ln in text.splitlines()]
     depth = 0
@@ -1135,6 +1142,13 @@ def parse_td_schemas(
         while j < n:
             joined = "\n".join(buf)
             if "> {" in joined or re.search(r">\s*;", joined):
+                return joined, j
+            # A line ending in `{` opens the body: the header is done even
+            # when the parent has no template args (`: Instruction {`) —
+            # without this the scan swallows the NEXT class header (e.g.
+            # HaydnPseudo into HaydnInst) and the swallowed class is never
+            # registered.
+            if j > start and lines[j].rstrip().endswith("{"):
                 return joined, j
             j += 1
             if j < n:
@@ -1267,8 +1281,14 @@ def load_logical_schemas(
             texts.append(path.read_text(encoding="utf-8"))
     texts.extend(extra_texts)
     schemas: Dict[str, TDInstSchema] = {}
+    # TableGen compiles these files as one include-ordered unit; class
+    # defaults (HaydnPseudo isCodeGenOnly=1 lives in HaydnInstrFormats.td,
+    # HaydnPseudos.td defs inherit it) must survive across per-file parse.
+    # Thread one class_defaults map through every text so census exemptions
+    # see the same flags the real MCInstrDesc carries.
+    classes: Dict[str, Dict[str, Any]] = {}
     for text in texts:
-        _classes, found = parse_td_schemas(text)
+        classes, found = parse_td_schemas(text, classes)
         schemas.update(found)
     return schemas
 
@@ -3069,12 +3089,14 @@ _SPECIAL_INSNS = {
     "SET_HWLOOP": "set_hwloop_w 0, 16, 32, 4",
     "SET_HWLOOP_F2": "set_hwloop_f2_w 0, 16, 32, r1",
     "SET_HWLOOP_REG": "set_hwloop_reg_w 0, r1, r2, r3",
-    "D_LQHWUA_POST": "d_lqhwua_post d0, 0, r1, r2, 0",
-    "D_LTWUA_POST": "d_ltwua_post d0, 0, r1, r2, 0",
-    "D_SQHWUA_POST": "d_sqhwua_post d0, 0, r1, r2, 0",
-    "D_STWUA_POST": "d_stwua_post d0, 0, r1, r2, 0",
+    # CB-151 member wire shape: stride/dir are not encoded (golden
+    # rs = rs+8, direction in rs[2:1]).
+    "D_LQHWUA_POST": "d_lqhwua_post 0, d0, r1",
+    "D_LTWUA_POST": "d_ltwua_post 0, d0, r1",
+    "D_SQHWUA_POST": "d_sqhwua_post 0, d0, r1",
+    "D_STWUA_POST": "d_stwua_post 0, d0, r1",
     "PLDWWUA_POST": "pldwwua 0, r1",
-    "WBARWUA": "wbarwua 0, r1, 0",
+    "WBARWUA": "wbarwua 0, r1",
     "MULL": "mull r1, r2, r1",
 }
 
@@ -4596,7 +4618,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # golden reads the old rtd to preserve the unwritten half, but a tie
     # requires an explicit old-destination operand through the whole API
     # chain (builtin -> IR intrinsic -> GISel -> logical -> member).
-    # Tracked in GOALS under the partial-write taxonomy; do NOT add a
+    # Tracked as GOALS M23; do NOT add a
     # generator-only tie (MI arity would desync from the public API).
     divergent_non_ls = [
         k for k in divergent

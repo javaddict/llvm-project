@@ -1,18 +1,15 @@
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,haydn-finalize-mi-bundles,haydn-verify-bundles \
-# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
-# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched -stats \
-# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 | \
-# RUN:   FileCheck %s --check-prefix=STATS
-
-# Role: MIR — Opaque INLINEASM is a post-RA layout/scheduling boundary:
-#   * never a product-cycle BUNDLE member (no compiler BUNDLE crosses it)
-#   * Finalize leaves INLINEASM bare (APP/NO_APP emission path)
-#   * neighbors on either side still exact-commit as Full product cycles
-#   * multi-line INLINEASM stays one standalone MI (size model unit-tested:
-#     InlineAsmConservativeLayoutSize — Full parcel per textual instruction)
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=REJECT
 #
-# Ownership: postmisched exact-commit (PostRASchedStrategy + BundleMaterialize
-# + AlternateDescriptors + Finalize). Sibling owns Fixup Following size pins.
+# RE-PINNED for the W68.4 inline-asm admission law: code-bearing opaque
+# asm BESIDE compiler encode MIs is outside the exact Format E layout
+# model (its bytes would emit after the claimed freeze). The prior
+# conservative-size boundary surface (getInlineAsmLength-priced layout
+# boundary that postmisched must not cross) is retired; asm-only naked
+# bodies and metadata-only asm remain the admitted classes.
+#
+# REJECT: Haydn Finalize: code-bearing inline asm is outside the exact
+# REJECT: Format E layout model
 
 --- |
   define void @inlineasm_between_alu() { ret void }

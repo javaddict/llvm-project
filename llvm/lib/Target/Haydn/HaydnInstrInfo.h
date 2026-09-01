@@ -123,11 +123,18 @@ public:
                     ArrayRef<MachineOperand> Cond, Register TrueReg,
                     Register FalseReg) const override;
 
+  // Short PC-relative B / cond / hwloop latch only. Long-form
+  // LUI+ADDI32_W+JALR_W is insertIndirectBranch (branches promote; JALR
+  // sites never regress through this API). Inherits DL onto each new MI.
+  // CFG successors and probabilities stay with the caller
+  // (AIEBaseInstrInfo.cpp:271-307).
   unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
                         MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
                         const DebugLoc &DL,
                         int *BytesAdded = nullptr) const override;
 
+  // Strip short B/cond terminators (including bundled solo/coissue). Leave
+  // LUI+ADDI32_W+JALR_W sites intact so they cannot shrink back to B.
   unsigned removeBranch(MachineBasicBlock &MBB,
                        int *BytesRemoved = nullptr) const override;
 
@@ -136,6 +143,13 @@ public:
 
   // Expand pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
+
+  // Representation expansion after MBP (HaydnExpandPseudos) and leftover
+  // wrap (HaydnFinalizeBundle). B becomes BEQZ_W_MSP r0 (barrier clone of
+  // BEQZ_W; AIEPseudoBranchExpansion.cpp:70-75). RET/BR_JT rebuild JALR_W.
+  // PseudoCALLIndirect becomes JALR_MSP. Returns the surviving MI, or
+  // nullptr when \p MI is not one of those four.
+  MachineInstr *expandRepresentationPseudo(MachineInstr &MI) const;
 
   // Format E CB members list dest2 as an input only (HaydnFormatsE96Members
   // D_LDW_CB_IMM_E2). rewriteFieldSlotToMember drops the logical AGU
@@ -174,17 +188,21 @@ public:
   // Branch relaxation hooks (used by generic BranchRelaxation pass)
   //===------------------------------------------------------------------===
 
-  // Check if a branch with the given opcode can reach an offset.
-  // Conditional branches use simm16 (±32KB); JAL uses simm20 (±512KB);
-  // unconditional branches (BEQZ R0) share the simm16 range.
+  // WIDE_BranchSImm12 byte PC+imm. Forward and backward offsets each charge
+  // one insertIndirectBranch sequence (MaxSingleBranchGrowthBytes). JALR_W
+  // is always in range so a long-form site is never re-relaxed or shrunk.
   bool isBranchOffsetInRange(unsigned BranchOpc,
                              int64_t BrOffset) const override;
 
-  // Return the destination basic block of a branch instruction.
+  // Destination MBB of a short B/cond, or of the LUI/ADDI32_W pair that
+  // materializes a long-form JALR target. Null if the JALR has no address MI.
   MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
 
-  // Insert an indirect branch (for far unconditional branches that exceed
-  // the direct branch range). Uses JALR to jump via a register.
+  // Long-form far jump: LUI+ADDI32_W+JALR_W (RISCV insertIndirectBranch
+  // peer; AIE has empty addPreEmitPass / no BR). Inherits DL onto every new
+  // MI including the emergency FI spill/reload. Updates Dest PHIs and
+  // RestoreBB live-ins. Does not add CFG successors (BranchRelaxation owns
+  // that after return). Spill is ST32 to a pre-reserved FI — SP/CFA unchanged.
   void insertIndirectBranch(MachineBasicBlock &MBB,
                             MachineBasicBlock &NewDestBB,
                             MachineBasicBlock &RestoreBB, const DebugLoc &DL,
@@ -194,10 +212,19 @@ public:
   // Encoded size in bytes: BUNDLE → encodedBytesFor(committed Format E row)
   // plus named late-layout growth (JT R0 re-zero, hwloop setup pads,
   // same-slot serial); bare real → productParcelBytes(); INLINEASM →
-  // conservative getInlineAsmLength. Shared with Fixup + HardwareLoops +
-  // BranchRelaxation. Hexagon peer: getSize + computeOffset extender/align
-  // (HexagonInstrInfo.cpp:4601; HexagonBranchRelaxation.cpp:95-114).
+  // exact typed getInlineAsmLength (empty metadata = 0; public mnemonic or
+  // braced packet = one product parcel; .space N = N; opaque text is
+  // fatal). Shared with Fixup + HardwareLoops + BranchRelaxation.
+  // Hexagon peer: getSize + getInlineAsmLength
+  // (HexagonInstrInfo.cpp:1847, 4601; HexagonBranchRelaxation.cpp:95-114).
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
+
+  // Exact Format E layout size of INLINEASM / INLINEASM_BR text. Hexagon
+  // peer HexagonInstrInfo.cpp:1847; Haydn overlay is exact parcels rather
+  // than MaxInstLength × statement count (generic TargetInstrInfo.cpp:113).
+  unsigned getInlineAsmLength(
+      const char *Str, const MCAsmInfo &MAI,
+      const TargetSubtargetInfo *STI = nullptr) const override;
 
   // Insert a standalone NOP at \p MI. Required for AIE-style cycle-level NOP
   // padding in the post-RA scheduler's leaveMBB (Phase B2). The base

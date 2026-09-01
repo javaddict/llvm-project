@@ -24,6 +24,6 @@ body:             |
     liveins: $r0, $r15
     ; CHECK-LABEL: name: dead_csrr_survives
     ; CHECK: CSRR
-    $r1 = CSRR 1, $r0, implicit $sfr
+    $r1 = CSRR 1, implicit $sfr
     RET implicit $r15
 ...

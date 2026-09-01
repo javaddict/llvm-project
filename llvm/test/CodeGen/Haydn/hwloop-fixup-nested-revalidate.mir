@@ -1,0 +1,172 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — post-S2 HWLoop revalidation: inner-first cascade.
+#
+# Each Fixup invocation rewrites Off1/Off2 from the live inventory
+# (HaydnLateConvergence re-invokes this pass after S2). Nested inner
+# demote/resize must re-check the outer; a retained outer that the inner
+# mutation pushed past uimm6 must demote, never keep a prior acceptance.
+# Demotion is monotone (setups only shrink) and uses preallocated homes.
+#
+# inner_pad_forces_outer_demote:
+#   Outer SET sel=1, inner SET sel=0 in the outer SET→BEGIN window.
+#   Inner Following=0 so Fixup inserts InterveningCycles deficit NOPs.
+#   Without those pads outer StartOff is 240 B (hard uimm6 still holds);
+#   with them outer StartOff is 264 B and must demote. Layout-order
+#   (outer first) would accept the outer before the pads — this test
+#   fails that order.
+#
+# nested_keep_both:
+#   Same nesting, distances inside both field ceilings after inner pads.
+#   Both hardware setups remain (inner-first is not always-demote).
+
+--- |
+  define dso_local void @inner_pad_forces_outer_demote(ptr nocapture writeonly %out) {
+  entry:
+    br label %inner_pre
+  inner_pre:
+    br label %spacer
+  spacer:
+    br label %inner_body
+  inner_body:
+    store i32 0, ptr %out, align 4
+    br label %outer_body
+  outer_body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @nested_keep_both(ptr nocapture writeonly %out) {
+  entry:
+    br label %inner_pre
+  inner_pre:
+    br label %inner_body
+  inner_body:
+    store i32 0, ptr %out, align 4
+    br label %outer_body
+  outer_body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            inner_pad_forces_outer_demote
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    ; Outer sel=1. Header/latch are %bb.4 (after inner latch, so outer
+    ; demote rewrites bb.4 only). Three NOPs = Following floor.
+    SET_HWLOOP_W 1, %bb.4, %bb.4, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Inner sel=0 in the outer SET→BEGIN window. No following parcels:
+  ; Fixup inserts two deficit NOPs here (+24 B into outer Off1).
+  bb.1.inner_pre:
+    liveins: $r1, $r0, $r15
+    successors: %bb.2
+    SET_HWLOOP_W 0, %bb.3, %bb.3, 8, implicit-def dead $sfr
+
+  ; 12× NOP = 144 B. Outer StartOff without inner pads:
+  ;   12 (outer SET) + 36 (bb.0 NOPs) + 12 (inner SET) + 144 + 36 (inner
+  ;   body) = 240 ≤ 252. With inner pads: 264 > 252 → outer must demote.
+  bb.2.spacer:
+    liveins: $r1, $r0, $r15
+    successors: %bb.3
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.3.inner_body:
+    liveins: $r1, $r0, $r15
+    successors: %bb.4
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+
+  bb.4.outer_body:
+    liveins: $r1, $r0, $r15
+    successors: %bb.5
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.5.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: inner_pad_forces_outer_demote
+# Inner stays hardware (StartOff 216 sits on the safe-margin edge, hard
+# uimm6 holds). Outer is rewritten from the post-pad inventory.
+# CHECK: SET_HWLOOP_W 0
+# CHECK-NOT: SET_HWLOOP_W 1
+# CHECK: SUBI32
+# CHECK: BNEZ{{[^ ]*}}
+# CHECK: bb.5.exit
+
+...
+---
+name:            nested_keep_both
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 1, %bb.3, %bb.3, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.inner_pre:
+    liveins: $r1, $r0, $r15
+    successors: %bb.2
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+
+  bb.2.inner_body:
+    liveins: $r1, $r0, $r15
+    successors: %bb.3
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.outer_body:
+    liveins: $r1, $r0, $r15
+    successors: %bb.4
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.4.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: nested_keep_both
+# Distances stay encodable after inner Following pads. Both setups remain.
+# CHECK: SET_HWLOOP_W 1
+# CHECK: SET_HWLOOP_W 0
+# CHECK-NOT: SUBI32
+# CHECK: bb.4.exit

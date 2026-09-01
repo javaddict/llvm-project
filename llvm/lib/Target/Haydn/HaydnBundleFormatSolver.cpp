@@ -606,7 +606,7 @@ unsigned llvm::haydn::bundle::countKernelIssueParcels(
   // AsmPrinter AchievedII filters exactly: one parcel per BUNDLE root, one
   // per bare real MI; meta/debug/CFI/implicit-def/kill/inline-asm never
   // issue. Callers: HaydnAsmPrinter::emitSMSSWPSComments and
-  // HaydnMultiStageSMS::countRealizedKernelParcels — never a second walk.
+  // Historical: the deleted post-RA host shared this walk — never a second walk.
   // G004: the ZOL terminator pseudo (PseudoLoopEnd) never issues either —
   // FixupHwLoops consumes it as the HWLR END marker. At the AsmPrinter seat
   // it is already gone (no change); at the multistage seat (pre-Fixup) it

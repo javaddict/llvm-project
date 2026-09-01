@@ -374,7 +374,10 @@ unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
         ExactE3 = Opc;
       continue;
     }
-    // Closed keep-map (tied-acc, CB writeback, AR-UA POST). Not bag-sort.
+    // Closed keep-map (hand-asm CB swap). Not bag-sort. The historical
+    // tied-acc / CB writeback / AR-UA POST arms matched zero pairs after
+    // the identity census emptied and are deleted from
+    // haydnFormatEKeepOperands.
     auto KeepKind = [&](unsigned OldI, unsigned NewI) {
       if (OldI >= LogDesc.getNumOperands() || NewI >= MemDesc.getNumOperands())
         return false;
@@ -397,15 +400,10 @@ unsigned formatEMemberAtResidualIndex(unsigned LogicalOpc, unsigned Index) {
         DropE3 = Opc;
       continue;
     }
-    // Tied-seed / trailing-use drop (X2MOVT32 3-op logical → 2-op member).
-    if (MemDesc.getNumOperands() > 0 &&
-        MemDesc.getNumOperands() < LogDesc.getNumOperands() &&
-        MemDesc.getNumDefs() == LogDesc.getNumDefs()) {
-      if (IsE2 && DropE2 == 0)
-        DropE2 = Opc;
-      else if (!IsE2 && DropE3 == 0)
-        DropE3 = Opc;
-    }
+    // W68.0R: the count-based Drop fallback (X2MOVT32-era "3-op logical →
+    // 2-op member") is deleted — no logical/member pair in the generated
+    // ledger differs in operand count since the census emptied. Members
+    // mirror the acc ties exactly.
   }
   // Occupancy is residual slot legality, not row identity. Prefer the E2
   // member when both Modes match the logical shape so a two-entry probe is
@@ -635,174 +633,24 @@ haydnFormatEKeepOperands(
     if (accept(K))
       return K;
   }
-  // Catalog role `reg` dest-as-ins (CSRR / ZERO_GPR / MOVESFR2GPR).
-  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN) {
-    auto K = prefix(NewN);
-    if (accept(K))
-      return K;
-  }
 
-  if (OldDefs == NewDefs && OldN > NewN) {
-    SmallVector<unsigned, 4> Keep;
-    bool DroppedTied = false;
-    for (unsigned I = 0; I != OldN; ++I) {
-      const int Tie = OldDesc.getOperandConstraint(I, MCOI::TIED_TO);
-      if (Tie >= 0 && static_cast<unsigned>(Tie) < OldDefs) {
-        DroppedTied = true;
-        continue;
-      }
-      Keep.push_back(I);
-    }
-    if (DroppedTied && accept(Keep))
-      return Keep;
-  }
+  // W68.0R keep-map deletion (2026-08-26): with the identity census empty,
+  // a mechanical simulation of the old arm set over the ENTIRE generated
+  // ledger (939 member→logical pairs) showed 933 identity, 2 hand-asm
+  // D_LDW_CB_IMM swaps, and 4 banned SET_HWLOOP_REG pseudo pairs. Every
+  // other historical arm — dest-as-ins, MAC tied-drop, MOVE32/ABS32
+  // trailing-drop, LUI vestigial-$rs skip, PLDWWUA synthetic-wb, AR-UA
+  // POST 6→4, WBARWUA 3→2, CB extra-writeback x4, CSRW 2-op swap —
+  // matched ZERO pairs and is deleted. A shape that needs one again is a
+  // NEW divergence: fix the logical schema (census ratchet), never here.
 
-  // AR unaligned POST load (2026-08-21 tied members): [rtd, rs1_wb, rs1,
-  // rs2, ar_sel, dir_sel] → [dest1, dest2_wb, ar_sel, dest2]. The member
-  // now declares the golden rs writeback (dest2_wb tied to dest2), so the
-  // unencoded rs2/dir_sel drop keeps NumDefs aligned.
-  if (OldDefs == 2 && NewDefs == 2 && OldN == 6 && NewN == 4) {
-    SmallVector<unsigned, 4> K{0, 1, 4, 2};
-    if (accept(K))
-      return K;
-  }
-  // AR unaligned POST store (tied members): [rs1_wb, rtd, rs1, rs2,
-  // ar_sel, dir_sel] → [dest2_wb, ar_sel, dest1, dest2].
-  if (OldDefs == 1 && NewDefs == 1 && OldN == 6 && NewN == 4) {
-    SmallVector<unsigned, 4> K{0, 4, 1, 2};
-    if (accept(K))
-      return K;
-  }
   // Hand CB load imm swap (tied members): hand D_LDW_CB_IMM lists
   // [rtd, rs_wb, rs, cbr_sel, imm] while the tied member lists
   // [dest1, dest2_wb, cbr_sel, dest2, imm] — same classes, positions 2/3
-  // swapped. Generated CB logicals match their members positionally and
-  // never reach here.
+  // swapped. The logical is isAsmParserOnly (census-exempt hand-asm
+  // surface); generated CB logicals match their members positionally.
   if (OldDefs == 2 && NewDefs == 2 && OldN == 5 && NewN == 5) {
     SmallVector<unsigned, 4> K{0, 1, 3, 2, 4};
-    if (accept(K))
-      return K;
-  }
-  // Hand shell omits a tied writeback the member declares (PLDWWUA vs
-  // tied PLDWWUA_POST member): [ar_sel, rs] → [dest2_wb, ar_sel, dest2].
-  // The member's tied use names the logical operand that also feeds the
-  // synthetic wb def, so both map to the same old index.
-  if (NewN == OldN + 1 && NewDefs == OldDefs + 1) {
-    for (unsigned NewI = NewDefs; NewI != NewN; ++NewI) {
-      const int Tie = NewDesc.getOperandConstraint(NewI, MCOI::TIED_TO);
-      if (Tie < 0 || static_cast<unsigned>(Tie) >= NewDefs)
-        continue;
-      SmallVector<unsigned, 4> Keep(NewN, 0);
-      unsigned OldUse = OldDefs;
-      for (unsigned J = NewDefs; J != NewN; ++J)
-        Keep[J] = OldUse++;
-      Keep[static_cast<unsigned>(Tie)] = Keep[NewI];
-      if (accept(Keep))
-        return Keep;
-    }
-  }
-  // WBARWUA: [rs, ar_sel, dir_sel] → [ar_sel, dest2].
-  if (OldDefs == 0 && NewDefs == 0 && OldN == 3 && NewN == 2) {
-    SmallVector<unsigned, 4> K{1, 0};
-    if (accept(K))
-      return K;
-  }
-
-  // CB load extra writeback: [dest, wb, base, sel, imm|rs] →
-  // [dest, sel, base, imm|rs].
-  // 2026-08-21: inert after the golden base-writeback tie cutover —
-  // CB members now declare dest2_wb (defs align with their logicals and
-  // the Exact/prefix paths bind them). Kept fail-closed for any future
-  // no-wb member shape; no family currently matches.
-  if (OldDefs == NewDefs + 1 && NewDefs == 1 && OldN == NewN + 1 &&
-      NewN >= 3) {
-    SmallVector<unsigned, 4> Keep{0, 3, 2};
-    for (unsigned I = 4; I < OldN && Keep.size() < NewN; ++I)
-      Keep.push_back(I);
-    if (accept(Keep))
-      return Keep;
-  }
-  // CB load extra writeback, generated operand order (S2b golden logicals):
-  // [dest, wb, sel, base, rs2] → [dest, sel, base, rs2]. The generated
-  // D_LDW_CB_REG logical emits uimm1 cbr_sel as the FIRST ins operand
-  // (HaydnInstrInfoGolden.td.inc), unlike the hand order above.
-  if (OldDefs == NewDefs + 1 && NewDefs == 1 && OldN == NewN + 1 &&
-      NewN >= 3) {
-    SmallVector<unsigned, 4> Keep{0, 2, 3, 4};
-    for (unsigned I = 5; I < OldN && Keep.size() < NewN; ++I)
-      Keep.push_back(I);
-    if (accept(Keep))
-      return Keep;
-  }
-  // CB store extra writeback: [wb, data, base, sel, imm|rs] →
-  // [sel, data, base, imm|rs].
-  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 && NewN >= 3) {
-    SmallVector<unsigned, 4> Keep{3, 1, 2};
-    for (unsigned I = 4; I < OldN && Keep.size() < NewN; ++I)
-      Keep.push_back(I);
-    if (accept(Keep))
-      return Keep;
-  }
-  // CB store extra writeback, generated operand order (S2b golden logicals):
-  // [wb, sel, data, base, imm] → [sel, data, base, imm]. Mirrors the
-  // generated load order above (uimm cbr_sel first in ins).
-  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 && NewN >= 3) {
-    SmallVector<unsigned, 4> Keep{1, 2, 3, 4};
-    for (unsigned I = 5; I < OldN && Keep.size() < NewN; ++I)
-      Keep.push_back(I);
-    if (accept(Keep))
-      return Keep;
-  }
-
-  // dest-as-ins skip first ins (LUI vestigial $rs).
-  if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 && NewN >= 1) {
-    SmallVector<unsigned, 4> Keep;
-    Keep.push_back(0);
-    for (unsigned NewI = 1; NewI != NewN; ++NewI)
-      Keep.push_back(NewI + 1);
-    if (accept(Keep))
-      return Keep;
-  }
-
-  if (OldDefs == NewDefs && OldN > NewN) {
-    bool AnyTiedUse = false;
-    for (unsigned I = OldDefs; I != OldN; ++I) {
-      const int Tie = OldDesc.getOperandConstraint(I, MCOI::TIED_TO);
-      if (Tie >= 0 && static_cast<unsigned>(Tie) < OldDefs) {
-        AnyTiedUse = true;
-        break;
-      }
-    }
-    if (!AnyTiedUse) {
-      bool TrailingUses = true;
-      for (unsigned I = NewN; I != OldN; ++I)
-        if (I < OldDefs) {
-          TrailingUses = false;
-          break;
-        }
-      if (TrailingUses) {
-        auto K = prefix(NewN);
-        if (accept(K))
-          return K;
-      }
-    }
-  }
-
-  if (OldDefs == NewDefs && OldN == NewN + 1 && OldDefs >= 1 &&
-      OldDefs < NewN) {
-    SmallVector<unsigned, 4> Keep;
-    for (unsigned I = 0; I != OldDefs; ++I)
-      Keep.push_back(I);
-    for (unsigned NewI = OldDefs; NewI != NewN; ++NewI)
-      Keep.push_back(NewI + 1);
-    if (accept(Keep))
-      return Keep;
-  }
-
-  // CSRW catalog is (uimm8, rs); some generated members list (rs, uimm8).
-  // Closed two-op swap, not a class bag-sort.
-  if (OldDefs == 0 && NewDefs == 0 && OldN == 2 && NewN == 2) {
-    SmallVector<unsigned, 4> K{1, 0};
     if (accept(K))
       return K;
   }
@@ -1070,16 +918,15 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
       Out.setOpcode(MemberOpc);
       return finishLogicalFill();
     }
-    // Parser may omit a tied writeback that is not in the AsmString
-    // (d_lqhwua_post $rtd, $ar_sel, $rs1, $rs2, $dir_sel has no $rs1_wb).
-    // 2026-08-21: members now model the golden rs writeback (dest2_wb
-    // tied to dest2, incl. UA `_POST` suffix + CB families); the keep-map
-    // branches in haydnFormatEKeepOperands reconstruct them.
+    // Parser may omit a tied writeback that is not in the AsmString. Since
+    // the CB-151 reshape every UA/CB logical carries the member wire shape,
+    // so the remaining reconstruction is the hand-asm CB swap alone.
     // kindOk already rejects keep indices past Have.
     if (OldN > 0 && NewN > 0 && Have > 0) {
-      // AsmString may omit a logical ins register (LUI $rs, CSRR $rs).
-      // The parser then defaults that slot to Imm 0. Drop those holes
-      // before trailing-use so the real imm/expr is kept.
+      // AsmString may omit a logical ins register. The parser then
+      // defaults that slot to Imm 0. Drop such holes so the real imm/expr
+      // is kept. (No current AsmString omits a reg — fail-closed residual
+      // for a future one; the census forbids re-introducing the shape.)
       if (OldDesc.getNumDefs() == NewDesc.getNumDefs() && OldN > NewN) {
         SmallVector<unsigned, 4> Keep;
         bool DroppedHole = false;
@@ -1098,31 +945,6 @@ bool haydnFillFormatEMemberInst(const haydn::format_e::FormatEMemberRec &Mem,
           return finishLogicalFill();
       }
       if (auto Keep = haydnFormatEKeepOperands(OldDesc, NewDesc, kindOk)) {
-        const unsigned OldDefs = OldDesc.getNumDefs();
-        const unsigned NewDefs = NewDesc.getNumDefs();
-        // Compiler LUI vestigial $rs keep-vector: drop the first ins after
-        // defs. Hand-asm LUI is positional and never reaches here.
-        if (OldDefs == NewDefs && OldN == NewN + 1 && OldDefs >= 1 &&
-            OldDefs < NewN && Keep->size() == NewN) {
-          bool DropsFirstIns = (*Keep)[0] == 0;
-          for (unsigned NewI = OldDefs; NewI != NewN && DropsFirstIns; ++NewI)
-            if ((*Keep)[NewI] != NewI + 1)
-              DropsFirstIns = false;
-          if (DropsFirstIns)
-            return false;
-        }
-        // dest-as-ins extra $rs keep-vector: skip first ins after dest
-        // (Keep = [0, 2, 3, ...]). CB store extra writeback is NumDefs
-        // 1->0 with a reorder keep ({3,1,2} / {1,2,3,4}) and stays.
-        if (OldDefs == 1 && NewDefs == 0 && OldN == NewN + 1 &&
-            Keep->size() == NewN && (*Keep)[0] == 0) {
-          bool DropsFirstIns = true;
-          for (unsigned NewI = 1; NewI != NewN && DropsFirstIns; ++NewI)
-            if ((*Keep)[NewI] != NewI + 1)
-              DropsFirstIns = false;
-          if (DropsFirstIns)
-            return false;
-        }
         if (emitKeep(*Keep))
           return finishLogicalFill();
       }

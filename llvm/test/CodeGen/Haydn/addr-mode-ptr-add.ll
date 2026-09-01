@@ -130,8 +130,8 @@ define i32 @test_2d_array_const_col(ptr %arr, i32 %row) {
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
 ; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
 ; store-writeback): consumer now issues next parcel; stall parcel gone.
-; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
-; CHECK-NEXT:    { nop; s_lw_pre_imm r1, r2, 3 }
+; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; ld32 r1, r1, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

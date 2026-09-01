@@ -35,6 +35,7 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNPOSTRASCHEDSTRATEGY_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNPOSTRASCHEDSTRATEGY_H
 
+#include "HaydnInterBlockScheduling.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
@@ -65,9 +66,17 @@ struct AuctionAnyOrderLegalMemo;
 // -misched-postra-direction modes (topdown / bottomup / bidirectional).
 class HaydnPostRASchedStrategy : public PostGenericScheduler {
 public:
+  const MachineSchedContext *Ctx = nullptr;
+
   HaydnPostRASchedStrategy(const MachineSchedContext *C);
 
   ~HaydnPostRASchedStrategy() override;
+
+  // After the base HR construction, replay scheduled successor bundles into
+  // the Bot scoreboard (AIE initializeBotScoreBoard,
+  // AIEMachineScheduler.cpp:260-405). Unscheduled/unknown successors stay
+  // full-latency: no static-depth fill that could invent a cut.
+  void initialize(ScheduleDAGMI *Dag) override;
 
   // Stash CurrentMBB for leaveMBB materialize (DAG BB is not publicly
   // accessible). Count multi-member BUNDLE roots at entry for metrics only
@@ -120,19 +129,6 @@ public:
   // is NOT mutated here; leaveMBB materializes. Invoked by
   // HaydnScheduleDAGMI::exitRegion.
   void leaveRegion(const SUnit &ExitSU);
-
-  /// G004 D493 seam: the multi-stage SMS plan committed this MBB's parcels
-  /// (kernel bundles + cycle-ordered idle NOPs) inside schedule(); the
-  /// ordinary zones are stale relative to that mutation. leaveRegion /
-  /// leaveMBB must not re-materialize bundles or re-pad idle cycles for a
-  /// committed MBB — the multistage plan is the placement authority.
-  void noteMultistageCommitted(MachineBasicBlock *MBB) {
-    if (MBB)
-      MultistageCommittedMBBs.insert(MBB);
-  }
-  bool multistageCommitted(MachineBasicBlock *MBB) const {
-    return MBB && MultistageCommittedMBBs.contains(MBB);
-  }
 
 private:
   // A single cycle's worth of instructions, in MBB order. Empty Instrs means
@@ -207,10 +203,6 @@ private:
   // SUnits/region iterators are stale from the previous region.
   bool RegionWasScheduled = false;
 
-  // G004 D493 seam: MBBs whose parcels the multi-stage plan committed;
-  // leaveRegion/leaveMBB defer to that authority (see noteMultistageCommitted).
-  SmallPtrSet<MachineBasicBlock *, 4> MultistageCommittedMBBs;
-
   // Per-pick memo of ready-subset auction scores. Cleared after every emit
   // so a later pick cannot reuse a stale Available/base snapshot.
   DenseMap<const SUnit *, unsigned> ReadyAuctionScoreCache;
@@ -261,6 +253,15 @@ private:
   void replayMultiMemberSeamHazards(
       MachineBasicBlock &MBB,
       const SmallPtrSetImpl<MachineInstr *> &PreExistingMultiMembers);
+
+  // True when this region is the last scheduling region of CurrentMBB
+  // (AIE IsBottomRegion / MaxLatencyFinder.cpp:67-76).
+  bool isBottomRegion() const;
+
+  // Populate Bot HR from scheduled successors' committed cycles. Uses HR
+  // emitInstruction(SU, Delta) + RecedeCycle only (AIE emitInScoreboard +
+  // recedeScoreboard peers). Flag-gated with -haydn-postra-interblock.
+  void initializeBotScoreBoard();
 };
 
 } // end namespace llvm

@@ -174,12 +174,14 @@ static_assert(Off1SafetyMarginBytes ==
 // Late-layout second-BR growth budget (stable row)
 //===----------------------------------------------------------------------===//
 //
-// Fixed pass order: BranchRelaxation → FixupHwLoops → BranchRelaxation →
-// late Finalize/Verify. There is no outer layout fixpoint. During its sole
-// execution, Fixup charges a conservative absolute expansion budget for every
-// still-relaxable short PC-relative branch still present in SET→BEGIN and
-// SET→END (including nested windows). Hardware form is accepted only when
-// residual Off1/Off2 margins cover both sums.
+// Pass order: each HaydnFixupHwLoops invocation (standalone PreEmit row, or
+// every HaydnLateConvergence iteration after S2/stalls) rewrites Off1/Off2
+// from the CURRENT layout inventory. There is no cached "layout-stable"
+// hardware-form acceptance. During one invocation Fixup still charges a
+// conservative absolute expansion budget for every still-relaxable short
+// PC-relative branch in SET→BEGIN and SET→END (including nested windows).
+// Hardware form is accepted only when residual Off1/Off2 margins cover both
+// sums. Nested inner demote/resize re-checks the outer (inner-first).
 //
 // Worst case for one short B / cond → indirect path (TII
 // insertIndirectBranch): LUI + ADDI32_W + JALR_W + optional emergency
@@ -307,6 +309,24 @@ static_assert(MinSetupIssueBytes ==
               "MinSetupIssueBytes must be SetupIssueDistance × product parcel");
 static_assert(MinSetupIssueBytes == MinSetupBytes + ProductParcelBytes,
               "issue PC delta = intervening span + one parcel (the SET cycle)");
+
+/// CB-164 anchor law: MC anchors HWLoopOff1/Off2 at the SET parcel base.
+/// HaydnAsmBackend::evaluateFixup seeds Value = Abs % Parcel so
+/// MCAssembler's PC-rel subtract lands on align_down(fixup_loc, Parcel) —
+/// the parcel the SET member encodes in. A layout walk that measures
+/// after the SET cycle under-charges one parcel: convert such an
+/// after-SET span into the encoded (SET-anchored) displacement by adding
+/// the SET cycle's committed EncodedBytes. Inverse of the subtract above;
+/// the sole arithmetic bridge between MI-level walks and MC fixups.
+inline constexpr int64_t anchoredFromAfterSet(int64_t AfterSetOff,
+                                              int64_t SetParcelBytes) {
+  return AfterSetOff < 0 ? AfterSetOff : AfterSetOff + SetParcelBytes;
+}
+static_assert(anchoredFromAfterSet(-1, ProductParcelBytes) == -1,
+              "unknown (-1) stays unknown, never a silent +parcel");
+static_assert(anchoredFromAfterSet(0, ProductParcelBytes) ==
+                  ProductParcelBytes,
+              "target at the next parcel start is one full SET parcel away");
 
 //===----------------------------------------------------------------------===//
 // Body / END / COUNT product law
@@ -447,6 +467,19 @@ static_assert(!isEncodableDisplacement(MaxStartOffsetBytes + DisplacementScale,
 static_assert(offsetsMeetImmRelocLaw(MinSetupBytes,
                                      MinSetupBytes + MinBodySpanBytes),
               "min legal geometry must meet reloc law");
+// CB-164 instance, frozen: after-SET 252 (the uimm6 ceiling) encodes as
+// 252 + 12 = 264 -> 264 >> 2 = 66 > 63. The accepted-after-SET walk must
+// not survive; the anchored walk demotes at this geometry. One parcel
+// short is exactly the ceiling and must stay encodable.
+static_assert(!isEncodableDisplacement(
+                  anchoredFromAfterSet(MaxStartOffsetBytes, ProductParcelBytes),
+                  Offset1Bits),
+              "after-SET uimm6-ceiling span is NOT encodable once anchored");
+static_assert(isEncodableDisplacement(
+                  anchoredFromAfterSet(MaxStartOffsetBytes - ProductParcelBytes,
+                                       ProductParcelBytes),
+                  Offset1Bits),
+              "one-parcel-short after-SET span is exactly the ceiling");
 static_assert(countMeetsMinLaw(MinCount) && !countMeetsMinLaw(0),
               "COUNT floor is MinCount");
 static_assert(countMeetsFieldLaw(MinCount) &&
@@ -493,6 +526,59 @@ inline constexpr bool bodyMeetsMinLaw(int64_t StartOff, int64_t EndOff) {
     return false;
   return bodyParcelsFromOffsets(StartOff, EndOff) >= MinBodyBundles;
 }
+
+//===----------------------------------------------------------------------===//
+// Late revalidation / nested cascade (post-S2 inventory)
+//===----------------------------------------------------------------------===//
+//
+// Peer: AIEBaseHardwareLoops.cpp:304-306 processLoop walks inner MachineLoops
+// first, then the outer. HexagonFixupHwLoops.cpp:97-148 is a two-pass offset
+// census then LOOP→LOOPext swap that does not change inner size, so a later
+// outer re-walk is unnecessary. Haydn demote/pad mutates EncodedBytes, so the
+// Hexagon census cannot be the acceptance; Haydn overlays AIE inner-first on
+// the SET→END layout window (no MLI — Haydn loop membership is CFG
+// successor/pred, not MachineLoopInfo).
+//
+// Laws:
+//  * Every retained SET is revalidated from the live post-S2 inventory.
+//  * Inner demote or resize (deficit pads) re-checks every outer whose
+//    SET→END window contains the inner setup.
+//  * Demotion is monotone: the number of hardware setups never increases.
+//  * Demote spill/reload homes are the pre-PEI reserved FIs
+//    (HwLoopDemoteSaveFI / PostRAScratchFI / BranchRelaxationScratchFI);
+//    CreateStackObject after frame finalization is a contract break.
+//  * Live trip-value, exact FixedStack MMOs on those homes, and latch
+//    Header membership are preservation gates on a successful demote —
+//    not cached Off1/Off2 from a prior invocation.
+//
+// Bound: one inner-first wave plus one re-check of remaining setups per
+// original setup. Exhaustion without a no-mutation wave is a hard
+// diagnostic (finite; selectors {0,1} cap product nesting at 2).
+//===----------------------------------------------------------------------===//
+
+/// Inclusive wave budget for inner-first revalidation of \p NumSetups
+/// retained hardware-loop setups. Empty inventory still runs one no-op
+/// collect so a post-S2 function with zero SETs is not a special case.
+inline constexpr unsigned nestedCascadeBound(unsigned NumSetups) {
+  return NumSetups + 1u;
+}
+
+/// True iff a later inventory may keep a hardware setup. Demotion is
+/// monotone: retained setups only shrink (or stay), never re-form.
+inline constexpr bool setupsMonotone(unsigned Before, unsigned After) {
+  return After <= Before;
+}
+
+static_assert(nestedCascadeBound(0) == 1,
+              "empty inventory still one no-op collect wave");
+static_assert(nestedCascadeBound(1) == 2, "one setup: fixup + recheck");
+static_assert(nestedCascadeBound(2) == 3,
+              "inner+outer: inner-first wave + recheck remaining");
+static_assert(setupsMonotone(2, 1) && setupsMonotone(2, 2) &&
+                  !setupsMonotone(1, 2),
+              "HWLoop demote is monotone (setups only shrink)");
+static_assert(ProductSelectorMax - ProductSelectorMin + 1 == 2,
+              "product nesting depth follows the {0,1} selector domain");
 
 } // namespace hwloop
 } // namespace haydn

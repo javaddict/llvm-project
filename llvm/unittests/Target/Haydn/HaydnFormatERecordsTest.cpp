@@ -594,21 +594,17 @@ TEST(HaydnFormatERecords, SFRWriterMembersDeclareImplicitSFRDef) {
 namespace {
 
 // Keep in sync with EXPECTED_IDENTITY_DIVERGENT in
-// llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py: CSRR
-// (decoder-parity 3-op shell), the UA/CB golden families pending the
-// CB-151 reshape, and the retained SET_HWLOOP_REG ZOL pseudo. Hand-asm
-// shells (isAsmParserOnly, e.g. D_LDW_CB_IMM) are exempt at generation
-// time by flag; the Desc-level walk has no flags, so they are named here.
+// llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py (EMPTY since
+// the 2026-08-26 W68.0R + CB-151 reshape). The Desc-level walk has no
+// flags, so the two flag-exempt departures are named here: the hand-asm
+// shell (isAsmParserOnly, D_LDW_CB_IMM swaps) and the retained
+// SET_HWLOOP_REG ZOL pseudo (cutover refuses it by name; product creator
+// emits SET_HWLOOP_F2_W directly). CSRR left with its 2-op shrink, the
+// UA/CB golden families left with the CB-151 reshape.
 std::set<std::string> identityDivergentAllowSet() {
   return {
-      "CSRR",
       "D_LDW_CB_IMM",
-      "D_LQHWUA_POST",
-      "D_LTWUA_POST",
-      "D_SQHWUA_POST",
-      "D_STWUA_POST",
       "SET_HWLOOP_REG",
-      "WBARWUA",
   };
 }
 

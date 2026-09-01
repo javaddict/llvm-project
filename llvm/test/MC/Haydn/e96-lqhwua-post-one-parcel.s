@@ -4,15 +4,17 @@
 # REQUIRES: haydn-registered-target
 
 # Public d_*wua_post is a one-parcel Format E encode. FieldSlot _S*
-# peers are CodeGen-only; the matcher uses the catalog logical. The
-# keep-map drops unencoded rs2/dir_sel onto the generated AR member.
+# peers are CodeGen-only; the matcher uses the catalog logical. Since the
+# CB-151 reshape the logical carries the member wire shape (ar_sel, rtd,
+# rs) — stride/dir_sel are not encoded (golden rs = rs+8; direction in
+# rs[2:1]) and no keep-map arm runs.
 
 .text
-  { d_lqhwua_post d0, 0, r1, r2, 0 }
-  { d_ltwua_post d0, 0, r1, r2, 0 }
-  { d_sqhwua_post d0, 0, r1, r2, 0 }
-  { d_stwua_post d0, 0, r1, r2, 0 }
-  { d_lqhwua_post d0, 0, r1, r2, 0; nop; nop }
+  { d_lqhwua_post 0, d0, r1 }
+  { d_ltwua_post 0, d0, r1 }
+  { d_sqhwua_post 0, d0, r1 }
+  { d_stwua_post 0, d0, r1 }
+  { d_lqhwua_post 0, d0, r1; nop; nop }
 
 # CHECK-LABEL: <.text>:
 # CHECK: {{.*}}0: {{.*}}d_lqhwua_post

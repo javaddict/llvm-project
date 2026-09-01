@@ -253,11 +253,13 @@ exit:
   ret i64 %r
 }
 
-; GEP+load is legal PRE-inc (rs+=4 then load) — expect S_LW_PRE_IMM.
+; GEP+load one-shot: the GEP result dies at the load, so the dead-writeback
+; PRE fusion is refused (deadDefHasNoUse hazard) and selection folds the
+; byte offset into the plain load — LD32 with offset 4.
 ; ISEL-LABEL: name: gep_then_load_is_pre
-; ISEL-DAG: S_LW_PRE_IMM
+; ISEL-DAG: LD32 {{.*}}, 1
 ; ASM-LABEL: gep_then_load_is_pre:
-; ASM-DAG: s_lw_pre_imm
+; ASM-DAG: ld32 {{.*}}, 1
 define i32 @gep_then_load_is_pre(ptr %p) {
   %q = getelementptr i8, ptr %p, i32 4
   %v = load i32, ptr %q, align 4

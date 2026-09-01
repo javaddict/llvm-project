@@ -5,14 +5,20 @@
 #
 # REGRESSION TEST: encodeSlotSubInst is serialize-only.
 #
+# Compiler BUNDLE with verified MemberId children serializes as-is.
+# Unused-entry pads come from generated IsNop records (Haydn::NOP alias),
+# never occupancy-empty / `_MSP` peel. skip-Finalize public logicals in a
+# compiler BUNDLE stay fatal (encodeBundle). Standalone
+# assignFormatEMemberEntries is hand-asm only.
+#
 # Bug: after placement converted residual/standalone sources to generated
 # MemberId, encodeSlotSubInst still peeled catalog names and
 # fillFormatEMemberInst-rebuilt operands (bag-sort, unit claim-by-name).
-# That was a second MC placement authority (T-MC4 encoder peel).
+# That was a second MC placement authority (encoder peel).
 #
-# Fix: encodeSlotSubInst encodes generated members / NOP as-is. It does
-# not peel _S* or _E3_ for row/entry. A non-member child that leaks into
-# entry encode fatals "refuse name recovery / operand rebuild".
+# Fix: encodeSlotSubInst encodes generated members / generated NOP as-is.
+# It does not peel _S*, _MSP, or _E3_ for row/entry. A non-member child
+# that leaks into entry encode fatals "refuse name recovery / operand rebuild".
 #
 # Test design: skip-Finalize dual generated members serialize as-is;
 # encodeSlotSubInst does not peel. 3-child store-last that cannot bind
@@ -37,7 +43,7 @@ body:             |
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
       $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
     }
-    RET implicit $r15
+    $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
 
 # CHECK-LABEL: <dual_fieldslot_positional>:
 # CHECK-DAG: add32

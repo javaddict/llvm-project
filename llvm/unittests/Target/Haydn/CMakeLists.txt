@@ -1,5 +1,6 @@
 include_directories(
   ${PROJECT_SOURCE_DIR}/lib/Target/Haydn
+  ${PROJECT_SOURCE_DIR}/lib/Target/Haydn/GISel
   ${PROJECT_SOURCE_DIR}/lib/Target/Haydn/MCTargetDesc
   ${PROJECT_BINARY_DIR}/lib/Target/Haydn
   )
@@ -8,6 +9,7 @@ set(LLVM_LINK_COMPONENTS
   HaydnCodeGen
   HaydnDesc
   HaydnInfo
+  Analysis
   CodeGen
   CodeGenTypes
   Core
@@ -32,9 +34,12 @@ add_llvm_target_unittest(HaydnTests
   HaydnFormatRegistryTest.cpp
   HaydnFrameFreezeTest.cpp
   HaydnHWLoopContractsTest.cpp
+  HaydnHWLoopDemoteTest.cpp
   HaydnHazardRecognizerTest.cpp
+  HaydnInterBlockEdgesTest.cpp
   HaydnIntraCycleRAWTest.cpp
   HaydnIntraCycleWAWTest.cpp
+  HaydnLaneStoreFoldTest.cpp
   HaydnLibcallNamesTest.cpp
   HaydnMCFormatsTest.cpp
   HaydnMaterializeMultiOpcodeTest.cpp

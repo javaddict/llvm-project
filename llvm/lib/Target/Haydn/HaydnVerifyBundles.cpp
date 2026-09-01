@@ -7,12 +7,17 @@
 //===----------------------------------------------------------------------===//
 //
 // Analysis-only pass: walk top-level BUNDLE roots and fail-close via
-// haydn::bundle::verifyCommittedBundle (late firewall).
+// haydn::bundle::verifyCommittedBundle (late firewall). The last instance
+// in a complete pipeline is the addPreEmitPass2 freeze gate: one concrete
+// generated-member BUNDLE, no representation-expand carve-out, no leftover
+// alternate-map / DDG transients.
 //
 // AIE peers:
-//   AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction fail-closed pattern
+//   AIEBaseInstrInfo.cpp:1616-1635 verifyInstruction fail-closed pattern
 //   AIEHazardRecognizer.cpp:278-312 commit surface (finalizeBundle)
 //   AIEFinalizeBundle.cpp:40-59 — verify runs immediately after finalize
+//   AIEMachineScheduler.cpp:1081-1082 / AIEAlternateDescriptors.h:74
+//     leaveRegion clears AltDescs (Haydn freeze requires empty transients)
 // Haydn also re-runs after PreEmit BR/Fixup growth (AIE PreEmit empty).
 //
 //===----------------------------------------------------------------------===//
@@ -25,8 +30,10 @@
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/Function.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -42,6 +49,18 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "haydn-verify-bundles"
+
+static cl::opt<bool> HaydnFreezeVerify(
+    "haydn-freeze-verify", cl::Hidden,
+    cl::desc("Force HaydnVerifyBundles freeze-gate checks (residual "
+             "representation/logical/mixed children and surviving "
+             "alternate-map/DDG transients)"),
+    cl::init(false));
+
+namespace {
+llvm::HaydnVerifyBundles *LatestVerifier = nullptr;
+unsigned LiveVerifiers = 0;
+} // namespace
 
 namespace llvm {
 namespace haydn {
@@ -131,8 +150,6 @@ bool isResidualExecutablePseudo(const MachineInstr &MI) {
       MI.isImplicitDef() || MI.isCFIInstruction() || MI.isInlineAsm() ||
       MI.isPosition())
     return false;
-  if (isRepresentationExpandPseudo(MI.getOpcode()))
-    return false;
   if (isAllowedLateNoopPseudo(MI.getOpcode()))
     return false;
   unsigned Opc = MI.getOpcode();
@@ -150,14 +167,28 @@ bool isResidualExecutablePseudo(const MachineInstr &MI) {
 namespace {
 
 /// True when a top-level bare MI would be an uncommitted encode escape if it
-/// survived product Finalize. Meta/debug/CFI/KILL/inline-asm and representation
-/// expand / late-noop pseudos are not encode cycles.
+/// survived product Finalize. Meta/debug/CFI/KILL/inline-asm and late-noop
+/// pseudos are not encode cycles. Representation-expand shells (B/RET/
+/// BR_JT/PseudoCALLIndirect) are residual executable.
 bool isUncommittedBareEncodeEscape(const MachineInstr &MI) {
   if (MI.isInsideBundle() || MI.isBundle())
     return false;
   if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isPosition() ||
       MI.isInlineAsm() || MI.isKill() || MI.isImplicitDef() ||
       MI.isCFIInstruction())
+    return false;
+  // W67 non-tail fnptr call clone (JALR_MSP): legal standalone — golden
+  // JALR members are isTerminator=1, so the mid-block call never bundles;
+  // it serializes Desc-as-is (encoder peels `_MSP` -> identical member
+  // bytes). JAL_W direct calls bundle normally (member isTerminator=0).
+  if (MI.isCall() && !MI.isTerminator() && !MI.isPseudo()) {
+    if (const MachineFunction *PMF =
+            MI.getParent() ? MI.getParent()->getParent() : nullptr)
+      if (PMF->getSubtarget().getInstrInfo()->getName(MI.getOpcode())
+              .ends_with("_MSP"))
+        return false;
+  }
+  if (haydn::bundle::isRepresentationExpandPseudo(MI.getOpcode()))
     return false;
   if (haydn::bundle::isResidualExecutablePseudo(MI))
     return true;
@@ -174,6 +205,33 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
   // Committed-cycle inverse is mandatory for optnone and every other function.
   // A skipFunction-skipped function with a noncanonical cycle must still fail
   // here — never an MC uncommitted/unverified escape hatch.
+
+  // Freeze seat: last constructed instance in a complete pipeline
+  // (addPreEmitPass2 after CFIFixup / stack-frame-layout). -run-pass
+  // constructs one instance (LiveVerifiers==1) and stays an invariant
+  // check, not the freeze gate, unless -haydn-freeze-verify is set.
+  // Peer: AIE leaveRegion clears AltDescs (AIEMachineScheduler.cpp:1081-1082;
+  // AIEAlternateDescriptors.h:74) before the next region; Haydn freeze
+  // requires the same empty transients after closure.
+  const bool Freeze =
+      HaydnFreezeVerify || (this == LatestVerifier && LiveVerifiers >= 4);
+
+  if (Freeze) {
+    const HaydnMachineFunctionInfo *MFI =
+        MF.getInfo<HaydnMachineFunctionInfo>();
+    if (!MFI->getAltDescs().empty()) {
+      report_fatal_error(
+          Twine("HaydnVerifyBundles: ") + MF.getName() +
+              ": freeze leftover alternate-map transient after closure",
+          /*GenCrashDiag=*/false);
+    }
+    if (MFI->getInterBlockRegistry()) {
+      report_fatal_error(
+          Twine("HaydnVerifyBundles: ") + MF.getName() +
+              ": freeze leftover inter-block DDG transient after closure",
+          /*GenCrashDiag=*/false);
+    }
+  }
 
   // Frame-deadline law: PEI froze object offsets and stack size; the first
   // post-PEI Haydn pass snapshotted both (HaydnExpandPseudos). Any later
@@ -236,7 +294,8 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
       //     bare encode beside committed co-issue roots).
       // Plain non-optnone verify-only MIR may still present all-bare MIs
       // before a separate Finalize run. Never change generic skipFunction.
-      if ((OptNone || HasCommittedCycle) && isUncommittedBareEncodeEscape(MI)) {
+      if ((Freeze || OptNone || HasCommittedCycle) &&
+          isUncommittedBareEncodeEscape(MI)) {
         std::string Msg;
         raw_string_ostream OS(Msg);
         OS << "HaydnVerifyBundles: uncommitted bare encode MI in "
@@ -244,9 +303,12 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
         if (OptNone)
           OS << " (optnone is no-reorder Format E commit via FinalizeBundle; "
                 "refuse MC standalone escape)";
-        else
+        else if (HasCommittedCycle)
           OS << " (mixed committed BUNDLE + bare encode; target-local "
                 "no-reorder Finalize must leave only committed cycles)";
+        else
+          OS << " (freeze residual bare encode; printer expansion is not a "
+                "verifier carve-out)";
         OS << ":\n  MI: " << MI;
         report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
       }
@@ -271,8 +333,17 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
              << "\n  root: " << MI;
           report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
         }
-        if (haydn::bundle::isExpandOwnedSemanticPseudo(KidOpc) &&
-            !haydn::bundle::isRepresentationExpandPseudo(KidOpc)) {
+        if (Freeze && haydn::bundle::isRepresentationExpandPseudo(KidOpc)) {
+          std::string Msg;
+          raw_string_ostream OS(Msg);
+          OS << "HaydnVerifyBundles: residual representation-expand pseudo "
+                "child in "
+             << MF.getName() << " BB#" << MBB.getNumber()
+             << " (printer expansion is not a verifier carve-out):\n"
+             << "  child: " << *I << "\n  root: " << MI;
+          report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+        }
+        if (haydn::bundle::isExpandOwnedSemanticPseudo(KidOpc)) {
           std::string Msg;
           raw_string_ostream OS(Msg);
           OS << "HaydnVerifyBundles: residual expand-owned pseudo child in "
@@ -371,12 +442,19 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
         }
       }
 
-      if (auto Err = haydn::bundle::verifyCommittedBundle(MI, Fmts)) {
+      if (auto Err = haydn::bundle::verifyCommittedBundle(MI, Fmts, nullptr,
+                                                          Freeze)) {
+        // Unexpanded representation pseudos fail as ordinary diagnostics
+        // (exit 1): MC-encode refuse class, same policy as the printer.
+        // Every other structural corruption aborts (--crash fixtures).
+        bool ReprOnly = StringRef(*Err).contains(
+            "residual representation-expand pseudo");
         std::string Msg;
         raw_string_ostream OS(Msg);
         OS << "Haydn bundle invariant violated in " << MF.getName() << " BB#"
            << MBB.getNumber() << ": " << *Err << "\n  MI: " << MI;
-        report_fatal_error(Twine(OS.str()));
+        report_fatal_error(Twine(OS.str()),
+                           /*GenCrashDiag=*/!ReprOnly);
       }
     }
   }
@@ -387,11 +465,26 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
 
 char HaydnVerifyBundles::ID = 0;
 
+// isAnalysis=false: this is a fail-closed invariant CHECKER, not a
+// computed analysis. With isAnalysis=true the legacy PM's schedulePass
+// dedup (PMTopLevelManager::findAnalysisPass over live AvailableAnalysis)
+// silently drops the second-lane instances — the W68.2R freeze seat at
+// addPreEmitPass2 (and any later lane) must always run. Preservation is
+// declared via AU.setPreservesAll() below, not via the analysis flag.
 INITIALIZE_PASS(HaydnVerifyBundles, DEBUG_TYPE, "Haydn Bundle Invariant Verifier",
-                false, true)
+                false, false)
 
 HaydnVerifyBundles::HaydnVerifyBundles() : MachineFunctionPass(ID) {
   initializeHaydnVerifyBundlesPass(*PassRegistry::getPassRegistry());
+  ++LiveVerifiers;
+  LatestVerifier = this;
+}
+
+HaydnVerifyBundles::~HaydnVerifyBundles() {
+  if (LatestVerifier == this)
+    LatestVerifier = nullptr;
+  if (LiveVerifiers)
+    --LiveVerifiers;
 }
 
 void HaydnVerifyBundles::getAnalysisUsage(AnalysisUsage &AU) const {

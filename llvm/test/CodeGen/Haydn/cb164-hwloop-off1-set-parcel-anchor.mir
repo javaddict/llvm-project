@@ -1,0 +1,152 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+
+# Role: MIR — CB-164 SET-parcel-base Off1/Off2 anchor.
+
+# CB-164 (2026-08-26): the encoder anchors HWLoopOff1/Off2 at the SET
+# parcel BASE (HaydnAsmBackend::evaluateFixup seeds Value = Abs % Parcel so
+# MCAssembler's PC-rel subtract lands on align_down(fixup_loc, 12)), while
+# Fixup historically measured StartOff/EndOff AFTER the SET cycle — every
+# accepted value was one parcel (12 B) smaller than the encoded
+# displacement. pr51581-1 f9/f11 at -O2 (div-by-constant magic-number
+# preheader, no inlining) landed measured 252 B (accepted at the uimm6
+# ceiling) and encoded 264 B -> 264>>2 = 66 > 63 -> "relocation offset out
+# of range" at object emission.
+#
+# Contract under test: Fixup measures from the SET cycle's parcel base
+# (computeOffsets charges committedEncodedBytes of the coissued root).
+#  * at_cap_demote: 21-parcel tail after the SET bundle. Old measurement
+#    252 B (accepted); encoded 264 B -> hard Off1 bad -> product
+#    demote-first installs the countable software loop.
+#  * one_under_keep: 20-parcel tail. Encoded 252 B = uimm6 ceiling
+#    exactly; the hardware form must SURVIVE (no over-demote).
+#
+# Same-MBB tails (no spacer block) so the preheader layout is exactly the
+# NOP count shown; Header==Latch single-BB with imm trip 8.
+
+--- |
+  define dso_local void @at_cap_demote(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+  define dso_local void @one_under_keep(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            at_cap_demote
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    ; 21 NOPs after SET = 252 B tail: legacy after-SET measurement accepted
+    ; this at the uimm6 ceiling; the SET-parcel-base anchor encodes 264 B.
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# Product demote-first: SET erased, countable SUBI32+BNEZ_W soft edge.
+# CHECK-LABEL: name: at_cap_demote
+# CHECK-NOT: SET_HWLOOP
+# CHECK: SUBI32
+# CHECK: BNEZ
+# CHECK: bb.2.exit
+
+...
+---
+name:            one_under_keep
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    ; 20 NOPs after SET = 240 B tail: encoded Off1 = 252 B = exactly the
+    ; uimm6 ceiling — hardware form must survive (no over-demote).
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# Hardware form retained at the exact ceiling.
+# CHECK-LABEL: name: one_under_keep
+# CHECK: SET_HWLOOP_W
+# CHECK-NOT: SUBI32

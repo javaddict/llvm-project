@@ -46,6 +46,7 @@ add_llvm_target(HaydnCodeGen
   HaydnRegisterInfo.cpp
   HaydnPostRAScratch.cpp
   HaydnInstrInfo.cpp
+  HaydnInterBlockScheduling.cpp
   HaydnPipelinerLoopInfo.cpp
   HaydnFrameLowering.cpp
   HaydnISelLowering.cpp
@@ -54,7 +55,6 @@ add_llvm_target(HaydnCodeGen
   HaydnMCInstLower.cpp
   HaydnMachineFunctionInfo.cpp
   HaydnMachineScheduler.cpp
-  HaydnPostRAMultiStage.cpp
   HaydnPreRASchedStrategy.cpp
   HaydnSchedMutations.cpp
   HaydnPostRASchedStrategy.cpp
@@ -66,6 +66,7 @@ add_llvm_target(HaydnCodeGen
   HaydnResourceCycle.cpp
   HaydnLatencyStalls.cpp
   HaydnHazardRecognizer.cpp
+  HaydnLateConvergence.cpp
   HaydnHardwareLoops.cpp
   HaydnHWLoopDemote.cpp
   HaydnFixupHwLoops.cpp

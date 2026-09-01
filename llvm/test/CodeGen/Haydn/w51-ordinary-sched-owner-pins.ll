@@ -9,6 +9,7 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnBundleMaterialize.cpp --check-prefix=TXN
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnMachineScheduler.cpp --check-prefix=IB
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSchedMutations.cpp --check-prefix=IBBRICK
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSchedMutations.h --check-prefix=IBHDR
 ; REQUIRES: haydn-registered-target
 ;
 ; Role: IR-less owner pins for ordinary post-RA host + shared resource model.
@@ -62,6 +63,16 @@
 ; IB: successorsAreScheduled
 ; IB: ScheduledMBBs.insert(BB);
 
+; IBBRICK: haydn-postra-region-end-edges", cl::init(false)
 ; IBBRICK: haydn-postra-interblock", cl::init(false)
 ; IBBRICK: no PerSuccEdges invent
+; IBBRICK: haydn-postra-waw-edges", cl::init(false)
 ; IBBRICK: IncludeStages(!EnableHaydnPostRAInterBlock
+; IBBRICK: ReduceLatency(EnableHaydnPostRAInterBlock && IsBottomRegion &&
+; IBBRICK-NOT: getPerSuccEdges
+; IBBRICK-NOT: buildPerSuccEdges
+; IBBRICK-NOT: class PerSuccEdges
+
+; IBHDR: stay off until same-artifact evidence
+; IBHDR: no PerSuccEdges invent
+; IBHDR: Never a process-static lookup

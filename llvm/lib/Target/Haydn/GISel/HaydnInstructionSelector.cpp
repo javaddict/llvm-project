@@ -14,6 +14,7 @@
 // generated member `_S*` / AltDesc forms. Encode is Desc-as-is (Format E).
 //===----------------------------------------------------------------------===//
 
+#include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnRegisterBankInfo.h"
@@ -1738,6 +1739,74 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     }
     if (!FusedOpc)
       return false;
+
+    // Chained-walk guard: when Base feeds multiple fused AGU sites (an
+    // unrolled/iterated same-buffer walk), the LAST link's writeback dies
+    // after two-address COPY insertion and the coalescer ties that dead
+    // def to its read base — breaking the pre-RA scheduler's
+    // deadDefHasNoUse invariant (assert in debug builds; dropped
+    // dependence edges, i.e. wrong scheduling, in release builds).
+    // Refuse fusion for the whole chained class: emit the access-only
+    // shape. One-shot addressing (Base exclusive to this access) never
+    // develops the tie and keeps the golden fused form.
+    if (!IsPost) {
+      // Dead-writeback PRE fusion is refused: a PRE writeback with no
+      // users dies, and the coalescer then ties that dead writeback to its
+      // read base — breaking the pre-RA scheduler's deadDefHasNoUse
+      // invariant (assert in debug; dropped dependence edges, i.e. wrong
+      // schedule, in release). Live-writeback PRE (value escapes, e.g. the
+      // pointer is returned/stored) and all POST forms keep the golden
+      // fused form.
+      if (!IsPost && MRI.use_empty(PtrOut)) {
+        Register EA = Base;
+        int64_t EAOffset = 0;
+        if (IsRegStride) {
+          MachineInstrBuilder Ptr =
+              MIB.buildInstr(Haydn::ADD32).addDef(PtrOut).addReg(Base)
+                  .addReg(OffsetReg);
+          if (!constrainSelectedInstRegOperands(*Ptr, TII, TRI, RBI))
+            return false;
+          EA = PtrOut;
+        } else {
+          // Imm stride folds into the plain op's offset field. Plain
+          // LD/ST offsets are ELEMENT-scaled (st32 r,r,1..4 walks the
+          // 4-byte locals in const-array; fused pre/post forms share the
+          // same scale), so emit the element count — never raw bytes.
+          EAOffset = Scaled;
+        }
+        unsigned PlainOpc = 0;
+        switch (MemBytes) {
+        case 1:
+          PlainOpc = IsLoad ? (IsSExt ? Haydn::LD8 : Haydn::LDU8) : Haydn::ST8;
+          break;
+        case 2:
+          PlainOpc =
+              IsLoad ? (IsSExt ? Haydn::LD16 : Haydn::LDU16) : Haydn::ST16;
+          break;
+        case 4:
+          PlainOpc = IsLoad ? Haydn::LD32 : Haydn::ST32;
+          break;
+        case 8:
+          PlainOpc = IsLoad ? Haydn::LD64 : Haydn::ST64;
+          break;
+        }
+        if (!PlainOpc)
+          return false;
+        MachineInstrBuilder Acc = MIB.buildInstr(PlainOpc);
+        if (IsLoad)
+          Acc.addDef(Data);
+        else
+          Acc.addReg(Data);
+        Acc.addReg(EA);
+        Acc.addImm(EAOffset);
+        for (auto *MMO : I.memoperands())
+          Acc.addMemOperand(MMO);
+        if (!constrainSelectedInstRegOperands(*Acc, TII, TRI, RBI))
+          return false;
+        I.eraseFromParent();
+        return true;
+      }
+    }
 
     MachineInstrBuilder Fused = MIB.buildInstr(FusedOpc);
     if (IsLoad) {
@@ -6651,11 +6720,16 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   // the opcode — post-RA HR auction writes AltDescs; leaveRegion setDesc
   // commits private _S0/_S1/_S2 members (Desc-as-is at encode). Hardwiring
   // *_S0 made dual AR ops look exclusive-S0 and oversubscribed the cycle.
-  // ar_sel / dir_sel must be compile-time constants (uimm2 / uimm1).
+  // ar_sel must be a compile-time constant (uimm2).
   //
   // Pointer contract: HW AGU post-inc is lowered as a *dead* tied-def so the
   // MC shape is correct. The IR/C cursor is ordinary ptr arithmetic (not HW
   // writeback readback). SCEV only needs the C/IR next-ptr GEP chain.
+  //
+  // CB-151 reshape (2026-08-26): logicals carry the member wire shape —
+  // stride and dir_sel are NOT encoded (golden behavior is rs = rs+8 with
+  // direction in rs[2:1]); they fold HERE at selection, not at Finalize.
+  // The tied base writeback is the member's golden GPR Write∩Read tie.
   //===---------------------------------------------------------------===
   case haydn_pldwwua: {
     // void pldwwua(ar_sel, ptr) — G_INTRINSIC_W_SIDE_EFFECTS:
@@ -6669,10 +6743,15 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     }
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
-    // Logical dag is (uimm2 ar_sel, GPR32 rs) — golden wire order so
-    // occupancy binds PLDWWUA_POST members positionally.
+    // Logical dag is the member wire shape (outs rs_wb tied; ins ar_sel, rs)
+    // so occupancy binds PLDWWUA_POST members positionally (identity). The
+    // HW post-inc writeback has no IR result (void intrinsic): def a fresh
+    // dead vreg like the old fat shape did; the tie records the golden
+    // Write∩Read pair and RA coalesces or elides it.
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
+    Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *MI = MIB.buildInstr(PLDWWUA)
+                           .addDef(WbReg, RegState::Dead)
                            .addImm(static_cast<int64_t>(ArSel))
                            .addReg(PtrReg)
                            .addDef(ArRegs[ArSel], RegState::Implicit);
@@ -6703,6 +6782,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_wbarwua: {
     // void wbarwua(ar_sel, ptr, dir_sel) — ar_sel/dir ImmArg.
     // op(0)=id, op(1)=ar_sel, op(2)=ptr, op(3)=dir_sel
+    // dir_sel is NOT encoded (direction is rs[2:1] in golden); fold here.
     uint64_t ArSel = 0, DirSel = 0;
     Register PtrReg = I.getOperand(2).getReg();
     if (!getConstOpZExt(I.getOperand(1), ArSel) || !admitProductArSel(ArSel) ||
@@ -6712,12 +6792,11 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
     }
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
-    // Logical: (outs), (ins GPR32:$rs, uimm2:$ar_sel, uimm1:$dir_sel)
+    // Logical: (outs), (ins uimm2:$ar_sel, GPR32:$rs) — member wire shape.
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
     MachineInstr *MI = MIB.buildInstr(WBARWUA)
-                           .addReg(PtrReg)
                            .addImm(static_cast<int64_t>(ArSel))
-                           .addImm(static_cast<int64_t>(DirSel))
+                           .addReg(PtrReg)
                            .addDef(ArRegs[ArSel], RegState::Implicit)
                            .addUse(ArRegs[ArSel],
                                    RegState::Implicit | RegState::Undef);
@@ -6729,14 +6808,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_d_lqhwua_post:
   case haydn_d_ltwua_post: {
     // i64 load(ptr, ar_sel, stride, dir_sel)
-    // MC: [rtd, rs1_wb, rs1, rs2, ar_sel, dir_sel]
-    // C next-ptr is IR GEP (haydn_dsp.h); HW base writeback stays Dead for MC
-    // shape. Implicit AR Def so PostRA cannot pack two same-stream UA/FLAR
-    // ops. Product ISel admits ar_sel {0,1}; 2/3 stay unmapped.
+    // MC (member wire shape): [rtd, rs_wb, ar_sel, rs]
+    // stride/dir_sel are NOT encoded (golden: rs = rs+8, direction in
+    // rs[2:1]) — fold at selection. C next-ptr is IR GEP (haydn_dsp.h);
+    // HW base writeback stays Dead. Implicit AR Def so PostRA cannot pack
+    // two same-stream UA/FLAR ops. Product ISel admits ar_sel {0,1}.
     unsigned Opc = (IntrID == haydn_d_lqhwua_post) ? D_LQHWUA_POST
                                                    : D_LTWUA_POST;
     Register PtrReg = I.getOperand(2).getReg();
-    Register StrideReg = I.getOperand(4).getReg();
     uint64_t ArSel = 0, DirSel = 0;
     if (!getConstOpZExt(I.getOperand(3), ArSel) || !admitProductArSel(ArSel) ||
         !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
@@ -6747,17 +6826,13 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(DstReg, DR64RegClass, MRI);
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
-    if (StrideReg.isVirtual())
-      RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *MI = MIB.buildInstr(Opc)
                            .addDef(DstReg)
                            .addDef(WbReg, RegState::Dead)
-                           .addReg(PtrReg)
-                           .addReg(StrideReg)
                            .addImm(static_cast<int64_t>(ArSel))
-                           .addImm(static_cast<int64_t>(DirSel))
+                           .addReg(PtrReg)
                            .addDef(ArRegs[ArSel], RegState::Implicit)
                            .addUse(ArRegs[ArSel],
                                    RegState::Implicit | RegState::Undef);
@@ -6769,12 +6844,12 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_d_sqhwua_post:
   case haydn_d_stwua_post: {
     // void store(data, ptr, ar_sel, stride, dir_sel)
-    // MC: [rs1_wb, rtd, rs1, rs2, ar_sel, dir_sel] + implicit AR write
+    // MC (member wire shape): [rs_wb, ar_sel, rtd, rs] + implicit AR write
+    // stride/dir_sel fold at selection (not encoded; golden rs = rs+8).
     unsigned Opc = (IntrID == haydn_d_sqhwua_post) ? D_SQHWUA_POST
                                                    : D_STWUA_POST;
     Register DataReg = I.getOperand(1).getReg();
     Register PtrReg = I.getOperand(2).getReg();
-    Register StrideReg = I.getOperand(4).getReg();
     uint64_t ArSel = 0, DirSel = 0;
     if (!getConstOpZExt(I.getOperand(3), ArSel) || !admitProductArSel(ArSel) ||
         !getConstOpZExt(I.getOperand(5), DirSel) || DirSel > 1) {
@@ -6785,17 +6860,13 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
       RBI.constrainGenericRegister(DataReg, DR64RegClass, MRI);
     if (PtrReg.isVirtual())
       RBI.constrainGenericRegister(PtrReg, GPR32RegClass, MRI);
-    if (StrideReg.isVirtual())
-      RBI.constrainGenericRegister(StrideReg, GPR32RegClass, MRI);
     static const MCPhysReg ArRegs[] = {Haydn::AR0, Haydn::AR1};
     Register WbReg = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
     MachineInstr *MI = MIB.buildInstr(Opc)
                            .addDef(WbReg, RegState::Dead)
+                           .addImm(static_cast<int64_t>(ArSel))
                            .addReg(DataReg)
                            .addReg(PtrReg)
-                           .addReg(StrideReg)
-                           .addImm(static_cast<int64_t>(ArSel))
-                           .addImm(static_cast<int64_t>(DirSel))
                            .addDef(ArRegs[ArSel], RegState::Implicit)
                            .addUse(ArRegs[ArSel],
                                    RegState::Implicit | RegState::Undef);

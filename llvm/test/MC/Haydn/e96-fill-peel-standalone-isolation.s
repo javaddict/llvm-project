@@ -31,8 +31,8 @@
 # FILL: haydnFillFormatEMemberInstPositional
 # FILL: FieldSlot, committed MemberId, and compiler extra-op never reconstruct
 # FILL: Class-bag reconstruction is deleted
+# PRINT: Desc-as-is
 # PRINT: refuse E2
-# PRINT: haydnFillFormatEMemberInstPositional
 # PRINT-NOT: haydnFillFormatEMemberInst(*Mem
 
 .ifdef FIELDSLOT
@@ -46,7 +46,7 @@ abs64_s1 d0, d1
   { move32 r0, r1 }
   { lui r4, 1 }
   { add32 r5, r0, r1; xor32 r6, r2, r3 }
-  { d_lqhwua_post d0, 0, r1, r2, 0 }
+  { d_lqhwua_post 0, d0, r1 }
   { d_ldw_cb_imm 0, d0, r1, 1 }
   { wfi }
 

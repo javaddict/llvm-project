@@ -1,0 +1,51 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postselect-opt \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+#
+# Role: MIR — MOVE32_DR_L/H + ST32 fusion must pass the ST32 offset
+# operand through UNCHANGED to D_SW_L/H_WITH_IMM.
+#
+# REGRESSION TEST (CB-160): ST32 and D_SW_L/H_WITH_IMM share one golden
+# word-scaled EA law (S_SW_WITH_IMM / D_SW_L_WITH_IMM:
+# EA = rs + (imm6 << 2)). The selected ST32 offset is already word-scaled,
+# so the fold must not rescale it. tryFoldMove32DrToSw used to divide the
+# ST32 offset by 4: in the fft_stage_inner_DFT4_16x16_ie shape the first
+# DR-pair store of each loop iteration lowered to
+#   MOVE32_DR_L + ST32 %v, %base, -4   (base = y+16, EA = y+0)
+# and the fold rewrote it to d_sw_l_with_imm -1 (EA = y+12): y[0] was
+# never stored while y[12] got clobbered — one dead lane per iteration at
+# -O1/-O2/-O3 only (pass runs O1+). Pin the identity: imm out == imm in.
+
+---
+name: lane_store_fold_negative_word_imm
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $d0, $r2
+    %0:dr64 = COPY $d0
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = MOVE32_DR_L %0
+    ST32 %2, %1, -4 :: (store (s32))
+    %3:gpr32 = MOVE32_DR_H %0
+    ST32 %3, %1, -3 :: (store (s32))
+    RET implicit $r15
+...
+# CHECK-LABEL: name: lane_store_fold_negative_word_imm
+# CHECK: D_SW_L_WITH_IMM %0, %1, -4
+# CHECK: D_SW_H_WITH_IMM %0, %1, -3
+# CHECK-NOT: ST32
+
+---
+name: lane_store_fold_positive_word_imm
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $d0, $r2
+    %0:dr64 = COPY $d0
+    %1:gpr32 = COPY $r2
+    %2:gpr32 = MOVE32_DR_L %0
+    ST32 %2, %1, 3 :: (store (s32))
+    RET implicit $r15
+...
+# CHECK-LABEL: name: lane_store_fold_positive_word_imm
+# CHECK: D_SW_L_WITH_IMM %0, %1, 3
+# CHECK-NOT: ST32

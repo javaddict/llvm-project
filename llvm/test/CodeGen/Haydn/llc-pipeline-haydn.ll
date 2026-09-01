@@ -9,6 +9,14 @@
 ; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
 ; RUN:     -haydn-enable-hwloops < %s -o /dev/null 2>&1 \
 ; RUN:   | FileCheck %s --check-prefix=HWON
+; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
+; RUN:     -haydn-sms2 < %s -o /dev/null 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=SMS2
+; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
+; RUN:     < %s -o /dev/null 2>&1 \
+; RUN:   | FileCheck %s --check-prefix=NOS2
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=SMS2FLAG
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnLateConvergence.h --check-prefix=S2SEAT
 ; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=PIPE20
 ; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=DG0
 ; RUN: FileCheck %s --input-file=%S/Inputs/SOURCE-AUTHORITY-ANCHORS.txt --check-prefix=M10
@@ -24,7 +32,6 @@
 ; RUN: %python %S/../../../utils/haydn/parse_lit_summary.py --self-test
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.h --check-prefix=HWDEF
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=HWFLAG
-; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRAMultiStage.h --check-prefix=SMSDEF
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnSubtarget.h --check-prefix=O0POST
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnEnsureTerminators.cpp --check-prefix=ENSURE
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnInstrInfo.cpp --check-prefix=W49
@@ -119,10 +126,29 @@ define i32 @f(i32 %a, i32 %b) {
 ; O0-NOT:      Branch Probability Basic Block Placement
 ; O0:      Branch relaxation pass
 ; O0-NOT:      Haydn Hardware Loop Fixup
-; Product default: late Finalize/Verify after BranchRelaxation
-; (same Finalize/Verify; insertIndirectBranch LUI+ADDI32_W+JALR_W).
+; W68.2R seats: mid Finalize/Verify after BranchRelaxation (bare-parcel
+; recommit; insertIndirectBranch LUI+ADDI32_W+JALR_W), then the late
+; CLOSURE Finalize/Verify at addPostBBSections (after every common
+; executable writer) and the terminal read-only freeze verifier at
+; addPreEmitPass2 (contracts/pipeline.md required terminal lifecycle).
 ; O0-NEXT:      Haydn Bundle Finalization
 ; O0-NEXT:      Haydn Bundle Invariant Verifier
+; Common tail runs between the mid pair and the closure (FuncletLayout,
+; RemoveLoadsIntoFakeUses, StackMap, LiveDebugValues, sanitizer, outliner
+; and BB-sections writers all precede addPostBBSections).
+; O0:      Contiguously Lay Out Funclets
+; O0:      Machine Sanitizer Binary Metadata
+; Closure pair (addPostBBSections) sits after every common writer and
+; before the common CFIFixup/frame-layout analyses.
+; O0-NEXT:      Haydn Bundle Finalization
+; O0-NEXT:      Haydn Bundle Invariant Verifier
+; O0:      Insert CFI remember/restore state instructions
+; O0:      Stack Frame Layout Analysis
+; Freeze gate (addPreEmitPass2): terminal read-only VerifyBundles; only
+; serialization follows.
+; O0-NEXT:      Haydn Bundle Invariant Verifier
+; S2/LateConvergence is default-off and is not seated in addPreEmitPass.
+; O0-NOT:      Haydn Late Layout Convergence Loop
 ; Densify/quarantine absent at product defaults (W0.1):
 ; O0-NOT:      Haydn Load/Store Optimizer
 ; O0-NOT:      Haydn Circular Buffer Detection
@@ -175,7 +201,9 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Sole MBP (addBlockPlacement empty - no second placement after pack):
 ; O123-NOT:      Branch Probability Basic Block Placement
-; PreEmit - BR then late Finalize/Verify at product default.
+; PreEmit - BR chain then mid Finalize/Verify (bare-parcel recommit), the
+; W68.2R closure pair at addPostBBSections, and the terminal read-only
+; freeze verifier at addPreEmitPass2.
 ; 2026-08-22 hwloop product-default flip rebaseline: default is now ON,
 ; so the late lane runs Fixup + second BR before the final commit.
 ; O123:      Branch relaxation pass
@@ -183,6 +211,16 @@ define i32 @f(i32 %a, i32 %b) {
 ; O123-NEXT:      Branch relaxation pass
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
+; Common-tail writers run between the mid pair and the closure.
+; O123:      Contiguously Lay Out Funclets
+; O123:      Machine Sanitizer Binary Metadata
+; O123-NEXT:      Haydn Bundle Finalization
+; O123-NEXT:      Haydn Bundle Invariant Verifier
+; O123:      Insert CFI remember/restore state instructions
+; O123:      Stack Frame Layout Analysis
+; O123-NEXT:      Haydn Bundle Invariant Verifier
+; S2/LateConvergence is default-off and is not seated in addPreEmitPass.
+; O123-NOT:      Haydn Late Layout Convergence Loop
 ; Densify/quarantine absent at product defaults (W0.1):
 ; O123-NOT:      Haydn Load/Store Optimizer
 ; O123-NOT:      Haydn Circular Buffer Detection
@@ -204,9 +242,41 @@ define i32 @f(i32 %a, i32 %b) {
 ; HWON:      Haydn Hardware Loop Fixup
 ; HWON:      Branch relaxation pass
 ; HWON:      Haydn Bundle Finalization
+; HWON:      Haydn Bundle Invariant Verifier
+; W68.2R closure + freeze seats (same lane as O0/O123 arms).
+; HWON:      Contiguously Lay Out Funclets
+; HWON:      Machine Sanitizer Binary Metadata
+; HWON:      Haydn Bundle Finalization
+; HWON-NEXT:      Haydn Bundle Invariant Verifier
+; HWON:      Insert CFI remember/restore state instructions
+; HWON:      Stack Frame Layout Analysis
 ; HWON-NEXT:      Haydn Bundle Invariant Verifier
 
-; PIPE-20 / DG0 / R15 inventory (Inputs/ is lit-excluded; this file
+; W68.2R: -haydn-sms2 seats HaydnLateConvergence at addPostBBSections,
+; after the common executable tail and immediately before closure
+; Finalize. It must not appear in addPreEmitPass (between BR and
+; FuncletLayout). Flag stays cl::init(false).
+; SMS2:      Branch relaxation pass
+; SMS2-NOT:      Haydn Late Layout Convergence Loop
+; SMS2:      Contiguously Lay Out Funclets
+; SMS2:      Machine Sanitizer Binary Metadata
+; LateConvergence requires MDT/MLI; those analyses sit between the
+; common tail and the S2 driver. S2 itself is immediately before
+; closure Finalize.
+; SMS2:      Haydn Late Layout Convergence Loop
+; SMS2-NEXT:      Haydn Bundle Finalization
+; SMS2-NEXT:      Haydn Bundle Invariant Verifier
+; SMS2:      Insert CFI remember/restore state instructions
+; SMS2:      Stack Frame Layout Analysis
+; SMS2-NEXT:      Haydn Bundle Invariant Verifier
+; SMS2FLAG: "haydn-sms2"
+; SMS2FLAG: cl::init(false)
+; S2SEAT: addPostBBSections
+; S2SEAT-NOT: addPreEmitPass
+; NOS2: PostRA Machine Instruction Scheduler
+; NOS2-NOT: Haydn Late Layout Convergence Loop
+
+; PIPE-20 / DG0 / R15 inventory (Inputs/ is lit-excluded; this file)
 ; is the owner-slice seat). DecisionGuard registry stays absent.
 ; No second format pipeline.
 ; PIPE20-DAG: Phase-firewall inventory (PIPE-20
@@ -256,7 +326,6 @@ define i32 @f(i32 %a, i32 %b) {
 ; HWFLAG: "haydn-enable-hwloops"
 ; HWFLAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
 ; 2026-08-22 SMS product-default flip rebaseline: default ON.
-; SMSDEF: productDefaultEnabled() { return true; }
 ; O0POST: enablePostRAMachineScheduler() const override { return true; }
 ; ENSURE: never call skipFunction
 ; W49: ensureSoftZeroR0Clean

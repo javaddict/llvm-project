@@ -262,9 +262,8 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
 
   // Stage-0 PostPipeliner is deleted. AIE ZeroOverheadLoop::preferPostPipeliner
   // (AIEBasePipelinerLoopInfo.cpp:770-834) routes some ZOL to PostPipeliner;
-  // Haydn's post-RA host (HaydnMultiStageSMS) is the only multi-stage owner,
-  // so the W59 routing seam below defers ZOL candidates to THAT engine
-  // (decline-and-defer), never to the retired Stage-0 engine.
+  // W68.1: the generic MachinePipeliner (this path) is the only multi-stage
+  // owner; the bespoke post-RA host is deleted.
 
   // For ZOL loops, reject single-stage schedules (StageCount <= 1).
   // A single-stage schedule has no pipeline overlap -- it just adds
@@ -308,9 +307,8 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   // accepts multi-stage, so ZOL candidates must reach the post-RA host
   // unpolluted." With ZOL multi-stage qualified on the generic path below,
   // pre-RA IS the multi-stage owner for both forms and a decline-and-defer
-  // would split one loop between two engines. The post-RA HaydnMultiStageSMS
-  // host itself is scheduled for deletion after this qualification (the F41
-  // knob at 1 bisects the whole lift down for both arms).
+  // would split one loop between two engines. The bespoke post-RA host is
+  // DELETED with this change (W68.1 final step).
 
   // PPS-3: AIE canAcceptII stage-count gate (into shouldUseSchedule — this
   // LLVM has no PipelinerLoopInfo::canAcceptII virtual). Reject schedules

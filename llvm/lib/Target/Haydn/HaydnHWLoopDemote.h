@@ -72,6 +72,45 @@ bool blockContainsUnpublishedHwlrCsr(const MachineBasicBlock &BB);
 /// True iff any block in \p Blocks writes the unpublished HWLR window.
 bool loopBlocksContainUnpublishedHwlrCsr(const LoopBlockSet &Blocks);
 
+/// CB-162/CB-165 value-preserve placement. The demote's save/restore pair
+/// exists only to return the value Prefer (the SET trip register) must
+/// carry OUT of the loop, and only the demote's own latch-scratch window
+/// can destroy that value:
+///
+///   * NoSave          — latch scratch != Prefer: nothing the demote
+///                       installs touches Prefer; any save/restore would
+///                       reload a stale value over the live exit value
+///                       (the CB-165 miscompile: pr51581-2 c[N-1]=trip).
+///   * PreheaderSave   — latch scratch == Prefer and the body does NOT
+///                       redefine Prefer: Prefer carries the trip through
+///                       untouched; save the trip in the preheader and
+///                       reload it at the exit (the CB-162 shape).
+///   * LatchEndSave    — latch scratch == Prefer and the body REDEFINES
+///                       Prefer (MachinePipeliner assigns the loop-carried
+///                       stage value to the trip physreg): the exit value
+///                       is the body's final def, so the save must execute
+///                       at latch end, just before the scratch window.
+///
+/// HasImm forms have no live Prefer to preserve (caller passes
+/// PreferValid=false).
+enum class HwLoopDemoteSaveKind {
+  NoSave,
+  PreheaderSave,
+  LatchEndSave,
+};
+
+/// The pure placement decision for the value-preserve save. Inputs are the
+/// resolved facts, not the MachineFunction, so this is the unit seam:
+///   \p PreferIsLatchScratch  LatchScr == Prefer after the scratch probe;
+///   \p PreferRedefinedInBody regClobberedNonCountdownIn(Prefer, blocks).
+HwLoopDemoteSaveKind
+demoteSavePlacement(bool PreferIsLatchScratch, bool PreferRedefinedInBody);
+
+/// Convenience wrapper resolving PreferRedefinedInBody from the body
+/// blocks (regClobberedNonCountdownIn is the authority).
+HwLoopDemoteSaveKind demoteSavePlacement(Register Prefer, Register LatchScr,
+                                         const LoopBlockSet &Blocks);
+
 /// CFG-only body resolution shared by formation and fixup (see file law).
 /// LoopStart: PLE-carrying preheader successor (single-BB), else the unique
 /// preheader successor whose latch PLE targets it (multi-BB header).

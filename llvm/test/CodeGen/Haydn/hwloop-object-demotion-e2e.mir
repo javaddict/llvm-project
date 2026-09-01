@@ -142,7 +142,7 @@ body:             |
 # DEMOTE: SUBI32
 # DEMOTE: BNEZ_E2
 # DEMOTE: bb.3.exit
-# DEMOTE: RET
+# DEMOTE: {{RET|JALR}}
 
 # OBJ-DEMOTE-LABEL: <demote_range>:
 # Final-real software countdown encodes and decodes (not <unknown>).

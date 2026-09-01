@@ -8,11 +8,13 @@
 //
 // Post-RA expansion of Haydn pseudos that still need physical registers or
 // a late operand rewrite: LOAD_ADDR, SETCBR, leftover *_POST_INC, leftover
-// generic SET_HWLOOP{,_REG} rewrite, and VAEND no-op. Soft-zero R0 restore
-// lives in HaydnPostRAScratch; this pass only calls it after leftover
-// expand so real JAL_W is visible. Product SET is SET_HWLOOP_F2_W at
-// HardwareLoops (HaydnHardwareLoops.cpp:701). Leftover expand-owned
-// semantic pseudos and leftover cycle-forming BUNDLE children are fatal.
+// generic SET_HWLOOP{,_REG} rewrite, VAEND no-op, and representation
+// expansion of B / RET / BR_JT / PseudoCALLIndirect to real parcels before
+// S1. Soft-zero R0 restore lives in HaydnPostRAScratch; this pass only
+// calls it after leftover expand so real JAL_W / JALR_W is visible. Product
+// SET is SET_HWLOOP_F2_W at HardwareLoops (HaydnHardwareLoops.cpp:701).
+// Leftover expand-owned semantic pseudos, leftover representation expands,
+// and leftover cycle-forming BUNDLE children are fatal.
 //
 // Relocated owners (not this pass):
 //   VASTART / VACOPY / G_VAARG  — HaydnLegalizerInfo

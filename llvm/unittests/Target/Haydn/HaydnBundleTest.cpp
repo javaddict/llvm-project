@@ -16,7 +16,6 @@
 #include "HaydnPlacementAlternative.h"
 #include "HaydnPreRASchedStrategy.h"
 #include "HaydnResourceCycle.h"
-#include "HaydnPostRAMultiStage.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -2098,27 +2097,4 @@ TEST(HaydnBundleTest, SMS_FormatAcceptance_MIDPathAgreesWithOpcode) {
 
 } // namespace
 
-TEST(HaydnBundleTest, PostRAMultiStageHostPins) {
-  // 2026-08-22 SMS product-default flip (G006): default ON after
-  // qualification (T4 accept + II parity + rollback + combined matrix);
-  // cl::init follows productDefaultEnabled().
-  EXPECT_TRUE(HaydnMultiStageSMS::productDefaultEnabled());
-  EXPECT_TRUE(EnableHaydnMultiStageSMS);
-  EXPECT_EQ(HaydnMultiStageSMS::preflightSeatNames().size(), 8u);
-  EXPECT_EQ(HaydnMultiStageSMS::journalSeatNames().size(), 7u);
-  EXPECT_STREQ(HaydnMultiStageSMS::preflightSeatNames()[0], "PF-CFG");
-  EXPECT_STREQ(HaydnMultiStageSMS::journalSeatNames()[0], "JM-ALLOC");
-  EXPECT_STREQ(HaydnMultiStageSMS::journalSeatNames()[4], "JM-LIVE");
-  EXPECT_STREQ(HaydnMultiStageSMS::journalSeatNames()[5], "JM-ALT");
-  EXPECT_STREQ(HaydnMultiStageSMS::journalSeatNames()[6], "JM-META");
-  bool IsPF = false;
-  unsigned Idx = 99;
-  EXPECT_TRUE(parseHaydnMultiStageForceFailSeat("PF-CFG", IsPF, Idx));
-  EXPECT_TRUE(IsPF);
-  EXPECT_EQ(Idx, 0u);
-  HaydnMultiStageNodeInfo N;
-  N.Cycle = 5;
-  N.update(3);
-  EXPECT_EQ(N.ModuloCycle, 2);
-  EXPECT_EQ(N.Stage, 1);
-}
+

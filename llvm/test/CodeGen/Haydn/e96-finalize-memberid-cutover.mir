@@ -593,8 +593,8 @@ body:             |
     liveins: $r0, $r15
     ; CHECK-LABEL: name: cutover_csrr_s0
     ; CHECK: CSRR_E2_E0_ALU0_I8
-    BUNDLE 0, 0, implicit-def $r1, implicit $r0, implicit $sfr {
-      $r1 = CSRR 1, $r0, implicit $sfr
+    BUNDLE 0, 0, implicit-def $r1, implicit $sfr {
+      $r1 = CSRR 1, implicit $sfr
     }
     RET implicit $r15
 

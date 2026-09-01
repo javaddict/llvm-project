@@ -118,7 +118,28 @@ def HaydnSchedModel : SchedMachineModel {
   // Aggregate unit itineraries + pooled PortModel ceilings remain product-safe
   // and are carried by the shared availability-aware record (IssueWidth /
   // NumExecUnits / LoadLatency scaffold + bank port budgets).
+  // M18 (2026-08-26): the per-op golden import IS generated
+  // (HaydnGenPerOpResources.inc: 806 covered compiler-reachable logicals),
+  // but 44 remain uncovered (wide-_W variants, legacy M0S0LS formats,
+  // pseudos without a Format E row) — the fail-closed census in that table
+  // is the CompleteModel=0 evidence. Coverage moves only with a golden
+  // index change.
   let CompleteModel = 0;
   // Open the post-RA MachineScheduler gate (Haydn owns the strategy).
   let PostRAScheduler = 1;
 }
+
+// M18 llvm-mca status (2026-08-26): llvm-mca REQUIRES a SchedRW model
+// (MCSchedModel::SchedClassTable); a ProcessorItineraries-only model is
+// rejected with "instruction itineraries are currently unsupported". A
+// generated ItinRW bridge WAS proven (HaydnGenSchedMcaBridge.td.inc, kept
+// generated+checked but NOT included here): llvm-mca then runs and reports
+// the golden unit menu/latencies. However the same non-null SchedClassTable
+// activates generic-scheduler resource arbitration in llc (SchedBoundary
+// pressure / reserved-resource paths key on hasInstrSchedModel()), which
+// measurably changed product scheduling (39 lit tests). Product scheduling
+// policy is Haydn-owned (HR is the pack authority); enabling mca's model is
+// not allowed to change llc QoR. AIE peer declines llvm-mca the same way
+// (CompleteModel=0, itineraries only). Decline mirrors the peer: llvm-mca
+// exits with the upstream "no instruction-level scheduling information"
+// error until the mca/llc model coupling gains a target-owned answer.

@@ -98,4 +98,74 @@ TEST(HaydnAdmittedPerOpRecordTest, AdmissionFlipWithoutTableFailsPins) {
   EXPECT_FALSE(haydnHasAdmittedPerOpResourceRecords());
 }
 
+// ---------------------------------------------------------------------------
+// M18 golden per-op import (HaydnGenPerOpResources.inc). Golden FACTS only:
+// the import is partial (806 covered / 44 uncovered census), so every
+// admission pin above stays byte-identical and CompleteModel stays 0.
+// ---------------------------------------------------------------------------
+
+TEST(HaydnAdmittedPerOpRecordTest, GoldenImportCensusPins) {
+  // Census pins: coverage counts are generator-owned and must move ONLY
+  // with a golden index change (ratchet like the setDesc ledger).
+  EXPECT_EQ(haydnGoldenPerOpRecordCount(), 806u);
+  EXPECT_EQ(haydnGoldenPerOpUncoveredCount(), 44u);
+  // The import itself does NOT flip admission or CompleteModel.
+  EXPECT_FALSE(haydnHasAdmittedPerOpResourceRecords());
+  EXPECT_EQ(haydnSchedCompleteModelPin(), 0u);
+  EXPECT_FALSE(haydnCompetitiveIIDensityClaimsAllowed());
+}
+
+TEST(HaydnAdmittedPerOpRecordTest, GoldenImportLatencyFacts) {
+  // golden instruction_type_index Pipeline_Info Data_Latency, now served
+  // from the generated table (the 2026-08-21 itinerary re-map comments in
+  // HaydnInstrInfo.td document the same golden fields).
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::ADD32), 1u);  // RR ALU lat 1
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::CSRR), 2u);   // I8 CsrLat 2
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::LOG2), 2u);   // R DspLat 2
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::SQRT), 2u);
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::EXP2), 2u);
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::RECIP), 2u);
+  // SIN_COS/ARCTAN are (uimm4+2): no scalar; the published conservative
+  // dest bound 17 rides OperandCycles[0].
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::SIN_COS), 17u);
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::ARCTAN), 17u);
+  // Golden-silent surface: store sides publish no Data_Latency (0 = no
+  // claim), and the load side keeps golden 2.
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::S_SW_WITH_IMM), 0u);
+  // Uncovered census member: NOP has no golden row, lookup is nullptr.
+  EXPECT_EQ(haydnGetAdmittedPerOpResourceRecord(Haydn::NOP), nullptr);
+  EXPECT_EQ(haydnGoldenDataLatency(Haydn::NOP), 0u);
+}
+
+TEST(HaydnAdmittedPerOpRecordTest, GoldenImportUnitAndPortFacts) {
+  // ADD32: golden Available ALU0|ALU1|ALU2 (RR), 2 GPR reads, 1 GPR write.
+  const auto *Add = haydnGetAdmittedPerOpResourceRecord(Haydn::ADD32);
+  ASSERT_NE(Add, nullptr);
+  EXPECT_EQ(Add->Opcode, static_cast<unsigned>(Haydn::ADD32));
+  EXPECT_EQ(Add->UnitMask, HAYDN_ADMITTED_UNIT_ALU0 |
+                               HAYDN_ADMITTED_UNIT_ALU1 |
+                               HAYDN_ADMITTED_UNIT_ALU2);
+  EXPECT_EQ(Add->GPRReadPorts, 2u);
+  EXPECT_EQ(Add->GPRWritePorts, 1u);
+  EXPECT_EQ(Add->PipelineOccupancy, 1u);
+  // CSRR: golden I8, ALU0|ALU1|ALU2, writes rt only.
+  const auto *Csr = haydnGetAdmittedPerOpResourceRecord(Haydn::CSRR);
+  ASSERT_NE(Csr, nullptr);
+  EXPECT_EQ(Csr->GPRWritePorts, 1u);
+  EXPECT_EQ(Csr->DataLatency, 2u);
+  // SEQ64: DR reads rsd1/rsd2, SFR write is the only semantic output.
+  const auto *Seq = haydnGetAdmittedPerOpResourceRecord(Haydn::SEQ64);
+  ASSERT_NE(Seq, nullptr);
+  EXPECT_EQ(Seq->DRReadPorts, 2u);
+  EXPECT_EQ(Seq->SFRWritePorts, 1u);
+  // D_LDW_POST_IMM: dual load menu LOADSTORE0|LOAD1, GPR rs read+writeback.
+  const auto *Ld = haydnGetAdmittedPerOpResourceRecord(Haydn::D_LDW_POST_IMM);
+  ASSERT_NE(Ld, nullptr);
+  EXPECT_EQ(Ld->UnitMask, HAYDN_ADMITTED_UNIT_LOADSTORE0 |
+                              HAYDN_ADMITTED_UNIT_LOAD1);
+  EXPECT_EQ(Ld->GPRReadPorts, 1u);
+  EXPECT_EQ(Ld->GPRWritePorts, 1u);
+  EXPECT_EQ(Ld->DataLatency, 2u);
+}
+
 } // namespace

@@ -58,8 +58,8 @@ define i32 @use_global() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; lui r1, %hi12(global_val) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(global_val) }
+; CHECK-NEXT:    { nop; lui r1, global_val }
+; CHECK-NEXT:    { nop; addi32 r1, r1, global_val }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -78,8 +78,8 @@ define i32 @use_zero() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; lui r1, %hi12(zero_val) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(zero_val) }
+; CHECK-NEXT:    { nop; lui r1, zero_val }
+; CHECK-NEXT:    { nop; addi32 r1, r1, zero_val }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

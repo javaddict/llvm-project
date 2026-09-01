@@ -4,8 +4,9 @@
 # REQUIRES: haydn-registered-target
 
 # Role: FieldSlot suffix-≠-entry premise retired; generated E2 e0 member
-# serializes. ADD32_E2_E0_ALU0_RR under E2 entry0 (composite position)
-# must serialize as-is.
+# serializes as-is. ADD32_E2_E0_ALU0_RR under E2 entry0 (composite position)
+# never peels `_S*` / `_MSP` for occupancy. Unused E2 e1 is a generated
+# IsNop record (prints nop, high-entry-first).
 
 --- |
   define void @residual_s2_at_e0() { ret void }
@@ -18,11 +19,9 @@ body:             |
   bb.0:
     liveins: $r0, $r1, $r15
     ; CHECK-LABEL: <residual_s2_at_e0>:
-    ; CHECK: add32
+    ; CHECK: { nop; add32
     BUNDLE 0, 0, implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
     }
-    BUNDLE 0, 0 {
-      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
-    }
+    $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
 ...

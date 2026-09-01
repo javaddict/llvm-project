@@ -36,6 +36,14 @@
 // optimization level in addPreSched2, after pack and before the first
 // Finalize, so BranchRelaxation / Fixup absorb any size growth.
 //
+// Regeneration pin (late repair loop): each invocation strips stall parcels
+// this pass previously inserted, then re-inserts the dest-window need of the
+// current inventory. Padding is never accumulated across mutating iterations.
+// Inserted parcels are charged with TargetInstrInfo::getInstSizeInBytes — the
+// same size interface branch / HWLoop range checks consume — plus the
+// generated minimum bundle-address alignment remainder. They carry empty
+// MMOs (NOP is not a memory op) and no extra kill/dead / implicit liveness.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNLATENCYSTALLS_H

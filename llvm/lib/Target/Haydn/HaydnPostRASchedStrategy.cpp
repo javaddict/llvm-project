@@ -32,6 +32,7 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnHazardRecognizer.h"
+#include "HaydnSchedMutations.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnMemberSetDesc.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -121,6 +122,9 @@ STATISTIC(NumAuctionSolves,
 STATISTIC(NumInterZonePadCaps,
           "Number of Top/Bot seam pads that hit the published occupancy "
           "horizon (T4 hang-containment; continue, do not loop)");
+STATISTIC(NumBotScoreboardBundleReplays,
+          "Number of scheduled successor cycle members replayed into the "
+          "post-RA Bot scoreboard (inter-block; default-off)");
 
 static cl::opt<bool> EnableHaydnPostRAReadySubsetAuction(
     "haydn-postra-ready-subset-auction", cl::init(true), cl::Hidden,
@@ -164,7 +168,7 @@ static unsigned countMultiMemberHardRoots(MachineBasicBlock &MBB) {
 HaydnPostRASchedStrategy::~HaydnPostRASchedStrategy() = default;
 
 HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
-    : PostGenericScheduler(C),
+    : PostGenericScheduler(C), Ctx(C),
       LegalMemo(std::make_unique<haydn::bundle::AuctionAnyOrderLegalMemo>()) {
   // Cache the Haydn TII from the MachineFunction's subtarget. enterMBB runs
   // BEFORE the base scheduler calls initialize(DAG), so the DAG member is
@@ -172,11 +176,94 @@ HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
   // (ScheduleDAGMI::startBlock -> SchedImpl->enterMBB happens before any
   // region's initialize; see MachineScheduler.cpp:824 vs :858/.)
   HII = static_cast<const HaydnInstrInfo *>(C->MF->getSubtarget().getInstrInfo());
+
+  // W68.2R S2 reopen (STATUS limit #1, contracts/pipeline.md S1/S2 repair
+  // law): the FIRST S2 invocation on this function (per-function MFI
+  // invocation counter == 2: S1 at addPreSched2 was 1) rebuilds from
+  // current bare MIs — never treats S1's committed BUNDLEs as immutable
+  // final choices. Every provisional BUNDLE whose real children all
+  // carry generated member->logical identity is dissolved and its
+  // children canonicalized back to logical opcodes; unrecoverable roots
+  // stay committed (S2 schedules around them).
+  //
+  // ONLY the first S2 invocation reopens. Later convergence-loop
+  // iterations (invocation 3+) schedule the BUNDLEs their OWN previous
+  // S2 committed; reopening those would break the driver's fixed-point
+  // argument (a repack of a repack can oscillate — G003's bound relies
+  // on pre-existing multi-member roots pinning their cycles after the
+  // first repair pass). The strategy is constructed once per scheduler
+  // invocation (PostMachineSchedulerImpl::run ->
+  // createPostMachineScheduler), before any enterMBB/region.
+  if (C && C->MF) {
+    auto &MFI = *C->MF->getInfo<HaydnMachineFunctionInfo>();
+    if (MFI.bumpPostRASchedInvocation() == 2) {
+      // TargetInstrInfo IS-A MCInstrInfo (public inheritance) — the
+      // subtarget's instr info serves directly (AsmPrinter idiom).
+      const TargetInstrInfo &TII = *C->MF->getSubtarget().getInstrInfo();
+      unsigned Reopened = haydn::bundle::reopenProvisionalBundles(*C->MF, TII);
+      (void)Reopened;
+      LLVM_DEBUG(dbgs() << "HaydnPostRASched S2: reopened " << Reopened
+                        << " provisional BUNDLE root(s) in "
+                        << C->MF->getName() << "\n");
+    }
+  }
+}
+
+static void gatherHaydnInterBlockEdges(
+    const MachineSchedContext *C,
+    DenseMap<const MachineBasicBlock *,
+             SmallVector<std::unique_ptr<HaydnInterBlockEdges>, 2>> &ByPred) {
+  MachineFunction &MF = *C->MF;
+  const auto &ST = MF.getSubtarget();
+  const auto *TII = ST.getInstrInfo();
+  const auto *TRI = ST.getRegisterInfo();
+  for (MachineBasicBlock &Pred : MF) {
+    for (MachineBasicBlock *Succ : Pred.successors()) {
+      if (Succ == &Pred)
+        continue; // self-edges: loop recurrence, not a cross-block edge
+      auto Edges = std::make_unique<HaydnInterBlockEdges>(*C, &Pred, Succ);
+      Edges->reserveForBlocks(Pred, *Succ);
+      auto PredEnd = Pred.getFirstTerminator();
+      auto SuccEnd = Succ->getFirstTerminator();
+      // Pre-boundary: Pred's real instructions below its terminators;
+      // post-boundary: Succ's real instructions above its terminators.
+      // Terminators carry no cross-boundary data dependence.
+      for (auto It = Pred.begin(); It != PredEnd; ++It)
+        if (!It->isTerminator() && !It->isPosition())
+          Edges->addNode(&*It);
+      Edges->markBoundary();
+      for (auto It = Succ->begin(); It != SuccEnd; ++It)
+        if (!It->isTerminator() && !It->isPosition())
+          Edges->addNode(&*It);
+      Edges->buildCrossBoundaryEdges(C->AA, TII, TRI,
+                                     &Edges->getSchedModelRef());
+      // S2 seeding: if the successor already carries S1's committed
+      // BUNDLEs, seed each post-boundary MI's depth from its bundle index
+      // (cycle 0 = first bundle). A fresh S1 pass finds no bundles and
+      // keeps static depths.
+      if (llvm::any_of(*Succ, [](const MachineInstr &MI) {
+            return MI.isBundle();
+          })) {
+        int Cycle = -1;
+        for (MachineInstr &MI : *Succ) {
+          if (MI.isBundle()) {
+            // Bundle roots start a new cycle; members share it.
+            if (!MI.isBundledWithPred())
+              ++Cycle;
+            Edges->recordPostDepth(&MI, Cycle);
+          }
+        }
+      }
+      ByPred[&Pred].push_back(std::move(Edges));
+    }
+  }
 }
 
 // True if MI is not a cycle member during post-RA bundle reconstruction.
 // Forward-declared here for tryCandidate ready filtering; definition below.
 static bool isBundleSkippable(const MachineInstr &MI);
+static void collectCycleMembers(MachineInstr &Head,
+                                SmallVectorImpl<MachineInstr *> &Members);
 
 /// Build BaseOpcodes from the live HR current-cycle preferred matching and
 /// ReadyOpcodes with Focus first, then other Available (non-skippable) ops.
@@ -411,6 +498,21 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
         report_fatal_error(
             "Haydn post-RA product resource admission pins failed",
             /*GenCrashDiag=*/false);
+      // W68.2: build the inter-block DDGs once, before any block schedules.
+      // Target-owned conservative construction (HC#0 declined): cross-
+      // boundary register RAW/WAR/WAW + memory edges over-approximate, so
+      // the effective-latency cut can only under-cut, never invent.
+      if (haydnInterBlockEnabled()) {
+        // S2 (second invocation) inherits S1's recorded depths: the
+        // per-function owning registry (HaydnMachineFunctionInfo) merges
+        // fresh graphs under the same keys and keeps depth state when a
+        // key re-publishes without records.
+        HaydnIBEdgesByPredMap Fresh;
+        gatherHaydnInterBlockEdges(Ctx, Fresh);
+        setHaydnInterBlockEdgesForFunction(*Ctx->MF, &Fresh);
+      } else {
+        setHaydnInterBlockEdgesForFunction(*Ctx->MF, nullptr);
+      }
     }
     ++NumPostRAResourceAdmissionPinsHeld;
     LLVM_DEBUG(dbgs() << "HaydnPostRASched: resource-admission "
@@ -427,6 +529,111 @@ void HaydnPostRASchedStrategy::enterMBB(MachineBasicBlock *MBB) {
     }
   }
   PostGenericScheduler::enterMBB(MBB);
+}
+
+void HaydnPostRASchedStrategy::initialize(ScheduleDAGMI *Dag) {
+  PostGenericScheduler::initialize(Dag);
+  RegionWasScheduled = false;
+  // Bot HR is (re)created in the base initialize; replay after that.
+  initializeBotScoreBoard();
+}
+
+bool HaydnPostRASchedStrategy::isBottomRegion() const {
+  // AIE MaxLatencyFinder.cpp:67-76. The last region of the MBB is the one
+  // that meets successors; earlier regions must not consume Bot occupancy.
+  if (!CurrentMBB || !DAG)
+    return false;
+  MachineInstr *ExitMI = DAG->ExitSU.getInstr();
+  if (!ExitMI)
+    return true;
+  MachineBasicBlock::instr_iterator It(ExitMI);
+  return std::next(It) == CurrentMBB->instr_end();
+}
+
+void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
+  // AIE AIEPostRASchedStrategy::initializeBotScoreBoard
+  // (AIEMachineScheduler.cpp:260-405). Haydn overlay: unscheduled/unknown
+  // successors keep full latency. Never static-depth-fill a successor that
+  // has no recorded S1 schedule — that would invent a cut.
+  if (!haydnInterBlockEnabled() || !CurrentMBB || !DAG)
+    return;
+  auto *BotHR = static_cast<HaydnHazardRecognizer *>(Bot.HazardRec);
+  if (!BotHR || !BotHR->isEnabled())
+    return;
+  if (!isBottomRegion())
+    return;
+
+  if (CurrentMBB->succ_empty()) {
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard skip bb."
+                      << CurrentMBB->getNumber()
+                      << " (no successors; full latency)\n");
+    return;
+  }
+  for (const MachineInstr &T : CurrentMBB->terminators()) {
+    if (T.isIndirectBranch()) {
+      LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard skip bb."
+                        << CurrentMBB->getNumber()
+                        << " (unknown successors; full latency)\n");
+      return;
+    }
+  }
+
+  MachineFunction &MF = *CurrentMBB->getParent();
+  SmallVector<MachineBasicBlock *, 4> ReplaySuccs;
+  for (MachineBasicBlock *Succ : CurrentMBB->successors()) {
+    if (Succ == CurrentMBB)
+      continue; // self-edge: loop recurrence, not a scheduled successor
+    if (!haydnSuccHasS1Depths(MF, Succ)) {
+      LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard skip bb."
+                        << CurrentMBB->getNumber() << " -> bb."
+                        << Succ->getNumber()
+                        << " (unscheduled successor; full latency)\n");
+      return;
+    }
+    ReplaySuccs.push_back(Succ);
+  }
+  if (ReplaySuccs.empty())
+    return;
+
+  const int Depth =
+      std::max(std::max(BotHR->getPipelineDepth(),
+                        static_cast<int>(BotHR->getMaxLookAhead())),
+               1);
+  LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard replay bb."
+                    << CurrentMBB->getNumber() << " depth=" << Depth << "\n");
+
+  // Insert successor cycle C at C-Depth so RecedeCycle(Depth+1) leaves
+  // successor cycle 0 at scoreboard[+1] (AIE AlignScoreboardToCycleOne).
+  unsigned Replayed = 0;
+  for (MachineBasicBlock *Succ : ReplaySuccs) {
+    int Cycle = 0;
+    for (MachineInstr &MI : *Succ) {
+      if (MI.isBundledWithPred())
+        continue;
+      if (MI.isDebugInstr() || MI.isPosition() || MI.isCFIInstruction() ||
+          MI.isKill() || MI.isImplicitDef() || MI.isCopy() || MI.isPHI() ||
+          MI.isLifetimeMarker())
+        continue;
+      if (Cycle >= Depth)
+        break;
+      SmallVector<MachineInstr *, 3> Members;
+      collectCycleMembers(MI, Members);
+      for (MachineInstr *M : Members) {
+        SUnit Tmp(M, /*NodeNum=*/0);
+        BotHR->emitInstruction(&Tmp, Cycle - Depth);
+        ++Replayed;
+        ++NumBotScoreboardBundleReplays;
+      }
+      ++Cycle;
+    }
+    LLVM_DEBUG(dbgs() << "  replayed bb." << Succ->getNumber()
+                      << " through cycle " << Cycle << "\n");
+  }
+
+  if (!Replayed)
+    return;
+  for (int I = 0; I < Depth + 1; ++I)
+    BotHR->RecedeCycle();
 }
 
 void HaydnPostRASchedStrategy::leaveMBB() {
@@ -447,15 +654,6 @@ void HaydnPostRASchedStrategy::leaveMBB() {
   // Sequentialize is recovery after the product coissue probe rejects —
   // not a second packing authority. Multi-member seam latency replay is
   // not a hard-root freeze path.
-  // G004 D493 seam: a multi-stage-committed MBB already holds its final
-  // parcels (kernel bundles + cycle-ordered idle NOPs). Re-materializing
-  // from the stale ordinary zones would insert stray NOPs past the kernel.
-  if (multistageCommitted(CurrentMBB)) {
-    LLVM_DEBUG(dbgs() << "HaydnPostRASched: leaveMBB defers to multistage "
-                         "plan bb." << CurrentMBB->getNumber() << "\n");
-    MBBBundles.clear();
-    return;
-  }
   if (CurrentMBB) {
     // Snapshot multi-member children present before free pack. Seam latency
     // replay applies only to residual shells (and their ordinary multi-MI
@@ -474,7 +672,20 @@ void HaydnPostRASchedStrategy::leaveMBB() {
                         << CurrentMBB->getNumber()
                         << " cycles=" << MBBBundles.size() << "\n");
       materializeBundles(*CurrentMBB, MBBBundles);
-      MBBBundles.clear();
+        // W68.2 S1 depth feed: record each materialized instruction's issue
+  // cycle into every inter-block DDG where it is post-boundary, so the S2
+  // pass's effective-latency cut uses scheduled (not static) depths. AIE
+  // records these during its fixpoint replay (recordPostDepth family).
+  if (haydnInterBlockEnabled())
+    if (HaydnIBEdgesByPredMap *Reg =
+            haydnGetInterBlockEdgesRegistry(*CurrentMBB->getParent()))
+      for (const auto &[PredBB, Edges] : *Reg)
+        for (auto &E : Edges)
+          if (E->getSucc() == CurrentMBB)
+            for (unsigned C = 0; C < MBBBundles.size(); ++C)
+              for (MachineInstr *MI : MBBBundles[C].Instrs)
+                E->recordPostDepth(MI, (int)C);
+MBBBundles.clear();
     }
     commitOrSequentializeUnstampedMultiMemberBundles(*CurrentMBB);
     // Own only the current MBB. Predecessor re-probe after leave was a

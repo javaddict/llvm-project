@@ -49,6 +49,7 @@
 #include "HaydnBundle.h"
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnBundlePlan.h"
+#include "HaydnBundleVerify.h" // shared members/pad/member-lookup laws
 #include "HaydnFormatERecords.h"
 #include "HaydnIntraCycleWAW.h" // shared no-dual-write WAW law (hard #7)
 #include "HaydnMemberSetDesc.h"
@@ -1484,6 +1485,86 @@ inline unsigned lateLayoutBytes(const MachineInstr &MI) {
     return MF->getSubtarget().getInstrInfo()->getInstSizeInBytes(MI);
   }
   return productParcelBytes().Value;
+}
+
+/// W68.2R S2 reopen (STATUS limit #1): dissolve every provisional
+/// BUNDLE root so the second scheduler invocation rebuilds from current
+/// bare MIs instead of treating S1's packet choices as immutable. Per
+/// contracts/pipeline.md ("S1/S2 repair law"), each direct-compatible
+/// member is canonicalized back to its logical opcode through the
+/// GENERATED member->logical identity (format_e::
+/// lookupGeneratedMemberToLogical; non-members keep their opcode).
+/// Pad-NOP children (completion fill) are erased.
+///
+/// Fail-closed law: a root is reopened only when every real child is a
+/// generated member WITH a logical identity or is already non-member. A
+/// generated member without identity (or any residual pseudo) keeps its
+/// BUNDLE committed — S2 schedules around it exactly as today, and the
+/// invariant checker still owns the final word. No operand is added,
+/// dropped, reordered, or retied here: reopen is the exact inverse of
+/// the commit path's setDesc bake, so operands already match the logical
+/// shape (direct-alternate compatibility law).
+///
+/// \returns the number of BUNDLE roots reopened (0 = nothing to do).
+inline unsigned reopenProvisionalBundles(MachineFunction &MF,
+                                         const MCInstrInfo &MII) {
+  unsigned Reopened = 0;
+  for (MachineBasicBlock &MBB : MF) {
+    // Collect roots first: unbundle + erase mutates the instr list.
+    SmallVector<MachineInstr *, 16> Roots;
+    for (MachineInstr &MI : MBB.instrs())
+      if (MI.isBundle() && !MI.isBundledWithPred())
+        Roots.push_back(&MI);
+
+    for (MachineInstr *Root : Roots) {
+      SmallVector<MachineInstr *, 4> Kids = members(*Root);
+      // Every real child must be identity-recoverable; pad NOPs drop.
+      bool AllRecoverable = true;
+      for (MachineInstr *Kid : Kids) {
+        if (isPadNopOpcode(Kid->getOpcode()))
+          continue;
+        if (Kid->isMetaInstruction() || Kid->isDebugInstr() ||
+            Kid->isPosition())
+          continue;
+        const unsigned Opc = Kid->getOpcode();
+        if (lookupPrivateFormatEMember(Opc) &&
+            format_e::lookupGeneratedMemberToLogical(Opc) == 0) {
+          // Generated private member without a logical identity: not
+          // recoverable through the generated mapping.
+          AllRecoverable = false;
+          break;
+        }
+      }
+      if (!AllRecoverable)
+        continue;
+
+      // Canonicalize each real child to its logical descriptor in place,
+      // then dissolve the bundle shell (children stay at the root's
+      // position as bare MIs — Hexagon packet-dissolve idiom). EVERY
+      // child (real, meta, debug, CFI, position) is unbundled; pad NOPs
+      // are erased. A left-bundled non-real child would outlive the root
+      // as an orphaned bundle chain (iterator assertion downstream).
+      for (MachineInstr *Kid : Kids) {
+        if (isPadNopOpcode(Kid->getOpcode())) {
+          Kid->clearFlag(MachineInstr::BundledPred);
+          Kid->clearFlag(MachineInstr::BundledSucc);
+          Kid->eraseFromParent();
+          continue;
+        }
+        const unsigned Opc = Kid->getOpcode();
+        if (!Kid->isMetaInstruction() && !Kid->isDebugInstr() &&
+            !Kid->isPosition())
+          if (unsigned Logical = format_e::lookupGeneratedMemberToLogical(Opc))
+            Kid->setDesc(MII.get(Logical));
+        Kid->clearFlag(MachineInstr::BundledPred);
+        Kid->clearFlag(MachineInstr::BundledSucc);
+      }
+      Root->clearFlag(MachineInstr::BundledSucc);
+      Root->eraseFromParent();
+      ++Reopened;
+    }
+  }
+  return Reopened;
 }
 
 } // namespace bundle

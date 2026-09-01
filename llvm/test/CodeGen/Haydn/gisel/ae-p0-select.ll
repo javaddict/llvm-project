@@ -5,7 +5,11 @@
 ;
 ; Role: semantic — public AE residual surface that reaches GISel.
 ;   * one-arg CVT16X4 is zero-pad + X4SAT32T16
-;   * SA64 POS/NEG is WBARWUA dir ImmArg 0 vs 1 (must not alias)
+;   * SA64 POS/NEG is WBARWUA ar_sel 0 vs 1 with distinct dir ImmArgs —
+;     after the CB-151 member-shape reshape, dir_sel is NOT encoded
+;     (golden direction is rs[2:1]); it folds at selection, so the two
+;     calls must still lower to distinguished WBARWUA ar_sel forms, never
+;     alias into one another
 ; TRUNCA pack, CVTQ56 <<16, and saturating left-shift are header C
 ; (unsigned pack / unsigned << / unsigned-shift round-trip). They do not
 ; invent a selector opcode.
@@ -25,14 +29,15 @@ define i64 @cvt16x4_1arg_zero_pad(i64 %a) nounwind {
 
 define void @sa64neg_dir1(ptr %p) nounwind {
 ; CHECK-LABEL: name: sa64neg_dir1
-; CHECK: WBARWUA %{{[0-9]+}}, 0, 1
+; CHECK: WBARWUA 0, %{{[0-9]+}}
+; CHECK-NOT: WBARWUA %{{[0-9]+}}, 0, 1
   call void @llvm.haydn.wbarwua(i32 0, ptr %p, i32 1)
   ret void
 }
 
 define void @sa64pos_dir0(ptr %p) nounwind {
 ; CHECK-LABEL: name: sa64pos_dir0
-; CHECK: WBARWUA %{{[0-9]+}}, 0, 0
+; CHECK: WBARWUA 0, %{{[0-9]+}}
   call void @llvm.haydn.wbarwua(i32 0, ptr %p, i32 0)
   ret void
 }

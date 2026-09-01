@@ -26,7 +26,9 @@
       "check": "python3 llvm/lib/Target/Haydn/FormatE/generate_sched_records.py --check --family e96",
       "outputs": [
         "llvm/lib/Target/Haydn/HaydnGenSchedRecords.inc",
-        "llvm/lib/Target/Haydn/HaydnGenMemoryCycles.inc"
+        "llvm/lib/Target/Haydn/HaydnGenMemoryCycles.inc",
+        "llvm/lib/Target/Haydn/HaydnGenPerOpResources.inc",
+        "llvm/lib/Target/Haydn/HaydnGenSchedMcaBridge.td.inc"
       ]
     }
   ]

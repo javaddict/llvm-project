@@ -116,11 +116,18 @@
 # MUT: haydn-postra-region-end-edges", cl::init(false)
 # MUT: haydn-postra-interblock", cl::init(false)
 # MUT: haydn-postra-waw-edges", cl::init(false)
+# MUT: haydnInterBlockEnabled() { return EnableHaydnPostRAInterBlock; }
 # MUT: constexpr bool ExactLatencies = true
 # MUT: class MaxLatencyFinder
+# MUT: computeEffectiveLatencyFor
 # MUT: IncludeStages(!EnableHaydnPostRAInterBlock
+# MUT: ReduceLatency(EnableHaydnPostRAInterBlock && IsBottomRegion &&
 # MUT: haydnIsSimplifiableReservedReg
 # MUT: EnableHaydnPostRAInterBlock
+# MUT: MFI.clearInterBlockRegistry
+# MUT-NOT: getPerSuccEdges
+# MUT-NOT: buildPerSuccEdges
+# MUT-NOT: class PerSuccEdges
 #
 # PORT2: HAYDN_SINCOS_OCCUPANCY_MAX
 # PORT2: haydnSinCosArctanWindowLaw

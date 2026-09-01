@@ -34,9 +34,10 @@
 # NO-PARSER-PEEL-NOT: UseE3
 # NO-PRINT-PEEL-NOT: peelLogicalOpcodeName
 # NO-PRINT-PEEL-NOT: HaydnFormatERecords.h
-# NO-ASM-PEEL: haydnCatalogOccupancyName
-# NO-ASM-PEEL: haydnIsResidualFieldSlotName
+# NO-ASM-PEEL: Desc-as-is
+# NO-ASM-PEEL: refuse E2
 # NO-ASM-PEEL-NOT: peelLogicalOpcodeName
+# NO-ASM-PEEL-NOT: applyHiLoSpecifiers
 # NO-LOWER-PEEL: logicalOpcodeOrSelf
 # NO-LOWER-PEEL: refuse dangling-block repair
 # NO-LOWER-PEEL-NOT: peelLogicalOpcodeName

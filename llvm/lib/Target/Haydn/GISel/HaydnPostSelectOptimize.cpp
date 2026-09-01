@@ -62,6 +62,20 @@ bool HaydnPostSelectOptimize::runOnMachineFunction(MachineFunction &MF) {
 // store). Const-pack CSE is generic MachineCSE.
 //===----------------------------------------------------------------------===//
 
+bool haydn::postselect::laneStoreImmForWordScaledOffset(int64_t WordOffset,
+                                                        int64_t &ScaledImm) {
+  // ST32 and D_SW_L/H_WITH_IMM share one golden word-scaled EA law
+  // (S_SW_WITH_IMM / D_SW_L_WITH_IMM: EA = rs + (imm6 << 2)). The selected
+  // ST32 offset operand is ALREADY that word-scaled imm, so it passes
+  // through unscaled. (Rescaling here halved negative-offset stores and
+  // silently moved the EA: CB-160, first DR-pair store of each loop
+  // iteration stored to y+12 instead of y+0.)
+  if (!isInt<6>(WordOffset))
+    return false;
+  ScaledImm = WordOffset;
+  return true;
+}
+
 bool HaydnPostSelectOptimize::tryFoldMove32DrToSw(MachineInstr &MovInst,
                                                    MachineRegisterInfo &MRI,
                                                    const HaydnInstrInfo &TII) {
@@ -85,11 +99,9 @@ bool HaydnPostSelectOptimize::tryFoldMove32DrToSw(MachineInstr &MovInst,
 
   Register DrSrc = MovInst.getOperand(1).getReg();
   Register Base = St32->getOperand(1).getReg();
-  int64_t Off = St32->getOperand(2).getImm();
-  if ((Off % 4) != 0)
-    return false;
-  int64_t ScaledImm = Off >> 2;
-  if (!isInt<6>(ScaledImm))
+  int64_t ScaledImm;
+  if (!haydn::postselect::laneStoreImmForWordScaledOffset(
+          St32->getOperand(2).getImm(), ScaledImm))
     return false;
 
   unsigned SwOpc = (MovOpc == Haydn::MOVE32_DR_L) ? Haydn::D_SW_L_WITH_IMM

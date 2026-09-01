@@ -14,7 +14,7 @@
 //
 // Post-RA: HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HazardRecognizer
 // (sole owner of final VLIW pack in leaveRegion/leaveMBB).
-// Multi-stage SMS (HaydnPostRAMultiStage) optional after ordinary convergence; default ON.
+// W68.1: no post-RA multi-stage host; SMS is owned pre-RA by the generic MachinePipeliner.
 //
 // Do NOT revive VLIWMachineScheduler / ConvergingVLIWScheduler (UAF).
 // Do NOT use bare GenericScheduler via nullptr factory fallback.

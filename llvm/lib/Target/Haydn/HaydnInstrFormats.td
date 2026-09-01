@@ -1055,29 +1055,11 @@ class FmtJR<bits<6> opcode, dag outs, dag ins, string asmstr,
   let Inst{15 - 0} = target;
 }
 
-// CSR format
-class FmtCSR<bits<6> opcode, dag outs, dag ins, string asmstr,
-             list<dag> pattern>
-    : HaydnInst<4, outs, ins, asmstr, pattern> {
-  let TSFlags{2-0} = 0b001;
-  let TSFlags{4-3} = 0b01;
-  // 2026-08-21 itinerary re-map: golden CSRR Available = ALU0|ALU1|ALU2
-  // (was Slot0_ALU). The latency-2 truth is carried by the CsrLat classes
-  // on members + the hand CSRR def, not this class.
-  let Itinerary = Slot012_ALU;
-
-  bits<4> rd;
-  bits<8> csr_addr;
-  bits<4> rs;
-
-  let Inst{31, 30} = 0b01;
-  let Inst{29 - 24} = opcode;
-  let Inst{23 - 20} = rd;
-  let Inst{19 - 16} = 0;  // reserved for read-only CSR
-  let Inst{15 - 8} = csr_addr;
-  let Inst{7 - 4} = rs;
-  let Inst{3 - 0} = 0;  // reserved
-}
+// CSR format — FmtCSR RETIRED. Its last user (the 3-op CSRR decoder-parity
+// shell) shrank to the catalog 2-op HaydnInst<0> isPseudo shape matching
+// the generated CSRR_*_I8 members (identity cutover). The Haydn32 trie this
+// class fed is generated but never consulted; decode is the Format E member
+// tables. CSRW is likewise a 2-op HaydnInst<0> shell (HaydnInstrInfo.td).
 
 //===----------------------------------------------------------------------===//
 // FmtG_S0_ALU32 (32-bit G-format s0 sub-slot) RETIRED.

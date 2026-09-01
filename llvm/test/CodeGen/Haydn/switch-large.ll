@@ -33,8 +33,8 @@ define i32 @switch_16_cases(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; sltu32 r3, r1, r2 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB0_18 }
 ; CHECK-NEXT:  // %bb.1: // %entry
-; CHECK-NEXT:    { nop; lui r3, %hi12(.LJTI0_0) }
-; CHECK-NEXT:    { nop; addi32 r3, r3, %lo20(.LJTI0_0) }
+; CHECK-NEXT:    { nop; lui r3, .LJTI0_0 }
+; CHECK-NEXT:    { nop; addi32 r3, r3, .LJTI0_0 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
 ; CHECK-NEXT:    { nop; add32 r2, r3, r2 }
 ; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
@@ -384,8 +384,8 @@ define i32 @switch_negative_cases(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB4_7 }
 ; CHECK-NEXT:  // %bb.1: // %entry
-; CHECK-NEXT:    { nop; lui r2, %hi12(.LJTI4_0) }
-; CHECK-NEXT:    { nop; addi32 r2, r2, %lo20(.LJTI4_0) }
+; CHECK-NEXT:    { nop; lui r2, .LJTI4_0 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, .LJTI4_0 }
 ; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }

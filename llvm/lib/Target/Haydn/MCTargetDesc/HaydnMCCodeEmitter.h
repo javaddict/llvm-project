@@ -22,7 +22,9 @@
 //     Residual FieldSlot never enters fill. Compiler extra-op
 //     (MOVE32 3-op vs member 2-op; LUI vestigial $rs) never enters fill.
 //     FieldSlot / MemberId / extra-op never reconstruct. Occupancy is
-//     haydnCatalogOccupancyName, never peelLogicalOpcodeName.
+//     haydnCatalogOccupancyName for standalone public logicals only;
+//     compiler `_MSP` clones never peel. Unused-entry pads are generated
+//     IsNop records, never occupancy-empty as NOP.
 // Peer: AIEBaseMCCodeEmitter.cpp:45-68 serializes typed members as-is;
 // HexagonMCCodeEmitter.h:34-54 keeps the emitter class in the header,
 // but Haydn's TableGen include stays in the .cpp (RISCV peer).

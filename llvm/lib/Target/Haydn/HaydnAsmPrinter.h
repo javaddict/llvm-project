@@ -19,10 +19,8 @@ namespace llvm {
 class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
   HaydnMCInstLower MCInstLowering;
 
-  /// Emit HiFi-like `#<swps>` SMS bounds when this MBB is a recorded kernel.
-  void emitSMSSWPSComments(const MachineBasicBlock &MBB);
 
- /// Emit function-level `#<spill-kpi>` spill/reload observe summary.
+  /// Emit function-level `#<spill-kpi>` spill/reload observe summary.
   /// Counts MachineInstr::getSpillSize/getRestoreSize (and folded peers) over
   /// all real MIs including BUNDLE children. Observe-only; default ON.
   void emitSpillKPIComments();
@@ -54,10 +52,9 @@ class LLVM_LIBRARY_VISIBILITY HaydnAsmPrinter : public AsmPrinter {
 
   // JT/call soft-zero R0 is MIR (HaydnExpandPseudos), not printer state.
 
-  // Stream a single MCInst. Product encode is Format E only (BUNDLE_E96_*);
-  // CodeGen emits Format->Opcode composites, and the MC emitter may wrap
-  // residual standalone/hand-asm singles as BUNDLE_E96_TWO_ENTRY. No
-  // printer re-slot / multi-width pad path.
+  // Stream a single already-concrete MCInst. Product encode is Format E
+  // only (BUNDLE_E96_*). No printer re-slot, representation expand, or
+  // logical-member bind.
   void emitWrappedInst(const MCInst &Inst);
 
  // : print-time fixed-R12 AT spill removed. VASTART/VACOPY expand via

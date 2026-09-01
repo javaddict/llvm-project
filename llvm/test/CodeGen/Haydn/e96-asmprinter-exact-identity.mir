@@ -7,12 +7,20 @@
 # RUN:   %t/completion_mismatch.mir -o - 2>&1 | FileCheck %s --check-prefix=COMP-MISMATCH
 # RUN: llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/idle_fullslot.mir -o - | FileCheck %s --check-prefix=IDLE
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_ret.mir -o - 2>&1 | FileCheck %s --check-prefix=RES-RET
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_b.mir -o - 2>&1 | FileCheck %s --check-prefix=RES-B
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/bundled_ret.mir -o - 2>&1 | FileCheck %s --check-prefix=BUNDLED-RET
 # REQUIRES: haydn-registered-target
 
 # Role: printer — compiler-origin BUNDLE roots must carry a product row.
 # Missing-row E2 default and child-count E3 override are silent repairs.
 # Present CompletionStateID must still match golden-row fill: unused
 # windows and pad-only idle are AllEntriesReal (architectural NOP).
+# Serialize-only: residual B/RET/BR_JT (bundled or top-level) is fatal;
+# no BEQZ_W/JALR_W rewrite.
 
 #--- missing_row.mir
 --- |
@@ -29,7 +37,7 @@ body:             |
     BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     }
-    RET implicit $r15
+    $r0 = JALR_W $r15, 0
 
 #--- child_count_override.mir
 --- |
@@ -48,7 +56,7 @@ body:             |
       $d4 = ADD64 $d0, $d1, implicit-def dead $sfr
       $d5 = ADD64 $d2, $d3, implicit-def dead $sfr
     }
-    RET implicit $r15
+    $r0 = JALR_W $r15, 0
 
 #--- completion_mismatch.mir
 --- |
@@ -65,7 +73,7 @@ body:             |
     BUNDLE 0, 1, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
     }
-    RET implicit $r15
+    $r0 = JALR_W $r15, 0
 
 #--- idle_fullslot.mir
 --- |
@@ -83,4 +91,50 @@ body:             |
     BUNDLE 0, 0 {
       NOP
     }
+    $r0 = JALR_W $r15, 0
+
+#--- residual_ret.mir
+--- |
+  define void @residual_ret() { ret void }
+...
+---
+name:            residual_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; RES-RET: residual unexpanded representation
     RET implicit $r15
+
+#--- residual_b.mir
+--- |
+  define void @residual_b() { ret void }
+...
+---
+name:            residual_b
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    ; RES-B: residual unexpanded representation
+    B %bb.1
+  bb.1:
+    $r0 = JALR_W $r15, 0
+
+#--- bundled_ret.mir
+--- |
+  define void @bundled_ret() { ret void }
+...
+---
+name:            bundled_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; BUNDLED-RET: residual unexpanded representation
+    BUNDLE 0, 0, implicit $r15 {
+      RET implicit $r15
+    }

@@ -78,7 +78,8 @@ class HaydnInst48<dag outs, dag ins, string asmstr, list<dag> pattern>
 // ORI32_W) are re-encoded onto the §5 opcode map. New WIDE-variant defs
 // (LUI_W, JAL_W, BEQ_W, CSRR_W, SET_HWLOOP_W,...) carry the §5 opcodes
 // 0x0C / 0x20-0x30 / 0x80-0x8A and coexist with the existing 32-bit FmtI
-// FmtBR / FmtJ / FmtCSR forms (which stay unchanged for short-offset code).
+// FmtBR / FmtJ forms (which stay unchanged for short-offset code; FmtCSR
+// is retired — CSR read/write are 2-op HaydnInst<0> shells).
 //===----------------------------------------------------------------------===//
 
 // Helper: emit the fixed low 16 bits of any §5 WIDE instruction (rd/rt +

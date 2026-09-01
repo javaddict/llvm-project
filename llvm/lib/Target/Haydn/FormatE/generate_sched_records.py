@@ -11,10 +11,21 @@ SIN_COS/ARCTAN dest bound) plus generated Format E entry capacities
 (E2=2 / E3=3). Also emits HaydnGenMemoryCycles.inc: C++
 getFirst/LastMemoryCycle lookup for the published Slot0_LS / Slot1_LD /
 Slot01_LD latency-2 scaffold (AIE MemInstrItinData +
-AIEMemoryCyclesEmitter peer). Does not import per-operation
-port/latency/pipeline tables and does not set CompleteModel.
+AIEMemoryCyclesEmitter peer).
 Emits generated Format E entry capacities (E2=2 / E3=3) so
 HaydnSchedModel.IssueWidth binds the E3 ProductRows EntryCount.
+
+M18 per-operation import: also emits HaydnGenPerOpResources.inc from golden
+instruction_type_index.json — one HaydnAdmittedPerOpResourceRecord per
+compiler-reachable logical that has a golden row (unit mask over the seven
+shared units, per-bank read/write port counts, Data_Latency, required
+alignment bytes). Compiler reachability is the generated-member families of
+HaydnFormatsE96Members.td.inc plus hand defs in HaydnInstrInfo.td — no
+opcode is inferred: a logical without a golden row is recorded in the
+uncovered census, never synthesized. CompleteModel stays 0 (the census is
+nonempty: machine-generic opcodes and Haydn pseudos/wide variants have no
+unit), so competitive II/density claims stay closed exactly as GE96-04
+requires; per-op lookups open only for the covered set.
 
 Peer: AIE generated ProcessorItineraries + InstrItinData
 (llvm-aie llvm/lib/Target/AIE/aie2p/AIE2PGenSchedule.td:4226;
@@ -31,6 +42,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import tempfile
@@ -40,6 +52,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from family_core import (
     PINNED_CANONICAL_SHA256,
+    PINNED_INDEX_SHA256,
     PINNED_JSON_SHA256,
     PINNED_XLSX_SHA256,
     SCHED_GENERATOR,
@@ -288,6 +301,249 @@ def validate_published(
             raise SystemExit(f"error: published memory class {mem_name} missing")
 
 
+# ---------------------------------------------------------------------------
+# M18 per-operation resource import (golden instruction_type_index.json)
+# ---------------------------------------------------------------------------
+
+# Golden unit name → HAYDN_ADMITTED_UNIT_* bit in HaydnPortModel.h. The bit
+# order is the HaydnSchedule.td ProcessorItineraries FuncUnit order and
+# HaydnExecUnit; one typed mapping, no per-site literals.
+UNIT_BIT: Dict[str, int] = {
+    "LOADSTORE0": 0,
+    "LOAD1": 1,
+    "ALU0": 2,
+    "ALU1": 3,
+    "ALU2": 4,
+    "MAC0": 5,
+    "MAC1": 6,
+}
+
+# Bank port fields of one golden row, in HaydnAdmittedPerOpResourceRecord
+# field order.
+PORT_FIELDS: Tuple[Tuple[str, str], ...] = (
+    ("GPRReadPorts", "GPR_Read_Port"),
+    ("GPRWritePorts", "GPR_Write_Port"),
+    ("DRReadPorts", "DR_Read_Port"),
+    ("DRWritePorts", "DR_Write_Port"),
+    ("ARReadPorts", "AR_Read_Port"),
+    ("ARWritePorts", "AR_Write_Port"),
+    ("SFRReadPorts", "SFR_Read_Port"),
+    ("SFRWritePorts", "SFR_Write_Port"),
+)
+
+# Required_Alignment text → byte alignment. Golden prose forms only; a new
+# prose shape fails closed instead of guessing a number.
+ALIGNMENT_BYTES: Dict[str, int] = {
+    "1-byte.": 1,
+    "the value in the rs register should be aligned 2-byte.": 2,
+    "the value in the rs register should be aligned 4-byte.": 4,
+    "the value in the rs register should be aligned 8-byte.": 8,
+    "the value in the rs1 register should be aligned 2-byte.": 2,
+    "the value in the rs1 register should be aligned 4-byte.": 4,
+    "the value in the rs1 register should be aligned 8-byte.": 8,
+    "the value in rs register should be aligned 2-byte.": 2,
+    "the value in rs1 register should be aligned 2-byte.": 2,
+    "the value rs + (imm6 << 1) should be aligned 2-byte.": 2,
+    "the value rs + (imm6 << 2) should be aligned 4-byte.": 4,
+    "the value rs + (imm6 << 3) should be aligned 8-byte.": 8,
+    "the value rs1 + rs2 should be aligned 2-byte.": 2,
+    "the value rs1 + rs2 should be aligned 4-byte.": 4,
+    "the value rs1 + rs2 should be aligned 8-byte.": 8,
+    "the value (rs1 + rs2) should be aligned 4-byte.": 4,
+    "the value (rs1 + rs2) should be aligned 8-byte.": 8,
+    "the value REVERSE32(rs) should be aligned 4-byte.": 4,
+    "the value REVERSE32(rs) should be aligned 8-byte.": 8,
+    "the value REVERSE32(rs1) should be aligned 4-byte.": 4,
+    "the value REVERSE32(rs1) should be aligned 8-byte.": 8,
+}
+
+# OperandCycles room mirrored from HaydnPortModel.h
+# HAYDN_ADMITTED_OPERAND_CYCLE_ROOM. One fact; the C++ static_assert in the
+# emitted table pins the C++ side to the generator side.
+ADMITTED_OPERAND_CYCLE_ROOM = 8
+
+
+@dataclass(frozen=True)
+class PerOpResourceRow:
+    """One golden-admitted per-logical resource record."""
+
+    name: str
+    unit_mask: int
+    ports: Tuple[int, ...]
+    # Scalar max Data_Latency; None = golden silent (stores/branches/hints).
+    latency: Optional[int]
+    # SIN_COS/ARCTAN (uimm4+2): dest bound is the published conservative 17.
+    latency_conservative: Optional[int]
+    # OperandCycles payload: [dest latency] when a latency is known.
+    operand_cycles: Tuple[int, ...]
+    alignment: int
+    # Golden format key (provenance comment only).
+    fmt: str
+
+
+def parse_index_units(raw: object) -> Tuple[str, ...]:
+    """Golden Available is a list or a bare string; both → unit tuple."""
+    if raw is None:
+        return ()
+    if isinstance(raw, str):
+        return (raw,)
+    if isinstance(raw, list):
+        return tuple(raw)
+    raise SystemExit(f"error: golden Available shape {type(raw).__name__}")
+
+
+def parse_index_latency(
+    raw: object, sincos_bound: int
+) -> Tuple[Optional[int], Optional[int]]:
+    """Data_Latency → (scalar, conservative). Both None when golden silent.
+
+    '(uimm4 + 2)' is operand-dependent; the published conservative dest
+    bound (uimm4_max+2) is the schedulable number, recorded as the
+    conservative field so consumers never mistake it for a golden scalar.
+    """
+    if raw is None:
+        return (None, None)
+    if isinstance(raw, int):
+        return (raw, None)
+    if raw == "(uimm4 + 2)":
+        return (None, sincos_bound)
+    raise SystemExit(f"error: golden Data_Latency shape {raw!r}")
+
+
+def parse_index_alignment(raw: object) -> int:
+    if raw is None:
+        return 0
+    if not isinstance(raw, str):
+        raise SystemExit(f"error: golden Required_Alignment shape {raw!r}")
+    text = raw.strip()
+    if text in ("N/A", ""):
+        return 0
+    got = ALIGNMENT_BYTES.get(text)
+    if got is None:
+        raise SystemExit(
+            f"error: unmapped golden Required_Alignment prose {text!r}; "
+            "map it in ALIGNMENT_BYTES or fail closed"
+        )
+    return got
+
+
+def load_golden_index(index_path: Path) -> Dict[str, dict]:
+    """instruction_type_index.json rows keyed by uppercase instruction name."""
+    data = json.loads(index_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise SystemExit("error: instruction_type_index.json is not an object")
+    by_name: Dict[str, Tuple[str, dict]] = {}
+    for fmt, recs in data.items():
+        if not isinstance(recs, list):
+            raise SystemExit(f"error: index format {fmt} is not a list")
+        for rec in recs:
+            name = rec.get("Instruction")
+            if not isinstance(name, str) or not name:
+                raise SystemExit("error: index row without Instruction")
+            key = name.upper()
+            if key in by_name:
+                raise SystemExit(f"error: duplicate index row {name}")
+            by_name[key] = (fmt, rec)
+    if not by_name:
+        raise SystemExit("error: instruction_type_index.json is empty")
+    return by_name
+
+
+def compiler_reachable_logicals(haydn_dir: Path) -> Tuple[set, set]:
+    """Logical-name universe the compiler can select or parse.
+
+    Two source-tree anchors (the same ones the product build compiles):
+    generated member families of HaydnFormatsE96Members.td.inc and hand
+    defs in the authored instruction files (HaydnInstrInfo.td plus the
+    Format E logical shells). Returns (member_families, hand_defs); a name
+    is compiler-reachable when it appears in either. Not an opcode enum
+    copy: build artifacts are unreadable from the source-tree generator.
+    """
+    members_path = haydn_dir / "HaydnFormatsE96Members.td.inc"
+    if not members_path.is_file():
+        raise SystemExit(
+            f"error: member families anchor missing: {members_path}"
+        )
+    member_text = members_path.read_text(encoding="utf-8")
+    member_fams = set(re.findall(r"\b([A-Z][A-Z0-9_]*)_E[23]_E?\d_", member_text))
+    hand: set = set()
+    for fn in ("HaydnInstrInfo.td", "HaydnMultiSlotPseudo.td"):
+        path = haydn_dir / fn
+        if not path.is_file():
+            raise SystemExit(f"error: hand-def anchor missing: {path}")
+        text = path.read_text(encoding="utf-8")
+        # strip comments first: doc comments name retired opcodes too
+        text = re.sub(r"//.*", "", text)
+        hand.update(re.findall(r"^def\s+([A-Za-z][A-Za-z0-9_]*)", text, re.M))
+    return member_fams, hand
+
+
+def build_per_op_rows(
+    index: Dict[str, dict], member_fams: set, hand: set, surf: GoldenLatencySurface
+) -> Tuple[List[PerOpResourceRow], List[str]]:
+    """Rows for every compiler-reachable logical with a golden record.
+
+    Fail-closed census: reachable names without a golden row are returned
+    as the uncovered list (never synthesized). WFI<TBD> is the golden
+    placeholder for an unpublished op; its WFITBDTBDTBD member family maps
+    to no record.
+    """
+    reachable = {n for n in (member_fams | hand) if n in index}
+    rows: List[PerOpResourceRow] = []
+    for name in sorted(reachable):
+        fmt, rec = index[name]
+        units = parse_index_units(rec.get("Available"))
+        mask = 0
+        for unit in units:
+            bit = UNIT_BIT.get(unit)
+            if bit is None:
+                raise SystemExit(
+                    f"error: {name} golden unit {unit!r} has no admitted bit"
+                )
+            mask |= 1 << bit
+        if mask == 0:
+            raise SystemExit(f"error: {name} golden Available is empty")
+        ports = []
+        for field, golden_key in PORT_FIELDS:
+            raw = rec.get(golden_key)
+            if raw is None:
+                ports.append(0)
+                continue
+            if not isinstance(raw, list):
+                raise SystemExit(
+                    f"error: {name} golden {golden_key} shape "
+                    f"{type(raw).__name__}"
+                )
+            ports.append(len(raw))
+        lat, lat_cons = parse_index_latency(
+            (rec.get("Pipeline_Info") or {}).get("Data_Latency"),
+            surf.sincos_conservative,
+        )
+        # OperandCycles payload mirrors the published itinerary shape for
+        # the dest: one entry carrying the scalar (or conservative) bound.
+        if lat is not None:
+            operand_cycles: Tuple[int, ...] = (lat,)
+        elif lat_cons is not None:
+            operand_cycles = (lat_cons,)
+        else:
+            operand_cycles = ()
+        rows.append(
+            PerOpResourceRow(
+                name=name,
+                unit_mask=mask,
+                ports=tuple(ports),
+                latency=lat,
+                latency_conservative=lat_cons,
+                operand_cycles=operand_cycles,
+                alignment=parse_index_alignment(rec.get("Required_Alignment")),
+                fmt=fmt,
+            )
+        )
+    covered = {r.name for r in rows}
+    uncovered = sorted(n for n in (member_fams | hand) if n not in covered)
+    return rows, uncovered
+
+
 def format_itin_data(row: PublishedItin) -> str:
     if not row.units and not row.operand_cycles:
         return f"    InstrItinData<{row.name}, []>"
@@ -302,12 +558,117 @@ def format_itin_data(row: PublishedItin) -> str:
 def emit_sched_records_inc(
     rows: Sequence[PublishedItin], surf: GoldenLatencySurface
 ) -> str:
+    """Itineraries + M18 llvm-mca bridge (ProcResource/SchedWriteRes/ItinRW).
+
+    llvm-mca requires a SchedRW model (MCSchedModel::SchedClassTable); a
+    ProcessorItineraries-only model is rejected ("instruction itineraries
+    are currently unsupported"). The LLVM-native bridge for itinerary
+    targets is ItinRW (TargetSchedule.td:477; ARM ARMScheduleA9.td:2284):
+    itinerary class → SchedWrite → SchedWriteRes on ProcResources. The
+    resources are the same seven units the itinerary InstrStages reserve
+    (ProcResource<1> each; dual-unit menus become resource groups), and
+    SchedWriteRes Latency is the class's max published OperandCycle — the
+    same golden numbers, one generated projection, no hand literals.
+    """
     fu = ", ".join(surf.units)
     body_lines = [format_itin_data(row) for row in rows]
     body = ",\n".join(body_lines)
     banner = "\n".join(generated_banner(
         generator=SCHED_GENERATOR, family=get_family("e96")))
-    return (
+    # ---- M18 llvm-mca bridge (ItinRW), generated from the same rows ----
+    # One ProcResource per shared unit (single-unit itineraries point at
+    # the unit directly) plus one resource GROUP per distinct multi-unit
+    # menu so ItinRW can map dual/triple classes without inventing an
+    # issue-arbitration policy: mca's DefaultResourceStrategy picks the
+    # ready unit, exactly like the HR's injective placement.
+    res_of = {u: f"HaydnRes{u}" for u in surf.units}
+    unit_tag = {
+        "LOADSTORE0": "LS",
+        "LOAD1": "L1",
+        "ALU0": "A0",
+        "ALU1": "A1",
+        "ALU2": "A2",
+        "MAC0": "M0",
+        "MAC1": "M1",
+    }
+    group_of: Dict[Tuple[str, ...], str] = {}
+    group_defs: List[str] = []
+    for row in rows:
+        units = tuple(row.units)
+        if len(units) < 2 or units in group_of:
+            continue
+        gname = "HaydnUnitGrp" + "".join(unit_tag[u] for u in units)
+        group_of[units] = gname
+        members = ", ".join(res_of[u] for u in units)
+        group_defs.append(f"def {gname} : ProcResGroup<[{members}]>;")
+    # SchedWriteRes per itinerary class (named defs, ARM A9 form): the
+    # SchedWriteRes class carries the SchedModel field, so it works under
+    # `let SchedModel = ... in` where anonymous `def : WriteRes` does not.
+    # Latency = max OperandCycle of the class (golden dest bound; the
+    # load/store conservative 2).
+    write_res: List[str] = []
+    itin_rw_classes: List[str] = []
+    for row in rows:
+        wname = f"HW_{row.name}"
+        resource = (
+            group_of[tuple(row.units)]
+            if len(row.units) >= 2
+            else res_of[row.units[0]]
+        )
+        lat = max(row.operand_cycles) if row.operand_cycles else 1
+        write_res.append(
+            f"def {wname} : SchedWriteRes<[{resource}]> {{ let Latency = {lat}; }}"
+        )
+        itin_rw_classes.append(row.name)
+    # Chunk the ItinRW class lists to keep lines readable.
+    itin_chunks: List[str] = []
+    chunk: List[str] = []
+    for name in itin_rw_classes:
+        chunk.append(name)
+        if len(chunk) == 6:
+            itin_chunks.append(chunk)
+            chunk = []
+    if chunk:
+        itin_chunks.append(chunk)
+    itin_rw_lines = []
+    for chunk_names in itin_chunks:
+        writes = ", ".join(f"HW_{n}" for n in chunk_names)
+        classes = ",\n  ".join(chunk_names)
+        itin_rw_lines.append(
+            f"def : ItinRW<[{writes}],\n  [{classes}]>;"
+        )
+    bridge = (
+        "//===-- HaydnGenSchedMcaBridge.td.inc - llvm-mca ItinRW bridge -*-===//\n"
+        "//\n"
+        f"{banner}\n"
+        "//\n"
+        "// ---- M18 llvm-mca bridge (generated; ARM A9 ItinRW peer) ----\n"
+        "// llvm-mca needs a SchedRW model; ItinRW maps each published\n"
+        "// itinerary class to a SchedWrite whose WriteRes carries the same\n"
+        "// golden latency and reserves the same units (groups for menus).\n"
+        "// This is the mca/latency projection of the itineraries in\n"
+        "// HaydnGenSchedRecords.inc — not a second scheduling policy and\n"
+        "// not a completeness claim (the HaydnSchedModel polarity is\n"
+        "// untouched). Separate file because `let SchedModel =` in\n"
+        "// HaydnSchedule.td must follow the HaydnSchedModel def.\n"
+        "//\n"
+        "//===----------------------------------------------------------------------===//\n"
+        "\n"
+        "let SchedModel = HaydnSchedModel in {\n\n"
+        + "\n".join(
+            f"def {res_of[u]} : ProcResource<1>;" for u in surf.units
+        )
+        + "\n\n"
+        + "\n".join(group_defs)
+        + "\n\n"
+        + "}\n\n"
+        "let SchedModel = HaydnSchedModel in {\n\n"
+        + "\n".join(write_res)
+        + "\n\n"
+        + "\n".join(itin_rw_lines)
+        + "\n\n} // SchedModel = HaydnSchedModel\n"
+    )
+    content = (
         "//===-- HaydnGenSchedRecords.inc - published itineraries "
         "-*- tablegen -*-===//\n"
         "//\n"
@@ -358,6 +719,7 @@ def emit_sched_records_inc(
         f"{body}\n"
         f"  ]>;\n"
     )
+    return content, bridge
 
 
 def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
@@ -443,6 +805,155 @@ def emit_memory_cycles_inc(rows: Sequence[PublishedItin]) -> str:
         "\n"
         f"{family_block}"
     )
+
+
+def emit_per_op_resources_inc(
+    rows: Sequence[PerOpResourceRow],
+    uncovered: Sequence[str],
+    surf: GoldenLatencySurface,
+) -> str:
+    """C++ HaydnAdmittedPerOpResourceRecord table + uncovered census.
+
+    Consumers include this from HaydnPortModel.h under
+    GET_HAYDN_PER_OP_RESOURCES. Lookup stays per-name (switch on opcode
+    enum) so admission is exactly the covered set; the census of
+    compiler-reachable names without golden rows is a pin, not a claim.
+    """
+    banner = "\n".join(generated_banner(
+        generator=SCHED_GENERATOR, family=get_family("e96")))
+    table_entries = []
+    for r in rows:
+        # Positional init in HaydnAdmittedPerOpResourceRecord declaration
+        # order (C++17 build; designated initializers need C++20):
+        # Opcode, 8 port fields, UnitMask, DataLatency, OperandCycleCount,
+        # OperandCycles, PipelineOccupancy, RequiredAlignment.
+        cyc = ", ".join(str(c) for c in r.operand_cycles)
+        cyc_arr = "{" + (f"{cyc}" if cyc else "") + "}"
+        counts = ", ".join(str(c) for c in r.ports)
+        lat_lit = "0" if r.latency is None else str(r.latency)
+        table_entries.append(
+            f"    {{ // {r.name} ({r.fmt}) units=0x{r.unit_mask:02X}\n"
+            f"        Haydn::{r.name}, {counts}, 0x{r.unit_mask:02X}u,\n"
+            f"        {lat_lit}u, {len(r.operand_cycles)}u, {cyc_arr},\n"
+            f"        1u, {r.alignment}u,\n"
+            f"    }},"
+        )
+    switch_cases = []
+    for idx, r in enumerate(rows):
+        switch_cases.append(
+            f"  case Haydn::{r.name}:\n    return &Table[{idx}];"
+        )
+    census_lines = "\n".join(f"    \"{n}\"," for n in uncovered)
+    return (
+        "//===-- HaydnGenPerOpResources.inc - per-op resource import -*- C++ -*-===//\n"
+        "//\n"
+        f"{banner}\n"
+        "//\n"
+        "// M18 import from golden instruction_type_index.json: one\n"
+        "// HaydnAdmittedPerOpResourceRecord per compiler-reachable logical\n"
+        "// with a golden row. UnitMask bits are the seven shared units\n"
+        "// (LOADSTORE0, LOAD1, ALU0, ALU1, ALU2, MAC0, MAC1); port counts\n"
+        "// are per-bank golden port lists; DataLatency is golden\n"
+        "// Pipeline_Info (0 = golden silent:\n"
+        "// stores/branches/hints publish no latency); conservative bound\n"
+        "// (uimm4+2 dest) rides OperandCycles like the published SinCosLat\n"
+        "// class. PipelineOccupancy=1 is the same product InstrStage<1,...>\n"
+        "// law the itineraries publish. CompleteModel stays 0: the census\n"
+        "// below is the explicit uncovered set (GE96-04).\n"
+        "//\n"
+        "//===----------------------------------------------------------------------===//\n"
+        "\n"
+        "#ifdef GET_HAYDN_PER_OP_RESOURCES\n"
+        "#undef GET_HAYDN_PER_OP_RESOURCES\n"
+        "\n"
+        "static_assert(HAYDN_ADMITTED_OPERAND_CYCLE_ROOM ==\n"
+        f"                  {ADMITTED_OPERAND_CYCLE_ROOM}u,\n"
+        "              \"generator/C++ OperandCycles room drift\");\n"
+        "\n"
+        "static constexpr HaydnAdmittedPerOpResourceRecord Table[] = {\n"
+        + "\n".join(table_entries)
+        + "\n};\n"
+        "\n"
+        "static constexpr unsigned HaydnAdmittedPerOpRecordCount =\n"
+        f"    sizeof(Table) / sizeof(Table[0]);\n"
+        "static_assert(HaydnAdmittedPerOpRecordCount > 0u,\n"
+        "              \"empty per-op import is not an import\");\n"
+        "\n"
+        "inline const HaydnAdmittedPerOpResourceRecord *\n"
+        "haydnGetAdmittedPerOpResourceRecord(unsigned Opcode) {\n"
+        "  switch (Opcode) {\n"
+        "  default:\n"
+        "    return nullptr;\n"
+        + "\n".join(switch_cases)
+        + "\n  }\n"
+        "}\n"
+        "\n"
+        "// Compiler-reachable logicals WITHOUT a golden row (fail-closed\n"
+        "// census; never synthesized). CompleteModel=0 evidence.\n"
+        "static constexpr const char *HaydnPerOpUncoveredNames[] = {\n"
+        f"{census_lines}\n"
+        "};\n"
+        "static constexpr unsigned HaydnPerOpUncoveredCount =\n"
+        "    sizeof(HaydnPerOpUncoveredNames) /\n"
+        "    sizeof(HaydnPerOpUncoveredNames[0]);\n"
+        "\n"
+        "#endif // GET_HAYDN_PER_OP_RESOURCES\n"
+    )
+
+
+def prove_per_op_import(
+    content: str, rows: Sequence[PerOpResourceRow]
+) -> None:
+    """The import must carry representative rows and pin the census."""
+    if "GET_HAYDN_PER_OP_RESOURCES" not in content:
+        raise SystemExit("error: per-op import guard missing")
+    if "haydnGetAdmittedPerOpResourceRecord" not in content:
+        raise SystemExit("error: per-op lookup missing")
+    if "case Haydn::ADD32:" not in content:
+        raise SystemExit("error: ADD32 per-op case missing")
+    if "case Haydn::CSRR:" not in content:
+        raise SystemExit("error: CSRR per-op case missing")
+    if "HaydnPerOpUncoveredNames" not in content:
+        raise SystemExit("error: uncovered census missing")
+    if "CompleteModel = 1" in content or "CompleteModel=1" in content:
+        raise SystemExit("error: per-op import must not set CompleteModel=1")
+    names = [r.name for r in rows]
+    if len(names) != len(set(names)):
+        dupes = sorted({n for n in names if names.count(n) > 1})
+        raise SystemExit(f"error: duplicate per-op rows {dupes}")
+
+
+def prove_mca_bridge(bridge: str, rows: Sequence[PublishedItin]) -> None:
+    """The ItinRW bridge covers every published class with one WriteRes."""
+    if "let SchedModel = HaydnSchedModel in {" not in bridge:
+        raise SystemExit("error: bridge missing SchedModel binding")
+    if "ProcResource<1>;" not in bridge:
+        raise SystemExit("error: bridge missing unit ProcResources")
+    for row in rows:
+        if f"HW_{row.name}" not in bridge:
+            raise SystemExit(
+                f"error: bridge missing SchedWriteRes for {row.name}"
+            )
+        lat = max(row.operand_cycles) if row.operand_cycles else 1
+        # Every class WriteRes must carry its published max latency.
+        if f"let Latency = {lat}; }}" not in bridge:
+            raise SystemExit(
+                f"error: bridge missing WriteRes latency {lat} for {row.name}"
+            )
+    itin_count = bridge.count("def : ItinRW<")
+    if itin_count == 0:
+        raise SystemExit("error: bridge has no ItinRW rows")
+    covered = sum(
+        1 for row in rows if f"[{row.name}]" in bridge or f"\n  [{row.name}]" in bridge or f"[{row.name}," in bridge or f",\n  {row.name}" in bridge or f" {row.name}," in bridge or f" {row.name}\n" in bridge
+    )
+    if covered != len(rows):
+        missing = [r.name for r in rows if f"{r.name}" not in bridge]
+        raise SystemExit(
+            f"error: bridge ItinRW covers {covered}/{len(rows)} classes "
+            f"(missing {missing[:6]})"
+        )
+    if "CompleteModel" in bridge:
+        raise SystemExit("error: bridge must not touch CompleteModel")
 
 
 def prove_no_dead_classes(content: str) -> None:
@@ -537,14 +1048,14 @@ def prove_source_mutation_not_silent(
     """P19: a changed Constraints fact must change the sched projection."""
     mut = replace(surf, sincos_conservative=surf.sincos_conservative + 1)
     mut_rows = published_itineraries(mut)
-    mutated = emit_sched_records_inc(mut_rows, mut)
+    mutated, _mut_bridge = emit_sched_records_inc(mut_rows, mut)
     if mutated == content:
         raise SystemExit(
             "P19 source-mutation: sincos flip reused committed sched records"
         )
     restored_rows = published_itineraries(surf)
-    restored = emit_sched_records_inc(restored_rows, surf)
-    second = emit_sched_records_inc(restored_rows, surf)
+    restored, _bridge = emit_sched_records_inc(restored_rows, surf)
+    second, _bridge2 = emit_sched_records_inc(restored_rows, surf)
     if restored != content:
         raise SystemExit(
             "P19 source-mutation: restored surface did not re-emit committed sched"
@@ -598,6 +1109,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--xlsx", type=Path, default=None)
     ap.add_argument("--canonical-vectors", type=Path, default=None)
     ap.add_argument("--constraints", type=Path, default=None)
+    ap.add_argument("--index", type=Path, default=None)
     ap.add_argument(
         "--out-dir",
         type=Path,
@@ -625,12 +1137,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     constraints_path: Path = args.constraints or (
         golden / family.constraints_filename
     )
+    index_path: Path = args.index or (golden / family.index_filename)
 
     for path, label in (
         (json_path, "golden JSON"),
         (xlsx_path, "golden XLSX"),
         (canonical_path, "canonical vectors"),
         (constraints_path, "Constraints.md"),
+        (index_path, "instruction type index"),
     ):
         if not path.is_file():
             print(f"error: {label} not found: {path}", file=sys.stderr)
@@ -640,17 +1154,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         verify_golden_hashes(
             golden, json_path, xlsx_path, canonical_path, constraints_path
         )
+        verify_authority_inputs(golden, [index_path.name])
+        index_sha = sha256_file(index_path)
+        if index_sha != PINNED_INDEX_SHA256:
+            raise SystemExit(
+                f"error: index sha256 {index_sha} != pinned "
+                f"{PINNED_INDEX_SHA256}"
+            )
         verify_golden_inputs_pin(golden_inputs_pin_path())
         check_cutover_surfaces(args.out_dir)
         surf = parse_constraints(constraints_path)
         rows = published_itineraries(surf)
         validate_published(rows, surf)
-        content = emit_sched_records_inc(rows, surf)
+        content, bridge_content = emit_sched_records_inc(rows, surf)
         mem_content = emit_memory_cycles_inc(rows)
         prove_no_dead_classes(content)
         prove_no_dead_classes(mem_content)
         prove_generated_entry_capacities(content)
         prove_family_sched_records(mem_content)
+        prove_mca_bridge(bridge_content, rows)
+        index = load_golden_index(index_path)
+        member_fams, hand = compiler_reachable_logicals(args.out_dir)
+        per_op_rows, uncovered = build_per_op_rows(
+            index, member_fams, hand, surf
+        )
+        per_op_content = emit_per_op_resources_inc(
+            per_op_rows, uncovered, surf
+        )
+        prove_per_op_import(per_op_content, per_op_rows)
+        prove_no_dead_classes(per_op_content)
     except SystemExit as exc:
         msg = str(exc)
         if msg:
@@ -659,7 +1191,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     out_path = args.out_dir / family.sched_records_inc
     mem_path = args.out_dir / family.memory_cycles_inc
-    targets = {out_path: content, mem_path: mem_content}
+    per_op_path = args.out_dir / "HaydnGenPerOpResources.inc"
+    bridge_path = args.out_dir / "HaydnGenSchedMcaBridge.td.inc"
+    targets = {
+        out_path: content,
+        mem_path: mem_content,
+        per_op_path: per_op_content,
+        bridge_path: bridge_content,
+    }
 
     if args.check:
         failed = bool(diff_generated_targets(targets))
@@ -678,13 +1217,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"sincos={surf.sincos_conservative} memcycles={mem_n} "
             "e2=2 e3=3 complete_model=0"
         )
+        print(
+            "OK per-op resources "
+            f"covered={len(per_op_rows)} uncovered={len(uncovered)} "
+            "complete_model=0"
+        )
         return 0
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     out_path.write_text(content, encoding="utf-8")
     mem_path.write_text(mem_content, encoding="utf-8")
+    per_op_path.write_text(per_op_content, encoding="utf-8")
+    bridge_path.write_text(bridge_content, encoding="utf-8")
     print(f"wrote {out_path}")
     print(f"wrote {mem_path}")
+    print(f"wrote {per_op_path}")
+    print(f"wrote {bridge_path}")
     return 0
 
 

@@ -27,12 +27,12 @@ body:             |
     liveins: $r0, $r1, $r2, $r3, $r15
     ; CHECK-LABEL: <residual_e2_fullpack>:
     ; CHECK-DAG: add32
-    ; CHECK-DAG: xor32
+    ; CHECK-DAG: ld32
     BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2, implicit $r3 {
-      $r4 = ADD32 $r0, $r1
-      $r5 = XOR32 $r2, $r3
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
+      $r5 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r2, 0
     }
-    BUNDLE 0 {
-      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
     }
 ...

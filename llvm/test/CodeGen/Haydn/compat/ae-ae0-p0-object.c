@@ -104,13 +104,14 @@ ae_int16x4 ae0_cvt16x4_1arg(ae_int32x2 a) {
 }
 
 // SA64NEG_FP owns dir ImmArg 1 (must not silent-alias POS dir0).
-// Direction is an ImmArg on the logical (IR + ISEL). Golden e0 member is
-// 2-op (ar_sel, dest2); dir is not a Format E field.
+// Direction is an ImmArg on the intrinsic (IR); CB-151 folds it at ISel —
+// the logical/member wire shape is 2-op (ar_sel, dest2); dir is not a
+// Format E field. Distinct ar_sel still distinguishes the streams.
 // IR-LABEL: @ae0_sa64neg_dir1
 // IR: call void @llvm.haydn.wbarwua(i32 {{.*}}, ptr {{.*}}, i32 1)
 // ISEL-LABEL: name: ae0_sa64neg_dir1
-// ISEL-DAG: WBARWUA{{[^,]*}}, 0, 1
-// ISEL-DAG: WBARWUA{{[^,]*}}, 1, 1
+// ISEL-DAG: WBARWUA 0,
+// ISEL-DAG: WBARWUA 1,
 // MIR-LABEL: name: ae0_sa64neg_dir1
 // MIR: WBARWUA{{.*}}_AR
 // MIR: WBARWUA{{.*}}_AR
@@ -122,8 +123,8 @@ void ae0_sa64neg_dir1(ae_valign align, void *ptr) {
 // IR-LABEL: @ae0_sa64pos_dir0
 // IR: call void @llvm.haydn.wbarwua(i32 {{.*}}, ptr {{.*}}, i32 0)
 // ISEL-LABEL: name: ae0_sa64pos_dir0
-// ISEL-DAG: WBARWUA{{[^,]*}}, 0, 0
-// ISEL-DAG: WBARWUA{{[^,]*}}, 1, 0
+// ISEL-DAG: WBARWUA 0,
+// ISEL-DAG: WBARWUA 1,
 // MIR-LABEL: name: ae0_sa64pos_dir0
 // MIR: WBARWUA{{.*}}_AR
 // MIR: WBARWUA{{.*}}_AR

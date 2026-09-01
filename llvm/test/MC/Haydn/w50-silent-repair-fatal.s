@@ -11,4 +11,5 @@
 # A-NOT: peelLogicalOpcodeName
 # D: refuse dangling-block repair
 # D-NOT: peelLogicalOpcodeName
-# F: silent repair
+# F-NOT: silent repair
+# F: Does not setDesc

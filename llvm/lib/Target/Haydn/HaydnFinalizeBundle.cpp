@@ -82,6 +82,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/Target/TargetMachine.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineOperand.h"
@@ -122,22 +124,32 @@ bool isBundleCandidate(MachineBasicBlock::instr_iterator MII) {
   // (BUNDLE path skips non-SETCBR pseudos). Leave standalone.
   if (MI->isInlineAsm())
     return false;
+  // W67 non-tail fnptr call clone (JALR_MSP): golden JALR members are
+  // isTerminator=1, so the mid-block call never takes a member Desc in MIR.
+  // It serializes Desc-as-is at MC (encoder peels `_MSP` -> identical member
+  // bytes, one E96 parcel). Bundle children must be member-encodable, so
+  // this clone stays standalone like inline asm. JAL_W direct calls bundle
+  // normally (their member is isTerminator=0).
+  if (MI->isCall() && !MI->isTerminator() && !MI->isPseudo()) {
+    MachineFunction *PMF = MI->getMF();
+    if (PMF && PMF->getSubtarget().getInstrInfo()->getName(MI->getOpcode())
+                   .ends_with("_MSP"))
+      return false;
+  }
   return true;
 }
 
 /// Keep-list from FieldSlot explicit operands onto generated member Desc.
-/// Closed drop rules (no bag-sort by register class):
-///  * identity when counts match
-///  * drop every ins TIED_TO a def (MAC/MOVT seed-copy acc; dual-dest MAC
-///    drops two acc ins)
-///  * trailing extra uses when NumDefs matches and no ins is tied to a def
-///    (MOVE32/ABS32 vestigial rs2)
-///  * skip first ins when NumDefs match and trailing drop fails
-///    (LUI vestigial $rs between dest and imm)
-/// Extra implicit-defs (SETCBR expand CBR) are ImplicitTail, not keep-map.
-/// LUI/ZERO_GPR cutover requires generated dest as SSA out (catalog role
-/// `reg`). Skip-Finalize / hand-asm FieldSlot uses the same keep-map;
-/// class-bag rebuild is not a fill path.
+/// W68.0R (2026-08-26): with the identity census empty, the only accepted
+/// maps are
+///  * identity when counts/kinds/defs match
+///  * the hand D_LDW_CB_IMM operand-order swap (isAsmParserOnly logical)
+/// and ties must correspond exactly through the map (no DropTies/AddTies).
+/// The historical drop rules (MAC/MOVT tied acc, MOVE32/ABS32 vestigial
+/// rs2, LUI vestigial $rs, PLDWWUA synthetic wb) matched zero pairs and
+/// are deleted. Extra implicit-defs (SETCBR expand CBR) are ImplicitTail,
+/// not keep-map. Skip-Finalize / hand-asm FieldSlot uses the same
+/// keep-map; class-bag rebuild is not a fill path.
 std::optional<SmallVector<unsigned, 4>>
 fieldSlotKeepOperands(const MachineInstr &MI, const MCInstrDesc &NewDesc) {
   const MCInstrDesc &OldDesc = MI.getDesc();
@@ -173,16 +185,11 @@ fieldSlotKeepOperands(const MachineInstr &MI, const MCInstrDesc &NewDesc) {
         return false;
       const int OldTie =
           OldDesc.getOperandConstraint(Keep[NewI], MCOI::TIED_TO);
+      // W68.0R: the synthetic-member-writeback exception (PLDWWUA shell
+      // vs tied member) is deleted — every logical now models the golden
+      // tie its member declares, so old and new tie maps must correspond
+      // exactly through the keep map.
       if (OldTie == static_cast<int>(Keep[NewTie]))
-        continue;
-      // 2026-08-21 synthetic member writeback: a member whose golden rs
-      // writeback the logical does not model (public pre-lowering shell
-      // PLDWWUA vs tied PLDWWUA_POST member) maps the wb DEF and the tied
-      // USE onto the SAME old operand — the tie is reconstructible without
-      // an old-side constraint. gaps/audit_shapes.md class (d').
-      if (OldTie == -1 &&
-          Keep[NewI] == Keep[static_cast<unsigned>(NewTie)] &&
-          static_cast<unsigned>(NewTie) < NewDesc.getNumDefs())
         continue;
       return false;
     }
@@ -209,9 +216,9 @@ bool llvm::memberDescCompatible(const MachineInstr &MI, unsigned MemberOpc,
 }
 
 /// setDesc to \p MemberOpc and rewrite explicit operands to the member
-/// Desc order from the keep map. Drop-only is not enough: CSRW catalog
-/// (uimm8, rs) vs a member that lists (rs, uimm8) must swap, not leave
-/// an imm in a register slot.
+/// Desc order from the keep map. Drop-only is not enough: the hand CB
+/// logical vs member operand-order swap must reorder, not leave an imm in
+/// a register slot.
 void llvm::rewriteFieldSlotToMember(MachineInstr &MI, unsigned MemberOpc,
                                     const TargetInstrInfo &TII) {
   const MCInstrDesc &OldDesc = MI.getDesc();
@@ -234,59 +241,19 @@ void llvm::rewriteFieldSlotToMember(MachineInstr &MI, unsigned MemberOpc,
   for (unsigned I = MI.getNumOperands(); I > OldN; --I)
     ImplicitTail.push_back(MI.getOperand(I - 1));
 
-  SmallVector<unsigned, 4> DropTies;
-  // Def indices (member operand order) needing a synthetic use→def flip.
-  SmallVector<unsigned, 4> AddTies;
-  for (unsigned NewI = 0; NewI != NewN; ++NewI) {
-    const unsigned OldI = (*Keep)[NewI];
-    if (OldDesc.getOperandConstraint(OldI, MCOI::TIED_TO) != -1 &&
-        NewDesc.getOperandConstraint(NewI, MCOI::TIED_TO) == -1)
-      DropTies.push_back(NewI);
-    // 2026-08-21 synthetic member writeback: the member declares a tie the
-    // old side does not (public shell PLDWWUA → tied PLDWWUA_POST member).
-    // Register the tie and mark the synthetic wb operand as a def so the
-    // machine verifier sees def/use tied exactly as the member Desc demands
-    // (gaps/audit_shapes.md class (d')).
-    const int NewTie = NewDesc.getOperandConstraint(NewI, MCOI::TIED_TO);
-    if (NewTie != -1 && OldDesc.getOperandConstraint(OldI, MCOI::TIED_TO) == -1)
-      AddTies.push_back(static_cast<unsigned>(NewTie));
-  }
-
-  // Def indices whose member Desc declares a tie the old side does not
-  // (public shell PLDWWUA → tied PLDWWUA_POST member): the keep map maps
-  // the wb DEF and the tied USE onto the same old operand, so the copied
-  // wb operand must flip use→def. Flip it on the LIVE re-added operand,
-  // never on the detached Kept copy: MachineOperand copies carry ParentMI
-  // (MachineOperand.h clearParent contract) and setIsDef is out-of-line
-  // precisely because it moves the operand across MRI def/use lists via
-  // that parent — on a stack copy it would splice stack memory into the
-  // register's use list and leave a dangling pointer when Kept dies
-  // (2026-08-21 synthetic member writeback, gaps/audit_shapes.md class
-  // (d'); verifyUseList segfault on ar-unaligned-intrinsics.ll).
-  //
-  // Sequencing: MC explicit operands list defs before uses, and each def
-  // index is flipped BEFORE its own operand is added, so the tied use
-  // added later finds a def where addOperand's auto-tie (TIED_TO →
-  // tieOperands asserts DefMO.isDef) expects one. A copied use may carry
-  // kill; clear it on the live operand before the flip (setIsDef refuses
-  // to flip under DeadOrKill).
+  // W68.0R: the DropTies / AddTies repair loops are deleted. tiesOk now
+  // requires old and new TIED_TO maps to correspond exactly through the
+  // keep map (identity or the hand CB swap, whose ties land on operands
+  // that carry them on both sides), so no accepted rewrite can leave a
+  // tie on exactly one side. A shape needing a synthetic tie again is a
+  // census divergence: fix the logical schema, never here.
   while (MI.getNumOperands())
     MI.removeOperand(MI.getNumOperands() - 1);
   MI.setDesc(NewDesc);
-  for (unsigned NewI = 0; NewI != NewN; ++NewI) {
+  for (unsigned NewI = 0; NewI != NewN; ++NewI)
     MI.addOperand(*MF, Kept[NewI]);
-    if (llvm::is_contained(AddTies, NewI)) {
-      MachineOperand &Wb = MI.getOperand(NewI);
-      if (Wb.isUse() && Wb.isKill())
-        Wb.setIsKill(false);
-      if (Wb.isUse())
-        Wb.setIsDef(true);
-    }
-  }
   for (unsigned I = ImplicitTail.size(); I > 0; --I)
     MI.addOperand(*MF, ImplicitTail[I - 1]);
-  for (unsigned OpI : DropTies)
-    MI.untieRegOperand(OpI);
 }
 
 namespace {
@@ -490,6 +457,18 @@ bool mustResolveToFormatEMember(unsigned Opc, const TargetInstrInfo &TII) {
     return false;
   const StringRef Name = TII.getName(Opc);
   if (isGeneratedFormatEMemberName(Name))
+    return false;
+  // W67 non-tail fnptr call clone (JALR_MSP): the golden JALR members are
+  // isTerminator=1, so a mid-block call must never take a member Desc in
+  // MIR (machine verifier: non-terminator after first terminator). The
+  // clone serializes Desc-as-is at MC — the encoder peels `_MSP` to the
+  // JALR logical and emits the identical member bytes inside one E96
+  // parcel. JAL_W direct calls are NOT blocked: their golden JAL member is
+  // isTerminator=0 and cutovers normally. Identified by the `_MSP` suffix
+  // (the only non-tail call clone); tail-call JALR_W_MSP is
+  // isReturn+isTerminator and unaffected.
+  if (Name.ends_with("_MSP") && TII.get(Opc).isCall() &&
+      !TII.get(Opc).isTerminator())
     return false;
   if (isResidualFieldSlotOpcode(Opc, TII))
     return true;
@@ -1061,6 +1040,50 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
   // underfilled stub completion into MC.
 
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  // W68.4 inline-asm admission (fail closed): opaque inline asm beside
+  // compiler packets is NOT inside the exact Format E layout model — its
+  // bytes emit after the claimed freeze via AsmPrinter::emitInlineAsm.
+  // Admitted classes:
+  //   * metadata-only asm (empty text: zero bytes, empty APP/NO_APP);
+  //   * asm-only naked bodies ([[gnu::naked]] — clang lowers the body to
+  //     bare INLINEASM(+terminators), the function emits ZERO compiler
+  //     parcels, so there is no packet layout to escape; libc
+  //     setjmp/longjmp depend on this shape).
+  // Detection: a code-bearing asm MI rejects only when the same function
+  // also holds at least one bundle-candidate encode MI (the mixed-stream
+  // case). Asm-only functions pass (naked); pure-metadata asm passes.
+  {
+    SmallVector<const MachineInstr *, 4> CodeBearingAsm;
+    bool AnyBundleCandidate = false;
+    for (MachineBasicBlock &MBB : MF) {
+      for (MachineBasicBlock::instr_iterator II = MBB.instr_begin(),
+                                             IE = MBB.instr_end();
+           II != IE; ++II) {
+        MachineInstr &MI = *II;
+        if (MI.isInlineAsm()) {
+          const unsigned Len = TII.getInlineAsmLength(
+              MI.getOperand(0).getSymbolName(),
+              *MF.getTarget().getMCAsmInfo());
+          if (Len != 0)
+            CodeBearingAsm.push_back(&MI);
+          continue;
+        }
+        if (isBundleCandidate(II))
+          AnyBundleCandidate = true;
+      }
+    }
+    if (AnyBundleCandidate) {
+      for (const MachineInstr *MI : CodeBearingAsm) {
+        std::string Msg;
+        raw_string_ostream OS(Msg);
+        OS << "Haydn Finalize: code-bearing inline asm is outside the exact "
+              "Format E layout model (typed admission or reject; metadata-"
+              "only asm and asm-only naked bodies are legal). MI:\n";
+        MI->print(OS);
+        report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+      }
+    }
+  }
   bool Changed = haydnRecommitLateMixedBare(MF);
 
   // Already-bundled residual roots (hand MIR / exact-commit) may have only

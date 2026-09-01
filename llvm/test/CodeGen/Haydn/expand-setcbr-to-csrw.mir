@@ -35,7 +35,7 @@ body:             |
     ; EXPAND-NEXT: CSRW_W 46, killed $r3, implicit-def $sfr, implicit-def $cbr1
     ; EXPAND-NEXT: CSRW_W 47, killed $r4, implicit-def $sfr, implicit-def $cbr1
     ; EXPAND-NOT: SETCBR
-    ; EXPAND: RET
+    ; EXPAND: {{RET|JALR}}
     ;
     ; PACK-LABEL: name: expand_cbr_map
     ; PACK: CSRW{{[^ ]*}} 44, {{.*}}$r1, implicit-def $sfr, implicit-def $cbr0

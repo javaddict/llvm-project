@@ -43,7 +43,10 @@ define i64 @pair_pack(ptr %p, i32 %i) {
 ; MIR-NOT: G_OR
 ; MIR-NOT: G_SHL
 ; ASM-LABEL: pair_pack:
-; ASM: d_ldw_pre_reg
+; W68.5 (dead-wb PRE refusal): the pack GEP's writeback dies at the load,
+; so selection folds the offset into the plain wide load — ld64 with the
+; byte offset, same one-parcel cost, no dead writeback.
+; ASM: ld64
 ; ASM-NOT: sext32t64
 ; ASM-NOT: or64
 entry:
@@ -66,7 +69,7 @@ define i64 @pair_pack_const_off(ptr %p) {
 ; MIR: G_HAYDN_PREINC_LOAD {{.*}}(s64)
 ; MIR-NOT: G_OR
 ; ASM-LABEL: pair_pack_const_off:
-; ASM: d_ldw_pre_imm {{.*}}, 1
+; ASM: ld64 {{.*}}, 1
 ; ASM-NOT: sext32t64
 ; ASM-NOT: or64
 entry:

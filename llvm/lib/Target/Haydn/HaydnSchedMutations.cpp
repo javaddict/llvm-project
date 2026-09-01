@@ -25,12 +25,15 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnHWLoopContracts.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnMachineScheduler.h"
 #include "HaydnPortModel.h"
+#include "HaydnInterBlockScheduling.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -89,22 +92,20 @@ static cl::opt<bool> EnableHaydnPostRAMemoryEdges(
     cl::desc("Post-RA: MemoryEdges via getMemoryLatency "
              "(default ON; product architectural latency)"));
 
-// AIE RegionEndEdges rebuilds ExitSU with MaxLatencyFinder. The conservative
-// intra-region finder is ported below (itinerary maxLatency, no inter-block
-// successor reduction). Enabling the rebuild without that reduction can
-// still drop live-out Data edges that InterBlockScheduling would keep
-// (AIE AIEMaxLatencyFinder.cpp:101-191). Default off until that
-// successor reduction exists. The post-RA multi-stage host being seated
-// does not flip these mutations.
+// AIE RegionEndEdges rebuilds ExitSU with MaxLatencyFinder
+// (AIEMaxLatencyFinder.cpp:101-191). Experimental-on has IncludeStages drop
+// plus the DDG remaining-latency cut (computeEffectiveLatencyFor). Do not
+// invent PerSuccEdges. Product default stays off until same-artifact
+// evidence decides; seating S2 does not flip these mutations.
 static cl::opt<bool> EnableHaydnPostRARegionEndEdges(
     "haydn-postra-region-end-edges", cl::init(false), cl::Hidden,
     cl::desc("Post-RA: recompute ExitSU edges (MaxLatencyFinder ported; "
-             "default off until inter-block reduction)"));
+             "default off until same-artifact evidence)"));
 
 // AIE InterBlock first brick (AIEMaxLatencyFinder.cpp:159 IncludeStages =
 // !SuccessorsAreScheduled). ScheduledMBBs is already recorded on
-// HaydnScheduleDAGMI. Do not invent PerSuccEdges remaining-latency cuts
-// without that graph (AIE ReduceLatency would under-cover). Default off.
+// HaydnScheduleDAGMI. Experimental-on applies the DDG remaining-latency cut;
+// do not invent PerSuccEdges. Product default stays off.
 static cl::opt<bool> EnableHaydnPostRAInterBlock(
     "haydn-postra-interblock", cl::init(false), cl::Hidden,
     cl::desc("Post-RA: drop ExitSU stage latency when successorsAreScheduled "
@@ -117,6 +118,10 @@ static cl::opt<bool> EnableHaydnPostRAWAWEdges(
     "haydn-postra-waw-edges", cl::init(false), cl::Hidden,
     cl::desc("Post-RA: simplify dead reserved-status Output (WAW) edges "
              "(SFR/CBR; AIE isSimplifiableReservedReg overlay; default off)"));
+
+namespace llvm {
+bool haydnInterBlockEnabled() { return EnableHaydnPostRAInterBlock; }
+} // namespace llvm
 
 //===----------------------------------------------------------------------===//
 // Latency helpers
@@ -568,11 +573,50 @@ class ZOLSetupExitLatency : public ScheduleDAGMutation {
 // Post-RA: MaxLatencyFinder (AIE AIEMaxLatencyFinder.cpp overlay)
 //===----------------------------------------------------------------------===//
 
+class MaxLatencyFinder;
+
+// AIE computeEffectiveLatency (AIEMaxLatencyFinder.cpp:101-151):
+// Remaining = EdgeLat - Depth(SuccNode) over each successor edge's
+// post-boundary node that this MI reaches; the ExitSU edge must cover the
+// max. Missing DDG / missing node / missing depth = 0 (no cut).
+static unsigned computeEffectiveLatencyFor(const MaxLatencyFinder &,
+                                           const MachineInstr &MI) {
+  const HaydnIBEdgesByPredMap *IBEdgesByPred =
+      haydnGetInterBlockEdgesRegistry(*MI.getMF());
+  if (!IBEdgesByPred || MI.getParent() == nullptr)
+    return 0;
+  auto It = IBEdgesByPred->find(MI.getParent());
+  if (It == IBEdgesByPred->end())
+    return 0;
+  int Best = 0;
+  for (const auto &E : It->second) {
+    const SUnit *Pre =
+        E->getPreBoundaryNode(const_cast<MachineInstr *>(&MI));
+    if (!Pre)
+      continue;
+    // Cross-boundary edges only: the cut prices how much of the edge's
+    // latency remains unservable inside the successor. Intra-block
+    // successors of the same node carry no post-boundary depth and would
+    // fall to PostRegionMaxDepth, yielding a negative Remaining that loses
+    // the max without ever being the binding edge.
+    for (const SDep *Dep : E->getCrossBoundaryEdges(*Pre)) {
+      const SUnit *Dst = Dep->getSUnit();
+      int Depth = E->getPostDepth(*Dst);
+      if (Depth < 0)
+        Depth = E->getPostRegionMaxDepth();
+      int Remaining = (int)Dep->getLatency() - Depth;
+      Best = std::max(Best, Remaining);
+    }
+  }
+  return Best > 0 ? (unsigned)Best : 1;
+}
+
 // Conservative intra-region maxLatency (AIE maxLatency at
 // AIEMaxLatencyFinder.cpp:32-63). Operand cycles + published memory last
-// cycle + optional stage latency. AIE computeEffectiveLatency needs
-// PerSuccEdges (AIEMaxLatencyFinder.cpp:101-151); Haydn keeps stage
-// latency whenever that graph is absent so ExitSU never under-covers.
+// cycle + optional stage latency. AIE computeEffectiveLatency walks
+// PerSuccEdges (AIEMaxLatencyFinder.cpp:101-151); Haydn does not invent
+// that graph. Flag-off keeps stage latency. Flag-on drops IncludeStages
+// and cuts remaining latency from the per-function DDG.
 class MaxLatencyFinder {
   const HaydnInstrInfo *const TII;
   const InstrItineraryData *const Itineraries;
@@ -580,6 +624,9 @@ class MaxLatencyFinder {
   const bool HasUnknownSuccessors;
   const bool SuccessorsAreScheduled;
   const bool IncludeStages;
+  /// DDG remaining-latency cut (AIE ReduceLatency at
+  /// AIEMaxLatencyFinder.cpp:98,184). Flag-off default is false.
+  const bool ReduceLatency = false;
 
   static bool isBottomRegion(ScheduleDAGInstrs *DAG) {
     // AIE MaxLatencyFinder.cpp:67-76. getBB() is protected on this DAG.
@@ -622,10 +669,13 @@ public:
         // AIE IncludeStages = !SuccessorsAreScheduled (AIEMaxLatencyFinder.cpp:159).
         // InterBlock off keeps stage latency even when successorsAreScheduled
         // so ExitSU never under-covers without PerSuccEdges. InterBlock on
-        // drops stages only; it does not invent remaining-latency cuts.
+        // drops stages and applies the DDG remaining-latency cut; it does
+        // not invent PerSuccEdges.
         IncludeStages(!EnableHaydnPostRAInterBlock ||
-                      !SuccessorsAreScheduled) {
-    LLVM_DEBUG(dbgs() << "MaxLatencyFinder bottom=" << IsBottomRegion
+                      !SuccessorsAreScheduled),
+        ReduceLatency(EnableHaydnPostRAInterBlock && IsBottomRegion &&
+                      !HasUnknownSuccessors && SuccessorsAreScheduled) {
+      LLVM_DEBUG(dbgs() << "MaxLatencyFinder bottom=" << IsBottomRegion
                       << " unknown-succ=" << HasUnknownSuccessors
                       << " succ-sched=" << SuccessorsAreScheduled
                       << " stages=" << IncludeStages
@@ -650,9 +700,20 @@ public:
       Latency = std::max(Latency,
                          static_cast<unsigned>(
                              TII->getInstrLatency(Itineraries, MI)));
+    // AIE computeEffectiveLatency (AIEMaxLatencyFinder.cpp:101-151): when
+    // the inter-block DDGs exist and every successor edge knows its
+    // post-boundary depth, the ExitSU edge only needs to cover
+    // Remaining = EdgeLat - Depth(SuccMI). Cut is exact when the successor
+    // depth is recorded and conservative (full latency) otherwise.
+    if (ReduceLatency)
+      if (unsigned Eff = computeEffectiveLatencyFor(*this, MI))
+        Latency = std::min(Latency, Eff);
     return std::max(Latency, 1u);
   }
 };
+
+
+
 
 //===----------------------------------------------------------------------===//
 // Post-RA: RegionEndEdges (MaxLatencyFinder)
@@ -803,7 +864,8 @@ std::vector<std::unique_ptr<ScheduleDAGMutation>> llvm::getHaydnPreRAMutations()
 std::vector<std::unique_ptr<ScheduleDAGMutation>> llvm::getHaydnPostRAMutations() {
   // Order mirrors AIE getPostRAMutationsImpl (minus Lock/Bias/Fixed/Sticky).
   // ZOLSetupExitLatency always on (AIE LoopSetupDistance peer) even when
-  // full RegionEndEdges rebuild is OFF.
+  // full RegionEndEdges rebuild is OFF. RegionEndEdges and WAW stay gated
+  // on default-off flags; seating S2 does not install them.
   std::vector<std::unique_ptr<ScheduleDAGMutation>> Mutations;
   Mutations.emplace_back(std::make_unique<ZOLSetupExitLatency>());
   if (EnableHaydnPostRARegionEndEdges || EnableHaydnPostRAInterBlock)
@@ -814,3 +876,102 @@ std::vector<std::unique_ptr<ScheduleDAGMutation>> llvm::getHaydnPostRAMutations(
     Mutations.emplace_back(std::make_unique<MachineSchedWAWEdges>());
   return Mutations;
 }
+
+namespace llvm {
+// Defined here (not HaydnMachineFunctionInfo.cpp): creating the store
+// needs the complete element type, which requires
+// HaydnInterBlockScheduling.h — already included by this TU.
+HaydnInterBlockEdgesRegistry &
+HaydnMachineFunctionInfo::getOrCreateInterBlockRegistry() {
+  if (!InterBlockRegistry)
+    InterBlockRegistry = std::make_shared<HaydnInterBlockEdgesRegistry>();
+  return *InterBlockRegistry;
+}
+
+void setHaydnInterBlockEdgesForFunction(MachineFunction &MF,
+                                        HaydnIBEdgesByPredMap *ByPred) {
+  // W68.2R per-function ownership (STATUS limit #9): the store lives in
+  // HaydnMachineFunctionInfo, so it dies with the MF and can never leak
+  // across functions or outline clones.
+  auto &MFI = *MF.getInfo<HaydnMachineFunctionInfo>();
+  // Null clears (flag off / function end).
+  if (!ByPred) {
+    MFI.clearInterBlockRegistry();
+    return;
+  }
+  HaydnIBEdgesByPredMap &Owned = MFI.getOrCreateInterBlockRegistry().ByPred;
+  // CFG-mutation invalidation: drop records whose Pred or Succ MBB no
+  // longer exists in this function. Raw MBB pointers from an earlier
+  // invocation are only meaningful while the block lives; the gathering
+  // walk re-adds every current edge below.
+  DenseSet<const MachineBasicBlock *> Live;
+  SmallVector<const MachineBasicBlock *, 16> Dead;
+  for (const MachineBasicBlock &MBB : MF)
+    Live.insert(&MBB);
+  for (auto &KV : Owned) {
+    if (!Live.contains(KV.first)) {
+      Dead.push_back(KV.first);
+      continue;
+    }
+    SmallVector<std::unique_ptr<HaydnInterBlockEdges>, 2> Keep;
+    for (auto &E : KV.second)
+      if (E->getSucc() && Live.contains(E->getSucc()))
+        Keep.push_back(std::move(E));
+    KV.second = std::move(Keep);
+    if (KV.second.empty())
+      Dead.push_back(KV.first);
+  }
+  for (const MachineBasicBlock *MBB : Dead)
+    Owned.erase(MBB);
+  // A new (empty) map for the same function (S2 re-gather) does NOT wipe
+  // S1's depths: publish merges into the owning store.
+  for (auto &KV : *ByPred)
+    for (auto &E : KV.second) {
+      // S2 re-gather: inherit S1's recorded depths for the same edge.
+      for (auto &Old : Owned[KV.first])
+        if (Old->getSucc() == E->getSucc())
+          E->inheritRecordedPostDepths(*Old);
+      Owned[KV.first].push_back(std::move(E));
+    }
+  // Superseded graphs for the same edge (S1's originals after S2 inherits)
+  // are dropped: keep the newest per (pred,succ).
+  for (auto &KV : Owned) {
+    SmallVector<std::unique_ptr<HaydnInterBlockEdges>, 2> Keep;
+    for (auto &E : KV.second)
+      if (Keep.empty() ||
+          none_of(Keep, [&](const std::unique_ptr<HaydnInterBlockEdges> &K) {
+            return K->getSucc() == E->getSucc();
+          }))
+        Keep.push_back(std::move(E));
+    KV.second = std::move(Keep);
+  }
+}
+
+HaydnIBEdgesByPredMap *haydnGetInterBlockEdgesRegistry(MachineFunction &MF) {
+  // The registry store itself is never mutated through this accessor
+  // (records are written via publish); the non-const overload exists for
+  // the S1 depth-recording walk, which re-keys records it owns.
+  const HaydnInterBlockEdgesRegistry *Reg =
+      MF.getInfo<HaydnMachineFunctionInfo>()->getInterBlockRegistry();
+  return Reg ? const_cast<HaydnIBEdgesByPredMap *>(&Reg->ByPred) : nullptr;
+}
+
+const HaydnIBEdgesByPredMap *
+haydnGetInterBlockEdgesRegistry(const MachineFunction &MF) {
+  const HaydnInterBlockEdgesRegistry *Reg =
+      MF.getInfo<HaydnMachineFunctionInfo>()->getInterBlockRegistry();
+  return Reg ? &Reg->ByPred : nullptr;
+}
+
+bool haydnSuccHasS1Depths(const MachineFunction &MF,
+                          const MachineBasicBlock *Succ) {
+  const HaydnIBEdgesByPredMap *Reg = haydnGetInterBlockEdgesRegistry(MF);
+  if (!Reg)
+    return false;
+  for (const auto &[PredBB, Edges] : *Reg)
+    for (const auto &E : Edges)
+      if (E->getSucc() == Succ && E->hasRecordedPostDepths())
+        return true;
+  return false;
+}
+} // namespace llvm

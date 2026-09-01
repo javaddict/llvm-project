@@ -9,8 +9,8 @@
 # singleton split. Suffix _S* is occupancy recovery, not a matcher.
 
 .text
-  { d_lqhwua_post d0, 0, r1, r2, 0 }
-  { d_lqhwua_post d0, 0, r1, r2, 0; nop; nop }
+  { d_lqhwua_post 0, d0, r1 }
+  { d_lqhwua_post 0, d0, r1; nop; nop }
   { d_ldw_cb_imm 0, d0, r1, 1 }
   { d_ldw_cb_imm 0, d0, r1, 1; nop; nop }
   { wfi }

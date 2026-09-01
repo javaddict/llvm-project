@@ -2,8 +2,6 @@
 ; RUN:   --check-prefix=MODEL
 ; RUN: FileCheck %s --input-file=%S/../../../../../lib/Target/Haydn/HaydnMachineScheduler.cpp \
 ; RUN:   --check-prefix=PIN
-; RUN: FileCheck %s --input-file=%S/../../../../../lib/Target/Haydn/HaydnPostRAMultiStage.h \
-; RUN:   --check-prefix=SMSDEF
 ; RUN: FileCheck %s --input-file=%S/../../../../../lib/Target/Haydn/HaydnTargetMachine.h \
 ; RUN:   --check-prefix=HWDEF
 ; RUN: FileCheck %s --input-file=%S/../../../../../lib/Target/Haydn/HaydnHardwareLoops.cpp \
@@ -33,10 +31,8 @@ define i32 @inorder_seat(i32 %a, i32 %b) {
 ; MODEL-DAG: let CompleteModel = 0
 ; MODEL-NOT: let CompleteModel = 1
 
-; 2026-08-22 SMS product-default flip rebaseline: default assert is now
-; positive (re-parking requires new failing evidence).
-; PIN: static_assert(HaydnMultiStageSMS::productDefaultEnabled()
-; PIN: static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled()
+; W68.1: the post-RA SMS host is deleted (generic pre-RA MachinePipeliner
+; owns multi-stage); the hardware-loop product default assert remains.
 ; PIN: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; PIN: pinHaydnInOrderIncompleteSchedModel
 ; PIN: SM.MicroOpBufferSize != 0
@@ -44,7 +40,6 @@ define i32 @inorder_seat(i32 %a, i32 %b) {
 ; PIN: SM.IssueWidth != Haydn::ISSUE_SLOT_COUNT
 ; PIN: pinHaydnInOrderIncompleteSchedModel(*C->MF)
 
-; SMSDEF: productDefaultEnabled() { return true; }
 ; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
 ; HWPIN: static_assert(llvm::HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 

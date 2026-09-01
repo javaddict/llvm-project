@@ -59,8 +59,9 @@
 // 2. Off1/Off2 range
 // Off1 = uimm6×4 ≤ 252 B (safety margin → MaxOff1BytesSafe).
 // Off2 = uimm12×4 ≤ 16380 B. Distance is measured forward in layout
-// from the MI after the SET cycle. If Header is not after SET in layout,
-// Off is unknown → treat as range-bad.
+// from the SET cycle's parcel base — the same PC anchor the encoder uses
+// (HaydnAsmBackend::evaluateFixup % Parcel seeding; CB-164). If Header is
+// not after SET in layout, Off is unknown → treat as range-bad.
 //
 // 3. Recoverability ladder (correctness only; peer-aligned 2026-08-22)
 // a. Pad setup gap only (deficit-only InterveningCycles NOPs after SET → BEGIN).
@@ -87,8 +88,11 @@
 // Debug only: -haydn-enable-hwloop-demote=false is still fatal on a
 // live body (never erase-only once-through).
 // 4. Pipeline
-// addPreEmit: BranchRelaxation → FixupHwLoops → BranchRelaxation again
-// so Fixup growth cannot leave branches past simm12.
+// BranchRelaxation → FixupHwLoops → BranchRelaxation (standalone PreEmit
+// row) and the same Fixup re-invocation inside HaydnLateConvergence after
+// S2/stalls. Each invocation rewrites Off1/Off2 from the live inventory
+// (inner-first nested cascade). Fixup growth cannot leave branches past
+// simm12 because BranchRelaxation is last in the mutating iteration.
 //
 // AsmPrinter is the emit-side twin: no START/END temp symbols without a
 // real body instruction to flush them.
@@ -100,6 +104,7 @@
 #include "HaydnBundleMaterialize.h"
 #include "HaydnBundlePlan.h"
 #include "HaydnBundleVerify.h"
+#include "HaydnFormatERecords.h"
 #include "HaydnFrameLowering.h"
 #include "HaydnHardwareLoops.h"
 #include "HaydnHWLoopContracts.h"
@@ -111,15 +116,19 @@
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
 
 using namespace llvm;
 
@@ -152,12 +161,15 @@ namespace {
 static constexpr unsigned InterveningCycles =
     haydn::hwloop::InterveningCycles;
 static constexpr unsigned MinSetupBundles = haydn::hwloop::MinSetupBundles;
-static constexpr int64_t MinSetupBytes = haydn::hwloop::MinSetupBytes;
 static_assert(MinSetupBundles == InterveningCycles,
               "Fixup Following floor must be InterveningCycles");
-static_assert(MinSetupBytes ==
-                  haydn::bundle::productBundlesToBytes(InterveningCycles),
-              "MinSetupBytes must be InterveningCycles × product parcel");
+// CB-164: offsets anchor at the SET parcel base, so the setup timing floor
+// is MinSetupIssueBytes (= MinSetupBytes + one SET parcel) — not the bare
+// after-SET intervening span.
+static_assert(haydn::hwloop::MinSetupIssueBytes ==
+                  haydn::hwloop::MinSetupBytes +
+                      haydn::bundle::productBundlesToBytes(1),
+              "SET-anchored setup floor = intervening span + SET parcel");
 static constexpr int64_t MaxOff1Bytes = haydn::hwloop::MaxStartOffsetBytes;
 static constexpr int64_t MaxOff2Bytes = haydn::hwloop::MaxEndOffsetBytes;
 static constexpr int64_t MaxOff1BytesSafe =
@@ -342,6 +354,19 @@ bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
   MachineBasicBlock::iterator AfterSet = nextBundleBoundary(SetMI);
   StartOff = estimateMBBDistance(*MF, Pre, AfterSet, StartMBB, TII);
   EndOff = estimateMBBDistance(*MF, Pre, AfterSet, EndMBB, TII);
+  // CB-164: MC anchors HWLoopOff1/Off2 at the SET parcel base, not after
+  // the SET cycle. HaydnAsmBackend::evaluateFixup seeds Value = Abs % Parcel
+  // so MCAssembler's PC-rel subtract lands on align_down(fixup_loc, Parcel)
+  // — the parcel the SET member encodes in. Charge the SET cycle's committed
+  // EncodedBytes so the accepted value IS the encoded displacement (measured-
+  // after-SET accepted a 252 B Off1 that encoded as 264 B → uimm66 > 63).
+  // Child-in-bundle has size 0 and the root is the SET cycle: topLevelForLayout
+  // resolves the coissued root either way (single size oracle, no new table).
+  MachineInstr &SetCycle = haydn::hwloop::topLevelForLayout(SetMI);
+  const int64_t SetParcelBytes = static_cast<int64_t>(
+      haydn::bundle::committedEncodedBytes(SetCycle).Value);
+  StartOff = haydn::hwloop::anchoredFromAfterSet(StartOff, SetParcelBytes);
+  EndOff = haydn::hwloop::anchoredFromAfterSet(EndOff, SetParcelBytes);
   // HWLR_END is the start of the last size-bearing non-terminator cycle
   // in EndMBB (golden: last body bundle). One closed walk: skip
   // terminators — PseudoLoopEnd and post-PLE soft-exit B/cond sit past
@@ -571,9 +596,11 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
     // Strict END > BEGIN; body parcels BEGIN..END inclusive >= MinBodyBundles.
     if (!haydn::hwloop::bodyMeetsMinLaw(StartOff, EndOff))
       return true;
-    // MinSetupBytes = InterveningCycles × productParcelBytes.
-    // Timing law is the cycle pair, not this product under mixed widths.
-    if (StartOff < MinSetupBytes)
+    // MinSetupBytes = InterveningCycles × productParcelBytes (after-SET
+    // span). CB-164: offsets now anchor at the SET parcel base, so the
+    // equivalent floor is MinSetupIssueBytes = MinSetupBytes + one parcel
+    // (the SET cycle itself) — same accepted geometry, same timing law.
+    if (StartOff < haydn::hwloop::MinSetupIssueBytes)
       return true;
     // Imm trip COUNT must fit the uimm16 field and meet MinCount.
     // Over-field values demote (or fatal when demote is off) rather
@@ -786,6 +813,270 @@ static bool sequentializeIllegalHwloopTripCoissue(MachineFunction &MF,
   return Changed;
 }
 
+void HaydnFixupHwLoops::collectRetainedSetups(
+    MachineFunction &MF, const HaydnInstrInfo &TII,
+    SmallVectorImpl<MachineInstr *> &Sets) const {
+  Sets.clear();
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB.instrs()) {
+      if (TII.isHardwareLoopSetupInstr(MI))
+        Sets.push_back(&MI);
+    }
+  }
+}
+
+bool HaydnFixupHwLoops::setupWindowContains(
+    const MachineInstr &Outer, const MachineInstr &Inner,
+    const HaydnInstrInfo &TII) const {
+  if (&Outer == &Inner)
+    return false;
+  const MachineBasicBlock *OuterMBB = Outer.getParent();
+  const MachineBasicBlock *InnerMBB = Inner.getParent();
+  if (!OuterMBB || !InnerMBB)
+    return false;
+  const MachineFunction *MF = OuterMBB->getParent();
+  if (!MF || InnerMBB->getParent() != MF)
+    return false;
+
+  MachineInstr &OuterMut = const_cast<MachineInstr &>(Outer);
+  MachineBasicBlock *StartMBB = nullptr;
+  MachineBasicBlock *EndMBB = nullptr;
+  int64_t StartOff = -1, EndOff = -1;
+  (void)computeOffsets(OuterMut, TII, StartOff, EndOff, StartMBB, EndMBB);
+
+  if (InnerMBB == OuterMBB) {
+    bool SeenOuter = false;
+    for (const MachineInstr &I : OuterMBB->instrs()) {
+      if (&I == &Outer) {
+        SeenOuter = true;
+        continue;
+      }
+      if (&I == &Inner)
+        return SeenOuter;
+    }
+    return false;
+  }
+
+  MachineBasicBlock::iterator AfterOuter = nextBundleBoundary(OuterMut);
+  const int64_t ToInner =
+      estimateMBBDistance(*MF, OuterMBB, AfterOuter, InnerMBB, TII);
+  if (ToInner < 0)
+    return false;
+  if (!EndMBB)
+    return true;
+  MachineInstr &InnerMut = const_cast<MachineInstr &>(Inner);
+  MachineBasicBlock::iterator AfterInner = nextBundleBoundary(InnerMut);
+  const int64_t ToEnd =
+      estimateMBBDistance(*MF, InnerMBB, AfterInner, EndMBB, TII);
+  return ToEnd >= 0 || InnerMBB == EndMBB;
+}
+
+void HaydnFixupHwLoops::sortInnermostFirst(
+    SmallVectorImpl<MachineInstr *> &Sets, const HaydnInstrInfo &TII) const {
+  // AIEBaseHardwareLoops.cpp:304-306 processLoop: inner loops first.
+  std::stable_sort(Sets.begin(), Sets.end(),
+                   [&](const MachineInstr *A, const MachineInstr *B) {
+                     if (!A || !B || A == B)
+                       return false;
+                     const bool AInB = setupWindowContains(*B, *A, TII);
+                     const bool BInA = setupWindowContains(*A, *B, TII);
+                     if (AInB != BInA)
+                       return AInB;
+                     return false;
+                   });
+}
+
+void HaydnFixupHwLoops::gatePostDemotePreservation(
+    MachineFunction &MF, const HaydnInstrInfo &TII,
+    MachineBasicBlock *Preheader, MachineBasicBlock *Header,
+    MachineBasicBlock *Latch, unsigned FrameObjectsBefore) {
+  (void)TII;
+  const unsigned FrameObjectsAfter = MF.getFrameInfo().getNumObjects();
+  if (FrameObjectsAfter > FrameObjectsBefore)
+    report_fatal_error(
+        "HaydnFixupHwLoops: hwloop demote created a frame object; demote "
+        "homes are preallocated before PEI",
+        /*gen_crash_diag=*/false);
+
+  if (!haydn::hwloop::isLiveMBB(MF, Header) ||
+      !haydn::hwloop::isLiveMBB(MF, Latch))
+    return; // L1 erase-only (dead body) — no soft-edge membership to gate.
+
+  bool HeaderSucc = false;
+  for (const MachineBasicBlock *S : Latch->successors()) {
+    if (S == Header) {
+      HeaderSucc = true;
+      break;
+    }
+  }
+  if (!HeaderSucc)
+    report_fatal_error(
+        "HaydnFixupHwLoops: demote lost loop membership (latch does not "
+        "succeed to header)",
+        /*gen_crash_diag=*/false);
+
+  bool SeenBnez = false;
+  bool SeenCountdown = false;
+  for (const MachineInstr &MI : Latch->instrs()) {
+    if (MI.getOpcode() == TargetOpcode::BUNDLE)
+      continue;
+    if (haydn::hwloop::isSoftLatchBnezOpcode(MI.getOpcode()))
+      SeenBnez = true;
+    if (haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode()) == Haydn::SUBI32)
+      SeenCountdown = true;
+  }
+  if (!SeenBnez || !SeenCountdown)
+    report_fatal_error(
+        "HaydnFixupHwLoops: demote lost live trip-value (latch missing "
+        "SUBI32+BNEZ countdown)",
+        /*gen_crash_diag=*/false);
+
+  // Exact FixedStack MMO on late LD/ST that address a preallocated demote
+  // home (HaydnInstrInfo storeRegToStackSlot / loadRegFromStackSlot peer).
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  const HaydnFrameLowering *TFL =
+      MF.getSubtarget<HaydnSubtarget>().getFrameLowering();
+  SmallVector<int, 3> Homes;
+  if (FuncInfo) {
+    if (FuncInfo->getHwLoopDemoteSaveFI() >= 0)
+      Homes.push_back(FuncInfo->getHwLoopDemoteSaveFI());
+    if (FuncInfo->getPostRAScratchFI() >= 0)
+      Homes.push_back(FuncInfo->getPostRAScratchFI());
+    if (FuncInfo->getBranchRelaxationScratchFI() >= 0)
+      Homes.push_back(FuncInfo->getBranchRelaxationScratchFI());
+  }
+  if (Homes.empty() || !TFL)
+    return;
+
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  SmallVector<MachineBasicBlock *, 4> Blocks;
+  auto pushLive = [&](MachineBasicBlock *BB) {
+    if (haydn::hwloop::isLiveMBB(MF, BB))
+      Blocks.push_back(BB);
+  };
+  pushLive(Preheader);
+  pushLive(Header);
+  pushLive(Latch);
+  for (MachineBasicBlock *S : Latch->successors())
+    pushLive(S);
+
+  for (MachineBasicBlock *BB : Blocks) {
+    for (MachineInstr &MI : BB->instrs()) {
+      if (MI.getOpcode() == TargetOpcode::BUNDLE)
+        continue;
+      const unsigned Log =
+          haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
+      const bool IsLoad = Log == Haydn::LD32;
+      const bool IsStore = Log == Haydn::ST32;
+      if (!IsLoad && !IsStore)
+        continue;
+      // Late demote glue: (dst,) base, imm-element. Need a base+imm pair.
+      Register Base;
+      int64_t Elem = 0;
+      bool HaveAddr = false;
+      for (const MachineOperand &MO : MI.operands()) {
+        if (MO.isReg() && MO.isUse() && !MO.isImplicit()) {
+          Base = MO.getReg();
+        } else if (MO.isImm() && HaveAddr == false && Base.isValid()) {
+          Elem = MO.getImm();
+          HaveAddr = true;
+        }
+      }
+      if (!HaveAddr || !Base.isPhysical())
+        continue;
+      for (int FI : Homes) {
+        Register FrameReg;
+        const int64_t Off =
+            TFL->getFrameIndexReference(MF, FI, FrameReg).getFixed();
+        if ((Off % 4) != 0 || FrameReg != Base || (Off / 4) != Elem)
+          continue;
+        bool Exact = false;
+        for (const MachineMemOperand *MMO : MI.memoperands()) {
+          const PseudoSourceValue *PSV = MMO->getPseudoValue();
+          if (const auto *FS = dyn_cast_or_null<FixedStackPseudoSourceValue>(PSV))
+            Exact |= FS->getFrameIndex() == FI;
+        }
+        if (Exact)
+          break;
+        if (!MI.memoperands_empty())
+          report_fatal_error(
+              "HaydnFixupHwLoops: demote stack access MMO is not the "
+              "preallocated FixedStack home",
+              /*gen_crash_diag=*/false);
+        MachineMemOperand *MMO = MF.getMachineMemOperand(
+            MachinePointerInfo::getFixedStack(MF, FI),
+            IsLoad ? MachineMemOperand::MOLoad : MachineMemOperand::MOStore, 4,
+            MFI.getObjectAlign(FI));
+        MI.addMemOperand(MF, MMO);
+        break;
+      }
+    }
+  }
+}
+
+bool HaydnFixupHwLoops::revalidateRetainedSetups(MachineFunction &MF,
+                                                 const HaydnInstrInfo &TII) {
+  SmallVector<MachineInstr *, 8> Sets;
+  collectRetainedSetups(MF, TII, Sets);
+  const unsigned Initial = Sets.size();
+  const unsigned Bound = haydn::hwloop::nestedCascadeBound(Initial);
+  bool Changed = false;
+
+  for (unsigned Wave = 0; Wave < Bound; ++Wave) {
+    collectRetainedSetups(MF, TII, Sets);
+    if (!haydn::hwloop::setupsMonotone(Initial, Sets.size()))
+      report_fatal_error(
+          "HaydnFixupHwLoops: hardware-loop setups increased; demotion is "
+          "monotone",
+          /*gen_crash_diag=*/false);
+    if (Sets.empty())
+      break;
+    sortInnermostFirst(Sets, TII);
+    LLVM_DEBUG({
+      dbgs() << "HaydnFixupHwLoops: revalidate wave " << Wave << " of " << Bound
+             << " (" << Sets.size() << " retained setup(s), inner-first)\n";
+    });
+
+    bool WaveChanged = false;
+    for (MachineInstr *MI : Sets) {
+      if (!MI || !MI->getParent())
+        continue;
+      MachineBasicBlock *Pre = MI->getParent();
+      MachineBasicBlock *Header = nullptr;
+      MachineBasicBlock *Latch = nullptr;
+      const unsigned Opc = MI->getOpcode();
+      if (TII.isHardwareLoopSetupOpcode(Opc) && Opc != Haydn::LoopStart) {
+        if (MI->getNumOperands() >= 3 && MI->getOperand(1).isMBB() &&
+            MI->getOperand(2).isMBB()) {
+          Header = MI->getOperand(1).getMBB();
+          Latch = MI->getOperand(2).getMBB();
+        }
+      } else if (Opc == Haydn::LoopStart) {
+        Header = haydn::hwloop::resolveBodyMBBFixup(*MI);
+        Latch = haydn::hwloop::resolveLoopStartLatch(Header, Pre);
+      }
+      const unsigned FrameObjectsBefore = MF.getFrameInfo().getNumObjects();
+      const bool One = fixupOne(*MI, TII);
+      WaveChanged |= One;
+      if (One && !MI->getParent())
+        gatePostDemotePreservation(MF, TII, Pre, Header, Latch,
+                                   FrameObjectsBefore);
+    }
+    Changed |= WaveChanged;
+    if (!WaveChanged)
+      break;
+    if (Wave + 1 == Bound) {
+      collectRetainedSetups(MF, TII, Sets);
+      if (!Sets.empty() && WaveChanged)
+        report_fatal_error(
+            "HaydnFixupHwLoops: nested cascade exhausted without a "
+            "no-mutation wave",
+            /*gen_crash_diag=*/false);
+    }
+  }
+  return Changed;
+}
+
 bool HaydnFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
   if (skipFunction(MF.getFunction()))
     return false;
@@ -814,22 +1105,10 @@ bool HaydnFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
   // post-pipeliner either refuses before mutation or commits a valid loop.
   Changed |= sequentializeIllegalHwloopTripCoissue(MF, TII);
 
-  // Collect first — inserting NOPs / demote invalidates iterators.
-  // Walk instrs so SETs that PostRASched coissued (mid-bundle) are found.
-  SmallVector<MachineInstr *, 8> Sets;
-  for (MachineBasicBlock &MBB : MF) {
-    for (MachineInstr &MI : MBB.instrs()) {
-      if (TII.isHardwareLoopSetupInstr(MI))
-        Sets.push_back(&MI);
-    }
-  }
-  for (MachineInstr *MI : Sets) {
-    // Skip if a prior demote already erased this MI (should not share
-    // pointers, but a later SET is never erased by an earlier one).
-    if (!MI->getParent())
-      continue;
-    Changed |= fixupOne(*MI, TII);
-  }
+  // Post-S2 inventory: inner-first revalidate. A retained loop that S2 (or
+  // an inner demote/pad) grew out of range is rewritten from current
+  // layout, never treated as layout-stable from a prior acceptance.
+  Changed |= revalidateRetainedSetups(MF, TII);
 
   return Changed;
 }

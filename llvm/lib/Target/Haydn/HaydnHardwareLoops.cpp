@@ -821,6 +821,7 @@ bool HaydnHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
 // fail-closed (resolveRoleABody law above).
 using haydn::hwloop::LoopBlockSet;
 using haydn::hwloop::collectLoopBlocks;
+using haydn::hwloop::demoteSavePlacement;
 using haydn::hwloop::resolveLoopStartLatch;
 using haydn::hwloop::emitExactLate;
 using haydn::hwloop::emitExactLateDef;
@@ -832,6 +833,7 @@ using haydn::hwloop::materializeTripCount;
 using haydn::hwloop::pickCounterReg;
 using haydn::hwloop::regClobberedNonCountdownIn;
 using haydn::hwloop::stripResidualCountdown;
+using haydn::hwloop::HwLoopDemoteSaveKind;
 using haydn::hwloop::topLevelForLayout;
 
 bool llvm::eraseHardwareLoopSetup(
@@ -1123,6 +1125,12 @@ bool llvm::demoteHardwareLoopToSoftware(
   // CB-162 value-preserve: set when the live trip value was saved to the
   // demote-save FI and must be reloaded into Prefer at the loop exit.
   bool PendingSaveRestore = false;
+  // CB-165: set when the loop body redefines Prefer (its exit value then
+  // originates from that body def, not from the ZOL trip).
+  bool PreferRedefinedInBody = false;
+  // CB-165: the resolved value-preserve placement (pure decision lives in
+  // haydn::hwloop::demoteSavePlacement — gtest seam).
+  HwLoopDemoteSaveKind SavePlacement = HwLoopDemoteSaveKind::NoSave;
   int SaveFI = -1;
   MCRegister SaveFrameReg;
   int64_t SaveElem = 0;
@@ -1272,6 +1280,15 @@ bool llvm::demoteHardwareLoopToSoftware(
       // before the loop and reloads it at the exit (below). The only
       // exclusion stays R0 (XOR-zero clobbers the soft-zero law).
       const bool PreferLiveAfterLoop = Prefer.isPhysical();
+      // CB-165: whether the loop body itself redefines Prefer. When it
+      // does, Prefer's exit value originates from that body def (software
+      // pipelining routinely assigns the stage-k value to the same physreg
+      // the ZOL trip used), and only the demote's own latch-scratch window
+      // can destroy it. A preheader save would capture the stale TRIP and
+      // the exit restore would overwrite the live body value with it.
+      PreferRedefinedInBody =
+          Prefer.isPhysical() &&
+          regClobberedNonCountdownIn(Prefer, LoopBlocks);
       LatchScr = findPostRAScratchNoSpill(
           *Latch, Latch->end(), /*PreferNotR12=*/true, {Header, Exit},
           (Prefer.isPhysical() && !PreferLiveAfterLoop)
@@ -1342,9 +1359,27 @@ bool llvm::demoteHardwareLoopToSoftware(
       }
       SaveFrameReg = SaveFrameRegReg;
       SaveElem = SaveOff / 4;
-      // Save the live trip value BEFORE the countdown can destroy it.
+      // CB-162/CB-165 value-preserve law. The save/restore pair exists to
+      // return to the exit the value Prefer must carry OUT of the loop.
+      // Two sound shapes:
+      //  * Prefer NOT redefined in the body AND Prefer is the latch
+      //    scratch (the only thing that destroys the surviving trip):
+      //    save the trip in the preheader, restore at exit (CB-162).
+      //  * Prefer redefined in the body AND Prefer is the latch scratch:
+      //    the value that must survive is the body's final def, so the save
+      //    must execute at latch end (below, before the scratch window) —
+      //    a preheader save would capture the stale trip.
+      // When the latch scratch is a different register, nothing the demote
+      // installs touches Prefer: no save, no restore. The old unconditional
+      // pair reloaded the preheader trip over a live loop-carried body def
+      // (SMS epilogue value) — CB-165 (pr51581-2 -O2: c[N-1] = trip).
       // (HasImm forms have no live Prefer to preserve.)
-      if (!HasImm) {
+      // Placement is the pure unit decision demoteSavePlacement (gtest
+      // seam); this site only translates it into emits.
+      const bool LatchScrIsPrefer = LatchScr == Prefer;
+      SavePlacement = demoteSavePlacement(LatchScrIsPrefer,
+                                          PreferRedefinedInBody);
+      if (!HasImm && SavePlacement == HwLoopDemoteSaveKind::PreheaderSave) {
         emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
                       [&](MachineInstrBuilder MIB) {
                         MIB.addReg(Prefer).addReg(SaveFrameReg)
@@ -1353,7 +1388,7 @@ bool llvm::demoteHardwareLoopToSoftware(
       }
       // Reload lands at the exit after the latch rewrite (Exit block
       // entry); recorded here, emitted below once Exit is final.
-      PendingSaveRestore = !HasImm;
+      PendingSaveRestore = !HasImm && SavePlacement != HwLoopDemoteSaveKind::NoSave;
 
       if (HasImm) {
         // Materialize imm into the probed spill-free temp, then store to FI.
@@ -1465,6 +1500,24 @@ bool llvm::demoteHardwareLoopToSoftware(
     // BranchRelaxationScratchFI ?: PostRAScratchFI), destroying the stored
     // trip. Terminators come last; nothing follows BNEZ_W except the
     // optional exit branch. Large-FI R0 address-temp is refused above.
+    //
+    // CB-165 body-def value-preserve: when Prefer is redefined in the body
+    // AND doubles as the latch scratch, the exit's live value is the body's
+    // final def of Prefer — the scratch LD32 below is about to destroy it.
+    // Save it here, at latch end, before the scratch window opens (the
+    // preheader save shape would capture the stale trip instead). The
+    // matching exit reload is PendingSaveRestore below.
+    if (PendingSaveRestore &&
+        SavePlacement == HwLoopDemoteSaveKind::LatchEndSave) {
+      emitExactLate(*Latch, LatchEnd, DL, TII, Haydn::ST32,
+                    [&](MachineInstrBuilder MIB) {
+                      MIB.addReg(Prefer).addReg(SaveFrameReg)
+                          .addImm(SaveElem);
+                    });
+      LLVM_DEBUG(dbgs() << DebugPrefix << ": demote saved body-def "
+                           << printReg(Prefer) << " to save FI#" << SaveFI
+                        << " at latch end\n");
+    }
     emitExactLateDef(*Latch, LatchEnd, DL, TII, Haydn::LD32, LatchScr,
                      [&](MachineInstrBuilder MIB) {
                        MIB.addReg(FrameReg).addImm(Elem);
@@ -1512,11 +1565,17 @@ bool llvm::demoteHardwareLoopToSoftware(
   // Do not leave a bare B for late Finalize — exact-commit the
     // unconditional exit edge so second BR charges committed EncodedBytes.
     // B has no PlacementAlternatives (wrap-only Format E singleton commit).
+    // Exit stays the B CFG shell here: BranchRelaxation must find the
+    // latch analyzable (BNEZ_W conditional + B barrier-unconditional).
+    // A direct BEQZ_W would be a SECOND conditional after the counted
+    // back-edge and fixupConditionalBranch asserts ("branches to be
+    // relaxed must be analyzable", nsichneu). The closure Finalize
+    // expands B to BEQZ_W_MSP after the last BR.
     emitExactLate(*Latch, Latch->end(), DL, TII, Haydn::B,
                   [&](MachineInstrBuilder MIB) { MIB.addMBB(Exit); });
   }
 
-  // CB-162 value-preserve: reload the saved trip value into Prefer at the
+  // CB-162/CB-165 value-preserve: reload the saved live value into Prefer at
   // exit entry — the latch countdown (or Prefer-as-latch-scratch) destroyed
   // the in-register copy. Exact-commit singleton at Exit begin, before any
   // of Exit's own code, so every later user reads the original value.
@@ -1550,9 +1609,19 @@ bool llvm::demoteHardwareLoopToSoftware(
       }
       if (!SeenBnez)
         continue;
+      // Exit-follower law: the demoter's own exit branch — the former
+      // B shell, its W67 BEQZ_W/BEQZ_W_MSP forms, or the generated
+      // BEQZ_e*_I12 member the late exact-commit already baked (logical
+      // BEQZ on R0, the always-taken uncond shape). Architectural NOP
+      // pad shares the cycle.
       const unsigned LateLog =
           haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
-      if (LateLog == Haydn::B || LateLog == Haydn::NOP)
+      if (LateLog == Haydn::B || LateLog == Haydn::BEQZ_W ||
+          LateLog == Haydn::NOP || MI.getOpcode() == Haydn::BEQZ_W_MSP)
+        continue;
+      if (isGeneratedFormatEMemberName(TII.getName(MI.getOpcode())) &&
+          LateLog == Haydn::BEQZ && MI.getNumOperands() >= 1 &&
+          MI.getOperand(0).isReg() && MI.getOperand(0).getReg() == Haydn::R0)
         continue;
       llvm_unreachable(
           "hwloop demote: only an exit B may follow latch BNEZ_W");

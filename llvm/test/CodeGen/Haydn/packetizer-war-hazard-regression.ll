@@ -6,7 +6,10 @@
 ; Contract: postmisched must not co-issue a WAR on the same physreg.
 ; CHECK-LABEL: name: war_hazard_test
 ; CHECK: SLLI32
-; CHECK: S_LW_PRE_REG
+; W68.5 (dead-wb PRE refusal): one-shot GEP load selects the plain LD32
+; (offset-folded) instead of the fused pre-inc — same parcels, no dead
+; writeback. The WAR hazard under test remains (ADD32 feeding the load).
+; CHECK: S_LW_WITH_IMM
 ; CHECK-NOT: BUNDLE
 
 

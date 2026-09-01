@@ -1,0 +1,219 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-late-convergence \
+# RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s
+
+# Role: MIR — W68.3R preservation matrix on the late-convergence
+# mutators (S2, HWLoop demote, BranchRelaxation LAST). STATUS limit #10
+# is FileCheck, not a comment: successors/live-ins, branch probabilities,
+# debug-location, CFI, kill/dead, and exact stack/FixedStack MMOs must
+# still be present after the driver returns. The IR sibling
+# late-convergence-preserve.ll covers the full -haydn-sms2 seat; this
+# file is the -run-pass inventory.
+
+--- |
+  define dso_local i32 @preserve_cfg_profile_debug(ptr nocapture readonly %a, i32 %n) {
+  entry:
+    %c = icmp sgt i32 %n, 0
+    br i1 %c, label %then, label %else, !prof !10
+  then:
+    %x = load i32, ptr %a, align 4
+    br label %exit
+  else:
+    br label %exit
+  exit:
+    %r = phi i32 [ %x, %then ], [ 0, %else ]
+    ret i32 %r
+  }
+
+  define dso_local i32 @preserve_cfi_mmo_liveness(i32 %x) {
+  entry:
+    %slot = alloca i32, align 4
+    store i32 %x, ptr %slot, align 4
+    %v = load i32, ptr %slot, align 4
+    ret i32 %v
+  }
+
+  define dso_local void @preserve_demote_cfg(ptr nocapture writeonly %out) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !9, producer: "llvm", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug)
+  !1 = distinct !DISubprogram(name: "preserve_cfg_profile_debug", scope: !9, file: !9, line: 1, type: !2, isLocal: false, isDefinition: true, scopeLine: 2, flags: DIFlagPrototyped, isOptimized: true, unit: !0)
+  !2 = !DISubroutineType(types: !3)
+  !3 = !{null}
+  !5 = !DILocation(line: 2, column: 3, scope: !1)
+  !6 = !DILocation(line: 3, column: 7, scope: !1)
+  !9 = !DIFile(filename: "late-convergence-preserve.mir", directory: "/tmp")
+  !10 = !{!"branch_weights", i32 96, i32 4}
+  !llvm.dbg.cu = !{!0}
+  !llvm.module.flags = !{!7, !8}
+  !7 = !{i32 2, !"Dwarf Version", i32 4}
+  !8 = !{i32 2, !"Debug Info Version", i32 3}
+...
+---
+name:            preserve_cfg_profile_debug
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1(0x7ae147ae), %bb.3(0x051eb852)
+
+    renamable $r3 = nsw ADDI32_W $r0, 0, implicit-def $sfr
+    renamable $r4 = SLT32 killed renamable $r3, renamable $r2, implicit-def $sfr, debug-location !5
+    BNEZ_W internal killed renamable $r4, %bb.3, implicit $sfr, debug-location !5
+
+  bb.1.then:
+    liveins: $r1, $r15
+    successors: %bb.2(0x80000000)
+
+    renamable $r5 = LD32 killed renamable $r1, 0, implicit-def $sfr, debug-location !6 :: (load (s32) from %ir.a)
+
+  bb.2.exit:
+    liveins: $r5, $r15
+    RET implicit killed $r15, implicit $r5
+
+  bb.3.else:
+    liveins: $r15
+    successors: %bb.2(0x80000000)
+
+    $r5 = ADDI32_W $r0, 0, implicit-def dead $sfr
+    B %bb.2
+
+...
+---
+name:            preserve_cfi_mmo_liveness
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  stackSize:       8
+  maxAlignment:    4
+  adjustsStack:    true
+  maxCallFrameSize: 0
+fixedStack:
+  - { id: 0, type: default, offset: 0, size: 4, alignment: 4, isImmutable: true }
+stack:
+  - { id: 0, name: '', type: spill-slot, offset: -4, size: 4, alignment: 4 }
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    $r13 = frame-setup SUBI32 $r13, 8, implicit-def dead $sfr
+    frame-setup CFI_INSTRUCTION def_cfa_offset 8
+    frame-setup CFI_INSTRUCTION offset $r15, -4
+    ST32 $r1, $r13, 4, implicit-def dead $sfr :: (store (s32) into %fixed-stack.0)
+    ST32 $r1, $r13, 0, implicit-def dead $sfr :: (store (s32) into %stack.0)
+    $r2 = LD32 $r13, 4, implicit-def dead $sfr :: (load (s32) from %fixed-stack.0)
+    $r1 = LD32 $r13, 0, implicit-def dead $sfr :: (load (s32) from %stack.0)
+    $r13 = frame-destroy ADDI32_W $r13, 8, implicit-def dead $sfr
+    frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
+    RET implicit $r15, implicit $r1, implicit $r2
+
+...
+---
+name:            preserve_demote_cfg
+tracksRegLiveness: true
+noVRegs:         true
+stack:
+  - { id: 0, name: '', type: spill-slot, offset: -4, size: 4, alignment: 4 }
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r0, $r15
+    successors: %bb.1(0x80000000)
+
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    successors: %bb.2(0x80000000)
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r0
+    successors: %bb.3(0x80000000)
+    ST32 $r0, $r1, 0, implicit-def dead $sfr :: (store (s32) into %ir.out)
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+# CHECK-NOT: bounded repair loop exhausted
+# CHECK-NOT: non-monotone mutation
+#
+# CFG + profile + debug + kill/dead + load MMO. The 96:4 encoding is
+# 0x7ae147ae / 0x051eb852; S2/BR must not flatten it to even weights
+# or drop a successor. Live-ins on then/else/exit stand in for PHIs.
+# CHECK-LABEL: name: preserve_cfg_profile_debug
+# CHECK: bb.0.entry:
+# CHECK: successors: %bb.1(0x7ae147ae), %bb.3(0x051eb852)
+# CHECK: liveins: $r1, $r2, $r15
+# CHECK: killed {{.*}}$r3
+# CHECK: BNEZ{{[^ ]*}} {{.*}}killed {{.*}}$r4, %bb.3{{.*}}debug-location !DILocation(line: 2
+# CHECK: bb.1.then:
+# CHECK: successors: %bb.2(0x80000000)
+# CHECK: liveins: $r1, $r15
+# CHECK: debug-location !DILocation(line: 3{{.*}}:: (load (s32) from %ir.a)
+# CHECK: bb.2.exit:
+# CHECK: liveins: $r5, $r15
+# CHECK: RET implicit{{.*}}$r15
+# CHECK: bb.3.else:
+# CHECK: liveins: $r15
+# CHECK: implicit-def dead $sfr
+#
+# CFI + exact stack / FixedStack MMOs + kill/dead on a straight-line
+# frame. S2 may reopen/reschedule; it must not drop CFI or rewrite the
+# MMO identity.
+# CHECK-LABEL: name: preserve_cfi_mmo_liveness
+# CHECK: CFI_INSTRUCTION def_cfa_offset 8
+# CHECK: CFI_INSTRUCTION offset $r15, -4
+# CHECK-DAG: :: (store (s32) into %fixed-stack.0)
+# CHECK-DAG: :: (store (s32) into %stack.0)
+# CHECK-DAG: :: (load (s32) from %fixed-stack.0)
+# CHECK-DAG: :: (load (s32) from %stack.0)
+# CHECK: CFI_INSTRUCTION def_cfa $r13, 0
+# CHECK: RET implicit{{.*}}$r15
+#
+# Demote mutator: setup erased, soft latch installed, successor list
+# updated (not left as a single fallthrough), body store MMO kept,
+# killed return live-in kept.
+# CHECK-LABEL: name: preserve_demote_cfg
+# CHECK-NOT: SET_HWLOOP
+# CHECK: successors: %bb.2({{0x[0-9a-f]+}}), %bb.3({{0x[0-9a-f]+}})
+# CHECK: SUBI32
+# CHECK: :: (store (s32) into %ir.out)
+# CHECK: BNEZ{{[^ ]*}}
+# CHECK: RET implicit{{.*}}$r15

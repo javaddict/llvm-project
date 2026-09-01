@@ -193,6 +193,18 @@ TEST(HaydnBundleVerifyTest, ResidualCycleFormingPseudoSet) {
   EXPECT_FALSE(isRepresentationExpandPseudo(Haydn::LOADI32));
   EXPECT_FALSE(isRepresentationExpandPseudo(Haydn::ADD32));
 
+  // Printer still classifies the shells; the independent inverse does not
+  // accept them as a solo-cycle carve-out.
+  HaydnMCFormats Fmts;
+  for (unsigned Opc : {Haydn::B, Haydn::RET, Haydn::BR_JT,
+                       Haydn::PseudoCALLIndirect}) {
+    auto Err = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry, {Opc},
+                                     Fmts);
+    ASSERT_TRUE(Err.has_value()) << "opc=" << Opc;
+    EXPECT_NE(Err->find("representation-expand"), std::string::npos)
+        << "opc=" << Opc << " diag=" << *Err;
+  }
+
   // Leftover expand-owned / remat / cross-bank copies are not inverse keys.
   EXPECT_TRUE(isExpandOwnedSemanticPseudo(Haydn::MOV_GPR_TO_DR64));
   EXPECT_TRUE(isExpandOwnedSemanticPseudo(Haydn::MOV_DR64_TO_GPR));
@@ -790,6 +802,38 @@ TEST(HaydnBundleVerifyTest, LookupPrivateMemberUsesCompletedInverse) {
   EXPECT_EQ(lookupPrivateFormatEMember(Haydn::ADD32), nullptr);
   EXPECT_EQ(lookupPrivateFormatEMember(Haydn::LOADI32), nullptr);
   EXPECT_EQ(lookupPrivateFormatEMember(Haydn::MOV_GPR_TO_DR64), nullptr);
+}
+
+TEST(HaydnBundleVerifyTest, RejectsMixedLogicalAndPrivateChildren) {
+  HaydnMCFormats Fmts;
+  auto Err = verifyCommittedBundle(
+      BundleFormatRowID::E96TwoEntry,
+      {Haydn::ADD32, Haydn::ADDI32_E2_E1_ALU1_RI20}, Fmts);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_NE(Err->find("mixed logical and private"), std::string::npos) << *Err;
+}
+
+TEST(HaydnBundleVerifyTest, FreezeRejectsResidualLogicalAcceptsPrivate) {
+  HaydnMCFormats Fmts;
+  BundlePlan LogicalPlan;
+  auto Logical = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                       {Haydn::ADD32}, Fmts, &LogicalPlan,
+                                       /*Freeze=*/false);
+  EXPECT_FALSE(Logical.has_value()) << (Logical ? *Logical : "");
+
+  auto FreezeLogical = verifyCommittedBundle(
+      BundleFormatRowID::E96TwoEntry, {Haydn::ADD32}, Fmts, nullptr,
+      /*Freeze=*/true);
+  ASSERT_TRUE(FreezeLogical.has_value());
+  EXPECT_NE(FreezeLogical->find("freeze residual logical"), std::string::npos)
+      << *FreezeLogical;
+
+  BundlePlan PrivPlan;
+  auto FreezePriv = verifyCommittedBundle(
+      BundleFormatRowID::E96TwoEntry, {Haydn::ADD32_E2_E0_ALU0_RR}, Fmts,
+      &PrivPlan, /*Freeze=*/true);
+  EXPECT_FALSE(FreezePriv.has_value()) << (FreezePriv ? *FreezePriv : "");
+  EXPECT_TRUE(PrivPlan.isProductLegal());
 }
 
 } // namespace

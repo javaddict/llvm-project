@@ -20,11 +20,14 @@
 //
 // `encodeInstruction` routing (serialize-only / fail-closed):
 //   BUNDLE_E96_* product:
-//     typed MemberId children -> trySerializeFormatECompositeAsIs (never DFS/fill)
-//     public logicals         -> standalone one-parcel place (hand-asm only)
+//     typed MemberId children -> trySerializeFormatECompositeAsIs (never DFS/fill);
+//                               unused entries take generated IsNop records only
+//     public logicals         -> standalone one-parcel place (hand-asm only;
+//                               assignFormatEMemberEntries never for compiler)
 //   Haydn::BUNDLE residual     -> encodeBundle: typed members scatter by
 //                               (Mode, EntryIdx) as-is; public logicals fatal
-//   standalone real opcode    -> wrap as one Format E row (NOP in unused entries)
+//                               (skip-Finalize never DFS/fill; `_MSP` is not occupancy)
+//   standalone real opcode    -> wrap as one Format E row (generated unused-entry NOP)
 // Long-branch is CodeGen BranchRelaxation only — no PseudoLongB* / expandLongBranch.
 // Placement failure fails closed — no sequential E2 singleton split (layout-size
 // fiction vs BranchRelaxation / FixupHwLoops). Typed MemberId composites serialize
@@ -33,7 +36,9 @@
 // (store at E3 e0 LOADSTORE0; dual loads LS0+LOAD1) lives in Finalize
 // assignFormatEMemberEntries. Residual FieldSlots never recover occupancy
 // into DFS/fill (AIE MultiSlot alts, AIEMCFormats.h:376-379). Retired slot
-// suffixes never pin entries. Occupancy is haydnCatalogOccupancyName.
+// suffixes never pin entries. Occupancy is haydnCatalogOccupancyName for
+// standalone public logicals only — compiler MultiSlot `_MSP` clones are not
+// occupancy and never peel into DFS.
 // encodeSlotSubInst is serialize-only: every non-NOP child must already be a
 // generated private member. Compiler BUNDLE_E96_* roots serialize typed
 // (row, entry, member) as-is via encodeInstructionFromCompilerRoot and never
@@ -135,8 +140,9 @@ static bool isResidualFieldSlotOpcodeName(StringRef Name) {
 static std::string formatELogicalName(StringRef Name);
 static const FormatEMemberRec *findFormatEMemberByOpcode(unsigned Opc);
 static bool isFormatENopOpcode(unsigned Opc, const MCInstrInfo &MII);
+static unsigned generatedUnusedEntryNopOpcode(uint8_t Mode, unsigned EntryIdx);
 /// Compiler MemberId serialize: bind each real by generated (Mode, EntryIdx)
-/// and NOP-pad holes. Never DFS, name peel, or fillFormatEMemberInst.
+/// and generated unused-entry NOP holes. Never DFS, name peel, or fill.
 static bool trySerializeFormatECompositeAsIs(const MCInst &In,
                                              const MCInstrInfo &MII,
                                              const MCRegisterInfo &MRI,
@@ -396,9 +402,18 @@ void HaydnMCCodeEmitter::encodeInstruction(const MCInst &MI,
                 ChildDiag + "]",
             /*GenCrashDiag=*/false);
       }
-      if (isFormatENopOpcode(ChildOpc, MII) || Log.empty() ||
-          StringRef(Log).equals_insensitive("NOP"))
+      if (isFormatENopOpcode(ChildOpc, MII))
         continue;
+      // Empty occupancy is skip-Finalize / `_MSP` clone / unknown — never a
+      // silent pad. Hand-asm DFS needs a catalog logical.
+      if (Log.empty() || StringRef(Log).equals_insensitive("NOP")) {
+        report_fatal_error(
+            Twine("Haydn MC: Format E composite child '") + RawName +
+                "' is not a standalone catalog logical — refuse skip-Finalize "
+                "DFS / occupancy peel; children=[" +
+                ChildDiag + "]",
+            /*GenCrashDiag=*/false);
+      }
       Reals.push_back(Op.getInst());
     }
     if (Reals.empty()) {
@@ -647,10 +662,18 @@ void HaydnMCCodeEmitter::encodeBundle(const MCInst &MBI,
           /*GenCrashDiag=*/false);
   }
   MCInst Pad0, Pad1, Pad2;
-  Pad0.setOpcode(Haydn::NOP);
-  Pad1.setOpcode(Haydn::NOP);
-  Pad2.setOpcode(Haydn::NOP);
   MCInst *Pads[3] = {&Pad0, &Pad1, &Pad2};
+  for (unsigned E = 0; E < EntryCount; ++E) {
+    if (ChildAt[E])
+      continue;
+    const unsigned NopOpc = generatedUnusedEntryNopOpcode(*Mode, E);
+    if (!NopOpc)
+      report_fatal_error(
+          "Haydn MC: no generated unused-entry NOP record for compiler BUNDLE "
+          "pad — refuse occupancy invent",
+          /*GenCrashDiag=*/false);
+    Pads[E]->setOpcode(NopOpc);
+  }
   MCInst Comp;
   Comp.setOpcode(*Mode ? Haydn::BUNDLE_E96_THREE_ENTRY
                        : Haydn::BUNDLE_E96_TWO_ENTRY);
@@ -718,18 +741,41 @@ static bool isFormatENopOpcode(unsigned Opc, const MCInstrInfo &MII) {
   if (isResidualFieldSlotOpcodeName(Name))
     return false;
   // Generated members: IsNop from the member table, never a name peel.
-  if (haydnIsGeneratedMemberName(Name)) {
-    for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
-      if (FormatEMemberOpcodes[I] != Opc)
-        continue;
-      return I < haydn::format_e::FormatEMemberCount &&
-             haydn::format_e::FormatEMembers[I].IsNop;
-    }
+  // Public logicals (including MultiSlot `_MSP` clones) are never encode-time
+  // pads — occupancy empty is skip-Finalize, not NOP.
+  if (!haydnIsGeneratedMemberName(Name))
     return false;
+  for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+    if (FormatEMemberOpcodes[I] != Opc)
+      continue;
+    return I < haydn::format_e::FormatEMemberCount &&
+           haydn::format_e::FormatEMembers[I].IsNop;
   }
-  std::string Log = haydnCatalogOccupancyName(Name);
-  // Empty catalog name is not a product real (unknown pseudo / meta).
-  return Log.empty() || StringRef(Log).equals_insensitive("NOP");
+  return false;
+}
+
+/// Unused-entry pad opcode from a generated IsNop record at (Mode, EntryIdx).
+/// Product NOP members alias Haydn::NOP in FormatEMemberOpcodes; the record
+/// is the authority that the unused entry exists. 0 = fail closed (no invent).
+static unsigned generatedUnusedEntryNopOpcode(uint8_t Mode, unsigned EntryIdx) {
+  unsigned Hint = 0;
+  unsigned Any = 0;
+  for (unsigned I = 0; I < haydn::format_e::FormatEMemberCount; ++I) {
+    const FormatEMemberRec &Mem = haydn::format_e::FormatEMembers[I];
+    if (!Mem.IsNop || Mem.Mode != Mode || Mem.EntryIdx != EntryIdx)
+      continue;
+    if (I >= FormatEMemberOpcodeCount)
+      continue;
+    const unsigned Opc = FormatEMemberOpcodes[I];
+    if (Opc == 0)
+      continue;
+    if (Mem.TypeName && StringRef(Mem.TypeName).equals_insensitive("HINT") &&
+        Hint == 0)
+      Hint = Opc;
+    else if (Any == 0)
+      Any = Opc;
+  }
+  return Hint ? Hint : Any;
 }
 
 /// Typed reverse map: private Format E member opcode → generated MemberId.
@@ -808,8 +854,11 @@ static bool trySerializeFormatECompositeAsIs(const MCInst &In,
                        : Haydn::BUNDLE_E96_TWO_ENTRY);
     for (unsigned E = 0; E < EntryCount; ++E) {
       if (!ChildAt[E]) {
+        const unsigned NopOpc = generatedUnusedEntryNopOpcode(Mode, E);
+        if (!NopOpc)
+          return false;
         Storage.emplace_back();
-        Storage.back().setOpcode(Haydn::NOP);
+        Storage.back().setOpcode(NopOpc);
         Out.addOperand(MCOperand::createInst(&Storage.back()));
         continue;
       }
@@ -855,14 +904,18 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
     const MCOperand &Op = In.getOperand(I);
     if (!Op.isInst() || !Op.getInst())
       continue;
-    StringRef RawName = MII.getName(Op.getInst()->getOpcode());
+    const unsigned ChildOpc = Op.getInst()->getOpcode();
+    StringRef RawName = MII.getName(ChildOpc);
     // Residual FieldSlots are not standalone occupancy. Do not peel `_S*`
     // into a catalog logical and bag-sort (AIEMCFormats.h:376-379).
     if (isResidualFieldSlotOpcodeName(RawName))
       return false;
-    std::string Log = formatELogicalName(RawName);
-    if (Log.empty() || StringRef(Log).equals_insensitive("NOP"))
+    if (isFormatENopOpcode(ChildOpc, MII))
       continue;
+    std::string Log = formatELogicalName(RawName);
+    // `_MSP` / unknown occupancy is skip-Finalize, not a silent pad.
+    if (Log.empty() || StringRef(Log).equals_insensitive("NOP"))
+      return false;
     Reals.push_back(Op.getInst());
     LogicalNames.push_back(std::move(Log));
   }
@@ -925,8 +978,11 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
         return false;
       Out.addOperand(MCOperand::createInst(&Storage.back()));
     } else {
+      const unsigned NopOpc = generatedUnusedEntryNopOpcode(BestMode, E);
+      if (!NopOpc)
+        return false;
       Storage.emplace_back();
-      Storage.back().setOpcode(Haydn::NOP);
+      Storage.back().setOpcode(NopOpc);
       Out.addOperand(MCOperand::createInst(&Storage.back()));
     }
   }
@@ -935,9 +991,13 @@ static bool buildFormatEPlacedComposite(const MCInst &In,
 
 // Catalog / alias occupancy for standalone DFS only. Residual FieldSlots
 // and generated members do not recover a logical by suffix peel
-// (AIEMCFormats.h:376-379). haydnCatalogOccupancyName is the one map.
+// (AIEMCFormats.h:376-379). Compiler MultiSlot `_MSP` clones are not a
+// catalog occupancy key — they serialize as MemberId after Finalize, or
+// fatal as skip-Finalize. haydnCatalogOccupancyName is the one map for
+// public hand-asm names (`_W` compact span stays occupancy, not peel).
 static std::string formatELogicalName(StringRef Name) {
-  if (isResidualFieldSlotOpcodeName(Name) || haydnIsGeneratedMemberName(Name))
+  if (isResidualFieldSlotOpcodeName(Name) || haydnIsGeneratedMemberName(Name) ||
+      Name.ends_with("_MSP"))
     return {};
   return haydnCatalogOccupancyName(Name);
 }

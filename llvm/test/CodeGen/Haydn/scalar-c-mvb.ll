@@ -239,9 +239,8 @@ define i32 @array_access(i32* %arr, i32 %idx) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
-; CHECK-NEXT:    { nop; s_lw_pre_reg r2, r1, r2 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; move32 r1, r2 }
+; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

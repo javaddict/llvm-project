@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnMachineScheduler.h"
-#include "HaydnPostRAMultiStage.h"
 #include "HaydnTargetMachine.h"
 #include "HaydnPostRASchedStrategy.h"
 #include "HaydnSchedMutations.h"
@@ -30,16 +29,12 @@
 
 using namespace llvm;
 
-static_assert(HaydnMultiStageSMS::productDefaultEnabled(),
-              "multi-stage product default is ON (2026-08-22 "
-              "qualification: T4 accept + II parity + rollback + combined "
-              "matrix); re-parking requires new failing evidence");
-static_assert(!HaydnMultiStageSMS::productHwloopCombinedEnabled(),
-              "combined hwloop+SMS is not product");
+// W68.1: the bespoke post-RA HaydnMultiStageSMS host is DELETED — the
+// generic pre-RA MachinePipeliner owns multi-stage for soft and ZOL loops
+// alike (form-uniform PPS-3 bound). No post-RA SMS engine remains.
 static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
               "hardware-loop product default is ON (2026-08-22 "
-              "qualification; multi-stage SMS is independently ON via "
-              "productDefaultEnabled())");
+              "qualification)");
 
 /// Live tblgen SchedMachineModel pin. AIE1 is in-order
 /// (`aie1/AIE1Schedule.td:258` MicroOpBufferSize=0, CompleteModel=0).
@@ -64,29 +59,12 @@ void HaydnScheduleDAGMI::schedule() {
   // then optional transactional multi-stage mode (product default ON since
   // the 2026-08-22 qualification).
   ScheduleDAGMI::schedule();
-  if (EnableHaydnMultiStageSMS) {
-    HaydnMultiStageSMS Host;
-    if (Host.tryAfterOrdinarySchedule(*this)) {
-      // G004 D493 seam: the multi-stage plan committed this region's
-      // parcels (kernel bundle + cycle-ordered idle NOPs). leaveRegion
-      // would then re-materialize bundles from the ORDINARY zones — now
-      // stale relative to the mutated MIR — and insert stray idle NOPs
-      // past the committed kernel. Mark the block so leaveRegion defers:
-      // the multistage plan is the placement authority for this MBB.
-      if (auto *S = static_cast<HaydnPostRASchedStrategy *>(SchedImpl.get()))
-        S->noteMultistageCommitted(BB);
-    }
-  }
 }
 
 void HaydnScheduleDAGMI::finalizeSchedule() {
-  // G005: the canonical per-loop II/NS remark fires exactly once per
-  // function, after every region scheduled and every multistage attempt
-  // journaled into HMFI — one deterministic line per single-MBB loop in
-  // layout order (AIE InterBlockScheduling::leaveFunction seat). This DAG
-  // is only constructed for the post-RA host, so the census never races a
-  // pre-RA scheduler.
-  emitHaydnSMSLoopRemarks(MF);
+  // W68.1: the post-RA multistage host (and its G005 canonical per-loop
+  // remark census) is deleted with the engine; SMS metrics live on the
+  // pre-RA pipeliner remark surface.
   ScheduleDAGMI::finalizeSchedule();
 }
 
@@ -97,7 +75,12 @@ bool HaydnScheduleDAGMI::successorsAreScheduled(
   if (!MBB || MBB->succ_empty())
     return false;
   return llvm::all_of(MBB->successors(), [&](const MachineBasicBlock *S) {
-    return ScheduledMBBs.contains(S);
+    // W68.2 S2: the per-function inter-block DDG registry
+    // (HaydnMachineFunctionInfo) carries S1's recorded issue cycles for
+    // this function (published by the strategy). A successor with
+    // recorded depths has a schedule S2 can price against — that is the
+    // pass-local S1->S2 carrier, not any new frontier state.
+    return ScheduledMBBs.contains(S) || haydnSuccHasS1Depths(MF, S);
   });
 }
 

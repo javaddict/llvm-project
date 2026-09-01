@@ -16,10 +16,13 @@
 
 #include "HaydnMCInstLower.h"
 #include "HaydnAsmPrinter.h"
+#include "HaydnBundlePlan.h"
+#include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnMemberSetDesc.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -29,12 +32,104 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <string>
 
 using namespace llvm;
 
+#define GET_FORMAT_E_MEMBER_OPCODES
+#include "HaydnGenFormatEMemberOpcodes.inc"
+
 #define DEBUG_TYPE "haydn-mcinstlower"
+
+/// `_MSP` clones encode as the catalog logical's generated member at the
+/// already-stamped (Mode, EntryIdx). Table identity, not occupancy DFS.
+/// Standalone clones take the closed-singleton E2 entry 0 member
+/// (AIEMachineScheduler.cpp:1126-1132 setDesc of the selected alt; Haydn
+/// overlay keeps the clone in MIR so CFG flags survive BranchRelaxation).
+static unsigned haydnMemberOpcodeForLogicalModeEntry(StringRef Logical,
+                                                     uint8_t Mode,
+                                                     unsigned EntryIdx) {
+  for (unsigned I = 0; I < haydn::format_e::FormatEMemberCount; ++I) {
+    const haydn::format_e::FormatEMemberRec &Mem =
+        haydn::format_e::FormatEMembers[I];
+    if (Mem.IsNop || Mem.Mode != Mode || Mem.EntryIdx != EntryIdx)
+      continue;
+    if (!Mem.Logical || !StringRef(Mem.Logical).equals_insensitive(Logical))
+      continue;
+    if (I < FormatEMemberOpcodeCount && FormatEMemberOpcodes[I])
+      return FormatEMemberOpcodes[I];
+  }
+  return 0;
+}
+
+static unsigned haydnMemberOpcodeForMspClone(const MachineInstr &MI) {
+  const unsigned Opc = MI.getOpcode();
+  StringRef Logical;
+  if (Opc == Haydn::BEQZ_W_MSP)
+    Logical = "BEQZ";
+  else if (Opc == Haydn::JALR_MSP || Opc == Haydn::JALR_W_MSP)
+    Logical = "JALR";
+  else if (Opc == Haydn::JAL_W_MSP)
+    Logical = "JAL";
+  else
+    return Opc;
+
+  uint8_t Mode = 0;
+  unsigned PreferEntry = 0;
+  uint8_t UsedEntries = 0;
+  unsigned Cap = 2;
+  if (MI.isInsideBundle()) {
+    const MachineInstr &Root = *getBundleStart(MI.getIterator());
+    if (auto Row = haydn::bundle::getBundleRowID(Root)) {
+      using haydn::format::BundleFormatRowID;
+      Mode = (*Row == BundleFormatRowID::E96ThreeEntry) ? 1 : 0;
+    }
+    Cap = Mode ? 3u : 2u;
+    unsigned Pos = 0;
+    for (const MachineInstr *C : haydn::bundle::members(Root)) {
+      if (!C)
+        continue;
+      if (C == &MI) {
+        PreferEntry = Pos;
+        ++Pos;
+        continue;
+      }
+      if (const haydn::format_e::FormatEMemberRec *Mem =
+              haydn::bundle::lookupPrivateFormatEMember(C->getOpcode())) {
+        if (Mem->EntryIdx < 8)
+          UsedEntries |= static_cast<uint8_t>(1u << Mem->EntryIdx);
+      }
+      ++Pos;
+    }
+  }
+
+  unsigned Entry = PreferEntry;
+  if (Entry >= Cap || (UsedEntries & (1u << Entry))) {
+    Entry = Cap;
+    for (unsigned E = 0; E < Cap; ++E) {
+      if (!(UsedEntries & (1u << E))) {
+        Entry = E;
+        break;
+      }
+    }
+  }
+  if (Entry >= Cap)
+    report_fatal_error(
+        "Haydn MCInstLower: `_MSP` clone has no free Format E entry in the "
+        "stamped row — refuse first-member occupancy invent",
+        /*GenCrashDiag=*/false);
+  const unsigned Member =
+      haydnMemberOpcodeForLogicalModeEntry(Logical, Mode, Entry);
+  if (!Member)
+    report_fatal_error(
+        Twine("Haydn MCInstLower: no generated ") + Logical +
+            " member at mode " + Twine(static_cast<unsigned>(Mode)) +
+            " entry " + Twine(Entry) + " for `_MSP` clone",
+        /*GenCrashDiag=*/false);
+  return Member;
+}
 
 static bool isHwloopWideSetup(const MachineInstr &MI) {
   // Wide-setup lowering law — NOT family-identical (see
@@ -55,13 +150,14 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // format-member when materialize succeeded; logical residual otherwise
   // (hand-asm / pseudo expand). Placement is member Desc getSlotKind /
   // Format composite (AIEBaseMCFormats.cpp:66-75) — no Flags re-slot.
-  OutMI.setOpcode(MI->getOpcode());
+  OutMI.setOpcode(haydnMemberOpcodeForMspClone(*MI));
 
-  // Reloc CSR I8 must already be a generated member (Finalize keep-map).
-  // A leftover CSRW_W/CSRR FieldSlot would miss findFixupFromFixupFields
-  // I8 type-opcodes 4/5 and emit untyped NONE. AIE applyFixup is
-  // member-Desc fields (AIEMCFixupKinds.cpp:36-65); Haydn overlay refuses
-  // the FieldSlot here instead of inventing a specifier.
+  // Reloc CSR I8 must already be a generated member. A leftover
+  // CSRW_W/CSRR FieldSlot would miss findFixupFromFixupFields I8
+  // type-opcodes 4/5 and emit untyped NONE. AIE applyFixup is member-Desc
+  // fields (AIEMCFixupKinds.cpp:36-65); Haydn overlay refuses the FieldSlot
+  // here instead of inventing a specifier. peelLogicalOpcodeName is a
+  // detect-and-refuse wall, not a repair.
   if (const MachineFunction *MF =
           MI->getParent() ? MI->getParent()->getParent() : nullptr) {
     const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();

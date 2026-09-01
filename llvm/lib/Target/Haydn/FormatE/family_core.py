@@ -410,11 +410,14 @@ _BANNED_MATCHER_FILES = frozenset(
     }
 )
 # Matcher-reachable generated includes: public logicals + published
-# itineraries. Member Inst defs stay on the product root (HaydnFormatE.td).
+# itineraries + the M18 mca ItinRW bridge (schedule-surface projection
+# of the same itineraries; no Inst defs). Member Inst defs stay on the
+# product root (HaydnFormatE.td).
 _MATCHER_ALLOWED_GENERATED = frozenset(
     {
         "HaydnInstrInfoGolden.td.inc",
         "HaydnGenSchedRecords.inc",
+        "HaydnGenSchedMcaBridge.td.inc",
     }
 )
 _MATCHER_BANNED_SUBSTRINGS = (

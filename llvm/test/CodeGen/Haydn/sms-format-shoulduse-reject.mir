@@ -1,7 +1,7 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
 # RUN:   -O2 -stop-after=pipeliner -haydn-sms-max-stagecount=1 \
 # RUN:   -debug-only=pipeliner -verify-machineinstrs \
-# RUN:   %S/sms-f41-containment-product-pin.ll -o /dev/null 2>&1 \
+# RUN:   %S/sms-usad-mutual-war-no-prera-freeze.ll -o /dev/null 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=STAGE
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
 # RUN:   -haydn-sms-force-pressure-reject -debug-only=pipeliner \

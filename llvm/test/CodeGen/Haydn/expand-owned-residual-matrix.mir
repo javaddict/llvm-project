@@ -136,6 +136,20 @@
 # RUN:   %t/loadi32_leftover.mir -o - 2>&1 | FileCheck %s --check-prefix=LOADI
 # RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
 # RUN:   %t/loadi64_leftover.mir -o - 2>&1 | FileCheck %s --check-prefix=LOADI64
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/b_ok.mir -o - | FileCheck %s --check-prefix=BEXP
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/ret_ok.mir -o - | FileCheck %s --check-prefix=RETEXP
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/br_jt_ok.mir -o - | FileCheck %s --check-prefix=BRJT
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   -verify-machineinstrs %t/pseudo_call_indirect_ok.mir -o - | FileCheck %s --check-prefix=CALLI
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_b.mir -o - 2>&1 | FileCheck %s --check-prefix=BB
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_ret.mir -o - 2>&1 | FileCheck %s --check-prefix=BRET
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-expand-pseudos \
+# RUN:   %t/bundled_br_jt.mir -o - 2>&1 | FileCheck %s --check-prefix=BBRJT
 
 # Role: verifier — ExpandPseudos residual matrix. Relocated surfaces
 # (PseudoCALL / LIBCALL_* / VASTART / VACOPY / VAARG_* / ADJCALLSTACK) fail
@@ -144,7 +158,10 @@
 # SET_HWLOOP{,_REG} setDesc here is MIR last-chance only. Leftover
 # SET_HWLOOP / SETCBR / LOOPCTL / LOAD_ADDR as BUNDLE children are fatal
 # (in-bundle expand is leftover *_POST_INC only). Top-level leftover
-# LOADI32/LOADI64 after ExpandPostRA is fatal before pack.
+# LOADI32/LOADI64 after ExpandPostRA is fatal before pack. Representation
+# expands RET/BR_JT→JALR_W r0 and PseudoCALLIndirect→JALR_MSP here
+# (pre-S1). Top-level B stays the CFG uncond shell through BranchRelaxation;
+# leftover bundled B/RET/BR_JT/PseudoCALLIndirect is fatal.
 
 #--- load_addr_fi.mir
 --- |
@@ -329,7 +346,7 @@ body:             |
   bb.0:
     liveins: $r1, $r15
     ; VAEND-NOT: VAEND
-    ; VAEND: RET
+    ; VAEND: JALR_W
     VAEND $r1
     RET implicit $r15
 
@@ -1268,3 +1285,139 @@ body:             |
     ; LOADI64: LOADI64
     $d0 = LOADI64 1
     RET implicit $r15
+
+#--- b_ok.mir
+--- |
+  define void @expand_b() { ret void }
+...
+---
+name:            expand_b
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1
+    ; B stays the CFG uncond shell through BranchRelaxation.
+    ; BEXP: B %bb.1
+    ; BEXP-NOT: BEQZ_W
+    B %bb.1
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- ret_ok.mir
+--- |
+  define void @expand_ret() { ret void }
+...
+---
+name:            expand_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; RETEXP: $r0 = JALR_W $r15, 0
+    ; RETEXP-NOT: {{[[:space:]]RET[[:space:]]}}
+    RET implicit $r15
+
+#--- br_jt_ok.mir
+--- |
+  define void @expand_br_jt() { ret void }
+...
+---
+name:            expand_br_jt
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1, %bb.2
+    ; BRJT: $r0 = JALR_W $r1, 0
+    ; BRJT-NOT: BR_JT
+    BR_JT $r1, 0
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+
+#--- pseudo_call_indirect_ok.mir
+--- |
+  define void @expand_pseudo_call_indirect() { ret void }
+...
+---
+name:            expand_pseudo_call_indirect
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CALLI: JALR_MSP
+    ; CALLI-NOT: PseudoCALLIndirect
+    $r15 = PseudoCALLIndirect $r1
+    RET implicit $r15
+
+#--- bundled_b.mir
+--- |
+  define void @residual_bundled_b() { ret void }
+...
+---
+name:            residual_bundled_b
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    successors: %bb.1
+    ; BB: residual representation-expand pseudo
+    ; BB: B
+    BUNDLE {
+      B %bb.1
+    }
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- bundled_ret.mir
+--- |
+  define void @residual_bundled_ret() { ret void }
+...
+---
+name:            residual_bundled_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; BRET: residual representation-expand pseudo
+    ; BRET: RET
+    BUNDLE {
+      RET implicit $r15
+    }
+
+#--- bundled_br_jt.mir
+--- |
+  define void @residual_bundled_br_jt() { ret void }
+...
+---
+name:            residual_bundled_br_jt
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1, %bb.2
+    ; BBRJT: residual representation-expand pseudo
+    ; BBRJT: BR_JT
+    BUNDLE {
+      BR_JT $r1, 0
+    }
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+

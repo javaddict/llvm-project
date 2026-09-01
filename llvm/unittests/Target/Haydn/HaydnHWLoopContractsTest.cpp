@@ -151,6 +151,48 @@ TEST(HaydnHWLoopContractsTest, MinSetupBytesFromProductParcel) {
   EXPECT_NE(MinSetupBytes, productBundlesToBytes(SetupIssueDistance));
 }
 
+// CB-164 anchor law: MC anchors HWLoopOff1/Off2 at the SET parcel base
+// (HaydnAsmBackend::evaluateFixup seeds Value = Abs % Parcel so
+// MCAssembler's PC-rel subtract lands on align_down(fixup_loc, Parcel)).
+// A layout walk measured after the SET cycle must add the SET cycle's
+// committed EncodedBytes before comparing against field ceilings — the
+// accepted value must BE the encoded displacement. Pin the bridge, the
+// unknown-sentinel passthrough, the CB-164 boundary, and that the anchored
+// setup floor is MinSetupIssueBytes.
+TEST(HaydnHWLoopContractsTest, OffAnchorIsSetParcelBase) {
+  // Bridge: after-SET span + SET parcel = encoded displacement.
+  EXPECT_EQ(anchoredFromAfterSet(0, ProductParcelBytes), ProductParcelBytes);
+  EXPECT_EQ(anchoredFromAfterSet(3 * ProductParcelBytes, ProductParcelBytes),
+            4 * ProductParcelBytes);
+  // Unknown stays unknown — never a silent +parcel (would fabricate range).
+  EXPECT_EQ(anchoredFromAfterSet(-1, ProductParcelBytes), -1);
+
+  // CB-164 boundary, frozen: after-SET 252 (uimm6 ceiling accepted by the
+  // legacy walk) anchors to 252 + 12 = 264 -> 264 >> 2 = 66 > uimm6 max.
+  const int64_t LegacyAccepted = MaxStartOffsetBytes; // 252
+  const int64_t Encoded = anchoredFromAfterSet(LegacyAccepted,
+                                               ProductParcelBytes);
+  EXPECT_EQ(Encoded, LegacyAccepted + ProductParcelBytes);
+  EXPECT_FALSE(isEncodableDisplacement(Encoded, Offset1Bits));
+  EXPECT_EQ(Encoded >> 2, 66); // the exact over-field value MC rejected
+  // One parcel short anchors to exactly the ceiling and stays encodable —
+  // the fix must demote at the boundary, not over-demote below it.
+  const int64_t OneUnder =
+      anchoredFromAfterSet(MaxStartOffsetBytes - ProductParcelBytes,
+                           ProductParcelBytes);
+  EXPECT_EQ(OneUnder, MaxStartOffsetBytes);
+  EXPECT_TRUE(isEncodableDisplacement(OneUnder, Offset1Bits));
+
+  // Anchored setup floor: an after-SET walk that just met MinSetupBytes
+  // anchors to MinSetupIssueBytes, so the anchored acceptance floor is the
+  // issue-distance delta (SET cycle + intervening span), not the bare span.
+  EXPECT_EQ(anchoredFromAfterSet(MinSetupBytes, ProductParcelBytes),
+            MinSetupIssueBytes);
+  // The minimum anchored legal START is MinSetupIssueBytes and it encodes.
+  EXPECT_TRUE(isEncodableDisplacement(MinSetupIssueBytes, Offset1Bits));
+  EXPECT_LT(MinSetupIssueBytes, MaxStartOffsetBytes);
+}
+
 TEST(HaydnHWLoopContractsTest, OffsetFieldLimitsAndSafetyMargin) {
   EXPECT_EQ(Offset1Bits, 6u);
   EXPECT_EQ(Offset2Bits, 12u);

@@ -18,6 +18,7 @@
 #include "HaydnExpandPseudos.h"
 #include "HaydnEnsureTerminators.h"
 #include "HaydnFinalizeBundle.h"
+#include "HaydnLateConvergence.h"
 #include "HaydnLatencyStalls.h"
 #include "HaydnVerifyBundles.h"
 #include "HaydnMachineFunctionInfo.h"
@@ -89,15 +90,27 @@ static cl::opt<bool> EnableHaydnPostSelectOptimize(
 // HaydnFixupHwLoops.cpp file header). SCEV-proven IR + retained-state
 // expansion only; late physical semantic rediscovery is deleted. Never
 // revive pre-RA multi-member SMS BUNDLE or force-coissue.
-// Multi-stage product default is not this flag; it lives on
-// HaydnMultiStageSMS::productDefaultEnabled() (ON since its own
-// 2026-08-22 qualification). Combined hwloop+SMS stays productHwloopCombinedEnabled()
-// (false). Stage-0 PostPipeliner / InterBlock stay deleted (tombstone
-// above). Finalize/Verify never call skipFunction — do not reopen that skip.
+// W68.1: multi-stage SMS is owned by the generic pre-RA MachinePipeliner
+// (soft + ZOL, form-uniform PPS-3 bound); the bespoke post-RA host and its
+// flags are deleted. Stage-0 PostPipeliner / InterBlock stay deleted
+// (tombstone above). Finalize/Verify never call skipFunction — do not reopen that skip.
 static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
               "hardware-loop product default is ON after the 2026-08-22 "
               "independent + combined qualification; this assert pins the "
               "policy against accidental re-parking without evidence");
+// W68.2R: S2/LateConvergence driver flag. Default remains off until the
+// same-artifact BundleSim + default decision gate. When on, the same
+// post-RA scheduler implementation runs at addPostBBSections after the
+// common executable tail (outliner/split/BB sections) and before the
+// closure Finalize. S1 in addPreSched2 is disposable.
+static cl::opt<bool> EnableHaydnSMS2(
+    "haydn-sms2", cl::Hidden, cl::init(false),
+    cl::desc("W68.2R: invoke the post-RA scheduler a second time (S2; "
+             "addPostBBSections after the common executable tail). "
+             "Default off."));
+
+static bool HaydnSMS2Enabled() { return EnableHaydnSMS2; }
+
 static cl::opt<bool> EnableHaydnHardwareLoops(
     "haydn-enable-hwloops",
     cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()),
@@ -133,6 +146,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnLatencyStallsPass(PR);
   initializeHaydnHardwareLoopsPass(PR);
   initializeHaydnFixupHwLoopsPass(PR);
+  initializeHaydnLateConvergencePassPass(PR);
   initializeBranchRelaxationLegacyPass(PR);
   initializeMachinePipelinerPass(PR);
 }
@@ -201,10 +215,8 @@ ScheduleDAGInstrs *
 HaydnTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
   // Post-RA pack owner: bundle formation in leaveRegion/leaveMBB
   // (HaydnScheduleDAGMI + HaydnPostRASchedStrategy + HaydnHazardRecognizer).
-  // Multi-stage SMS (HaydnPostRAMultiStage / HaydnMultiStageSMS) hooks inside
-  // HaydnScheduleDAGMI::schedule after ordinary convergence; product default
-  // ON since the 2026-08-22 qualification (-haydn-enable-multistage-sms).
-  // That default is not flipped here.
+  // W68.1: multi-stage SMS is owned by the generic pre-RA MachinePipeliner;
+  // the bespoke post-RA host is deleted — no post-RA SMS engine remains.
   // UAF inapplicable: never instantiates VLIWMachineScheduler.
   return createHaydnPostRAScheduler(C);
 }
@@ -233,10 +245,11 @@ namespace {
 // HaydnFinalizeBundle * + HaydnVerifyBundles * (AIE FinalizeBundle :243)
 // Layout: addBlockPlacement empty (AIE2TargetMachine.cpp:250-253)
 // Pre-emit: BranchRelaxation; FixupHwLoops(O1+hwloops) + second BR;
-// late Finalize+Verify after BR at every opt level (same Finalize/Verify;
-// AIE PreEmit empty :88 — AIE has no BR). insertIndirectBranch emits
-// real LUI+ADDI32_W+JALR_W that must rejoin that late lane.
-// Asm: AsmPrinter
+// mid Finalize+Verify after BR (bare-parcel recommit). S2/LateConvergence
+// is at addPostBBSections under -haydn-sms2 (default off), after the
+// common executable tail and before closure Finalize. insertIndirectBranch
+// emits real LUI+ADDI32_W+JALR_W that must rejoin the mid/late lanes.
+// AIE PreEmit empty :88 — AIE has no BR. Asm: AsmPrinter
 // (O1) = opt-gated; * = load-bearing / legal encode. Deleted: PushPopOpt
 // CommonGEP deleted. PreRALoadPromote deleted.
 // CopyElim/ConditionOptimizer/BitSimplify/PEIPeephole/CFGOptimizer deleted.
@@ -245,7 +258,9 @@ namespace {
 // DeadMI → MBP (O1) → HardwareLoops → PseudoExpand → PostMachineScheduler
 // → (Haydn overlay) LatencyStalls → Finalize+Verify. Suppress generic
 // post-pack MBP via addBlockPlacement. PreEmit is BR (+ Fixup/BR when
-// hwloops ON) then the same Finalize+Verify — not a second packer.
+// hwloops ON) then the same Finalize+Verify — not a second packer. S2 is
+// addPostBBSections (AArch64TargetMachine.cpp:883-891 late writers after
+// BB sections), not PreEmit.
 //===----------------------------------------------------------------------===//
 class HaydnPassConfig : public TargetPassConfig {
 public:
@@ -278,6 +293,11 @@ public:
   // AIE2: MBP runs in addPreSched2 before PostRA pack — suppress late MBP.
   void addBlockPlacement() override;
   void addPreEmitPass() override;
+  // W68.2R: the late VLIW closure runs after every common executable
+  // writer (outlining/splitting/BB-sections) and the terminal read-only
+  // verifier is the freeze gate (contracts/pipeline.md required seats).
+  void addPostBBSections() override;
+  void addPreEmitPass2() override;
 
   // AIE peer: full CSE above O0; empty at O0 (fast RA).
   std::unique_ptr<CSEConfigBase> getCSEConfig() const override;
@@ -461,6 +481,12 @@ void HaydnPassConfig::addPreSched2() {
   // plain O0 without optnone still enters the post-RA pack path first and may
   // form multi-MI full-fill packs for independent ops.
   addPass(&PostMachineSchedulerID);
+  // W68.2 S2: second invocation of the SAME scheduler implementation,
+  // flag-gated. S1 (above) scheduled the function and recorded per-MI
+  // issue cycles into the inter-block DDGs; S2 reschedules with those
+  // depths feeding the effective-latency cut (successors are now
+  // "scheduled" from S1's perspective). Same impl = no second scheduler.
+  // W68.3 will seat the late range/layout mutations BETWEEN the two.
   // Exposed-pipeline RAW net between pack and first commit. AIE2 addPreSched2
   // is PostMachineScheduler then createAIEFinalizeBundle
   // (AIE2TargetMachine.cpp:242-244; AIE PreEmit empty at :88). Stall NOPs are
@@ -520,7 +546,63 @@ void HaydnPassConfig::addPreEmitPass() {
     addPass(createHaydnFixupHwLoopsPass());
     addPass(&BranchRelaxationPassID);
   }
-  // Late Finalize+Verify after BR at every opt level (same Finalize/Verify).
+  // Mid Finalize+Verify after BR at every opt level (same Finalize/Verify;
+  // identity on already-bundled roots, recommit for BR bare parcels). S2/
+  // LateConvergence is NOT here: it must choose current physical MIs after
+  // the common executable tail. The W68.2R S2 + closure + freeze seats live
+  // at addPostBBSections/addPreEmitPass2. Peer: AArch64 addPostBBSections
+  // seats late BranchRelaxation after BB sections
+  // (AArch64TargetMachine.cpp:883-891); AIE2 PreEmit is empty
+  // (AIE2TargetMachine.cpp:90).
   addPass(createHaydnFinalizeBundlePass());
+  addPass(createHaydnVerifyBundlesPass());
+}
+
+void HaydnPassConfig::addPostBBSections() {
+  // W68.2R late VLIW closure owner (contracts/pipeline.md "Required
+  // terminal multi-format lifecycle"): this seat runs AFTER every common
+  // executable writer — RegUsageInfoCollector/IPRA, FuncletLayout,
+  // RemoveLoadsIntoFakeUses, StackMapLiveness, LiveDebugValues, sanitizer
+  // metadata, MachineOutliner, function/data splitting, and
+  // BasicBlockSections all precede addPostBBSections. S2 (HaydnLateConvergence,
+  // -haydn-sms2 default-off) chooses current physical MIs here, then the
+  // one closure Finalize commits any bare MI those writers reintroduced
+  // (outlined sequences rejoin committed state) and Verify fail-closes the
+  // committed-cycle invariants. Optional CFIFixup (metadata/CFI only,
+  // enabled by setCFIFixup(true) in the TM ctor) follows this seat via
+  // the common TargetPassConfig tail; the terminal read-only verifier at
+  // addPreEmitPass2 is the executable freeze.
+  //
+  // A -start-after/-stop-…-carved pipeline is a seat PROBE, not the
+  // product pipeline: the closure must not commit state the probe
+  // deliberately left bare (e96/vf5/mc printer fixtures predate the
+  // freeze seat and probe serialization directly). Product runs are
+  // never limited (llc/clang full pipelines), so this gate cannot mask
+  // a real freeze.
+  //
+  // S2 still seats under the limited-pipeline carve-out so -stop-after=
+  // haydn-late-convergence can observe the pass; Finalize/Verify remain
+  // product-pipeline-only. Flag stays default-off (cl::init(false)).
+  if (HaydnSMS2Enabled())
+    addPass(createHaydnLateConvergencePass());
+  if (TargetPassConfig::hasLimitedCodeGenPipeline())
+    return;
+  addPass(createHaydnFinalizeBundlePass());
+  addPass(createHaydnVerifyBundlesPass());
+}
+
+void HaydnPassConfig::addPreEmitPass2() {
+  // W68.2R executable freeze gate: terminal read-only VerifyBundles after
+  // optional CFIFixup and frame-layout analysis. Only serialization
+  // (AsmPrinter/MC) follows. Read-only by construction — VerifyBundles
+  // never mutates MIR; a violation here is a hard diagnostic, never a
+  // repair. A second Finalize is deliberately NOT seated here: closure
+  // owned addPostBBSections; anything bare at this seat is a pipeline
+  // contract violation the verifier reports.
+  //
+  // Same limited-pipeline probe carve-out as addPostBBSections: the
+  // freeze is a property of the COMPLETE pipeline only.
+  if (TargetPassConfig::hasLimitedCodeGenPipeline())
+    return;
   addPass(createHaydnVerifyBundlesPass());
 }

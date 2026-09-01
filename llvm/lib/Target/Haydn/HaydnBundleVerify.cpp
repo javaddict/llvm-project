@@ -61,15 +61,14 @@ static StringRef inverseOpcodeName(unsigned Opcode) {
   return StringRef(&HaydnInstrNameData[HaydnInstrNameIndices[Opcode]]);
 }
 
-/// Expand-owned / cycle-forming / leftover generic COPY-subreg that must not
-/// complete an inverse record. Representation-expand solo cycles (B/RET/
-/// BR_JT/PseudoCALLIndirect) are the typed printer exception and are skipped
-/// by the caller.
-/// Peer: AIEPseudoBranchExpansion.cpp:43-57 expands named branch desc only.
+/// Expand-owned / cycle-forming / leftover generic COPY-subreg / leftover
+/// CFG representation shells that must not complete an inverse record.
+/// There is no printer-expand accept path: B/RET/BR_JT/PseudoCALLIndirect
+/// are residual until a typed pre-closure expansion. Peer:
+/// AIEPseudoBranchExpansion.cpp:43-57; AIEBaseInstrInfo.cpp:1616-1635.
 static bool isUnexpandedResidualPseudo(unsigned Opc) {
-  if (isRepresentationExpandPseudo(Opc))
-    return false;
-  return isLeftoverGenericResidualPseudo(Opc) ||
+  return isRepresentationExpandPseudo(Opc) ||
+         isLeftoverGenericResidualPseudo(Opc) ||
          isResidualCycleFormingPseudo(Opc) || isExpandOwnedSemanticPseudo(Opc);
 }
 
@@ -228,8 +227,16 @@ static void collectInverseIdsForOpcode(unsigned Opc,
     return M;
   }();
 
-  if (auto It = Generated.find(Opc); It != Generated.end())
+  if (auto It = Generated.find(Opc); It != Generated.end()) {
     Ids.append(It->second.begin(), It->second.end());
+    return;
+  }
+  // Compiler `_MSP` / `_W` clones share the catalog logical's inverse span
+  // (peelLogicalOpcodeName already maps them; occupancy is not DFS).
+  const unsigned Log = format_e::logicalOpcodeOrSelf(Opc);
+  if (Log != Opc)
+    if (auto It = Generated.find(Log); It != Generated.end())
+      Ids.append(It->second.begin(), It->second.end());
 }
 
 static unsigned inverseTableCount() {
@@ -295,7 +302,7 @@ static bool inverseOpcodesHaveUnitCoverForMode(ArrayRef<unsigned> Opcodes,
   SmallVector<uint32_t, 3> Masks;
   Masks.reserve(Opcodes.size());
   for (unsigned Opc : Opcodes) {
-    if (Opc == 0 || isPadNopOpcode(Opc) || isRepresentationExpandPseudo(Opc))
+    if (Opc == 0 || isPadNopOpcode(Opc))
       continue;
     uint32_t M = inverseUnitMaskForOpcode(Opc, Mode);
     // Unknown opcodes have mask 0 and must not pass — even as a singleton.
@@ -393,11 +400,22 @@ static unsigned privateMemberIdForOpcode(unsigned Opc) {
 }
 
 /// Residual/logical member that must have a completed FormatEInverse record.
-/// Private members, pad NOP, and representation-expand solo cycles are not
-/// residual inverse roots. Peer: AIEBaseInstrInfo.cpp:1595-1614
-/// verifyInstruction fail-closed (Haydn overlay is FormatEInverse).
+/// Private members and pad NOP are not residual inverse roots.
+/// Representation-expand shells are residual (no printer carve-out).
+/// Peer: AIEBaseInstrInfo.cpp:1616-1635 verifyInstruction fail-closed.
+static bool haydnIsMspEncodeClone(unsigned Opc) {
+  return inverseOpcodeName(Opc).ends_with("_MSP");
+}
+
 static bool haydnResidualLogicalNeedsCompletedInverse(unsigned Opc) {
-  if (Opc == 0 || isPadNopOpcode(Opc) || isRepresentationExpandPseudo(Opc))
+  if (Opc == 0 || isPadNopOpcode(Opc))
+    return false;
+  // CFG uncond shell through BranchRelaxation. Freeze still rejects via
+  // haydnRejectRepresentationExpand.
+  if (isRepresentationExpandPseudo(Opc))
+    return false;
+  // Encoder peels `_MSP`; occupancy uses the catalog logical.
+  if (haydnIsMspEncodeClone(Opc))
     return false;
   if (isUnexpandedResidualPseudo(Opc))
     return true;
@@ -492,8 +510,19 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
           "structural inverse: FormatEInverse misses exact encodeable "
           "MemberId for private member");
   } else {
-    Inv = haydnInverseRecordFromOpcode(Opc, ExpectMode, EntryIdx, SeenUnits,
-                                       /*MatchEntry=*/true);
+    // `_MSP` flag clones encode as the catalog logical (encoder peels).
+    // BEQZ_W_MSP is the uncond barrier overlay of BEQZ_W.
+    unsigned LookupOpc = Opc;
+    if (Opc == Haydn::BEQZ_W_MSP)
+      LookupOpc = Haydn::BEQZ_W;
+    else if (Opc == Haydn::JALR_MSP)
+      LookupOpc = Haydn::JALR;
+    else if (Opc == Haydn::JAL_W_MSP)
+      LookupOpc = Haydn::JAL_W;
+    else if (Opc == Haydn::JALR_W_MSP)
+      LookupOpc = Haydn::JALR_W;
+    Inv = haydnInverseRecordFromOpcode(LookupOpc, ExpectMode, EntryIdx,
+                                       SeenUnits, /*MatchEntry=*/true);
     if (!Inv)
       return std::string(
                  "structural inverse: residual/logical inverse record not "
@@ -572,6 +601,58 @@ haydnRequireCompletedInverseOnResidualRoots(ArrayRef<unsigned> MemberOpcodes,
   return std::nullopt;
 }
 
+static std::optional<std::string>
+haydnRejectRepresentationExpand(ArrayRef<unsigned> MemberOpcodes) {
+  for (unsigned Opc : MemberOpcodes) {
+    if (Opc == 0 || isPadNopOpcode(Opc))
+      continue;
+    if (!isRepresentationExpandPseudo(Opc))
+      continue;
+    return std::string(
+               "structural inverse: residual representation-expand pseudo "
+               "(printer expansion is not a verifier carve-out): ") +
+           std::string(inverseOpcodeName(Opc));
+  }
+  return std::nullopt;
+}
+
+static std::optional<std::string>
+haydnRejectMixedLogicalPrivate(ArrayRef<unsigned> MemberOpcodes) {
+  bool AnyPriv = false;
+  bool AnyLog = false;
+  for (unsigned Opc : MemberOpcodes) {
+    if (Opc == 0 || isPadNopOpcode(Opc) || isRepresentationExpandPseudo(Opc))
+      continue;
+    if (lookupPrivateFormatEMember(Opc))
+      AnyPriv = true;
+    else
+      AnyLog = true;
+  }
+  if (AnyPriv && AnyLog)
+    return std::string(
+        "structural inverse: mixed logical and private inverse children");
+  return std::nullopt;
+}
+
+static std::optional<std::string>
+haydnRejectFreezeResidualLogical(ArrayRef<unsigned> MemberOpcodes) {
+  for (unsigned Opc : MemberOpcodes) {
+    if (Opc == 0 || isPadNopOpcode(Opc))
+      continue;
+    if (isRepresentationExpandPseudo(Opc))
+      continue;
+    if (lookupPrivateFormatEMember(Opc))
+      continue;
+    if (inverseOpcodeName(Opc).ends_with("_MSP"))
+      continue;
+    return std::string(
+               "structural inverse: freeze residual logical child; concrete "
+               "generated member required: ") +
+           std::string(inverseOpcodeName(Opc));
+  }
+  return std::nullopt;
+}
+
 /// Pure fail-closed check for one committed cycle by row + members.
 ///
 /// INDEPENDENT INVERSE ONLY (topics/encoding P7 row; hard constraints #7/#8):
@@ -604,7 +685,8 @@ haydnRequireCompletedInverseOnResidualRoots(ArrayRef<unsigned> MemberOpcodes,
 /// \returns nullopt on success; human-readable reason on failure.
 std::optional<std::string>
 verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
-                      const HaydnBaseMCFormats &Fmts, BundlePlan *OutPlan) {
+                      const HaydnBaseMCFormats &Fmts, BundlePlan *OutPlan,
+                      bool Freeze) {
   if (!isProductBundleRow(Row))
     return std::string("non-product BundleFormatRowID");
 
@@ -621,11 +703,18 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
       HasPadNop = true;
       continue;
     }
+    if (!Freeze && isRepresentationExpandPseudo(Opc))
+      continue;
+    if (haydnIsMspEncodeClone(Opc))
+      continue;
     Reals.push_back(Opc);
   }
 
   if (Reals.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
+
+  if (auto ExpandErr = haydnRejectRepresentationExpand(MemberOpcodes))
+    return ExpandErr;
 
   if (auto ResidualIdsErr =
           haydnRequireInverseIdsOnResidualRoots(MemberOpcodes))
@@ -704,20 +793,10 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
     const unsigned Opc = MemberOpcodes[E];
     if (isPadNopOpcode(Opc))
       continue;
-
-    // Representation-expand pseudos (B / RET / BR_JT / PseudoCALLIndirect)
-    // expand to a real Format E member at AsmPrinter emission. They are
-    // legal committed SOLO cycles only: the expansion target occupies an
-    // entry the committed members must not already hold. Co-issue with a
-    // representation expand is a corruption — fail closed. Pad holes are
-    // unused windows, not co-issue partners.
-    if (isRepresentationExpandPseudo(Opc)) {
-      if (Reals.size() != 1)
-        return std::string(
-            "structural inverse: representation-expand pseudo must be a "
-            "solo committed cycle (printer expands one-to-one)");
+    if (!Freeze && isRepresentationExpandPseudo(Opc))
       continue;
-    }
+    if (haydnIsMspEncodeClone(Opc))
+      continue;
 
     // Shared inverse: committed child order is the encode-dag entry
     // (leading order, including pad holes; suffix digits never pin
@@ -733,6 +812,12 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
   if (auto ResidualErr = haydnRequireCompletedInverseOnResidualRoots(
           MemberOpcodes, ResidualCompletedBits))
     return ResidualErr;
+  if (auto MixedErr = haydnRejectMixedLogicalPrivate(MemberOpcodes))
+    return MixedErr;
+  if (Freeze) {
+    if (auto LogicalErr = haydnRejectFreezeResidualLogical(MemberOpcodes))
+      return LogicalErr;
+  }
 
   // Inverse-verified product plan: stamped row + inverse occupancy +
   // golden-row completion. Never makeProductPlan / PacketFormats planner /
@@ -782,6 +867,8 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
   }
   if (MemberOpcodes.size() > Haydn::ISSUE_SLOT_COUNT)
     return std::string("memberCount > ISSUE_SLOT_COUNT (3)");
+  if (auto ExpandErr = haydnRejectRepresentationExpand(MemberOpcodes))
+    return ExpandErr;
   if (auto ResidualIdsErr =
           haydnRequireInverseIdsOnResidualRoots(EntryOpcodes))
     return ResidualIdsErr;
@@ -799,13 +886,10 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
     const MCInst *Inst = Entries[E];
     if (!Inst || isPadNopOpcode(Inst->getOpcode()))
       continue;
-    if (isRepresentationExpandPseudo(Inst->getOpcode())) {
-      if (MemberOpcodes.size() != 1)
-        return std::string(
-            "structural inverse: representation-expand pseudo must be a "
-            "solo committed cycle (printer expands one-to-one)");
-      continue;
-    }
+    unsigned ChildOpc = Inst->getOpcode();
+    if (auto ExpandErr =
+            haydnRejectRepresentationExpand(ArrayRef(&ChildOpc, 1)))
+      return ExpandErr;
     ResidualAtEntry[E] = Inst->getOpcode();
     if (auto MemErr = verifyMemberAtStampedEntry(
             Inst->getOpcode(), ExpectMode, static_cast<uint8_t>(E), RowEntries,
@@ -815,6 +899,8 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
   if (auto ResidualErr = haydnRequireCompletedInverseOnResidualRoots(
           ResidualAtEntry, ResidualCompletedBits))
     return ResidualErr;
+  if (auto MixedErr = haydnRejectMixedLogicalPrivate(MemberOpcodes))
+    return MixedErr;
 
   if (auto RegErr = haydnCheckParsedBundleRegs(RealInsts, MII, MRI))
     return std::string("structural inverse: ") + *RegErr;
@@ -825,7 +911,7 @@ verifyParsedBundle(BundleFormatRowID Row, ArrayRef<const MCInst *> Entries,
 /// Fail-closed: missing/unknown row imm or missing completion is an error.
 std::optional<std::string>
 verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &Fmts,
-                      BundlePlan *OutPlan) {
+                      BundlePlan *OutPlan, bool Freeze) {
   if (!BundleRoot.isBundle())
     return std::string("not a BUNDLE root");
 
@@ -847,7 +933,7 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &
       EntryOpcodes.push_back(I->getOpcode());
     }
   }
-  auto Err = verifyCommittedBundle(*Row, EntryOpcodes, Fmts, OutPlan);
+  auto Err = verifyCommittedBundle(*Row, EntryOpcodes, Fmts, OutPlan, Freeze);
   if (Err)
     return Err;
 

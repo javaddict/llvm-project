@@ -44,7 +44,9 @@ body:             |
       $r4 = ADD32 $r0, $r1
       $r5 = XOR32 $r2, $r3
     }
-    RET implicit $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
 
 ...
 ---
@@ -70,7 +72,9 @@ body:             |
       $d0 = LD64 $r1, 0
       $r6 = ADD32 $r2, $r3
     }
-    RET implicit $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
 
 ...
 ---
@@ -88,7 +92,9 @@ body:             |
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
       $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1
     }
-    RET implicit $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }
 
 ...
 ---
@@ -106,4 +112,6 @@ body:             |
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
       $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1
     }
-    RET implicit $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    }

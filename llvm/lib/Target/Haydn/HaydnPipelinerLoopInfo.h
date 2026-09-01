@@ -129,7 +129,7 @@ public:
   // SetupIssueDistance is preheader→BEGIN, never an II>=Setup floor.
   // F41: -haydn-sms-containment-max may lift the bound for SOFT loops only
   // (test/bisect through the classic expander); ZOL multi-stage stays
-  // unconditionally contained (post-RA HaydnMultiStageSMS owns it).
+  // accepted on the generic path (W68.1 form-uniform lift).
   bool shouldUseSchedule(SwingSchedulerDAG &SSD, SMSchedule &SMS) override;
 
   /// Advisory format-union cycle estimate for the pre-RA body \p Body (the

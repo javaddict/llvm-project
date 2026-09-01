@@ -496,7 +496,8 @@ def JAL : FmtJ<0x37, (outs GPR32:$rd), (ins calltarget:$target),
   let TSFlags{2-0} = 0b001;
   // JAL decodes via DecoderTableHaydn3232. Its opcode 0x37 is disjoint
   // from every other Haydn32 opcode (FmtI 0x20-0x2C, FmtBRCond 0x2D-0x32
-  // FmtBR 0x33-0x36, FmtJR 0x38, FmtCSR 0x39-0x3A). The prior "SIMD 0x77
+  // FmtBR 0x33-0x36, FmtJR 0x38; FmtCSR 0x39-0x3A is retired with the
+  // 3-op CSRR shell). The prior "SIMD 0x77
   // conflict" rationale was phantom: the DSP ops that share Inst[31:24]=0x77
   // (D_SDW_*_REG family) are isAsmParserOnly=1, which DecoderEmitter filters
   // out of the decoder trie (DecoderEmitter.cpp:1377). The custom JAL
@@ -536,32 +537,27 @@ def WFI : HaydnInst<0, (outs), (ins), "wfi", []> {
 // CSRR/CSRW — CSR read/write. The DB says:
 // CSRR rt, uimm8 -> rt = CSR[uimm8] (rt is OUTPUT)
 // CSRW uimm8, rs -> CSR[uimm8] = rs (rs is INPUT, no GPR out)
-// The clean operand shape (CSRR: 1 out + 1 imm; CSRW: 0 out + 1 imm + 1 in)
-// does NOT match the shared FmtCSR decoder: FmtCSR decodes three fields
-// (rd, csr_addr, rs) into the MCInst for BOTH CSRR and CSRW (decoder table
-// case 25), and the auto-generated printer indexes operands by position.
-// Reducing the operand list therefore desyncs printer-vs-decoder and crashes
-// the disassembler (`idx < size` in printOperand). So we keep the original
-// symmetric 3-operand shape (rd + csr_addr + rs) for MC-layer fidelity and
-// mark the unused direction with `isDead`/`isUndef` so the *Codegen* side
-// treats them correctly. CSRW's hasSideEffects=1 is on the CSRW def
-// below (dead CBR setup must not be DCE'd).
 //
-// CSRR — hasSideEffects=1 matches Format E members and RISCV Zicsr.
+// CSRR — catalog 2-op (rd, uimm8), per-member shape
+// (CSRR_E2_E0_ALU0_I8 = (outs GPR32:$reg_0) (ins uimm8:$imm_1)).
+// Matcher-visible isPseudo shell exactly like CSRW below; product encode
+// is Format E I8 members (identity cutover, no keep-map arm). The old
+// 3-op FmtCSR shell was decoder-parity only: the Haydn32 trie it fed is
+// generated but never consulted (decode is the Format E member tables),
+// and the asm matcher filled the vestigial $rs with imm 0 — the
+// standalone fill then had to drop it via the Imm-0-hole keep-map.
+// FmtCSR is deleted with this def as its last user.
+//
+// hasSideEffects=1 matches Format E members and RISCV Zicsr.
 // Without it a dead CSRR is DCE'd (HaydnInst default 0) and a later
 // CSRW can hoist across a missing read.
 // 2026-08-21 latency P0/P1: golden CSRR Available = ALU0|ALU1|ALU2 AND
-// Pipeline_Info Data_Latency = 2 — Slot012_ALU_CsrLat carries both (the
-// FmtCSR class default was also re-mapped to Slot012_ALU).
-let hasSideEffects = 1 in
-def CSRR : FmtCSR<0x39, (outs GPR32:$rd), (ins uimm8:$csr_addr, GPR32:$rs),
-               "csrr\t$rd, $csr_addr", []> {
+// Pipeline_Info Data_Latency = 2 — Slot012_ALU_CsrLat carries both.
+let hasSideEffects = 1, isPseudo = 1, isCodeGenOnly = 0 in
+def CSRR : HaydnInst<0, (outs GPR32:$rd), (ins uimm8:$csr_addr),
+                    "csrr\t$rd, $csr_addr", []> {
   let Itinerary = Slot012_ALU_CsrLat;
   let TSFlags{2-0} = 0b001;
-  // $rs is not a real input for CSRR (DB reads only the CSR); it exists for
-  // MC operand-count parity with the shared FmtCSR decoder (case 25 decodes
-  // rd + csr_addr + rs for BOTH CSRR and CSRW). Regalloc ignores an unused
-  // tied input operand; no correctness impact.
 }
 
 // CSRW — catalog 2-op (uimm8, rs). Matcher-visible isPseudo shell; product
@@ -1641,21 +1637,34 @@ def SET_HWLOOP_REG_W : Fmt48_WideSET_HWLOOP_REG<0x8A, (outs),
 //===----------------------------------------------------------------------===//
 // AR / unaligned UA logicals (moved from HaydnFormatsLS.td).
 // Product encode is Format E members. No FieldSlot occupancy defs.
-// D_LQHWUA_POST carries Slot2_LS so the published memory-cycle itinerary
-// stays live after the last `_S*` FieldSlot was deleted.
+//
+// CB-151 reshape (2026-08-26): logicals carry the MEMBER wire shape
+// (golden AR rows are 2-op `ar_sel, rs` / 3-op `rtd, ar_sel, rs` with the
+// base writeback tied — stride and dir_sel are NOT on the wire; golden
+// behavior is `rs = rs + 8` with direction in rs[2:1]). The old fat
+// logicals [rtd, rs_wb, rs, rs2(stride), ar_sel, dir_sel] folded stride
+// and dir at Finalize through hardcoded keep-map arms. ISel now admits
+// only ImmArg ar_sel (admitProductArSel) and drops stride/dir at
+// selection; the cutover is identity.
 //===----------------------------------------------------------------------===//
 
+// Golden PLDWWUA_POST ar_sel, rs (rs writeback tied). Selector uses the
+// public intrinsic name PLDWWUA; occupancy peels _POST (HaydnFormatERecords).
 let mayLoad = 1, hasSideEffects = 1 in
-def PLDWWUA : HaydnInst<4, (outs), (ins uimm2:$ar_sel, GPR32:$rs),
-                        "pldwwua\t$ar_sel, $rs", []> {
-  let Itinerary = Slot012_ALU;
+def PLDWWUA : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$ar_sel, GPR32:$rs),
+    "pldwwua\t$ar_sel, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
+  // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
+  // LOADSTORE0|LOAD1.
+  let Itinerary = Slot01_LD;
 }
 
 let mayLoad = 1, hasSideEffects = 1 in
-def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
-    (ins GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
-    "d_lqhwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
-  let Constraints = "$rs1 = $rs1_wb";
+def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
+    (ins uimm2:$ar_sel, GPR32:$rs),
+    "d_lqhwua_post\t$ar_sel, $rtd, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
   // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
   // LOAD1|LOADSTORE0 (was Slot2_LS = ALU2 seat). Slot01_LD is a published
   // memory itinerary, so the published Data_Latency=2 memory row is kept.
@@ -1663,10 +1672,10 @@ def D_LQHWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
 }
 
 let mayLoad = 1, hasSideEffects = 1 in
-def D_LTWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs1_wb),
-    (ins GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
-    "d_ltwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
-  let Constraints = "$rs1 = $rs1_wb";
+def D_LTWUA_POST : HaydnInst<4, (outs DR64:$rtd, GPR32:$rs_wb),
+    (ins uimm2:$ar_sel, GPR32:$rs),
+    "d_ltwua_post\t$ar_sel, $rtd, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
   // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
   // LOAD1|LOADSTORE0 (was Slot012_ALU, which falsely contended all ALUs).
   let Itinerary = Slot01_LD;
@@ -1680,18 +1689,19 @@ def FLAR : HaydnInst<4, (outs), (ins uimm2:$ar_sel), "flar\t$ar_sel", []> {
 }
 
 let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
-def WBARWUA : HaydnInst<4, (outs), (ins GPR32:$rs, uimm2:$ar_sel, uimm1:$dir_sel),
-                        "wbarwua\t$ar_sel, $rs, $dir_sel", []> {
+def WBARWUA : HaydnInst<4, (outs),
+    (ins uimm2:$ar_sel, GPR32:$rs),
+    "wbarwua\t$ar_sel, $rs", []> {
   // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
   // LOADSTORE0 (was Slot012_ALU).
   let Itinerary = Slot0_LS;
 }
 
 let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
-def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
-    (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
-    "d_sqhwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
-  let Constraints = "$rs1 = $rs1_wb";
+def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$ar_sel, DR64:$rtd, GPR32:$rs),
+    "d_sqhwua_post\t$ar_sel, $rtd, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
   // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
   // LOADSTORE0 (was Slot012_ALU).
   // 2026-08-21 latency P3: golden Data_Latency=1 for the rs1 writeback —
@@ -1700,10 +1710,10 @@ def D_SQHWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
 }
 
 let mayStore = 1, mayLoad = 0, hasSideEffects = 1 in
-def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs1_wb),
-    (ins DR64:$rtd, GPR32:$rs1, GPR32:$rs2, uimm2:$ar_sel, uimm1:$dir_sel),
-    "d_stwua_post\t$rtd, $ar_sel, $rs1, $rs2, $dir_sel", []> {
-  let Constraints = "$rs1 = $rs1_wb";
+def D_STWUA_POST : HaydnInst<4, (outs GPR32:$rs_wb),
+    (ins uimm2:$ar_sel, DR64:$rtd, GPR32:$rs),
+    "d_stwua_post\t$ar_sel, $rtd, $rs", []> {
+  let Constraints = "$rs = $rs_wb";
   // 2026-08-21 itinerary re-map (wrong-family fix): golden Available =
   // LOADSTORE0 (was Slot012_ALU).
   // 2026-08-21 latency P3: golden Data_Latency=1 for the rs1 writeback —

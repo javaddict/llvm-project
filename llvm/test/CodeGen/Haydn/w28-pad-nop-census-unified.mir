@@ -136,7 +136,6 @@ body:             |
     ; CHECK-NOT: {{^ +NOP$}}
     BUNDLE 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2 {
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
-      NOP
       $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1
     }
     RET implicit $r15
@@ -153,7 +152,7 @@ body:             |
     ; CHECK-LABEL: name: arm6_reals_plus_pad_stamped
     ; CHECK: BUNDLE 0, 0
     ; CHECK: ADD32_E2_E0_ALU0_RR
-    ; CHECK-NOT: {{^ +NOP$}}
+    ; CHECK: NOP
     BUNDLE 0, 0, implicit-def $r4, implicit $r0, implicit $r1 {
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
       NOP

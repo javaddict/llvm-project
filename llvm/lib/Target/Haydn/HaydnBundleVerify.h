@@ -60,9 +60,13 @@ namespace bundle {
 /// Defined in HaydnVerifyBundles.cpp (avoids dual GET_INSTRINFO_ENUM includes).
 bool isResidualCycleFormingPseudo(unsigned Opc);
 
-/// Typed presentation expands allowed in AsmPrinter (B/RET/BR_JT/
-/// PseudoCALLIndirect). Every other residual executable pseudo is fatal at
-/// the late firewall — no silent drop inside committed BUNDLEs.
+/// Printer-facing CFG/call shells (B/RET/BR_JT/PseudoCALLIndirect). The
+/// freeze verifier does not treat these as a carve-out: residual
+/// representation at a committed cycle is fatal. AsmPrinter still
+/// classifies them so an unexpanded leftover is a hard diagnostic, not a
+/// silent serialize. Peer: AIEPseudoBranchExpansion.cpp:43-57 expands the
+/// named branch desc before late pack; AIE verifyInstruction
+/// (AIEBaseInstrInfo.cpp:1616-1635) has no printer-pseudo accept path.
 bool isRepresentationExpandPseudo(unsigned Opc);
 
 /// Bare residual semantic pseudo (VerifyBundles + AsmPrinter): cycle-forming
@@ -284,16 +288,22 @@ findInverseLogicalAtEntry(StringRef Logical, uint8_t Mode, uint8_t EntryIdx,
 ///     selectCompletionFor / selectCompletionForMembersAndPads)
 ///
 /// \returns nullopt on success; human-readable reason on failure.
+///
+/// \p Freeze is the addPreEmitPass2 gate: one concrete generated-member
+/// child representation (no residual logical, mixed logical+private,
+/// or representation-expand shell). Intermediate seats keep residual
+/// logical inverse completion. Mixed logical+private is always illegal.
 std::optional<std::string>
 verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
-                      const HaydnBaseMCFormats &Fmts, BundlePlan *OutPlan = nullptr);
+                      const HaydnBaseMCFormats &Fmts,
+                      BundlePlan *OutPlan = nullptr, bool Freeze = false);
 
 /// MIR entry: rebuild plan from BUNDLE root row + completion imms + children.
 /// Fail-closed: missing/unknown row imm or missing completion is an error.
 std::optional<std::string>
 verifyCommittedBundle(const MachineInstr &BundleRoot,
                       const HaydnBaseMCFormats &Fmts,
-                      BundlePlan *OutPlan = nullptr);
+                      BundlePlan *OutPlan = nullptr, bool Freeze = false);
 
 /// Post-RA hard-root / SMS commit-inside-group certificate.
 /// Requires multi-member membership (hard root shape) and a product Format E

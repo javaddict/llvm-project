@@ -35,7 +35,9 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
   // VLIW / Format E parcels: high-entry-first text
   // `{ e2; e1; e0 }` / `{ e1; e0 }`. Product disasm emits
   // BUNDLE_E96_TWO_ENTRY / BUNDLE_E96_THREE_ENTRY of logical children (public
-  // mnemonics, no private member suffix). Generic TargetOpcode::BUNDLE is a
+  // mnemonics, no private member suffix). Unused entries of a stamped row
+  // print as nop (generated unused-entry NOP / missing isInst slot — AIE
+  // empty-slot NOP). Generic TargetOpcode::BUNDLE is a
   // non-product composite root (print its isInst children; do not invent a
   // row from child count). Print children via isInst operands — do not rely
   // on generated AsmWriter for multi-entry composites.
@@ -108,6 +110,13 @@ void HaydnInstPrinter::printInst(const MCInst *MI, uint64_t Address,
 void HaydnInstPrinter::printSingleInst(const MCInst *MI, uint64_t Address,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &O) {
+  // Generated unused-entry NOP records alias Haydn::NOP. Print the public
+  // mnemonic; never a private member suffix and never an occupancy peel.
+  if (MI->getOpcode() == Haydn::NOP) {
+    O << "nop";
+    return;
+  }
+
   // Special handling for SET_HWLOOP_REG: print as
   // set_hwloop_f2 sel, loop_start, loop_end, rs
   // The MCInst carries: sel(imm), loop_start(expr|imm), loop_end(expr|imm), rs(reg).

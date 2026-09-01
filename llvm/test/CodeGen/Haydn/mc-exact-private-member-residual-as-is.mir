@@ -27,5 +27,8 @@ body:             |
       $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def dead $sfr
       $r5 = ADDI32_E2_E1_ALU1_RI20 $r2, 1, implicit-def dead $sfr
     }
-    RET implicit $r15
+    ; Serialize-only printer: unexpanded representation pseudos are fatal,
+    ; so this probe ends with the expanded return parcel (same law as
+    ; e96-asmprinter-exact-identity).
+    $r0 = JALR_W $r15, 0
 ...

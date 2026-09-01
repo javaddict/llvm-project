@@ -20,12 +20,14 @@
 // Never calls skipFunction: committed-cycle verify is product emission
 // ownership, not a quality pass. skipFunction-skipped (optnone / bisect)
 // functions cannot escape noncanonical cycles — inverse records still run.
-// Fail-closes residual cycle-forming, expand-owned, and leftover generic
-// COPY/subreg children (inverse records require exact-committed real
-// members and completed FormatEInverse on every residual/logical root;
-// representation-expand solo cycles are the typed printer exception),
-// optnone bare encode escape, and mixed committed-BUNDLE + bare encode MIR.
-// Does not mutate MIR.
+// Fail-closes residual cycle-forming, expand-owned, leftover generic
+// COPY/subreg children, leftover B/RET/BR_JT/PseudoCALLIndirect
+// representation shells (no printer-expand carve-out), mixed
+// logical+private inverse children, and — at the addPreEmitPass2 freeze
+// seat — residual logical children plus surviving alternate-map / DDG
+// transients. Inverse records require exact-committed real members.
+// Optnone bare encode escape and mixed committed-BUNDLE + bare encode MIR
+// are fatal. Does not mutate MIR.
 // report_fatal_error on violation (no silent skip).
 // No MCFlags writers. setDesc is owned by Finalize / materialize / hard-root
 // commit-inside-group. Never includes HaydnBundle.h / HaydnBundleFormatSolver.h
@@ -45,6 +47,7 @@ public:
   static char ID;
 
   HaydnVerifyBundles();
+  ~HaydnVerifyBundles() override;
 
   StringRef getPassName() const override {
     return "Haydn Bundle Invariant Verifier";

@@ -14,11 +14,13 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNMACHINEFUNCTIONINFO_H
 
 #include "HaydnAlternateDescriptors.h"
+#include "HaydnSchedMutations.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include <memory>
 #include <string>
 
 namespace llvm {
@@ -119,54 +121,32 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // Transient post-RA alt-descriptor side-map (not durable placement).
   // HaydnHazardRecognizer records chosen member opcodes during post-RA
   // scheduling; leaveRegion materialize reads then clear()s it
-  // (AIEAlternateDescriptors peer). clone() clears AltDescs and remaps
-  // SMSLoopInfos via Src2DstMBB so MI*/MBB* keys never leak across outline.
+  // (AIEAlternateDescriptors peer). clone() clears AltDescs so chosen
+  // member descriptors never leak across outline.
   HaydnAlternateDescriptors AltDescs;
 
-public:
-  /// SMS kernel metadata for release `#<swps>` asm annotation.
-  /// Keyed by kernel MBB. Holds II / stage / ops scalars only — no pre-RA
-  /// same-cycle group identity (issue-cycle identity must not cross RA).
-  struct SMSSWPSInfo {
-    unsigned ResMII = 0;
-    unsigned RecMII = 0;
-    unsigned MII = 0;
-    unsigned StageCount = 0;   ///< Prolog stages + 1 (kernel phase span).
-    unsigned NumOps = 0;
-    unsigned ScheduledII = 0;  ///< Accepted initiation interval.
-  };
+  // W68.2R S1/S2 lifecycle (STATUS limit #1): how many times the post-RA
+  // scheduler has been invoked on this function (S1 at addPreSched2 = 1;
+  // each S2/convergence-driver invocation increments further). The
+  // strategy consults this to reopen provisional BUNDLEs before any
+  // second-or-later scheduling invocation, so S2 always rebuilds from
+  // current bare MIs. Per-function by construction (MFI lifetime);
+  // clone() zeros this so outlined/cloned MFs do not inherit the source
+  // count.
+  unsigned PostRASchedInvocations = 0;
 
-  /// G005 canonical per-loop KPI record — the post-RA multistage engine's
-  /// outcome for ONE loop it attempted, written by
-  /// HaydnMultiStageSMS::tryAfterOrdinarySchedule and read back
-  /// function-late by emitHaydnSMSLoopRemarks (the per-region Host dies
-  /// before the canonical remark fires). Observation only — never
-  /// placement truth; the decline seat reuses the LastRejectReason
-  /// vocabulary verbatim.
-  struct SMSLoopRecord {
-    /// "accepted" | "accepted-analysis" | "declined" | "not-candidate"
-    /// (shape never candidated, or G009 pragma-disable user veto — the
-    /// latter carries seat=pragma-disable).
-    const char *Kind = nullptr;
-    /// Accepted: searched II (== realized, G002 certificate). Declined:
-    /// last II the search reached (0 = failed before any II attempt).
-    int II = 0;
-    /// Pipeline stage count (0 when never scheduled).
-    int NS = 0;
-    /// Decline seat (LastRejectReason); not-candidate carries a seat only
-    /// for the G009 pragma-disable veto; null otherwise.
-    const char *Reason = nullptr;
-    /// Committed prologue/epilogue MBBs when an accept materialized them.
-    MachineBasicBlock *PrologueMBB = nullptr;
-    MachineBasicBlock *EpilogueMBB = nullptr;
-  };
-
-private:
-  // Key by MBB pointer (stable through layout; numbers are renumbered).
-  DenseMap<const MachineBasicBlock *, SMSSWPSInfo> SMSLoopInfos;
-  // G005 engine-outcome records, keyed the same way. Cleared in clone():
-  // remark observations must not cross function outlining.
-  DenseMap<const MachineBasicBlock *, SMSLoopRecord> SMSLoopRecords;
+  //===--------------------------------------------------------------------===
+  // W68.2R per-function inter-block DDG registry (STATUS limit #9 closure).
+  // S1 publishes one HaydnInterBlockEdges per CFG edge; S2 re-gathers and
+  // inherits S1's recorded post-boundary depths. Lifetime = this
+  // MachineFunction only: the store dies with the MF (no process-static
+  // raw-pointer registry), and re-publishing is keyed against the CURRENT
+  // CFG so erased/replaced MBBs drop their records (CFG/MI mutation
+  // invalidation). shared_ptr (MFI must stay copy-constructible for
+  // cloneInfo): element destruction happens only in TUs that include
+  // HaydnInterBlockScheduling.h. clone() clears it — keys point into the
+  // source MF. Dest starts a fresh per-function DDG lifetime.
+  std::shared_ptr<HaydnInterBlockEdgesRegistry> InterBlockRegistry;
 
 public:
   HaydnMachineFunctionInfo(const Function &F, const TargetSubtargetInfo *STI);
@@ -281,36 +261,26 @@ public:
   HaydnAlternateDescriptors &getAltDescs() { return AltDescs; }
   const HaydnAlternateDescriptors &getAltDescs() const { return AltDescs; }
 
-  void recordSMSLoop(const MachineBasicBlock *KernelBB, SMSSWPSInfo Info) {
-    SMSLoopInfos[KernelBB] = std::move(Info);
-  }
-
-  /// \name G005 canonical per-loop KPI records.
+  // \name W68.2R S1/S2 invocation lifecycle.
   //@{
-  void recordSMSLoopRecord(const MachineBasicBlock *KernelBB,
-                           SMSLoopRecord Record) {
-    SMSLoopRecords[KernelBB] = Record;
-  }
-
-  const SMSLoopRecord *getSMSLoopRecord(const MachineBasicBlock *KernelBB) const {
-    auto It = SMSLoopRecords.find(KernelBB);
-    return It == SMSLoopRecords.end() ? nullptr : &It->second;
-  }
+  unsigned getPostRASchedInvocations() const { return PostRASchedInvocations; }
+  /// Bump and return the invocation number (1 = S1 at addPreSched2).
+  unsigned bumpPostRASchedInvocation() { return ++PostRASchedInvocations; }
   //@}
 
-  /// Drop kernel SMS metadata. Used by post-RA multi-stage JM-META rollback
-  /// so a failed transaction cannot leak `#<swps>` into the ordinary baseline.
-  /// Also drops the G005 record: a rolled-back attempt must not be reported
-  /// as accepted (the decline path re-records it).
-  void eraseSMSLoop(const MachineBasicBlock *KernelBB) {
-    SMSLoopInfos.erase(KernelBB);
-    SMSLoopRecords.erase(KernelBB);
+  // \name W68.2R inter-block DDG registry (per-function lifetime).
+  //@{
+  /// The owning registry, or null when none was published (flag off).
+  const HaydnInterBlockEdgesRegistry *getInterBlockRegistry() const {
+    return InterBlockRegistry.get();
   }
+  /// Lazily create the owning store (first publish). Defined in
+  /// HaydnSchedMutations.cpp where the element type is complete.
+  HaydnInterBlockEdgesRegistry &getOrCreateInterBlockRegistry();
+  /// Drop every record (flag-off publish / function transition).
+  void clearInterBlockRegistry() { InterBlockRegistry.reset(); }
+  //@}
 
-  const SMSSWPSInfo *getSMSLoop(const MachineBasicBlock *KernelBB) const {
-    auto It = SMSLoopInfos.find(KernelBB);
-    return It == SMSLoopInfos.end() ? nullptr : &It->second;
-  }
 };
 
 } // namespace llvm

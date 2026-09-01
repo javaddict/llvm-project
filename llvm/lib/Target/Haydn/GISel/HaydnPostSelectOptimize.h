@@ -23,6 +23,22 @@ class MachineInstr;
 class MachineRegisterInfo;
 class HaydnInstrInfo;
 
+namespace haydn {
+namespace postselect {
+
+/// Lane-store immediate fit law (CB-160). The golden S_SW (ST32) and
+/// D_SW_L/H store families — plain WITH_IMM and the PRE/POST writeback
+/// forms — share ONE word-scaled EA law: EA = rs + (imm6 << 2). A selected
+/// ST32 offset operand is already that word-scaled imm, so folding
+/// MOVE32_DR_L/H + ST32 into D_SW_L/H_WITH_IMM passes it through unscaled;
+/// only the signed imm6 range gate applies. On success \p ScaledImm is the
+/// D_SW immediate (== \p WordOffset); returns false (fold must not fire)
+/// when the value is outside signed imm6.
+bool laneStoreImmForWordScaledOffset(int64_t WordOffset, int64_t &ScaledImm);
+
+} // namespace postselect
+} // namespace haydn
+
 class HaydnPostSelectOptimize : public MachineFunctionPass {
 public:
   static char ID;

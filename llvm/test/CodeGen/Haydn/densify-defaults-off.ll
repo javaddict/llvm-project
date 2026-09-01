@@ -2,7 +2,7 @@
 ; RUN:   | grep -v 'Verify generated machine code' \
 ; RUN:   | FileCheck %s --check-prefix=PIPE
 ; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
-; RUN:     -haydn-enable-hwloops -haydn-enable-multistage-sms < %s -o /dev/null 2>&1 \
+; RUN:     -haydn-enable-hwloops < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' \
 ; RUN:   | FileCheck %s --check-prefix=DUAL
 ; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
@@ -10,34 +10,18 @@
 ; RUN:   | grep -v 'Verify generated machine code' \
 ; RUN:   | FileCheck %s --check-prefix=ATTR
 ; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
-; RUN:     -haydn-enable-hwloops -haydn-enable-multistage-sms=false < %s -o /dev/null 2>&1 \
+; RUN:     -haydn-enable-hwloops < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' \
 ; RUN:   | FileCheck %s --check-prefix=HWONLY
 ; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -disable-verify -debug-pass=Structure \
-; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms < %s -o /dev/null 2>&1 \
+; RUN:     -haydn-enable-hwloops=false < %s -o /dev/null 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' \
 ; RUN:   | FileCheck %s --check-prefix=SMSONLY
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.h --check-prefix=HWDEF
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=HWASSERT
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp --check-prefix=HWFLAG
-; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRAMultiStage.h --check-prefix=SMSDEF
-; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRAMultiStage.cpp --check-prefix=SMSFLAG
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFeatures.td --check-prefix=FEAT
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/CMakeLists.txt --check-prefix=CMAKE
-; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -verify-machineinstrs \
-; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
-; RUN:   2>%t.off.rmk | FileCheck %s --check-prefix=OFFASM
-; RUN: FileCheck %s --allow-empty --check-prefix=OFFRMK < %t.off.rmk
-; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -verify-machineinstrs \
-; RUN:     -mattr=+hwloop < %s | FileCheck %s --check-prefix=ATTRASM
-; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -verify-machineinstrs \
-; RUN:     -haydn-enable-hwloops -haydn-enable-multistage-sms=false < %s \
-; RUN:   | FileCheck %s --check-prefix=HWASM
-; RUN: llc -global-isel-abort=1 -O2 -mtriple=haydn-unknown-elf -verify-machineinstrs \
-; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms \
-; RUN:     -pass-remarks-analysis=haydn-multistage-sms < %s \
-; RUN:   2>%t.sms.rmk | FileCheck %s --check-prefix=SMSASM
-; RUN: FileCheck %s --check-prefix=SMSRMK < %t.sms.rmk
 ; REQUIRES: asserts
 
 ; 2026-08-22 SMS product-default flip rebaseline: SMS default is now ON
@@ -64,8 +48,6 @@
 ; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
 ; HWASSERT: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; HWFLAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
-; SMSDEF: productDefaultEnabled() { return true; }
-; SMSFLAG: cl::init(HaydnMultiStageSMS::productDefaultEnabled())
 ; FEAT: ISA capability only
 ; FEAT: hardwareLoopsProductDefaultEnabled
 ; CMAKE: regeneration is an explicit developer step
@@ -157,9 +139,6 @@
 ; SMSASM-LABEL: sum_loop:
 ; SMSASM-NOT:   set_hwloop
 ; SMSASM:       jalr
-; SMSRMK: product-on
-; SMSRMK: hwloop-combined=off
-; SMSRMK-NOT: hwloop-combined=on
 
 define i32 @sum_loop(ptr nocapture readonly %p, i32 %n) {
 entry:

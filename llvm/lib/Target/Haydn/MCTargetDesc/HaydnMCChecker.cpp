@@ -146,6 +146,11 @@ std::optional<std::string> llvm::haydnCheckParsedBundle(
     if (haydnIsResidualFieldSlotName(Name) || haydnIsGeneratedMemberName(Name) ||
         haydnFindFormatEMemberByOpcode(Opc))
       return std::string("private placement opcode");
+    // Compiler MultiSlot `_MSP` clones are not hand-asm occupancy. Encoder
+    // serializes verified MemberId as-is; parse-time cover must not peel
+    // `_MSP` into the catalog logical (JALR_MSP is ExpandPseudos, not asm).
+    if (Name.ends_with("_MSP"))
+      return std::string("unknown logical occupancy");
     // Catalog occupancy / MemberId span (Hexagon MCChecker.cpp:692-703 uses
     // the packet's real opcodes). Not a row-identity peel and not `_S*`
     // recovery (those names already returned above). Unknown names fail

@@ -18,8 +18,8 @@ define i32 @cb22_jt_r0_rezero(i32 %x) nounwind {
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB0_10 }
 ; CHECK-NEXT:  // %bb.1: // %entry
-; CHECK-NEXT:    { nop; lui r2, %hi12(.LJTI0_0) }
-; CHECK-NEXT:    { nop; addi32 r2, r2, %lo20(.LJTI0_0) }
+; CHECK-NEXT:    { nop; lui r2, .LJTI0_0 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, .LJTI0_0 }
 ; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }

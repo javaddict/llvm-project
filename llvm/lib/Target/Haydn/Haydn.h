@@ -42,6 +42,9 @@ FunctionPass *createHaydnFinalizeBundlePass();
 FunctionPass *createHaydnVerifyBundlesPass();
 // Exposed-pipeline Data_Latency stall insert (pre-emit; every opt level).
 FunctionPass *createHaydnLatencyStallsPass();
+// W68.3R bounded late repair loop (S2 -> stalls -> HWLoop validate ->
+// BranchRelaxation-last, to a census fixed point; -haydn-sms2 gated).
+FunctionPass *createHaydnLateConvergencePass();
 
 // Pass initialization declarations
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
@@ -53,6 +56,7 @@ void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
 void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
 void initializeHaydnLatencyStallsPass(PassRegistry &);
+void initializeHaydnLateConvergencePassPass(PassRegistry &);
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_HAYDN_HAYDN_H

@@ -22,8 +22,8 @@ define i32 @load_global() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r1, %hi12(g_int) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_int) }
+; CHECK-NEXT:    { nop; lui r1, g_int }
+; CHECK-NEXT:    { nop; addi32 r1, r1, g_int }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -37,8 +37,8 @@ define void @store_global(i32 %v) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r2, %hi12(g_int) }
-; CHECK-NEXT:    { nop; addi32 r2, r2, %lo20(g_int) }
+; CHECK-NEXT:    { nop; lui r2, g_int }
+; CHECK-NEXT:    { nop; addi32 r2, r2, g_int }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -52,8 +52,8 @@ define ptr @gep_global() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r1, %hi12(g_int) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_int) }
+; CHECK-NEXT:    { nop; lui r1, g_int }
+; CHECK-NEXT:    { nop; addi32 r1, r1, g_int }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 20 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -67,8 +67,8 @@ define i64 @load_global_i64() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; lui r1, %hi12(g_long) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_long) }
+; CHECK-NEXT:    { nop; lui r1, g_long }
+; CHECK-NEXT:    { nop; addi32 r1, r1, g_long }
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -91,8 +91,8 @@ define void @store_global_i64(i64 %v) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r1, %hi12(g_long) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_long) }
+; CHECK-NEXT:    { nop; lui r1, g_long }
+; CHECK-NEXT:    { nop; addi32 r1, r1, g_long }
 ; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
 ; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r1, 0 }
 ; CHECK-NEXT:    { nop; d_sw_h_with_imm d0, r2, 0 }
@@ -108,8 +108,8 @@ define void @rmw_global() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r1, %hi12(g_int) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_int) }
+; CHECK-NEXT:    { nop; lui r1, g_int }
+; CHECK-NEXT:    { nop; addi32 r1, r1, g_int }
 ; CHECK-NEXT:    { nop; ld32 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 1 }
@@ -128,10 +128,10 @@ define i32 @two_globals() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r1, %hi12(g_int) }
-; CHECK-NEXT:    { nop; lui r2, %hi12(g_int2) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(g_int) }
-; CHECK-NEXT:    { nop; addi32 r2, r2, %lo20(g_int2) }
+; CHECK-NEXT:    { nop; lui r1, g_int }
+; CHECK-NEXT:    { nop; lui r2, g_int2 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, g_int }
+; CHECK-NEXT:    { nop; addi32 r2, r2, g_int2 }
 ; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
@@ -151,8 +151,8 @@ define i32 @load_local_const() nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r1, %hi12(local_const) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(local_const) }
+; CHECK-NEXT:    { nop; lui r1, local_const }
+; CHECK-NEXT:    { nop; addi32 r1, r1, local_const }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -168,10 +168,11 @@ define i32 @load_global_array(i32 %idx) nounwind {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; lui r2, %hi12(g_array) }
-; CHECK-NEXT:    { nop; addi32 r2, r2, %lo20(g_array) }
+; CHECK-NEXT:    { nop; lui r2, g_array }
+; CHECK-NEXT:    { nop; addi32 r2, r2, g_array }
 ; CHECK-NEXT:    { nop; slli32 r1, r1, 2 }
-; CHECK-NEXT:    { nop; s_lw_pre_reg r1, r2, r1 }
+; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
+; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p = getelementptr [10 x i32], ptr @g_array, i32 0, i32 %idx

@@ -262,8 +262,8 @@ define i32 @read_global_struct() {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; lui r1, %hi12(global_struct) }
-; CHECK-NEXT:    { nop; addi32 r1, r1, %lo20(global_struct) }
+; CHECK-NEXT:    { nop; lui r1, global_struct }
+; CHECK-NEXT:    { nop; addi32 r1, r1, global_struct }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

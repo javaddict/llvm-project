@@ -18,7 +18,7 @@
 ; HWFLAG-DAG: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; HWFLAG-DAG: "haydn-enable-hwloops"
 ; HWFLAG-DAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
-; LATE: Late Finalize+Verify after BR at every opt level (same Finalize/Verify).
+; LATE: Mid Finalize+Verify after BR at every opt level (same Finalize/Verify;
 ; LATE-NOT: Product default does not pay a second Finalize+Verify
 ; O0POST-DAG: enablePostRAMachineScheduler() const override { return true; }
 ; O0POST-DAG: no BUNDLE, private member, row

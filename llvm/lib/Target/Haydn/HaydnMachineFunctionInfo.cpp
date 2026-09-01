@@ -23,20 +23,15 @@ MachineFunctionInfo *HaydnMachineFunctionInfo::clone(
   // clone/outline: keys point into the source MF and would retain stale
   // setDesc/placement state (phase firewall).
   Copy->AltDescs.clear();
-  // G005 remark observations are per-function KPI, not placement truth:
-  // never remap them into the outlined copy.
-  Copy->SMSLoopRecords.clear();
-  // Durable SMS kernel metadata is MBB-keyed: remap into DestMF, drop
-  // entries whose source block was not cloned.
-  DenseMap<const MachineBasicBlock *, SMSSWPSInfo> Remapped;
-  for (const auto &KV : SMSLoopInfos) {
-    MachineBasicBlock *SrcBB = const_cast<MachineBasicBlock *>(KV.first);
-    auto It = Src2DstMBB.find(SrcBB);
-    if (It == Src2DstMBB.end() || !It->second)
-      continue;
-    Remapped[It->second] = KV.second;
-  }
-  Copy->SMSLoopInfos = std::move(Remapped);
+  // Same law for the inter-block DDG registry: the graphs' MBB/MI keys
+  // belong to the source function.
+  Copy->InterBlockRegistry.reset();
+  // Per-function S1/S2 invocation count must not cross clone/outline.
+  // Inheriting the source count skips or mis-fires first-S2 reopen
+  // (counter == 2) on the dest. AIE clone is identity
+  // (AIEMachineFunctionInfo.cpp:33-37); Haydn overlays per-function
+  // lifecycle state (pipeline.md: S1 records are one-MF lifetime).
+  Copy->PostRASchedInvocations = 0;
   return Copy;
 }
 

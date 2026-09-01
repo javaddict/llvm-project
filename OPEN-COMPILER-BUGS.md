@@ -31,11 +31,16 @@
 >
 > | ID | Pri | Class | Tests / symptom |
 > |----|-----|-------|-----------------|
-> | **CB-160** | P3 | O1/O2 partial store elimination (backend) | naturedsp `fft_stage_inner_DFT4_16x16_ie` all-DR radix-4 stage: at -O1/-O2 the FIRST DR-pair store of the loop never reaches memory — output lane y[0] keeps its sentinel while y[1..7] get exactly the -O0 values (-O0 fully correct). IR is innocent: `-O2 -S -emit-llvm` retains all 8 `store i32` (also under `-fno-dse`, `-fno-dse2`, `-fstack-protector`), so the loss is in ISel/MIR lowering — the emitted loop addresses every lane EXCEPT EA y+0: with r4=y+16 pre-incremented, stores use imm −3..+3 (element-index scale 4) and two `d_sw_l_with_imm` (−1, 0); there is no instruction whose EA equals y+0, i.e. the merged/paired lowering of `haydn_store_i32x2_a(y+2*i, x2add32s(...))` drops the first 8-byte pair when its address needs imm −4. Host-oracle knife (CB-156/157 lesson): the C_REF body computes the expected values in portable C and the -O0 run matches it lane-for-lane, so goldens are sound and this is a real miscompile. Repro (in-tree, self-contained — depends ONLY on `<haydn.h>`, no `-I` flags; FAIL exit 1 at -O1/-O2 / PASS exit 0 at -O0): BundleSim `benchmarks/naturedsp_kernels/tests/fft/repro_2026_08_21_dft4_o2_deadstore.c`, run from the BundleSim repo root exactly as `./build/run_c benchmarks/naturedsp_kernels/tests/fft/repro_2026_08_21_dft4_o2_deadstore.c` (add `-O0` for the passing control; toolchain clang 22.1.8 e1898dc4732d). Workaround shipped: same kernel rewritten with split scalar-lane stores (kernel_v4/fft/fft_ie/fft_stage_inner_DFT4_16x16_ie_v4.c) — bit-exact in-range, survives -O2. Suspect: store-merge / DR-pair formation around negative immediates crossing the pre-increment rotation. |
-> | **CB-158** | P3 | generic-vector compat lowering | `gcc.dg/compat` vector triples `vector-2`, `vector-2a`, `vector-2b` (vendored at <sim>/benchmarks/gcc-test-suite/gcc.dg/compat/, ctest label gcc-compat) guest-ABORT their self-checks at the suite's -O2 (`stop=ABORT` after ~6k bundles). REAL (host-verified): the same triples built with host x86-64 gcc -O2 run clean, so the goldens are sound and the Haydn guest abort is a genuine miscompile — 64-byte generic float vectors (v16sf/v8sf/v4sf) passed and returned by value across TUs under soft-float. Sits next to CB-130 (vector legalize, PARTIAL). Its two suite-mates filed the same day (CB-156/CB-157) were acquitted as wrong test goldens; this one survived the same host-oracle knife. |
+> | **CB-163 CLOSED 2026-08-26 (2nd retest)** | — | **GONE on fresh toolchain `c6200933db5d`** | Exact ledger repro (`./build/run_c -O0/-O2 --bundle-limit 60000000 $BS/tests/fir/fir_gate_blk.c -I …kernel_v4/include`): **guest_exit=0 both levels** (O0 54,209,472 bundles / O2 12,262,784). Objdump of the -O2 object: **1198/1198 `move32_dr_[lh]` take a `dN` source, 0 `rN`-source**. First "repro" was an in-flight `.so` relink (stale `libLLVMHaydnCodeGen` labeled MOVE32 c1=0x2 rows as MOVE32_DR_L c1=0x4); the fresh-build retest shows no defect. Full row + original evidence in git history 2026-08-26. |
+> | **CB-164 CLOSED 2026-08-26** | — | **FIXED: Fixup measured Off1/Off2 from AFTER the SET cycle; MC encodes from the SET parcel BASE** | Root cause: `HaydnFixupHwLoops::computeOffsets` measured StartOff/EndOff starting at `nextBundleBoundary(SetMI)`, but the encoder anchors HWLoopOff1/Off2 at the SET parcel's own base (`HaydnAsmBackend::evaluateFixup` seeds `Value = Abs % Parcel` so MCAssembler's PC-rel subtract lands on `align_down(fixup_loc, 12)`). Every encoded displacement was one parcel (12 B) larger than Fixup's accepted value, leaving a one-parcel blind slot at the uimm6 ceiling: pr51581-1 `f9`/`f11` at -O2 measured 252 B (accepted ≤ 252 cap) and encoded 264 B → `264>>2 = 66 > uimm6 63` → `error: relocation offset out of range` at object emission. Why fir_gate was caught but div-constant not: fir_gate's overflow was by whole parcels (measured value itself > 252 → demoted); the div-constant fat preheader landed measured exactly AT 252 — inside the blind slot. Fix (same commit as this row): `computeOffsets` charges the SET cycle's committed `EncodedBytes` (root via `haydn::hwloop::topLevelForLayout`) onto both offsets; the setup timing floor moves to `MinSetupIssueBytes` (= `MinSetupBytes` + one parcel, same accepted geometry); delta-based consumers (body-min-law, pads) are anchor-invariant. The two offending loops now demote to software loops (`startOff=264 > 252` → product demote-first); all other hwloops keep hardware forms. Law helper `haydn::hwloop::anchoredFromAfterSet` (HaydnHWLoopContracts.h) is the sole after-SET→encoded bridge, consumed by `computeOffsets` and sealed by gtest `HaydnHWLoopContractsTest.OffAnchorIsSetParcelBase` (bridge identity, −1 passthrough, CB-164 boundary 252→264→66>63, one-under=ceiling encodable, `MinSetupBytes→MinSetupIssueBytes` floor) plus compile-time static_asserts. MIR pin: `llvm/test/CodeGen/Haydn/cb164-hwloop-off1-set-parcel-anchor.mir` (21-parcel tail demotes; 20-parcel tail = encoded 252 exactly → hardware form SURVIVES, no over-demote); MC-side anchor boundary already sealed by `MC/Haydn/reloc-range-hwloop-div4-boundaries.s` (`.space 228`→field 60 pass / `.space 252`→264→OOR — the compiler-side instance of the same law). Verification: `clang -O2 -c pr51581-1.c` clean; torture `-O2 --filter 'pr51581'` → **pr51581-1 AND pr51581-2 both PASS** (compile+execute, guest_exit=0); full Haydn lit **1024 discovered: 1009 pass / 0 fail / 14 unsupported / 1 XFAIL** (`ar-unaligned-roundtrip.s`, pre-existing CB-151); all 14 hwloop-Fixup tests pass; HaydnTests gtest binary **595/595**; full BundleSim ctest 683/683. Original filing text in git history 2026-08-26. |
+> | **CB-165 NEW 2026-08-26 (P1)** | HWLOOP runtime miscompile | gcc torture `pr51581-2.c` (`c[i]=b[i]%3` etc., N=4096, mod-by-constant) **ABORTs at -O2 only** (PASS -O0/-O1): `stop=ABORT guest_exit=134 bundles=930135`. Same source shape as CB-164 sibling pr51581-1. **HWLOOP proven causal**: rebuild with `-mllvm -haydn-enable-hwloops=false` at -O2 → links and runs `guest_exit=0`. `clang -O2 -S` shows 5× `set_hwloop_f2`. Repro: `/ssd2/mhyang/BundleSim/scripts/run_gcc_torture_lit.sh -j1 -O2 --filter "^pr51581-2.c$"`; workaround arm: compile `-O2 -mllvm -haydn-enable-hwloops=false`, link vs bsp-stage + llvm-libc + libclang_rt.builtins-haydn.a, BundleSim → exit 0. Likely same family as CB-162 (demote/counter clobber) or hwloop+mod-constant interaction; needs bisection vs W68 commits. |
+> | **CB-160 CLOSED 2026-08-26** | — | **FIXED: `tryFoldMove32DrToSw` double-scaled the ST32 offset** | Root cause: `HaydnPostSelectOptimize::tryFoldMove32DrToSw` (GISel post-select peephole, O1+ only — hence clean -O0) folded `MOVE32_DR_L/H + ST32` into `D_SW_L/H_WITH_IMM` but divided the ST32 offset by 4, assuming a byte offset. ST32 (golden `S_SW_WITH_IMM`) and `D_SW_L/H_WITH_IMM` share ONE word-scaled EA law `EA = rs + (imm6 << 2)` (ISS `ls_ea_with_imm(...,2)` both; NOTION-closed (a) probes confirm), so the already-word-scaled ST32 imm must pass through UNCHANGED. Effect in `fft_stage_inner_DFT4_16x16_ie`: first pair store lowered to `MOVE32_DR_L + ST32 %v, %y16, -4` (EA y+0) and the fold rewrote it to `d_sw_l_with_imm -1` (EA y+12): y[0] never stored, y[12] clobbered each iteration. Fix (same commit as this row): pass-through imm, keep `isInt<6>` gate. MIR pin: `llvm/test/CodeGen/Haydn/cb160-lane-store-fold-word-scaled-imm.mir` (imm out == imm in, ±). Verification: repro PASS -O0/-O1/-O2/-O3 (Y0=000004cc); full Haydn lit 1008 pass / 0 fail / 14 unsupported / 1 XFAIL (`ar-unaligned-roundtrip.s`, pre-existing CB-151) — identical to pre-fix baseline; ALL six fft-family dual-path gates PASS (g1 12, g2 33, g3 27, g4 4, g5 26, g6 float); picojpeg embench BOTH tests PASS (`bundlesim_embench_picojpeg`, `bundlesim_embench_v2_picojpeg`) — the same value-class as the CB-160-family picojpeg note. Original filing text in git history 2026-08-26. |
+> | **NOTION-closed 2026-08-26 (a)** | — | "D_SW_L double-scaled imm" — NOT REPRODUCIBLE on `c6200933db5d` | 8 semantic probes on BundleSim, all match golden `instruction_type_index.json` exactly: d_sw_l imm=1→word 1 (`imm<<2` ✓), d_sdw imm=1→word 2 (`imm<<3` ✓), composed ptr+1&imm=2→word 3 ✓, d_sw_h imm=2 ✓, reg-form unscaled `rs+rs2` ✓, post/pre writeback forms ✓, imm sweep 0..3/−1/−2 ✓. Compiler obj bytes = hand-asm obj bytes (identical `87 43 08 11…`). If this notion came from a real failure it predates the current artifact; reopen only with a self-contained repro. |
+> | **NOTION-closed 2026-08-26 (b)** | — | "picojpeg final-MIR-present-but-not-emitted" — FALSE ALARM (measurement artifact) | Full per-function, per-opcode compare of terminal-verify MIR vs emitted asm across all 11 picojpeg functions: **11/11 exact real-op match**. The apparent diffs were three parser artifacts: (1) MIR member names (`S_LBU_WITH_IMM_E2…`) vs public mnemonics (`ldu8`) — mapped via the generated td.inc table; (2) `nsw/nuw/disjoint` flags sit between `=` and the opcode; (3) late legal expansions `B`→`beqz`, `BR_JT`→`jalr` (member print), `RET`/`JALR_MSP`→`jalr_w`. NOP deltas (+47..+2649/parcel) are slot pad fill by design. Zero dropped instructions. |
+> | **CB-158 CLOSED 2026-08-26** | — | **GONE on `c6200933db5d`** | `ctest -L gcc-compat`: **51/51 PASS incl. `vector-2` (3.40s), `vector-2a` (2.93s), `vector-2b` (3.05s)** — the exact triples that guest-ABORTed at filing. 64-byte generic float vector compat lowering now correct at the suite -O2. Full row (host-oracle acquittal, v16sf/v8sf/v4sf detail) in git history 2026-08-26. |
 > | **CB-126 residual** | P3 | GISel legalize | any remaining non-pow2 / width MMO edge cases outside torture green set |
 > | **CB-153** | P2→(a fixed) | wave scheduler performance | Residual half only: schedule-time HR never packs (open-cycle members + per-cycle advance leave pairing to leaveMBB) — the last ~9 multi-issue bundles and +0.76% CoreMark vs haydn-on-mhyang. Owner: post-RA scheduler cycle formation / HR admission (CB-147 exact re-solve density analog). Full history (a FIXED auction blowup; (b) density single-shot bridge + reversed re-bind recovery: core_matrix multi-issue 107→214 vs 223 baseline, CoreMark +8.8%→+0.76%) in git/file history 2026-08-15. |
-> | **CB-154** | P2 | unmodeled destination reads | 87 non-LS instructions whose golden Write_Port alias also appears in the same bank's Read_Port (Behavior reads the destination: accumulate / conditional move / partial-word insert) but whose LLVM logical models NO tied input — MULSS32/MULSA32, the SMULA16/SMULS16 and FMULS16/FMULAA16/FMULSS16 grids, F2MULAS32/F2MULSA32, MOVT64/MOVF64, MOVEI_H/MOVEI_L, X4FF2MULA16S... (full list prints from the generator's fail-closed pin, `len(divergent_non_ls) != 87`). SHARPENED 2026-08-15: the INTRINSICS themselves are two-argument (`int_haydn_mulss32_hhll DR64:$a, DR64:$b` -> selectBinary) while golden accumulates (`rtd = rtd - hh - ll`), so the accumulator input is unmodeled at every level and the value accumulated at runtime is whatever stale content RA left in the destination register. e2e tests pass by allocation luck. The fix starts at the intrinsic/builtin signatures (3-arg accumulate forms) and flows down through the public header — owner's API surface. |
+> | **CB-154 UPDATED 2026-08-26** | P2 (scope shrunk) | unmodeled destination reads — residual 4 families | Generator pin now expects **`len(divergent_non_ls) == 4`** (generate_format_e_records.py:4627): the 2026-08-19 S2b waves migrated MULSS32/MULSA32, SMULA16/SMULS16, FMULS16/FMULAA16/FMULSS16, F2MULAS32/F2MULSA32, X4CLAMP16 etc. to generated tied defs (87 → 46 → 4). Remaining 4 = partial-write/conditional-move families (MOVEI_H/L, MOVF64/MOVT64, X2MOVF/T32, X4MOVF/T16) where golden reads old rtd to preserve the unwritten half; fix requires explicit old-destination operand through builtin→IR→GISel→member chain. Tracked under GOALS partial-write taxonomy. |
 > | **CB-151** | P2 (sharpened 2026-08-15) | AR-ua encode | The D-side unaligned-window post ops encode through the bag-by-class member binding; golden's whole UA family carries NO rs2 and NO dir_sel (`D_LTWUA_POST rtd, ar_sel, rs`) — the five-operand LLVM logical shape is a fabrication against golden, and the wire member (3 fields) is the CORRECT shape. The public builtins (int64_t(void const*, int, int, int) in haydn_dsp.h) mirror the fat form, so the real fix reshapes the AE-compat LOWERING to expand the 4-arg public semantic onto golden-shaped ops — owner's API-intent territory (same layer as CB-150), not a generator patch. `ar-unaligned-roundtrip.s` XFAIL w/ OWNER note is the tracking signal (overlaps GE96-09 classification). |
 > | **CB-150** | P3 | AE tier machinery | Tip mid-stream state, pre-existing at 1c740f0d5708: `ae-tier-audit.test` inventory counts drift (macros=600 surface=673 td_tiers=661), `ae-compat-tier-closure.c`, and `ae-compat-selp24-f24-satshift.c` expecting `llvm.smax`-shaped compat IR the current headers no longer produce. Needs the tier inventory regeneration workflow (owner's machine) — not guessed at in the merge. |
 >
@@ -1556,3 +1561,101 @@ spill path. Lit: `llvm/test/CodeGen/Haydn/vastart-large-fp.ll`.
 **Valid gates going forward:** greenfield `run_c` cases with defined C,
 `yarpgen -m 32` only when used as compile smoke, not as host-mod-256 oracle
 without sanitizing UB.
+
+## CB-163 — OPEN: MOVE32_DR_L/H emitted with GPR (rN) source; sim catalog aborts
+
+**Minted 2026-08-26.** Toolchain: clang 22.1.8 `1d9f3c7f3175` (w68-new).
+BundleSim catalog `529c0dcfa10364243a82941aa210743e2b646f4b21c3fe901c4c956c954ed432`;
+ISA semantic baseline `e74b2911ac7c7d171cb488bf6277901ed48cf1c3cf044b42f651d681685a5ff5`.
+
+**Was:** naturedsp FIR family gate `fir_gate_blk` fails at **every** opt level
+(O0/O1/O2/O3), product AND C_REF-oracle arms. compile+link succeed; BundleSim
+aborts on the first `move32_dr_*`:
+`ILLEGAL_INSTRUCTION  "operand kind disagrees with the golden catalog"`
+(O0: `pc=0x100f0 line=34`; O1+: `pc=0x10438 line=100`).
+Not the HWLOOP far-form issue (CB-164; that is gone on `1d9f3c7f`).
+
+**Root cause:** `move32_dr_l/h` is a DR→GPR move (ISA `MOVE32_DR_L rt, rsd`,
+`rsd` = DR pair). The frozen golden catalog pins `MOVE32_DR_L/H` operand[1] =
+`BS_OPERAND_DR`. The compiler emits **943 of 2049** `move32_dr_*` with a **plain
+GPR source (`rN`)** instead of a **DR pair (`dN`)** (1106 are correct `dN`).
+The frontend `bundlesim/src/frontend/haydn_dump_parser.c` parses `rN`→GPR and
+`dN`→DR (lines 50-53), so every GPR-source `move32_dr_*` fails the catalog's
+operand-kind check → run aborts at instruction #1.
+
+**Why the compiler is at fault (not catalog / not kernel / not LP64):**
+- The raw encoding is unchanged; bytes decode identically; only the emitted
+  operand **token** is wrong (`rN` vs `dN`).
+- The compiler **already has** the correct GPR→GPR op **`MOVE32`** (`{GPR,GPR}`,
+  emitted 735× in the same ELF). A split 64-bit value should be consumed via
+  `MOVE32` (or via a `dN`-source `move32_dr_*`), not via `move32_dr_l rN`.
+- Each `dN` form passes the catalog (1106/2049), so the catalog row is correct.
+- Repro is independent of my 10 uncommitted a-variant firblk fast-paths
+  (fails on committed source) and of the kernels (fails on the C_REF arm which
+  uses no intrinsics).
+
+**Reproduce** (BundleSim repo root; wrapper scripts `run_fir_gate.sh` /
+`run_fft_gates.sh` mangle groups and masked this — drive `run_c` directly):
+
+```bash
+cd /ssd2/mhyang/BundleSim
+export BUNDLESIM_HAYDN_TOOLCHAIN_BIN=/ssd2/mhyang/haydn-build/bin
+BS=benchmarks/naturedsp_kernels
+INC="-I $BS -I $BS/kernel_v4/include"
+./build/run_c -O0 --bundle-limit 60000000 $BS/tests/fir/fir_gate_blk.c $INC --cflag -Wno-macro-redefined
+#   -> ILLEGAL_INSTRUCTION "operand kind disagrees with the golden catalog"
+#      stop_reason=ILLEGAL_INSTRUCTION  pc=0x000100f0  line=34  elf_sha256=f1659574...
+# same at -O1/-O2/-O3 (pc=0x10438 line=100), and with -D HAYDN_KERNEL_C_REF=1 (oracle).
+```
+
+**Evidence** (object built from the gate at -O0):
+
+```text
+100f0: 07 44 80 01 ...   { nop; move32_dr_l  r8, r1 }   <-- WRONG: source r1 is a GPR
+100fc: 07 44 70 02 ...   { nop; move32_dr_l  r7, r2 }   <-- WRONG
+10108: 07 44 50 03 ...   { nop; move32_dr_l  r5, r3 }   <-- WRONG
+102dc: cf 6b a9 1b ...   { move32_dr_h r3, d4; move32_dr_l r2, d4; ... }  <-- correct dN forms
+2049 total move32_dr_* in ELF:  1106 dN (DR, correct), 943 rN (GPR, malformed)
+MOVE32 (GPR,GPR) in same ELF: 735 (the op that should have been used for GPR→GPR)
+```
+
+**Clean minimal repros (object-only) confirm `dN` is valid and common:**
+`c_call64.c` / `d_sel64.c` (64-bit call/select) emit `move32_dr_l rN, d0` —
+no GPR-source form — i.e. the malformed `rN`-source form needs the full
+inlined-fast-path shape; the gate `fir_gate_blk.c` is the reliable reproducer.
+
+**Fix direction (owner):** in the 64-bit lowering / `MOVE32` vs
+`MOVE32_DR_L/H` selection + RA slicing: only select `MOVE32_DR_L/H` when the
+source is a live DR pair (`dN`); otherwise lower to `MOVE32` (GPR→GPR). A
+minimal gate run after the fix should pass `fir_gate_blk` bit-exact at all
+opt levels (expect the `MOVE32` count to absorb the 943).
+
+## CB-164 — closed/regression-guard (filed 2026-08-25; GONE on current HEAD)
+
+**Was** (toolchain clang 22.1.8 `d9cba20c772c` W68.3): `fir_gate_blk` at
+-O1/-O2 failed to **compile** with
+
+```text
+error: relocation offset out of range   (x2)
+```
+
+`clang -S` emits fine; `clang -c` (assembler) rejects. Both sites are
+`set_hwloop_f2` (hardware-loop **far form**) whose loop-back distance exceeds
+the immediate field:
+
+```text
+firblk.s:28982: set_hwloop_f2 0, .LLhwloop_start284, .LLhwloop_end284, r6; ...
+firblk.s:31428: set_hwloop_f2 0, .LLhwloop_start315, .LLhwloop_end315, r1; ...
+```
+
+opt-gated: -O0 compiles+passes, -O1/-O2 fail; both sites inside inlined `main`
+(19 blk kernels #included; -O2 inlines them → an inlined loop body far enough
+back to overflow). **Workaround:** `-mllvm -haydn-enable-hwloops=false` → blk
+compiles AND passes bit-exact (19 kernels / 75 run-checks, GUEST_EXIT 0).
+
+**Status:** retested 08-26 on `1d9f3c7f3175` — **GONE**. The HWLOOP pass now
+demotes to a software loop instead of emitting an unencodable far form.
+Keep as a regression guard: far-form selection must never emit when the offset
+can't fit. Distinct from CB-162 (software-*demoter* live-out trip-reg clobber);
+this was far-form *emission* range.
+

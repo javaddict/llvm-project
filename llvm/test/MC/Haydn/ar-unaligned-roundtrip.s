@@ -36,6 +36,12 @@
 # XFAIL: *
 # Residual: FileCheck / idle-pad / reloc geometry still open under Format E cutover.
 # XFAIL-OWNER: GE96-09 ar_sel 2/3 class residual | product-legal ar_sel 0/1 only; no golden invent
+#
+# CB-151 reshape (2026-08-26): input operand text is the golden member wire
+# shape — loads/stores `mnemonic ar_sel, rtd, rs` (tied rs writeback;
+# stride/dir NOT encoded: golden rs = rs+8 with direction in rs[2:1]);
+# wbarwua `ar_sel, rs`. CHECK/ENC bodies still pin the old fat operand
+# lists and stay XFAIL until the Format E cutover pins land.
 
 # Role: object — AR unaligned MC encode/disasm for product-legal ar_sel 0/1 only.
 
@@ -66,25 +72,25 @@ f_flar:
 
 f_wbarwua:
 // ENC: f_wbarwua:
-  { wbarwua 1, r3, 1 }
+  { wbarwua 1, r3 }
 // ENC: { 		wbarwua	1, r3, 1; 	nop }   // encoding: [0xc7,0x09,0x00,0x00,0x00,0xb0,0x06,0x00,0x00,0x00,0x00,0x00]
 
 f_d_lqhwua_post:
 // ENC: f_d_lqhwua_post:
-  { d_lqhwua_post d7, 1, r4, r5, 1 }
+  { d_lqhwua_post 1, d7, r4 }
 
 f_d_ltwua_post:
 // ENC: f_d_ltwua_post:
-  { d_ltwua_post d3, 0, r6, r7, 0 }
+  { d_ltwua_post 0, d3, r6 }
 // ENC: { 		d_ltwua_post	d3, 0, r6, r7, 0; 	nop } // encoding: [0x07,0xd8,0x31,0x00,0x00,0x90,0x06,0x00,0x00,0x00,0x00,0x00]
 
 f_d_sqhwua_post:
 // ENC: f_d_sqhwua_post:
-  { d_sqhwua_post d1, 1, r8, r9, 1 }
+  { d_sqhwua_post 1, d1, r8 }
 
 f_d_stwua_post:
 // ENC: f_d_stwua_post:
-  { d_stwua_post d2, 0, r10, r11, 0 }
+  { d_stwua_post 0, d2, r10 }
 // ENC: { 		d_stwua_post	d2, 0, r10, r11, 0; 	nop } // encoding: [0x07,0xe8,0x22,0x00,0x00,0xd0,0x06,0x00,0x00,0x00,0x00,0x00]
 
 #===----------------------------------------------------------------------===#
@@ -95,17 +101,17 @@ f_corners:
 // ENC: f_corners:
   { pldwwua 0, r1 }
 // ENC: { 		pldwwua	0, r1; 	nop }           // encoding: [0x47,0x00,0x00,0x00,0x00,0x70,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_lqhwua_post d0, 0, r1, r2, 0 }
+  { d_lqhwua_post 0, d0, r1 }
 // ENC: { 		d_lqhwua_post	d0, 0, r1, r2, 0; 	nop } // encoding: [0x07,0x84,0x00,0x00,0x00,0x80,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_ltwua_post d0, 0, r1, r2, 0 }
+  { d_ltwua_post 0, d0, r1 }
 // ENC: { 		d_ltwua_post	d0, 0, r1, r2, 0; 	nop } // encoding: [0x07,0x84,0x00,0x00,0x00,0x90,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_sqhwua_post d0, 0, r1, r2, 0 }
+  { d_sqhwua_post 0, d0, r1 }
 // ENC: { 		d_sqhwua_post	d0, 0, r1, r2, 0; 	nop } // encoding: [0x07,0x84,0x00,0x00,0x00,0xc0,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_stwua_post d0, 0, r1, r2, 0 }
+  { d_stwua_post 0, d0, r1 }
 // ENC: { 		d_stwua_post	d0, 0, r1, r2, 0; 	nop } // encoding: [0x07,0x84,0x00,0x00,0x00,0xd0,0x06,0x00,0x00,0x00,0x00,0x00]
   { flar 0 }
 // ENC: { 		flar	0; 	nop }           // encoding: [0x07,0x00,0x00,0x00,0x00,0xa0,0x06,0x00,0x00,0x00,0x00,0x00]
-  { wbarwua 0, r1, 0 }
+  { wbarwua 0, r1 }
 // ENC: { 		wbarwua	0, r1, 0; 	nop }   // encoding: [0x87,0x00,0x00,0x00,0x00,0xb0,0x06,0x00,0x00,0x00,0x00,0x00]
 
 #===----------------------------------------------------------------------===#
@@ -116,9 +122,9 @@ f_load_stream:
 // ENC: f_load_stream:
   { pldwwua 0, r1 }
 // ENC: { 		pldwwua	0, r1; 	nop }           // encoding: [0x47,0x00,0x00,0x00,0x00,0x70,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_lqhwua_post d0, 0, r2, r3, 0 }
+  { d_lqhwua_post 0, d0, r2 }
 // ENC: { 		d_lqhwua_post	d0, 0, r2, r3, 0; 	nop } // encoding: [0x07,0xc8,0x00,0x00,0x00,0x80,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_ltwua_post d1, 0, r2, r3, 0 }
+  { d_ltwua_post 0, d1, r2 }
 // ENC: { 		d_ltwua_post	d1, 0, r2, r3, 0; 	nop } // encoding: [0x07,0xc8,0x10,0x00,0x00,0x90,0x06,0x00,0x00,0x00,0x00,0x00]
   { flar 0 }
 // ENC: { 		flar	0; 	nop }           // encoding: [0x07,0x00,0x00,0x00,0x00,0xa0,0x06,0x00,0x00,0x00,0x00,0x00]
@@ -127,11 +133,11 @@ f_store_stream:
 // ENC: f_store_stream:
   { pldwwua 0, r1 }
 // ENC: { 		pldwwua	0, r1; 	nop }           // encoding: [0x47,0x00,0x00,0x00,0x00,0x70,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_sqhwua_post d0, 0, r2, r3, 0 }
+  { d_sqhwua_post 0, d0, r2 }
 // ENC: { 		d_sqhwua_post	d0, 0, r2, r3, 0; 	nop } // encoding: [0x07,0xc8,0x00,0x00,0x00,0xc0,0x06,0x00,0x00,0x00,0x00,0x00]
-  { d_stwua_post d1, 0, r2, r3, 0 }
+  { d_stwua_post 0, d1, r2 }
 // ENC: { 		d_stwua_post	d1, 0, r2, r3, 0; 	nop } // encoding: [0x07,0xc8,0x10,0x00,0x00,0xd0,0x06,0x00,0x00,0x00,0x00,0x00]
-  { wbarwua 0, r2, 0 }
+  { wbarwua 0, r2 }
 // ENC: { 		wbarwua	0, r2, 0; 	nop }   // encoding: [0x07,0x01,0x00,0x00,0x00,0xb0,0x06,0x00,0x00,0x00,0x00,0x00]
 
 #===----------------------------------------------------------------------===#
@@ -155,6 +161,6 @@ f_dual_pldw_add:
 #
 #   # { pldwwua 3, r12 }              — residual
 #   # { flar 2 }                      — residual
-#   # { d_lqhwua_post d7, 2, r4, r5, 1 } — residual
-#   # { d_sqhwua_post d1, 3, r8, r9, 1 } — residual
+#   # { d_lqhwua_post 2, d7, r4 } — residual
+#   # { d_lqhwua_post 3, d1, r8 } — residual
 #

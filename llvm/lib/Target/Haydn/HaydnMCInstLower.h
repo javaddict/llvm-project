@@ -28,6 +28,8 @@ public:
   HaydnMCInstLower(MCContext &ctx, AsmPrinter &printer)
       : Ctx(ctx), Printer(printer) {}
 
+  /// Desc-as-is lower plus HWLoop MBB→inclusive-label rewrite.
+  /// Leftover CSR FieldSlot names are a refuse wall, not a repair.
   void Lower(const MachineInstr *MI, MCInst &OutMI) const;
 
   MCOperand LowerOperand(const MachineOperand &MO) const;

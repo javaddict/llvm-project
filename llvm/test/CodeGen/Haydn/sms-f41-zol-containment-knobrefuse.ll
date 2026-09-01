@@ -1,10 +1,10 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -global-isel-abort=1 \
 ; RUN:     -O2 -verify-machineinstrs -debug-only=pipeliner \
-; RUN:     -haydn-enable-hwloops=false -haydn-enable-multistage-sms=false \
+; RUN:     -haydn-enable-hwloops=false \
 ; RUN:     < %s -o %t.policy.s 2>&1 | FileCheck %s --check-prefix=POLICY
 ; RUN: FileCheck %s --check-prefix=POLICY-ASM < %t.policy.s
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -mattr=+hwloop -haydn-enable-hwloops \
-; RUN:     -haydn-enable-multistage-sms=false \
+; RUN:     \
 ; RUN:     -global-isel-abort=1 -O2 -verify-machineinstrs \
 ; RUN:     -haydn-sms-containment-max=3 -debug-only=pipeliner \
 ; RUN:     < %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=ZOL

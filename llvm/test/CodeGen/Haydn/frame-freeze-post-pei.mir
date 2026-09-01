@@ -10,7 +10,7 @@
 # Growth detection itself is unit-sealed in HaydnFrameFreezeTest.
 #
 # CHECK: frame_freeze_identity
-# CHECK: RET
+# CHECK: {{RET|JALR}}
 
 ---
 name:            frame_freeze_identity

@@ -58,7 +58,7 @@ body:             |
     ; CHECK: BUNDLE
     ; CHECK: BEQZ_E2_E0_ALU0_I12
     ; CHECK: BUNDLE
-    ; CHECK: B %bb.1
+    ; CHECK: BEQZ_W_MSP $r0, %bb.1
     $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
     NOP
     BEQZ $r2, %bb.1, implicit-def dead $sfr
@@ -67,7 +67,7 @@ body:             |
   bb.1:
     liveins: $r15
     ; CHECK: BUNDLE 0
-    ; CHECK: RET
+    ; CHECK: JALR
     RET implicit killed $r15
 
 ...

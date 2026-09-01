@@ -875,7 +875,7 @@ bool productResMIIFailsQualification(ArrayRef<unsigned> Opcodes);
 // oracle; same-cycle row/entry coverage is asked exclusively through this
 // oracle (one mechanism, many instances — hard constraint #7).
 //
-// Ownership: the SMS host (HaydnMultiStageSMS) owns one oracle per tryII
+// Historical: the deleted post-RA SMS host owned one oracle per tryII
 // attempt and reseeds it wholesale on II retry (init(II) is O(1) per cycle:
 // every cycle is the makeProductCandidateSet() seed). The commit tail
 // (canCoissueProductCycle + commitExactMultiMIProductCycle) keeps full
@@ -962,7 +962,7 @@ private:
 /// G002 II-parity: the ONE realized-parcel counter for a kernel MBB. An
 /// architectural issue parcel is one BUNDLE root, or one bare non-meta real
 /// MI not yet wrapped. Same filters as the AsmPrinter AchievedII stamp —
-/// the multistage qualify seat (HaydnMultiStageSMS::
+/// the historical multistage qualify seat (deleted post-RA host::
 /// countRealizedKernelParcels) and the #<swps> stamp both call this; a
 /// second counter anywhere is a hard-constraint #7 defect.
 unsigned countKernelIssueParcels(const MachineBasicBlock &MBB);
