@@ -37,6 +37,8 @@
 #include "HaydnTargetMachine.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
@@ -4418,6 +4420,150 @@ bool identicalToIdentity(const MachineInstr &MI, const InstrIdentity &Id) {
 }
 
 } // namespace
+
+// D1.52: the exact bake itself must enforce the store/load may-alias law.
+// REGRESSION TEST: commitExactMultiMIProductCycle is exported for
+// direct-bake callers (the SET-removal recommit path in HaydnHWLoopDemote
+// used to call it probeless); its predicate list had every other same-cycle
+// law (RAW, WAW, ports, named laws, hwloop trip) but NOT
+// pack::cycleHasMayAliasStoreLoad, so a direct bake could commit an
+// unproved same-cycle store/load packet. The probe canCoissueProductCycle
+// owned the law; the bake did not. Fix: the bake enforces it too, on the
+// caller's AA. Arms:
+//   * same-base overlapping ST32+LD32 (no AA)  -> bake refuses;
+//   * proven-disjoint same-base pair (no AA)   -> bake commits (TII
+//     areMemAccessesTriviallyDisjoint offset+width path);
+//   * no-MMO pair (no AA)                      -> bake refuses (missing
+//     MMO is conservatively MayAlias);
+//   * overlapping pair + NoAlias-AA overlay    -> bake commits (AA
+//     isNoAlias fact), pinning that forwarded AA keeps proven pairs
+//     coissuing — the fail-closed default never silently co-issues.
+// What breaks if this regresses: EXPECT_FALSE(commit...Overlapping) turns
+// true and the committed root bakes an unproved same-cycle store/load
+// packet (the freeze verifier only sees it with AA of its own).
+TEST_F(HaydnBundleBoundaryTest, CommitExactEnforcesStoreLoadAliasLaw) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  auto *GV = new GlobalVariable(*M, Type::getInt32Ty(*Ctx), /*isConstant=*/false,
+                                GlobalValue::ExternalLinkage, nullptr, "obj");
+  auto *GV2 = new GlobalVariable(*M, Type::getInt32Ty(*Ctx), /*isConstant=*/false,
+                                 GlobalValue::ExternalLinkage, nullptr, "obj2");
+  auto addMMO = [&](MachineInstr *MI, const Value *V, int64_t ByteOff,
+                    bool IsStore) {
+    MachineMemOperand::Flags F =
+        IsStore ? MachineMemOperand::MOStore : MachineMemOperand::MOLoad;
+    MI->addMemOperand(*MF, MF->getMachineMemOperand(
+                               MachinePointerInfo(V, ByteOff), F, 4, Align(4)));
+  };
+
+  // Overlapping same-base store+load (byte 0 vs 0, width 4): unproved.
+  MachineInstr *StOv =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R4)
+          .addImm(0)
+          .getInstr();
+  addMMO(StOv, GV, 0, /*IsStore=*/true);
+  MachineInstr *LdOv =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R3)
+          .addReg(Haydn::R4)
+          .addImm(0)
+          .getInstr();
+  addMMO(LdOv, GV, 0, /*IsStore=*/false);
+  MachineInstr *Overlap[] = {StOv, LdOv};
+  EXPECT_FALSE(commitExactMultiMIProductCycle(Overlap))
+      << "bake must refuse an unproved same-cycle store/load pair";
+
+  // Proven-disjoint same-base pair (byte 0 vs 4, width 4): commits under
+  // null AA via the TII same-base offset+width oracle.
+  MachineInstr *StDj =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R5)
+          .addImm(0)
+          .getInstr();
+  addMMO(StDj, GV2, 0, /*IsStore=*/true);
+  MachineInstr *LdDj =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R6)
+          .addReg(Haydn::R5)
+          .addImm(1)
+          .getInstr();
+  addMMO(LdDj, GV2, 4, /*IsStore=*/false);
+  MachineInstr *Disjoint[] = {StDj, LdDj};
+  EXPECT_TRUE(commitExactMultiMIProductCycle(Disjoint))
+      << "TII-proven disjoint store/load must bake under null AA";
+
+  // Missing MMOs: conservatively MayAlias — the bake refuses (null-AA
+  // fail-closed pinned at the commit seat, not only in the probe).
+  MachineInstr *StNoMMO =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R7)
+          .addImm(0)
+          .getInstr();
+  MachineInstr *LdNoMMO =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R8)
+          .addReg(Haydn::R7)
+          .addImm(4)
+          .getInstr();
+  MachineInstr *NoMMO[] = {StNoMMO, LdNoMMO};
+  EXPECT_FALSE(commitExactMultiMIProductCycle(NoMMO))
+      << "missing MMO must refuse the bake under null AA";
+
+  // AA-forwarding arm: distinct IR objects with VOLATILE (ordered) MMOs.
+  // areMemAccessesTriviallyDisjoint refuses ordered refs, so the object
+  // identity shortcut cannot prove disjointness — the ONLY possible proof
+  // is the AA overlay itself. Null AA => MayAlias => bake refuses;
+  // NoAlias AA => the forwarded fact bakes the pair. This pins that the
+  // bake honors a caller-supplied AA rather than silently failing closed
+  // on every heap-shaped pair.
+  auto addVolatileMMO = [&](MachineInstr *MI, const Value *V, int64_t ByteOff,
+                            bool IsStore) {
+    MachineMemOperand::Flags F =
+        (IsStore ? MachineMemOperand::MOStore : MachineMemOperand::MOLoad) |
+        MachineMemOperand::MOVolatile;
+    MI->addMemOperand(*MF, MF->getMachineMemOperand(
+                               MachinePointerInfo(V, ByteOff), F, 4, Align(4)));
+  };
+  MachineInstr *StAA =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ST32))
+          .addReg(Haydn::R2)
+          .addReg(Haydn::R9)
+          .addImm(0)
+          .getInstr();
+  addVolatileMMO(StAA, GV, 0, /*IsStore=*/true);
+  MachineInstr *LdAA =
+      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::LD32), Haydn::R10)
+          .addReg(Haydn::R9)
+          .addImm(0)
+          .getInstr();
+  addVolatileMMO(LdAA, GV2, 0, /*IsStore=*/false);
+
+  // Minimal AA whose every query answers NoAlias (AAResultBase default is
+  // MayAlias; only the overlay's fact differs). Same shape as
+  // AliasAnalysisTest's TestCustomAAResult.
+  struct AllNoAliasAAResult : AAResultBase {
+    AliasResult alias(const MemoryLocation &LocA, const MemoryLocation &LocB,
+                      AAQueryInfo &AAQI, const Instruction *) {
+      return AliasResult::NoAlias;
+    }
+  };
+  TargetLibraryInfoImpl TLII(M->getTargetTriple());
+  TargetLibraryInfo TLI(TLII);
+  AllNoAliasAAResult NoAliasAA;
+  AAResults AAR(TLI);
+  AAR.addAAResult(NoAliasAA);
+
+  MachineInstr *AaPair[] = {StAA, LdAA};
+  EXPECT_FALSE(commitExactMultiMIProductCycle(AaPair))
+      << "ordered distinct-object pair with no AA fact must refuse";
+  EXPECT_TRUE(commitExactMultiMIProductCycle(AaPair, &AAR))
+      << "proven-NoAlias pair must bake through forwarded AA";
+}
 
 // CB-153b: LD reads R2, ADD redefs R2 is schedule WAR. Preferred field
 // order used to flip it to true RAW; reverse re-bind on the settled row

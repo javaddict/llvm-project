@@ -1,0 +1,74 @@
+# D1.49 ZOL DeadOn=FarDest pin. Header live-through occupies every
+# caller-saved GPR; Exit reads only $r1. The retired all-successor walk
+# refuses (FIR-kernel "no dead-on-edge GPR" crash). Exit-only computed
+# liveness picks $r7 and promotes the trailing B, keeping PseudoLoopEnd.
+#
+# LUI/ADDI after PseudoLoopEnd are not MachineVerifier-legal (non-term
+# after the first terminator) — the same in-block ZOL form HEAD already
+# emits. This pin is the picker, not the verifier shape, so it runs
+# without -verify-machineinstrs.
+#
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize -haydn-branch-relax-safety-buffer=4 %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+
+--- |
+  define dso_local void @zol_exit() {
+  entry:
+    br label %latch
+  latch:
+    br i1 undef, label %latch, label %exit
+  pad:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            zol_exit
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.latch:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    successors: %bb.0, %bb.2
+    ST32 $r1, $r1, 0, implicit-def dead $sfr
+    ST32 $r2, $r2, 0, implicit-def dead $sfr
+    ST32 $r3, $r3, 0, implicit-def dead $sfr
+    ST32 $r4, $r4, 0, implicit-def dead $sfr
+    ST32 $r5, $r5, 0, implicit-def dead $sfr
+    ST32 $r6, $r6, 0, implicit-def dead $sfr
+    ST32 $r7, $r7, 0, implicit-def dead $sfr
+    ST32 $r12, $r12, 0, implicit-def dead $sfr
+    PseudoLoopEnd %bb.0
+    B %bb.2
+
+  bb.1.pad:
+    successors: %bb.2
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+
+  bb.2.exit:
+    liveins: $r1, $r15
+    ST32 $r1, $r1, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+# CHECK-LABEL: name: zol_exit
+# CHECK: PseudoLoopEnd %bb.0
+# CHECK-NOT: B %bb.2
+# CHECK: $r7 = LUI
+# CHECK: JALR_W $r7

@@ -1,0 +1,91 @@
+# RUN: split-file %s %t
+# The COPY-child wall is report_fatal_error(GenCrashDiag=false) -> exit 1,
+# not abort (same policy class as the MC-encode refuse arm in
+# bundle-corruption-matrix.mir): plain `not` still surfaces the diagnostic.
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/coissued-copy-kid.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=COPY-KID
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/coissued-copy-only-kids.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=COPY-ONLY
+# Positive control: the same stamped E2 root without the COPY kid verifies
+# clean, so the reject below is the COPY, not the row/stamp.
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %t/private-ok-control.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=OK-CONTROL
+# REQUIRES: haydn-registered-target
+#
+# D1.39 MIR pin: a COPY can never occupy a Format E entry in a committed
+# cycle — the verify/freeze seat is the owner of that law (three walls:
+# MachineBundle::canAdd -> isSupportedInstruction(COPY)=false;
+# canCoissueProductCycle reject; inverse-record completion here). The
+# pre-existing unit pins covered only the SINGLETON COPY root; this pins the
+# co-issued shapes a future packer/replay path could try to introduce:
+#   COPY-KID  — one real private member + one COPY child under a stamped E2
+#               row (the "book COPY entry/port occupancy" shape the D1.39
+#               row proposed admitting);
+#   COPY-ONLY — a stamped root whose children are COPYs exclusively.
+# The seat must fail closed at membership entry: a COPY is a leftover
+# generic residual pseudo and is not an inverse key. Release-safe
+# report_fatal_error diagnostic (GenCrashDiag=false), not an assert.
+
+# COPY-KID: HaydnVerifyBundles: residual/logical inverse record not completed at membership entry
+# COPY-ONLY: HaydnVerifyBundles: residual/logical inverse record not completed at membership entry
+# OK-CONTROL: ADD32_E2_E0_ALU0_RR
+
+#--- coissued-copy-kid.mir
+--- |
+  define void @coissued_copy_kid() { ret void }
+...
+---
+name:            coissued_copy_kid
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r3, $r15
+    ; One real private member plus a COPY child under a stamped E2 row
+    ; (completion imm 0 = golden-row fill; member census counts the COPY).
+    ; The COPY child must fail closed at inverse membership entry.
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r0, implicit $r1, implicit $r2 {
+      $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
+      $r5 = COPY $r2
+    }
+    RET implicit $r15, implicit $r4, implicit $r5
+...
+
+#--- coissued-copy-only-kids.mir
+--- |
+  define void @coissued_copy_only_kids() { ret void }
+...
+---
+name:            coissued_copy_only_kids
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r2, $r3, $r15
+    ; No child of this stamped root has a Format E identity at all.
+    BUNDLE 0, 0, implicit-def $r4, implicit-def $r5, implicit $r2, implicit $r3 {
+      $r4 = COPY $r2
+      $r5 = COPY $r3
+    }
+    RET implicit $r15, implicit $r4, implicit $r5
+...
+
+#--- private-ok-control.mir
+--- |
+  define void @private_ok_control() { ret void }
+...
+---
+name:            private_ok_control
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1 {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1
+    }
+    RET implicit $r15, implicit $r2
+...

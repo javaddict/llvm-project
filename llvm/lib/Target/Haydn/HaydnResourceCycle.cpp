@@ -9,8 +9,9 @@
 // Translation unit for HaydnResourceCycle. Class methods that are
 // templates or SMS probes stay header-inline; this TU owns the pair with
 // HaydnResourceCycle.h (AIE AIEHazardRecognizer.cpp:181-222 AIEResourceCycle
-// peer). SIN_COS occupancy is booked on reserveResources(MI) via
-// haydnSinCosWindowOccupancy (HR scoreboard peer).
+// peer). SIN_COS/ARCTAN issue-alone is booked as HasAloneOp; the
+// multi-cycle window occupancy itself lives on the post-RA HR scoreboard
+// (HaydnHazardRecognizer::sinCosWindowOccupancy), not this cycle state.
 //
 //===----------------------------------------------------------------------===//
 

@@ -330,6 +330,10 @@ inline constexpr unsigned MinBundleAddressAlignBytes = 2;
 inline constexpr unsigned FormatEEntryNumTwo = 0;
 inline constexpr unsigned FormatEEntryNumThree = 1;
 
+/// Header bit position of entry_num (bit 3, right above the indicator).
+/// Named so Loc-sniff header parses never spell a bare >>3 mask (D1.42).
+inline constexpr unsigned FormatEEntryNumBit = 3;
+
 /// Generated full-slot idle parcel: legal E2 row with architectural NOP in
 /// every entry window (zero entry payload under the Format E inverse). Header
 /// bits come from the registry indicator / entry_num — never an all-zero word.

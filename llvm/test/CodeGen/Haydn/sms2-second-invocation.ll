@@ -39,7 +39,7 @@
 ; WHOLE: HaydnLateConvergence: mb_chain2 bound={{[0-9]+}} (cond={{[0-9]+}} hwloop=0)
 ; WHOLE: HaydnPostRASched: emitted-cycle audit bb.{{[0-9]+}}
 ; WHOLE: HaydnPostRASched: emitted-cycle audit bb.{{[0-9]+}}
-; WHOLE: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; WHOLE: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; WHOLE-NOT: changed-BB
 ; WHOLE-NOT: exhausted
 

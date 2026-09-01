@@ -209,11 +209,14 @@ body:             |
 #
 # Demote mutator: setup erased, soft latch installed, successor list
 # updated (not left as a single fallthrough), body store MMO kept,
-# killed return live-in kept.
+# killed return live-in kept. GR2.6 restamp: the single S2 now packs the
+# body before Fixup runs, so the store precedes the SUBI32 countdown
+# (S2 repack ordering — semantically identical single-trip countdown;
+# the old no-S2-first output had SUBI32 before the store).
 # CHECK-LABEL: name: preserve_demote_cfg
 # CHECK-NOT: SET_HWLOOP
 # CHECK: successors: %bb.2({{0x[0-9a-f]+}}), %bb.3({{0x[0-9a-f]+}})
-# CHECK: SUBI32
 # CHECK: :: (store (s32) into %ir.out)
+# CHECK: SUBI32
 # CHECK: BNEZ{{[^ ]*}}
 # CHECK: RET implicit{{.*}}$r15

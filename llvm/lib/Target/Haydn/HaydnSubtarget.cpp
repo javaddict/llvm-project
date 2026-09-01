@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnSubtarget.h"
+#include "Haydn.h"
 #include "GISel/HaydnCallLowering.h"
 #include "GISel/HaydnLegalizerInfo.h"
 #include "llvm/Support/CommandLine.h"
@@ -99,10 +100,6 @@ HaydnSubtarget::HaydnSubtarget(const Triple &TT, StringRef CPU, StringRef TuneCP
 
 HaydnSubtarget::~HaydnSubtarget() = default;
 
-// declared in HaydnInstrInfo.cpp at global scope (uses 'using namespace
-// llvm' but the variable itself is global, not in llvm::).
-extern llvm::cl::opt<bool> EnableZOLPipelining;
-
 void HaydnSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
                                          const SchedRegion &Region) const {
   // AIE/RISCV: pressure tracking is critical even for small loops (spills are
@@ -130,7 +127,7 @@ bool HaydnSubtarget::enableWindowScheduler() const {
   // that keeps the generic WindowScheduler off Haydn's ZOL loops on the
   // product arm. MachinePipeliner::canPipelineLoop PASSES ZOL loops to WS —
   // analyzeLoopForPipelining returns the HaydnPipelinerLoopInfo whenever
-  // EnableZOLPipelining is on — so after SMS declines
+  // -haydn-zol-pipelining is on — so after SMS declines
   // (MachinePipeliner.cpp useWindowScheduler: WS_On && !Changed, and always
   // under -window-sched=force) the WindowScheduler WOULD run on them. It
   // must not:
@@ -146,7 +143,9 @@ bool HaydnSubtarget::enableWindowScheduler() const {
   // Unblocking WS for Haydn is an HC#0 item (smallest common delta recorded
   // in contracts/pipeline.md): meta-terminator TripleMBB handling plus a ZOL
   // expand law, and a target-owned ignore-set law for the soft arm.
-  if (EnableZOLPipelining)
+  // (-haydn-zol-pipelining consumed via the one accessor; SMS ZOL admission
+  // reads the same bit in shouldUseSchedule.)
+  if (haydnZOLPipeliningEnabled())
     return false;
   return true;
 }

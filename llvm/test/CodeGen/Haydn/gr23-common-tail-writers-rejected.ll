@@ -22,6 +22,13 @@
 ; RUN:     < %s > /dev/null
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -basic-block-sections=none \
 ; RUN:     < %s > /dev/null
+; D1.46: the rejection seat reads the STORED cl::opt value directly (no
+; printOptionValue/stdout capture — that fd-swap was process-wide under
+; in-process parallel codegen and not portable). This combined-disable pin
+; locks the typed-read semantics: explicit enum disable + explicit bool
+; zero together classify as no-request.
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -enable-machine-outliner=never \
+; RUN:     -enable-split-machine-functions=0 < %s > /dev/null
 
 ; Default path is unchanged: plain -O2 compiles clean with ordinary asm.
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s --check-prefix=DEF

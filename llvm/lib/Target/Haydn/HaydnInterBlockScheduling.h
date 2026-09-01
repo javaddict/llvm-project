@@ -108,10 +108,25 @@ public:
   MachineBasicBlock *getPred() const { return Pred; }
   MachineBasicBlock *getSucc() const { return Succ; }
 
-  /// Target-owned conservative cross-boundary edge construction (no HC#0):
-  /// register RAW/WAR/WAW + memory store->load/store edges, pre->post only,
-  /// over-approximating so the effective-latency cut can only under-cut,
-  /// never invent. Replaces stock buildSchedGraph for this DDG.
+  /// Target-owned conservative cross-boundary edge construction (no HC#0).
+  /// Replaces stock buildSchedGraph for this DDG. Edge classes, pre->post:
+  ///   (1) exact-register RAW/WAR/WAW plus a regmask-clobber arm (a pre
+  ///       regmask clobbering a post operand's register is a def of it);
+  ///       exact-register equality is regunit-exact because Haydn's register
+  ///       file is flat (no SubRegs/SubRegIndices);
+  ///   (2) memory edges through mayAlias, with calls admitted as both
+  ///       reader and writer on either side (mayAlias returns true for
+  ///       isCall);
+  ///   (3) latency-0 Order edges for unmodeled-side-effect / call pairs
+  ///       (MOVESFR2GPR/MOVEGPR2SFR, FLAR, generated JAL_E*/SFR members)
+  ///       — cut-inert, they exist for any future dependence-superset
+  ///       consumer.
+  /// Dependence SUPERSET over ADMITTED nodes for those classes; a missing
+  /// edge shrinks Eff in the effective-latency cut and UNDER-pads (the
+  /// reason the classes are mandatory before any W69 flip). Not a blanket
+  /// superset: terminators are not nodes on either side (pre-terminator
+  /// reads vs post writers are WAR-only, latency-0, cut-inert), and
+  /// bundle-internal reads are not cross edges.
   void buildCrossBoundaryEdges(AAResults *AA, const TargetInstrInfo *TII,
                                const TargetRegisterInfo *TRI,
                                const TargetSchedModel *TSM);

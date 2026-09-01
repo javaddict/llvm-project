@@ -153,7 +153,7 @@ public:
 
   // WindowScheduler forfeit (D1.29-verified mechanism; pinned by
   // llvm/test/CodeGen/Haydn/d129-window-scheduler-forfeit.ll and tracked as
-  // its own GOALS row): returning false under EnableZOLPipelining (product
+  // its own GOALS row): returning false under -haydn-zol-pipelining (product
   // default ON) is the sole blocker keeping the generic WindowScheduler off
   // Haydn's ZOL loops — canPipelineLoop passes them, so WS would otherwise
   // run after SMS declines. WS drops the PseudoLoopEnd meta-terminator in

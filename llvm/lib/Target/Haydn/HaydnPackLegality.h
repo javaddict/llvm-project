@@ -61,6 +61,7 @@
 
 #include "HaydnBundlePortBudget.h"
 #include "HaydnPortModel.h"
+#include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -105,6 +106,11 @@ inline constexpr unsigned FormatEE3EntryCapacity = 3;
 
 static_assert(FormatEE2EntryCapacity == 2 && FormatEE3EntryCapacity == 3,
               "generated Format E entry capacity is E2=2 / E3=3");
+// ISSUE_SLOT_COUNT (MCTargetDesc/HaydnBaseInfo.h) is the MC-side spelling
+// of the same generated E3 capacity — one law, two namespaces; this pin
+// keeps them from ever drifting apart.
+static_assert(FormatEE3EntryCapacity == llvm::Haydn::ISSUE_SLOT_COUNT,
+              "ISSUE_SLOT_COUNT must equal the generated E3 entry capacity");
 static_assert(!haydnMemoryObjectWaitCyclesAdmitted(),
               "memory-object wait-cycle reject stays unadmitted");
 static_assert(haydnSchedCompleteModelPin() == 0,

@@ -1,0 +1,89 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -misched-postra-direction=bidirectional %s -o - \
+# RUN:     | FileCheck %s --check-prefixes=S2,INTER
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs \
+# RUN:     -misched-postra-direction=bidirectional %s -o - \
+# RUN:     | FileCheck %s --check-prefixes=S2,OFF
+# REQUIRES: haydn-registered-target
+#
+# D1.39 llc pin: the Bot successor replay walk counts committed PARCELS, not
+# MIs — a bare COPY interleaved between the successor's real parcels is a
+# non-parcel residual (no Format E identity: S1 never wraps it, Finalize
+# cannot bake it, it emits no bytes), so it must neither consume a replay
+# cycle nor book occupancy. Removing the isCopy term from the replay skip
+# list (HaydnPostRASchedStrategy Bot replay walk) would advance the walk's
+# Cycle counter for a parcel that never exists: successor demand would land
+# one cycle LATER (under-constraining the seam) — this pin would then see the
+# NOP run shift or stretch, which is the failure signature this test rejects.
+#
+# Shape: bb.0 writes the SIN_COS dest's bank register late; bb.1 leads with
+# SIN_COS (occupancy uimm4+2 = 4, so Occupancy-1 = 3 predecessor NOPs under
+# interblock replay) and interleaves a bare '$r0 = COPY $r0' between the DSP
+# parcel and the tail call — mirroring the successor-COPY shape already
+# exercised by interblock-bot-replay-sincos-window.mir, but with the COPY
+# placed BEFORE the replayed parcel so any cycle consumption by the COPY
+# itself misaligns the demand window, not just trailing layout.
+#
+# Expectation: identical NOP pattern to the COPY-free successor (INTER arm:
+# three NOPs then the parcel; OFF arm expects no NOPs at all). The COPY must
+# remain a bare non-member
+# after scheduling — the co-issued/wrapped COPY rejection is owned by the
+# verify seat (gr27-d139-coissued-copy-law.mir), not by this layout pin, so
+# no bundle-structure CHECK is asserted here.
+
+# S2-LABEL: name: bot_replay_copy_nonparcel
+# S2:       bb.0:
+# S2:         $d1 = ADD64{{.*}}
+# INTER-NEXT: NOP
+# INTER-NEXT: NOP
+# INTER-NEXT: NOP
+# INTER-NOT:  NOP
+# OFF-NOT:    NOP
+# S2:       bb.1:
+# S2:         $r0 = COPY $r0
+# S2:         $d1 = SIN_COS{{.*}} $r0, 2
+# S2:         $r0 = JALR{{.*}}
+
+--- |
+  define void @bot_replay_copy_nonparcel() { ret void }
+...
+---
+name:            bot_replay_copy_nonparcel
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:           true
+isSSA:            false
+noVRegs:          true
+registers:        []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:       []
+stack:            []
+constants:        []
+machineFunctionInfo: {}
+body:             |
+
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $d0, $r0
+
+    $d2 = ADD64 $d0, $d0
+    $d1 = ADD64 $d2, $d0
+
+  bb.1:
+    liveins: $r0, $r15
+
+    $r0 = COPY $r0
+    $d1 = SIN_COS $r0, 2
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...

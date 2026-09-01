@@ -1,0 +1,294 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops,haydn-longbranch-normalize,branch-relaxation \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=PUSH
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops,haydn-longbranch-normalize,branch-relaxation \
+# RUN:   -haydn-branch-relax-safety-buffer=0 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=KEEP
+# REQUIRES: haydn-registered-target
+#
+# D1.35 composition pin (path B): a legal HWLoop DEMOTE event grows the
+# layout by its admitted vocabulary and pushes a DIFFERENT still-relaxable
+# branch site across the simm12 edge — the exact post-stamp growth class
+# the pre-S1 addPreSched2 estimate cannot see (its layout walk + one
+# BranchRelaxSafetyBufferBytes inflation per direction measured this site
+# SHORT before the demote inserted its parcels). Pinned laws:
+#
+#   PUSH-1 pre-event the entry conditional bb.0 -> bb.2 is SHORT
+#         (1980 B + 48 B buffer <= 2048), so every pre-S1 consumer
+#         accepts it short;
+#   PUSH-2 the Fixup demote (out-of-domain selector Sel=2, the D1.33
+#         trigger idiom; free-counter arm on trip $r2) erases the SET
+#         parcel (-12) and installs SUBI32+BNEZ_W (+24): net +12 B moves
+#         the branch site one parcel earlier AND grows the span, pushing
+#         its displacement to 2004 B, past the 2000 B window edge — a
+#         growth event a DIFFERENT site absorbs;
+#   PUSH-3 the post-event LongBranchNormalize seat promotes that site to
+#         the TERMINAL IN-BLOCK long form (LUI + ADDI32_W + inverted near
+#         cond + JALR_W on the far MBB symbol): legal recovery, MF.size()
+#         unchanged, and the following BranchRelaxation finds no far
+#         short site left. This is the closed rejection/recovery class
+#         documented at the addPreSched2 seat (HaydnTargetMachine.cpp
+#         D1.35 law) and typed by HaydnHWLoopContracts.h
+#         PreS1PostStampGrowthBytes: in-block promotion when a
+#         dead-on-edge scratch exists, named fatal otherwise — never a
+#         silent accept, never a CFG-creating repair.
+#   KEEP  buffer-polarity control: at -haydn-branch-relax-safety-buffer=0
+#         the SAME post-demote displacement (2004 B) stays inside the raw
+#         2048 B window, so the normalizer leaves the short BEQZ_W and
+#         emits no long form — proving the DEFAULT-arm promotion is
+#         exactly the demote-growth push across the default buffer band,
+#         not an unrelated far site.
+#
+# Parcel arithmetic (parcel 12 B; SET/BEQZ/NOP/SUBI32/BNEZ_W one parcel
+# each; window edge 2048 - buffer). The far NOP run sits INSIDE the loop
+# body (bb.1) so no non-terminator follows a terminator (MachineVerifier
+# law), exactly like gr27-d133-single-charge-boundary.mir; the entry
+# conditional closes bb.0:
+#   pre-event  bb.0 = SET 12 + BEQZ_W 12 (site offset 12), bb.1 = 164
+#              NOPs 1968 -> bb.2 start 1992, displacement 1980 (SHORT:
+#              1980 + 48 = 2028 <= 2048);
+#   post-demote bb.0 = BEQZ_W only (site offset 0; SET erased), bb.1 =
+#              164 NOPs + SUBI32 + BNEZ_W = 1992 -> bb.2 start 2004,
+#              displacement 2004 (FAR: 2004 + 48 = 2052 > 2048; KEEP arm:
+#              2004 <= 2048 stays short at buffer 0);
+#   latch backedge (the demote's own LongLatch decision, measured
+#              Header-begin..Latch-end BEFORE the countdown installs):
+#              164 NOPs = 1968 B -> short at both buffer values, so the
+#              SHORT-latch arm runs and the demote's own growth here is
+#              exactly 1 net parcel — a minimal instance of the 13-parcel
+#              MaxHwLoopDemoteGrowthBytes vocabulary the composition
+#              constant charges (gr27-d133-single-charge-boundary.mir
+#              owns the full worst-case re-enumeration pin).
+#
+# Registers: trip $r2 is a livein used only by the SET and dead after the
+# loop (free-counter arm keeps the countdown in $r2); the normalizer
+# scratch is a caller-saved GPR not livein on either bb.0 out-edge and
+# not the cond register ($r1). Shape follows gr27-d133-single-charge-
+# boundary.mir (SET in the preheader, no PseudoLoopEnd, conditional exit
+# from the preheader, explicit B to the loop entry).
+
+--- |
+  define dso_local void @demote_growth_pushes_site() {
+  entry:
+    br i1 undef, label %far, label %loop
+  loop:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            demote_growth_pushes_site
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.2, %bb.1
+    SET_HWLOOP_F2_W 2, %bb.1, %bb.1, $r2, implicit-def dead $sfr
+    BEQZ_W $r1, %bb.2, implicit-def dead $sfr
+
+  bb.1.loop:
+    liveins: $r2
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    B %bb.2
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+# PUSH-LABEL: name: demote_growth_pushes_site
+# PUSH-3: the terminal in-block long form on the FAR block symbol, in the
+# captured-iterator order (LUI defines, ADDI32 reads its def), printed
+# first because the promoted site is the bb.0 entry conditional.
+# PUSH: LUI{{.*}} %bb.2
+# PUSH: ADDI32{{.*}} %bb.2
+# Inverted near conditional to the layout-NEXT block (bb.1), guarding the
+# JALR take of the far edge.
+# PUSH: BNEZ_W $r1, %bb.1
+# PUSH: JALR{{.*}}
+# In-block promotion only: no CFG creation, no fatal.
+# PUSH-NOT: bb.3
+# PUSH-NOT: LLVM ERROR
+# PUSH-2: the demote erased the setup and installed the free-counter
+# countdown (the growth source) in the loop body.
+# PUSH-NOT: SET_HWLOOP
+# PUSH: SUBI32{{.*}} $r2, 1
+# PUSH: BNEZ{{.*}} $r2, %bb.1
+
+# KEEP-LABEL: name: demote_growth_pushes_site
+# The entry conditional stays the SHORT BEQZ_W (2004 B inside the raw
+# window at buffer 0): no long form, no JALR. It prints BEFORE the loop
+# body (block order), so match it first.
+# KEEP-NOT: SET_HWLOOP
+# KEEP: BEQZ_W $r1, %bb.2
+# KEEP: SUBI32{{.*}} $r2, 1
+# KEEP: BNEZ{{.*}} $r2, %bb.1
+# KEEP-NOT: JALR
+# KEEP-NOT: bb.3

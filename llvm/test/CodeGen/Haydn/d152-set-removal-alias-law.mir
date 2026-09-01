@@ -1,0 +1,208 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefixes=CHECK,MAYALIGN
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR — D1.52 SET-removal recommit enforces the store/load may-alias
+# law on the exact commit path.
+#
+# REGRESSION TEST: eraseSetMemberAndRecommitSiblings ->
+# recommitSurvivingCycleMembers used to recommit multi-survivor coissue
+# through the probeless bake commitExactMultiMIProductCycle, whose
+# predicate list had no pack::cycleHasMayAliasStoreLoad. A SET cycle
+# carrying store+load survivors therefore stayed ONE packet after SET
+# erase even when the pair was unproved (the probe would have rejected
+# it; the bake did not). Fix: the recommit routes through the ONE
+# production commit site commitOneProductCycle (probe + bake) and the
+# bake itself enforces the alias law defensively.
+#
+# may_alias_demote: spacer MBB between preheader and header puts StartOff
+# past the hard uimm6 field, forcing the range demote; the SET strip
+# leaves an OVERLAPPING same-base {ST32, LD32} survivor pair. Under the
+# fixed law the pair cannot coissue: each survivor becomes its own
+# exact-committed singleton parcel (never one store+load packet).
+#
+# noalias_demote: same geometry, but the survivors are proven disjoint
+# (same IR object %q, 4-byte gap: byte 0 vs byte 4). The TII same-base
+# offset+width oracle proves non-overlap with NO AA (null-AA fail-closed
+# still accepts PROVEN pairs), so the survivors stay ONE coissued packet
+# after SET erase — the sibling proving this law splits only UNPROVED
+# pairs, never proven ones.
+#
+# What breaks if this regresses: the MAYALIGN BUNDLE arm matches a packet
+# containing both ST32 and LD32 siblings (store+load coissued without an
+# AA fact), or the NOALIAS arm stops coissuing the proven pair.
+
+--- |
+  define dso_local void @may_alias_demote(ptr nocapture %p, i32 %v) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %v, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+  define dso_local void @noalias_demote(ptr nocapture %q, i32 %v) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %v, ptr %q, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            may_alias_demote
+tracksRegLiveness: true
+noVRegs: true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r10, $r11, $r15
+    successors: %bb.1
+
+    ; SET co-issued with an OVERLAPPING same-base store+load pair
+    ; (both byte 0, width 4 — unproved under any AA). Spacer forces the
+    ; range demote; the SET strip must NOT leave the pair coissued.
+    ; No SFR defs on the survivors: the sole cycle SFR writer is SET
+    ; (one-SFR-writer law), so the survivor legality below is decided by
+    ; the ALIAS law alone, not a WAW reject.
+    BUNDLE 1, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r10, implicit $r2, implicit $r1 {
+      ST32 $r2, $r10, 0 :: (store (s32) into %ir.p)
+      $r3 = LD32 $r10, 0 :: (load (s32) from %ir.p)
+      SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r1, implicit-def dead $sfr
+    }
+
+  bb.1.spacer:
+    liveins: $r1
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1
+    successors: %bb.3
+    ST32 $r1, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# SET is gone (range demote) and NO packet carries BOTH survivors: the
+# pair splits into two single-member parcels. Discriminator: after the
+# store's parcel line, the load's parcel opens a NEW bundle root of its
+# own (a coissued packet would print LD32 as a bundle CHILD, i.e. with
+# the store above it inside the same braces and no new `BUNDLE` token
+# between the two member lines).
+# CHECK-LABEL: name: may_alias_demote
+# MAYALIGN-NOT: SET_HWLOOP
+# MAYALIGN: {{ST32|S_SW_WITH_IMM.*}} $r2, $r10, 0
+# MAYALIGN-NOT: $r3 = {{LD32|S_LW_WITH_IMM.*}} $r10, 0
+# MAYALIGN: BUNDLE
+# MAYALIGN: $r3 = {{LD32|S_LW_WITH_IMM.*}} $r10, 0
+# MAYALIGN: bb.1.spacer
+...
+---
+name:            noalias_demote
+tracksRegLiveness: true
+noVRegs: true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r10, $r11, $r15
+    successors: %bb.1
+
+    ; SET co-issued with a PROVEN-DISJOINT store+load pair (same IR object
+    ; %q, byte 0 vs byte 4, width 4 — non-overlapping by offset+width).
+    ; After SET erase the survivors stay one coissued product packet.
+    BUNDLE 1, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r10, implicit $r2, implicit $r1 {
+      ST32 $r2, $r10, 0 :: (store (s32) into %ir.q)
+      $r3 = LD32 $r10, 1 :: (load (s32) from %ir.q + 4)
+      SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r1, implicit-def dead $sfr
+    }
+
+  bb.1.spacer:
+    liveins: $r1
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1
+    successors: %bb.3
+    ST32 $r1, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# SET is gone; the proven pair REMAINS one coissued packet: both members
+# print as children of the SAME root with no new BUNDLE token between the
+# two member lines. (The recommit prints the load child before the store
+# child; the discriminator is the absence of an intervening BUNDLE root,
+# not the child order.)
+# CHECK-LABEL: name: noalias_demote
+# CHECK-NOT: SET_HWLOOP
+# CHECK: BUNDLE
+# CHECK: $r3 = {{LD32|S_LW_WITH_IMM.*}} $r10, 1
+# CHECK-NOT: BUNDLE
+# CHECK: {{ST32|S_SW_WITH_IMM.*}} $r2, $r10, 0
+# CHECK: bb.1.spacer

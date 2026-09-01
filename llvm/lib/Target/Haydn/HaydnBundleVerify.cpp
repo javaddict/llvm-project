@@ -25,6 +25,7 @@
 // exactTryAddProduct / PacketFormats planner / findFormatEMember /
 // opcodesHaveFormatEUnitCover.
 #include "HaydnFormatERecords.h"
+#include "HaydnMspCloneFamily.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -145,7 +146,6 @@ namespace haydn {
 namespace bundle {
 
 static bool encodeableInverseRecord(const format_e::FormatEInverseRec &R);
-static unsigned haydnMspCloneInverseLookupOpcode(unsigned Opc);
 
 /// Opcode → generated FormatEInverse row ids (table indices, not MemberId).
 /// Sole inverse source is HaydnGenFormatEInverse.inc / FormatEInverse.
@@ -248,13 +248,13 @@ static void collectInverseIdsForOpcode(unsigned Opc,
   }
   // `_MSP` encode clones share the catalog logical's inverse span through
   // the same opcode-keyed mapping the stamped-entry walk uses
-  // (haydnMspCloneInverseLookupOpcode; serializer-identical families).
-  // This feeds haydnInverseRecordFromOpcode, inverseUnitMaskForOpcode, and
-  // the unit-cover pre-check — without it a legal solo clone dies as
-  // mask-0 "not unit-injective". Unmapped `_MSP` opcodes fall through to
-  // logicalOpcodeOrSelf / exact-key lookup below and end with empty Ids,
-  // so the walk fails closed on them.
-  if (const unsigned CloneLog = haydnMspCloneInverseLookupOpcode(Opc)) {
+  // (msp::logicalOpcodeForMspClone, HaydnMspCloneFamily.h — ONE table with
+  // the serializer). This feeds haydnInverseRecordFromOpcode,
+  // inverseUnitMaskForOpcode, and the unit-cover pre-check — without it a
+  // legal solo clone dies as mask-0 "not unit-injective". Unmapped `_MSP`
+  // opcodes fall through to logicalOpcodeOrSelf / exact-key lookup below
+  // and end with empty Ids, so the walk fails closed on them.
+  if (const unsigned CloneLog = msp::logicalOpcodeForMspClone(Opc)) {
     if (auto It = Generated.find(CloneLog); It != Generated.end())
       Ids.append(It->second.begin(), It->second.end());
     return;
@@ -435,32 +435,6 @@ static bool haydnIsMspEncodeClone(unsigned Opc) {
   return inverseOpcodeName(Opc).ends_with("_MSP");
 }
 
-/// Sole `_MSP` clone → catalog-logical opcode mapping for the structural
-/// inverse walk. Opcode-keyed (never peelLogicalOpcodeName / forward
-/// solver) and byte-identical to the serializer's own logical families in
-/// haydnMemberOpcodeForMspClone (HaydnMCInstLower.cpp:67) so verify checks
-/// the exact member family MC encode selects. The generated member tables
-/// key Logical as "BEQZ"/"JAL"/"JALR" — the catalog _W names
-/// (BEQZ_W/JAL_W/JALR_W) have no FormatEInverse rows of their own, so the
-/// former in-walk chain that targeted them was dead for three of four
-/// clones. An `_MSP`-named opcode without a mapping here (ADD32_MSP)
-/// returns 0 and the walk fails closed ("no generated member"):
-/// materialize/leaveRegion setDesc baking is the only legal way such
-/// pseudos reach commit.
-static unsigned haydnMspCloneInverseLookupOpcode(unsigned Opc) {
-  switch (Opc) {
-  case Haydn::BEQZ_W_MSP:
-    return Haydn::BEQZ;
-  case Haydn::JALR_MSP:
-  case Haydn::JALR_W_MSP:
-    return Haydn::JALR;
-  case Haydn::JAL_W_MSP:
-    return Haydn::JAL;
-  default:
-    return 0;
-  }
-}
-
 static bool haydnResidualLogicalNeedsCompletedInverse(unsigned Opc) {
   if (Opc == 0 || isPadNopOpcode(Opc))
     return false;
@@ -565,13 +539,14 @@ verifyMemberAtStampedEntry(unsigned Opc, uint8_t ExpectMode,
           "MemberId for private member");
   } else {
     // `_MSP` encode clones complete an inverse record for the CATALOG
-    // LOGICAL the serializer also selects (haydnMemberOpcodeForMspClone
-    // families) at the stamped (mode, membership entry) — MatchEntry stays
-    // true so a clone at an entry with no complete inverse under the
-    // stamped mode fails closed. Unmapped `_MSP` opcodes (ADD32_MSP) have
-    // no catalog logical and fail as "no generated member";
-    // materialize/setDesc baking is the only legal commit path for them.
-    unsigned LookupOpc = haydnMspCloneInverseLookupOpcode(Opc);
+    // LOGICAL the serializer also selects (msp::logicalNameForMspClone in
+    // HaydnMCInstLower, ONE table with this walk) at the stamped (mode,
+    // membership entry) — MatchEntry stays true so a clone at an entry
+    // with no complete inverse under the stamped mode fails closed.
+    // Unmapped `_MSP` opcodes (ADD32_MSP) have no catalog logical and fail
+    // as "no generated member"; materialize/setDesc baking is the only
+    // legal commit path for them.
+    unsigned LookupOpc = msp::logicalOpcodeForMspClone(Opc);
     if (!LookupOpc)
       LookupOpc = Opc;
     Inv = haydnInverseRecordFromOpcode(LookupOpc, ExpectMode, EntryIdx,
@@ -729,7 +704,8 @@ haydnRejectFreezeResidualLogical(ArrayRef<unsigned> MemberOpcodes) {
 ///     name peel. Completion of the inverse record is mandatory on every
 ///     residual root — never structural/forward acceptance. Compiler `_MSP`
 ///     encode clones verify through the catalog logical the serializer also
-///     selects (haydnMspCloneInverseLookupOpcode) at the stamped entry; a
+///     selects (msp::logicalOpcodeForMspClone, HaydnMspCloneFamily.h — ONE
+///     table with MC-lower) at the stamped entry; a
 ///     clone at an entry with no complete inverse under the stamped mode, or
 ///     an `_MSP` opcode with no catalog mapping, fails closed — no member
 ///     class is structurally unverifiable and no clone-only bundle takes the

@@ -315,6 +315,17 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
   // (WAR would sample stale trip under snapshot no-forwarding).
   if (cycleMembersHaveHwloopTripConflict(Instrs, TRI))
     return false;
+  // D1.52 defensive may-alias law: the bake itself must never co-issue an
+  // unproved store/load pair. canCoissueProductCycle owns the probe seat,
+  // but this entry is exported for direct-bake callers (SET-removal
+  // recommit); the law is enforced HERE too so no commit path can bake a
+  // same-cycle store/load packet without either a proven-NoAlias AA fact
+  // or a split. Null AA is fail-closed by construction: the shared
+  // pack::cycleHasMayAliasStoreLoad predicate only accepts proven disjoint
+  // (TII same-base offset+width or AA NoAlias); missing MMO / unproven
+  // heap / null AA all reject. Dual-load is not this law.
+  if (cycleHasUnprovenStoreLoad(Instrs, AA))
+    return false;
 
   // AIE applyBundles: already-setDesc members pack by slot, no rematch.
   if (asIsGeneratedMembersFormLegalCycle(Instrs, TRI, AA)) {

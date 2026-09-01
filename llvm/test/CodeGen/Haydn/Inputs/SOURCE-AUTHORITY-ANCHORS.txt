@@ -72,6 +72,8 @@ Pipeline ownership anchors (current implementation)
 | Callback-local repair residual | T4 ordinary / T3 inverse — not a second format pipeline | contracts/pipeline.md lifecycle gap |
 | GR2.4 postmisched mandatory for optnone (forcePostRAScheduling) | TargetSubtargetInfo.h defaulted virtual + MachineScheduler.cpp guard; HaydnSubtarget override true (legacy-only seam; new-PM never skipped) | gr24-optnone-mandatory-sched.ll POST-*; authority-o0-vs-optnone-commit.ll SKIP-OPTNONE/PACK |
 | skipFunction = optnone / pass gate (residual: LateConvergence S2 driver only) | Pass.cpp FunctionPass::skipFunction; HaydnLateConvergence.cpp | late-convergence-loop.ll DBG-NOT |
+| GR2.6 monotone closure (S2 once per entry; no reschedule-after-mutation) | HaydnLateConvergence.cpp runHaydnLateConvergence; deleted RunS2/inventoryChanged | gr26-closure-no-reschedule.ll DBG; gr26-nested-closure-matrix.ll |
+| GR2.6 enforced no-growth law (event-accounted per-iteration) | HaydnLateConvergence.cpp haydnClosureGrowthAccount + HaydnHWLoopContracts.h MaxHwLoopDemoteGrowthBytes/isStillRelaxableShortBranch | HaydnLateConvergenceBudgetTest; late-convergence-o0.ll NOGROWTH |
 | LatencyStalls never skipFunction | HaydnLatencyStalls.cpp::runOnMachineFunction | latency-stalls.ll |
 | Plain O0 commits Format-E BUNDLE (row+completion) | postmisched + finalize path | authority-o0-vs-optnone-commit.ll PLAIN |
 | optnone also commits Format-E BUNDLE (mandatory scheduler singleton fallback + Finalize residual) | forcePostRAScheduling scheduler commit; Finalize no-skip residual | gr24-optnone-mandatory-sched.ll VERIFY-*; authority-o0-vs-optnone-commit.ll OPT + ASM |
@@ -148,18 +150,18 @@ Hardware-loop / multi-stage product boundaries (G-HWLOOP-POLICY hygiene)
 ------------------------------------------------------------------------
 | Claim | Source anchor | Live pin / state |
 |---|---|---|
-| -haydn-enable-hwloops default OFF | HaydnTargetMachine::hardwareLoopsProductDefaultEnabled() false | post-pipeliner-default-equals-off.ll OFF/HWON; densify-defaults-off.ll PIPE/ATTR/HWONLY; llc-pipeline-haydn.ll HWFLAG |
-| Multi-stage product default OFF | HaydnMultiStageSMS::productDefaultEnabled() false | post-pipeliner-default-equals-off.ll OFF/SMSON; densify-defaults-off.ll SMSONLY; sms-multistage-host-default-off.ll |
+| -haydn-enable-hwloops default ON | HaydnTargetMachine::hardwareLoopsProductDefaultEnabled() true (static_assert pins the 2026-08-22 qualification) | llc-pipeline-haydn.ll HWFLAG; densify-defaults-off.ll PIPE/ATTR |
+| Multi-stage SMS owner | generic pre-RA MachinePipeliner (W68.1); bespoke post-RA host + flags DELETED | sms-multistage-tied-mull-bundle-copy.ll; no HaydnPostRAMultiStage.cpp |
 | TTI acceptance never flips product policy | isHardwareLoopProfitable; pass still gated on flag | phase-firewall-latencystalls-presched2.ll O2-NOT Hardware Loop Insertion |
-| Innermost multi-BB TTI overlay (latch==exit); product still OFF | HaydnTargetTransformInfo.cpp isHardwareLoopProfitable | hwloop-multibb.ll DEFAULT-NOT; HWON may SET |
+| Innermost multi-BB TTI overlay (latch==exit) | HaydnTargetTransformInfo.cpp isHardwareLoopProfitable | hwloop-multibb.ll DEFAULT-NOT; HWON may SET |
 | Retained-state MIR expand + incomplete reject fatal | HaydnHardwareLoops.cpp expandRoleALoopStarts / rejectIncompleteRoleA | hwloop-rolea-preflight-demote.mir expand; hwloop-rolea-preflight-reject.mir fatal |
 | Retained-state EndGrowth stops at PseudoLoopEnd | HaydnFixupHwLoops.cpp sumStillRelaxableGrowth InclusiveTo | hwloop-fixup-second-br-growth.mir keep_soft_exit_after_ple |
 | Incomplete retained seats reject pre-mutation | rejectIncompleteRoleA report_fatal_error (no structural demote lie) | hwloop-rolea-preflight-reject.mir TRIP/CALL/MEXIT |
 | Late physical semantic reconstruction helpers deleted | HaydnHardwareLoops.cpp retained-state expand only; no convertToHardwareLoop | product shape STATUS.md; no MachineLoopInfo dep |
-| P0/P3/P6 gated on EnableHaydnHardwareLoops | HaydnTargetMachine addPreISel / addPreSched2 / addPreEmitPass | llc-pipeline-haydn.ll (flag OFF) |
-| Multi-stage post-RA host present (default OFF) | HaydnPostRAMultiStage + HaydnScheduleDAGMI::schedule; PF-*/JM-* seats | sms-multistage-host-default-off.ll; PostRAMultiStageHostPins |
-| Combined interaction QUALIFY | T3 then T6 independent QUALIFY first; then dual-ON evidence | G-MULTISTAGE-HWLOOP WAITING; combined-* XFAIL |
-| Policy flips | separate patches after combined QUALIFY | G-HWLOOP-POLICY / G-MULTISTAGE-POLICY BLOCKED; no PRODUCT_ON |
+| P0/P3/P6 gated on EnableHaydnHardwareLoops | HaydnTargetMachine addPreISel / addPreSched2 / addPreEmitPass | llc-pipeline-haydn.ll (flag OFF arm) |
+| Post-RA multistage host + PF-*/JM-* seats deleted | W68 deleted HaydnPostRAMultiStage.cpp with its Preflight/Journal tables | FAULT-INJECTION-SEATS.txt W68 tombstone section |
+| Combined interaction QUALIFY | closed by the 2026-08-22 independent + combined qualification | product default ON; no combined-* XFAIL |
+| Policy flips | historical; hwloops + multistage owners both landed | G-HWLOOP-POLICY / G-MULTISTAGE-POLICY closed |
 | HWLR CSR final identity open | golden only | GE96-08 open |
 | ar_sel 2/3 classification open | golden only | GE96-09 open |
 | Branch/call/hwloop reloc equations | golden PC+imm / hwloop <<2 | GE96-03 LANDED (M7); GE96-09 still live XFAIL |

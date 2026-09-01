@@ -646,6 +646,49 @@ TEST(HaydnBundleVerifyTest, ResidualLogicalRequiresCompletedInverseRecord) {
       << *Copy;
 }
 
+// D1.39 co-issued COPY law: a COPY can never occupy a Format E entry in a
+// committed cycle. The singleton reject above is not the whole law — a future
+// packer path could try to co-issue a COPY beside a real member. Every
+// co-issued shape must fail closed here (the verify/freeze seat is the law
+// owner; see the three-wall comment at isBundleSkippable in
+// HaydnPostRASchedStrategy.cpp).
+TEST(HaydnBundleVerifyTest, CoissuedCopyMemberFailClosed) {
+  HaydnMCFormats Fmts;
+
+  // Real member + COPY kid under E2.
+  auto AddCopy = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                       {Haydn::ADD32, TargetOpcode::COPY},
+                                       Fmts);
+  ASSERT_TRUE(AddCopy.has_value());
+  EXPECT_TRUE(AddCopy->find("no generated member") != std::string::npos ||
+              AddCopy->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *AddCopy;
+
+  // COPY + COPY under E2: no member of the cycle has a Format E identity.
+  auto CopyCopy = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
+                                        {TargetOpcode::COPY,
+                                         TargetOpcode::COPY}, Fmts);
+  ASSERT_TRUE(CopyCopy.has_value());
+  EXPECT_TRUE(CopyCopy->find("no generated member") != std::string::npos ||
+              CopyCopy->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *CopyCopy;
+
+  // E3 three-member shape with a trailing COPY kid: still fail closed —
+  // entry capacity and unit injectivity are never reached because the COPY
+  // has no inverse key at membership entry.
+  auto TripleCopy =
+      verifyCommittedBundle(BundleFormatRowID::E96ThreeEntry,
+                            {Haydn::ADD32, Haydn::XOR32, TargetOpcode::COPY},
+                            Fmts);
+  ASSERT_TRUE(TripleCopy.has_value());
+  EXPECT_TRUE(TripleCopy->find("no generated member") != std::string::npos ||
+              TripleCopy->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *TripleCopy;
+}
+
 TEST(HaydnBundleVerifyTest, PublicMnemonicInverseNotPseudoAlias) {
   // Real public mnemonics whose catalog Logical differs (LD32 vs
   // S_LW_WITH_IMM) still complete generated inverse records. MC-pseudo
@@ -717,6 +760,21 @@ TEST(HaydnBundleVerifyTest, ParseTimeResidualLogicalRequiresCompletedInverse) {
               Copy->find("residual/logical inverse record not completed") !=
                   std::string::npos)
       << *Copy;
+
+  // D1.39 co-issued COPY law at the MC-parse seat: a COPY entry beside a
+  // real member must fail closed (verifyParsedBundle walks the same inverse
+  // membership as verifyCommittedBundle).
+  MCInst RealAdd = mcRR(Haydn::ADD32, Haydn::R1, Haydn::R2, Haydn::R3);
+  MCInst CopyEntry;
+  CopyEntry.setOpcode(TargetOpcode::COPY);
+  const MCInst *Mixed[] = {&RealAdd, &CopyEntry};
+  auto MixedErr = verifyParsedBundle(BundleFormatRowID::E96TwoEntry, Mixed,
+                                     Fmts, MII, nullptr);
+  ASSERT_TRUE(MixedErr.has_value());
+  EXPECT_TRUE(MixedErr->find("no generated member") != std::string::npos ||
+              MixedErr->find("residual/logical inverse record not completed") !=
+                  std::string::npos)
+      << *MixedErr;
 
   MCInst Add = mcRR(Haydn::ADD32, Haydn::R1, Haydn::R2, Haydn::R3);
   const MCInst *Ok[] = {&Add, nullptr};

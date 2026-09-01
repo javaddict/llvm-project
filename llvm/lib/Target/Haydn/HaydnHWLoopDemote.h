@@ -31,6 +31,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/Register.h"
@@ -41,6 +42,7 @@
 
 namespace llvm {
 
+class AAResults;
 class HaydnInstrInfo;
 class HaydnSubtarget;
 class LivePhysRegs;
@@ -217,17 +219,27 @@ void finalizeExactLateSingleton(MachineInstr &MI);
 /// surviving coissued siblings so the BUNDLE root is rebuilt (consolidated
 /// defs/uses, kill flags, FormatID). Bare survivors would leave residual
 /// real MIs for the late firewall and stale root operands.
+///
+/// D1.52: multi-survivor coissue routes through the one production commit
+/// site commitOneProductCycle (probe + exact bake), never a probeless bake,
+/// so the store/load may-alias law is enforced on the exact rematch path.
+/// \p AA forwards the owning pass's AAResults so proven-NoAlias survivors
+/// still coissue; null AA is fail-closed (the probe rejects an unproved
+/// store/load pair and this falls back to per-member singletons).
 void recommitSurvivingCycleMembers(ArrayRef<MachineInstr *> Keep,
                                    const HaydnInstrInfo &TII,
-                                   const char *DebugPrefix);
+                                   const char *DebugPrefix,
+                                   AAResults *AA = nullptr);
 
 /// SET/LoopStart-member erase that preserves coissued siblings as an exact
 /// product cycle. Dissolves the old root, erases only the setup member, then
 /// recommits remaining children so consolidated root operands match the
-/// surviving membership.
+/// surviving membership. \p AA is forwarded to recommitSurvivingCycleMembers
+/// (same null-AA fail-closed law).
 void eraseSetMemberAndRecommitSiblings(MachineInstr &SetMI,
                                        const HaydnInstrInfo &TII,
-                                       const char *DebugPrefix);
+                                       const char *DebugPrefix,
+                                       AAResults *AA = nullptr);
 
 /// Build a late singleton with exact-commit member opcode (dest form).
 MachineInstrBuilder buildExactLateDef(MachineBasicBlock &MBB,
@@ -248,6 +260,81 @@ void collectLoopBlocks(const MachineBasicBlock *Header,
                        const MachineBasicBlock *Latch,
                        const MachineBasicBlock *Preheader,
                        LoopBlockSet &Out);
+
+/// D1.34 ONE estimate law (shared authority): conservative layout byte
+/// growth charged when entering an aligned MBB — the joint parcel-grid /
+/// BranchRelaxation-conservative law, unit-pinned:
+///   (a) whole-parcel: Haydn emits whole product parcels, so the charged
+///       start stays a parcel multiple whenever the running offset is;
+///   (b) joint grid: the charged start is >= the first
+///       lcm(MBB alignment, product parcel bytes) grid point — the same
+///       grid HaydnMCELFStreamer::emitCodeAlignment and
+///       HaydnMachineAlignment walk (Bytes=12, align 16 -> 48; the raw
+///       alignTo-gap parcel rounding that returned 24 satisfies neither
+///       the alignment nor the grid);
+///   (c) BR-conservative: the charged start is >= generic
+///       BranchRelaxation's postOffset model, alignTo(Bytes, A) plus the
+///       (A - ParentAlign) uncertainty term when A exceeds the function
+///       alignment (BranchRelaxation.cpp BasicBlockInfo::postOffset), so
+///       no consumer can measure a span as near that the post-stamp BR
+///       re-scan measures far (PO=96, A=32, PA=1: BR model 127 -> 132,
+///       not the 96 the bare lcm grid allows).
+/// Align(1) and negative-Bytes inputs return Bytes unchanged: the entire
+/// alignment-1 corpus (every gr27/D1.33 boundary pin) charges zero pad.
+int64_t padLayoutBytesForMBBAlign(int64_t Bytes,
+                                  const MachineBasicBlock &MBB);
+
+/// D1.34 ONE byte-walk authority: signed per-MBB start offsets in layout
+/// order (BranchRelaxation scanFunction law) — cumulative
+/// TII.getInstSizeInBytes plus the entering-MBB pad from
+/// padLayoutBytesForMBBAlign. The entry block charges no pad (its
+/// alignment is the function alignment, outside the branch-distance
+/// window). \p Starts is assigned MF.getNumBlockIDs() entries; blocks
+/// not seen live in layout order (dead / foreign numbers) keep the -1
+/// sentinel. The pre-S1 normalizer consumes this scan directly (its
+/// private static fork is deleted, not duplicated); the exported
+/// distance/span estimators below are derivations of the same walk.
+void computeLayoutBlockStarts(const MachineFunction &MF,
+                              const TargetInstrInfo &TII,
+                              SmallVectorImpl<int64_t> &Starts);
+
+/// D1.34 ONE byte-walk authority: signed offset of \p It inside \p MBB
+/// (BranchRelaxation getInstrOffset law: sizes of the preceding instrs;
+/// \p It == end() yields the whole-block size). getInstSizeInBytes is
+/// the single skip law — meta/debug/kill/implicit-def/CFI instrs charge
+/// 0 there; no private hand skip-set exists beside it.
+int64_t estimateLayoutInstrOffset(
+    const MachineBasicBlock &MBB, MachineBasicBlock::const_iterator It,
+    const TargetInstrInfo &TII);
+
+/// D1.34 derivation of the one byte walk: signed layout distance in
+/// bytes from \p FromIt (exclusive) in \p FromMBB to the START of \p
+/// ToMBB, charging the entering-MBB pad for every block entered after
+/// FromMBB. Returns -1 when either block is dead or ToMBB precedes
+/// FromMBB in layout order. The Fixup Off1/Off2 windows (via
+/// HaydnFixupHwLoops::estimateMBBDistance) consume exactly this walk.
+int64_t estimateLayoutMBBDistance(const MachineFunction &MF,
+                                  const MachineBasicBlock *FromMBB,
+                                  MachineBasicBlock::const_iterator FromIt,
+                                  const MachineBasicBlock *ToMBB,
+                                  const TargetInstrInfo &TII);
+
+/// D1.34 derivation of the one byte walk: inclusive layout span in bytes
+/// from the START of \p FromMBB through the END of \p ToMBB. This is the
+/// latch-backedge quantity the hwloop-demote LongLatch decision measures
+/// (the short BNEZ_W at the latch end targets the header start).
+///
+/// Sentinel law: returns -1 when either block is dead or ToMBB does not
+/// follow FromMBB in layout order (latch-before-header included). A -1
+/// is a DIRECTION refusal, never a magnitude: the consumer must resolve
+/// the site displacement on the SAME walk in the other direction
+/// (estimateLayoutMBBDistance with the operands swapped) and fail closed
+/// only when NEITHER direction is measurable; the demote never feeds
+/// -(-1) = +1 into the range oracle as a short displacement.
+int64_t estimateLayoutSpanBytes(const MachineFunction &MF,
+                                const MachineBasicBlock *FromMBB,
+                                const MachineBasicBlock *ToMBB,
+                                const TargetInstrInfo &TII);
 
 /// True if any MI in \p Blocks mentions \p Reg (use or def).
 bool regMentionedInBlocks(Register Reg, const LoopBlockSet &Blocks);
@@ -292,8 +379,23 @@ void stripResidualCountdown(const LoopBlockSet &Blocks, Register Reg);
 /// AIELiveRegs.cpp:37-52 without the function-wide worklist class.
 void computeBlockLiveIns(LivePhysRegs &Live, const MachineBasicBlock &MBB);
 
+/// One-block live-ins of \p MBB computed as if its successors were exactly
+/// \p Succs (the post-rewrite obligation set). A self-loop entry in \p Succs
+/// seeds the block's stored liveins (loop-carried); every other successor
+/// contributes its computed live-ins. Extra pre-rewrite successors that are
+/// not in \p Succs do not occupy the set — Header==Latch early-exit edges
+/// that the demote latch rewrite drops must not refuse a legal LongScr.
+void computeBlockLiveInsFromSuccessors(
+    LivePhysRegs &Live, const MachineBasicBlock &MBB,
+    ArrayRef<const MachineBasicBlock *> Succs);
+
 /// True iff the computed live-ins of \p MBB contain \p Reg.
 bool blockLiveInContains(const MachineBasicBlock &MBB, MCPhysReg Reg);
+
+/// True iff \p Reg is a computed live-in of \p MBB under successor set \p Succs.
+bool blockLiveInContainsFromSuccessors(
+    const MachineBasicBlock &MBB, ArrayRef<const MachineBasicBlock *> Succs,
+    MCPhysReg Reg);
 
 /// Pick a free GPR for soft-loop countdown at \p InsertPt in \p Preheader.
 /// Returns invalid Register if none is free (caller must refuse erase-only

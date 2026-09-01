@@ -468,4 +468,180 @@ TEST_F(HaydnInterBlockEdgesTest, RegistrySupersedeKeepsNewestGraph) {
   EXPECT_NE(It->second[0]->getPostBoundaryNode(&Extra), nullptr);
 }
 
+// D1.38 (1b): a pre-boundary regmask with NO implicit-def clobber operands
+// (hand MIR / future CC shape — today's compiled JAL_W materializes its
+// clobbers as implicit-defs) must still edge to a post reader of a clobbered
+// register, and the regmask must contribute NO edge for a CSR_Haydn-preserved
+// register (the exact-match arm still owns Pre's own def->read edge).
+TEST_F(HaydnInterBlockEdgesTest, RegMaskClobberEdges) {
+  const HaydnInstrInfo &II = TII();
+  // Pre: ADD32 on preserved regs, carrying ONLY a regmask (no implicit-defs).
+  const TargetRegisterInfo *TRI = MF->getRegInfo().getTargetRegisterInfo();
+  const uint32_t *Mask = TRI->getCallPreservedMask(
+      *MF, MF->getFunction().getCallingConv());
+  ASSERT_NE(Mask, nullptr);
+  MachineInstr *Pre =
+      BuildMI(*Pred, Pred->end(), DebugLoc(), II.get(Haydn::ADD32), Haydn::R9)
+          .addReg(Haydn::R10)
+          .addReg(Haydn::R11)
+          .addRegMask(Mask)
+          .getInstr();
+  // Post: reader of R5 (clobbered: CSR = R8-R11,R14,R15,D8-D15) and reader
+  // of R9 (preserved, also defined by Pre — the exact-match arm owns that
+  // edge, so the regmask arm must not add a second one).
+  MachineInstr &PostClob = add32(Succ, Haydn::R4, Haydn::R5, Haydn::R3);
+  MachineInstr &PostKeep = add32(Succ, Haydn::R6, Haydn::R9, Haydn::R7);
+
+  HaydnInterBlockEdges DDG(MC, Pred, Succ);
+  DDG.reserveForBlocks(*Pred, *Succ);
+  DDG.addNode(Pre);
+  DDG.markBoundary();
+  DDG.addNode(&PostClob);
+  DDG.addNode(&PostKeep);
+  DDG.buildCrossBoundaryEdges(/*AA=*/nullptr, &II, TRI,
+                              &DDG.getSchedModelRef());
+
+  // Clobbered R5: Data edge (regmask def -> post read), Reg bound to R5.
+  SmallVector<const SDep *, 4> ClobEdges =
+      DDG.getCrossBoundaryEdges(DDG.SUnits[0]);
+  bool SawClobData = false, SawKeepData = false;
+  for (const SDep *Dep : ClobEdges) {
+    if (Dep->getKind() != SDep::Data)
+      continue;
+    if (Dep->getReg() == Haydn::R5 && Dep->getSUnit() == DDG.getPostBoundaryNode(&PostClob))
+      SawClobData = true;
+    if (Dep->getReg() == Haydn::R9 && Dep->getSUnit() == DDG.getPostBoundaryNode(&PostKeep))
+      SawKeepData = true;
+  }
+  EXPECT_TRUE(SawClobData) << "regmask clobber of R5 must reach the post reader";
+  EXPECT_TRUE(SawKeepData)
+      << "exact-match R9 def->read edge must survive (not first-match dropped)";
+}
+
+// D1.38 (2): calls are memory agents on BOTH sides. Generated JAL_W carries
+// no MayLoad/MayStore, so the flag-only PreMem walk never saw it; mayAlias
+// answers true for isCall, so admission is the only fix. A post-boundary
+// call is also a memory reader of pre stores.
+TEST_F(HaydnInterBlockEdgesTest, CallMemoryEdges) {
+  const HaydnInstrInfo &II = TII();
+  const TargetRegisterInfo *TRI = MF->getRegInfo().getTargetRegisterInfo();
+  // Pre JAL_W: call with disjoint explicit regs (rt=R12) and no mem operands.
+  MachineInstr *Call =
+      BuildMI(*Pred, Pred->end(), DebugLoc(), II.get(Haydn::JAL_W), Haydn::R12)
+          .addImm(0)
+          .getInstr();
+  MachineInstr *PostLoad =
+      BuildMI(*Succ, Succ->end(), DebugLoc(), II.get(Haydn::LD32), Haydn::R4)
+          .addReg(Haydn::R1)
+          .addImm(0)
+          .getInstr();
+  // Second graph: pre store vs post call (post-call memory reader).
+  MachineInstr *Store =
+      BuildMI(*Pred, Pred->end(), DebugLoc(), II.get(Haydn::ST32))
+          .addReg(Haydn::R3)
+          .addReg(Haydn::R2)
+          .addImm(0)
+          .getInstr();
+  MachineInstr *PostCall =
+      BuildMI(*Succ, Succ->end(), DebugLoc(), II.get(Haydn::JAL_W), Haydn::R12)
+          .addImm(0)
+          .getInstr();
+
+  HaydnInterBlockEdges DDG(MC, Pred, Succ);
+  DDG.reserveForBlocks(*Pred, *Succ);
+  DDG.addNode(Call);
+  DDG.markBoundary();
+  DDG.addNode(PostLoad);
+  DDG.buildCrossBoundaryEdges(/*AA=*/nullptr, &II, TRI,
+                              &DDG.getSchedModelRef());
+  SmallVector<const SDep *, 4> Edges = DDG.getCrossBoundaryEdges(DDG.SUnits[0]);
+  bool SawCallMem = false;
+  for (const SDep *Dep : Edges)
+    if (Dep->getSUnit() == DDG.getPostBoundaryNode(PostLoad) &&
+        Dep->getKind() == SDep::Data && Dep->getReg() == 0u)
+      SawCallMem = true;
+  EXPECT_TRUE(SawCallMem) << "pre call must memory-edge to a post load";
+
+  HaydnInterBlockEdges DDG2(MC, Pred, Succ);
+  DDG2.reserveForBlocks(*Pred, *Succ);
+  DDG2.addNode(Store);
+  DDG2.markBoundary();
+  DDG2.addNode(PostCall);
+  DDG2.buildCrossBoundaryEdges(/*AA=*/nullptr, &II, TRI,
+                               &DDG2.getSchedModelRef());
+  SmallVector<const SDep *, 4> Edges2 =
+      DDG2.getCrossBoundaryEdges(DDG2.SUnits[0]);
+  bool SawStoreToCall = false;
+  for (const SDep *Dep : Edges2)
+    if (Dep->getKind() == SDep::Data && Dep->getReg() == 0u)
+      SawStoreToCall = true;
+  EXPECT_TRUE(SawStoreToCall) << "pre store must memory-edge to a post call";
+}
+
+// D1.38 (3): real (non-pseudo) carriers of MCID::UnmodeledSideEffects —
+// MOVESFR2GPR/MOVEGPR2SFR, FLAR, generated JAL_E* — model effects the
+// register/memory arms cannot price. FLAR is the cleanest pin: no reg
+// operands, no memory flags (CSRW/CSRW_W/WFI are isPseudo and never become
+// DDG nodes, and CSRW_W is hasSideEffects=0 anyway). Only the Order arm
+// sees the pair; latency 0 keeps it cut-inert (Remaining <= 0 skips).
+TEST_F(HaydnInterBlockEdgesTest, UnmodeledSideEffectOrderEdges) {
+  const HaydnInstrInfo &II = TII();
+  const TargetRegisterInfo *TRI = MF->getRegInfo().getTargetRegisterInfo();
+  // Pre/post FLAR: hasSideEffects=1 (HaydnInstrInfo.td:1702), no Defs/Uses.
+  MachineInstr *PreFlar =
+      BuildMI(*Pred, Pred->end(), DebugLoc(), II.get(Haydn::FLAR))
+          .addImm(0)
+          .getInstr();
+  MachineInstr *PostFlar =
+      BuildMI(*Succ, Succ->end(), DebugLoc(), II.get(Haydn::FLAR))
+          .addImm(1)
+          .getInstr();
+
+  HaydnInterBlockEdges DDG(MC, Pred, Succ);
+  DDG.reserveForBlocks(*Pred, *Succ);
+  DDG.addNode(PreFlar);
+  DDG.markBoundary();
+  DDG.addNode(PostFlar);
+  DDG.buildCrossBoundaryEdges(/*AA=*/nullptr, &II, TRI,
+                              &DDG.getSchedModelRef());
+  SmallVector<const SDep *, 4> Edges = DDG.getCrossBoundaryEdges(DDG.SUnits[0]);
+  ASSERT_EQ(Edges.size(), 1u)
+      << "no reg operands and no memory ops: only the Order edge may exist";
+  EXPECT_EQ(Edges[0]->getKind(), SDep::Order);
+  EXPECT_EQ(Edges[0]->getLatency(), 0u);
+}
+
+// D1.38 (strongest-edge law): one Pre MI whose operand order places a USE of
+// R1 before a DEF of R1 used to stop at the first match (Anti) and drop the
+// true Data edge. Every matching operand must contribute its class.
+TEST_F(HaydnInterBlockEdgesTest, ReadDefOperandKeepsStrongestEdge) {
+  const HaydnInstrInfo &II = TII();
+  const TargetRegisterInfo *TRI = MF->getRegInfo().getTargetRegisterInfo();
+  // Pre: ADD32 R1 = R1 + R2 (use of R1 precedes its def in operand order).
+  MachineInstr *Pre =
+      BuildMI(*Pred, Pred->end(), DebugLoc(), II.get(Haydn::ADD32), Haydn::R1)
+          .addReg(Haydn::R1)
+          .addReg(Haydn::R2)
+          .getInstr();
+  MachineInstr &Post = add32(Succ, Haydn::R4, Haydn::R1, Haydn::R5);
+
+  HaydnInterBlockEdges DDG(MC, Pred, Succ);
+  DDG.reserveForBlocks(*Pred, *Succ);
+  DDG.addNode(Pre);
+  DDG.markBoundary();
+  DDG.addNode(&Post);
+  DDG.buildCrossBoundaryEdges(/*AA=*/nullptr, &II, TRI,
+                              &DDG.getSchedModelRef());
+  SmallVector<const SDep *, 4> Edges = DDG.getCrossBoundaryEdges(DDG.SUnits[0]);
+  // The post side only reads R1, so exactly one edge may exist and it must
+  // be the Data edge: the pre-fix first-match break hit the USE operand of
+  // R1 first (readsReg, no PreWrites on that operand) and fell through to
+  // `continue`, never reaching the DEF operand's Data class.
+  ASSERT_EQ(Edges.size(), 1u);
+  EXPECT_EQ(Edges[0]->getKind(), SDep::Data)
+      << "the Data edge (def->read) must survive, not only Anti";
+  EXPECT_EQ(Edges[0]->getReg(), Haydn::R1);
+  EXPECT_GE(Edges[0]->getLatency(), 1u);
+}
+
 } // namespace

@@ -1,4 +1,5 @@
 # RUN: %python %S/../../../lib/Target/Haydn/FormatE/generate_format_e_records.py --check
+# RUN: %python %S/../../../lib/Target/Haydn/FormatE/generate_format_e_records.py --check --family e96
 # RUN: FileCheck %s --check-prefix=LSB --input-file=%S/../../../lib/Target/Haydn/HaydnGenRelocFieldLsb.inc
 # REQUIRES: haydn-registered-target
 # REQUIRES: haydn-golden-canonical
@@ -8,6 +9,17 @@
 # vector ledger round-trip, and reloc FieldLsbSites / ExtraPublishedLsb
 # (HaydnGenRelocFieldLsb.inc). RelocKind / scale / ELF rows and Loc sniff
 # stay in HaydnRelocLayout; this file only ratchets generated member LSBs.
+#
+# D1.44 (2026-09-01): --check also enforces the FULL setDesc identity law
+# per dimension — operand shape (legacy census) plus implicit Defs/Uses
+# lists, MCID side-effect/control flags, commutability, and itinerary
+# shape (OperandCycles equal + member stage units within the logical
+# menu) — each with an enumerated monotone-shrink allow census
+# (EXPECTED_*_DIVERGENT in the generator), and the golden 84-logical
+# multi-signature ledger census (EXPECTED_MULTI_SIGNATURE_LOGICALS). A
+# hand-TD flag/Defs/Itinerary edit that breaks parity with a generated
+# member fails this RUN in --check; the always-on Desc-level mirror is
+# HaydnFormatERecordsTest.DirectSetDescExtrasIdentityOverLedger.
 #
 # Bug: generate_format_e_records.py --check existed but was unwired (zero
 # CMake consumers beyond this lit), the golden XLSX was hash-pinned never

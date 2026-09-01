@@ -108,6 +108,7 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNHWLOOPCONTRACTS_H
 
 #include "HaydnBundlePlan.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h" // GET_INSTRINFO_ENUM: Haydn::*
 #include <cstdint>
 
 namespace llvm {
@@ -226,6 +227,115 @@ static_assert(BranchRelaxSafetyBufferBytes != 200 &&
               "BR safety buffer is not a free-standing 200/1024");
 
 //===----------------------------------------------------------------------===//
+// HWLoop demote insertion growth budget (GR2.6 closure no-growth law)
+//===----------------------------------------------------------------------===//
+//
+// One demoteHardwareLoopToSoftware call erases the SET parcel (and the
+// PseudoLoopEnd meta, which is zero-size) and may install, per the
+// HaydnHWLoopDemote / HaydnHardwareLoops emission vocabulary:
+//
+//   Free-counter arm (CountReg != Prefer, worst case):
+//     trip materialize XOR32 + ADDI32_W ............ 2 parcels
+//     (materializeTripCount HasImm path; MOVE32 copy arm is 1)
+//     latch countdown SUBI32 + BNEZ_W .............. 2 parcels
+//     optional exit B (non-fallthrough exit) ....... 1 parcel
+//     stripped residual countdown (net >= 0; erased, not added)
+//     GR2.7 long-latch variant (backedge over simm12): the BNEZ_W back-
+//     edge is REPLACED by the terminal in-block template
+//     LUI + ADDI32_W + BEQZ_W + JALR_W ............. +3 parcels
+//     (4 emitted - 1 BNEZ_W replaced) and the optional exit B is
+//     SUPPRESSED (the near BEQZ_W is the exit edge) ... -1 parcel
+//     => net +2 over the short-latch worst case
+//   Stack-counter arm (worst case):
+//     preheader materialize XOR32 + ADDI32_W + ST32  3 parcels
+//     (Adj!=0 ADDI32_W addend into PreheaderScr overlaps the
+//     materialize count above — not additive)
+//     value-preserve save ST32 ..................... 1 parcel
+//     latch-end save ST32 / scratch LD32 ........... 1 parcel
+//     latch LD32 + SUBI32 + ST32 + BNEZ_W .......... 4 parcels
+//     exit restore LD32 ............................ 1 parcel
+//     optional exit B .............................. 1 parcel
+//     (same GR2.7 long-latch variant: +3 template / -1 exit B = +2)
+//
+// Worst case (stack-counter + save/restore + exit B + the GR2.7 long-
+// latch template) is 14 parcels minus the erased SET parcel = 13
+// net-new parcels. The long-latch JALR scratch itself adds ZERO parcels:
+// it is a computed-dead GPR on both post-rewrite latch out-edges (D1.32
+// probe; refusal — never an FI-spill fallback that would add more).
+// This is a conservative implementation-vocabulary bound (same class as
+// MaxSingleBranchGrowthParcels), NOT a golden fact: the demote emission
+// vocabulary owns it. D1.6-style vocabulary edits must update the parcel
+// terms above and the static_assert together
+// (HaydnLateConvergenceBudgetTest pins the value).
+inline constexpr unsigned MaxHwLoopDemoteGrowthParcels = 13;
+
+/// Per-demote net encoded-byte growth bound charged by the closure
+/// no-growth law (HaydnLateConvergence). Equals
+/// MaxHwLoopDemoteGrowthParcels × productParcelBytes.
+inline constexpr int64_t MaxHwLoopDemoteGrowthBytes =
+    bundle::productBundlesToBytes(MaxHwLoopDemoteGrowthParcels);
+
+static_assert(MaxHwLoopDemoteGrowthParcels == 13,
+              "demote growth: 13 net parcels (12 short-latch worst case "
+              "+ 2 GR2.7 long-latch swap - 1 erased SET)");
+static_assert(MaxHwLoopDemoteGrowthBytes ==
+                  static_cast<int64_t>(MaxHwLoopDemoteGrowthParcels) *
+                      ProductParcelBytes,
+              "demote growth bytes must be parcels × product EncodedBytes");
+static_assert(MaxHwLoopDemoteGrowthBytes > MaxSingleBranchGrowthBytes,
+              "one demote can install more than one branch promotion");
+
+//===----------------------------------------------------------------------===//
+// Shared still-relaxable short-branch classifier (one mechanism)
+//===----------------------------------------------------------------------===//
+//
+// GR2.6: the Fixup-local lambda isStillRelaxableShortBranch and the
+// closure budget capture must count sites with the SAME law (hard
+// constraint 14 — no second classifier). Owner: this header.
+//
+// Not still-relaxable (zero further layout growth under a later
+// BranchRelaxation): already-indirect JALR*, long-reach JAL*/calls, pure
+// RET/BR_JT, ZOL / software-latch metas (Fixup owns their lowering).
+//===----------------------------------------------------------------------===//
+
+/// True when \p Br is a short PC-relative branch a later BranchRelaxation
+/// may still expand (bare or bundled member; cond + B simm12 forms).
+/// Both the Fixup Off1/Off2 growth reservation and the LateConvergence
+/// prefix-budget capture count sites through this one classifier.
+inline bool isStillRelaxableShortBranch(const MachineInstr &Br) {
+  if (!Br.isBranch())
+    return false;
+  // Already-indirect forms cannot grow further under BranchRelaxation.
+  if (Br.isIndirectBranch())
+    return false;
+  // Calls (including JAL_W) are long-reach / not the short simm12 path.
+  if (Br.isCall())
+    return false;
+  switch (Br.getOpcode()) {
+  // ZOL / software-latch metas: not PC-relative BR subjects (see
+  // HaydnInstrInfo::isBranchOffsetInRange). Fixup owns their lowering.
+  case Haydn::PseudoLoopEnd:
+  case Haydn::LoopJNZ:
+  case Haydn::LoopDec:
+  case Haydn::LoopStart:
+  // Long-reach / already-final control (member forms included by
+  // isIndirectBranch / isCall above; list logical/wide bases for clarity).
+  case Haydn::JAL:
+  case Haydn::JAL_W:
+  case Haydn::JALR:
+  case Haydn::JALR_W:
+  case Haydn::PseudoCALL:
+  case Haydn::BR_JT:
+  case Haydn::RET:
+    return false;
+  default:
+    // Bare/member short cond + B (simm12). A later BR may expand each to
+    // an inverted near + trampoline or LUI+ADDI+JALR sequence.
+    return true;
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Setup arithmetic (width-independent issue-cycle inequality)
 //===----------------------------------------------------------------------===//
 //
@@ -328,6 +438,74 @@ static_assert(anchoredFromAfterSet(-1, ProductParcelBytes) == -1,
 static_assert(anchoredFromAfterSet(0, ProductParcelBytes) ==
                   ProductParcelBytes,
               "target at the next parcel start is one full SET parcel away");
+
+//===----------------------------------------------------------------------===//
+// D1.35: pre-S1 far-site estimate composition vs post-stamp growth
+//===----------------------------------------------------------------------===//
+//
+// The addPreSched2 normalization window (HaydnLongBranchNormalize then
+// BranchRelaxation, before the first Finalize stamp) decides "far" from
+// the CURRENT layout walk (TII.getInstSizeInBytes + entering-MBB pad,
+// haydn::hwloop::computeLayoutBlockStarts) plus ONE
+// BranchRelaxSafetyBufferBytes inflation per direction inside
+// TII.isBranchOffsetInRange. Post-stamp growth the pre-S1 estimate does
+// NOT see, by admitted post-stamp vocabulary:
+//
+//   * one HWLoop demote insertion ................ MaxHwLoopDemoteGrowthBytes
+//     (the demote runs at Fixup / closure, after the pre-S1 window; one
+//     demote can push a DIFFERENT site out of range — the composition
+//     class pinned by gr27-d135-demote-growth-pushes-branch.mir);
+//   * closure-loop stall regeneration ............ per-site floor below;
+//   * idle-parcel alignment pads .................. ALREADY in the walk
+//     (padLayoutBytesForMBBAlign charges the parcel-rounded worst case
+//     per entered MBB; HaydnMachineAlignment pads are committed parcels
+//     every size consumer charges for free — no residual term exists).
+//
+// PreS1PostStampGrowthBytes is the typed composition of the two residual
+// (walk-invisible) sources for ONE far-site span. The stall term is the
+// per-span worst case, not a per-parcel count: every regenerating stall
+// at a site the span crosses sits before that site's terminator
+// (HaydnLatencyStalls inserts at the dest-read window / the exit seam /
+// before the backedge), so the site's own parcel is never displaced by
+// more than InterveningCycles stall parcels from any ONE producer window
+// the span contains — the same floor the Fixup Following law charges
+// (HWLoopSetupPadBundles == InterveningCycles).
+//
+// D1.35 DECISION (path B, recorded): the pre-S1 estimate is NOT widened
+// by this composition. Widening would have to pre-add growth at the
+// far-deciding callers, but D1.33's single-inflation law made
+// isBranchOffsetInRange the ONLY seat that adds any allowance — a
+// pre-added composition term is exactly the double-charge class that
+// stole the (2048 − 2·buffer, 2048 − buffer] short band. And no typed
+// composition can cover the S2 repack: HaydnLateConvergence's single S2
+// may REDISTRIBUTE encoded bytes across pairs with no event at all
+// (documented non-law: entry-vs-final no-growth is telemetry only), so
+// a pre-S1 span can both stay short at the estimate and re-overflow
+// after S2 with zero admitted vocabulary. The closed rejection class is
+// therefore: a still-relaxable site that re-overflows post-stamp and
+// cannot take the in-block long form (no dead-on-edge GPR / uninvertible
+// cond / no near dest) is a FAIL-CLOSED fatal at the post-stamp seats —
+// the normalizer's named report_fatal_error, never a silent accept and
+// never a CFG-creating repair. Every such site that CAN take the
+// in-block form promotes legally post-stamp (the recovery the MIR pin
+// exercises).
+inline constexpr int64_t PreS1PostStampGrowthBytes =
+    MaxHwLoopDemoteGrowthBytes +
+    bundle::productBundlesToBytes(InterveningCycles);
+
+static_assert(PreS1PostStampGrowthBytes ==
+                  MaxHwLoopDemoteGrowthBytes +
+                      static_cast<int64_t>(InterveningCycles) *
+                          ProductParcelBytes,
+              "pre-S1 composition: one demote vocabulary + the per-site "
+              "stall-regen floor");
+static_assert(PreS1PostStampGrowthBytes > MaxHwLoopDemoteGrowthBytes,
+              "the stall-regen term is additive, never folded away");
+static_assert(PreS1PostStampGrowthBytes >
+                  BranchRelaxSafetyBufferBytes +
+                      bundle::productBundlesToBytes(InterveningCycles),
+              "composition must dominate buffer + stalls alone: one demote "
+              "can push a different site, not just grow its own span");
 
 //===----------------------------------------------------------------------===//
 // Body / END / COUNT product law

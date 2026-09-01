@@ -106,14 +106,16 @@ policy pins only.
 | F41 product containment=1    | G-MULTISTAGE-POLICY      | productSMSContainmentMaxStageCount | sms-f41-containment-product-pin.ll PRODUCT |
 | F41 ZOL ignores containment knob | G-HWLOOP-POLICY / F41 | ZOL bound pinned to product=1  | sms-f41-zol-containment-knobrefuse.ll ZOL |
 
-Physical multistage preflight seats (executable host present; force-fail seats live)
+Physical multistage preflight seats (W68 DELETED — tombstone)
 -------------------------------------------------------------------------------
-Closed seat list. Host HaydnMultiStageSMS implements each PF-* force-fail seat
-via -haydn-multistage-sms-force-fail-seat=<ID>. Product default remains OFF.
-Independent QUALIFY residual is G-MULTISTAGE-QUALIFY (T3) plus independent
-SCEV hwloop QUALIFY (T6). Combined dual-ON QUALIFY is G-MULTISTAGE-HWLOOP
-and waits for those independent T3 then T6 arms.
-Names must match HaydnPostRAMultiStage.cpp PreflightNames[] exactly.
+D1.45 re-stamp: the bespoke post-RA multistage host
+(HaydnPostRAMultiStage.cpp) and its PreflightNames[] / JournalNames[]
+force-fail seat tables were DELETED in W68 when the generic pre-RA
+MachinePipeliner became the sole SMS owner (both product defaults ON
+since 2026-08-22; see HaydnTargetMachine.cpp W68.1 tombstone). The PF-*
+and JM-* rows below are retained as provenance for the 2026-08-22
+qualification evidence only — no executable seat, no flag, no name-match
+law against a live source file.
 
 | ID      | Seat                              | Owning goal           | Status                                              |
 |---------|-----------------------------------|-----------------------|-----------------------------------------------------|
@@ -126,12 +128,11 @@ Names must match HaydnPostRAMultiStage.cpp PreflightNames[] exactly.
 | PF-BUNDLE| Bundle roots/members/order/comp  | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
 | PF-LATE | Late layout / relocation facts    | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
 
-Physical multistage journal / rollback seats (executable host present)
+Physical multistage journal / rollback seats (W68 DELETED — tombstone)
 --------------------------------------------------------------------------
-After first MIR edit every fallible step is journaled; failure restores
-byte-for-byte ordinary scheduled MIR/CFG/metadata and clears transient state.
-Force-fail seats are live on HaydnMultiStageSMS via the same seat flag.
-Names must match HaydnPostRAMultiStage.cpp JournalNames[] exactly.
+D1.45 re-stamp: journal/rollback force-fail seats were part of the same
+deleted HaydnPostRAMultiStage.cpp host. Rows retained as provenance for
+the 2026-08-22 qualification evidence only — no executable seat remains.
 
 | ID       | Seat                                  | Owning goal            | Status                                              |
 |----------|---------------------------------------|------------------------|-----------------------------------------------------|

@@ -181,15 +181,25 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     }
     // Data is pre-adjusted to Fixup.getOffset (lesson): write at Data[0].
     // Table FieldLsb (getFixupKindInfo TargetOffset) is E2 e0 only.
-    // applyFixup patches parcel-absolute bits via resolveFieldLsb — do not
-    // also shift by TargetOffset (AIE Dummy TargetOffset: AIEBaseAsmBackend.h
-    // getFixupKindInfo 56-71; AIE applyFixup shifts only generic FK_Data_*).
+    // applyFixup patches parcel-absolute bits via tryResolveFieldLsb — do
+    // not also shift by TargetOffset (AIE Dummy TargetOffset:
+    // AIEBaseAsmBackend.h getFixupKindInfo 56-71; AIE applyFixup shifts
+    // only generic FK_Data_*).
     // D1.17: producer emission of HI12/CSR_UImm8 (and every other
-    // entry-qualified kind) is TYPED — resolveFieldLsb early-returns the
+    // entry-qualified kind) is TYPED — tryResolveFieldLsb early-returns the
     // qualified row via isEntryQualifiedKind, so no byte re-sniff happens
     // for qualified kinds. The Loc sniff remains only for base-kind
     // base-window sites and is opc-pinned on every HI12/CSR arm.
-    const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, Data);
+    // D1.42: the hwloop arm resolves windows ONLY from the generated
+    // HwLoopSniffSites table; an unrecognized hwloop site is a NAMED error
+    // (fail-closed), never a silent base-row patch — diagnose, do not
+    // abort (same shape as the parcel-grid check above).
+    unsigned FieldLsb = 0;
+    if (const char *SiteErr =
+            HaydnReloc::tryResolveFieldLsb(R, Data, FieldLsb)) {
+      getContext().reportError(Fixup.getLoc(), SiteErr);
+      return;
+    }
     HaydnReloc::patchField(Data, Comp.FieldVal, FI.NBytes, FI.FieldSize, FieldLsb);
     return;
   }

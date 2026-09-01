@@ -1,0 +1,1371 @@
+# D1.49 pins: the LongBranchNormalize scratch picker is COMPUTED liveness,
+# never stored MBB livein lists; every retained-control operand (explicit +
+# implicit, TRI::regsOverlap) is excluded; pristine CSRs are refused
+# fail-closed BEFORE any mutation (no AllowUnusedCSR fallback, no spill).
+#
+# Far template (gr27-d134 law, buffer=4, parcel=12, window edge 2044):
+#   bb.0 = BEQZ_W(cond, %bb.2) + B %bb.1 (24B) ; bb.1 = 169 NOPs (2028B)
+#   fallthrough ; bb.2 starts at 2052 -> the BEQZ site-0 offset 2052 > 2044
+#   is FAR. RETAIN adds one more tail terminator (bb.0 = 36B, trailing B
+#   site 24) and 170 NOPs (bb.2 at 2076, off 2052).
+#
+# Arms:
+#   GREEN   : one computed-dead GPR exists ($r6: no use anywhere on either
+#             out-edge walk) -> promotion proceeds; scratch is $r6, never
+#             the cond $r7.
+#   THROUGH : every non-CSR candidate is READ by the bb.2 body but NO
+#             stored livein names it; CSRs are unmentioned AND CSI is
+#             invalid (no pristine seeding possible) -> both the computed
+#             walk (successor reads) and the CSI-independent
+#             isPhysRegUsed refusal are required to exhaust. Tail intact.
+#   PRISTINE arm — same as THROUGH but CSI valid + empty; the walk seeds
+#             all unsaved CSRs live-out of the return block (pristines)
+#             and refuses R8-R11 through the LivePhysRegs law itself.
+#   RETAIN  : unanalyzable tail (two conds + far trailing B; Arm B). The
+#             retained conds read $r4/$r5; every other candidate is read
+#             by bb.2; the retired exact-ID Cond Forbid was EMPTY on an
+#             unanalyzable tail and the stored-livein probe saw none of
+#             these uses. Tail intact (all three terminators survive).
+#             On the flat Haydn GPR model (HaydnRegisterInfo.td defines
+#             no GPR subregs/aliases) regsOverlap reduces to identity, so
+#             this arm pins the operand-COVERAGE half of the alias law
+#             (implicit operands and retained controls included); the
+#             subreg half is vacuous by construction.
+#   USEDCSR : $r8 IS mentioned (bb.0 body, dead after) and computed-dead
+#             on both out-edge walks -> a MENTIONED CSR (PEI-saved class)
+#             is pickable; pins that the CSR refusal is the pristine law,
+#             not a blanket CSR ban. (bb.1 pads 170 NOPs: the ADD32 shifts
+#             the BEQZ site to 12, so bb.2 at 2064 keeps the site far.)
+#   POISON  : the guarded-tail wrong-code class (ls_reg_scalar CHECK(13),
+#             guest_exit=13). bb.0's NEAR successor bb.1 is ALREADY
+#             promoted: 169 NOPs then the guarded long form
+#             LUI/ADDI/BEQZ_W($r2 near)/JALR_W($r6 fail), and the trailing
+#             JALR_W bundle carries the call-saved implicit defs
+#             $r1..$r7/$r12/$d0..$d7. $r6 is LIVE-THROUGH bb.0's near
+#             chain: bb.1's stored liveins name it, and its ONLY use is
+#             bb.3 (reached on bb.1's TAKEN near edge) — the JALR never
+#             executes on that path. The UNGUARDED stepBackward walk
+#             treats the JALR_W implicit-def $r6 as a kill, so livein(bb.1)
+#             drops it and the picker "proves" $r6 dead at bb.0 — every
+#             other candidate is read by the far successor bb.2, so $r6 is
+#             picked (red-proof: the unguarded build picks $r6 HERE). The
+#             guarded walk ignores defs of terminators strictly after
+#             bb.1's first terminator: $r6 stays live, bb.0 refuses, the
+#             tail survives byte-identically, no LUI.
+#
+# Every negative arm proves refusal precedes mutation: the far site's
+# terminators are byte-identical and no LUI/ADDI32/JALR was inserted.
+
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=GREEN
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=THROUGH
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=PRISTINE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=RETAIN
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=USEDCSR
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=POISON
+# REQUIRES: haydn-registered-target
+
+--- |
+  define dso_local void @green() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @through() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @pristine() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @retain() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @used_csr() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @poison() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            green
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r7, $r15
+    ST32 $r7, $r7, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+# GREEN-LABEL: name: green
+# Computed-dead $r6 (unmentioned CSRs R8-R11 refused, cond $r7 refused,
+# nothing else is live on either out-edge walk).
+# GREEN-NOT: $r7 = LUI
+# GREEN: $r6 = LUI_E2_E0_ALU0_I12 %bb.2
+# GREEN: $r6 = ADDI32_E2_E0_ALU0_RI20 $r6, %bb.2
+# GREEN: BNEZ_W $r7, %bb.1
+# GREEN: JALR_W $r6
+...
+---
+name:            through
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r1, %bb.2, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    ST32 $r2, $r2, 0, implicit-def dead $sfr
+    ST32 $r3, $r3, 0, implicit-def dead $sfr
+    ST32 $r4, $r4, 0, implicit-def dead $sfr
+    ST32 $r5, $r5, 0, implicit-def dead $sfr
+    ST32 $r6, $r6, 0, implicit-def dead $sfr
+    ST32 $r7, $r7, 0, implicit-def dead $sfr
+    ST32 $r12, $r12, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+# THROUGH-LABEL: name: through
+# Every candidate is refused: $r1 cond overlap; $r2-$r7/$r12 computed-live
+# through the edge (bb.2 reads them; NO stored livein names them — the
+# retired stored-livein probe called them all free); R8-R11 unmentioned
+# CSRs refused by the CSI-independent pristine law. Pre-stamp refusal:
+# no mutation.
+# THROUGH-NOT: LUI
+# THROUGH: BEQZ_W $r1, %bb.2
+# THROUGH: B %bb.1
+...
+---
+name:            pristine
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+frameInfo:
+  isCalleeSavedInfoValid: true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r1, %bb.2, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    ST32 $r2, $r2, 0, implicit-def dead $sfr
+    ST32 $r3, $r3, 0, implicit-def dead $sfr
+    ST32 $r4, $r4, 0, implicit-def dead $sfr
+    ST32 $r5, $r5, 0, implicit-def dead $sfr
+    ST32 $r6, $r6, 0, implicit-def dead $sfr
+    ST32 $r7, $r7, 0, implicit-def dead $sfr
+    ST32 $r12, $r12, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+# PRISTINE-LABEL: name: pristine
+# CSI valid + empty: R8-R11 are pristine — the computed walk itself seeds
+# them live-out of the return block and refuses them (the retired
+# AllowUnusedCSR second pass picked exactly here). No mutation.
+# PRISTINE-NOT: LUI
+# PRISTINE: BEQZ_W $r1, %bb.2
+# PRISTINE: B %bb.1
+...
+---
+name:            retain
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r4, %bb.2, implicit-def dead $sfr
+    BEQZ_W $r5, %bb.1, implicit-def dead $sfr
+    B %bb.2
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r1, $r2, $r3, $r6, $r7, $r12, $r15
+    ST32 $r1, $r1, 0, implicit-def dead $sfr
+    ST32 $r2, $r2, 0, implicit-def dead $sfr
+    ST32 $r3, $r3, 0, implicit-def dead $sfr
+    ST32 $r6, $r6, 0, implicit-def dead $sfr
+    ST32 $r7, $r7, 0, implicit-def dead $sfr
+    ST32 $r12, $r12, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+
+# RETAIN-LABEL: name: retain
+# Arm B (unanalyzable two-cond tail, far trailing B to %bb.2 after 2040B of
+# pad). $r4/$r5 are the RETAINED conds' registers (operand-coverage law);
+# $r1/$r2/$r3/$r6/$r7/$r12 are computed-live through the edge; R8-R11 are
+# unmentioned. Exhaustion refuses BEFORE removeBranch: all three
+# terminators survive byte-identically.
+# RETAIN-NOT: LUI
+# RETAIN: BEQZ_W $r4, %bb.2
+# RETAIN: BEQZ_W $r5, %bb.1
+# RETAIN: B %bb.2
+...
+---
+name:            used_csr
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r12, $r15
+    successors: %bb.1, %bb.2
+    $r8 = ADD32 $r8, $r8, implicit-def dead $sfr
+    BEQZ_W $r1, %bb.2, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    ST32 $r2, $r2, 0, implicit-def dead $sfr
+    ST32 $r3, $r3, 0, implicit-def dead $sfr
+    ST32 $r4, $r4, 0, implicit-def dead $sfr
+    ST32 $r5, $r5, 0, implicit-def dead $sfr
+    ST32 $r6, $r6, 0, implicit-def dead $sfr
+    ST32 $r7, $r7, 0, implicit-def dead $sfr
+    ST32 $r12, $r12, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+# USEDCSR-LABEL: name: used_csr
+# $r8 is mentioned (bb.0 body, dead after — no successor reads it) and
+# computed-dead on both out-edge walks: a MENTIONED CSR is pickable, so
+# the refusal is the pristine law, not a CSR ban. Scratch is $r8.
+# USEDCSR-NOT: $r1 = LUI
+# USEDCSR: $r8 = LUI_E2_E0_ALU0_I12 %bb.2
+# USEDCSR: $r8 = ADDI32_E2_E0_ALU0_RI20 $r8, %bb.2
+# USEDCSR: BNEZ_W $r1, %bb.1
+# USEDCSR: JALR_W $r8
+...
+
+---
+name:            poison
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r12, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r1, %bb.2, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1.near:
+    successors: %bb.3, %bb.4
+    liveins: $r2, $r6, $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    $r6 = LUI_E2_E0_ALU0_I12 %bb.4
+    $r6 = ADDI32_E2_E0_ALU0_RI20 $r6, %bb.4
+    BEQZ_W $r2, %bb.3, implicit-def dead $sfr
+    BUNDLE implicit-def $r6, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit $r6 {
+      $r6 = JALR_W $r6, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    }
+
+  bb.2.far:
+    liveins: $r2, $r3, $r4, $r5, $r7, $r12, $r15
+    ST32 $r2, $r2, 0, implicit-def dead $sfr
+    ST32 $r3, $r3, 0, implicit-def dead $sfr
+    ST32 $r4, $r4, 0, implicit-def dead $sfr
+    ST32 $r5, $r5, 0, implicit-def dead $sfr
+    ST32 $r7, $r7, 0, implicit-def dead $sfr
+    ST32 $r12, $r12, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+  bb.3:
+    liveins: $r6, $r15
+    ST32 $r6, $r6, 0, implicit-def dead $sfr
+    RET implicit killed $r15
+
+  bb.4:
+    liveins: $r15
+    RET implicit killed $r15
+
+# POISON-LABEL: name: poison
+# $r6 is LIVE-THROUGH bb.0 -> bb.2 (bb.2 reads it; no stored livein names
+# it). The already-promoted bb.1 tail's trailing JALR_W carries
+# implicit-def $r6, which an UNGUARDED walk treats as a kill — "proving"
+# $r6 dead at bb.0 (the ls_reg_scalar guest_exit=13 wrong-code class).
+# The guarded walk keeps $r6 live: bb.0 refuses before any mutation; the
+# original terminators survive byte-identically and no LUI is inserted.
+# POISON-NOT: LUI
+# POISON: BEQZ_W $r1, %bb.2
+# POISON: B %bb.1
+...

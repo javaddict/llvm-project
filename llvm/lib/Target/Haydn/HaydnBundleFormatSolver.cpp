@@ -240,7 +240,9 @@ unsigned computeExhaustiveProductResMII(ArrayRef<unsigned> Opcodes) {
   const unsigned Full = 1u << N;
 
   // Packable[Mask]: ops in Mask form one legal issue cycle (size ≤ 3).
-  SmallVector<uint8_t, 4096> Packable(Full, 0);
+  // Heap storage: Full is 2^N and N is caller-bounded (12), so the inline
+  // buffer is a 4 KiB stack reservation per call — SmallVector default.
+  SmallVector<uint8_t> Packable(Full, 0);
   Packable[0] = 1;
   for (unsigned Mask = 1; Mask < Full; ++Mask) {
     const unsigned Bits = llvm::popcount(Mask);
@@ -256,7 +258,7 @@ unsigned computeExhaustiveProductResMII(ArrayRef<unsigned> Opcodes) {
 
   // dp[Mask] = min cycles to cover exactly the ops in Mask.
   const unsigned Inf = N + 1;
-  SmallVector<unsigned, 4096> DP(Full, Inf);
+  SmallVector<unsigned> DP(Full, Inf);
   DP[0] = 0;
   for (unsigned Mask = 1; Mask < Full; ++Mask) {
     // Enumerate nonempty submasks (standard SOS: O(3^N) total).

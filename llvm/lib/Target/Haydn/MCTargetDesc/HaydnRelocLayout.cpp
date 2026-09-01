@@ -18,6 +18,7 @@
 
 #include "HaydnRelocLayout.h"
 #include "HaydnFixupKinds.h"
+#include "HaydnFormat.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/MathExtras.h"
@@ -256,6 +257,24 @@ struct ExtraLsb {
   uint8_t Lsb;
 };
 
+// D1.42 generated hwloop Loc-sniff geometry (HwLoopSniffSites rows,
+// HaydnGenRelocFieldLsb.inc). Parcel-absolute map/type windows plus the
+// Off1/Off2 LSBs; the generator law-checks every LSB against
+// FieldLsbSites / ExtraPublishedLsb so this table is never a second
+// publication authority.
+struct HwLoopSniffSite {
+  uint8_t Mode;
+  uint8_t EntryIdx;
+  uint8_t MapLo;
+  uint8_t MapWidth;
+  uint8_t MapValue;
+  uint8_t TypeLo;
+  uint8_t TypeWidth;
+  uint8_t TypeValue;
+  uint8_t Off1Lsb;
+  uint8_t Off2Lsb;
+};
+
 // Generated from Format E member imm LSBs. Do not hand-edit the arrays.
 #define GET_HAYDN_RELOC_FIELD_LSB
 #include "HaydnGenRelocFieldLsb.inc"
@@ -370,15 +389,19 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
   return Out;
 }
 
-unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
+const char *tryResolveFieldLsb(RelocKind R, const uint8_t *Loc, unsigned &Lsb) {
   const RelocFieldInfo &I = getRelocFieldInfo(R);
-  if (!Loc)
-    return I.FieldLsb;
+  if (!Loc) {
+    Lsb = I.FieldLsb;
+    return nullptr;
+  }
   // Entry-qualified kinds carry the write window in the TYPE (the typed
   // (kind, entry, window) mapping). Never sniff parcel content for them —
   // sniffing is ambiguous once two same-kind fields share a parcel.
-  if (isEntryQualifiedKind(R))
-    return I.FieldLsb;
+  if (isEntryQualifiedKind(R)) {
+    Lsb = I.FieldLsb;
+    return nullptr;
+  }
 
   auto GetBits = [&](unsigned Lo, unsigned Width) -> unsigned {
     unsigned V = 0;
@@ -390,38 +413,40 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
     return V;
   };
 
-  // Format E header: indicator bits[2:0]=7, entry_num bit[3] (0=E2, 1=E3).
-  const unsigned Indicator = Loc[0] & 0x7u;
-  const unsigned EntryNum = (Loc[0] >> 3) & 0x1u;
+  // Format E header parse via named constants (D1.42): indicator low bits,
+  // entry_num at FormatEEntryNumBit (0=E2, 1=E3). No bare masks.
+  const unsigned Indicator = Loc[0] & haydn::format::FormatEIndicatorBits;
+  const unsigned EntryNum =
+      (Loc[0] >> haydn::format::FormatEEntryNumBit) & 0x1u;
+  const unsigned Mode =
+      (EntryNum == haydn::format::FormatEEntryNumThree) ? 1u : 0u;
 
-  // SET_HWLOOP_F2 / SET_HWLOOP Off1/Off2 — golden absolute parcel bits.
-  // Table default is E2 e0 F2 (HWLRIIR): Off1@32, Off2@38.
+  // SET_HWLOOP Off1/Off2 — generated HwLoopSniffSites walk (D1.42). The
+  // generated rows are the ONLY window authority for this family: each row
+  // carries the parcel-absolute map/type windows plus both Off LSBs, and
+  // the generator law-checks the LSBs against FieldLsbSites /
+  // ExtraPublishedLsb. An unrecognized hwloop site (wrong indicator,
+  // non-hwloop type at E2 e0, no F2 at E3 e0/e1, or an E3 e2 parcel) FAILS
+  // CLOSED with a named error — never a silent patch of the base-row E2 F2
+  // window (the pre-D1.42 behavior on unknown sites).
   if (R == RelocKind::HWLoopOff1 || R == RelocKind::HWLoopOff2) {
     const bool IsOff1 = R == RelocKind::HWLoopOff1;
-    if (Indicator != 0x7u)
-      return I.FieldLsb;
-
-    if (EntryNum == 0) {
-      // E2 e0: type field at entry bits[6:2] → abs bits[12:8] (5b).
-      // HWLRIIR (F2)=0x0c, HWLRIII (SET)=0x10 (generated Inst{} packing).
-      const unsigned Type = GetBits(8, 5);
-      if (Type == 0x10u)
-        // SET_HWLOOP HWLRIII: Off1@bits[18:13], Off2@bits[47:36].
-        return IsOff1 ? 13u : 36u;
-      // SET_HWLOOP_F2 HWLRIIR (and unrecognized): table default.
-      return IsOff1 ? 32u : 38u;
+    if (Indicator == haydn::format::FormatEIndicatorBits) {
+      for (const HwLoopSniffSite &S : HwLoopSniffSites) {
+        if (S.Mode != Mode)
+          continue;
+        if (GetBits(S.MapLo, S.MapWidth) != S.MapValue)
+          continue;
+        if (GetBits(S.TypeLo, S.TypeWidth) != S.TypeValue)
+          continue;
+        Lsb = IsOff1 ? S.Off1Lsb : S.Off2Lsb;
+        return nullptr;
+      }
     }
-
-    // E3: F2 only. map@entry+0 (2b)=2 (ALU0), type@entry+2 (4b)=0xc.
-    // e0 @ abs[6:36] → Off1@18 Off2@24; e1 @ abs[37:67] → Off1@49 Off2@55.
-    auto IsE3HwloopF2 = [&](unsigned EntryLo) -> bool {
-      return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xcu;
-    };
-    if (IsE3HwloopF2(6))
-      return IsOff1 ? 18u : 24u;
-    if (IsE3HwloopF2(37))
-      return IsOff1 ? 49u : 55u;
-    return I.FieldLsb;
+    return IsOff1 ? "Haydn reloc: HWLoopOff1 site is not a generated "
+                   "SET_HWLOOP window (mode/entry/type unrecognized)"
+                 : "Haydn reloc: HWLoopOff2 site is not a generated "
+                   "SET_HWLOOP window (mode/entry/type unrecognized)";
   }
 
   // HI12 / LUI I12. Table FieldLsb=32 is E2 e0 ALU0
@@ -442,18 +467,26 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   //     imm @ entry+13 → abs 81
   // Patching the E2 LSB on an E3 ALU2 LUI writes bit 32, which is only the
   // top bit of [21:32] — hi12=1 becomes executed imm 0x800.
+  // D1.42: returned LSBs come from the generated FieldLsbSites rows via
+  // resolveFieldLsbForMember — the sniff pins the SITE, the table supplies
+  // the window.
   if (R == RelocKind::HI12) {
-    if (Indicator != 0x7u)
-      return I.FieldLsb;
+    if (Indicator != haydn::format::FormatEIndicatorBits) {
+      Lsb = I.FieldLsb;
+      return nullptr;
+    }
     // E2 e0: golden ALU0 I12 (map=0, 5-bit type @8=0x0a) hosts LUI(1) with
     // BEQZ(4)/BNEZ(5)/BGEZ(6)/BLTZ(7) — pin opc. Without the pin, a parcel
     // whose e0 is a branch would patch the e0 tail of a symbolic LUI at
     // another entry (the D1.24 wrong-window shape).
     if (EntryNum == 0) {
       if (GetBits(6, 2) == 0u && GetBits(8, 5) == 0x0au &&
-          GetBits(17, 3) == 1u)
-        return 32u; // E2 e0 LUI
-      return I.FieldLsb; // no LUI at E2 e0 — documented fail-through
+          GetBits(17, 3) == 1u) {
+        Lsb = resolveFieldLsbForMember(R, 0, 0); // E2 e0 LUI
+        return nullptr;
+      }
+      Lsb = I.FieldLsb; // no LUI at E2 e0 — documented fail-through
+      return nullptr;
     }
     auto IsLuiAlu2 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 1u && GetBits(EntryLo + 2, 4) == 4u;
@@ -462,26 +495,39 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
       return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xau;
     };
     // E3 e0 @ abs [6:36]. opc pins match the existing e0 unit test buffers.
-    if (IsLuiAlu2(6) && GetBits(12, 1) == 1u)
-      return 21u;
-    if (IsLuiAlu0(6) && GetBits(16, 3) == 1u)
-      return 23u;
+    if (IsLuiAlu2(6) && GetBits(12, 1) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 0, kALU2);
+      return nullptr;
+    }
+    if (IsLuiAlu0(6) && GetBits(16, 3) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 0, kALU0);
+      return nullptr;
+    }
     // E3 e1 @ abs [37:67]: both ALU1/ALU0 31b pack imm @ entry+17. The
     // ALU0 site shares I12 with BEQZ..BLTZ (opc 4..7) — pin opc==1 (LUI)
     // so a branch member at e1 never satisfies the HI12 sniff (D1.17:
     // `{ lui; beqz; nop }` made this arm return 54 while the LUI sat at
     // 81/83). ALU1 I12 hosts only NOP/LUI (1-bit opc) — pin opc==1.
-    if (IsLuiAlu2(37) && GetBits(49, 1) == 1u)
-      return 54u;
-    if (IsLuiAlu0(37) && GetBits(47, 3) == 1u)
-      return 54u;
+    if (IsLuiAlu2(37) && GetBits(49, 1) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 1, kALU1);
+      return nullptr;
+    }
+    if (IsLuiAlu0(37) && GetBits(47, 3) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 1, kALU0);
+      return nullptr;
+    }
     // E3 e2 @ abs [68:94]: 27b ALU2 imm @ entry+15; ALU0 imm @ entry+13.
     // ALU0 e2 I12 (layout 123) again shares LUI with branches — pin opc.
-    if (IsLuiAlu2(68) && GetBits(74, 1) == 1u)
-      return 83u;
-    if (IsLuiAlu0(68) && GetBits(74, 3) == 1u)
-      return 81u;
-    return I.FieldLsb;
+    if (IsLuiAlu2(68) && GetBits(74, 1) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 2, kALU2);
+      return nullptr;
+    }
+    if (IsLuiAlu0(68) && GetBits(74, 3) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 2, kALU0);
+      return nullptr;
+    }
+    Lsb = I.FieldLsb;
+    return nullptr;
   }
 
   // LO20 / PC_LO20 — ALU RI20 (ADDI32/ORI32/…). RI20 is an E2-only type
@@ -495,21 +541,31 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   // ALU1 I32 shares map=0 but has 2-bit opcode @ [55:54] and no imm20; the
   // full 1-bit type check @53 (=0) plus FieldSize=20 acceptance is the
   // golden discriminator (I32 imm sits at e1 [70:65] with opc≠RI20 range).
+  // D1.42: the e1 window is the generated FieldLsbSites row.
   if (R == RelocKind::LO20 || R == RelocKind::PC_LO20) {
-    if (Indicator != 0x7u)
-      return I.FieldLsb;
-    if (EntryNum != 0u)
-      return I.FieldLsb; // RI20 has no E3 member — fail to table default
+    if (Indicator != haydn::format::FormatEIndicatorBits) {
+      Lsb = I.FieldLsb;
+      return nullptr;
+    }
+    if (EntryNum != 0u) {
+      Lsb = I.FieldLsb; // RI20 has no E3 member — fail to table default
+      return nullptr;
+    }
     // Both E2 ALU units carry RI20 (map=0), so the entry is discriminated
     // by the type field: e0 ALU0 has a 5-bit type @8 (RI20=0x0f, golden
     // "01111"); e1 ALU1 has a 1-bit type @53 (RI20=0).
     // e0 ALU0 RI20: map[7:6]=0 + 5-bit type @8=0x0f → table window.
-    if (GetBits(6, 2) == 0u && GetBits(8, 5) == 0x0fu)
-      return I.FieldLsb; // E2 e0 ALU0 — table window
-    // e1 ALU1 RI20: map[52:51]=0 + 1-bit type @53=0 → imm @65.
-    if (GetBits(51, 2) == 0u && GetBits(53, 1) == 0u)
-      return 65u;
-    return I.FieldLsb;
+    if (GetBits(6, 2) == 0u && GetBits(8, 5) == 0x0fu) {
+      Lsb = resolveFieldLsbForMember(R, 0, 0); // E2 e0 ALU0 — table window
+      return nullptr;
+    }
+    // e1 ALU1 RI20: map[52:51]=0 + 1-bit type @53=0 → generated e1 row.
+    if (GetBits(51, 2) == 0u && GetBits(53, 1) == 0u) {
+      Lsb = resolveFieldLsbForMember(R, 0, 1);
+      return nullptr;
+    }
+    Lsb = I.FieldLsb;
+    return nullptr;
   }
 
   // LS_IMM — LOADSTORE0/LOAD1 RI6 (S_LW_WITH_IMM et al.). Table FieldLsb=28
@@ -524,26 +580,41 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   // LS_IMM row (findFixupFromFixupFields RequireLSUnit) — the LOAD unit map
   // values below are exactly the LS units, so an ALU-unit RI6 site falls to
   // the table default (its producers never mint LS_IMM).
+  // D1.42: every non-default window is the generated FieldLsbSites row.
   if (R == RelocKind::LS_IMM) {
-    if (Indicator != 0x7u)
-      return I.FieldLsb;
+    if (Indicator != haydn::format::FormatEIndicatorBits) {
+      Lsb = I.FieldLsb;
+      return nullptr;
+    }
     if (EntryNum == 0u) {
       // E2: e0 LOADSTORE0 map[7:6]=2 (golden "10") with 3-bit type @8=3;
       // e1 LOAD1 map[52:51]=2 (golden "10") with 2-bit type @53=1.
-      if (GetBits(6, 2) == 2u && GetBits(8, 3) == 3u)
-        return I.FieldLsb; // E2 e0 LOADSTORE0 — table window
-      if (GetBits(51, 2) == 2u && GetBits(53, 2) == 1u)
-        return 72u; // E2 e1 LOAD1
-      return I.FieldLsb;
+      if (GetBits(6, 2) == 2u && GetBits(8, 3) == 3u) {
+        Lsb = resolveFieldLsbForMember(R, 0, 0); // E2 e0 — table window
+        return nullptr;
+      }
+      if (GetBits(51, 2) == 2u && GetBits(53, 2) == 1u) {
+        Lsb = resolveFieldLsbForMember(R, 0, 1); // E2 e1 LOAD1
+        return nullptr;
+      }
+      Lsb = I.FieldLsb;
+      return nullptr;
     }
     // E3: LOADSTORE0 @ e0 (map=3, 3b type=3), LOAD1 @ e1/e2 (map=3, 2b type=1).
-    if (GetBits(6, 2) == 3u && GetBits(8, 3) == 3u)
-      return 25u; // E3 e0 LOADSTORE0
-    if (GetBits(37, 2) == 3u && GetBits(39, 2) == 1u)
-      return 54u; // E3 e1 LOAD1
-    if (GetBits(68, 2) == 3u && GetBits(70, 2) == 1u)
-      return 85u; // E3 e2 LOAD1
-    return I.FieldLsb;
+    if (GetBits(6, 2) == 3u && GetBits(8, 3) == 3u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 0); // E3 e0 LOADSTORE0
+      return nullptr;
+    }
+    if (GetBits(37, 2) == 3u && GetBits(39, 2) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 1); // E3 e1 LOAD1
+      return nullptr;
+    }
+    if (GetBits(68, 2) == 3u && GetBits(70, 2) == 1u) {
+      Lsb = resolveFieldLsbForMember(R, 1, 2); // E3 e2 LOAD1
+      return nullptr;
+    }
+    Lsb = I.FieldLsb;
+    return nullptr;
   }
 
   // CSR_UImm8 — I8 uimm8 (CSRW/CSRR). Table FieldLsb=32 is E2 e0
@@ -559,18 +630,24 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   // member-unique, so every arm pins opc in {4,5}. Without the pins a
   // `{ nop; csrr; zero_gpr }` parcel matched the e0 ZERO_GPR member and
   // returned 23 while the real CSR window was 54.
+  // D1.42: every non-default window is the generated FieldLsbSites row.
   if (R == RelocKind::CSR_UImm8) {
-    if (Indicator != 0x7u)
-      return I.FieldLsb;
+    if (Indicator != haydn::format::FormatEIndicatorBits) {
+      Lsb = I.FieldLsb;
+      return nullptr;
+    }
     auto IsCsrOpc = [](unsigned V) -> bool {
       return V == 4u || V == 5u;
     };
     // E2 e0: golden ALU0 I8 (map=0, 5-bit type @8=3) — pin opc.
     if (EntryNum == 0) {
       if (GetBits(6, 2) == 0u && GetBits(8, 5) == 3u &&
-          IsCsrOpc(GetBits(17, 3)))
-        return 32u; // E2 e0 CSRR/CSRW
-      return I.FieldLsb; // no CSR member at E2 e0 — fail-through
+          IsCsrOpc(GetBits(17, 3))) {
+        Lsb = resolveFieldLsbForMember(R, 0, 0); // E2 e0 CSRR/CSRW
+        return nullptr;
+      }
+      Lsb = I.FieldLsb; // no CSR member at E2 e0 — fail-through
+      return nullptr;
     }
     auto IsI8Alu2 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 1u && GetBits(EntryLo + 2, 4) == 1u;
@@ -578,30 +655,47 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
     auto IsI8Alu0 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 3u;
     };
-    if (IsI8Alu2(6) && IsCsrOpc(GetBits(16, 3)))
-      return 27u;
-    if (IsI8Alu0(6) && IsCsrOpc(GetBits(16, 3)))
-      return 23u;
-    if (IsI8Alu2(37) && IsCsrOpc(GetBits(47, 3)))
-      return 54u;
-    if (IsI8Alu0(37) && IsCsrOpc(GetBits(47, 3)))
-      return 54u;
-    if (IsI8Alu2(68) && IsCsrOpc(GetBits(74, 3)))
-      return 85u;
-    if (IsI8Alu0(68) && IsCsrOpc(GetBits(78, 3)))
-      return 85u;
-    return I.FieldLsb;
+    if (IsI8Alu2(6) && IsCsrOpc(GetBits(16, 3))) {
+      Lsb = resolveFieldLsbForMember(R, 1, 0, kALU2);
+      return nullptr;
+    }
+    if (IsI8Alu0(6) && IsCsrOpc(GetBits(16, 3))) {
+      Lsb = resolveFieldLsbForMember(R, 1, 0, kALU0);
+      return nullptr;
+    }
+    if (IsI8Alu2(37) && IsCsrOpc(GetBits(47, 3))) {
+      Lsb = resolveFieldLsbForMember(R, 1, 1, kALU1);
+      return nullptr;
+    }
+    if (IsI8Alu0(37) && IsCsrOpc(GetBits(47, 3))) {
+      Lsb = resolveFieldLsbForMember(R, 1, 1, kALU0);
+      return nullptr;
+    }
+    if (IsI8Alu2(68) && IsCsrOpc(GetBits(74, 3))) {
+      Lsb = resolveFieldLsbForMember(R, 1, 2, kALU2);
+      return nullptr;
+    }
+    if (IsI8Alu0(68) && IsCsrOpc(GetBits(78, 3))) {
+      Lsb = resolveFieldLsbForMember(R, 1, 2, kALU0);
+      return nullptr;
+    }
+    Lsb = I.FieldLsb;
+    return nullptr;
   }
 
   const bool IsCall = R == RelocKind::WIDE_CallSImm20;
   const bool IsBrI12 = R == RelocKind::WIDE_BranchSImm12;
   const bool IsBrRI12 = R == RelocKind::WIDE_BranchSImm12_RI;
   const bool IsJalr = R == RelocKind::JALRSImm12;
-  if (!IsCall && !IsBrI12 && !IsBrRI12 && !IsJalr)
-    return I.FieldLsb;
+  if (!IsCall && !IsBrI12 && !IsBrRI12 && !IsJalr) {
+    Lsb = I.FieldLsb;
+    return nullptr;
+  }
 
-  if (Indicator != 0x7u)
-    return I.FieldLsb;
+  if (Indicator != haydn::format::FormatEIndicatorBits) {
+    Lsb = I.FieldLsb;
+    return nullptr;
+  }
 
   // I12/RI12 cond-branch (and JALR — same golden RI12 type geometry):
   // table FieldLsb=32 is E2 e0 (golden abs[43:32]).
@@ -613,26 +707,42 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   //     same map/type/imm LSBs as I12 (type 0xd)
   //   e2 27b I12 {pad2, imm12, reg4, opc3, type4=0xa, map2=2}
   //     map@entry+0, type@entry+2, imm@entry+13 → abs 81
+  // D1.42: windows are the generated per-kind FieldLsbSites rows. JALR and
+  // RI12 have no E3 e2 member — for those kinds an e2-shaped site keeps the
+  // documented fail-through to the table default (their producers never
+  // place them at e2).
   if (IsBrI12 || IsBrRI12 || IsJalr) {
-    if (EntryNum == 0)
-      return 32u; // E2 e0
+    if (EntryNum == 0) {
+      Lsb = resolveFieldLsbForMember(R, 0, 0); // E2 e0
+      return nullptr;
+    }
     auto IsE3BrI12 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xau;
     };
     auto IsE3BrRI12 = [&](unsigned EntryLo) -> bool {
       return GetBits(EntryLo, 2) == 2u && GetBits(EntryLo + 2, 4) == 0xdu;
     };
-    if (IsE3BrI12(6) || IsE3BrRI12(6))
-      return 23u;
-    if (IsE3BrI12(37) || IsE3BrRI12(37))
-      return 54u;
-    if (IsE3BrI12(68) || IsE3BrRI12(68))
-      return 81u;
-    return I.FieldLsb;
+    if (IsE3BrI12(6) || IsE3BrRI12(6)) {
+      Lsb = resolveFieldLsbForMember(R, 1, 0);
+      return nullptr;
+    }
+    if (IsE3BrI12(37) || IsE3BrRI12(37)) {
+      Lsb = resolveFieldLsbForMember(R, 1, 1);
+      return nullptr;
+    }
+    if (IsE3BrI12(68) || IsE3BrRI12(68)) {
+      Lsb = resolveFieldLsbForMember(R, 1, 2);
+      return nullptr;
+    }
+    Lsb = I.FieldLsb;
+    return nullptr;
   }
 
-  if (EntryNum == 0)
-    return 31u; // E2 e0 I20: Inst e0={imm20, c0, dest, …} → abs [31:50]
+  if (EntryNum == 0) {
+    Lsb = resolveFieldLsbForMember(R, 0, 0); // E2 e0 I20: Inst e0={imm20,
+    // c0, dest, …} → abs [31:50]
+    return nullptr;
+  }
 
   // E3 I20 JAL: e0/e1 Inst = {imm20, dest4, opc1, type4, map2} (MSB-first).
   // map @ entry+0 (2b), type @ entry+2 (4b), opc @ entry+6 (1b), dest @
@@ -643,15 +753,20 @@ unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc) {
   };
 
   // E3 e0 @ parcel bits[6:36] → imm abs [17:36]
-  if (IsE3JalI20(6))
-    return 17u;
+  if (IsE3JalI20(6)) {
+    Lsb = resolveFieldLsbForMember(R, 1, 0);
+    return nullptr;
+  }
   // E3 e1 @ parcel bits[37:67] → imm abs [48:67]
-  if (IsE3JalI20(37))
-    return 48u;
+  if (IsE3JalI20(37)) {
+    Lsb = resolveFieldLsbForMember(R, 1, 1);
+    return nullptr;
+  }
 
   // Unrecognized E3 call site: keep table default (E2 geometry) rather than
   // invent a third window.
-  return I.FieldLsb;
+  Lsb = I.FieldLsb;
+  return nullptr;
 }
 
 bool isPublishedFieldLsb(RelocKind R, unsigned FieldLsb) {
@@ -790,7 +905,14 @@ RelocAddend tryReadRelocAddend(RelocKind R, const uint8_t *Loc) {
     return Out;
   }
 
-  const unsigned FieldLsb = resolveFieldLsb(R, Loc);
+  // D1.42: propagate the named site error instead of reading at a
+  // default-window LSB (an unknown hwloop site must never read bits the
+  // producer never wrote).
+  unsigned FieldLsb = 0;
+  if (const char *SiteErr = tryResolveFieldLsb(R, Loc, FieldLsb)) {
+    Out.Err = SiteErr;
+    return Out;
+  }
   uint64_t Field = readField(Loc, I.NBytes, I.FieldSize, FieldLsb);
 
   switch (I.Trans) {

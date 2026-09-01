@@ -1,0 +1,107 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -haydn-postra-region-end-edges %s -o - \
+# RUN:     | FileCheck %s --check-prefix=S2
+#
+# D1.38 pin: the cross-boundary DDG builder's edge classes (regmask
+# clobber, call-vs-memory on both sides, unmodeled-side-effect Order) only
+# ADD edges. In the effective-latency cut (Remaining = EdgeLat - Depth)
+# an added edge can only RAISE Eff, hence reduce or preserve cuts — the
+# conservative direction on a no-interlock machine. This test pins
+# end-to-end non-fatal behavior under the flag with all three new classes
+# present across one boundary; the default arm pins identity of the
+# ordinary path (builder unreachable when the flag is off).
+#
+# Fixture (bb.0 -> bb.1 fallthrough):
+#   bb.0: FLAR (real hasSideEffects=1, no reg/mem operands: Order-class
+#         carrier), then a mid-block JAL_W call that RETURNS (not a
+#         terminator), then a branch to bb.1.
+#   bb.1: LD32 of memory the callee may write (call-vs-memory edge),
+#         FLAR 1 (unmodeled pair with the pre FLAR -> Order edge), and a
+#         reader of caller-saved $r5 (clobbered by the call's regmask /
+#         implicit-defs).
+#   Note CSRW/CSRR are NOT usable here: both are isPseudo (addNode skips
+#   them) and CSRW_W is hasSideEffects=0.
+# The flag-on arm must schedule and verify cleanly; parcel order across
+# the boundary must stay conservative (call parcel never after the
+# boundary consumer's parcel).
+#
+# Flags stay default OFF (haydnPostRAInterblockProductDefaultEnabled).
+
+--- |
+  define void @edge_classes(ptr %p, i32 %a) {
+    call void @callee(ptr %p)
+    ret void
+  }
+
+  declare void @callee(ptr)
+...
+---
+name:            edge_classes
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+registers:       []
+liveins:
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:      []
+stack:           []
+constants:       []
+machineFunctionInfo: {}
+body:             |
+
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $r2, $r3, $r15
+
+    FLAR 0
+    $r15 = JAL_W @callee, csr_haydn, implicit-def $r5, implicit $r2
+    B %bb.1
+
+  bb.1:
+    liveins: $r3, $r5, $r15
+
+    $r4 = LD32 $r3, 0
+    FLAR 1
+    $r7 = ADD32 $r5, $r4, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+
+...
+# Default path: builder unreachable (gather seat gated at
+# HaydnPostRASchedStrategy), all four new-class instructions survive
+# verification unchanged. CHECK-DAG keeps this order-insensitive: within a
+# block postmisched owns the order, and this arm's claim is only survival +
+# no transformation, not a layout pin.
+# OFF: body:
+# OFF: bb.0:
+# OFF-DAG: FLAR 0
+# OFF-DAG: $r15 = JAL_W @callee, csr_haydn, implicit-def $r5, implicit{{.*}} $r2
+# OFF: bb.1:
+# OFF-DAG: FLAR{{.*}} 1
+# OFF-DAG: $r4 = {{.*}}LW{{.*}} $r3, 0
+# OFF-DAG: $r7 = ADD32{{.*}} $r5, {{.*}}$r4, implicit-def dead $sfr
+# Flag-on S1+S2 arm: same survivor set, verify-clean, no fatal. New edge
+# classes only ADD edges; in the cut (Remaining = EdgeLat - Depth) they can
+# only raise Eff and suppress cuts, so parcels may gain pads but the
+# pre-boundary FLAR/call parcels must never sink below the boundary
+# consumers (checked by survival here; order pins belong to the QoR arms).
+# S2: body:
+# S2: bb.0:
+# S2-DAG: FLAR 0
+# S2-DAG: $r15 = JAL_W @callee, csr_haydn, implicit-def $r5, implicit{{.*}} $r2
+# S2: bb.1:
+# S2-DAG: FLAR{{.*}} 1
+# S2-DAG: $r4 = {{.*}}LW{{.*}} $r3, 0
+# S2-DAG: $r7 = ADD32{{.*}} $r5, {{.*}}$r4, implicit-def dead $sfr

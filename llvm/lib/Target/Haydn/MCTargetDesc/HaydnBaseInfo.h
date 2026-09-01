@@ -23,7 +23,13 @@ namespace llvm::Haydn {
 // VLIW bundle constants
 //===----------------------------------------------------------------------===//
 
-// Number of issue slots in a VLIW bundle (Format E E2/E3 occupancy cap).
+// Number of issue slots in a VLIW bundle. This equals the generated E3
+// row entry capacity — the compile-time pin lives beside the generated
+// occupancy constants in HaydnPackLegality.h (FormatEE3EntryCapacity /
+// MaxIssuePerCycle), which cannot be included here without pulling
+// MachineInstr into every MC consumer. CodeGen seats that have that
+// header use these names; ISSUE_SLOT_COUNT remains the MC-side spelling
+// of the same generated fact.
 constexpr unsigned ISSUE_SLOT_COUNT = 3;
 
 // Product parcels are Format E only. Retired variable-width bundle tags and

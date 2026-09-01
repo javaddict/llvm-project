@@ -1180,6 +1180,13 @@ auctionFocusFillScoreOnly(ArrayRef<unsigned> BaseOpcodes,
 /// from the bake. \p AA defaults to nullptr; \p commitOneProductCycle
 /// forwards ScheduleDAGMI AA so as-is generated members keep the probe's
 /// proven-disjoint result.
+///
+/// D1.52: the bake itself defensively enforces the store/load may-alias
+/// law (pack::cycleHasMayAliasStoreLoad on the caller's \p AA): no commit
+/// path can bake a same-cycle store/load packet without either a
+/// proven-NoAlias AA fact or a split. Null AA is fail-closed by
+/// construction (the shared predicate accepts only proven disjoint);
+/// callers holding live AA must forward it so a proven pair still bakes.
 bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
                                     AAResults *AA = nullptr);
 
@@ -1188,7 +1195,8 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
 /// field order, store/load overlap) then exact bake. \p AA defaults to
 /// nullptr (fail-closed); leaveMBB passes HaydnScheduleDAGMI AA.
 /// Callers must not open a second bake path beside this — residual
-/// hard-root and SMS/hwloop sites dissolve into the same pair.
+/// hard-root and SMS/hwloop sites (including the D1.52 SET-removal
+/// recommit in HaydnHWLoopDemote) dissolve into the same pair.
 bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs,
                            AAResults *AA = nullptr);
 

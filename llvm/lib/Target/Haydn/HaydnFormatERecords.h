@@ -190,17 +190,27 @@ inline bool inverseCoversMember(const FormatEMemberRec &M) {
 /// catalog span when the unsuffixed `_W` name has no alt row (ADDI32_W →
 /// ADDI32). CSRW_W peels to CSRW; reloc CSRW_W cutovers to the member and
 /// encode refuses an untyped CSR fixup kind.
+///
+/// FAIL-CLOSED LAW (D1.46): every nonempty result must be a generated
+/// catalog occupancy name (a FormatEAltSpans key — directly, or after the
+/// public-alias mapping below). An unknown spelling returns the EMPTY
+/// string, never the raw input: the occupancy layer (unitMaskForLogical)
+/// treats an unknown name as unconstrained (mask 0), so returning an
+/// unpeeled/unknown name would silently drop the unit-injectivity
+/// constraint for that member. The freeze verifier is unaffected (it uses
+/// the generated inverse, not this peel). The `*_S<digits>` refusal above
+/// also returns empty for the same reason — ST8_S0 is not occupancy ST8.
 inline std::string peelLogicalOpcodeName(StringRef Name,
                                          bool StripWide = true) {
   // Leftover FieldSlot `*_S<digits>` is not a catalog logical. Occupancy
-  // must not recover ST8 from ST8_S0 (AIE MultiSlot alts).
+  // must not recover ST8 from ST8_S0 (AIE MultiSlot alts) — fail closed.
   {
     StringRef Rest = Name;
     while (!Rest.empty() && Rest.back() >= '0' && Rest.back() <= '9')
       Rest = Rest.drop_back();
     if (Rest.size() != Name.size() && Rest.size() >= 2 &&
         Rest.ends_with_insensitive("_S"))
-      return Name.str();
+      return {};
   }
   StringRef Base = Name;
   auto peel = [&](StringRef Suf) {
@@ -301,12 +311,24 @@ inline std::string peelLogicalOpcodeName(StringRef Name,
       Base.equals_insensitive("ZEXT_GPR32_TO_DR64"))
     return "SEXT32T64";
   if (Base.equals_insensitive("RET"))
-    return "JALR";
+    Base = "JALR";
   // Catalog token is WFI<TBD>; TableGen member symbol is WFITBDTBDTBD_*
   // (angle brackets are not ident). Same span as the generated HINT members.
-  if (Base.equals_insensitive("WFI") ||
-      Base.equals_insensitive("WFITBDTBDTBD"))
-    return "WFI<TBD>";
+  else if (Base.equals_insensitive("WFI") ||
+           Base.equals_insensitive("WFITBDTBDTBD"))
+    Base = "WFI<TBD>";
+  // NOP is a real catalog occupancy name (FormatEMembers Logical, all 128
+  // NOP member rows) but is deliberately excluded from the NonNop
+  // FormatEAltSpans table — admit it here, same as findFormatEMember's
+  // NOP special case.
+  else if (Base.equals_insensitive("NOP"))
+    Base = "NOP";
+  // Fail-closed exit: the peeled name must be a generated catalog occupancy
+  // name (FormatEAltSpans key, or NOP above). Unknown spelling → empty
+  // string, so the occupancy layer never treats a typo'd/unknown residual
+  // as an unconstrained-but-present member.
+  if (!Base.equals_insensitive("NOP") && !findAltSpan(Base.str().c_str()))
+    return {};
   return Base.str();
 }
 

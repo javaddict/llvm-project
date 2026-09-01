@@ -1,0 +1,74 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,branch-relaxation \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# GR2.7 class 2 pin: a REAL conditional-branch emission by a postcommit
+# insertBranch (BranchRelaxation re-emitting a short cond branch after the
+# finalize stamp) SELF-COMMITS as a committed singleton BUNDLE root at
+# emission time — no bare real-encode MI is reachable between a postcommit
+# BR/Fixup invocation and the next Finalize (GR2.7 I3). Representation
+# shells (B) stay bare: Finalize expands B to BEQZ_W_MSP.
+#
+# Product-ordered chain: finalize first (stamps the postcommit block
+# budget), then branch-relaxation with the safety buffer at 0 so the
+# short sites stay in range and BR exercises its removeBranch/insertBranch
+# fixed point on the already-committed roots.
+
+--- |
+  define void @cond_reemit(i1 %c) {
+  entry:
+    br i1 %c, label %taken, label %exit
+  taken:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            cond_reemit
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: cond_reemit
+    ; CHECK: bb.0.entry
+    ; The conditional branch is a committed singleton BUNDLE root at BR
+    ; exit (never a bare real-encode MI after the stamp).
+    ; CHECK: BUNDLE
+    ; CHECK: BEQZ{{.*}} $r0, %bb.2
+    BEQZ_W $r0, %bb.2, implicit-def dead $sfr
+
+  bb.1.taken:
+    successors: %bb.2
+    liveins: $r15
+    ; Uncond representation shell stays a BUNDLE root wrapping B; Finalize
+    ; (already ran) expanded it to the MSP clone.
+    ; CHECK: bb.1.taken
+    ; CHECK: BUNDLE
+    BUNDLE 0 {
+      BEQZ_W_MSP $r0, %bb.2
+    }
+
+  bb.2.exit:
+    liveins: $r15
+    ; CHECK: bb.2.exit
+    ; CHECK: JALR
+    RET implicit $r15
+
+...

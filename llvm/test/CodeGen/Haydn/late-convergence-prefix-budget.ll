@@ -8,6 +8,11 @@
 ; budgets (encoded bytes + alignment pad), not a whole-function total.
 ; Range-relevant pairs are dumped at entry and after the bounded loop;
 ; no-growth is reported against those pair budgets.
+; GR2.6 restamp: the loop is the monotone closure (S2 once per entry;
+; "closed after N iteration(s)"), and the per-iteration event-accounted
+; no-growth law is enforced (fatal on unaccounted growth). This function
+; closes with no upward event, so entry==final and no-growth is
+; deterministic (=1 under the parcel-rounded reserved budget).
 
 define i32 @prefix_chain(ptr nocapture readonly %a, i32 %n) {
 entry:
@@ -28,6 +33,8 @@ exit:
 
 ; CHECK: HaydnLateConvergence: prefix_chain bound={{[0-9]+}}
 ; CHECK: HaydnLateConvergence: entry prefix_chain prefix bb.{{[0-9]+}}->bb.{{[0-9]+}} encoded={{[0-9]+}} pad={{[0-9]+}} maxalign={{[0-9]+}} budget={{[0-9]+}}
-; CHECK: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; CHECK: HaydnLateConvergence: S2 once per driver entry
+; CHECK: HaydnLateConvergence: closure iteration {{[0-9]+}} events: promotions={{[0-9]+}} demotions={{[0-9]+}} stalls={{[0-9]+}} mbb-growth={{[0-9]+}}
+; CHECK: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; CHECK: HaydnLateConvergence: final prefix_chain prefix bb.{{[0-9]+}}->bb.{{[0-9]+}} encoded={{[0-9]+}} pad={{[0-9]+}} maxalign={{[0-9]+}} budget={{[0-9]+}}
-; CHECK: HaydnLateConvergence: prefix_chain prefixes={{[0-9]+}} no-growth={{[01]}} jalr-sites={{[0-9]+}} hwloop-setups=0
+; CHECK: HaydnLateConvergence: prefix_chain prefixes={{[0-9]+}} no-growth=1 jalr-sites={{[0-9]+}} hwloop-setups=0

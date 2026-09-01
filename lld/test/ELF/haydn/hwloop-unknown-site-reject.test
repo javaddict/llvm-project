@@ -1,0 +1,58 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %s -o %t.o
+# Stamp product ELFFlagsValue (e_flags=0x1). yaml2obj has no Haydn e_flags
+# bit names; LLD rejects unprofiled zero flags fail-closed.
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.o
+# RUN: not ld.lld %t.o -o %t.out --section-start=.text=0x10000 2>&1 | FileCheck %s
+
+# D1.42 fail-closed pin: an R_HAYDN_HWLoopOff1/Off2 whose Loc is NOT a
+# generated SET_HWLOOP window must produce a NAMED error in lld relocate —
+# never a silent patch of the base-row E2 F2 window (32/38), the
+# pre-D1.42 behavior on unknown sites. Both consumers (MC applyFixup and
+# lld relocate) share the one fallible tryResolveFieldLsb authority; this
+# is the lld arm. (.reloc cannot name R_HAYDN_* kinds at the assembler, so
+# the object is hand-minted here.)
+#
+# Site shapes (parcel content from golden E2 e0 LUI I12 layout):
+#   parcel 0 bytes 07 0a .. — indicator 111, entry_num 0, type=0x0a (LUI)
+#   at bits[12:8]: a valid Format E parcel with NO hwloop member.
+# The producer never mints this (HWLoopOff comes only from SET members
+# whose committed entry is a hwloop member; D1.12 dual walls refuse
+# ambiguous shapes), so only a hand object reaches it.
+
+# CHECK: error:{{.*}}Haydn reloc: HWLoopOff1 site is not a generated SET_HWLOOP window
+# CHECK-NOT: error: {{.*}}undefined
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    # E2 e0 LUI parcel: header 07, type 0x0a @ bits[12:8], opc=1 @17.
+    Content: '070a02000000000000000000'
+  - Name:    .rela.text
+    Type:    SHT_RELA
+    Link:    .symtab
+    Info:    .text
+    Relocations:
+      - Offset: 0
+        Symbol: target
+        Type:   0x10
+Symbols:
+  - Name:    _start
+    Section: .text
+    Value:   0
+    Size:    12
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC
+  - Name:    target
+    Section: .text
+    Value:   12
+    Size:    0
+    Binding: STB_GLOBAL

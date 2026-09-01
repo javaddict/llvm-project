@@ -264,52 +264,27 @@ unsigned HaydnFixupHwLoops::countFollowingBundles(
   return Bundles;
 }
 
-// Conservative layout pad when entering a later MBB. Hexagon aligns the
-// running offset to MBB.getAlignment(); Haydn can emit only whole product
-// EncodedBytes parcels, so the gap is charged as ceilProductParcels ×
-// generated EncodedBytes. No magic 12/16 quantum.
-static int64_t padLayoutBytesForMBBAlign(int64_t Bytes,
-                                         const MachineBasicBlock &MBB) {
-  const Align A = MBB.getAlignment();
-  if (A == Align(1) || Bytes < 0)
-    return Bytes;
-  const uint64_t Need = alignTo(static_cast<uint64_t>(Bytes), A);
-  if (Need <= static_cast<uint64_t>(Bytes))
-    return Bytes;
-  const unsigned Gap =
-      static_cast<unsigned>(Need - static_cast<uint64_t>(Bytes));
-  return Bytes + haydn::bundle::productBundlesToBytes(
-                     haydn::bundle::ceilProductParcels(Gap));
-}
+// D1.34 (closed law): the layout pad and the From→To distance walk live
+// ONCE in haydn::hwloop (HaydnHWLoopDemote.cpp) —
+// padLayoutBytesForMBBAlign (joint lcm(Align, Parcel) grid +
+// BranchRelaxation postOffset/ParentAlign-uncertainty bound, whole
+// parcels) / computeLayoutBlockStarts / estimateLayoutMBBDistance.
+// This seat delegates; the demote LongLatch decision and the pre-S1
+// normalization far-test consume the same law, so no two seats can
+// disagree on "far" (the GR2.7 5-red class). A negative return (-1)
+// from THIS seat's Fixup windows is fail-closed here directly:
+// computeOffsets feeds it into StartOff/EndOff, and the
+// StartOff < 0 || EndOff < 0 arm of rangeBad/padBodyToMinLaw rejects
+// before any encode decision. (The demote's span sentinel resolves its
+// other direction on the same walk — see estimateLayoutSpanBytes.)
 
 // Conservative layout distance From→To in layout order (only forward).
 int64_t HaydnFixupHwLoops::estimateMBBDistance(
     const MachineFunction &MF, const MachineBasicBlock *FromMBB,
     MachineBasicBlock::const_iterator FromIt, const MachineBasicBlock *ToMBB,
     const HaydnInstrInfo &TII) const {
-  if (!isLiveMBB(MF, FromMBB) || !isLiveMBB(MF, ToMBB))
-    return -1;
-  int64_t Bytes = 0;
-  bool Started = false;
-  for (const MachineBasicBlock &MBB : MF) {
-    if (&MBB == FromMBB)
-      Started = true;
-    if (!Started)
-      continue;
-    // Already inside FromMBB (AfterSet). Charge alignment only when
-    // entering a subsequent MBB in layout order.
-    if (&MBB != FromMBB)
-      Bytes = padLayoutBytesForMBBAlign(Bytes, MBB);
-    auto Begin = (&MBB == FromMBB) ? FromIt : MBB.begin();
-    for (auto I = Begin, E = MBB.end(); I != E; ++I) {
-      if (&MBB == ToMBB && I == ToMBB->begin())
-        return Bytes;
-      Bytes += TII.getInstSizeInBytes(*I);
-    }
-    if (&MBB == ToMBB)
-      return Bytes;
-  }
-  return -1; // To not after From in layout.
+  return haydn::hwloop::estimateLayoutMBBDistance(MF, FromMBB, FromIt, ToMBB,
+                                                  TII);
 }
 
 bool HaydnFixupHwLoops::computeOffsets(MachineInstr &SetMI,
@@ -650,38 +625,11 @@ bool HaydnFixupHwLoops::fixupOne(MachineInstr &SetMI,
     static_assert(BranchRelaxSafetyBufferBytes == MaxSingleBranchGrowthBytes,
                   "BR safety buffer is the contracts growth budget");
 
-    auto isStillRelaxableShortBranch = [](const MachineInstr &Br) -> bool {
-      if (!Br.isBranch())
-        return false;
-      // Already-indirect forms cannot grow further under BranchRelaxation.
-      if (Br.isIndirectBranch())
-        return false;
-      // Calls (including JAL_W) are long-reach / not the short simm12 path.
-      if (Br.isCall())
-        return false;
-      switch (Br.getOpcode()) {
-      // ZOL / software-latch metas: not PC-relative BR subjects (see
-      // HaydnInstrInfo::isBranchOffsetInRange). Fixup owns their lowering.
-      case Haydn::PseudoLoopEnd:
-      case Haydn::LoopJNZ:
-      case Haydn::LoopDec:
-      case Haydn::LoopStart:
-      // Long-reach / already-final control (member forms included by
-      // isIndirectBranch / isCall above; list logical/wide bases for clarity).
-      case Haydn::JAL:
-      case Haydn::JAL_W:
-      case Haydn::JALR:
-      case Haydn::JALR_W:
-      case Haydn::PseudoCALL:
-      case Haydn::BR_JT:
-      case Haydn::RET:
-        return false;
-      default:
-        // Bare/member short cond + B (simm12). Second BR may expand each to
-        // an inverted near + trampoline or LUI+ADDI+JALR sequence.
-        return true;
-      }
-    };
+    // GR2.6: the still-relaxable site law is the ONE shared classifier in
+    // HaydnHWLoopContracts.h (isStillRelaxableShortBranch) — Fixup's
+    // Off1/Off2 margin reservation and the LateConvergence prefix-budget
+    // capture count sites through the same mechanism (constraint 14).
+    using haydn::hwloop::isStillRelaxableShortBranch;
 
     auto countBranchGrowthIn = [&](const MachineInstr &Probe) -> int64_t {
       int64_t G = 0;

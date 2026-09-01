@@ -1,0 +1,255 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-relaxation \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# GR2.7 class 2 pin of the normalized long-jump form at the PRE-SCHEDULER
+# seat (C1/C2 catalog, HaydnTargetMachine.cpp addPreSched2): an
+# out-of-range B with every allocatable GPR live across the jump
+# materializes the LUI+ADDI32_W+JALR_W trampoline at this seat. No Finalize
+# runs in this chain (unstamped => the CFG-creating callback stays legal
+# here per GR2.7 I4; the same promotion after a stamp is refused, pinned
+# in gr27-postcommit-cfg-wall.mir). The R11-spill/RestoreBB splice leg (C2)
+# additionally requires BranchRelaxationScratchFI from PEI; product seats
+# reserve it (HaydnFrameLowering) and cb124-branch-relax-nospill-after-jalr
+# pins the AllowSpill=false law on the same callback.
+
+--- |
+  define void @all_gpr_live_far_b() {
+  entry:
+    br label %pad
+  pad:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            all_gpr_live_far_b
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r3', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r7', virtual-reg: '' }
+  - { reg: '$r8', virtual-reg: '' }
+  - { reg: '$r9', virtual-reg: '' }
+  - { reg: '$r10', virtual-reg: '' }
+  - { reg: '$r11', virtual-reg: '' }
+  - { reg: '$r12', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    ; Far unconditional B with every allocatable GPR live: the default
+    ; BranchRelaxSafetyBufferBytes plus the NOP pad puts the dest out of
+    ; WIDE_BranchSImm12 reach, so the site promotes to the terminal long
+    ; form at this (unstamped, pre-S1) seat.
+    B %bb.2
+
+  bb.1.pad:
+    successors: %bb.2
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r15
+    RET implicit $r15
+
+...
+
+# CHECK: name: all_gpr_live_far_b
+# CHECK: bb.0.entry
+# The trampoline is created and the long-form parcels are the bare real
+# LUI/ADDI32_W/JALR_W triple (S1 commits them next in the product
+# pipeline; this probe stops before Finalize so no BUNDLE roots appear).
+# CHECK: LUI %bb.2
+# CHECK-NEXT: ADDI32_W {{.*}}, %bb.2
+# CHECK-NEXT: JALR_W
+# CHECK-NOT: B %bb.2

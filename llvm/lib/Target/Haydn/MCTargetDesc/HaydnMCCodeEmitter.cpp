@@ -289,7 +289,10 @@ static std::optional<unsigned> getExprFixupKind(const MCInst &MI,
       Mem->Unit == static_cast<uint8_t>(FormatEUnit::LOADSTORE0) ||
       Mem->Unit == static_cast<uint8_t>(FormatEUnit::LOAD1);
   const HaydnReloc::RelocKind R = HaydnReloc::findFixupFromFixupFields(
-      TypeName, Mem->Opcode, Field, /*FormatBytes=*/12, IsLS);
+      TypeName, Mem->Opcode, Field,
+      haydn::format::encodedBytesOrDie(
+          haydn::format::BundleFormatRowID::E96TwoEntry),
+      IsLS);
   if (R == HaydnReloc::RelocKind::Invalid)
     return std::nullopt;
   const unsigned FK = HaydnReloc::mapRelocKindToFixup(R);

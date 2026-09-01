@@ -71,11 +71,37 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
                                                    const TargetSchedModel *TSM) {
   // Target-owned conservative construction (HC#0 NOT minted): stock
   // buildSchedGraph cannot walk two blocks, and a subclass re-implementation
-  // of its full memory walk would drift. This builder only OVER-APPROXIMATES
-  // the cross-boundary dependences the effective-latency cut consumes —
-  // extra edges only suppress cuts, never invent them, so conservatism is
-  // the safety property (AIE peer semantics: AIEMaxLatencyFinder
-  // computeEffectiveLatency, Remaining = EdgeLat - Depth(Succ)).
+  // of its full memory walk would drift.
+  //
+  // INVARIANT (dependence superset over ADMITTED nodes): for every admitted
+  // (Pre, Post) node pair, a cross-boundary SDep exists whenever one of these
+  // classes holds:
+  //   (1) register truth: an exact-register operand match, OR a pre-boundary
+  //       regmask that clobbers a post operand's register. Exact-register
+  //       equality IS regunit-exact on Haydn: the register file is flat
+  //       (HaydnRegisterInfo.td has no SubRegs / SubRegIndices), so a
+  //       register equals its only regunit.
+  //   (2) memory truth: pre memory op OR pre call, against post memory op OR
+  //       post call, priced through mayAlias (returns true whenever either
+  //       side isCall — MachineInstr.cpp mayAlias).
+  //   (3) unmodeled truth: pre (isCall || hasUnmodeledSideEffects) against
+  //       post (isCall || hasUnmodeledSideEffects || mayLoad || mayStore)
+  //       gets a latency-0 Order edge (CSRW->CSRR, WFI pairs, call->call).
+  // Adding an edge can only RAISE Eff in the effective-latency cut
+  // (Remaining = EdgeLat - Depth(Succ)); a MISSING edge shrinks Eff and cuts
+  // latency MORE — under-padding on a no-interlock machine. So these classes
+  // are mandatory before any W69 interblock flip, and conservatism (extra
+  // edges) is the safe direction, not merely a QoR knob.
+  //
+  // NON-SUPERSET boundaries (what this DDG deliberately does NOT cover —
+  // do not read the invariant above as blanket over-approximation):
+  //   (a) Pred and Succ terminators are not nodes on either side (gather
+  //       excludes them): a pre-terminator branch read vs a post-boundary
+  //       writer is a WAR-only, latency-0, cut-inert pair — safe to omit.
+  //   (b) Bundle-internal reads (IsInternalRead) are not cross edges.
+  // Bot scoreboard replay does not read this edge set at all (it replays
+  // recorded successor occupancy), so these classes only feed the cut
+  // consumer.
   auto MIFor = [&](const SUnit &SU) -> MachineInstr & { return *SU.getInstr(); };
 
   // Published Data_Latency for a cross-boundary producer. getInstrLatency
@@ -106,7 +132,14 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
   };
 
   // Register dependences, pre -> post: for each post node's operands,
-  // connect against every pre node touching the same reg units.
+  // connect against every pre node touching the same register (exact
+  // equality == regunit equality on the flat file) or clobbering it via a
+  // regmask. Every matching Pre operand contributes its edge class; a
+  // single Pre MI that both reads and defines the same register must not
+  // deliver only the Anti edge when a Data edge is true, so there is no
+  // first-match break. SDep::overlaps (kind+reg) inside SUnit::addPred
+  // (ScheduleDAG.cpp) is the sole collapse, extending latency when the
+  // re-added edge is the costlier one.
   for (const SUnit &PostSU : SUnits) {
     if (!isPostBoundaryNode(&PostSU))
       continue;
@@ -121,6 +154,8 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
         if (!isPreBoundaryNode(&PreSU) || PreSU.isBoundaryNode())
           continue;
         MachineInstr &Pre = MIFor(PreSU);
+        // (1a) Exact-register operands (covers compiled JAL_W calls, whose
+        // caller-saved clobbers are materialized as implicit-def operands).
         for (const MachineOperand &PMO : Pre.operands()) {
           if (!PMO.isReg() || !PMO.getReg() || PMO.getReg() != Reg)
             continue;
@@ -144,21 +179,55 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
           if (Kind == SDep::Data)
             Cross.setLatency(EdgeDataLatency(Pre));
           const_cast<SUnit &>(PostSU).addPred(Cross);
-          break;
+        }
+        // (1b) Regmask clobber: a pre-boundary regmask that clobbers a post
+        // operand's register is a def of that register. Today's compiled
+        // JAL_W materializes its clobber set as implicit-defs, so this arm
+        // dedups away there; it exists for the regmask-only shape (hand
+        // MIR, future calling-convention edits) the explicit scan cannot
+        // see. Exact equality == regunit equality (flat register file).
+        // isPhysical guards the clobbersPhysReg assert (this builder is
+        // post-RA; a vreg-shaped operand has no mask truth).
+        bool PreHasRegMaskClobber = false;
+        if (Reg.isPhysical()) {
+          for (const MachineOperand &PMO : Pre.operands()) {
+            if (PMO.isRegMask() && PMO.clobbersPhysReg(Reg)) {
+              PreHasRegMaskClobber = true;
+              break;
+            }
+          }
+        }
+        if (PreHasRegMaskClobber) {
+          if (PostReads) {
+            SDep Cross(const_cast<SUnit *>(&PreSU), SDep::Data, Reg);
+            Cross.setLatency(EdgeDataLatency(Pre));
+            const_cast<SUnit &>(PostSU).addPred(Cross);
+          } else if (PostWrites) {
+            SDep Cross(const_cast<SUnit *>(&PreSU), SDep::Output, Reg);
+            const_cast<SUnit &>(PostSU).addPred(Cross);
+          }
         }
       }
     }
   }
 
-  // Memory dependences, pre -> post: any pre memory writer to any post
-  // memory reader/writer (store->load, store->store; load->store) unless AA
-  // proves no-alias. Loads before the boundary reading after a post store is
-  // impossible in this direction (post runs later) — only pre->post edges.
+  // Memory dependences, pre -> post: any pre memory writer (or pre CALL —
+  // generated JAL_W/JAL_E members carry no MayLoad/MayStore flags but a call
+  // reads and writes arbitrary memory) to any post memory reader/writer or
+  // post call (store->load, store->store, load->store, call-vs-memory both
+  // directions) unless AA proves no-alias. Loads before the boundary reading
+  // after a post store is impossible in this direction (post runs later) —
+  // only pre->post edges. mayAlias returns true whenever either side isCall,
+  // so calls need no separate alias logic.
   SmallVector<std::pair<const SUnit *, bool>> PreMem; // (SU, isWrite)
   for (const SUnit &SU : SUnits)
     if (isPreBoundaryNode(&SU) && !SU.isBoundaryNode()) {
       const MachineInstr &MI = MIFor(SU);
-      if (MI.mayStore())
+      if (MI.isCall()) {
+        // A call is both a memory writer and a memory reader.
+        PreMem.emplace_back(&SU, true);
+        PreMem.emplace_back(&SU, false);
+      } else if (MI.mayStore())
         PreMem.emplace_back(&SU, true);
       else if (MI.mayLoad())
         PreMem.emplace_back(&SU, false);
@@ -169,7 +238,11 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
     MachineInstr &Post = MIFor(PostSU);
     bool PostWrites = Post.mayStore();
     bool PostReads = Post.mayLoad();
-    if (!PostWrites && !PostReads)
+    // Post-boundary calls read arbitrary memory (the callee may read what
+    // the pre-boundary side wrote); unmodeled-side-effect post ops stay out
+    // of the memory arm (no known address) and get Order edges below.
+    bool PostIsMemOrCall = PostWrites || PostReads || Post.isCall();
+    if (!PostIsMemOrCall)
       continue;
     for (const auto &[PreSU, PreWrites] : PreMem) {
       // load -> load is not a dependence.
@@ -185,6 +258,34 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
       SDep MemEdge(const_cast<SUnit *>(PreSU), SDep::Data, /*Reg=*/0);
       MemEdge.setLatency(EdgeDataLatency(MIFor(*PreSU)));
       const_cast<SUnit &>(PostSU).addPred(MemEdge);
+    }
+  }
+
+  // (3) Unmodeled-side-effect Order edges, pre -> post: real (non-pseudo)
+  // carriers of MCID::UnmodeledSideEffects — MOVESFR2GPR/MOVEGPR2SFR,
+  // FLAR/WBARWUA, and generated Format E members like JAL_E* and the SFR
+  // member family — model their effect on SFR/AR state, not on the GPR/DR
+  // operands or memory addresses the arms above price. These pairs must not
+  // reorder across the boundary. Latency 0 by construction (the 2-arg Order
+  // SDep constructor), hence cut-inert today (Remaining <= 0 skips); the
+  // edge exists so any future dependence-superset consumer (W69) cannot
+  // drop the ordering. This is NOT a latency guarantee.
+  for (const SUnit &PostSU : SUnits) {
+    if (!isPostBoundaryNode(&PostSU) || PostSU.isBoundaryNode())
+      continue;
+    MachineInstr &Post = MIFor(PostSU);
+    bool PostUnmodeled = Post.hasUnmodeledSideEffects() || Post.isCall() ||
+                         Post.mayLoad() || Post.mayStore();
+    if (!PostUnmodeled)
+      continue;
+    for (const SUnit &PreSU : SUnits) {
+      if (!isPreBoundaryNode(&PreSU) || PreSU.isBoundaryNode())
+        continue;
+      MachineInstr &Pre = MIFor(PreSU);
+      if (!Pre.hasUnmodeledSideEffects() && !Pre.isCall())
+        continue;
+      SDep Ord(const_cast<SUnit *>(&PreSU), SDep::Barrier);
+      const_cast<SUnit &>(PostSU).addPred(Ord);
     }
   }
 

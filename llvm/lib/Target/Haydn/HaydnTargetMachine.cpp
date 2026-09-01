@@ -47,10 +47,9 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Target/CGPassBuilderOption.h"
 #include "llvm/Target/TargetOptions.h"
-#include <fcntl.h>
 #include <optional>
-#include <unistd.h>
 
 using namespace llvm;
 
@@ -171,6 +170,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnFixupHwLoopsPass(PR);
   initializeHaydnLateConvergencePassPass(PR);
   initializeHaydnMachineAlignmentPass(PR);
+  initializeHaydnLongBranchNormalizePass(PR);
   initializeBranchRelaxationLegacyPass(PR);
   initializeMachinePipelinerPass(PR);
 }
@@ -247,6 +247,28 @@ HaydnTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
 
 namespace {
 
+// Registered-option lookup for the GR2.3 rejection seat below. Returns
+// nullptr when the option is absent (not-registered = not-requested;
+// consumers must treat that as "no request", never reject). The
+// static_cast to the concrete cl::opt<T> is the in-tree introspection
+// idiom (the Haydn unit tests do the same): cl::opt has no classof, LLVM
+// builds without RTTI, and the static option types are pinned in the seat
+// comment, so the cast target is part of the read-only contract, not a
+// guess.
+static cl::Option *lookupRegisteredOption(StringRef Name) {
+  auto &Opts = cl::getRegisteredOptions();
+  auto It = Opts.find(Name);
+  return It == Opts.end() ? nullptr : It->second;
+}
+
+// Read the stored value of a registered cl::opt<T>. Returns nullptr when
+// the option is not registered (treated as "no request").
+template <typename T>
+static cl::opt<T> *registeredOptionAs(StringRef Name) {
+  cl::Option *O = lookupRegisteredOption(Name);
+  return O ? static_cast<cl::opt<T> *>(O) : nullptr;
+}
+
 //===----------------------------------------------------------------------===//
 // GR2.3: fail-closed forced-enable rejection for unsupported executable
 // common-tail writers (MachineOutliner, MachineFunctionSplitter,
@@ -262,8 +284,8 @@ namespace {
 // directly, but the llc-only hidden static cl::opts in TargetPassConfig.cpp
 // are file-static in generic CodeGen. Exposing them would be a generic-code
 // edit (forbidden by hard constraint #1); cl::getRegisteredOptions() +
-// getNumOccurrences() + printOptionValue() is the public, read-only
-// introspection surface, so this stays target-owned.
+// getNumOccurrences() + the typed cl::opt<T> stored value is the public,
+// read-only introspection surface, so this stays target-owned.
 //
 // Why the PassConfig seat and not the TM constructor: TargetOptions are
 // final at TM creation, but tools speculatively create targets; the
@@ -312,58 +334,21 @@ static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM
 
   // The llc-only hidden static flags are file-static in generic CodeGen;
   // cl::getRegisteredOptions() is the public read-only way to reach them.
-  // getNumOccurrences() is the occurred gate (an untouched option prints
-  // its default and must never reject); printOptionValue() classifies the
-  // requested value. Pinned printed forms (gr23 lit test):
-  //   RunOutliner enum : "= always" | "= never" | "= optimistic-pgo" |
-  //                      "= conservative-pgo" | "= *unknown option value*"
-  //                      (the last is the untouched default; a bare
-  //                      ValueOptional occurrence prints "always")
-  //   bool flag        : "= 1" | "= 0"
-  // printOptionValue writes to llvm::outs() (Support offers no stream
-  // parameter and no public buffer swap), so the value is captured by
-  // redirecting fd 1 to a scratch file for the call only. This is the same
-  // sink -print-all-options uses; the redirect is local, restored on every
-  // path, and never spans user-visible output (outs() is flushed around
-  // the swap).
-  auto PrintedFlagValue = [](StringRef Name, SmallVectorImpl<char> &Out) {
-    auto It = cl::getRegisteredOptions().find(Name);
-    if (It == cl::getRegisteredOptions().end())
-      return false;
-    cl::Option *O = It->second;
-    if (O->getNumOccurrences() == 0)
-      return false;
-    llvm::outs().flush();
-    fflush(stdout);
-    int SavedFD = dup(STDOUT_FILENO);
-    if (SavedFD < 0)
-      return false;
-    char Scr[] = "/tmp/haydn-gr23-optval-XXXXXX";
-    int ScrFD = mkstemp(Scr);
-    if (ScrFD < 0) {
-      close(SavedFD);
-      return false;
-    }
-    dup2(ScrFD, STDOUT_FILENO);
-    O->printOptionValue(O->getOptionWidth(), /*Force=*/true);
-    llvm::outs().flush();
-    fflush(stdout);
-    dup2(SavedFD, STDOUT_FILENO);
-    close(SavedFD);
-    off_t Len = lseek(ScrFD, 0, SEEK_CUR);
-    if (Len > 0) {
-      lseek(ScrFD, 0, SEEK_SET);
-      Out.resize(Len);
-      ssize_t Read = read(ScrFD, Out.data(), Len);
-      Out.resize(Read > 0 ? Read : 0);
-    }
-    close(ScrFD);
-    unlink(Scr);
-    return true;
-  };
-
-  SmallString<128> Printed;
-
+  // getNumOccurrences() is the occurred gate (an untouched option holds
+  // its default and must never reject); the STORED VALUE classifies the
+  // request. The value is read directly from the typed cl::opt object —
+  // no printOptionValue/fd capture (that path wrote to llvm::outs(), is
+  // process-wide under in-process parallel codegen, and is not portable).
+  // Static type facts (TargetPassConfig.cpp, both cl::Hidden):
+  //   -enable-machine-outliner          cl::opt<RunOutliner>
+  //                                      (ValueOptional; init TargetDefault;
+  //                                      enum values always/optimistic-pgo/
+  //                                      conservative-pgo/never; the bare
+  //                                      "-enable-machine-outliner" spelling
+  //                                      parses the "" sentinel row which the
+  //                                      cl parser maps to AlwaysOutline)
+  //   -enable-split-machine-functions   cl::opt<bool>
+  //
   // (2) MachineOutliner. TM bit (clang -moutline via -mllvm, C API
   // LLVMSetTargetMachineMachineOutliner) OR the llc hidden static flag
   // with an enable value. TargetDefault/never/absent are admitted.
@@ -371,19 +356,19 @@ static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM
     Reject("machine-outliner (-enable-machine-outliner/-moutline) is not "
            "qualified for the one-commit Format E packet lifecycle "
            "(contracts/pipeline.md common tail; GR2.3)");
-  Printed.clear();
-  if (PrintedFlagValue("enable-machine-outliner", Printed)) {
-    // "= never" and the untouched "= *unknown option value*" default are
-    // disable/no-request spellings; everything else (always /
-    // optimistic-pgo / conservative-pgo, including the bare sentinel
-    // print) is an enable request.
-    StringRef V(Printed.data(), Printed.size());
-    bool IsNever = V.contains("= never");
-    bool IsUnknownDefault = V.contains("*unknown option value*");
-    if (!IsNever && !IsUnknownDefault)
-      Reject("machine-outliner (-enable-machine-outliner/-moutline) is not "
-             "qualified for the one-commit Format E packet lifecycle "
-             "(contracts/pipeline.md common tail; GR2.3)");
+  if (cl::opt<RunOutliner> *O =
+          registeredOptionAs<RunOutliner>("enable-machine-outliner")) {
+    // TargetDefault (untouched) and NeverOutline are disable/no-request
+    // spellings; every other value (always / optimistic-pgo /
+    // conservative-pgo, including the bare ValueOptional occurrence) is
+    // an enable request.
+    if (O->getNumOccurrences() > 0) {
+      const RunOutliner V = O->getValue();
+      if (V != RunOutliner::TargetDefault && V != RunOutliner::NeverOutline)
+        Reject("machine-outliner (-enable-machine-outliner/-moutline) is not "
+               "qualified for the one-commit Format E packet lifecycle "
+               "(contracts/pipeline.md common tail; GR2.3)");
+    }
   }
 
   // (3) MachineFunctionSplitter. TM bit (-split-machine-functions via llc
@@ -395,11 +380,11 @@ static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM
            "-fsplit-machine-functions) is not qualified for the one-commit "
            "Format E packet lifecycle (contracts/pipeline.md common tail; "
            "GR2.3)");
-  Printed.clear();
-  if (PrintedFlagValue("enable-split-machine-functions", Printed)) {
-    // bool flag: "= 1" is enable; "= 0" is an explicit disable, admitted.
-    StringRef SV(Printed.data(), Printed.size());
-    if (SV.contains("= 1"))
+  if (cl::opt<bool> *O =
+          registeredOptionAs<bool>("enable-split-machine-functions")) {
+    // bool flag: true (spelled "=1" or bare) is enable; "=0" is an
+    // explicit disable, admitted.
+    if (O->getNumOccurrences() > 0 && O->getValue())
       Reject("machine-function-splitter "
              "(-enable-split-machine-functions/-split-machine-functions/"
              "-fsplit-machine-functions) is not qualified for the one-commit "
@@ -684,6 +669,79 @@ void HaydnPassConfig::addPreSched2() {
   // emit bare LUI+ADDI32_W+JALR_W (insertIndirectBranch); addPreEmitPass
   // re-runs the same Finalize+Verify after BR so those parcels commit.
   addPass(createHaydnLatencyStallsPass());
+
+  // GR2.7 pre-commit CFG-form normalization: one additional invocation of
+  // the SAME generic BranchRelaxation (the existing addPreEmitPass
+  // BR→FixupHwLoops→BR multipass pattern, one invocation earlier), seated
+  // AFTER LatencyStalls and BEFORE the first (commit-normalization)
+  // Finalize so every branch site whose estimate (TII getInstSizeInBytes
+  // offset walk + namedLateLayoutGrowthBytes, inflated one per-direction
+  // BranchRelaxSafetyBufferBytes = MaxSingleBranchGrowthBytes,
+  // HaydnHWLoopContracts.h) exceeds the generated WIDE_BranchSImm12 window
+  // is already at its terminal long form BEFORE the first packet commit.
+  // The commit deadline is this Finalize's stamp; seating the normalizer
+  // here (not before S1) makes the estimate include the S1 pack + stall
+  // layout — before S1 a real ~250B growth window remained on
+  // tdsp3-class kernels that the post-stamp BR had to close with CFG
+  // forms. Unconditional (the addPreEmitPass BR is also unconditional):
+  // optnone bodies take far branches too.
+  //
+  // Catalog of generic-BranchRelaxation CFG/bare forms normalized HERE
+  // (BranchRelaxation.cpp authority, read-only):
+  //   C1 fixupUnconditionalBranch always creates a trampoline MBB (the MBB
+  //      always contains the branch MI, so BranchBB is never empty) +
+  //      insertIndirectBranch LUI+ADDI32_W+JALR_W (HaydnInstrInfo).
+  //   C2 no-free-scratch R11 spill + RestoreBB splice before DestBB;
+  //      preservation helper haydnPreserveLongFormJumpState.
+  //   C3 fixupConditionalBranch split arms (NewBB for the inverted-cond and
+  //      the far-B legs).
+  //   C4 cold-section trampoline arm — product-unreachable under GR2.3
+  //      (BB sections rejected) and covered by the postcommit CFG wall.
+  //   C5 splitBlockBeforeInstr for multi-conditional blocks.
+  //   C6 insertBranch bare short-form re-emission (cond/B re-emitted bare;
+  //      post-stamp real-encode emissions self-commit — see
+  //      HaydnInstrInfo::insertBranch).
+  // Whole-body hwloop demotes are NOT normalized here (their latch site
+  // does not exist pre-demote); the HaydnHardwareLoops demote installs the
+  // terminal in-block long latch itself when the backedge is out of
+  // simm12 (GR2.7 template; no CFG creation).
+  //
+  // Interim-seat law: the addPreEmitPass BR→FixupHwLoops→BR chain below
+  // STAYS SEATED until the GR1 lifecycle — its CFG arms become
+  // product-unreachable (far sites are terminal pre-commit) and
+  // fatal-if-reached via the postcommit CFG-creation wall (MFI stamp +
+  // HaydnVerifyBundles independent repeat).
+  //
+  // GR2.7: LongBranchNormalize BEFORE this first (pre-stamp) BR too. Its
+  // in-block rewrite owns every far site's terminal form in one owner;
+  // generic fixupConditionalBranch asserted on a tail made unanalyzable
+  // by earlier same-seat rewrites (nsichneu benchmark_body), and the
+  // in-block form makes the split/trampoline arms unreachable here as
+  // well — the whole-function far-site inventory is terminal before the
+  // first commit.
+  //
+  // D1.35 estimate-coverage law (path B, DECIDED — do not widen here):
+  // this seat's far decision sees the CURRENT layout walk + one
+  // BranchRelaxSafetyBufferBytes inflation per direction. Post-stamp
+  // growth beyond that vocabulary is admitted and lawful: one HWLoop
+  // demote insertion (up to MaxHwLoopDemoteGrowthBytes), closure-loop
+  // stall regeneration (InterveningCycles-floor per site), and the S2
+  // repack that may redistribute spans with NO event at all. The typed
+  // composition of the walk-invisible sources is
+  // haydn::hwloop::PreS1PostStampGrowthBytes (HaydnHWLoopContracts.h) —
+  // but it is deliberately NOT charged into this estimate: D1.33's
+  // single-inflation law makes TII.isBranchOffsetInRange the ONLY seat
+  // that adds any allowance, so a pre-added composition here would
+  // double-charge and steal the legal near-boundary short band, and no
+  // finite composition can cover eventless S2 redistribution anyway.
+  // The rejection class this leaves is closed, named, and pinned: a
+  // still-relaxable site re-overflowed post-stamp either takes the
+  // in-block long form at the post-stamp LongBranchNormalize seats
+  // (legal recovery; gr27-d135-demote-growth-pushes-branch.mir) or is a
+  // fail-closed fatal there (no dead-on-edge GPR / uninvertible cond /
+  // no near dest) — never a silent accept, never a CFG-creating repair.
+  addPass(createHaydnLongBranchNormalizePass());
+  addPass(&BranchRelaxationPassID);
   // After scheduling, wrap remaining standalone MIs as singleton BUNDLEs and
   // stamp generated Format E members (AIE2TargetMachine.cpp:242-244
   // createAIEFinalizeBundle; AIEFinalizeBundle.cpp:40-59). Multi-MI already
@@ -748,9 +806,21 @@ void HaydnPassConfig::addPreEmitPass() {
   //      fail-closed verifyCommittedBundle
   //        (AIEBaseInstrInfo.cpp:1440-1459; haydn-verify-bundles)
   // Do not move BR before pack (sizes wrong). No PostMachineScheduler here.
+  //
+  // GR2.7: LongBranchNormalize sits immediately before EVERY post-stamp
+  // BR invocation here (and inside the LateConvergence closure). It
+  // rewrites each far short-branch site to the terminal in-block
+  // LUI+ADDI32_W(+cond)+JALR_W form first, so BR's CFG-creating fixup
+  // arms (trampoline/RestoreBB/split) are product-unreachable after the
+  // first Finalize stamp — the S2 repack and FixupHwLoops pads/demotes
+  // can re-overflow a site the pre-S1 normalization BR accepted, and the
+  // postcommit CFG-creation wall refuses BR's only generic promotion
+  // path at that point. In-block rewrite keeps MF.size() unchanged.
+  addPass(createHaydnLongBranchNormalizePass());
   addPass(&BranchRelaxationPassID);
   if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnHardwareLoops) {
     addPass(createHaydnFixupHwLoopsPass());
+    addPass(createHaydnLongBranchNormalizePass());
     addPass(&BranchRelaxationPassID);
   }
   // Mid Finalize+Verify after BR at every opt level (same Finalize/Verify;

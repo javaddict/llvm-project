@@ -53,6 +53,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -200,7 +201,11 @@ void haydnStampDebugLocOnNewInstrs(MachineBasicBlock &MBB, MachineInstr *LastOld
 
 // Long-form LUI+ADDI32_W+JALR_W is inserted into a trampoline MBB that
 // BranchRelaxation already wired as Dest's predecessor (RISCV/AArch64
-// insertIndirectBranch: TII does not addSuccessor). Overlay Haydn
+// insertIndirectBranch: TII does not addSuccessor). GR2.7: the owning
+// normalization seat and the C1–C6 form catalog live at the pre-S1
+// BranchRelaxation seat in HaydnTargetMachine.cpp addPreSched2; once the
+// first Finalize run stamps the postcommit block budget this callback
+// refuses (CFG-creation wall). Overlay Haydn
 // preservation the generic pass does not do at this seat:
 //   * Dest PHIs still name the original pred after replaceSuccessor;
 //   * RestoreBB needs Dest live-ins so the emergency reload is a legal
@@ -280,6 +285,8 @@ void haydnPreserveLongFormJumpState(MachineBasicBlock &Trampoline,
 cl::opt<bool> EnableZOLPipelining(
     "haydn-zol-pipelining", cl::Hidden, cl::init(true),
     cl::desc("Enable SMS pipelining of ZOL-form loops (default on)"));
+
+bool llvm::haydnZOLPipeliningEnabled() { return EnableZOLPipelining; }
 
 // AIE aie-loop-min-tripcount peer: force a floor MinTripCount for all SMS
 // candidates. -1 = disabled (default). Used for soak / when MD is missing.
@@ -724,14 +731,21 @@ bool HaydnInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
       continue; // Keep scanning backwards for a conditional branch
     }
 
-    // JALR / JALR_W — long-form indirect, not analyzable as a short B/cond.
-    // Returning unanalyzable keeps insertBranch from rewriting the site to
-    // a PC-relative B (JALR sites never regress). Addr materialize (LUI /
-    // ADDI32_W) is not a terminator; walking into it falls through to the
-    // non-branch break below.
+    // JALR / JALR_W — GR2.7 in-block long form (LUI+ADDI+near-cond+JALR).
+    // Treat a trailing JALR as the unconditional dest so a PRECEDING near
+    // cond stays analyzable (BranchRelaxation::fixupConditionalBranch
+    // asserts "branches to be relaxed must be analyzable"). Returning
+    // unanalyzable here made every cond+JALR tail opaque; a leftover far
+    // cond in the same function then aborted (picojpeg / bkfir32x16).
+    // insertBranch still cannot shrink the JALR: removeBranch stops at
+    // isHaydnIndirectJALR and never erases it.
     if (isHaydnIndirectJALR(Opc)) {
       if (!Cond.empty() || UncondTarget)
         break;
+      if (MachineBasicBlock *JDest = getBranchDestBlock(CF)) {
+        UncondTarget = JDest;
+        continue;
+      }
       return true;
     }
 
@@ -973,13 +987,78 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
   // is insertIndirectBranch; insertBranch must not emit JALR (branches only
   // promote). CFG successors/probabilities stay with the caller
   // (TargetInstrInfo.h:780-781; AIEBaseInstrInfo.cpp:271-307).
+  //
+  // GR2.7 phase law: pre-stamp (before the first Finalize run — MBP,
+  // BranchFolder, the pre-S1 normalization BR, -run-pass probes) bare
+  // emission is legal, S1 commits later. Post-stamp, a REAL conditional
+  // branch emission self-commits as a committed singleton packet at
+  // emission time (bake + finalizeExactLateSingleton — the same authority
+  // removeBranch's survivor re-stamp uses), so no bare real-encode MI is
+  // reachable between a postcommit BR/Fixup invocation and the next
+  // Finalize. Representation shells (B expands to BEQZ_W_MSP at Finalize)
+  // and zero-size hwloop metas (PseudoLoopEnd/LoopJNZ) are not encode
+  // cycles and stay bare by the isUncommittedBareEncodeEscape law.
   const DebugLoc UseDL = haydnInheritBranchDebugLoc(MBB, DL);
+
+  MachineFunction *MF = MBB.getParent();
+  HaydnMachineFunctionInfo *FuncInfo =
+      MF ? MF->getInfo<HaydnMachineFunctionInfo>() : nullptr;
+  const bool PostCommit = FuncInfo && FuncInfo->hasPostCommitBlockBudget();
+
+  // GR2.7 S2: if a LUI+ADDI+JALR tail remains (removeBranch skips it
+  // post-stamp; pre-stamp it is erased), short cond/B must be inserted
+  // BEFORE that tail. Inserting at end() placed cond+B after JALR
+  // (dead), left the original far BEQZ in place, and BranchRelaxation
+  // invert-swapped forever (matmult-int).
+  auto longFormInsertPt = [&]() -> MachineBasicBlock::iterator {
+    MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
+    if (I == MBB.end())
+      return MBB.end();
+    MachineInstr &CF = unwrapBundleControlFlow(*I);
+    if (!isHaydnIndirectJALR(haydnLogicalOpcode(CF.getOpcode())))
+      return MBB.end();
+    Register Scratch = 0;
+    if (CF.getNumOperands() && CF.getOperand(0).isReg())
+      Scratch = CF.getOperand(0).getReg();
+    MachineBasicBlock::iterator Ins = I;
+    while (Ins != MBB.begin()) {
+      MachineBasicBlock::iterator P = std::prev(Ins);
+      if (P->isDebugInstr() || P->isCFIInstruction()) {
+        Ins = P;
+        continue;
+      }
+      MachineInstr &PCF = unwrapBundleControlFlow(*P);
+      unsigned POpc = haydnLogicalOpcode(PCF.getOpcode());
+      if (!isHaydnAddrMaterializeOpc(POpc))
+        break;
+      if (Scratch && PCF.getNumOperands() && PCF.getOperand(0).isReg() &&
+          PCF.getOperand(0).getReg() == Scratch)
+        Ins = P;
+      else
+        break;
+    }
+    return Ins;
+  };
+  const MachineBasicBlock::iterator Ins = longFormInsertPt();
+
+  // Self-commit one real conditional-branch emission. Same
+  // bake+finalizeExactLateSingleton authority as removeBranch survivors.
+  // Both callers pass a freshly BuildMI-inserted MI (parent always set),
+  // so the only gate is the post-stamp state.
+  auto selfCommitCondBranch = [&](MachineInstr &MI) {
+    if (!PostCommit)
+      return;
+    unsigned Member = haydn::bundle::lateProductMemberOpcode(MI.getOpcode());
+    if (Member != MI.getOpcode())
+      bakeFormatEMemberDesc(MI, Member, *this);
+    haydn::bundle::finalizeExactLateSingleton(MI);
+  };
 
   auto insertUncond = [&](MachineBasicBlock *Dest) -> MachineInstr & {
     // Unconditional B is isBarrier=1 (HaydnPseudos.td). Catalog BEQZ_W is
     // isConditionalBranch. Mid/closure Finalize expands leftover B to
     // BEQZ_W_MSP after the last BranchRelaxation.
-    return *BuildMI(MBB, MBB.end(), UseDL, get(Haydn::B)).addMBB(Dest);
+    return *BuildMI(MBB, Ins, UseDL, get(Haydn::B)).addMBB(Dest);
   };
 
   if (Cond.empty()) {
@@ -1001,7 +1080,7 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
   // Meta zero-byte markers stay bare (getInstSizeInBytes → 0).
   if (Opc == Haydn::PseudoLoopEnd) {
     MachineInstr &MI =
-        *BuildMI(MBB, MBB.end(), UseDL, get(Opc)).addMBB(TBB);
+        *BuildMI(MBB, Ins, UseDL, get(Opc)).addMBB(TBB);
     if (BytesAdded)
       *BytesAdded += getInstSizeInBytes(MI);
     if (FBB) {
@@ -1013,7 +1092,7 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
     return 1;
   }
   if (Opc == Haydn::LoopJNZ) {
-    MachineInstr &MI = *BuildMI(MBB, MBB.end(), UseDL, get(Opc))
+    MachineInstr &MI = *BuildMI(MBB, Ins, UseDL, get(Opc))
                             .addReg(Cond[1].getReg())
                             .addMBB(TBB);
     if (BytesAdded)
@@ -1029,26 +1108,31 @@ unsigned HaydnInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   if (FBB == nullptr) {
     // One-way conditional: if Cond, goto TBB; else fall through.
-    MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), UseDL, get(Opc));
+    MachineInstrBuilder MIB = BuildMI(MBB, Ins, UseDL, get(Opc));
     if (isHaydnCondBranch1Reg(Opc)) {
       MIB.addReg(Cond[1].getReg());
     } else {
       MIB.addReg(Cond[1].getReg()).addReg(Cond[2].getReg());
     }
     MIB.addMBB(TBB);
+    // Post-stamp real-encode emission self-commits (committed singleton
+    // BUNDLE root at emission time); pre-stamp stays bare.
+    selfCommitCondBranch(*MIB);
     if (BytesAdded)
       *BytesAdded += getInstSizeInBytes(*MIB);
     return 1;
   }
 
   // Two-way conditional: if Cond, goto TBB; else goto FBB.
-  MachineInstrBuilder MIB = BuildMI(MBB, MBB.end(), UseDL, get(Opc));
+  MachineInstrBuilder MIB = BuildMI(MBB, Ins, UseDL, get(Opc));
   if (isHaydnCondBranch1Reg(Opc)) {
     MIB.addReg(Cond[1].getReg());
   } else {
     MIB.addReg(Cond[1].getReg()).addReg(Cond[2].getReg());
   }
   MIB.addMBB(TBB);
+  // Post-stamp real-encode emission self-commits.
+  selfCommitCondBranch(*MIB);
   if (BytesAdded)
     *BytesAdded += getInstSizeInBytes(*MIB);
   MachineInstr &BMI = insertUncond(FBB);
@@ -1062,8 +1146,14 @@ unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
   if (BytesRemoved)
     *BytesRemoved = 0;
 
+  MachineFunction *MF = MBB.getParent();
+  HaydnMachineFunctionInfo *FuncInfo =
+      MF ? MF->getInfo<HaydnMachineFunctionInfo>() : nullptr;
+  const bool PostCommit = FuncInfo && FuncInfo->hasPostCommitBlockBudget();
+
   MachineBasicBlock::iterator I = MBB.end();
   unsigned Count = 0;
+  bool SawJALR = false;
 
   while (I != MBB.begin()) {
     --I;
@@ -1077,21 +1167,40 @@ unsigned HaydnInstrInfo::removeBranch(MachineBasicBlock &MBB,
     MachineInstr &Top = *I;
     MachineInstr &CF = unwrapBundleControlFlow(Top);
     unsigned CFOpc = haydnLogicalOpcode(CF.getOpcode());
-    // Long-form JALR is isIndirectBranch, not isBranch. Leave the whole
-    // LUI+ADDI32_W+JALR_W site (and any bundle that contains it) intact so
-    // a later insertBranch cannot shrink it back to B.
-    if (isHaydnIndirectJALR(CFOpc))
-      break;
-    if (Top.isBundle()) {
-      bool HasJALR = false;
+    bool HasJALR = isHaydnIndirectJALR(CFOpc);
+    if (!HasJALR && Top.isBundle()) {
       for (const MachineInstr *Child : haydn::bundle::members(Top)) {
         if (isHaydnIndirectJALR(haydnLogicalOpcode(Child->getOpcode()))) {
           HasJALR = true;
           break;
         }
       }
-      if (HasJALR)
-        break;
+    }
+    // GR2.7 S2: LUI+ADDI+JALR is the in-block long uncond. Pre-stamp, BR
+    // invert-swap must be able to erase the whole tail (insertIndirect
+    // re-emits long form if the new B is far). Post-stamp, keep the
+    // committed JALR/addr pair and skip over them so the preceding near
+    // cond can still be stripped. Breaking here left the far BEQZ in
+    // place and insertBranch appended dead cond+B after JALR (matmult-int
+    // invert-swap ping-pong).
+    if (HasJALR) {
+      SawJALR = true;
+      if (PostCommit)
+        continue;
+      if (BytesRemoved)
+        *BytesRemoved += static_cast<int>(haydn::bundle::lateLayoutBytes(Top));
+      Count++;
+      I = MBB.erase(I);
+      continue;
+    }
+    if (SawJALR && isHaydnAddrMaterializeOpc(CFOpc)) {
+      if (PostCommit)
+        continue;
+      if (BytesRemoved)
+        *BytesRemoved += static_cast<int>(haydn::bundle::lateLayoutBytes(Top));
+      Count++;
+      I = MBB.erase(I);
+      continue;
     }
     if (!CF.isBranch(MachineInstr::IgnoreBundle))
       break;
@@ -2106,14 +2215,26 @@ bool HaydnInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
 // Branch relaxation hooks
 //===----------------------------------------------------------------------===//
 
+// GR2.7: the range estimate below is the SAME authority at the pre-S1
+// normalization BranchRelaxation seat (HaydnTargetMachine.cpp addPreSched2,
+// C1–C6 catalog comment) and at the interim addPreEmitPass BR seats; a far
+// site it selects at the pre-S1 seat is terminal long form before the
+// first packet commit.
+
+// D1.33 one-buffer accessor: every far-deciding seat reads the cl::opt
+// through THIS method (no second capture, no compile-time constant fork).
+uint32_t HaydnInstrInfo::getBranchRelaxSafetyBuffer() const {
+  return BranchRelaxSafetyBuffer;
+}
+
 bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
                                             int64_t BrOffset) const {
-  // BranchRelaxation may pass TargetOpcode::BUNDLE (header of a wrapped
-  // branch). Cond/B field is signed 12-bit byte PC+imm — same RelocFieldInfo
-  // as applyFixup. JAL long-reach is not modeled via BUNDLE opc
-  // (insertBranch emits bare MI).
+  // Opcode-only API cannot unwrap a BUNDLE child (JALR long form vs near
+  // cond). Conservative simm12 made BR trampoline committed packets in a
+  // loop (matmult-int hang). GR2.7: LongBranchNormalize range-tests the
+  // child opcode; BR must not create CFG on a BUNDLE root.
   if (BranchOpc == TargetOpcode::BUNDLE)
-    BranchOpc = Haydn::B; // conservative short-range (cond/B)
+    return true;
 
   BranchOpc = haydnLogicalOpcode(BranchOpc);
   // JAL / JAL_W have a 20-bit signed target field (SImm20): ±512KB range.
@@ -2167,8 +2288,12 @@ bool HaydnInstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
   // one insertIndirectBranch sequence (MaxSingleBranchGrowthBytes).
   const HaydnReloc::RelocFieldInfo &I = HaydnReloc::getRelocFieldInfo(
       HaydnReloc::RelocKind::WIDE_BranchSImm12);
-  const int64_t ForwardGrowth = (int64_t)BranchRelaxSafetyBuffer;
-  const int64_t BackwardGrowth = (int64_t)BranchRelaxSafetyBuffer;
+  // D1.33: consume the one-buffer accessor (not the raw cl::opt) so this
+  // window test and every other far-deciding seat cannot drift.
+  const int64_t ForwardGrowth =
+      (int64_t)getBranchRelaxSafetyBuffer();
+  const int64_t BackwardGrowth =
+      (int64_t)getBranchRelaxSafetyBuffer();
   static_assert(haydn::hwloop::BranchRelaxSafetyBufferBytes ==
                     haydn::hwloop::MaxSingleBranchGrowthBytes,
                 "TII range buffer is one long-form sequence");
@@ -2218,22 +2343,57 @@ HaydnInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
   if (Opc == Haydn::LoopJNZ)
     return Br.getOperand(1).getMBB();
 
-  // Long-form JALR has no MBB operand; dest is on the LUI/ADDI32_W pair.
-  // Returning the dest keeps the site identifiable without treating JALR as
-  // a short PC-relative branch (isBranchOffsetInRange is always true).
+  // Long-form JALR has no MBB operand; dest is on the LUI/ADDI32_W pair
+  // (possibly each a singleton BUNDLE root). Walk previous instrs, looking
+  // inside BUNDLE members, so analyzeBranch can treat trailing JALR as the
+  // unconditional dest of a preceding near cond.
   if (isHaydnIndirectJALR(Opc)) {
+    auto destFromAddrMI = [](const MachineInstr &AMI) -> MachineBasicBlock * {
+      if (!isHaydnAddrMaterializeOpc(haydnLogicalOpcode(AMI.getOpcode())))
+        return nullptr;
+      for (const MachineOperand &MO : AMI.operands())
+        if (MO.isMBB())
+          return MO.getMBB();
+      return nullptr;
+    };
     const MachineInstr *Addr = Br.getPrevNode();
-    while (Addr && (Addr->isDebugInstr() || Addr->isCFIInstruction() ||
-                    Addr->isImplicitDef() || Addr->isKill()))
-      Addr = Addr->getPrevNode();
-    if (Addr) {
-      unsigned AOpc = haydnLogicalOpcode(Addr->getOpcode());
-      if (isHaydnAddrMaterializeOpc(AOpc)) {
-        for (const MachineOperand &MO : Addr->operands()) {
-          if (MO.isMBB())
-            return MO.getMBB();
-        }
+    while (Addr) {
+      if (Addr->isDebugInstr() || Addr->isCFIInstruction() ||
+          Addr->isImplicitDef() || Addr->isKill()) {
+        Addr = Addr->getPrevNode();
+        continue;
       }
+      auto skipNearCond = [](const MachineInstr &AMI) {
+        unsigned L = haydnLogicalOpcode(AMI.getOpcode());
+        return isHaydnCondBranch1Reg(L) || isHaydnCondBranch2Reg(L) ||
+               L == Haydn::B;
+      };
+      if (Addr->isBundle()) {
+        for (const MachineInstr *C : haydn::bundle::members(*Addr)) {
+          if (MachineBasicBlock *D = destFromAddrMI(*C))
+            return D;
+        }
+        // Invert-form layout is LUI; ADDI; near-cond; JALR — skip the
+        // cond bundle to reach the address pair.
+        bool OnlyNearCond = false;
+        for (const MachineInstr *C : haydn::bundle::members(*Addr)) {
+          if (skipNearCond(*C))
+            OnlyNearCond = true;
+        }
+        if (OnlyNearCond) {
+          Addr = Addr->getPrevNode();
+          continue;
+        }
+        Addr = Addr->getPrevNode();
+        continue;
+      }
+      if (MachineBasicBlock *D = destFromAddrMI(*Addr))
+        return D;
+      if (skipNearCond(*Addr)) {
+        Addr = Addr->getPrevNode();
+        continue;
+      }
+      break;
     }
     return nullptr;
   }
@@ -2277,6 +2437,25 @@ void HaydnInstrInfo::insertIndirectBranch(
   // that. No-free-reg → manual R11 spill only.
   assert(RS && "RegScavenger required for long branching");
   assert(MBB.pred_size() == 1);
+
+  // GR2.7 postcommit CFG-creation wall (seat-level refusal; the Verify
+  // seats independently repeat it): once the first Finalize run stamped
+  // the per-function block budget, creating the trampoline/RestoreBB CFG
+  // form here is refused — long-form promotion must be selected
+  // PRE-sCHEDULER (the addPreSched2 normalization BranchRelaxation after
+  // ExpandPseudos). Unstamped (pre-S1 seat, -run-pass probes, MIR
+  // fixtures) behavior is unchanged. Never silent CFG surgery.
+  if (auto *FuncInfoStamp = MBB.getParent()
+                                ->getInfo<HaydnMachineFunctionInfo>();
+      FuncInfoStamp->hasPostCommitBlockBudget()) {
+    std::string Msg;
+    raw_string_ostream OS(Msg);
+    OS << "Haydn insertIndirectBranch: postcommit CFG creation refused "
+          "(GR2.7: long-form promotion must be selected pre-scheduler) in "
+       << MBB.getParent()->getName() << " BB#" << MBB.getNumber()
+       << " -> BB#" << NewDestBB.getNumber();
+    report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
+  }
 
   if (!isInt<32>(BrOffset))
     report_fatal_error(
@@ -3741,7 +3920,13 @@ static bool haydnCheckSMSCoverage(const TargetInstrInfo &TII,
         TII.getName(MI.getOpcode()));
     if (!haydn::format_e::findAltSpan(CatalogName.c_str())) {
       DEBUG_WITH_TYPE("pipeliner", {
-        dbgs() << "SMS-HANDOFF: reject — body logical '" << CatalogName
+        // peelLogicalOpcodeName fails closed on unknown spellings (returns
+        // ""; e.g. the LOADI32 pseudo is not a FormatEAltSpans key), so the
+        // reject names the raw MI opcode — an empty catalog name would hide
+        // which body logical rejected.
+        dbgs() << "SMS-HANDOFF: reject — body logical '"
+               << (CatalogName.empty() ? TII.getName(MI.getOpcode())
+                                       : StringRef(CatalogName))
                << "' has no generated non-NOP alternate (coverage fail-close; "
                   "post-RA packability is not a pre-RA matching input)\n";
       });
@@ -3795,14 +3980,15 @@ HaydnInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
   // runs before IRTranslator, so it has ALREADY converted every countable
   // single-BB loop to LoopStart (preheader) + PseudoLoopEnd (latch) by the time
   // SMS runs. SMS pipelines it via the ZOL PipelinerLoopInfo
-  // (adjustTripCount edits LoopStart's $adj operand). EnableZOLPipelining
-  // defaults ON ("SMS runs PRE-RA on ZOL form"); the cl::opt remains for
-  // emergency disable. When off, SMS skips ZOL loops — they still form
-  // hwloops via the IR-level pass, just without software pipelining.
+  // (adjustTripCount edits LoopStart's $adj operand).
+  // haydnZOLPipeliningEnabled() defaults ON ("SMS runs PRE-RA on ZOL form");
+  // the cl::opt remains for emergency disable. When off, SMS skips ZOL loops —
+  // they still form hwloops via the IR-level pass, just without software
+  // pipelining.
   MachineBasicBlock::iterator TermIt = LoopBB->getFirstTerminator();
   if (TermIt != LoopBB->end() &&
       TermIt->getOpcode() == Haydn::PseudoLoopEnd) {
-    if (!EnableZOLPipelining)
+    if (!haydnZOLPipeliningEnabled())
       return nullptr; // ZOL loop — don't pipeline (keep hwloop, skip SMS).
     // Same call rejection as the naive path below: soft-float libcalls
     // (e.g. JAL_W __addsf3 in pr28982a/b) must not SMS across ZOL stages —

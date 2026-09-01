@@ -116,8 +116,8 @@ STATISTIC(NumPostRAAltDescsCleared,
           "descriptors after setDesc materialize (product expects every "
           "scheduled region)");
 STATISTIC(NumPostRAAltDescLeakFatals,
-          "Number of post-RA leaveRegion/leaveMBB residual alternate "
-          "descriptor leaks (must be 0)");
+          "Number of post-RA leaveMBB residual alternate descriptor leaks "
+          "(must be 0; leaveRegion clears unconditionally before leaveMBB)");
 STATISTIC(NumPostRAResourceAdmissionPinsHeld,
           "Number of post-RA enterMBB checks that held fail-closed per-op "
           "resource admission (product closed until golden import)");
@@ -963,6 +963,25 @@ bool HaydnPostRASchedStrategy::tryCandidate(SchedCandidate &Cand,
 // INLINEASM is skippable here (not a product cycle member) but is *not*
 // splice-movable — see spliceSkippablesForCycle. It remains a standalone
 // opaque layout boundary (isSchedulingBoundary + FinalizeBundle skip).
+//
+// D1.39 law (COPY term): the explicit MI.isCopy() below is documentation, not
+// a load-bearing filter — COPY is a StandardPseudoInstruction (isPseudo=1, no
+// PlacementAlternatives), so the isBundlePackSkippableOpcode pseudo fallback
+// (HaydnBundle.h isBundlePackSkippableOpcode) would also return skippable for
+// it; deleting the term is behavior-neutral. COPY can NEVER be a committed
+// cycle member, so making it one (to "book" its occupancy) is not a fix:
+//   wall 1: MachineBundle::canAdd -> isSupportedInstruction(COPY)=false
+//           (no generated Formats row, getLegalSlots=0 — HaydnMCFormats);
+//   wall 2: canCoissueProductCycle rejects a multi-MI cycle containing it
+//           (HaydnBundleMaterialize.cpp);
+//   wall 3: verifyCommittedBundle / HaydnVerifyBundles reject a COPY child
+//           via inverse-record completion (isLeftoverGenericResidualPseudo);
+// a COPY pushed into commitOneProductCycle/splice/reconstruction can never
+// bake — only QoR churn. The law owner is the verify/freeze seat (unit-pinned
+// for co-issued shapes in HaydnBundleVerifyTest; MIR pin
+// gr27-d139-coissued-copy-law.mir). As a movable non-member a bare COPY is
+// still W22-splice-guarded (spliceSkippablesForCycle remaining-set oracle;
+// postmisched-copy-not-above-producer.mir).
 static bool isBundleSkippable(const MachineInstr &MI) {
   // Non-issue markers independent of isPseudo / placement alts.
   if (MI.isDebugInstr() || MI.isPosition() || MI.isBundle() ||
@@ -1236,6 +1255,27 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
       TargetHR = &ScratchHR;
     }
     int Cycle = 0;
+    // D1.39 replay semantics: this walk counts committed PARCELS, not MIs.
+    // Each surviving head is one successor issue cycle (a BUNDLE root or a
+    // bare real MI). The skip list drops non-parcels BEFORE ++Cycle so parcel
+    // indices stay aligned with the successor's actual issue order:
+    //   * a bare COPY is a non-parcel residual — S1 (computeAndFinalizeBundles
+    //     via isBundleSkippable) never wraps it and Finalize cannot bake it
+    //     (no Format E identity, three-wall law at isBundleSkippable above);
+    //     it emits no bytes. Skipping it WITHOUT consuming a cycle is
+    //     correct: removing the isCopy term would advance Cycle for a parcel
+    //     that never exists, landing successor demand one cycle later
+    //     (under-constraining the seam) and booking fictional occupancy.
+    //   * AIE parity note: the peer replay iterates bundle contents only
+    //     (AIEMachineScheduler.cpp initializeBotScoreBoard); AIE never
+    //     replays a bare inter-bundle COPY. AIEBundle's bundle-member divert
+    //     list is a different object and is not a replay-walk precedent.
+    // Pin: gr27-d139-replay-copy-nonparcel.mir (COPY interleaved between
+    // parcels; pattern must equal the COPY-free expectation).
+    // Residual adjacent gap (NOT isCopy, filed as its own row): INLINE_ASM
+    // heads are not in this skip list, so an opaque boundary head DOES
+    // consume a replay cycle without being a Format E parcel — misaligning
+    // successor demand in the same under-constraint direction.
     for (MachineInstr &MI : *Succ) {
       if (MI.isBundledWithPred())
         continue;
@@ -1753,14 +1793,13 @@ void HaydnPostRASchedStrategy::materializeMultiOpcodeInstrs() {
 
   // AIE leaveRegion: materialize then SelectedAltDescs.clear()
   // (AIEMachineScheduler.cpp:1081-1082). Full clear — no slot side-map
-  // survives.
+  // survives. The post-clear residual check is deliberately ABSENT here:
+  // clear() on the underlying map cannot leave entries, so a
+  // leaveRegion-side empty() pin after clear() is vacuous by construction.
+  // The LIVE residual pin is the leaveMBB seat above — it observes the map
+  // across the whole leaveRegion/leaveMBB window (any recording path that
+  // bypassed materialize leaves entries there and fatals).
   AltDescs.clear();
-  if (!AltDescs.empty()) {
-    ++NumPostRAAltDescLeakFatals;
-    report_fatal_error(
-        "Haydn post-RA leaveRegion left residual alternate descriptors",
-        /*GenCrashDiag=*/false);
-  }
   ++NumPostRAAltDescsCleared;
 }
 

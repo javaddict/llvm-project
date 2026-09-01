@@ -82,12 +82,15 @@
 ; PIPE:      Haydn pseudo instruction expansion pass
 ; PIPE:      PostRA Machine Instruction Scheduler
 ; PIPE-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; PIPE-NEXT:      Haydn Long-Branch Normalize
+; PIPE-NEXT:      Branch relaxation pass
 ; PIPE-NEXT:      Haydn Bundle Finalization
 ; PIPE-NEXT:      Haydn Bundle Invariant Verifier
 ; PIPE-NOT:      Haydn Circular Buffer Detection
 ; PIPE-NOT:      Haydn Redundant Copy Elimination
 ; PIPE:      Branch relaxation pass
 ; PIPE-NEXT:      Haydn Hardware Loop Fixup
+; PIPE-NEXT:      Haydn Long-Branch Normalize
 ; PIPE-NEXT:      Branch relaxation pass
 ; PIPE-NEXT:      Haydn Bundle Finalization
 ; PIPE-NEXT:      Haydn Bundle Invariant Verifier
@@ -111,8 +114,14 @@
 ; ATTR:      Hardware Loop Insertion
 ; ATTR:      Haydn Hardware Loop Expansion
 ; ATTR:      PostRA Machine Instruction Scheduler
+; ATTR-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; ATTR-NEXT:      Haydn Long-Branch Normalize
+; ATTR-NEXT:      Branch relaxation pass
+; ATTR-NEXT:      Haydn Bundle Finalization
+; ATTR-NEXT:      Haydn Bundle Invariant Verifier
 ; ATTR:      Branch relaxation pass
 ; ATTR-NEXT:      Haydn Hardware Loop Fixup
+; ATTR-NEXT:      Haydn Long-Branch Normalize
 ; ATTR-NEXT:      Branch relaxation pass
 ; ATTR-NEXT:      Haydn Bundle Finalization
 ;

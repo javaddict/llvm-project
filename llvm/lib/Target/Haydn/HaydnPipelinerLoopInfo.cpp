@@ -428,14 +428,16 @@ bool HaydnPipelinerLoopInfo::shouldUseSchedule(SwingSchedulerDAG &SSD,
   // floor is never an II proxy. The accept-line tail names the LIVE
   // containment bound (product PPS-3 vs F41 bisect override); log truth
   // only, the bound itself is the ContainmentMax selection above.
-  // The contract's only pre-RA format API, consumed here as the advisory
-  // proposal-ranking metric for an accepted schedule. It prices the loop body
+  // The contract's only pre-RA format API. It prices the loop body
   // (the SMS DAG's real SUnits) against the golden-admitted format table:
   // coverage in at least one available row, then the E3-widest format-union
-  // cycle floor. Advisory only — metrics live on this accept remark, no cycle
-  // group or selected row crosses RA (D493/PIPE-20). A body with an uncovered
-  // logical would have failed the build-time schema check; nullopt here is
-  // fail-closed log truth, never an accept/reject input.
+  // cycle floor. Diagnostics-only and computed solely inside this
+  // DEBUG_WITH_TYPE block — release builds never run the pricing walk, so
+  // it is NOT a live proposal-ranking input in product builds; the
+  // accept/reject inputs are the ResMII/RecMII floors and the containment
+  // bound named above. A body with an uncovered logical would have failed
+  // the build-time schema check; nullopt here is fail-closed log truth,
+  // never an accept/reject input.
   DEBUG_WITH_TYPE("pipeliner", {
     SmallVector<MachineInstr *, 16> Body;
     for (const SUnit &SU : SSD.SUnits) {

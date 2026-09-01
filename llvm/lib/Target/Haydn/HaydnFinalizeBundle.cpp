@@ -42,6 +42,7 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnMemberSetDesc.h"
 #include "HaydnPackLegality.h"
 #include "HaydnPortModel.h"
@@ -655,6 +656,19 @@ void llvm::rewriteFieldSlotToMember(MachineInstr &MI, unsigned MemberOpc,
 
 bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+
+  // GR2.7/D1.40 postcommit CFG identity wall: the FIRST Finalize run is the
+  // commit-normalization seat that closes the pre-S1 window opened by the
+  // normalization BranchRelaxation (HaydnTargetMachine addPreSched2). Stamp
+  // the per-function CFG identity snapshot write-once; after the stamp the
+  // postcommit CFG is identity-frozen: live count, block-ID numbering
+  // slack, and per-MBB identity tokens never change
+  // (HaydnVerifyBundles independently fails closed at every seat when they
+  // do; insertIndirectBranch refuses when stamped). Never re-stamped: later
+  // Finalize seats cannot legitimize postcommit CFG mutation (monotone
+  // ratchet).
+  MF.getInfo<HaydnMachineFunctionInfo>()->stampPostCommitCfgSnapshot(MF);
+
   // Mixed-stream inline-asm admission (fail closed): opaque inline asm
   // beside compiler packets is outside the exact Format E layout model.
   // Admitted: metadata-only asm (empty text) and asm-only naked bodies.

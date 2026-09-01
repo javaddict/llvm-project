@@ -71,5 +71,16 @@ constexpr ExtraLsb ExtraPublishedLsb[] = {
     {RelocKind::HWLoopOff1, 13},
     {RelocKind::HWLoopOff2, 36},
 };
+
+// D1.42 hwloop Loc-sniff geometry (generated golden authority).
+// Map/type windows are parcel-absolute BitRanges; Off1/Off2 LSBs are
+// law-checked against FieldLsbSites (HWLRIIR) / ExtraPublishedLsb
+// (E2 e0 HWLRIII) at generation — not a second LSB authority.
+constexpr HwLoopSniffSite HwLoopSniffSites[] = {
+    {0, 0, 6, 2, 0, 8, 5, 16, 13, 36}, // HWLRIII
+    {0, 0, 6, 2, 0, 8, 5, 12, 32, 38}, // HWLRIIR
+    {1, 0, 6, 2, 2, 8, 4, 12, 18, 24}, // HWLRIIR
+    {1, 1, 37, 2, 2, 39, 4, 12, 49, 55}, // HWLRIIR
+};
 #endif // GET_HAYDN_RELOC_FIELD_LSB
 

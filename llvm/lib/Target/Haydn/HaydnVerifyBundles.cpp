@@ -261,6 +261,28 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
         /*GenCrashDiag=*/false);
   }
 
+  // GR2.7/D1.40 postcommit CFG identity wall (independent repeat of the
+  // seat-level insertIndirectBranch refusal): after the first Finalize run
+  // stamped the per-function CFG identity snapshot, the postcommit CFG is
+  // identity-frozen — live count (creation AND shrink), per-MBB identity
+  // tokens (equal-count erase+re-add / split-and-merge), and the block-ID
+  // numbering-slot slack (create-then-delete / erase+replace) never change.
+  // Generic BranchRelaxation is the only postcommit block creator
+  // (trampoline/RestoreBB/split arms); RenumberBlocks changes neither the
+  // token sequence (BasicBlock identity + BBID, never MBB numbers) nor the
+  // law set enforceable at this seat, so its entry renumber cannot mask or
+  // fake this wall. No stamp (limited-pipeline probes / MIR fixtures that
+  // never run Finalize) observes no wall. Fires at every Verify seat
+  // incl. freeze.
+  if (std::string CfgViolation =
+          MF.getInfo<HaydnMachineFunctionInfo>()
+              ->postCommitCfgCreationViolation(MF);
+      !CfgViolation.empty()) {
+    report_fatal_error(
+        Twine("HaydnVerifyBundles: ") + MF.getName() + ": " + CfgViolation,
+        /*GenCrashDiag=*/false);
+  }
+
   // Local registry wrapper (same type as haydnDefaultMCFormats in
   // HaydnBundleFormatSolver.h:96-99) — this pass must not include the
   // forward solver / Bundle.canAdd.

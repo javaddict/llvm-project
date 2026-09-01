@@ -235,14 +235,14 @@ RelocKind findFixupFromFixupFields(StringRef TypeName, unsigned TypeOpcode,
 /// True when \p FieldLsb is the table default or a typed member window for
 /// \p R (E3 e0/e1/e2 and E2 e1). Unknown LSB values are not published.
 /// Typed windows are generated FieldLsbSites / ExtraPublishedLsb
-/// (HaydnGenRelocFieldLsb.inc); Loc sniffing stays resolveFieldLsb.
+/// (HaydnGenRelocFieldLsb.inc); Loc sniffing stays tryResolveFieldLsb.
 bool isPublishedFieldLsb(RelocKind R, unsigned FieldLsb);
 
 /// FieldLsb from typed (mode, entry, unit) membership. Mode 0=E2, 1=E3.
 /// Unit is the Format E unit index (ALU0=0, ALU1=1, ALU2=2, LOAD1=3,
 /// LOADSTORE0=4); ~0u means unknown unit. Prefers an exact unit match,
 /// then a unit-wildcard site, then the E2 e0 table default. Does not sniff
-/// Loc bytes — that remains resolveFieldLsb for MC applyFixup / lld.
+/// Loc bytes — that remains tryResolveFieldLsb for MC applyFixup / lld.
 unsigned resolveFieldLsbForMember(RelocKind R, unsigned Mode, unsigned EntryIdx,
                                   unsigned Unit = ~0u);
 
@@ -262,28 +262,34 @@ uint64_t readField(const uint8_t *Loc, unsigned NBytes, unsigned FieldSize,
                    unsigned FieldLsb);
 
 // Resolve FieldLsb for kinds whose absolute parcel bit position depends on the
-// live Format E mode/entry at Loc. Table FieldLsb is E2 e0 authority:
-//   WIDE_CallSImm20 — E3 JAL I20 at e0 [17:36] or e1 [48:67]
-//   WIDE_BranchSImm12 / _RI / JALRSImm12 — E3 I12/RI12 at e0 [23:34],
-//     e1 [54:65], e2 I12 [81:92] (E2 e0 stays table FieldLsb=32).
-//     JALR generated members are E2 e0 / E3 e0 / E3 e1 ALU0 only.
-//   HWLoopOff1/Off2 — E2 HWLRIII Off1/Off2 @ [13]/[36]; E3 F2 e0 @ [18]/[24],
-//     e1 @ [49]/[55] (golden absolute parcel bits; table default is E2 F2
-//     Off1@32 / Off2@38).
-//   LO20/PC_LO20 — ALU RI20 (E2-only type): e0 ALU0 @31 (table default);
-//     e1 ALU1 @65 (golden imm bit[84:65]).
-//   LS_IMM — LS RI6: E2 e0 LOADSTORE0 @28 (table default); E2 e1 LOAD1 @72;
-//     E3 e0 LOADSTORE0 @25; E3 e1 LOAD1 @54; E3 e2 LOAD1 @85.
-//   CSR_UImm8 — I8 uimm8: E2 e0 @32 (table default); E3 e0 ALU2 @27 /
-//     ALU0 @23; E3 e1 @54; E3 e2 @85.
-// HI12 / CSR_UImm8 sniff arms additionally pin the member OPCODE: I12
-// shares LUI(1) with BEQZ..BLTZ(4..7) at E3 e1/e2 ALU0 (and E2 e0), I8
-// shares CSRR(4)/CSRW(5) with ZERO_*(1..3), so map/type alone is not
-// member-unique (D1.17). Producer emission routes through
-// resolveFieldLsbForMember and emits entry-qualified kinds; this sniff is
-// the lld/consumer fallback and base-window site path only.
-// Returns the table default when Loc is not a recognizable Format E site.
-unsigned resolveFieldLsb(RelocKind R, const uint8_t *Loc);
+// live Format E mode/entry at Loc — the fallible successor of the retired
+// infallible resolveFieldLsb (D1.42). Nullptr return == success and \p Lsb
+// carries the window; a non-null return is a NAMED, kind-qualified error
+// string the caller must report (MC applyFixup reportError / lld Err(ctx)).
+//
+// Authority:
+//   HWLoopOff1/Off2 — generated HwLoopSniffSites ONLY (golden parcel map/
+//     type windows + Off LSBs from HaydnGenRelocFieldLsb.inc). An unknown
+//     hwloop site (wrong indicator, non-hwloop type at E2 e0, no F2 at E3,
+//     an E3 e2 site) FAILS CLOSED with a named error naming the kind —
+//     never a silent patch of the base-row E2 F2 window (32/38). The
+//     header parse uses named constants (FormatEIndicatorBits /
+//     FormatEEntryNumBit), not numeric masks.
+//   Entry-qualified kinds (24..42) early-return their typed row — the
+//     window rides the kind, never a sniff.
+//   Remaining families (WIDE_Call/Branch, JALR, LO20/PC_LO20, LS_IMM,
+//     HI12, CSR_UImm8) return their windows via resolveFieldLsbForMember
+//     on the generated FieldLsbSites rows and keep their documented
+//     opc/map/type pin predicates and fail-through to the table default
+//     (INV6 ratchet: unit test SniffMatchesGeneratedSites).
+//
+// E2 e0 vs e1 discrimination is positional (the header encodes only mode,
+// not entry index): the sniff alone is never proof of entry identity —
+// producer-side placement stays the typed authority.
+//
+// A null \p Loc keeps returning the table row (no product caller passes
+// null; noted for completeness).
+const char *tryResolveFieldLsb(RelocKind R, const uint8_t *Loc, unsigned &Lsb);
 
 // Result of computing the field value from a relocation input.
 struct RelocCompute {

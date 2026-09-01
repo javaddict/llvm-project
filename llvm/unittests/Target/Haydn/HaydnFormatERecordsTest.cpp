@@ -17,7 +17,12 @@
 #include "MCTargetDesc/HaydnFormat.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCInstrItineraries.h"
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/TargetParser/Triple.h"
 #include "gtest/gtest.h"
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -181,13 +186,31 @@ TEST(HaydnFormatERecords, ModeOnlyLogicalPeelSpellings) {
   // E3-bearing hwloop forms (SET_HWLOOP_F2 / SET_HWLOOP_REG are dual-mode
   // golden logicals) peel to themselves, not to bare SET_HWLOOP.
   EXPECT_EQ(peelLogicalOpcodeName("ADDI32_E2_E1_ALU1_RI20", false), "ADDI32");
-  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W", false), "ADDI32_W");
-  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W_S0", false), "ADDI32_W_S0");
+  // D1.46 fail-closed law: a peel result that is NOT a generated catalog
+  // occupancy name (FormatEAltSpans key) returns the EMPTY string — never
+  // the raw input. `_W` reloc rows and FieldSlot spellings have no span of
+  // their own, so they peel empty; their admission derives from the base
+  // logical at the consumer, which must consult the catalog explicitly
+  // (never feed an empty peel into an unconstrained-occupancy path).
+  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W", false), "");
+  EXPECT_EQ(peelLogicalOpcodeName("ADDI32_W_S0", false), "");
   EXPECT_EQ(peelLogicalOpcodeName("SET_HWLOOP_F2_E3_E0_ALU0_HWLRIIR", false),
             "SET_HWLOOP_F2");
-  EXPECT_EQ(peelLogicalOpcodeName("SET_HWLOOP_F2_W_S0", false),
-            "SET_HWLOOP_F2_W_S0");
+  EXPECT_EQ(peelLogicalOpcodeName("SET_HWLOOP_F2_W_S0", false), "");
   EXPECT_EQ(peelLogicalOpcodeName("ARCTAN_E3_E0_ALU2_RI4", false), "ARCTAN");
+  // Unknown/unpeeled spellings fail closed to empty (D1.46): an unknown
+  // residual name must never surface as a "present but unconstrained"
+  // occupancy member.
+  EXPECT_EQ(peelLogicalOpcodeName("NOT_A_CATALOG_LOGICAL"), "");
+  EXPECT_EQ(peelLogicalOpcodeName("LD32_REG_M9X9LS"), "");
+  EXPECT_EQ(peelLogicalOpcodeName("FOO_MSP"), "");
+  // Every spelling that DOES peel must land on a generated span key —
+  // the public alias mapping is part of the fail-closed contract.
+  EXPECT_NE(peelLogicalOpcodeName("LD32"), "");
+  EXPECT_NE(peelLogicalOpcodeName("RET"), "");
+  EXPECT_EQ(peelLogicalOpcodeName("RET"), "JALR");
+  EXPECT_NE(peelLogicalOpcodeName("WFITBDTBDTBD"), "");
+  EXPECT_EQ(peelLogicalOpcodeName("WFITBDTBDTBD"), "WFI<TBD>");
   // The generated sets are keyed by exact golden logicals; `_W` reloc forms
   // are not members (they are residual FieldSlot rows, not catalog logicals)
   // — their admission derives from the base logical at the consumer.
@@ -414,8 +437,10 @@ TEST(HaydnFormatERecords, StoreLogicalsAreLoadStore0Only) {
   // FormatEUnit::LOADSTORE0 = 4 (not itinerary EU_LOADSTORE0 = 0).
   const uint32_t LS0 = 1u << static_cast<unsigned>(FormatEUnit::LOADSTORE0);
   EXPECT_EQ(peelLogicalOpcodeName("ST8"), "S_SB_WITH_IMM");
-  EXPECT_EQ(peelLogicalOpcodeName("ST8_S0"), "ST8_S0");
-  EXPECT_EQ(peelLogicalOpcodeName("D_SW_L_WITH_IMM_S2"), "D_SW_L_WITH_IMM_S2");
+  // D1.46 fail-closed: FieldSlot _S<digits> spellings peel EMPTY (they
+  // are residual rows, not catalog occupancy names).
+  EXPECT_EQ(peelLogicalOpcodeName("ST8_S0"), "");
+  EXPECT_EQ(peelLogicalOpcodeName("D_SW_L_WITH_IMM_S2"), "");
   // Earliest mode marker: E3-e2 must not peel as LOGICAL_E3.
   EXPECT_EQ(peelLogicalOpcodeName("ADD32_E3_E2_ALU2_RR"), "ADD32");
   EXPECT_EQ(peelLogicalOpcodeName("ADD32_E2_E0_ALU0_RR"), "ADD32");
@@ -542,7 +567,8 @@ TEST(HaydnFormatERecords, MemberToLogicalGeneratedInverse) {
 }
 
 TEST(HaydnFormatERecords, AssignThreeChildStoreLastE3) {
-  EXPECT_EQ(peelLogicalOpcodeName("ST64_S0"), "ST64_S0");
+  // D1.46 fail-closed: FieldSlot spelling peels EMPTY.
+  EXPECT_EQ(peelLogicalOpcodeName("ST64_S0"), "");
   const std::string Logs[3] = {"SRLI64", "SEXT32T64", "D_SDW_WITH_IMM"};
   auto A = assignFormatEMemberEntries(Logs, /*Mode=*/1);
   ASSERT_TRUE(A.has_value());
@@ -606,6 +632,9 @@ TEST(HaydnFormatERecords, AssignTwoStoresRejected) {
 namespace llvm {
 const MCInstrInfo &getHaydnSharedMCInstrInfo();
 }
+
+extern "C" void LLVMInitializeHaydnTargetInfo();
+extern "C" void LLVMInitializeHaydnTargetMC();
 
 TEST(HaydnFormatERecords, UAAndCBMembersCarryTiedDest2Writeback) {
   // One member per family, spanning AR-ua suffix loads/stores and both CB
@@ -671,13 +700,14 @@ TEST(HaydnFormatERecords, SFRWriterMembersDeclareImplicitSFRDef) {
 namespace {
 
 // Keep in sync with EXPECTED_IDENTITY_DIVERGENT in
-// llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py (EMPTY since
-// the 2026-08-26 W68.0R + CB-151 reshape). The Desc-level walk has no
-// flags, so the two flag-exempt departures are named here: the hand-asm
-// shell (isAsmParserOnly, D_LDW_CB_IMM swaps) and the retained
-// SET_HWLOOP_REG ZOL pseudo (cutover refuses it by name; product creator
-// emits SET_HWLOOP_F2_W directly). CSRR left with its 2-op shrink, the
-// UA/CB golden families left with the CB-151 reshape.
+// llvm/lib/Target/Haydn/FormatE/generate_format_e_records.py (the operand-
+// shape arm is EMPTY since the 2026-08-26 CB-151 reshape; the aggregate
+// census folds in the D1.44 extras dimensions, which are pinned per
+// dimension in the test below this one). The Desc-level walk has no
+// TableGen flags, so the two operand-shape-exempt departures are named
+// here: the hand-asm shell (isAsmParserOnly, D_LDW_CB_IMM swaps) and the
+// retained SET_HWLOOP_REG ZOL pseudo (cutover refuses it by name; product
+// creator emits SET_HWLOOP_F2_W directly).
 std::set<std::string> identityDivergentAllowSet() {
   return {
       "D_LDW_CB_IMM",
@@ -727,6 +757,187 @@ TEST(HaydnFormatERecords, DirectSetDescIdentityOverLedger) {
   EXPECT_GT(Pairs, 4000u) << "ledger walk lost its member pairs";
   EXPECT_EQ(DivergentNames, Allow)
       << "divergent census drifted from the pinned allow set";
+}
+
+// ---------------------------------------------------------------------------
+// D1.44: setDesc identity beyond operand shape — implicit Defs/Uses lists,
+// MCID side-effect/control flags, and itinerary SHAPE (OperandCycles equal;
+// member stage units within the logical menu). The generator census owns
+// the build-time law in BOTH emit and --check modes; these are the
+// always-on runtime arms over the REAL MCInstrDesc + InstrItineraryData,
+// so a stale .inc or a TableGen-internal drift still fails at test time.
+// Allow sets mirror the generator's EXPECTED_*_DIVERGENT pins (monotone
+// shrink only; never silently grown).
+// ---------------------------------------------------------------------------
+namespace {
+
+// Superset relationship to the generator's EXPECTED_*_DIVERGENT pins: the
+// Desc-level walk has no TableGen isCodeGenOnly bit, so it also sees the
+// two ZOL pseudos (SET_HWLOOP / SET_HWLOOP_REG, isCodeGenOnly=1 — exempt
+// in the generator census) and, on the flag arm, D_LDW_CB_IMM (the hand-asm
+// shell; its operand-shape divergence is in identityDivergentAllowSet and
+// its UnmodeledSideEffects bit diverges the same way). A name leaving
+// either seat requires re-pinning BOTH, never just one.
+std::set<std::string> implicitDivergentAllowSet() {
+  return {
+      "BEQ", "BGE", "BGEU", "BLT", "BLTU", "BNE", "CSRW", "JAL", "JALR",
+      "MOVESFR2GPR", "MOVF64", "MOVT64", "SET_HWLOOP", "SET_HWLOOP_F2_W",
+      "SET_HWLOOP_REG", "X2MOVF32", "X2MOVT32", "X4MOVF16", "X4MOVT16",
+  };
+}
+
+std::set<std::string> flagDivergentAllowSet() {
+  return {
+      "D_LDW_CB_IMM", "D_LDW_CB_REG", "D_LQHWUA_CB_POST",
+      "D_LTWUA_CB_POST", "D_SDW_CB_IMM", "D_SDW_CB_REG",
+      "D_SQHWUA_CB_POST", "D_STWUA_CB_POST", "JAL", "JALR",
+      "PLDWWUA_POST", "PLQHWUA_CB_POST", "PLTWWUA_CB_POST",
+      "SET_HWLOOP_F2_W", "WBARWUA_CB",
+  };
+}
+
+std::set<std::string> commutableDivergentAllowSet() {
+  return {
+      "ADD32", "ADD64", "AND32", "AND64", "OR32", "OR64", "XOR32",
+      "XOR64",
+  };
+}
+
+} // namespace
+
+TEST(HaydnFormatERecords, DirectSetDescExtrasIdentityOverLedger) {
+  using llvm::haydn::format_e::lookupGeneratedMemberToLogical;
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+
+  // Itinerary shape comes from the subtarget tables (the same registry
+  // initialization path HaydnMemoryCycleTest uses in this binary).
+  LLVMInitializeHaydnTargetInfo();
+  LLVMInitializeHaydnTargetMC();
+  std::string Error;
+  const Triple TT("haydn-unknown-elf");
+  const Target *TheTarget = TargetRegistry::lookupTarget(TT, Error);
+  ASSERT_NE(TheTarget, nullptr) << Error;
+  std::unique_ptr<MCSubtargetInfo> STI(
+      TheTarget->createMCSubtargetInfo(TT, "generic", ""));
+  ASSERT_NE(STI, nullptr);
+  InstrItineraryData Itins;
+  STI->initInstrItins(Itins);
+  ASSERT_FALSE(Itins.isEmpty());
+
+  const auto ImplicitAllow = implicitDivergentAllowSet();
+  const auto FlagAllow = flagDivergentAllowSet();
+  const auto CommutableAllow = commutableDivergentAllowSet();
+  unsigned Pairs = 0;
+  std::set<std::string> ImplicitNames, FlagNames, CommutableNames,
+      ItineraryNames;
+  for (unsigned MemberOpc = 0; MemberOpc != Haydn::INSTRUCTION_LIST_END;
+       ++MemberOpc) {
+    const unsigned LogicalOpc = lookupGeneratedMemberToLogical(MemberOpc);
+    if (!LogicalOpc || LogicalOpc == MemberOpc)
+      continue;
+    const MCInstrDesc &L = MII.get(LogicalOpc);
+    const MCInstrDesc &M = MII.get(MemberOpc);
+    ++Pairs;
+    const std::string Name = MII.getName(LogicalOpc).str();
+
+    // Implicit Defs/Uses: same physical registers, same order
+    // (implicit_defs()/implicit_uses() are positional). All pinned
+    // divergences are logical-declares/member-omits: a raw setDesc onto
+    // the member would DROP the implicit SFR def/use or the JAL/JALR
+    // call-clobber list from the committed MI.
+    if (!(L.implicit_defs() == M.implicit_defs() &&
+          L.implicit_uses() == M.implicit_uses())) {
+      ImplicitNames.insert(Name);
+      EXPECT_TRUE(ImplicitAllow.count(Name))
+          << "new implicit-list setDesc divergence: " << Name << " vs "
+          << MII.getName(MemberOpc)
+          << " (setDesc would drop/add implicit Defs/Uses; align the "
+             "logical TableGen Defs/Uses and re-pin the census)";
+    }
+
+    // MCID side-effect/control flags — the exact set classify_member_flags
+    // owns (mayLoad/mayStore/isBranch/isTerminator/isCall/isIndirectBranch/
+    // isBarrier) plus hasSideEffects via its Desc bit
+    // (hasUnmodeledSideEffects).
+    if (!(L.mayLoad() == M.mayLoad() && L.mayStore() == M.mayStore() &&
+          L.isBranch() == M.isBranch() &&
+          L.isTerminator() == M.isTerminator() && L.isCall() == M.isCall() &&
+          L.isIndirectBranch() == M.isIndirectBranch() &&
+          L.isBarrier() == M.isBarrier() &&
+          L.hasUnmodeledSideEffects() == M.hasUnmodeledSideEffects())) {
+      FlagNames.insert(Name);
+      EXPECT_TRUE(FlagAllow.count(Name))
+          << "new MCID-flag setDesc divergence: " << Name << " vs "
+          << MII.getName(MemberOpc)
+          << " (setDesc would change side-effect/control legality; align "
+             "the logical TableGen flags and re-pin the census)";
+    }
+
+    if (L.isCommutable() != M.isCommutable()) {
+      CommutableNames.insert(Name);
+      EXPECT_TRUE(CommutableAllow.count(Name))
+          << "new commutability setDesc divergence: " << Name << " vs "
+          << MII.getName(MemberOpc);
+    }
+
+    // Itinerary SHAPE parity (never class-name equality: the logical books
+    // the union menu of its placements, the member pins its committed
+    // unit — the published AIE-style contract).
+    //   1. OperandCycles vectors equal (latency/read-write shape).
+    //   2. Every member stage's unit choice is covered by SOME logical
+    //      stage's unit set (member never books an unbooked unit).
+    const InstrItinerary &LI = Itins.Itineraries[L.getSchedClass()];
+    const InstrItinerary &MI = Itins.Itineraries[M.getSchedClass()];
+    bool CyclesEqual =
+        (LI.LastOperandCycle - LI.FirstOperandCycle) ==
+        (MI.LastOperandCycle - MI.FirstOperandCycle);
+    if (CyclesEqual) {
+      for (unsigned I = 0; I != LI.LastOperandCycle - LI.FirstOperandCycle;
+           ++I) {
+        if (Itins.OperandCycles[LI.FirstOperandCycle + I] !=
+            Itins.OperandCycles[MI.FirstOperandCycle + I]) {
+          CyclesEqual = false;
+          break;
+        }
+      }
+    }
+    bool UnitsWithin = true;
+    for (const InstrStage *MS = Itins.beginStage(M.getSchedClass()),
+                         *ME = Itins.endStage(M.getSchedClass());
+         MS != ME; ++MS) {
+      bool Covered = false;
+      for (const InstrStage *LS = Itins.beginStage(L.getSchedClass()),
+                           *LE = Itins.endStage(L.getSchedClass());
+           LS != LE; ++LS) {
+        if ((MS->getUnits() & LS->getUnits()) == MS->getUnits()) {
+          Covered = true;
+          break;
+        }
+      }
+      if (!Covered) {
+        UnitsWithin = false;
+        break;
+      }
+    }
+    if (!CyclesEqual || !UnitsWithin) {
+      ItineraryNames.insert(Name);
+      EXPECT_TRUE(CyclesEqual)
+          << "itinerary OperandCycles setDesc divergence: " << Name
+          << " vs " << MII.getName(MemberOpc);
+      EXPECT_TRUE(UnitsWithin)
+          << "member books a unit outside the logical itinerary menu: "
+          << Name << " vs " << MII.getName(MemberOpc);
+    }
+  }
+  EXPECT_GT(Pairs, 4000u) << "ledger walk lost its member pairs";
+  EXPECT_EQ(ImplicitNames, ImplicitAllow)
+      << "implicit divergent census drifted from the pinned allow set";
+  EXPECT_EQ(FlagNames, FlagAllow)
+      << "flag divergent census drifted from the pinned allow set";
+  EXPECT_EQ(CommutableNames, CommutableAllow)
+      << "commutable divergent census drifted from the pinned allow set";
+  EXPECT_TRUE(ItineraryNames.empty())
+      << "itinerary shape parity must hold for every pair";
 }
 
 // ---------------------------------------------------------------------------

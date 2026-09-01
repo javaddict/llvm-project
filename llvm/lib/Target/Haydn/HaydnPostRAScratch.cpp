@@ -302,6 +302,15 @@ Register llvm::findPostRAScratchNoSpill(
   for (const MachineBasicBlock *Succ : EffSuccs) {
     if (!Succ)
       continue;
+    // Self-loop: stored liveins are the loop-carried set. Computing
+    // live-ins of MBB itself would re-walk with extra pre-rewrite
+    // successors (Header==Latch early-exit) and occupy GPRs the
+    // post-rewrite {Header, Exit} obligation does not carry.
+    if (Succ == &MBB) {
+      for (const MachineBasicBlock::RegisterMaskPair &LI : MBB.liveins())
+        LPR.addReg(LI.PhysReg);
+      continue;
+    }
     // Computed live-ins of Succ, not Succ->liveins(). Stored lists are
     // stale this late: a BR split-tail / trampoline Exit with empty
     // liveins would make every exit-only live-through GPR look free.

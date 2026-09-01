@@ -246,6 +246,11 @@ public:
       InternalErr(ctx, buf) << "cannot read addend for relocation " << type;
       return 0;
     }
+    // RELA-unconsulted in the product path. The int64_t wrapper cannot
+    // report diagnostics; the fail-closed site authority for the hwloop
+    // windows lives in relocate (tryResolveFieldLsb, D1.42). A future
+    // REL (implicit-addend) Haydn path needs its own error propagation
+    // here — do not widen this seat ad hoc.
     return HaydnReloc::readRelocAddend(
         static_cast<HaydnReloc::RelocKind>(static_cast<unsigned>(type)), buf);
   }
@@ -369,8 +374,16 @@ public:
     }
     const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
     // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI} / JALRSImm12 / HI12: E2 e0
-    // table FieldLsb; E3 e0/e1/e2 (and E2 e1 LO20/PC_LO20) via resolveFieldLsb.
-    const unsigned FieldLsb = HaydnReloc::resolveFieldLsb(R, loc);
+    // table FieldLsb; E3 e0/e1/e2 (and E2 e1 LO20/PC_LO20) via
+    // tryResolveFieldLsb. D1.42: the hwloop arm resolves windows ONLY from
+    // the generated HwLoopSniffSites table; an unrecognized hwloop site is
+    // a NAMED error (fail-closed), never a silent base-row patch — same
+    // diagnose shape as the TPREL/GOT guards above.
+    unsigned FieldLsb = 0;
+    if (const char *SiteErr = HaydnReloc::tryResolveFieldLsb(R, loc, FieldLsb)) {
+      Err(ctx) << getErrorLoc(ctx, loc) << SiteErr;
+      return;
+    }
     HaydnReloc::patchField(loc, Comp.FieldVal, FI.NBytes, FI.FieldSize,
                            FieldLsb);
   }

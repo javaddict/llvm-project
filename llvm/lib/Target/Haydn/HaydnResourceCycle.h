@@ -543,10 +543,6 @@ private:
   HaydnCyclePortDemand Ports;
   /// True once an ARCTAN/SIN_COS has been reserved in this cycle.
   bool HasAloneOp = false;
-  /// Constraints §Special occupancy (uimm4+2) booked for the reserved
-  /// SIN_COS/ARCTAN. Issue-alone is HasAloneOp; this is the window
-  /// length the HR scoreboard books as Reserved on the selected unit.
-  unsigned SinCosWindowOccupancy = 0;
   /// Same-cycle laws the post-RA HR names (HaydnHazardRecognizer::
   /// cycleViolatesNamedSameCycleLaws / HAYDN_NAMED_SAME_CYCLE_LAWS_TAG):
   /// CSRW 0x20-0x25 ↔ SET_HWLOOP, and LUI/ADDI32_W e0-alone. Incremental
@@ -697,7 +693,6 @@ public:
         haydn::bundle::makeProductCandidateSet(Fmts.getPacketFormats());
     Ports = HaydnCyclePortDemand{};
     HasAloneOp = false;
-    SinCosWindowOccupancy = 0;
     HasHwloopSetup = false;
     HasHwloopCsrw = false;
     HasAbsMaterialize = false;
@@ -747,8 +742,6 @@ public:
   }
   void reserveResources(MachineInstr &MI) override {
     reserveWithPorts(MI.getOpcode(), countHaydnPortsFromMI(MI));
-    if (unsigned Occ = haydnSinCosWindowOccupancy(MI))
-      SinCosWindowOccupancy = std::max(SinCosWindowOccupancy, Occ);
     if (haydnHwloopCsrAddr(MI) >= 0)
       HasHwloopCsrw = true;
     // Record defs AFTER a successful commit so subsequent same-cycle
@@ -798,9 +791,6 @@ public:
   const HaydnCyclePortDemand &getPortDemand() const { return Ports; }
 
   bool hasAloneOp() const { return HasAloneOp; }
-
-  /// Booked SIN_COS/ARCTAN occupancy (0 if none reserved this cycle).
-  unsigned sinCosWindowOccupancy() const { return SinCosWindowOccupancy; }
 
   // Opcode-keyed reserve without an MCInstrDesc (unit tests / local probes).
   // Format + alone only — no port pressure (callers without operand shapes).

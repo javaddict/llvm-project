@@ -17,6 +17,8 @@
 ; RUN:     | FileCheck %s --check-prefix=DBG
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnLateConvergence.cpp \
 ; RUN:     --check-prefix=EXHAUST
+; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnLateConvergence.cpp \
+; RUN:     --check-prefix=NOGROWTH
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnTargetMachine.cpp \
 ; RUN:     --check-prefix=FLAG
 ;
@@ -86,12 +88,18 @@ e:
 ; Ordinary O0 function is entered; optnone is skipFunction'd BY THE DRIVER
 ; (the postmisched pack itself runs for optnone since GR2.4).
 ; DBG: HaydnLateConvergence: conv_o0 bound={{[0-9]+}} (cond={{[0-9]+}} hwloop=0)
-; DBG: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; DBG: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; DBG-NOT: conv_o0_optnone
 ; DBG-NOT: exhausted
 
-; EXHAUST: report_fatal_error(
-; EXHAUST-NEXT: "HaydnLateConvergence: bounded repair loop exhausted " +
+; EXHAUST: "HaydnLateConvergence: bounded repair loop exhausted " +
+
+; GR2.6 enforced no-growth law: unaccounted per-iteration prefix growth is
+; a named fatal (the discarded (void)NoGrowth site is gone). Illegal
+; growth has no healthy-compiler producer — the firing path is proven by
+; the HaydnLateConvergenceBudgetTest unit red/green plus this source pin.
+; NOGROWTH: "HaydnLateConvergence: prefix budget grew beyond the admitted "
+; NOGROWTH-NEXT: "closure vocabulary: " +
 
 ; FLAG: "haydn-sms2", cl::Hidden,
 ; FLAG-NEXT: cl::init(haydnLateConvergenceProductDefaultEnabled()),

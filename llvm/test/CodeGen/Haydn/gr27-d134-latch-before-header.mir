@@ -1,0 +1,326 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=NEAR --check-prefix=FAR
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   %S/Inputs/gr27-d134-header-first-control.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=CTL
+# REQUIRES: haydn-registered-target
+#
+# D1.34 signed-span pin: when the latch is laid out BEFORE the header
+# (MachineBlockPlacement rotation — the embench nsichneu @benchmark_body
+# shape), the Header-begin..Latch-end span walk returns the -1 sentinel
+# and the latch-end BNEZ site displacement is the FORWARD
+# Latch-end..Header-begin distance on the SAME one walk. Two historical
+# wrong readings of that sentinel, both pinned here:
+#   * -(-1) = +1 (the pre-D1.34 state): an unmeasured magnitude read as
+#     short — a far rotated backedge installed a BNEZ the post-stamp
+#     BranchRelaxation had to promote into the CFG wall;
+#   * flat refusal (the interim D1.34 state): every rotated loop refused
+#     the demote, and the expand-path caller
+#     (expandRoleALoopStarts) treats a refused demote on a body-resolvable
+#     shape as terminal — a fail-closed compile error on legal rotated
+#     loops (the exact BundleSim nsichneu #289/#302 fleet red).
+# Arms:
+#   rotated_near — adjacent rotated latch/header: forward distance 0,
+#     in range, SHORT demote (BNEZ backedge, no JALR). This is the
+#     nsichneu regression arm: it FATALS under the interim refusal.
+#   rotated_far  — 170-NOP spacer (2040 B) + B between latch and header:
+#     forward distance 2052 B > 2000 (2048 - 48 buffer), LONG terminal
+#     in-block latch, no BNEZ backedge.
+#   CTL (Inputs/gr27-d134-header-first-control.mir) — the Header-then-
+#     Latch twin at 2100 B span, LONG: proves the direction split, not a
+#     general demote regression, on the same shared seat.
+#
+# Trigger: OUT-OF-DOMAIN selector (Sel=2; product domain {0,1}) takes
+# the shared demoteHardwareLoopToSoftware long-latch path (same seat as
+# the gr27-d133 boundary pins).
+
+--- |
+  define dso_local i32 @rotated_near() {
+  entry:
+    br label %body
+  latch:
+    br label %body
+  body:
+    br label %latch
+  exit:
+    ret i32 0
+  }
+
+  define dso_local i32 @rotated_far() {
+  entry:
+    br label %body
+  latch:
+    br label %body
+  spacer:
+    br label %body
+  body:
+    br label %latch
+  exit:
+    ret i32 0
+  }
+...
+---
+name:            rotated_near
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.2
+    SET_HWLOOP_F2_W 2, %bb.2, %bb.1, $r2, implicit-def dead $sfr
+    B %bb.2
+
+  ; Latch (bb.1) laid out immediately BEFORE the Header (bb.2): the
+  ; span authority returns -1 and the forward Latch-end..Header-begin
+  ; distance is 0 (adjacent, alignment 1) — in range, SHORT.
+  ; The latch carries a live conditional exit edge (bb.3) so the demote
+  ; reaches the span law with a parseable Exit.
+  bb.1.latch:
+    liveins: $r2
+    successors: %bb.2, %bb.3
+    BNEZ_W $r2, %bb.3, implicit-def dead $sfr
+    B %bb.2
+
+  bb.2.body:
+    liveins: $r2
+    successors: %bb.1
+    B %bb.1
+
+  bb.3.exit:
+    liveins: $r2, $r15
+    RET implicit $r15
+
+...
+---
+name:            rotated_far
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.3
+    SET_HWLOOP_F2_W 2, %bb.3, %bb.1, $r2, implicit-def dead $sfr
+    B %bb.3
+
+  ; Rotated latch (bb.1), then a 170-NOP spacer (bb.2, 2040 B + 12 B B
+  ; = 2052 B) before the Header (bb.3): the forward site displacement
+  ; 2052 B exceeds the single-charge short window (2048 - 48 = 2000) —
+  ; LONG terminal latch, never a short BNEZ that a later seat promotes.
+  bb.1.latch:
+    liveins: $r2
+    successors: %bb.3, %bb.4
+    BNEZ_W $r2, %bb.4, implicit-def dead $sfr
+    B %bb.3
+
+  bb.2.spacer:
+    successors: %bb.3
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    B %bb.3
+
+  bb.3.body:
+    liveins: $r2
+    successors: %bb.1
+    B %bb.1
+
+  bb.4.exit:
+    liveins: $r2, $r15
+    RET implicit $r15
+
+...
+# Adjacent rotated backedge: measured FORWARD 0 B — short demote with a
+# BNEZ backedge (this arm is the nsichneu #289/#302 regression pin; it
+# fatals under a flat sentinel refusal).
+# NEAR-LABEL: name:            rotated_near
+# NEAR: SUBI32
+# NEAR: BNEZ{{.*}} $r2, {{.*}}bb.2
+# NEAR-NOT: JALR
+#
+# Far rotated backedge: measured FORWARD 2052 B — the terminal in-block
+# long latch LUI(scr); ADDI32_W(scr); BEQZ_W(countdown, Exit); JALR_W.
+# FAR-LABEL: name:            rotated_far
+# FAR: LUI
+# FAR: ADDI32
+# FAR: BEQZ{{.*}} $r2, {{.*}}bb.4
+# FAR: JALR{{.*\$r11, 0}}
+# FAR-NOT: BNEZ
+#
+# Header-then-Latch control (2100 B backward span): LONG, unchanged.
+# CTL-LABEL: name:            header_first
+# CTL: LUI
+# CTL: ADDI32
+# CTL: BEQZ{{.*}} $r2, {{.*}}bb.2
+# CTL: JALR{{.*\$r11, 0}}
+# CTL-NOT: BNEZ

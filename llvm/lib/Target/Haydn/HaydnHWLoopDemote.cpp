@@ -32,6 +32,9 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
+
+#include <numeric>
 
 using namespace llvm;
 using namespace llvm::haydn::hwloop;
@@ -412,7 +415,7 @@ void haydn::hwloop::finalizeExactLateSingleton(MachineInstr &MI) {
 
 void haydn::hwloop::recommitSurvivingCycleMembers(
     ArrayRef<MachineInstr *> Keep, const HaydnInstrInfo &TII,
-    const char *DebugPrefix) {
+    const char *DebugPrefix, AAResults *AA) {
   if (Keep.empty())
     return;
 
@@ -442,11 +445,14 @@ void haydn::hwloop::recommitSurvivingCycleMembers(
     return;
   }
 
-  // Multi-survivor coissue: transactional multi-MI exact commit rebuilds
-  // root operands/kills/internal-reads + Format E row/completion. Fall back to
-  // per-member singletons rather than leave bare reals if membership is
-  // no longer one legal product cycle after SET removal.
-  if (!haydn::bundle::commitExactMultiMIProductCycle(Live)) {
+  // Multi-survivor coissue: the ONE production commit site (probe + exact
+  // bake) rebuilds root operands/kills/internal-reads + Format E
+  // row/completion. D1.52: never a probeless direct bake here — the probe
+  // owns the store/load may-alias law (null AA fail-closed; proven-NoAlias
+  // via forwarded AA), and the exact bake re-enforces it defensively. Fall
+  // back to per-member singletons rather than leave bare reals if
+  // membership is no longer one legal product cycle after SET removal.
+  if (!haydn::bundle::commitOneProductCycle(Live, AA)) {
     LLVM_DEBUG(dbgs() << DebugPrefix << ": coissue survivors not one "
                          "legal multi-MI cycle after SET erase — "
                          "singleton exact-commit each\n");
@@ -460,7 +466,8 @@ void haydn::hwloop::recommitSurvivingCycleMembers(
 }
 
 void haydn::hwloop::eraseSetMemberAndRecommitSiblings(
-    MachineInstr &SetMI, const HaydnInstrInfo &TII, const char *DebugPrefix) {
+    MachineInstr &SetMI, const HaydnInstrInfo &TII, const char *DebugPrefix,
+    AAResults *AA) {
   MachineBasicBlock *MBB = SetMI.getParent();
   if (!MBB)
     return;
@@ -488,7 +495,7 @@ void haydn::hwloop::eraseSetMemberAndRecommitSiblings(
   }
 
   SetMI.eraseFromParent();
-  recommitSurvivingCycleMembers(Keep, TII, DebugPrefix);
+  recommitSurvivingCycleMembers(Keep, TII, DebugPrefix, AA);
 }
 
 MachineInstrBuilder haydn::hwloop::buildExactLateDef(
@@ -582,6 +589,181 @@ bool haydn::hwloop::isCountdownStepOf(const MachineInstr &MI, Register Reg) {
       MI.getOperand(1).getReg() == Reg && MI.getOperand(2).isImm())
     return logicalStepIsProvenCountdown(MI.getOperand(2).getImm());
   return false;
+}
+
+// D1.34 ONE estimate law, shared authority. Prior state had three private
+// copies (Fixup's estimateMBBDistance-internal pad, the demote's forked
+// BackedgeBytes lambda with NO alignment charge, and the normalizer's
+// static copy); a disagreement between them is exactly the class that let
+// a site measure in-range at one seat while BranchRelaxation's scan
+// measured far (the GR2.7 5-red kernels). One function, one law.
+//
+// The law is the joint parcel-grid / BR-conservative maximum (header
+// contract): the charged start must be a whole-parcel multiple (the only
+// in-tree input shape — getInstSizeInBytes charges only parcel multiples),
+// at or past the first lcm(Align, Parcel) grid point (the MC emitter law,
+// HaydnMCELFStreamer::emitCodeAlignment / HaydnMachineAlignment), AND at
+// or past generic BranchRelaxation's postOffset model including the
+// Alignment > ParentAlign uncertainty term. A pad below ANY of those is a
+// span a later seat measures longer — the exact defect class this law
+// closes (Bytes=12 / align 16 previously returned 24: neither aligned to
+// 16 nor on the 48-byte joint grid).
+int64_t haydn::hwloop::padLayoutBytesForMBBAlign(int64_t Bytes,
+                                                 const MachineBasicBlock &MBB) {
+  const Align A = MBB.getAlignment();
+  if (A == Align(1) || Bytes < 0)
+    return Bytes;
+  const MachineFunction *MF = MBB.getParent();
+  const Align PA = MF ? MF->getAlignment() : Align(1);
+  const uint64_t Cur = static_cast<uint64_t>(Bytes);
+  const uint64_t Parcel = haydn::bundle::productParcelBytes().Value;
+  assert(Parcel != 0 && "product EncodedBytes must be non-zero");
+  // (b) joint grid: first lcm(Align, Parcel) point at or past the start.
+  const uint64_t Grid = std::lcm(A.value(), Parcel);
+  const uint64_t GridTarget = alignTo(Cur, Grid);
+  // (c) BranchRelaxation postOffset model: alignTo(PO, A), plus the
+  // A > ParentAlign uncertainty (BR cannot tell whether extra padding
+  // will be inserted, so it assumes the worst). Unrounded here; the
+  // parcel rounding below is the one whole-parcel authority.
+  const uint64_t BRWorst =
+      alignTo(Cur, A) +
+      (A > PA ? A.value() - PA.value() : 0);
+  // Whole-parcel maximum of the two bounds. ceilProductParcels of the
+  // byte gap keeps every charged start a parcel multiple (input shape),
+  // and a parcel-rounded BR bound is >= its raw value (monotone max).
+  uint64_t Pad = GridTarget - Cur;
+  const uint64_t BRPad = BRWorst > Cur ? BRWorst - Cur : 0;
+  if (BRPad > Pad)
+    Pad = haydn::bundle::productBundlesToBytes(
+        haydn::bundle::ceilProductParcels(static_cast<unsigned>(BRPad)));
+  return Bytes + static_cast<int64_t>(Pad);
+}
+
+// D1.34 ONE byte-walk authority. Per-MBB signed start offsets in layout
+// order, charging exactly padLayoutBytesForMBBAlign once per entered
+// MBB. The entry block is exempt (function alignment sits outside the
+// branch-distance window — the normalizer's convention, now the one
+// law). Dead/foreign numbers keep the -1 sentinel so every consumer can
+// refuse an unknown span (INV: -1 is never a displacement).
+void haydn::hwloop::computeLayoutBlockStarts(
+    const MachineFunction &MF, const TargetInstrInfo &TII,
+    SmallVectorImpl<int64_t> &Starts) {
+  Starts.assign(MF.getNumBlockIDs(), -1);
+  int64_t Bytes = 0;
+  bool First = true;
+  for (const MachineBasicBlock &MBB : MF) {
+    if (!First)
+      Bytes = padLayoutBytesForMBBAlign(Bytes, MBB);
+    First = false;
+    if (MBB.getNumber() >= 0 &&
+        MBB.getNumber() < static_cast<int>(Starts.size()))
+      Starts[MBB.getNumber()] = Bytes;
+    for (const MachineInstr &MI : MBB)
+      Bytes += TII.getInstSizeInBytes(MI);
+  }
+}
+
+// Intra-block site offset (BranchRelaxation getInstrOffset law). The skip
+// law is getInstSizeInBytes alone (it returns 0 for meta/debug/kill/
+// implicit-def/CFI/position); no private hand skip-set beside it.
+int64_t haydn::hwloop::estimateLayoutInstrOffset(
+    const MachineBasicBlock &MBB, MachineBasicBlock::const_iterator It,
+    const TargetInstrInfo &TII) {
+  int64_t Bytes = 0;
+  for (auto I = MBB.begin(), E = MBB.end(); I != E; ++I) {
+    if (I == It)
+      return Bytes;
+    Bytes += TII.getInstSizeInBytes(*I);
+  }
+  return Bytes; // It == end(): the whole-block size.
+}
+
+// Layout-order membership, not numeric order: empty blocks can share a
+// numeric offset, so "To precedes From" is decidable only by walking the
+// layout. Keeps the -1 sentinel exact for empty latch-before-header
+// shapes (numeric equality would otherwise masquerade as span 0).
+static bool blockAtOrAfterInLayout(const MachineFunction &MF,
+                                   const MachineBasicBlock *From,
+                                   const MachineBasicBlock *To) {
+  if (!From || !To)
+    return false;
+  bool Started = false;
+  for (const MachineBasicBlock &MBB : MF) {
+    if (&MBB == From)
+      Started = true;
+    if (Started && &MBB == To)
+      return true;
+  }
+  return false;
+}
+
+// D1.34 derivation of the one byte walk: the FromIt-exclusive to-To-start
+// distance. Semantics identical to the previous dedicated loop for every
+// forward layout (entry pad exempt, per-entered-MBB pad, sizes from
+// TII.getInstSizeInBytes); -1 when ToMBB never starts at or after FromIt.
+// (To == FromMBB with FromIt past begin now refuses with -1 instead of
+// the old remaining-block sum — a same-block "distance to its own start"
+// is not a span any caller may consume; refusal is the fail-closed fix.)
+int64_t haydn::hwloop::estimateLayoutMBBDistance(
+    const MachineFunction &MF, const MachineBasicBlock *FromMBB,
+    MachineBasicBlock::const_iterator FromIt, const MachineBasicBlock *ToMBB,
+    const TargetInstrInfo &TII) {
+  if (!isLiveMBB(MF, FromMBB) || !isLiveMBB(MF, ToMBB))
+    return -1;
+  if (!blockAtOrAfterInLayout(MF, FromMBB, ToMBB))
+    return -1; // To precedes From in layout.
+  SmallVector<int64_t, 32> Starts;
+  computeLayoutBlockStarts(MF, TII, Starts);
+  // isLiveMBB proved both numbers are >= 0 and parented by MF; bound the
+  // lookup so a renumbered-out number can never index past the scan (the
+  // -1 sentinel is then the only failure shape).
+  const auto lookup = [&Starts](const MachineBasicBlock *B) -> int64_t {
+    const int64_t N = B->getNumber();
+    return (N >= 0 && N < static_cast<int64_t>(Starts.size()))
+               ? Starts[N]
+               : -1;
+  };
+  const int64_t FromStart = lookup(FromMBB);
+  const int64_t ToStart = lookup(ToMBB);
+  if (FromStart < 0 || ToStart < 0)
+    return -1;
+  const int64_t FromSite = FromStart + estimateLayoutInstrOffset(
+                                           *FromMBB, FromIt, TII);
+  if (ToStart < FromSite)
+    return -1; // To's start precedes the From site inside FromMBB.
+  return ToStart - FromSite;
+}
+
+// D1.34 derivation of the one byte walk: the Header-begin..Latch-end span
+// the demote LongLatch decision consumes. The old walk charged a private
+// hand skip-set (meta/debug/kill/implicit-def/CFI/position) on top of
+// getInstSizeInBytes — dead weight: the size oracle already returns 0 for
+// exactly those. Deleted; the span is the single-walk expression.
+int64_t haydn::hwloop::estimateLayoutSpanBytes(
+    const MachineFunction &MF, const MachineBasicBlock *FromMBB,
+    const MachineBasicBlock *ToMBB, const TargetInstrInfo &TII) {
+  if (!isLiveMBB(MF, FromMBB) || !isLiveMBB(MF, ToMBB))
+    return -1;
+  if (!blockAtOrAfterInLayout(MF, FromMBB, ToMBB))
+    return -1; // To precedes From in layout (latch-before-header).
+  SmallVector<int64_t, 32> Starts;
+  computeLayoutBlockStarts(MF, TII, Starts);
+  const int64_t FromStart =
+      (FromMBB->getNumber() >= 0 &&
+       FromMBB->getNumber() < static_cast<int>(Starts.size()))
+          ? Starts[FromMBB->getNumber()]
+          : -1;
+  const int64_t ToStart =
+      (ToMBB->getNumber() >= 0 &&
+       ToMBB->getNumber() < static_cast<int>(Starts.size()))
+          ? Starts[ToMBB->getNumber()]
+          : -1;
+  if (FromStart < 0 || ToStart < 0)
+    return -1;
+  const int64_t ToEnd =
+      ToStart + estimateLayoutInstrOffset(*ToMBB, ToMBB->end(), TII);
+  assert(ToEnd >= FromStart && "layout-order-checked span must be monotone");
+  return ToEnd - FromStart;
 }
 
 bool haydn::hwloop::regMentionedInBlocks(Register Reg,
@@ -828,10 +1010,49 @@ void haydn::hwloop::computeBlockLiveIns(LivePhysRegs &Live,
     Live.stepBackward(MI);
 }
 
+void haydn::hwloop::computeBlockLiveInsFromSuccessors(
+    LivePhysRegs &Live, const MachineBasicBlock &MBB,
+    ArrayRef<const MachineBasicBlock *> Succs) {
+  const MachineFunction &MF = *MBB.getParent();
+  Live.init(*MF.getRegInfo().getTargetRegisterInfo());
+  bool Seeded = false;
+  for (const MachineBasicBlock *S : Succs) {
+    if (!S)
+      continue;
+    if (S == &MBB) {
+      // Self-loop: stored liveins are the loop-carried set the rewriter
+      // keeps. Extra pre-rewrite successors are not in Succs.
+      for (const MachineBasicBlock::RegisterMaskPair &LI : MBB.liveins())
+        Live.addReg(LI.PhysReg);
+      Seeded = true;
+      continue;
+    }
+    LivePhysRegs SL;
+    computeBlockLiveIns(SL, *S);
+    for (MCPhysReg R : SL)
+      Live.addReg(R);
+    Seeded = true;
+  }
+  if (!Seeded) {
+    computeBlockLiveIns(Live, MBB);
+    return;
+  }
+  for (const MachineInstr &MI : llvm::reverse(MBB))
+    Live.stepBackward(MI);
+}
+
 bool haydn::hwloop::blockLiveInContains(const MachineBasicBlock &MBB,
                                         MCPhysReg Reg) {
   LivePhysRegs Live;
   computeBlockLiveIns(Live, MBB);
+  return Live.contains(Reg);
+}
+
+bool haydn::hwloop::blockLiveInContainsFromSuccessors(
+    const MachineBasicBlock &MBB, ArrayRef<const MachineBasicBlock *> Succs,
+    MCPhysReg Reg) {
+  LivePhysRegs Live;
+  computeBlockLiveInsFromSuccessors(Live, MBB, Succs);
   return Live.contains(Reg);
 }
 

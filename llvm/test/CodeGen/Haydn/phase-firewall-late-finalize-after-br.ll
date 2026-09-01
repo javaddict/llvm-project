@@ -36,19 +36,24 @@ define i32 @f(i32 %a, i32 %b) {
 ; O2: Hardware Loop Insertion
 ; O2-NOT: Haydn Hardware Loop Detection
 
-; No Finalize/Verify before PostRA (phase firewall).
+; No Finalize/Verify before PostRA (phase firewall). The GR2.7 pre-commit
+; normalization BR sits between LatencyStalls and the first Finalize.
 ; COMMON-NOT: Haydn Bundle Finalization
 ; COMMON: PostRA Machine Instruction Scheduler
 ; COMMON-NEXT: Haydn Exposed-Pipeline Latency Stalls
+; COMMON-NEXT:      Haydn Long-Branch Normalize
+; COMMON-NEXT: Branch relaxation pass
 ; COMMON-NEXT: Haydn Bundle Finalization
 ; COMMON-NEXT: Haydn Bundle Invariant Verifier
-; COMMON: Branch relaxation pass
 
 ; O0 keeps no hwloop passes; O2 arms Fixup + second BR in the late lane.
 ; O0-NOT: Haydn Hardware Loop Fixup
+; O0: Branch relaxation pass
 ; O0-NEXT: Haydn Bundle Finalization
 ; O0-NEXT: Haydn Bundle Invariant Verifier
+; O2: Branch relaxation pass
 ; O2-NEXT: Haydn Hardware Loop Fixup
+; O2-NEXT:      Haydn Long-Branch Normalize
 ; O2-NEXT: Branch relaxation pass
 ; O2-NEXT: Haydn Bundle Finalization
 ; O2-NEXT: Haydn Bundle Invariant Verifier

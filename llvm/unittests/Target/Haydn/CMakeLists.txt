@@ -42,12 +42,16 @@ add_llvm_target_unittest(HaydnTests
   HaydnIssueWidthCycleTest.cpp
   HaydnIntraCycleWAWTest.cpp
   HaydnLaneStoreFoldTest.cpp
+  HaydnLateConvergenceBudgetTest.cpp
   HaydnLibcallNamesTest.cpp
   HaydnMCFormatsTest.cpp
   HaydnMaterializeMultiOpcodeTest.cpp
   HaydnMemoryCycleTest.cpp
+  HaydnMspCloneFamilyTest.cpp
   HaydnPlacementAlternativeTest.cpp
   HaydnPortModelSFRMemberTest.cpp
+  HaydnPostCommitBlockBudgetTest.cpp
+  HaydnPreS1GrowthCompositionTest.cpp
   HaydnRegisterBankInfoTest.cpp
   HaydnRegisterInfoTest.cpp
   HaydnRelocLayoutTest.cpp

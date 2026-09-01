@@ -1461,6 +1461,116 @@ def _check_reloc_sniff_pins(cat: Catalog) -> None:
             )
 
 
+# D1.42 hwloop sniff geometry: the generated HwLoopSniffSites rows. One row
+# per golden hwloop member family (HWLRIIR / HWLRIII), keyed by
+# (Mode, EntryIdx) with parcel-absolute map/type windows and the Off1/Off2
+# LSBs. This is NOT a second LSB authority: emit-time law (b) below fails
+# generation unless every row's Off1Lsb/Off2Lsb equals the FieldLsbSites
+# (or, for the E2 HWLRIII variant, ExtraPublishedLsb) value for that
+# (kind, mode, entry). FieldLsbSites/ExtraPublishedLsb stay the sole
+# publication authority (isPublishedFieldLsb / findFixupFromFixupFields).
+_HWLOOP_SNIFF_TYPES = ("HWLRIIR", "HWLRIII")
+
+
+def _collect_hwloop_sniff_sites(
+    cat: Catalog,
+) -> List[
+    Tuple[str, int, int, int, int, int, int, int, int, int, int]
+]:
+    """Return HwLoopSniffSite rows from golden TypeLayouts.
+
+    Row shape: (type_name, mode, entry, map_lo, map_width, map_value,
+    type_lo, type_width, type_value, off1_lsb, off2_lsb). Map/type windows
+    are parcel-absolute BitRanges from the same golden entry geometry the
+    C++ sniff used to hand-code; Off1/Off2 LSBs come from
+    _reloc_imm_lsb(lay, 6/12, 'imm1'/'imm2') — the derivation
+    FieldLsbSites uses.
+    """
+    layouts = {l.layout_id: l for l in cat.layouts}
+    rows: Dict[Tuple[str, int, int], Tuple[int, int, int, int, int, int, int, int, int]] = {}
+    seen_hwloop: Set[Tuple[str, int, int]] = set()
+    for rec in cat.members:
+        if rec.is_nop or rec.type_name not in _HWLOOP_SNIFF_TYPES:
+            continue
+        lay = layouts[rec.layout_id]
+        mode = 0 if rec.mode == "E2" else 1
+        key = (rec.type_name, mode, rec.entry_idx)
+        seen_hwloop.add(key)
+        off1 = _reloc_imm_lsb(lay, 6, "imm1")
+        off2 = _reloc_imm_lsb(lay, 12, "imm2")
+        row = (
+            lay.map_bits.lo,
+            lay.map_bits.width,
+            rec.unit_map,
+            lay.type_code_bits.lo,
+            lay.type_code_width,
+            rec.type_code,
+            off1,
+            off2,
+        )
+        prior = rows.get(key)
+        if prior is not None and prior != row:
+            raise SystemExit(
+                f"hwloop sniff: {rec.mode} e{rec.entry_idx} {rec.type_name} "
+                f"conflicting golden geometry {prior} vs {row}"
+            )
+        rows[key] = row
+    out: List[Tuple[str, int, int, int, int, int, int, int, int, int, int]] = []
+    for (tname, mode, entry), row in sorted(
+        rows.items(), key=lambda kv: (kv[0][1], kv[0][2], kv[0][0])
+    ):
+        out.append((tname, mode, entry) + row)
+    return out, seen_hwloop
+
+
+def _check_hwloop_sniff_sites(
+    sniff: Sequence[Tuple[str, int, int, int, int, int, int, int, int, int, int]],
+    seen_hwloop: Set[Tuple[str, int, int]],
+    sites: Sequence[Tuple[str, int, int, int, int]],
+    extras: Sequence[Tuple[str, int]],
+) -> None:
+    """D1.42 generator laws for HwLoopSniffSites (fail generation closed).
+
+    (a) one-publication-law: every row's Off1Lsb/Off2Lsb equals the
+        FieldLsbSites value for (HWLoopOff1/HWLoopOff2, mode, entry), or —
+        for the E2 e0 HWLRIII variant only — the ExtraPublishedLsb value.
+    (b) exactly one HWLRIII row exists (the E2 e0 extras variant).
+    (c) census completeness: every golden hwloop member family appears in
+        the table, and every table row is a golden family (a new E2-e1 or
+        E3-e2 hwloop admission fails here until a row + extras/twin
+        decision is made).
+    """
+    kinds = {"HWLoopOff1": 6, "HWLoopOff2": 12}
+    iii_rows = [r for r in sniff if r[0] == "HWLRIII"]
+    if len(iii_rows) != 1:
+        raise SystemExit(
+            f"hwloop sniff: expected exactly one HWLRIII row, got {len(iii_rows)}"
+        )
+    for tname, mode, entry, _ml, _mw, _mv, _tl, _tw, _tv, off1, off2 in sniff:
+        for kind, lsb in ((("HWLoopOff1"), off1), ("HWLoopOff2", off2)):
+            if tname == "HWLRIII" and (mode, entry) == (0, 0):
+                if (kind, lsb) not in extras:
+                    raise SystemExit(
+                        f"hwloop sniff: HWLRIII row ({mode},{entry}) {kind}"
+                        f"@{lsb} missing from ExtraPublishedLsb"
+                    )
+                continue
+            got = _reloc_resolve_for_member(sites, kind, mode, entry, None)
+            if got != lsb:
+                raise SystemExit(
+                    f"hwloop sniff: {tname}@({mode},{entry}) {kind}@{lsb} "
+                    f"disagrees with FieldLsbSites site {got}"
+                )
+    table_keys = {(r[0], r[1], r[2]) for r in sniff}
+    if table_keys != seen_hwloop:
+        raise SystemExit(
+            "hwloop sniff: golden hwloop families != table rows: "
+            f"{sorted(seen_hwloop ^ table_keys)}"
+        )
+    for kind in kinds:
+        del kind  # kinds widths pinned by _reloc_imm_lsb role names
+
+
 def emit_reloc_field_lsb_inc(cat: Catalog, json_sha: str, xlsx_sha: str, family) -> str:
     sites, extras = _collect_reloc_field_lsb(cat)
     _check_reloc_test_windows(sites, extras)
@@ -1469,6 +1579,8 @@ def emit_reloc_field_lsb_inc(cat: Catalog, json_sha: str, xlsx_sha: str, family)
         raise SystemExit(
             "reloc FieldLsb: ExtraPublishedLsb empty (HWLRIII Off1/Off2 missing)"
         )
+    sniff, seen_hwloop = _collect_hwloop_sniff_sites(cat)
+    _check_hwloop_sniff_sites(sniff, seen_hwloop, sites, extras)
     lines: List[str] = []
     lines.append(
         "//===-- HaydnGenRelocFieldLsb.inc - reloc FieldLsb sites -*- C++ -*-===//"
@@ -1509,6 +1621,18 @@ def emit_reloc_field_lsb_inc(cat: Catalog, json_sha: str, xlsx_sha: str, family)
     lines.append("constexpr ExtraLsb ExtraPublishedLsb[] = {")
     for kind, lsb in extras:
         lines.append(f"    {{RelocKind::{kind}, {lsb}}},")
+    lines.append("};")
+    lines.append("")
+    lines.append("// D1.42 hwloop Loc-sniff geometry (generated golden authority).")
+    lines.append("// Map/type windows are parcel-absolute BitRanges; Off1/Off2 LSBs are")
+    lines.append("// law-checked against FieldLsbSites (HWLRIIR) / ExtraPublishedLsb")
+    lines.append("// (E2 e0 HWLRIII) at generation — not a second LSB authority.")
+    lines.append("constexpr HwLoopSniffSite HwLoopSniffSites[] = {")
+    for tname, mode, entry, ml, mw, mv, tl, tw, tv, o1, o2 in sniff:
+        lines.append(
+            f"    {{{mode}, {entry}, {ml}, {mw}, {mv}, {tl}, {tw}, {tv}, "
+            f"{o1}, {o2}}}, // {tname}"
+        )
     lines.append("};")
     lines.append("#endif // GET_HAYDN_RELOC_FIELD_LSB")
     lines.append("")
@@ -1564,7 +1688,142 @@ TD_LET_SEMI_RE = re.compile(r"\blet\s+([A-Za-z0-9_]+)\s*=\s*(.+?)\s*;")
 #     carry the golden member wire shape (loads (rtd, rs_wb; ar_sel, rs),
 #     stores (rs_wb; ar_sel, rtd, rs), wbarwua (ar_sel, rs)); stride and
 #     dir_sel fold at ISel (golden: rs = rs+8, direction in rs[2:1]).
-EXPECTED_IDENTITY_DIVERGENT: frozenset = frozenset({})
+#
+# D1.44 (2026-09-01): the operand census arm above stays EMPTY; the
+# aggregate census (identity_divergent_census) now also folds in the
+# extras dimensions (implicit lists, MCID flags, commutability, itinerary
+# shape — see the EXPECTED_* pins directly below), so the aggregate pin is
+# their UNION. Fixing a dimension means fixing the schema pair; the pins
+# are the enumerated allow census per dimension.
+EXPECTED_IMPLICIT_DIVERGENT: frozenset = frozenset({
+    "BEQ", "BGE", "BGEU", "BLT", "BLTU", "BNE", "CSRW", "JAL", "JALR",
+    "MOVESFR2GPR", "MOVF64", "MOVT64", "SET_HWLOOP_F2_W",
+    "X2MOVF32", "X2MOVT32", "X4MOVF16", "X4MOVT16",
+})
+EXPECTED_FLAG_DIVERGENT: frozenset = frozenset({
+    "D_LDW_CB_REG", "D_LQHWUA_CB_POST", "D_LTWUA_CB_POST",
+    "D_SDW_CB_IMM", "D_SDW_CB_REG", "D_SQHWUA_CB_POST",
+    "D_STWUA_CB_POST", "JAL", "JALR", "PLDWWUA_POST",
+    "PLQHWUA_CB_POST", "PLTWWUA_CB_POST", "SET_HWLOOP_F2_W",
+    "WBARWUA_CB",
+})
+EXPECTED_COMMUTABLE_DIVERGENT: frozenset = frozenset({
+    "ADD32", "ADD64", "AND32", "AND64", "OR32", "OR64", "XOR32", "XOR64",
+})
+EXPECTED_ITINERARY_CYCLES_DIVERGENT: frozenset = frozenset({})
+EXPECTED_ITINERARY_UNITS_DIVERGENT: frozenset = frozenset({})
+EXPECTED_IDENTITY_DIVERGENT: frozenset = (
+    EXPECTED_IMPLICIT_DIVERGENT
+    | EXPECTED_FLAG_DIVERGENT
+    | EXPECTED_COMMUTABLE_DIVERGENT
+    | EXPECTED_ITINERARY_CYCLES_DIVERGENT
+    | EXPECTED_ITINERARY_UNITS_DIVERGENT
+)
+
+# D1.44 (constraint #4, setDesc identity beyond operand shape): the same
+# TD-parse-back surface also carries implicit Defs/Uses lists, MCID
+# side-effect/control flags, commutability, and the Itinerary class. Those
+# are checked by check_setdesc_extras_pair; each dimension pin above is a
+# monotone-shrink ratchet with the identical fail-closed semantics (new
+# name = generation fails in BOTH emit and --check modes; a name leaving =
+# re-pin note).
+#
+# IMPLICIT divergence shape — every entry is logical-declares /
+# member-omits (member side () on both lists): setDesc onto the member
+# would DROP the implicit SFR def/use or the call-clobber list from the
+# committed MI. Rationale per family:
+#   * BEQ/BGE/BGEU/BLT/BLTU/BNE — hand FmtBRCond defs live under
+#     `let Defs = [SFR]` (HaydnInstrInfo.td:418): SFR is a control input
+#     of every conditional branch.
+#   * CSRW — hand `let hasSideEffects=1, isPseudo=1, Defs=[SFR]` def
+#     (HaydnInstrInfo.td:570-572).
+#   * JAL/JALR — hand call-clobber list `Defs = [R1..R7,R12,D0..D7,R15]`
+#     (HaydnInstrInfo.td:489-491); the member carries isCall but not the
+#     clobber set (an ABI fact of the WIDE shell).
+#   * MOVESFR2GPR/MOVF64/MOVT64/X2MOVF32/X2MOVT32/X4MOVF16/X4MOVT16 —
+#     SFR readers (`Uses = [SFR]` on the hand defs).
+#   * SET_HWLOOP_F2_W — hand Fmt48_WideSET_HWLOOP_F2 def sits in the
+#     `let ... Defs = [SFR]` group (HaydnInstrInfo.td:1625-1638): HWLR
+#     CSRs are written. The bare SET_HWLOOP / SET_HWLOOP_REG pseudos
+#     sharing that group are isCodeGenOnly (HaydnPseudos.td:288-296) and
+#     never reach this walk.
+#
+# FLAG divergence shape (golden v2_2, measured):
+#   * has_side_effects 0→1 — classify_member_flags sets side=1 for
+#     is_call/is_indirect (JAL/JALR), the SET_HWLOOP* name prefix
+#     (SET_HWLOOP_F2_W), and `LS unit & neither load nor store`: the UA/CB
+#     families whose golden Behavior is a load-with-CB-window-select or a
+#     partial store (D_*_CB_*, D_*WUA_CB_POST, PL*WUA_*_POST, WBARWUA_CB).
+#   * may_load 1→0 — PLQHWUA_CB_POST / PLTWWUA_CB_POST only: golden
+#     Behavior IS a mem64 read (`ar[ar_sel] = mem64[rs & 0xFFFFFFF8]`),
+#     the generated logical def regex derives mayLoad=1, but the member
+#     classifier prefix table `_is_load_logical` ("D_L","S_L","PLD") does
+#     not carry the PLQ/PLT prefixes. The member is the UNDER-declarer —
+#     extend the prefix table when these rows move; never pin growth.
+#   * is_barrier 0→1 — JALR only (classify_member_flags sets
+#     is_barrier = is_indirect; the hand JALR keeps the barrier off).
+#   CSRR is NOT here: both sides agree on hasSideEffects=1.
+#
+# COMMUTABLE: members are generated non-commutable; eight hand ALU
+# logicals declare isCommutable=1 as a pre-RA scheduler hint. Pinned so
+# the hint cannot silently reach members (it would change post-setDesc
+# scheduler swap behavior).
+#
+# ITINERARY parity is SHAPE parity, never class-name equality: the logical
+# carries the union menu of its placements (e.g. Slot012_ALU) while each
+# member pins its committed unit (Slot0_ALU) — the published AIE-style
+# contract (VLIW_Engine_Compiler_Constraints.md "unit assignment is not
+# bound to a fixed slot"). Two laws, both read from the published
+# HaydnGenSchedRecords.inc (owner: generate_sched_records.py; consumer
+# pin only — never a second scheduling authority):
+#   1. OperandCycles vectors equal (latency/read-write shape identical).
+#   2. Member stage units ⊆ logical stage units (a member never occupies
+#      a unit its logical does not book).
+# Both hold for all 4182 pairs at golden v2_2; the two ratchets stay
+# EMPTY and any new divergence fails generation immediately.
+
+# Side-effect/control flag set compared by check_setdesc_extras_pair.
+# These are the MCID flags the generator itself emits
+# (classify_member_flags) or the hand/generated logical defs declare —
+# everything that changes committed-MI legality at setDesc time.
+# isCommutable is separate (scheduler hint, own ratchet above).
+TD_IDENTITY_FLAG_KEYS = (
+    "may_load",
+    "may_store",
+    "is_branch",
+    "is_terminator",
+    "is_call",
+    "is_indirect_branch",
+    "is_barrier",
+    "has_side_effects",
+)
+
+# D1.44 ledger gate: golden logicals whose placements carry more than one
+# operand-role SIGNATURE (role:alias:width vector). This is golden arity
+# variety (H/L lane halves, S-saturated forms, CSRR/CSRW imm-vs-reg,
+# MOVE*/ZERO_* families), NOT a TableGen shape divergence — the TD-level
+# identity law is the check_setdesc_* family above. Measured at golden
+# v2_2 (2026-08-31): 84 logicals, enumerated exactly. Monotone fail-closed
+# on growth AND shrinkage (emit and --check): a golden regen must
+# re-audit this list, never let the count drift silently.
+EXPECTED_MULTI_SIGNATURE_LOGICALS_COUNT = 84
+EXPECTED_MULTI_SIGNATURE_LOGICALS = frozenset({
+    "ABS32", "ABS32S", "ABS64", "ABS64S", "CSRR", "CSRW", "EXP2", "LOG2",
+    "LUI", "MOVE32", "MOVE32_DR_H", "MOVE32_DR_L", "MOVE64",
+    "MOVEGPR2SFR", "MOVESFR2GPR", "MOVF64", "MOVT64", "NEG32", "NEG32S",
+    "NEG64", "NEG64S", "NOT32", "NOT64", "NSA16_L", "NSA32", "NSA32_L",
+    "NSA64", "NSAU32", "NSAZ16_L", "NSAZ32_L", "NSAZ64", "POPCOUNT32",
+    "POPCOUNT64", "RECIP", "SEQ64", "SEXT32T64", "SLE64", "SLT64",
+    "SQRT", "TRANSF64", "TRANSF64F2", "TRANSF64_H", "TRANSF64_L",
+    "X2ABS32", "X2ABS32S", "X2HADD32S_H", "X2HADD32S_L", "X2HADD32_H",
+    "X2HADD32_L", "X2HMAX32", "X2HMIN32", "X2MJSWAP32", "X2MJSWAP32S",
+    "X2MOVF32", "X2MOVT32", "X2NEG32", "X2NEG32S", "X2NEG32S_L",
+    "X2NEG32_L", "X2SEQ32", "X2SLE32", "X2SLT32", "X2SWAP32", "X4ABS16",
+    "X4ABS16S", "X4CONJ16", "X4CONJ16S", "X4HADD16_H", "X4HADD16_L",
+    "X4HMAX16", "X4HMIN16", "X4MJSWAP16", "X4MJSWAP16S", "X4MOVF16",
+    "X4MOVT16", "X4NEG16", "X4NEG16S", "X4SEQ16", "X4SLE16", "X4SLT16",
+    "X4SWAP16", "ZERO_DR", "ZERO_GPR", "ZERO_SFR",
+})
 
 #//===---------------------------------------------------------------------===//
 # Universal singleton coverage census (compiler-reachable direction)
@@ -2139,6 +2398,51 @@ def _td_tie_index_pairs(schema: TDInstSchema) -> List[Tuple[int, int]]:
     return sorted(pairs)
 
 
+# One InstrItinData row: name, stage unit list, OperandCycles list.
+_SCHED_ITIN_ROW_RE = re.compile(
+    r"InstrItinData<(\w+),\s*\[InstrStage<\d+,\s*\[([^\]]*)\]>\],"
+    r"\s*\[([^\]]*)\]>"
+)
+
+
+def load_sched_itinerary_shapes(
+    sched_inc_path: Path,
+) -> Dict[str, Tuple[frozenset, Tuple[int, ...]]]:
+    """Parse the checked-in HaydnGenSchedRecords.inc itinerary table.
+
+    Owner: generate_sched_records.py (same pinned golden inputs). This is
+    a read-only consumer pin for the itinerary-parity arm of the setDesc
+    identity check — never a second scheduling authority. Every row maps
+    an InstrItinClass name to (functional-unit set, OperandCycles tuple).
+    """
+    if not sched_inc_path.is_file():
+        raise SystemExit(
+            f"error: published itinerary table not found: {sched_inc_path}"
+        )
+    shapes: Dict[str, Tuple[frozenset, Tuple[int, ...]]] = {}
+    for row in _SCHED_ITIN_ROW_RE.finditer(sched_inc_path.read_text()):
+        name = row.group(1)
+        units = frozenset(
+            u.strip() for u in row.group(2).split(",") if u.strip()
+        )
+        cycles = tuple(
+            int(c)
+            for c in row.group(3).replace("]", "").split(",")
+            if c.strip()
+        )
+        if name in shapes:
+            raise SystemExit(
+                f"error: duplicate InstrItinData row {name} in "
+                f"{sched_inc_path.name}"
+            )
+        shapes[name] = (units, cycles)
+    if not shapes:
+        raise SystemExit(
+            f"error: no InstrItinData rows parsed from {sched_inc_path.name}"
+        )
+    return shapes
+
+
 def check_setdesc_identity(
     cat: Catalog,
     member_schemas: Dict[str, TDInstSchema],
@@ -2146,10 +2450,13 @@ def check_setdesc_identity(
     member_to_logical: Dict[str, str],
 ) -> List[str]:
     """Errors for compiler-reachable logical/member pairs that are not
-    operand-shape identical. Members are read from the EMITTED member TD
+    setDesc-identity identical. Members are read from the EMITTED member TD
     (members_td, parsed back with parse_td_schemas — the exact text
     TableGen consumes), so outs/ins/ties parity with the real Desc is
-    guaranteed. Empty list = goal state."""
+    guaranteed. D1.44 extends identity past operand shape: implicit
+    Defs/Uses lists, MCID side-effect/control flags, commutability, and
+    itinerary SHAPE (OperandCycles equal; member units within the logical
+    menu) via check_setdesc_extras_pair. Empty list = goal state."""
     errors: List[str] = []
     for member_symbol, logical in sorted(member_to_logical.items()):
         l_schema = logical_schemas.get(logical)
@@ -2186,7 +2493,91 @@ def check_setdesc_identity(
                     f"{_td_tie_index_pairs(l_schema)} vs "
                     f"{_td_tie_index_pairs(m_schema)}"
                 )
+        # D1.44: extras arms run even when operand shape already failed
+        # (each is an independent divergence dimension).
+        for err in check_setdesc_extras_pair(logical, l_schema, member_symbol,
+                                             m_schema):
+            if err not in errors:
+                errors.append(err)
     return errors
+
+
+def check_setdesc_extras_pair(
+    logical: str,
+    l_schema: TDInstSchema,
+    member_symbol: str,
+    m_schema: TDInstSchema,
+) -> List[str]:
+    """Implicit/flag/itinerary-parity errors for ONE logical/member pair.
+
+    Constraint #4 beyond operand shape: a late setDesc alternate must not
+    change implicit Defs/Uses, MCID side-effect/control flags, or the
+    published itinerary shape. Both schemas come from the same TD
+    parse-back surface as the operand arm (member side = the emitted
+    members_td text TableGen actually consumes).
+    """
+    errors: List[str] = []
+    if (l_schema.implicit_defs, l_schema.implicit_uses) != (
+        m_schema.implicit_defs,
+        m_schema.implicit_uses,
+    ):
+        errors.append(
+            f"{logical} vs {member_symbol}: implicit lists "
+            f"defs={l_schema.implicit_defs} uses={l_schema.implicit_uses} "
+            f"vs defs={m_schema.implicit_defs} "
+            f"uses={m_schema.implicit_uses}"
+        )
+    for key in TD_IDENTITY_FLAG_KEYS:
+        lv = getattr(l_schema, key)
+        mv = getattr(m_schema, key)
+        if lv != mv:
+            errors.append(
+                f"{logical} vs {member_symbol}: flag {key} {lv} vs {mv}"
+            )
+    if l_schema.is_commutable != m_schema.is_commutable:
+        errors.append(
+            f"{logical} vs {member_symbol}: is_commutable "
+            f"{l_schema.is_commutable} vs {m_schema.is_commutable}"
+        )
+    if l_schema.itinerary != m_schema.itinerary:
+        l_shape = SCHED_ITINERARY_SHAPES.get(l_schema.itinerary)
+        m_shape = SCHED_ITINERARY_SHAPES.get(m_schema.itinerary)
+        if l_shape is None or m_shape is None:
+            errors.append(
+                f"{logical} vs {member_symbol}: itinerary "
+                f"{l_schema.itinerary} vs {m_schema.itinerary} not in "
+                "published HaydnGenSchedRecords.inc table (regen "
+                "generate_sched_records.py first)"
+            )
+        else:
+            if l_shape[1] != m_shape[1]:
+                errors.append(
+                    f"{logical} vs {member_symbol}: itinerary "
+                    f"OperandCycles {l_schema.itinerary}{l_shape[1]} vs "
+                    f"{m_schema.itinerary}{m_shape[1]}"
+                )
+            if not (m_shape[0] <= l_shape[0]):
+                errors.append(
+                    f"{logical} vs {member_symbol}: member itinerary "
+                    f"{m_schema.itinerary} units {sorted(m_shape[0])} not "
+                    f"within logical {l_schema.itinerary} units "
+                    f"{sorted(l_shape[0])}"
+                )
+    return errors
+
+
+# Published itinerary shape table (name → (unit set, OperandCycles tuple))
+# parsed ONCE from the checked-in HaydnGenSchedRecords.inc (target dir root,
+# next to the members/logical .inc files this generator owns the siblings
+# of). The sched-records generator is the owner; this read is a consumer
+# pin, same as the members td parse-back — the file must exist and every
+# itinerary name used by any compiler-reachable logical/member must have a
+# row, else generation fails.
+SCHED_ITINERARY_SHAPES: Dict[str, Tuple[frozenset, Tuple[int, ...]]] = (
+    load_sched_itinerary_shapes(
+        Path(__file__).resolve().parents[1] / "HaydnGenSchedRecords.inc"
+    )
+)
 
 
 def identity_divergent_census(
@@ -2195,13 +2586,128 @@ def identity_divergent_census(
     logical_schemas: Dict[str, TDInstSchema],
     member_to_logical: Dict[str, str],
 ) -> List[str]:
-    """Sorted logical names that have at least one non-identity placement."""
+    """Sorted logical names that have at least one non-identity placement.
+
+    D1.44: this now includes the extras dimensions (implicit lists, MCID
+    flags, itinerary shape) — "identity" is the full constraint-#4 law,
+    not operand shape alone.
+    """
     divergent = set()
     for err in check_setdesc_identity(
         cat, member_schemas, logical_schemas, member_to_logical
     ):
         divergent.add(err.split(" vs ")[0])
     return sorted(divergent)
+
+
+def _extras_dimension_census(
+    cat: Catalog,
+    member_schemas: Dict[str, TDInstSchema],
+    logical_schemas: Dict[str, TDInstSchema],
+    member_to_logical: Dict[str, str],
+    dimension: str,
+) -> List[str]:
+    """Sorted logical names divergent on ONE extras dimension.
+
+    dimension selects the arm: "implicit", "flags", "commutable",
+    "itinerary_cycles", "itinerary_units". Mirrors identity_divergent_census
+    (same pair walk, same codegen-only skip) so each ratchet is pinned
+    independently of the others.
+    """
+    divergent = set()
+    for member_symbol, logical in sorted(member_to_logical.items()):
+        l_schema = logical_schemas.get(logical)
+        m_schema = member_schemas.get(member_symbol)
+        if l_schema is None or m_schema is None:
+            continue
+        if l_schema.is_codegen_only or l_schema.is_asm_parser_only:
+            continue
+        if dimension == "implicit":
+            ok = (l_schema.implicit_defs, l_schema.implicit_uses) == (
+                m_schema.implicit_defs,
+                m_schema.implicit_uses,
+            )
+        elif dimension == "flags":
+            ok = all(
+                getattr(l_schema, k) == getattr(m_schema, k)
+                for k in TD_IDENTITY_FLAG_KEYS
+            )
+        elif dimension == "commutable":
+            ok = l_schema.is_commutable == m_schema.is_commutable
+        elif dimension == "itinerary_cycles":
+            l_shape = SCHED_ITINERARY_SHAPES.get(l_schema.itinerary)
+            m_shape = SCHED_ITINERARY_SHAPES.get(m_schema.itinerary)
+            if l_shape is None or m_shape is None:
+                raise SystemExit(
+                    f"error: itinerary {l_schema.itinerary} / "
+                    f"{m_schema.itinerary} ({logical} vs {member_symbol}) "
+                    "missing from published HaydnGenSchedRecords.inc — "
+                    "regen generate_sched_records.py first"
+                )
+            ok = l_shape[1] == m_shape[1]
+        elif dimension == "itinerary_units":
+            l_shape = SCHED_ITINERARY_SHAPES.get(l_schema.itinerary)
+            m_shape = SCHED_ITINERARY_SHAPES.get(m_schema.itinerary)
+            if l_shape is None or m_shape is None:
+                raise SystemExit(
+                    f"error: itinerary {l_schema.itinerary} / "
+                    f"{m_schema.itinerary} ({logical} vs {member_symbol}) "
+                    "missing from published HaydnGenSchedRecords.inc — "
+                    "regen generate_sched_records.py first"
+                )
+            ok = m_shape[0] <= l_shape[0]
+        else:
+            raise SystemExit(f"unknown extras dimension {dimension!r}")
+        if not ok:
+            divergent.add(logical)
+    return sorted(divergent)
+
+
+def implicit_divergent_census(
+    cat, member_schemas, logical_schemas, member_to_logical
+) -> List[str]:
+    """Logicals whose member setDesc would change implicit Defs/Uses."""
+    return _extras_dimension_census(
+        cat, member_schemas, logical_schemas, member_to_logical, "implicit"
+    )
+
+
+def flag_divergent_census(
+    cat, member_schemas, logical_schemas, member_to_logical
+) -> List[str]:
+    """Logicals whose member setDesc would change an MCID flag."""
+    return _extras_dimension_census(
+        cat, member_schemas, logical_schemas, member_to_logical, "flags"
+    )
+
+
+def commutable_divergent_census(
+    cat, member_schemas, logical_schemas, member_to_logical
+) -> List[str]:
+    """Logicals whose member setDesc would change isCommutable."""
+    return _extras_dimension_census(
+        cat, member_schemas, logical_schemas, member_to_logical, "commutable"
+    )
+
+
+def itinerary_cycles_divergent_census(
+    cat, member_schemas, logical_schemas, member_to_logical
+) -> List[str]:
+    """Logicals whose member itinerary OperandCycles shape differs."""
+    return _extras_dimension_census(
+        cat, member_schemas, logical_schemas, member_to_logical,
+        "itinerary_cycles",
+    )
+
+
+def itinerary_units_divergent_census(
+    cat, member_schemas, logical_schemas, member_to_logical
+) -> List[str]:
+    """Logicals whose member books a unit outside the logical menu."""
+    return _extras_dimension_census(
+        cat, member_schemas, logical_schemas, member_to_logical,
+        "itinerary_units",
+    )
 
 
 def operand_signature(rec: MemberRecord, layouts: Dict[int, TypeLayout]) -> str:
@@ -2216,12 +2722,18 @@ def operand_signature(rec: MemberRecord, layouts: Dict[int, TypeLayout]) -> str:
 def emit_setdesc_ledger_inc(cat: Catalog, family) -> str:
     """Start the setDesc compatibility ledger.
 
-    Full MCInstrDesc equality (regclasses, ties, implicits, flags, sched
-    cycles) requires live member opcodes and is completed when members are
-    activated. This stage records the golden-side structural signature each
-    logical/member pair must satisfy: operand role vector and field widths,
-    plus placement identity. Ambiguous role vectors within one logical are
-    flagged for later descriptor work.
+    D1.44: full MCInstrDesc identity is now enforced at generation time by
+    check_setdesc_identity (operand shape) plus check_setdesc_extras_pair
+    (implicit Defs/Uses, MCID flags, commutability, itinerary shape), with
+    per-dimension enumerated allow censuses (EXPECTED_*_DIVERGENT). This
+    ledger records the golden-side structural signature each logical/member
+    pair carries: operand role vector and field widths, plus placement
+    identity. Logicals with >1 golden operand-role signature across
+    placements are counted in FormatESetDescMultiSignatureLogicals — a
+    golden-arity fact (aliases/widths differ per placement), not a
+    divergence from the TableGen shape law; the pin below fails closed on
+    census growth so the multi-signature set is an explicit enumerated
+    census, never a silent number.
     """
     layouts = {l.layout_id: l for l in cat.layouts}
     lines: List[str] = []
@@ -2269,6 +2781,30 @@ def emit_setdesc_ledger_inc(cat: Catalog, family) -> str:
         sig_groups[logical] = gmap
 
     multi = sum(1 for g in sig_groups.values() if len(g) > 1)
+    # D1.44: the multi-signature set is an EXPLICIT ENUMERATED census, not
+    # a silent count. Golden arity variants (H/L lane forms, S-saturated
+    # forms, CSRR/CSRW imm/reg splits, ZERO_*/MOVE* families) legitimately
+    # carry >1 golden role signature; the pin fails closed when the set
+    # grows OR shrinks, so a golden regen must re-audit the enumerated list
+    # here — in BOTH emit and --check modes (byte-identical output is the
+    # --check diff; this SystemExit runs before any write).
+    multi_names = sorted(g for g, gm in sig_groups.items() if len(gm) > 1)
+    pinned_multi_names = sorted(EXPECTED_MULTI_SIGNATURE_LOGICALS)
+    if multi != EXPECTED_MULTI_SIGNATURE_LOGICALS_COUNT or (
+        multi_names != pinned_multi_names
+    ):
+        grown = sorted(set(multi_names) - EXPECTED_MULTI_SIGNATURE_LOGICALS)
+        shrunk = sorted(
+            EXPECTED_MULTI_SIGNATURE_LOGICALS - set(multi_names)
+        )
+        raise SystemExit(
+            "error: golden multi-signature logical census changed "
+            f"({multi} vs pinned {EXPECTED_MULTI_SIGNATURE_LOGICALS_COUNT})"
+            f"{f'; new: {grown}' if grown else ''}"
+            f"{f'; gone: {shrunk}' if shrunk else ''} — re-audit the "
+            "enumerated EXPECTED_MULTI_SIGNATURE_LOGICALS pin (golden "
+            "operand-role arity variants; never edit silently)"
+        )
     lines.append(
         f"// Logicals with >1 golden operand-role signature across placements: {multi}"
     )
@@ -2673,6 +3209,7 @@ class MemberEmitFlags:
     is_terminator: int
     is_call: int
     is_indirect_branch: int
+    is_barrier: int
     has_side_effects: int
     # 2026-08-21 (gaps/audit_shapes.md): compare logicals write SFR as
     # their ONLY semantic output; members must declare the implicit def
@@ -2693,6 +3230,8 @@ class MemberEmitFlags:
             parts.append("isCall = 1")
         if self.is_indirect_branch:
             parts.append("isIndirectBranch = 1")
+        if self.is_barrier:
+            parts.append("isBarrier = 1")
         parts.extend(
             [
                 f"hasSideEffects = {self.has_side_effects}",
@@ -3109,6 +3648,7 @@ def classify_member_flags(
         is_terminator=1 if is_terminator else 0,
         is_call=1 if is_call else 0,
         is_indirect_branch=1 if is_indirect else 0,
+        is_barrier=1 if is_indirect else 0,
         has_side_effects=1 if side else 0,
         implicit_defs=("SFR",)
         if sfr_writers and key in sfr_writers
@@ -5557,9 +6097,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         cat, member_schemas, logical_schemas, member_to_logical
     )
     census_set = set(census)
+    # D1.44 per-dimension censuses (implicit/flags/commutable/itinerary).
+    # Computed once here; --print-identity-census reports every dimension
+    # before returning, the gate below enforces every ratchet.
+    extras_censuses = {
+        dim_name: census_fn(cat, member_schemas, logical_schemas,
+                            member_to_logical)
+        for dim_name, census_fn in (
+            ("implicit", implicit_divergent_census),
+            ("flag", flag_divergent_census),
+            ("commutable", commutable_divergent_census),
+            ("itinerary-cycles", itinerary_cycles_divergent_census),
+            ("itinerary-units", itinerary_units_divergent_census),
+        )
+    }
     if args.print_identity_census:
         for name in census:
             print(name)
+        for dim_name, names in extras_censuses.items():
+            for name in names:
+                print(f"{dim_name}: {name}")
         return 0
     if census_set - EXPECTED_IDENTITY_DIVERGENT:
         raise SystemExit(
@@ -5574,6 +6131,36 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "note: setDesc identity ratchet: logicals now aligned (re-pin "
             f"the census): {sorted(fixed)}"
         )
+    # D1.44 (constraint #4, full-desc identity): the same pair walk, per
+    # dimension. Every gate below runs in BOTH emit and --check modes — the
+    # --check arm is the regeneration ratchet exactly as for the operand
+    # census above. New names fail closed; shrinking names print a re-pin
+    # note. The itinerary dimensions also fail closed on any itinerary
+    # class absent from the published HaydnGenSchedRecords.inc table.
+    extras_expected = (
+        ("implicit", EXPECTED_IMPLICIT_DIVERGENT),
+        ("flag", EXPECTED_FLAG_DIVERGENT),
+        ("commutable", EXPECTED_COMMUTABLE_DIVERGENT),
+        ("itinerary-cycles", EXPECTED_ITINERARY_CYCLES_DIVERGENT),
+        ("itinerary-units", EXPECTED_ITINERARY_UNITS_DIVERGENT),
+    )
+    for dim_name, expected in extras_expected:
+        dim_set = set(extras_censuses[dim_name])
+        if dim_set - expected:
+            raise SystemExit(
+                "error: new setDesc identity divergence ("
+                f"{dim_name} census grew): "
+                f"{sorted(dim_set - expected)} — fix the logical/member "
+                "TableGen schema pair (constraint #4: implicit lists, MCID "
+                "flags, and itinerary shape are setDesc identity), or "
+                f"re-audit the EXPECTED pin for {dim_name}"
+            )
+        dim_fixed = expected - dim_set
+        if dim_fixed:
+            print(
+                f"note: setDesc identity ratchet ({dim_name}): logicals now "
+                f"aligned (re-pin the census): {sorted(dim_fixed)}"
+            )
     # Universal singleton coverage census (PIPE-20, GR2.2): every
     # compiler-reachable logical must peel to a catalog alt span. Runs in
     # BOTH emit and --check modes — the --check arm is the ratchet's

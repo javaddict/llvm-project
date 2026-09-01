@@ -1,4 +1,4 @@
-//===-- HaydnLateConvergence.cpp - bounded late repair loop ------*- C++ -*-=//
+//===-- HaydnLateConvergence.cpp - monotone late closure driver ----*- C++ -*-=//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// W68.3R bounded convergence driver. See HaydnLateConvergence.h for the
-// contract loop and the termination argument. Implementation notes:
+// GR2.6 monotone closure driver. See HaydnLateConvergence.h for the
+// contract loop, the enforced no-growth law, and the termination argument.
+// Implementation notes:
+//
+// * S2 runs EXACTLY ONCE per driver entry, before the first closure
+//   iteration. The W68.3R RunS2/inventoryChanged reschedule-after-mutation
+//   arm is deleted (constraints 9/11: no scheduling after a range/HWLoop
+//   mutation inside the loop; GR2.6 migration). Every subsequent mutating
+//   iteration is only [MDT/MLI refresh -> LatencyStalls -> FixupHwLoops
+//   inner-first -> BranchRelaxation LAST].
 //
 // * Every mutating step instantiates a FRESH pass object — the two common
 //   passes (BranchRelaxationLegacy, PostMachineSchedulerLegacy) are
@@ -15,7 +23,7 @@
 //   Pass::createPass(ID) is the same mechanism TargetPassConfig::addPass
 //   uses, so the common implementations are reused without editing them and
 //   without any second scheduler. The two Haydn passes are created through
-//   their factories. All four are deleted at end of iteration: no state
+//   their factories. All are deleted at end of iteration: no state
 //   crosses iterations (padding is regenerated, never accumulated).
 //
 // * The inner PostMachineSchedulerLegacy resolves MLI/MDT/AA/
@@ -31,10 +39,21 @@
 //
 // * Per-prefix budgets: source/target pairs (branch dests, HWLoop START/END)
 //   are measured with BranchRelaxation BasicBlockInfo Offset/Size/postOffset
-//   (llvm/lib/CodeGen/BranchRelaxation.cpp) plus ARM UnknownPadding
-//   (ARMBasicBlockInfo.h) and Haydn parcel-rounded MBB gaps
-//   (HaydnFixupHwLoops padLayoutBytesForMBBAlign). The census includes
-//   those prefix charges; whole-function byte totals are not a proof.
+//   (llvm/lib/CodeGen/BranchRelaxation.cpp) plus the parcel-rounded
+//   worst-case Haydn MBB gap (the same ceilProductParcels arithmetic
+//   LayoutBlockInfo::postOffset uses — GR2.6 replaces the raw ARM
+//   unknownPadding under-reserve). The census includes those prefix
+//   charges; whole-function byte totals are not a proof.
+//
+// * Enforced no-growth law (GR2.6, was the discarded (void)NoGrowth site;
+//   D1.41 exact accounting): growth of a consumed pair's charge across ONE
+//   closure iteration is fatal unless accounted by the admitted event
+//   vocabulary (promotion / demote / stall / split evidence) ATTRIBUTED to
+//   that pair's span — every event names its affected MBBs and its exact
+//   net bytes (measured from per-arm MBB size deltas), so an event never
+//   grants credit to an unrelated prefix. Entry-vs-final no-growth is
+//   deliberately telemetry-only: the single S2 may redistribute bytes with
+//   no event at all.
 //
 // * Monotone law (checked every iteration; violation is a hard diagnostic):
 //     - the hardware-loop setup census never grows (demotion erases the
@@ -44,12 +63,12 @@
 //   PC-relative) predates the TII guards that make JALR promotion
 //   irreversible and is stale; IndirectCount is non-decreasing in
 //   practice, but it is not law-checked because it seeds the iteration
-//   bound and the per-MBB byte census carries the fixed point.
+//   bound and the event ledger carries the fixed point.
 //   Short->Relaxed shape growth is also NOT a census dimension: the
 //   relaxed two-branch shape is byte-identical in kind to an ordinary
 //   two-target conditional lowering (insertBranch emits cond+B), so shape
-//   churn under S2 repacking cannot be distinguished from promotion — the
-//   per-MBB byte census carries those iterations instead.
+//   churn is carried by the per-iteration pair charges, not by a census
+//   dimension of its own.
 //
 //===----------------------------------------------------------------------===//
 
@@ -58,13 +77,16 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnFixupHwLoops.h"
 #include "HaydnFormatERecords.h"
+#include "HaydnHWLoopContracts.h"
 #include "HaydnInstrInfo.h"
 #include "HaydnLatencyStalls.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -118,8 +140,12 @@ struct LayoutBlockInfo {
 };
 
 // Peer: ARMBasicBlockInfo.h UnknownPadding with KnownBits=0 — worst-case
-// pad before an aligned block. Range budgets reserve this, not the pad
-// this particular compilation happened to emit.
+// pad before an aligned block, BEFORE parcel rounding. Range budgets
+// reserve the parcel-rounded form (the same ceilProductParcels arithmetic
+// LayoutBlockInfo::postOffset uses): on the product 12-byte grid a
+// raw A-1 reserve can under-reserve by up to one parcel minus one byte
+// (GR2.6; the pre-migration raw reserve under-counted the pad the
+// closure actually emits).
 static unsigned unknownPadding(Align A) {
   const unsigned KnownBits = 0;
   if (KnownBits < Log2(A))
@@ -127,17 +153,17 @@ static unsigned unknownPadding(Align A) {
   return 0;
 }
 
-using PrefixKey = std::pair<unsigned, unsigned>;
+/// Parcel-rounded worst-case alignment reserve for \p A. This is what the
+/// prefix budget charges — never the raw unknownPadding value.
+static uint64_t parcelRoundedUnknownPad(Align A) {
+  const unsigned Raw = unknownPadding(A);
+  if (Raw == 0)
+    return 0;
+  return static_cast<uint64_t>(
+      haydn::bundle::productBundlesToBytes(haydn::bundle::ceilProductParcels(Raw)));
+}
 
-struct PrefixPairRecord {
-  unsigned Src = 0;
-  unsigned Dst = 0;
-  uint64_t EncodedBytes = 0;
-  uint64_t AlignPad = 0;
-  Align MaxAlign = Align(1);
-
-  uint64_t charge() const { return EncodedBytes + AlignPad; }
-};
+using PrefixKey = HaydnPrefixKey;
 
 static unsigned computeBlockSize(const MachineBasicBlock &MBB,
                                  const TargetInstrInfo &TII) {
@@ -146,6 +172,20 @@ static unsigned computeBlockSize(const MachineBasicBlock &MBB,
     Bytes += TII.getInstSizeInBytes(MI);
   return Bytes;
 }
+
+/// GR2.6 audit note (no second fatal — documented residual): the closure
+/// budget/offset model consumes committed EncodedBytes only — BUNDLE
+/// roots (committedEncodedBytes + namedLateLayoutGrowthBytes), zero-size
+/// metas, and single-parcel exact reals/pseudos. Bare MIs larger than one
+/// product parcel outside the named-growth vocabulary (the N*12 stand-in
+/// class: LOADI32/LOAD_ADDR/LOADI64/VASTART/VACOPY/MOV_GPR_TO_DR64...) DO
+/// survive to this seat on crafted -start-after MIR corpora
+/// (residual-executable-pseudos-matrix.mir), where AsmPrinter's
+/// residual-pseudo fatal is the owning fail-closed seat. A second fatal
+/// here would preempt that owner (constraint 14: no second mechanism);
+/// the surviving stand-ins are the recorded W70.1/W70.4 residual and get
+/// their exact layout length through getInstSizeInBytes exactly as
+/// BranchRelaxation itself charges them.
 
 static void scanLayout(const MachineFunction &MF, const TargetInstrInfo &TII,
                        SmallVectorImpl<LayoutBlockInfo> &Info) {
@@ -170,17 +210,52 @@ static void scanLayout(const MachineFunction &MF, const TargetInstrInfo &TII,
   }
 }
 
-static PrefixPairRecord measurePrefix(const MachineFunction &MF,
-                                      ArrayRef<LayoutBlockInfo> Info,
-                                      unsigned Src, unsigned Dst) {
-  PrefixPairRecord P;
+/// Count still-relaxable short-branch sites and retained HWLoop setups in
+/// the span between the Src and Dst endpoints (exclusive of the Src
+/// block's own bytes; inclusive of interior MBBs). The ONE shared
+/// classifier (haydn::hwloop::isStillRelaxableShortBranch) is the same
+/// law FixupHwLoops charges Off1/Off2 margins with — constraint 14.
+static void countSpanEvents(const MachineFunction &MF,
+                            const HaydnInstrInfo &HII, unsigned Src,
+                            unsigned Dst, unsigned &RelaxableSites,
+                            unsigned &HwLoopSetups) {
+  RelaxableSites = 0;
+  HwLoopSetups = 0;
+  bool InSpan = false;
+  for (const MachineBasicBlock &MBB : MF) {
+    const unsigned N = MBB.getNumber();
+    const bool IsEndPoint = (N == Src || N == Dst);
+    if (!InSpan) {
+      if (!IsEndPoint)
+        continue;
+      InSpan = true;
+      if (N == Dst)
+        break; // empty span
+      continue;
+    }
+    if (N == Dst)
+      break;
+    for (const MachineInstr &MI : MBB.instrs()) {
+      if (HII.isHardwareLoopSetupInstr(MI))
+        ++HwLoopSetups;
+      if (haydn::hwloop::isStillRelaxableShortBranch(MI))
+        ++RelaxableSites;
+    }
+  }
+}
+
+static HaydnPrefixPairRecord measurePrefix(const MachineFunction &MF,
+                                           const HaydnInstrInfo &HII,
+                                           ArrayRef<LayoutBlockInfo> Info,
+                                           unsigned Src, unsigned Dst) {
+  HaydnPrefixPairRecord P;
   P.Src = Src;
   P.Dst = Dst;
   if (Src == Dst) {
     if (Src < Info.size()) {
       P.EncodedBytes = Info[Src].Size;
       P.MaxAlign = Info[Src].Alignment;
-      P.AlignPad = unknownPadding(P.MaxAlign);
+      P.AlignPad = parcelRoundedUnknownPad(P.MaxAlign);
     }
     return P;
   }
@@ -213,7 +288,10 @@ static PrefixPairRecord measurePrefix(const MachineFunction &MF,
   }
   P.EncodedBytes = Encoded;
   P.MaxAlign = MaxA;
-  P.AlignPad = std::max<uint64_t>(Pad, unknownPadding(MaxA));
+  // Reserve the parcel-rounded worst-case pad, never the accumulated
+  // emitted gap alone (the emitted gap is only this compilation's pad).
+  P.AlignPad = std::max<uint64_t>(Pad, parcelRoundedUnknownPad(MaxA));
+  countSpanEvents(MF, HII, Src, Dst, P.RelaxableSites, P.HwLoopSetups);
   return P;
 }
 
@@ -287,7 +365,7 @@ ConvergenceSnapshot takeSnapshot(MachineFunction &MF,
   SmallVector<PrefixKey, 8> Pairs;
   collectRangePairs(MF, HII, Pairs);
   for (const PrefixKey &K : Pairs) {
-    PrefixPairRecord Rec = measurePrefix(MF, Info, K.first, K.second);
+    HaydnPrefixPairRecord Rec = measurePrefix(MF, HII, Info, K.first, K.second);
     S.PrefixCharge[K] = Rec.charge();
   }
 
@@ -324,25 +402,114 @@ ConvergenceSnapshot takeSnapshot(MachineFunction &MF,
   return S;
 }
 
-/// Promotion, demotion, or MBB identity change. Pure per-MBB / prefix-byte
-/// churn is S2 packing, not new inventory — the next iteration still runs
-/// stalls + HWLoop revalidation + BranchRelaxation LAST, but does not
-/// reschedule. Rerunning S2 on already-committed roots is not a fixed
-/// point (spill/call and far-pad regions repack to a different cycle
-/// count), which exhausted the +2 slack. Contract: rerun S2 after a
-/// promotion/demotion that changes inventory; BR stays last.
-bool inventoryChanged(const ConvergenceSnapshot &Before,
-                      const ConvergenceSnapshot &After) {
-  if (Before.HwLoopSetups != After.HwLoopSetups)
-    return true;
-  if (Before.IndirectCount != After.IndirectCount)
-    return true;
-  if (Before.MBBBytes.size() != After.MBBBytes.size())
-    return true;
-  for (const auto &KV : Before.MBBBytes)
-    if (!After.MBBBytes.count(KV.first))
-      return true;
+/// GR2.6 monotone closure repeat predicate: an iteration repeats only on
+/// an UPWARD event — a JALR promotion (IndirectCount up), an HWLoop demote
+/// insertion (HwLoopSetups down), MBB growth (BranchRelaxation split
+/// evidence), or growth of any consumed pair's charge. An iteration with
+/// no upward event terminates the loop (pure shrink / no change closes).
+bool upwardEvent(const ConvergenceSnapshot &Before,
+                 const ConvergenceSnapshot &After) {
+  if (After.IndirectCount > Before.IndirectCount)
+    return true; // promotion
+  if (After.HwLoopSetups < Before.HwLoopSetups)
+    return true; // demote insertion
+  if (After.MBBBytes.size() > Before.MBBBytes.size())
+    return true; // split
+  for (const auto &KV : After.PrefixCharge)
+    if (KV.second > Before.PrefixCharge.lookup(KV.first))
+      return true; // span grew
   return false;
+}
+
+/// Per-MBB encoded sizes via TII->getInstSizeInBytes (the same law
+/// scanLayout/computeBlockSize and ConvergenceSnapshot::MBBBytes use) —
+/// the D1.41 attribution measurement taken around each mutating arm.
+static DenseMap<unsigned, uint64_t> perMBBEncodedSizes(MachineFunction &MF,
+                                                       const TargetInstrInfo &TII) {
+  DenseMap<unsigned, uint64_t> Sizes;
+  for (MachineBasicBlock &MBB : MF)
+    Sizes[MBB.getNumber()] = computeBlockSize(MBB, TII);
+  return Sizes;
+}
+
+/// D1.41 pair-interval attribution for a stable-key window (stalls /
+/// Fixup / LongBranchNormalize — arms that never renumber or create
+/// blocks): the measured CHARGE delta (encoded + alignment pad) per pair
+/// key is exact for the span, alignment-pad ripple included. Only spans
+/// that net-grew earn an event (admission vocabulary is growth; a span
+/// that net-shrank — stripped regenerable parcels — earns nothing and its
+/// shrinkage never subsidizes another span). The event class is chosen
+/// PER SPAN from the span's own setup census: a span whose retained-setup
+/// count dropped across the window was touched by a demotion (Demote
+/// class, capped at MaxHwLoopDemoteGrowthBytes per retained setup by the
+/// law); every other growing span is stall-class (exact bytes). No global
+/// class switch: nested loops sharing one span and a pure retained-pad
+/// iteration in the same window are each accounted by their own span's
+/// evidence.
+static void addPairDeltaEvents(HaydnClosureEventLedger &Ledger,
+                               HaydnClosureGrowthEvent::Kind KindIfSetupLost,
+                               HaydnClosureGrowthEvent::Kind KindOtherwise,
+                               const HaydnPrefixBudgetRecord &Pre,
+                               const HaydnPrefixBudgetRecord &Post) {
+  DenseMap<HaydnPrefixKey, const HaydnPrefixPairRecord *> PreByKey;
+  for (const HaydnPrefixPairRecord &P : Pre.Pairs)
+    PreByKey[{P.Src, P.Dst}] = &P;
+  for (const HaydnPrefixPairRecord &P : Post.Pairs) {
+    auto It = PreByKey.find({P.Src, P.Dst});
+    if (It == PreByKey.end())
+      continue; // no stable key (cannot happen in these windows)
+    const HaydnPrefixPairRecord &B = *It->second;
+    if (P.charge() <= B.charge())
+      continue;
+    const bool SetupLost = P.HwLoopSetups < B.HwLoopSetups;
+    Ledger.Events.push_back(HaydnClosureGrowthEvent::forPair(
+        SetupLost ? KindIfSetupLost : KindOtherwise, P.charge() - B.charge(),
+        P.Src, P.Dst));
+  }
+}
+
+/// D1.41 vanished-key attribution for a stable-key window. A key can
+/// vanish inside stalls/Fixup/LongBranchNormalize ONLY by the window's
+/// one key-consuming rewrite: a far-site promotion to the in-block long
+/// form (LUI+ADDI[+cond]+JALR), whose parcels carry no range-pair MBB
+/// operand, so collectRangePairs stops emitting the key (cxfir16x16
+/// bb.6->bb.2 at the normalize seat). The rewrite's own byte growth is
+/// already attributed exactly by the surviving spans that grew (the
+/// self-prefix bb.6->bb.6 above); what vanishes is the KEY, so the
+/// migration evidence is a Promotion-class event scoped to EXACTLY the
+/// vanished key — never a global count, never credit on a surviving
+/// span. Fail-closed: this helper is called only when the window's
+/// IndirectCount actually rose (census evidence, the same law
+/// takeSnapshot counts), so a vanished key with no promotion in the
+/// window still reaches the named vanished-pair fatal.
+static void addVanishedPairEvents(HaydnClosureEventLedger &Ledger,
+                                  const HaydnPrefixBudgetRecord &Pre,
+                                  const HaydnPrefixBudgetRecord &Post) {
+  DenseMap<HaydnPrefixKey, bool> PostKeys;
+  for (const HaydnPrefixPairRecord &P : Post.Pairs)
+    PostKeys[{P.Src, P.Dst}] = true;
+  for (const HaydnPrefixPairRecord &B : Pre.Pairs)
+    if (!PostKeys.count({B.Src, B.Dst}))
+      Ledger.Events.push_back(HaydnClosureGrowthEvent::forPair(
+          HaydnClosureGrowthEvent::Kind::Promotion, /*Bytes=*/0, B.Src,
+          B.Dst));
+}
+
+/// D1.41 MBB attribution for the BranchRelaxation window (BR renumbers
+/// pair keys at entry, so pair matching is meaningless there): net-grown
+/// surviving MBBs earn Promotion-class events; the accounting law caps
+/// the span credit at MaxSingleBranchGrowthBytes × the span's
+/// pre-iteration still-relaxable sites.
+static void addMBBDeltaEvents(HaydnClosureEventLedger &Ledger,
+                              HaydnClosureGrowthEvent::Kind K,
+                              const DenseMap<unsigned, uint64_t> &Pre,
+                              const DenseMap<unsigned, uint64_t> &Post) {
+  for (const auto &KV : Post) {
+    const uint64_t PreSize = Pre.lookup(KV.first);
+    if (KV.second > PreSize)
+      Ledger.Events.push_back(
+          HaydnClosureGrowthEvent(K, KV.second - PreSize, {KV.first}));
+  }
 }
 
 /// Verify the monotone law between the snapshots bracketing one mutating
@@ -411,23 +578,7 @@ bool runInnerPass(FunctionPass &P, MachineFunctionPass &DriverPass,
 
 // Per-prefix budget record (pipeline.md "S1 issue depths and byte/
 // alignment budgets" lifetime row). Dies with the driver.
-struct PrefixBudgetRecord {
-  SmallVector<PrefixPairRecord, 8> Pairs;
-
-  bool noGrowth(const PrefixBudgetRecord &Final) const {
-    DenseMap<PrefixKey, uint64_t> FinalCharge;
-    for (const PrefixPairRecord &P : Final.Pairs)
-      FinalCharge[{P.Src, P.Dst}] = P.charge();
-    for (const PrefixPairRecord &P : Pairs) {
-      auto It = FinalCharge.find({P.Src, P.Dst});
-      if (It == FinalCharge.end())
-        continue;
-      if (It->second > P.charge())
-        return false;
-    }
-    return true;
-  }
-};
+using PrefixBudgetRecord = HaydnPrefixBudgetRecord;
 
 static PrefixBudgetRecord capturePrefixBudget(MachineFunction &MF,
                                               const TargetInstrInfo &TII) {
@@ -439,7 +590,18 @@ static PrefixBudgetRecord capturePrefixBudget(MachineFunction &MF,
   collectRangePairs(MF, HII, Pairs);
   Budget.Pairs.reserve(Pairs.size());
   for (const PrefixKey &K : Pairs)
-    Budget.Pairs.push_back(measurePrefix(MF, Info, K.first, K.second));
+    Budget.Pairs.push_back(measurePrefix(MF, HII, Info, K.first, K.second));
+  // Long-form site census (the vanished-key promotion evidence gate; the
+  // counting law is takeSnapshot's — logical opcode, MSP suffix stripped).
+  for (MachineBasicBlock &MBB : MF)
+    for (MachineInstr &MI : MBB.instrs()) {
+      StringRef Name = TII.getName(haydn::format_e::logicalOpcodeOrSelf(
+          MI.getOpcode()));
+      if (Name.ends_with("_MSP"))
+        Name = Name.drop_back(4);
+      if (Name.starts_with("JALR"))
+        ++Budget.IndirectCount;
+    }
   return Budget;
 }
 
@@ -449,7 +611,7 @@ static void dumpPrefixBudget(StringRef Tag, const MachineFunction &MF,
   (void)MF;
   (void)Budget;
   LLVM_DEBUG({
-    for (const PrefixPairRecord &P : Budget.Pairs)
+    for (const HaydnPrefixPairRecord &P : Budget.Pairs)
       dbgs() << "HaydnLateConvergence: " << Tag << ' ' << MF.getName()
              << " prefix bb." << P.Src << "->bb." << P.Dst
              << " encoded=" << P.EncodedBytes << " pad=" << P.AlignPad
@@ -459,6 +621,183 @@ static void dumpPrefixBudget(StringRef Tag, const MachineFunction &MF,
 }
 
 } // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// Enforced no-growth law (GR2.6, exact accounting D1.41). Pure accounting
+// over the snapshot pair plus the attributed event ledger — unit-testable
+// without a MachineFunction.
+//===----------------------------------------------------------------------===//
+
+bool llvm::haydnSpanContainsMBB(unsigned Src, unsigned Dst, unsigned MBB) {
+  // Same numeric interior the shared span walk (countSpanEvents /
+  // measurePrefix) iterates: the span runs from the Src endpoint to the
+  // Dst endpoint, visiting every numerically interior MBB (either
+  // direction — collectRangePairs emits both forward and backedge pairs).
+  // A self-pair span (latch branch, ZOL self-prefix) is exactly the Src
+  // block: a growth event in the block itself is inside that span.
+  if (Src == Dst)
+    return MBB == Src;
+  const unsigned Lo = std::min(Src, Dst);
+  const unsigned Hi = std::max(Src, Dst);
+  return MBB >= Lo && MBB <= Hi;
+}
+
+/// Exact admitted budget for one pair span from the attributed ledger
+/// (D1.41): every event whose affected MBBs feed the span contributes its
+/// exact net bytes; promotion/demote credit is additionally capped by the
+/// sites/setups the span held BEFORE the iteration (a promoted site stops
+/// being relaxable after; a demoted setup is no longer retained). An
+/// event whose MBBs are all outside the span contributes nothing — no
+/// event may grant credit to an unrelated prefix.
+static uint64_t spanAdmittedBudget(const HaydnClosureEventLedger &Ledger,
+                                   const HaydnPrefixPairRecord &Span,
+                                   int64_t MaxSingleBranchGrowthBytes,
+                                   int64_t MaxHwLoopDemoteGrowthBytes) {
+  uint64_t PromotionBudget = 0, DemoteBudget = 0, StallBudget = 0;
+  for (const HaydnClosureGrowthEvent &E : Ledger.Events) {
+    bool InSpan;
+    if (E.HasExactPair)
+      InSpan = E.PairSrc == Span.Src && E.PairDst == Span.Dst;
+    else if (!E.AffectedMBBs.empty())
+      InSpan = llvm::any_of(E.AffectedMBBs, [&](unsigned M) {
+        return haydnSpanContainsMBB(Span.Src, Span.Dst, M);
+      });
+    else
+      InSpan = false; // unscoped: admits nothing (fail-closed)
+    if (!InSpan)
+      continue;
+    switch (E.K) {
+    case HaydnClosureGrowthEvent::Kind::Promotion:
+      PromotionBudget += E.Bytes;
+      break;
+    case HaydnClosureGrowthEvent::Kind::Demote:
+      DemoteBudget += E.Bytes;
+      break;
+    case HaydnClosureGrowthEvent::Kind::Stall:
+      StallBudget += E.Bytes;
+      break;
+    }
+  }
+  // Vocabulary caps over the span's pre-iteration census (the same two
+  // bounds the coarse law used; now applied to the exact per-event bytes).
+  PromotionBudget = std::min(
+      PromotionBudget, static_cast<uint64_t>(Span.RelaxableSites) *
+                           static_cast<uint64_t>(MaxSingleBranchGrowthBytes));
+  DemoteBudget = std::min(
+      DemoteBudget, static_cast<uint64_t>(Span.HwLoopSetups) *
+                        static_cast<uint64_t>(MaxHwLoopDemoteGrowthBytes));
+  return PromotionBudget + DemoteBudget + StallBudget;
+}
+
+std::string llvm::haydnClosureGrowthAccount(
+    const HaydnPrefixBudgetRecord &Before, const HaydnPrefixBudgetRecord &After,
+    const HaydnClosureEventLedger &Ledger, int64_t MaxSingleBranchGrowthBytes,
+    int64_t MaxHwLoopDemoteGrowthBytes) {
+  DenseMap<HaydnPrefixKey, const HaydnPrefixPairRecord *> BeforeByKey;
+  for (const HaydnPrefixPairRecord &P : Before.Pairs)
+    BeforeByKey[{P.Src, P.Dst}] = &P;
+
+  const bool SplitEvidence = Ledger.MBBGrowth > 0;
+  // Structural migrations that move pair keys WITHOUT an MBB split:
+  // (1) a promotion's insertIndirectBranch trampoline/restore blocks
+  //     introduce new pair keys (BranchBB retargeting) — the promotion
+  //     event itself is key-migration evidence;
+  // (2) BranchRelaxation calls RenumberBlocks() unconditionally at entry,
+  //     so even a no-change BR iteration rotates EVERY pair key when a
+  //     mid-CFG block was removed earlier (trampoline merging compacts
+  //     numbering; split blocks appended past the high-water mark keep
+  //     vacated numbers alive until then).
+  // Renumber migrations are accounted as ONE aggregate span: total
+  // appeared charge vs total vanished charge plus the exact event budget
+  // attributed to the vanished keys' spans (a pure retarget with an empty
+  // ledger is the zero-growth case of the same aggregate); residue beyond
+  // that budget falls through to the named fatal below.
+  DenseMap<HaydnPrefixKey, bool> AfterKeys;
+  for (const HaydnPrefixPairRecord &A : After.Pairs)
+    AfterKeys[{A.Src, A.Dst}] = true;
+  SmallVector<const HaydnPrefixPairRecord *, 4> Appeared, VanishedKeys;
+  for (const HaydnPrefixPairRecord &A : After.Pairs)
+    if (!BeforeByKey.count({A.Src, A.Dst}))
+      Appeared.push_back(&A);
+  for (const HaydnPrefixPairRecord &B : Before.Pairs)
+    if (!AfterKeys.count({B.Src, B.Dst}))
+      VanishedKeys.push_back(&B);
+  uint64_t AppearedCharge = 0, VanishedCharge = 0;
+  for (const auto *A : Appeared)
+    AppearedCharge += A->charge();
+  for (const auto *B : VanishedKeys)
+    VanishedCharge += B->charge();
+  // D1.41 exact per-span budget: the ONLY admitted growth for one span is
+  // the events whose affected MBBs lie inside it, with promotion/demote
+  // events additionally capped by the sites/setups the span held BEFORE
+  // the iteration (a promoted site stops being relaxable after; a demoted
+  // setup is no longer retained). Stall-class events contribute exactly
+  // the parcels their arm inserted on the affected MBBs — no fixed
+  // allowance, no global grant. Identical law for the common-key and
+  // migration-aggregate arms below.
+  auto SpanAdmitted = [&](const HaydnPrefixPairRecord &B) {
+    return spanAdmittedBudget(Ledger, B, MaxSingleBranchGrowthBytes,
+                              MaxHwLoopDemoteGrowthBytes);
+  };
+  // A renumber migration (BranchRelaxation ALWAYS RenumbersBlocks at
+  // entry, even on its no-change iterations) rotates every pair key at
+  // once, so the migration is accounted as ONE aggregate span: total
+  // appeared charge against total vanished charge plus the event budget
+  // the vanished keys were entitled to. A pure retarget (equal charges,
+  // empty ledger) is the zero-growth case of the same aggregate. Growth
+  // beyond that budget falls through to the named fatal below.
+  const bool VanishedPresent = !VanishedKeys.empty();
+  uint64_t VanishedAdmitted = 0;
+  for (const auto *B : VanishedKeys)
+    VanishedAdmitted += SpanAdmitted(*B);
+  const bool AccountedMigration =
+      VanishedPresent && !Appeared.empty() &&
+      AppearedCharge <= VanishedCharge + VanishedAdmitted;
+  const bool AnyPromotionOrDemote = llvm::any_of(
+      Ledger.Events, [](const HaydnClosureGrowthEvent &E) {
+        return E.K == HaydnClosureGrowthEvent::Kind::Promotion ||
+               E.K == HaydnClosureGrowthEvent::Kind::Demote;
+      });
+  const bool KeyMigrationEvidence =
+      SplitEvidence || AnyPromotionOrDemote || AccountedMigration;
+  for (const HaydnPrefixPairRecord &A : After.Pairs) {
+    auto It = BeforeByKey.find({A.Src, A.Dst});
+    if (It == BeforeByKey.end()) {
+      // Appeared key: legal only as structural evidence (split
+      // renumbering, promotion/demote block insertion, or an
+      // event-accounted renumber migration); with an empty ledger and no
+      // accounted migration the pair is new layout state no admitted
+      // event can produce.
+      if (!KeyMigrationEvidence)
+        return ("appeared pair bb." + Twine(A.Src) + "->bb." + Twine(A.Dst) +
+                " with no split/promotion evidence")
+                   .str();
+      continue;
+    }
+    const HaydnPrefixPairRecord &B = *It->second;
+    const uint64_t Growth =
+        A.charge() > B.charge() ? A.charge() - B.charge() : 0;
+    if (Growth == 0)
+      continue;
+    // Split evidence admits block-boundary movement inside the span.
+    if (Growth > SpanAdmitted(B) && !SplitEvidence)
+      return ("bb." + Twine(A.Src) + "->bb." + Twine(A.Dst) + " grew " +
+              Twine(Growth) + " bytes; admitted vocabulary covers " +
+              Twine(SpanAdmitted(B)))
+                 .str();
+  }
+
+  // Vanished keys: legal only as structural evidence (renumbering /
+  // promotion retargeting / balanced pure retarget), never as a silent
+  // disappearance.
+  if (!KeyMigrationEvidence) {
+    for (const auto *B : VanishedKeys)
+      return ("vanished pair bb." + Twine(B->Src) + "->bb." + Twine(B->Dst) +
+              " with no split evidence")
+                 .str();
+  }
+  return {};
+}
 
 //===----------------------------------------------------------------------===//
 // The bounded loop.
@@ -472,11 +811,10 @@ bool llvm::runHaydnLateConvergence(MachineFunction &MF,
   // Iteration bound (contract): every conditional branch site accounts for
   // its finite promotion sequence and every hardware-loop setup for its one
   // demotion; +2 covers the initial pass and the final no-change
-  // confirmation. S2 reruns only after promotion/demotion/MBB-identity
-  // change; pure packing/prefix-byte churn is closed by stalls + HWLoop
-  // revalidation + BranchRelaxation LAST without another S2 (a second S2
-  // on committed roots is not a fixed point). Exhaustion without a census
-  // fixed point is a hard diagnostic.
+  // confirmation. S2 runs exactly once per driver entry (GR2.6); closure
+  // iterations after it are only stalls + HWLoop revalidation +
+  // BranchRelaxation LAST. Exhaustion without a fixed point is a hard
+  // diagnostic.
   unsigned NumCondBranches = 0, NumHwLoopSetups = 0, NumIndirect = 0;
   for (MachineBasicBlock &MBB : MF)
     for (MachineInstr &MI : MBB.instrs()) {
@@ -521,7 +859,23 @@ bool llvm::runHaydnLateConvergence(MachineFunction &MF,
 
   ConvergenceSnapshot Before = takeSnapshot(MF, TII);
   bool AnyChanged = false;
-  bool RunS2 = true;
+
+  // S2 EXACTLY ONCE per driver entry, before the first closure iteration
+  // (GR2.6). PostMachineSchedulerImpl::run returns true unconditionally,
+  // so the census (not the return value) decides relevance; conservatively
+  // mark changed (an in-MBB reorder is invisible to the byte census). The
+  // inner pass honors optnone itself; the driver skipped it first.
+  {
+    MachineFunctionPass *S2 = createFreshMachinePass(PostMachineSchedulerID);
+    if (!S2)
+      report_fatal_error(
+          "HaydnLateConvergence: PostMachineSchedulerID not registered",
+          /*gen_crash_diag=*/false);
+    LLVM_DEBUG(dbgs() << "HaydnLateConvergence: S2 once per driver entry\n");
+    runInnerPass(*S2, DriverPass, MF);
+    delete S2;
+    AnyChanged = true;
+  }
 
   for (unsigned Iter = 0;; ++Iter) {
     if (Iter >= MaxIterations)
@@ -536,56 +890,96 @@ bool llvm::runHaydnLateConvergence(MachineFunction &MF,
     MDTWrapper.getDomTree().recalculate(MF);
     MLIWrapper.getLI().calculate(MDTWrapper.getDomTree());
 
-    // 1. S2 on current inventory: a fresh PostMachineSchedulerLegacy.
-    //    PostMachineSchedulerImpl::run returns true unconditionally, so the
-    //    census (not the return value) decides relevance; conservatively
-    //    mark changed (an in-MBB reorder is invisible to the byte census).
-    //    The inner pass honors optnone itself; the driver skipped it first.
-    //    Rerun S2 only after promotion/demotion/MBB-identity change;
-    //    otherwise BR last closes the packing that S2 already chose.
-    if (RunS2) {
-      MachineFunctionPass *S2 = createFreshMachinePass(PostMachineSchedulerID);
-      if (!S2)
-        report_fatal_error(
-            "HaydnLateConvergence: PostMachineSchedulerID not registered",
-            /*gen_crash_diag=*/false);
-      runInnerPass(*S2, DriverPass, MF);
-      delete S2;
-      AnyChanged = true;
-    } else {
-      LLVM_DEBUG(dbgs() << "HaydnLateConvergence: skip S2 (no inventory "
-                           "change since last S2)\n");
-    }
+    PrefixBudgetRecord IterBefore = capturePrefixBudget(MF, TII);
+    LLVM_DEBUG(dumpPrefixBudget("iter-in", MF, IterBefore));
 
-    // 2. Regenerate stalls/alignment (exposed-pipeline correctness net).
+    // 1. Regenerate stalls/alignment (exposed-pipeline correctness net).
+    //    D1.41: this window's keys are stable (no renumber/creation), so
+    //    its attribution is the exact per-pair CHARGE delta — pad ripple
+    //    included. Baseline is the iteration-top scan (IterBefore holds
+    //    the same measurement; rescan keeps the two independent).
+    bool StallsChanged = false;
     if (MachineFunctionPass *Stalls =
             asMachinePass(createHaydnLatencyStallsPass())) {
-      AnyChanged |= runInnerPass(*Stalls, DriverPass, MF);
+      StallsChanged = runInnerPass(*Stalls, DriverPass, MF);
+      AnyChanged |= StallsChanged;
       delete Stalls;
     }
+    PrefixBudgetRecord PostStalls = capturePrefixBudget(MF, TII);
 
-    // 3. Validate or demote HWLoops against the post-S2 byte layout.
+    // 2. Validate or demote HWLoops against the post-S2 byte layout.
     //    fixupOne recomputes Off1/Off2 windows from CURRENT layout on every
-    //    invocation, so re-invocation IS the post-S2 revalidation of
-    //    retained loops (W68.3R exit item).
+    //    invocation, so re-invocation IS the post-mutation revalidation of
+    //    retained loops (innermost-first wave order). Fixup may also insert
+    //    exact-commit deficit NOP pads on a RETAINED loop (setup-gap /
+    //    MinBodyBundles floors) — admitted closure vocabulary alongside
+    //    demotion (a change signal, not a demotion event). D1.41: stable
+    //    keys — exact per-pair charge delta.
+    bool FixupChanged = false;
     if (MachineFunctionPass *Fixup =
             asMachinePass(createHaydnFixupHwLoopsPass())) {
-      AnyChanged |= runInnerPass(*Fixup, DriverPass, MF);
+      FixupChanged = runInnerPass(*Fixup, DriverPass, MF);
+      AnyChanged |= FixupChanged;
       delete Fixup;
     }
+    PrefixBudgetRecord PostFixup = capturePrefixBudget(MF, TII);
 
-    // 4. BranchRelaxation LAST in the mutating iteration (contract).
+    // 3. BranchRelaxation LAST in the mutating iteration (contract).
+    //    GR2.7: LongBranchNormalize immediately before it — the S2 repack
+    //    above (and this loop's stalls/Fixup mutations) can shrink a
+    //    fallthrough span so a site the pre-S1 normalization BR accepted
+    //    re-overflows. The in-block long-form rewrite (no CFG creation)
+    //    keeps BR's trampoline/RestoreBB arms unreachable so the
+    //    postcommit block-budget wall holds (bundlesim cb_wua_cbr /
+    //    matmult-int failure class). No-op before the first Finalize
+    //    stamp (pre-stamp window owns nothing here). D1.41: stable keys —
+    //    exact per-pair charge delta.
+    bool NormalizeChanged = false;
+    if (MachineFunctionPass *Norm =
+            asMachinePass(createHaydnLongBranchNormalizePass())) {
+      NormalizeChanged = runInnerPass(*Norm, DriverPass, MF);
+      AnyChanged |= NormalizeChanged;
+      delete Norm;
+    }
+    PrefixBudgetRecord PostNorm = capturePrefixBudget(MF, TII);
+    DenseMap<unsigned, uint64_t> SizesPreBR = perMBBEncodedSizes(MF, TII);
+    bool BRChanged = false;
     if (MachineFunctionPass *BR =
             createFreshMachinePass(BranchRelaxationPassID)) {
-      AnyChanged |= runInnerPass(*BR, DriverPass, MF);
+      BRChanged = runInnerPass(*BR, DriverPass, MF);
+      AnyChanged |= BRChanged;
       delete BR;
     } else {
       report_fatal_error(
           "HaydnLateConvergence: BranchRelaxationPassID not registered",
           /*gen_crash_diag=*/false);
     }
+    DenseMap<unsigned, uint64_t> SizesPostBR = perMBBEncodedSizes(MF, TII);
 
-    // 5. Change detection + monotone law.
+    // D1.40 immediate CFG identity check: refusal must not wait for the
+    // later Verify seat while further closure mutation proceeds. After
+    // each mutating inner pass (stalls, Fixup, Norm, BR — at minimum the
+    // Norm/BR pair above), any postcommit CFG mutation is an immediate
+    // fatal with the wall text: creation AND shrink AND equal-count MBB
+    // replacement AND a numbering-slot trace (create-then-delete /
+    // erase+replace) — the identity laws, not just cardinality. This seat
+    // runs after BR's LAST invocation, whose entry RenumberBlocks precedes
+    // all of BR's own mutations, so a create-then-delete inside BR is still
+    // visible here through the numbering-slot slack (L3) or the token
+    // sequence (L4). The ledger's MBBGrowth below stays TELEMETRY ONLY
+    // (event evidence for the growth accounting); the wall itself is this
+    // check plus the Verify seats — no second admission path.
+    if (std::string CfgViolation =
+            MF.getInfo<HaydnMachineFunctionInfo>()
+                ->postCommitCfgCreationViolation(MF);
+        !CfgViolation.empty())
+      report_fatal_error(
+          "HaydnLateConvergence: postcommit CFG creation refused during "
+          "closure (" +
+              Twine(CfgViolation) + ")",
+          /*gen_crash_diag=*/false);
+
+    // 4. Change detection + monotone law + ENFORCED no-growth law (GR2.6).
     ConvergenceSnapshot After = takeSnapshot(MF, TII);
     std::string Violation = checkMonotonicity(Before, After);
     if (!Violation.empty())
@@ -593,12 +987,105 @@ bool llvm::runHaydnLateConvergence(MachineFunction &MF,
                              Twine(Violation),
                          /*gen_crash_diag=*/false);
 
-    if (After == Before) {
-      LLVM_DEBUG(dbgs() << "HaydnLateConvergence: fixed point after "
-                        << Iter + 1 << " iteration(s)\n");
+    // Event ledger for the no-growth accounting (D1.41 exact attribution):
+    // each stable-key window (stalls / Fixup / LongBranchNormalize)
+    // contributes the exact per-pair CHARGE delta it measured — inserted
+    // AND removed parcels, pad ripple included — to exactly the pair it
+    // affected; the BR window contributes per-MBB promotion events (BR
+    // renumbers keys, so pair matching is meaningless there; the
+    // vocabulary cap keeps those tight). No global booleans/counts: an
+    // event on one span never grants credit to an unrelated prefix.
+    HaydnClosureEventLedger Ledger;
+    // (a) Stall-class: the stalls pass's net charge growth per span
+    //     (regenerable-parcel strips are net-negative: no event, and their
+    //     shrinkage never subsidizes another span).
+    if (StallsChanged) {
+      addPairDeltaEvents(Ledger, HaydnClosureGrowthEvent::Kind::Stall,
+                         HaydnClosureGrowthEvent::Kind::Stall, IterBefore,
+                         PostStalls);
+      // Stalls never rewrite a branch site; a vanished key here would be
+      // unaccounted (no census rise -> addVanishedPairEvents stays off).
+    }
+    // (b) Fixup window: per-span class from the span's own setup census —
+    //     a span whose retained-setup count dropped was touched by a
+    //     demotion (Demote class, capped at MaxHwLoopDemoteGrowthBytes per
+    //     retained setup); pure deficit-pad growth on a RETAINED loop is
+    //     stall-class. Both carry the window's exact measured deltas.
+    if (FixupChanged)
+      addPairDeltaEvents(Ledger, HaydnClosureGrowthEvent::Kind::Demote,
+                         HaydnClosureGrowthEvent::Kind::Stall, PostStalls,
+                         PostFixup);
+    // (c) GR2.7 in-block long form (LongBranchNormalize) inserts
+    //     LUI+ADDI+JALR parcels on a far site, including ZOL latches whose
+    //     self-prefix is not a RelaxableSites pair (PseudoLoopEnd is
+    //     always-in-range): stall-class, exact per-span charge delta.
+    //     A promotion CONSUMES the promoted pair key (the long form has
+    //     no range-pair MBB operand): the vanished key earns a
+    //     Promotion-class event scoped to exactly itself, gated on the
+    //     window's IndirectCount census rise (cxfir16x16 bb.6->bb.2 —
+    //     the key vanishes while its self-prefix sibling bb.6->bb.6
+    //     carries the exact byte growth).
+    if (NormalizeChanged) {
+      addPairDeltaEvents(Ledger, HaydnClosureGrowthEvent::Kind::Stall,
+                         HaydnClosureGrowthEvent::Kind::Stall, PostFixup,
+                         PostNorm);
+      if (PostNorm.IndirectCount > PostFixup.IndirectCount)
+        addVanishedPairEvents(Ledger, PostFixup, PostNorm);
+    }
+    // (d) BR promotions (JALR long form): the IndirectCount delta is the
+    //     census evidence; the exact bytes come from BR's own MBB deltas,
+    //     capped per span by MaxSingleBranchGrowthBytes × the span's
+    //     pre-iteration still-relaxable sites.
+    if (After.IndirectCount > Before.IndirectCount)
+      addMBBDeltaEvents(Ledger, HaydnClosureGrowthEvent::Kind::Promotion,
+                        SizesPreBR, SizesPostBR);
+    Ledger.MBBGrowth = After.MBBBytes.size() > Before.MBBBytes.size()
+                           ? After.MBBBytes.size() - Before.MBBBytes.size()
+                           : 0;
+    PrefixBudgetRecord IterAfter = capturePrefixBudget(MF, TII);
+    LLVM_DEBUG(dumpPrefixBudget("iter-out", MF, IterAfter));
+    {
+      unsigned Promotions = 0, Demotions = 0, StallEvents = 0;
+      for (const auto &E : Ledger.Events) {
+        switch (E.K) {
+        case HaydnClosureGrowthEvent::Kind::Promotion:
+          ++Promotions;
+          break;
+        case HaydnClosureGrowthEvent::Kind::Demote:
+          ++Demotions;
+          break;
+        case HaydnClosureGrowthEvent::Kind::Stall:
+          ++StallEvents;
+          break;
+        }
+      }
+      LLVM_DEBUG(dbgs()
+                 << "HaydnLateConvergence: closure iteration " << Iter
+                 << " events: promotions=" << Promotions
+                 << " demotions=" << Demotions << " stalls=" << StallEvents
+                 << " mbb-growth=" << Ledger.MBBGrowth << " (indirect "
+                 << Before.IndirectCount << "->" << After.IndirectCount
+                 << ")\n");
+    }
+    std::string Unaccounted = haydnClosureGrowthAccount(
+        IterBefore, IterAfter, Ledger,
+        haydn::hwloop::MaxSingleBranchGrowthBytes,
+        haydn::hwloop::MaxHwLoopDemoteGrowthBytes);
+    if (!Unaccounted.empty())
+      report_fatal_error(
+          "HaydnLateConvergence: prefix budget grew beyond the admitted "
+          "closure vocabulary: " +
+              Twine(Unaccounted) + " (function " + MF.getName() + ")",
+          /*gen_crash_diag=*/false);
+
+    // Monotone closure termination: repeat only on an upward event; an
+    // iteration with no upward event (shrink, no change) closes the loop.
+    if (!upwardEvent(Before, After)) {
+      LLVM_DEBUG(dbgs() << "HaydnLateConvergence: closed after "
+                        << Iter + 1 << " iteration(s) (no upward event)\n");
+      Before = std::move(After);
       break;
     }
-    RunS2 = inventoryChanged(Before, After);
     Before = std::move(After);
   }
 
@@ -609,16 +1096,19 @@ bool llvm::runHaydnLateConvergence(MachineFunction &MF,
 
   PrefixBudgetRecord FinalBudget = capturePrefixBudget(MF, TII);
   dumpPrefixBudget("final", MF, FinalBudget);
+  // Entry-vs-final strict no-growth is deliberately NOT a fatal law (GR2.6
+  // documented-legality rationale): the single S2 may redistribute encoded
+  // bytes across pairs with no event at all — that is legal repacking, not
+  // closure growth. The enforceable law is the per-iteration event
+  // accounting above; this comparison stays as QoR telemetry only.
   const bool NoGrowth = EntryBudget.noGrowth(FinalBudget);
   LLVM_DEBUG({
-    ConvergenceSnapshot Final = takeSnapshot(MF, TII);
     dbgs() << "HaydnLateConvergence: " << MF.getName()
            << " prefixes=" << FinalBudget.Pairs.size()
            << " no-growth=" << (NoGrowth ? 1 : 0)
-           << " jalr-sites=" << Final.IndirectSites.size()
-           << " hwloop-setups=" << Final.HwLoopSetups << '\n';
+           << " jalr-sites=" << Before.IndirectSites.size()
+           << " hwloop-setups=" << Before.HwLoopSetups << '\n';
   });
-  (void)NoGrowth;
 
   return AnyChanged;
 }
@@ -639,7 +1129,11 @@ void HaydnLateConvergencePass::getAnalysisUsage(AnalysisUsage &AU) const {
   // resolver. AA is IR-level (function-locked). TargetPassConfig is
   // immutable. MDT/MLI are recalculated in-place each iteration and after
   // the loop, so the wrapper objects remain valid. CFG is not preserved:
-  // inner BranchRelaxation and HWLoop demote may split or insert blocks.
+  // pre-stamp inner passes (BranchRelaxation trampoline/RestoreBB,
+  // RestoreBB-presched normalization) may split or insert blocks. After
+  // the first Finalize stamp, post-stamp CFG creation is FATAL (the
+  // D1.40 immediate closure check + the Verify seats); every post-stamp
+  // mutation is in-block only.
   AU.addRequired<MachineLoopInfoWrapperPass>();
   AU.addRequired<MachineDominatorTreeWrapperPass>();
   AU.addRequired<AAResultsWrapperPass>();

@@ -79,5 +79,5 @@ entry:
 ; LOOP: jalr
 
 ; DBG: HaydnLateConvergence: conv_spills bound={{[0-9]+}} (cond={{[0-9]+}} hwloop=0)
-; DBG: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; DBG: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; DBG-NOT: exhausted

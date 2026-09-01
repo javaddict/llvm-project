@@ -671,7 +671,9 @@ unsigned haydnFormatEHwloopImmFieldShift(int MemberId) {
   // Off1 is 6 bits; Off2 is 12. Both layout rows share ValueShift=2.
   const HaydnReloc::FixupField Field{HaydnReloc::kUnspecifiedFieldLsb, 6};
   const HaydnReloc::RelocKind R = HaydnReloc::findFixupFromFixupFields(
-      TypeName, Mem.Opcode, Field, /*FormatBytes=*/12,
+      TypeName, Mem.Opcode, Field,
+      haydn::format::encodedBytesOrDie(
+          haydn::format::BundleFormatRowID::E96TwoEntry),
       /*IsLSUnit=*/false);
   if (R == HaydnReloc::RelocKind::Invalid)
     return 0;

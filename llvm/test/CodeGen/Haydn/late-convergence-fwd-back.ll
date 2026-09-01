@@ -40,25 +40,30 @@
 ; NEAR: jalr
 
 ; DBG: HaydnLateConvergence: fwd_near bound={{[0-9]+}}
-; DBG: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; DBG: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; DBG: HaydnLateConvergence: back_near bound={{[0-9]+}}
-; DBG: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; DBG: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; DBG-NOT: exhausted
 
-; Out-of-range forward: inverted cond + LUI/ADDI long form (not just
-; the epilogue jalr). Out-of-range back: long form on the latch.
+; Out-of-range forward: the GR2.7 in-block long form — address
+; materialization (LUI, then ADDI32) precedes the inverted near cond,
+; then the JALR to the far target (the generic MachineVerifier forbids
+; non-terminators after the first terminator, so the materialization
+; comes first). Out-of-range back: the long-latch template on the latch
+; (same LUI/ADDI before BEQZ law).
 ; FAR-LABEL: fwd_far:
-; FAR: {{beqz|bnez|beq|bne}}
 ; FAR: lui
+; FAR: addi32
 ; FAR: jalr
 ; FAR-LABEL: back_far:
 ; FAR: lui
+; FAR: addi32
 ; FAR: jalr
 
 ; FARDBG: HaydnLateConvergence: fwd_far bound={{[0-9]+}}
-; FARDBG: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; FARDBG: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; FARDBG: HaydnLateConvergence: back_far bound={{[0-9]+}}
-; FARDBG: HaydnLateConvergence: fixed point after {{[0-9]+}} iteration(s)
+; FARDBG: HaydnLateConvergence: closed after {{[0-9]+}} iteration(s) (no upward event)
 ; FARDBG-NOT: exhausted
 
 ;--- near.ll

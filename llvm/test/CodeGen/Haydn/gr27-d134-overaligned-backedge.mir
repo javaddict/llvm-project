@@ -1,0 +1,472 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=CHECK
+# REQUIRES: haydn-registered-target
+#
+# D1.34 joint-grid pad pin: the layout pad charged when entering an
+# aligned MBB must satisfy BOTH the requested alignment AND the 12-byte
+# product parcel grid (lcm law) and cover BranchRelaxation's
+# Alignment>ParentAlign uncertainty. The old parcel-only rounding of the
+# raw alignTo gap charged neither: entering an align-16 block from a
+# 12-byte boundary charged 1 parcel (12 -> 24), a start that is neither
+# 16-aligned nor on the lcm(16,12)=48 joint grid; the real emitter walks
+# idle parcels to the joint grid (HaydnMCELFStreamer::emitCodeAlignment,
+# HaydnMachineAlignment), so the true backedge is LONGER than measured —
+# an under-estimated pad left this shape's short latch accepted here and
+# promoted post-stamp into the CFG wall.
+#
+# Arithmetic (Sel=2 out-of-domain demote seat, same as the gr27-d133
+# boundary pins; demote measures the Header..Latch span BEFORE installing
+# the countdown). Buffer 48; short window: span + 48 <= 2048, i.e. span
+# <= 2000. Parcel = 12.
+#   align16 (160 header NOPs): header start 12, end 1932. Spacer entry:
+#     OLD pad alignTo(1932,16)=1944 gap 12 -> 1 parcel -> 1944; NEW joint
+#     grid lcm(16,12)=48 -> 1968, BR worst alignTo(1932,16)+15 = 1947 ->
+#     3 parcels pad 36 -> 1968. +2 NOP = 1992. Latch entry: OLD
+#     alignTo(1992,16)=2000 gap 8 -> 1 parcel -> 2004; NEW grid
+#     alignTo(1992,48)=2016 pad 24, BR 2000+15=2015 gap 23 -> 2 parcels
+#     24 -> 2016. Latch NOP+B = 24. Boundary-walked totals (the exact
+#     two-law walker, entry SET parcel then per-block pads):
+#     align16 OLD span 1980 (SHORT: 1980 + 48 <= 2048), NEW span 2028
+#     (LONG); align8 OLD 1980 (SHORT), NEW 2004 (LONG). The
+#     under-estimated OLD pad kept the short latch that BR would promote
+#     postcommit; the joint-grid law crosses into the legal terminal
+#     long latch.
+#
+# Long-latch CHECK shape = the D1.32/D1.33 terminal template:
+# LUI ; ADDI32_W ; BEQZ_W(countdown) ; JALR_W, no BNEZ backedge.
+
+--- |
+  define dso_local i32 @align16_long() {
+  entry:
+    br label %body
+  body:
+    br label %spacer
+  spacer:
+    br label %latch
+  latch:
+    br label %exit
+  exit:
+    ret i32 0
+  }
+
+  define dso_local i32 @align8_long() {
+  entry:
+    br label %body
+  body:
+    br label %spacer
+  spacer:
+    br label %latch
+  latch:
+    br label %exit
+  exit:
+    ret i32 0
+  }
+...
+---
+name:            align16_long
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.1
+    SET_HWLOOP_F2_W 2, %bb.1, %bb.3, $r2, implicit-def dead $sfr
+
+  ; Header (160 NOPs = 1920 B).
+  bb.1.body:
+    liveins: $r2
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Interior spacer, align 16. Entry into it pads the running offset to
+  ; the lcm(16,12)=48 joint grid (+ the BR ParentAlign uncertainty: MF
+  ; alignment 1 < 16 charges the worst-case 15 extra inside the same
+  ; parcel rounding). The OLD parcel-only pad under-charged here.
+  bb.2.spacer (align 16):
+    successors: %bb.3
+    NOP
+    B %bb.3
+
+  ; Latch. 1 NOP = 12 B.
+  bb.3.latch (align 16):
+    liveins: $r2
+    successors: %bb.2, %bb.4
+    NOP
+    BNEZ_W $r2, %bb.2, implicit-def dead $sfr
+    B %bb.4
+
+  bb.4.exit:
+    liveins: $r2, $r15
+    RET implicit $r15
+
+...
+---
+name:            align8_long
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.1
+    SET_HWLOOP_F2_W 2, %bb.1, %bb.3, $r2, implicit-def dead $sfr
+
+  bb.1.body:
+    liveins: $r2
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Unequal grid arm: lcm(8,12)=24.
+  bb.2.spacer (align 8):
+    successors: %bb.3
+    NOP
+    B %bb.3
+
+  bb.3.latch (align 16):
+    liveins: $r2
+    successors: %bb.2, %bb.4
+    NOP
+    BNEZ_W $r2, %bb.2, implicit-def dead $sfr
+    B %bb.4
+
+  bb.4.exit:
+    liveins: $r2, $r15
+    RET implicit $r15
+
+# CHECK-LABEL: name:            align16_long
+# The joint-grid pad pushes the true backedge past the single-charge
+# window: the terminal long latch is emitted (never an under-estimated
+# short BNEZ that BR would promote postcommit).
+# CHECK: LUI
+# CHECK: ADDI32
+# CHECK: BEQZ{{.*}} $r2, {{.*}}bb.4
+# CHECK: JALR{{.*\$r11, 0}}
+# CHECK-NOT: BNEZ
+#
+# CHECK-LABEL: name:            align8_long
+# CHECK: LUI
+# CHECK: ADDI32
+# CHECK: BEQZ{{.*}} $r2, {{.*}}bb.4
+# CHECK: JALR{{.*\$r11, 0}}
+# CHECK-NOT: BNEZ

@@ -124,6 +124,8 @@ define i32 @f(i32 %a, i32 %b) {
 ; -enable-post-ra-machine-sched=false product flag).
 ; No Finalize/Verify before PostRA (no pre-RA bundle identity).
 ; O0-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; O0-NEXT:      Haydn Long-Branch Normalize
+; O0-NEXT:      Branch relaxation pass
 ; O0-NEXT:      Haydn Bundle Finalization
 ; O0-NEXT:      Haydn Bundle Invariant Verifier
 ; O0-NOT:      Branch Probability Basic Block Placement
@@ -205,6 +207,8 @@ define i32 @f(i32 %a, i32 %b) {
 ; LatencyStalls then first Finalize/Verify (no-skip commit ownership).
 ; No Finalize/Verify before PostRA (no pre-RA bundle identity).
 ; O123-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; O123-NEXT:      Haydn Long-Branch Normalize
+; O123-NEXT:      Branch relaxation pass
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
 ; Sole MBP (addBlockPlacement empty - no second placement after pack):
@@ -216,6 +220,7 @@ define i32 @f(i32 %a, i32 %b) {
 ; so the late lane runs Fixup + second BR before the final commit.
 ; O123:      Branch relaxation pass
 ; O123-NEXT:      Haydn Hardware Loop Fixup
+; O123-NEXT:      Haydn Long-Branch Normalize
 ; O123-NEXT:      Branch relaxation pass
 ; O123-NEXT:      Haydn Bundle Finalization
 ; O123-NEXT:      Haydn Bundle Invariant Verifier
@@ -247,6 +252,8 @@ define i32 @f(i32 %a, i32 %b) {
 ; HWON:      Hardware Loop Insertion
 ; HWON:      PostRA Machine Instruction Scheduler
 ; HWON-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; HWON-NEXT:      Haydn Long-Branch Normalize
+; HWON-NEXT:      Branch relaxation pass
 ; HWON-NEXT:      Haydn Bundle Finalization
 ; HWON-NEXT:      Haydn Bundle Invariant Verifier
 ; HWON:      Haydn Hardware Loop Fixup

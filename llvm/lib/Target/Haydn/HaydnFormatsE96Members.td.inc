@@ -2793,7 +2793,7 @@ def BLTU_E2_E0_ALU0_RI12 : HaydnEntryE2E0<(outs), (ins GPR32:$reg_0, GPR32:$src_
 }
 }
 
-let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 1, isCall = 1, isIndirectBranch = 1, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 1, isCall = 1, isIndirectBranch = 1, isBarrier = 1, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
 def JALR_E2_E0_ALU0_RI12 : HaydnEntryE2E0<(outs GPR32:$reg_0), (ins GPR32:$src_1, calltarget_wide_ri12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
   bits<4> reg_0;
   bits<4> src_1;
@@ -31816,7 +31816,7 @@ def BLTU_E3_E0_ALU0_RI12 : HaydnEntryE3E0<(outs), (ins GPR32:$reg_0, GPR32:$src_
 }
 }
 
-let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 1, isCall = 1, isIndirectBranch = 1, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 1, isCall = 1, isIndirectBranch = 1, isBarrier = 1, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
 def JALR_E3_E0_ALU0_RI12 : HaydnEntryE3E0<(outs GPR32:$reg_0), (ins GPR32:$src_1, calltarget_wide_ri12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
   bits<4> reg_0;
   bits<4> src_1;
@@ -45657,7 +45657,7 @@ def BLTU_E3_E1_ALU0_RI12 : HaydnEntryE3E1<(outs), (ins GPR32:$reg_0, GPR32:$src_
 }
 }
 
-let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 1, isCall = 1, isIndirectBranch = 1, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
+let Itinerary = Slot0_ALU, mayLoad = 0, mayStore = 0, isBranch = 0, isTerminator = 1, isCall = 1, isIndirectBranch = 1, isBarrier = 1, hasSideEffects = 1, isCodeGenOnly = 0, isAsmParserOnly = 0, AsmVariantName = "e96member" in {
 def JALR_E3_E1_ALU0_RI12 : HaydnEntryE3E1<(outs GPR32:$reg_0), (ins GPR32:$src_1, calltarget_wide_ri12:$imm_2), "jalr\t$reg_0, $src_1, $imm_2", []> {
   bits<4> reg_0;
   bits<4> src_1;

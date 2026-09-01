@@ -1,0 +1,441 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=TWO
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=ONE
+# REQUIRES: haydn-registered-target
+#
+# D1.34 per-TI site-offset pin. The normalizer's far-scan used to measure
+# EVERY tail terminator from the LAST terminator's site offset. In a
+# two-terminator tail (cond + trailing uncond) the earlier terminator's
+# true site is one parcel BEFORE the trailing one, so its true forward
+# displacement is 12 bytes LARGER than measured: an under-estimate left
+# the site short here and the post-stamp BranchRelaxation promoted it
+# into the CFG wall. Each tail TI is now measured from its OWN site
+# (haydn::hwloop::estimateLayoutInstrOffset); the post-rewrite measures
+# (destInRange / Arm B) intentionally stay Last-anchored — they model
+# the re-emitted site.
+#
+# Sizing (buffer=4 so the window edge 2044 falls INSIDE the 12-byte band
+# the old measure hid; parcel=12):
+#   two_term: bb.0 = BEQZ_W(bb.2) + B(bb.1) — sites 0 and 12; bb.1 169
+#     NOPs (2028) so bb.2 starts at 24 + 2028 = 2052.
+#     OLD (Last site 12): off 2040 <= 2044 -> left SHORT (the defect).
+#     TRUE first-TI site 0: off 2052 > 2044 -> promoted in-block now.
+#   one_term (control): single B at site 0, bb.2 start 2040, off 2040 —
+#     both laws measure the same site; byte-identical NO promotion,
+#     proving the flip is exactly the site-offset correction.
+
+--- |
+  define dso_local void @two_term() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @one_term() {
+  entry:
+    br label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            two_term
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r2, %bb.2, implicit-def dead $sfr
+    B %bb.1
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            one_term
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.1
+    B %bb.1
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+# TWO-LABEL: name:            two_term
+# TWO: LUI
+# TWO: ADDI32
+# Near-cond branch keeps the ORIGINAL polarity family (BEQZ_W's inverse
+# is BNEZ_W): the promotion inverts the condition so JALR takes the far
+# edge and the near branch guards the fallthrough-to-near edge.
+# TWO: BNEZ{{.*}} $r2, {{.*}}bb.1
+# TWO: JALR
+# TWO-NOT: B %bb.2
+#
+# ONE-LABEL: name:            one_term
+# ONE-NOT: LUI
+# ONE: B %bb.1

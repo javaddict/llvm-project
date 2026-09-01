@@ -128,6 +128,13 @@ public:
   // sites never regress through this API). Inherits DL onto each new MI.
   // CFG successors and probabilities stay with the caller
   // (AIEBaseInstrInfo.cpp:271-307).
+  //
+  // GR2.7 phase law: BEFORE the first Finalize run stamps the postcommit
+  // block budget, bare emission is legal (S1 commits later). AFTER the
+  // stamp, every REAL conditional-branch emission self-commits as a
+  // committed singleton packet at emission time (bake +
+  // finalizeExactLateSingleton); representation shells (B) and hwloop
+  // metas (PseudoLoopEnd/LoopJNZ) stay bare.
   unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
                         MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
                         const DebugLoc &DL,
@@ -135,6 +142,8 @@ public:
 
   // Strip short B/cond terminators (including bundled solo/coissue). Leave
   // LUI+ADDI32_W+JALR_W sites intact so they cannot shrink back to B.
+  // Post-stamp removals re-stamp surviving members as committed
+  // singletons/cycles (never leaves bare real encode).
   unsigned removeBranch(MachineBasicBlock &MBB,
                        int *BytesRemoved = nullptr) const override;
 
@@ -188,9 +197,23 @@ public:
   // Branch relaxation hooks (used by generic BranchRelaxation pass)
   //===------------------------------------------------------------------===
 
+  // D1.33 one-buffer law: the SOLE accessor for the
+  // -haydn-branch-relax-safety-buffer runtime value. It is consumed INSIDE
+  // isBranchOffsetInRange below — the single inflation seat. Every
+  // far-deciding caller (the pre-S1 normalization far-test, the
+  // hwloop-demote LongLatch decision, generic BranchRelaxation) passes the
+  // RAW signed offset and must never pre-add the buffer: a pre-add
+  // double-charges the allowance and steals the near-boundary short band.
+  // Default ties to haydn::hwloop::BranchRelaxSafetyBufferBytes (one
+  // insertIndirectBranch sequence); the static_assert in the .cpp pins
+  // that tie.
+  uint32_t getBranchRelaxSafetyBuffer() const;
+
   // WIDE_BranchSImm12 byte PC+imm. Forward and backward offsets each charge
   // one insertIndirectBranch sequence (MaxSingleBranchGrowthBytes). JALR_W
   // is always in range so a long-form site is never re-relaxed or shrunk.
+  // This is the ONLY seat that inflates a displacement by
+  // getBranchRelaxSafetyBuffer() (D1.33 single-inflation law).
   bool isBranchOffsetInRange(unsigned BranchOpc,
                              int64_t BrOffset) const override;
 
@@ -203,6 +226,11 @@ public:
   // MI including the emergency FI spill/reload. Updates Dest PHIs and
   // RestoreBB live-ins. Does not add CFG successors (BranchRelaxation owns
   // that after return). Spill is ST32 to a pre-reserved FI — SP/CFA unchanged.
+  //
+  // GR2.7 phase law: once the first Finalize run stamped the postcommit
+  // block budget, this CFG-creating callback REFUSES (named fatal) —
+  // long-form promotion must be selected pre-scheduler. Unstamped
+  // (pre-S1 seat, -run-pass probes) behavior is unchanged.
   void insertIndirectBranch(MachineBasicBlock &MBB,
                             MachineBasicBlock &NewDestBB,
                             MachineBasicBlock &RestoreBB, const DebugLoc &DL,

@@ -20,8 +20,10 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/Support/UniqueBBID.h"
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace llvm {
 
@@ -152,6 +154,113 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // clone() zeros this so outlined/cloned MFs do not inherit the source
   // count.
   unsigned PostRASchedInvocations = 0;
+
+  // GR2.7/D1.40 postcommit CFG identity wall. The first HaydnFinalizeBundle
+  // run (the commit-normalization seat at addPreSched2) stamps a full CFG
+  // identity snapshot exactly once; after the stamp the postcommit CFG is
+  // identity-frozen: live count, block-ID numbering slack, and per-MBB
+  // identity tokens never change. Four closed laws, one owner
+  // (postCommitCfgCreationViolation, consumed verbatim by both seats):
+  //   L1  live count grew     — the published growth law (BranchRelaxation
+  //                             trampoline/RestoreBB/split arms are the
+  //                             only postcommit block creators);
+  //   L2  live count shrank   — postcommit MBB erasure is refused too
+  //                             (constraint 11: no block reassignment; the
+  //                             only erase source, insertIndirectBranch's
+  //                             RestoreBB, already refuses when stamped);
+  //   L4  token sequence diverged at equal count — equal-count MBB
+  //                             replacement (erase+re-add, split-and-merge);
+  //   L3  numbering slack changed (epoch-guarded) — create-then-delete and
+  //                             erase+replace leave a null/extra block-ID
+  //                             slot that tokens alone cannot see. Guarded
+  //                             on the numbering epoch so the unconditional
+  //                             RenumberBlocks at BranchRelaxation entry
+  //                             (which compacts null slots and bumps the
+  //                             epoch) cannot false-fire the law, and so
+  //                             sparse bb.N holes already present at the
+  //                             stamp are measured as slack deltas, not
+  //                             absolute density.
+  //   L5  successor sequence diverged (edge digest) — with block identity
+  //                             proven unchanged by L1/L2/L4, every MBB's
+  //                             successor sequence is digested as successor
+  //                             LAYOUT POSITIONS (renumber-stable; successor
+  //                             order preserved) and compared against the
+  //                             stamp. Edge-only mutation — a successor
+  //                             rewrite with unchanged block identity/token
+  //                             sequence — is refused unless covered by the
+  //                             ONE admitted-transition record
+  //                             (recordPostCommitAdmittedEdgeTransition,
+  //                             called once per demote from
+  //                             llvm::demoteHardwareLoopToSoftware:
+  //                             FixupHwLoops at addPreEmitPass and the
+  //                             HaydnLateConvergence inner loop legitimately
+  //                             rewrite the latch successors post-stamp; an
+  //                             unconditional edge freeze would false-fire on
+  //                             every demote).
+  // Tokens are renumber-stable and recycle-stable: (MBB.getBasicBlock(),
+  // BBID-or-sentinel); MBB numbers/pointers are NOT recorded, so a legal
+  // renumber keeps the stamp valid. Residual (documented on the D1.40 row):
+  // a create-then-delete with NO token change after a renumber launders L3
+  // (epoch already bumped) — closing it needs a monotone per-MF creation
+  // counter, an HC#0 common-MachineFunction seam, not a target edit; and
+  // replacement among null-BB/no-BBID synthetic blocks shares one token, so
+  // only L3 can catch it. Write-once monotone ratchet: later Finalize seats
+  // never re-stamp. No stamp (limited-pipeline probes and MIR fixtures that
+  // never run Finalize) observes no wall. Per-function MFI state — no
+  // process global, parallel-codegen safe (D1.13 law).
+  struct PostCommitCfgSnapshot {
+    unsigned LiveCount = 0;      // L0 = MF.size()
+    unsigned BlockIDHighWater = 0; // H0 = MF.getNumBlockIDs()
+    unsigned NumberingEpoch = 0; // E0 = MF.getBlockNumberEpoch()
+    // T0 = per-MBB identity tokens in layout order:
+    // (getBasicBlock(), BBID-or-sentinel).
+    SmallVector<std::pair<const BasicBlock *, uint64_t>, 8> Tokens;
+    // D0 = per-MBB successor-position digests in layout order (L5). Each
+    // digest is the successor list encoded as LAYOUT POSITIONS, matching the
+    // token-vector domain: renumber-stable (never MBB numbers), identical
+    // for two CFGs with the same blocks in the same order and the same
+    // edges. Null successors are not representable in a legal Machine CFG
+    // (every successor is a live MBB of this MF).
+    SmallVector<SmallVector<unsigned, 4>, 8> SuccPositions;
+  };
+  PostCommitCfgSnapshot PostCommitCfg;
+  bool PostCommitCfgStamped = false;
+  // L5 admitted-transition record (D1.40 Phase 2): layout positions of the
+  // SOURCE blocks whose successor rewrite is legitimately covered by the
+  // single recording site (llvm::demoteHardwareLoopToSoftware). Post-stamp
+  // demote latch rewrites are exactly the admitted class; every uncovered
+  // edge mutation stays refused by L5. Written ONLY while the wall is armed
+  // (the demote runs post-stamp; a pre-stamp record is dead state — the
+  // snapshot below is what the wall enforces). Monotone append; never
+  // consumed as an admission the stamp does not cover.
+  SmallVector<unsigned, 4> PostCommitAdmittedEdgeSources;
+  // Sentinel token half for MBBs without a UniqueBBID (BB sections are off
+  // for Haydn, so this is the common case). A present UniqueBBID encodes as
+  // (BaseID << 32) | CloneID.
+  static constexpr uint64_t NoBBIDSentinel = ~uint64_t(0);
+  // The single token encoding shared by the stamp and every law check
+  // (renumber-stable and recycle-stable by construction).
+  static uint64_t cfgIdentityToken(const MachineBasicBlock &MBB) {
+    const std::optional<UniqueBBID> BBID = MBB.getBBID();
+    return BBID ? (uint64_t(BBID->BaseID) << 32) | BBID->CloneID
+                : NoBBIDSentinel;
+  }
+  // Layout position sentinel: the block is not a live block of this MF
+  // (successor of a dead/foreign block; unrepresentable in the stamp).
+  static constexpr unsigned NoCfgPosition = ~unsigned(0);
+  // Layout position of \p MBB (its index in MF's block list), or
+  // NoCfgPosition when it is not a live block of \p MF. The L5 digest
+  // domain: renumber-stable because it never reads MBB numbers.
+  static unsigned cfgLayoutPosition(const MachineFunction &MF,
+                                    const MachineBasicBlock &MBB) {
+    unsigned Pos = 0;
+    for (const MachineBasicBlock &B : MF) {
+      if (&B == &MBB)
+        return Pos;
+      ++Pos;
+    }
+    return NoCfgPosition;
+  }
 
   //===--------------------------------------------------------------------===
   // W68.2R per-function inter-block DDG registry (STATUS limit #9 closure).
@@ -292,6 +401,57 @@ public:
   unsigned getPostRASchedInvocations() const { return PostRASchedInvocations; }
   /// Bump and return the invocation number (1 = S1 at addPreSched2).
   unsigned bumpPostRASchedInvocation() { return ++PostRASchedInvocations; }
+  //@}
+
+  // \name GR2.7/D1.40 postcommit CFG identity wall.
+  //@{
+  /// True once the first Finalize run stamped the CFG identity snapshot
+  /// ("the wall is armed"). Name kept: five out-of-lane consumers key on it.
+  bool hasPostCommitBlockBudget() const { return PostCommitCfgStamped; }
+  /// Stamp the snapshot write-once (first Finalize run = the
+  /// commit-normalization seat). Records live count, block-ID high-water,
+  /// numbering epoch, per-MBB identity tokens, and per-MBB successor
+  /// digests in layout order. Later seats never re-stamp.
+  void stampPostCommitCfgSnapshot(const MachineFunction &MF) {
+    if (PostCommitCfgStamped)
+      return;
+    PostCommitCfgStamped = true;
+    PostCommitCfg.LiveCount = static_cast<unsigned>(MF.size());
+    PostCommitCfg.BlockIDHighWater = MF.getNumBlockIDs();
+    PostCommitCfg.NumberingEpoch = MF.getBlockNumberEpoch();
+    PostCommitCfg.Tokens.clear();
+    PostCommitCfg.Tokens.reserve(MF.size());
+    PostCommitCfg.SuccPositions.clear();
+    PostCommitCfg.SuccPositions.resize(MF.size());
+    for (const MachineBasicBlock &MBB : MF) {
+      PostCommitCfg.Tokens.emplace_back(MBB.getBasicBlock(),
+                                        cfgIdentityToken(MBB));
+      SmallVectorImpl<unsigned> &Succ =
+          PostCommitCfg.SuccPositions[PostCommitCfg.Tokens.size() - 1];
+      Succ.reserve(MBB.succ_size());
+      for (const MachineBasicBlock *S : MBB.successors())
+        Succ.push_back(cfgLayoutPosition(MF, *S));
+    }
+  }
+  /// The ONE admitted-transition record for the L5 edge law (D1.40
+  /// Phase 2). Called exactly once per demote by
+  /// llvm::demoteHardwareLoopToSoftware after it rewrites the latch's
+  /// successor list: names the SOURCE block (by layout position) whose
+  /// successors were rewritten post-stamp. Append-only; the L5 check
+  /// admits an edge digest change ONLY on a recorded source position (and
+  /// never before its record). Dead code if the wall is not armed — the
+  /// demote also runs pre-stamp, where no snapshot exists to diverge from.
+  void recordPostCommitAdmittedEdgeTransition(const MachineFunction &MF,
+                                              const MachineBasicBlock &Src) {
+    PostCommitAdmittedEdgeSources.push_back(cfgLayoutPosition(MF, Src));
+  }
+  /// Postcommit CFG identity violation description (laws L1-L5 above), or
+  /// empty when the CFG is identity-identical to the stamp (or no stamp was
+  /// taken — probes and MIR fixtures that never run Finalize stay legal).
+  /// Non-const because the L5 check CONSUMES a spent admission (erases it
+  /// from the persistent record): one record admits exactly one divergence
+  /// across the whole post-stamp lifecycle.
+  std::string postCommitCfgCreationViolation(const MachineFunction &MF);
   //@}
 
   // \name W68.2R inter-block DDG registry (per-function lifetime).

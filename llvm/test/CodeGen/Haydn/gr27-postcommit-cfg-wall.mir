@@ -1,0 +1,243 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,branch-relaxation,haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=WALL
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-relaxation \
+# RUN:   -haydn-branch-relax-safety-buffer=0 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=NOSTAMP
+# REQUIRES: haydn-registered-target
+#
+# GR2.7 class 4: after Finalize stamps the postcommit block budget, BR
+# does not trampoline committed BUNDLE packets (opcode-only range API
+# treats BUNDLE as always-in-range; insertIndirectBranch still refuses
+# a bare post-stamp callback).
+#   * WALL arm    : finalize+BR+verify, no extra MBB, no CFG-wall fatal.
+#   * NOSTAMP arm : BR alone (no stamp) may still promote via trampoline.
+
+--- |
+  define void @far_cond(i32 %c) {
+  entry:
+    br i1 undef, label %exit, label %pad
+  pad:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            far_cond
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:          false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    BEQZ_W $r0, %bb.2, implicit-def dead $sfr
+
+  bb.1.pad:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15
+
+...
+
+# WALL-NOT: LLVM ERROR
+# WALL-NOT: postcommit CFG creation refused
+# WALL: name: far_cond
+# WALL-NOT: bb.3
+# NOSTAMP: name: far_cond
+# NOSTAMP: JALR

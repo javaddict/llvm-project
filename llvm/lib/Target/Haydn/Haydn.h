@@ -52,11 +52,23 @@ FunctionPass *createHaydnLateConvergencePass();
 // extent with legal generated idle-parcel BUNDLEs; the AsmPrinter label no
 // longer grows.
 FunctionPass *createHaydnMachineAlignmentPass();
+// GR2.7 postcommit long-form normalizer: seated immediately BEFORE every
+// post-stamp BranchRelaxation invocation; rewrites far short-branch sites
+// to the terminal in-block LUI+ADDI32_W(+cond)+JALR_W form so BR's
+// CFG-creating fixup arms are product-unreachable (no trampoline/RestoreBB,
+// MF.size() unchanged). No-op before the first Finalize stamp.
+FunctionPass *createHaydnLongBranchNormalizePass();
 
 /// -haydn-sms2 (product default ON, G004 flip 2026-08-27). S1 keeps the
 /// inter-block DDG for S2 Bot replay; the last scheduler invocation clears
 /// it before freeze.
 bool haydnSMS2Enabled();
+
+/// -haydn-zol-pipelining (product default ON; emergency-disable only).
+/// Consumed by shouldUseSchedule (SMS ZOL admission) and
+/// HaydnSubtarget::enableWindowScheduler. One accessor — never a cross-TU
+/// extern cl::opt redeclaration.
+bool haydnZOLPipeliningEnabled();
 
 // Pass initialization declarations
 void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
@@ -70,6 +82,7 @@ void initializeHaydnVerifyBundlesPass(PassRegistry &);
 void initializeHaydnLatencyStallsPass(PassRegistry &);
 void initializeHaydnLateConvergencePassPass(PassRegistry &);
 void initializeHaydnMachineAlignmentPass(PassRegistry &);
+void initializeHaydnLongBranchNormalizePass(PassRegistry &);
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_HAYDN_HAYDN_H

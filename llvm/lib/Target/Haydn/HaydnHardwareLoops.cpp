@@ -831,6 +831,7 @@ using haydn::hwloop::isLiveMBB;
 using haydn::hwloop::isSoundDemoteCounter;
 using haydn::hwloop::materializeTripCount;
 using haydn::hwloop::blockLiveInContains;
+using haydn::hwloop::blockLiveInContainsFromSuccessors;
 using haydn::hwloop::pickCounterReg;
 using haydn::hwloop::regClobberedNonCountdownIn;
 using haydn::hwloop::stripResidualCountdown;
@@ -1141,6 +1142,11 @@ bool llvm::demoteHardwareLoopToSoftware(
   int SaveFI = -1;
   MCRegister SaveFrameReg;
   int64_t SaveElem = 0;
+  // D1.51 deferred-emission captures (stack-counter arm decision state;
+  // the free-counter arm needs none — CountReg/LoopStartAdj suffice).
+  Register CounterPreheaderScr;
+  Register CounterFrameReg;
+  int64_t CounterFIElem = 0;
   const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const HaydnFrameLowering *TFL = ST.getFrameLowering();
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
@@ -1225,14 +1231,11 @@ bool llvm::demoteHardwareLoopToSoftware(
       if (LoopStartAdj != 0 && CountReg == Prefer)
         CountReg = Register();
       if (CountReg.isPhysical()) {
-        if (LoopStartAdj != 0)
-          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W, CountReg,
-                           [&](MachineInstrBuilder MIB) {
-                             MIB.addReg(Prefer).addImm(LoopStartAdj);
-                           });
-        else
-          materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, 0,
-                               /*HasImm=*/false);
+        // D1.51 refusal-atomicity: the emit is DEFERRED to the post-
+        // preflight emission block; this arm only DECIDES (InstallSoftLoop
+        // + the recorded CountReg/Adj shape). Emitting here let every
+        // later refusal (Exit==Header / unknown span / no long-latch
+        // scratch) leave a materialized trip behind a returned-false.
         InstallSoftLoop = true;
         LLVM_DEBUG(dbgs() << DebugPrefix << ": demote trip "
                           << printReg(Prefer)
@@ -1248,8 +1251,8 @@ bool llvm::demoteHardwareLoopToSoftware(
     CountReg = pickCounterReg(LoopBlocks, Prefer, ST, *Preheader, Ins,
                         DebugPrefix);
     if (CountReg.isPhysical()) {
-      materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, Imm,
-                           /*HasImm=*/true);
+      // D1.51: decision only — the imm materialize is emitted after the
+      // preflight (same deferred-emit law as the reg-trip arm above).
       InstallSoftLoop = true;
     }
   }
@@ -1279,6 +1282,10 @@ bool llvm::demoteHardwareLoopToSoftware(
         return false;
       }
       const int64_t Elem = Off / 4;
+      // D1.51: Elem/FrameReg/PreheaderScr are captured for the deferred
+      // emission block below the preflight (the arm itself never emits).
+      CounterFIElem = Elem;
+      CounterFrameReg = FrameReg;
 
       // Scratch-window soundness: every demote
       // scratch window that touches the counter FI must be spill-free and
@@ -1345,6 +1352,8 @@ bool llvm::demoteHardwareLoopToSoftware(
             LatchScr != Prefer)
           PreheaderScr = LatchScr;
       }
+      // D1.51: captured for the deferred emission block (see Elem above).
+      CounterPreheaderScr = PreheaderScr;
       // D1.19: admission is the closed case matrix in
       // haydn::hwloop::demoteStackCounterAdmissible (single law, gtest
       // seam). Cell (e) — Adj!=0 with no PreheaderScr and LatchScr==Prefer
@@ -1441,53 +1450,15 @@ bool llvm::demoteHardwareLoopToSoftware(
       // (SMS epilogue value) — CB-165 (pr51581-2 -O2: c[N-1] = trip).
       // (HasImm forms have no live Prefer to preserve.)
       // Placement was decided above, before the save home was resolved
-      // (the home is only law-checked when a pair will be installed); this
-      // site only translates it into emits.
-      if (!HasImm && SavePlacement == HwLoopDemoteSaveKind::PreheaderSave) {
-        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
-                      [&](MachineInstrBuilder MIB) {
-                        MIB.addReg(Prefer).addReg(SaveFrameReg)
-                            .addImm(SaveElem);
-                      });
-      }
-      // Reload lands at the exit after the latch rewrite (Exit block
-      // entry); recorded here, emitted below once Exit is final.
+      // (the home is only law-checked when a pair will be installed); the
+      // deferred emission block below translates it into MIs.
+      // D1.51 refusal-atomicity: NOTHING is emitted inside the decision
+      // arms. The preheader save ST32, the imm materialize+ST32, and the
+      // Adj ADDI+ST32 all moved to the post-preflight emission block —
+      // a refusal downstream of this point once left a stored trip (and
+      // a clobbered PreheaderScr) behind a returned-false.
       PendingSaveRestore = !HasImm && SavePlacement != HwLoopDemoteSaveKind::NoSave;
 
-      if (HasImm) {
-        // Materialize imm into the probed spill-free temp, then store to FI.
-        // No withPostRAScratch bracket: its NeedsSpill home aliases this
-        // same counter FI. The probe above is the single mechanism that
-        // picked PreheaderScr.
-        materializeTripCount(*Preheader, Ins, DL, TII, PreheaderScr, Prefer,
-                             Imm, /*HasImm=*/true);
-        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
-                      [&](MachineInstrBuilder MIB) {
-                        MIB.addReg(PreheaderScr, getKillRegState(true))
-                            .addReg(FrameReg)
-                            .addImm(Elem);
-                      });
-      } else {
-        // Prefer holds trip at SET; store remaining kernel trip Prefer+Adj.
-        // ADDI into scratch; leave Prefer for CB-162/165 save.
-        Register StoreSrc = Prefer;
-        unsigned StoreFlags = 0;
-        if (LoopStartAdj != 0 && PreheaderScr.isPhysical() &&
-            PreheaderScr != Prefer) {
-          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W,
-                           PreheaderScr, [&](MachineInstrBuilder MIB) {
-                             MIB.addReg(Prefer).addImm(LoopStartAdj);
-                           });
-          StoreSrc = PreheaderScr;
-          StoreFlags = getKillRegState(true);
-        }
-        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
-                      [&](MachineInstrBuilder MIB) {
-                        MIB.addReg(StoreSrc, StoreFlags)
-                            .addReg(FrameReg)
-                            .addImm(Elem);
-                      });
-      }
       UseStackCounter = true;
       InstallSoftLoop = true;
       LLVM_DEBUG(dbgs() << DebugPrefix << ": demote stack-counter FI#"
@@ -1500,6 +1471,229 @@ bool llvm::demoteHardwareLoopToSoftware(
     LLVM_DEBUG(dbgs() << DebugPrefix << ": demote refused — no free counter "
                          "GPR for soft edge (body still live)\n");
     return false;
+  }
+
+  // D1.51 PREFLIGHT (refusal-atomicity; the pure-predicate seam class of
+  // demoteStackCounterAdmissible): every decision that can still refuse
+  // runs HERE, on the untouched function, before the first MIR or CFG
+  // mutation. Previously the three decisions below sat AFTER
+  // stripResidualCountdown / eraseHardwareLoopSetup / the latch terminator
+  // sweep / the successor rewrite (and, in the two counter arms, after the
+  // trip materialize / counter-FI store emissions): a refusal returned
+  // false over a half-demoted function — SET gone, latch edges already
+  // {Header, Exit}, trip state materialized — violating the pipeline
+  // repair theorem and corrupting any retry/nonfatal caller. All three
+  // consume only read-only measurements (estimateLayout* one-byte walks,
+  // isBranchOffsetInRange, blockLiveInContains), which are invariant under
+  // every mutation the demote itself performs (PseudoLoopEnd is isMeta —
+  // zero-size; the erased latch terminators sit at the walked Latch END, so
+  // the Latch-end site offset is the same before and after the sweep; the
+  // erased SET lives in the PREHEADER, outside the Header..Latch span; the
+  // stripped residual countdowns live INSIDE the span, so the pre-strip
+  // span is the LARGER one — any LongLatch flip is in the conservative,
+  // always-encodable direction). The decisions are hoisted VERBATIM — same
+  // order, same debug text, same laws — only their position moved.
+  //
+  // D1.32 Exit==Header refusal: both latch edges would return to the
+  // header (the BEQZ "exit" edge is the backedge; the JALR edge is the
+  // backedge) — there is no exit path at all, so the counted loop cannot
+  // terminate. Fail-closed before any latch emission.
+  if (Exit == Header) {
+    LLVM_DEBUG(dbgs() << DebugPrefix
+                      << ": demote refused — Exit == Header has no exit "
+                         "path for the soft latch\n");
+    return false;
+  }
+  // D1.34 signed-span law: the latch-end BNEZ site to the header start
+  // is a SIGNED displacement on the one byte walk —
+  //   * Header precedes Latch (unrotated): BACKWARD, the negated
+  //     Header-begin..Latch-end span;
+  //   * Latch precedes Header (MachineBlockPlacement rotation, embench
+  //     nsichneu): FORWARD, the Latch-end..Header-begin distance on the
+  //     SAME walk (entering-MBB pad included).
+  // The old flat reading consumed the rotated sentinel as -(-1) = +1: an
+  // unmeasured magnitude that masqueraded as short (a far-rotated
+  // backedge then installed a BNEZ the post-stamp BR had to promote —
+  // the CFG-wall class). A flat refusal was equally wrong: the
+  // expand-path caller (expandRoleALoopStarts) treats a refused demote
+  // as terminal on a body-resolvable shape, a fail-closed compile error
+  // on legal rotated loops. With Header/Latch proven live above, exactly
+  // one direction is measurable; only a dead/foreign block (neither walk
+  // resolves) is an UNKNOWN span, and that refuses fail-closed.
+  int64_t BackedgeDisp = 0;
+  const int64_t BackedgeBytes = haydn::hwloop::estimateLayoutSpanBytes(
+      MF, Header, Latch, TII);
+  if (BackedgeBytes >= 0) {
+    BackedgeDisp = -BackedgeBytes;
+  } else {
+    const int64_t ForwardBytes = haydn::hwloop::estimateLayoutMBBDistance(
+        MF, Latch, Latch->end(), Header, TII);
+    if (ForwardBytes < 0) {
+      LLVM_DEBUG(dbgs() << DebugPrefix
+                        << ": demote refused — unknown backedge span "
+                           "(neither direction measurable; dead or foreign "
+                           "block); never consumed as a short displacement\n");
+      return false;
+    }
+    BackedgeDisp = ForwardBytes;
+    LLVM_DEBUG(dbgs() << DebugPrefix
+                      << ": demote rotated backedge measured FORWARD "
+                      << ForwardBytes << "B (latch precedes header)\n");
+  }
+  // D1.33: raw signed displacement only — the TII oracle is the single
+  // seat that inflates by getBranchRelaxSafetyBuffer().
+  const bool LongLatch =
+      !TII.isBranchOffsetInRange(Haydn::BNEZ_W, BackedgeDisp);
+  // D1.32 scratch law: the JALR link scratch must be provably dead on BOTH
+  // post-rewrite latch out-edges {Header, Exit}. JALR_W DEFINES the scratch
+  // (link discard); any value live into either successor would be silently
+  // destroyed every backedge — the free-counter arm's countdown register
+  // (CountReg) is exactly such a value: it is a loop-carried live-in of
+  // Header until the trip is exhausted. The retired identity shortcut
+  // (LongScr = CountReg) both clobbered the trip and (through the emitted
+  // order) let BEQZ test the LUI-clobbered scratch instead of the
+  // countdown.
+  //
+  // Probe law (computed, never stored MBB livein lists — stale this late
+  // after BranchRelaxation split tails): a candidate is dead when the
+  // one-block LivePhysRegs walk (computeBlockLiveIns) of BOTH successors
+  // excludes it. Never the countdown register (CountReg / LatchScr),
+  // never R0 (soft-zero), never R13 (SP) / R15 (LR), never reserved.
+  Register LongScr;
+  if (LongLatch) {
+    // BOTH arms use the SAME fresh computed-dead probe. The countdown
+    // register (CountReg in the free arm, LatchScr in the stack arm) is
+    // read by BEQZ AFTER the LUI/ADDI32_W scratch writes in the corrected
+    // order, so the scratch can never alias it (the stack arm's old
+    // identity reuse LatchScr==LongScr made BEQZ test the HI12-clobbered
+    // scratch — D1.32 defect 2). LatchScr's own dead-after-final-read
+    // probe does not help: "dead after the window" says nothing about a
+    // clobber BETWEEN the LD/SUBI/ST sequence and the final read.
+    static const MCPhysReg LongCands[] = {
+        Haydn::R11, Haydn::R10, Haydn::R9,  Haydn::R8, Haydn::R7,
+        Haydn::R4,  Haydn::R3,  Haydn::R2,  Haydn::R1, Haydn::R12};
+    const MachineRegisterInfo &MRI = MF.getRegInfo();
+    const Register CountdownReg = UseStackCounter ? LatchScr : CountReg;
+    // Post-rewrite latch out-edges are {Header, Exit}. Header==Latch
+    // bodies can still carry extra early-exit successors at this
+    // preflight (Role-A refused them; the latch rewrite drops them).
+    // Walking Header with those extra edges occupies every GPR and
+    // refuses a legal LongScr — the nsichneu compile-fatal class.
+    const MachineBasicBlock *PostSuccsArr[] = {Header, Exit};
+    ArrayRef<const MachineBasicBlock *> PostSuccs = PostSuccsArr;
+    for (MCPhysReg R : LongCands) {
+      if (R == CountdownReg || R == Prefer || R == Haydn::R0 ||
+          R == Haydn::R13 || R == Haydn::R15)
+        continue;
+      if (MRI.isReserved(R))
+        continue;
+      if (blockLiveInContains(*Exit, R))
+        continue;
+      if (Header != Latch) {
+        if (blockLiveInContains(*Header, R))
+          continue;
+      } else if (blockLiveInContainsFromSuccessors(*Latch, PostSuccs, R)) {
+        continue;
+      }
+      LongScr = R;
+      break;
+    }
+    if (!LongScr) {
+      // Fail-closed: no computed-dead GPR at a far-latch demote. An
+      // FI-spill fallback would add per-iteration parcels beyond the
+      // MaxHwLoopDemoteGrowthParcels vocabulary bound (D1.35: 13 after
+      // the long-latch template re-enumeration); refusal is the recorded
+      // decision, never a silent spill arm.
+      LLVM_DEBUG(dbgs() << DebugPrefix
+                        << ": demote refused — no computed-dead GPR for "
+                           "the long-latch JALR scratch\n");
+      return false;
+    }
+    LLVM_DEBUG(dbgs() << DebugPrefix
+                      << ": demote long-latch scratch "
+                      << printReg(LongScr, &TRI) << " (computed-dead on "
+                      << printMBBReference(*Header) << " and "
+                      << printMBBReference(*Exit) << "; countdown "
+                      << printReg(CountdownReg, &TRI) << ")\n");
+  }
+
+  // === D1.51 EMISSION BARRIER ==========================================
+  // Every decision above is final: no refusal is reachable past this
+  // point. The deferred trip-state emissions from the two counter arms
+  // run first — same inserts, same order, same operands as when they
+  // lived inside the decision arms — then the original mutation order is
+  // preserved exactly.
+  {
+    MachineBasicBlock::iterator Ins = topLevelForLayout(SetMI).getIterator();
+    if (!UseStackCounter) {
+      // Free-counter arm. Two sub-shapes shared this arm:
+      //   * reg trip (LoopStart / SET_HWLOOP_REG): CountReg == Prefer means
+      //     canUsePreferAsCounter() won — the value is already in place,
+      //     nothing to materialize; otherwise ADDI Prefer+Adj (Adj!=0 needs
+      //     dest != Prefer) or a MOVE32 copy.
+      //   * imm trip (SET_HWLOOP imm, never LoopStart, Adj==0): XOR-zero +
+      //     ADDI32_W of the constant into CountReg (Prefer is invalid, so
+      //     the CountReg != Prefer guard is vacuous here).
+      if (HasImm)
+        materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, Imm,
+                             /*HasImm=*/true);
+      else if (CountReg != Prefer) {
+        if (LoopStartAdj != 0)
+          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W,
+                           CountReg, [&](MachineInstrBuilder MIB) {
+                             MIB.addReg(Prefer).addImm(LoopStartAdj);
+                           });
+        else
+          materializeTripCount(*Preheader, Ins, DL, TII, CountReg, Prefer, 0,
+                               /*HasImm=*/false);
+      }
+    } else {
+      // Stack-counter arm, preheader group (original order):
+      //   1. CB-162 value-preserve save ST32 (PreheaderSave placement).
+      if (!HasImm && SavePlacement == HwLoopDemoteSaveKind::PreheaderSave) {
+        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
+                      [&](MachineInstrBuilder MIB) {
+                        MIB.addReg(Prefer).addReg(SaveFrameReg)
+                            .addImm(SaveElem);
+                      });
+      }
+      //   2. counter-FI store: imm materialize into the probed spill-free
+      //      PreheaderScr then ST32, or the reg-trip Prefer(+Adj) store.
+      //      No withPostRAScratch bracket: its NeedsSpill home aliases
+      //      this same counter FI; the decision-time probe is the single
+      //      mechanism that picked PreheaderScr.
+      if (HasImm) {
+        materializeTripCount(*Preheader, Ins, DL, TII, CounterPreheaderScr,
+                             Prefer, Imm, /*HasImm=*/true);
+        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
+                      [&](MachineInstrBuilder MIB) {
+                        MIB.addReg(CounterPreheaderScr, getKillRegState(true))
+                            .addReg(CounterFrameReg)
+                            .addImm(CounterFIElem);
+                      });
+      } else {
+        // Prefer holds trip at SET; store remaining kernel trip Prefer+Adj.
+        // ADDI into scratch; leave Prefer for CB-162/165 save.
+        Register StoreSrc = Prefer;
+        unsigned StoreFlags = 0;
+        if (LoopStartAdj != 0 && CounterPreheaderScr.isPhysical() &&
+            CounterPreheaderScr != Prefer) {
+          emitExactLateDef(*Preheader, Ins, DL, TII, Haydn::ADDI32_W,
+                           CounterPreheaderScr,
+                           [&](MachineInstrBuilder MIB) {
+                             MIB.addReg(Prefer).addImm(LoopStartAdj);
+                           });
+          StoreSrc = CounterPreheaderScr;
+          StoreFlags = getKillRegState(true);
+        }
+        emitExactLate(*Preheader, Ins, DL, TII, Haydn::ST32,
+                      [&](MachineInstrBuilder MIB) {
+                        MIB.addReg(StoreSrc, StoreFlags)
+                            .addReg(CounterFrameReg)
+                            .addImm(CounterFIElem);
+                      });
+      }
+    }
   }
 
   // Strip residual countdown of CountReg *before* erasing SET / rewriting
@@ -1553,13 +1747,92 @@ bool llvm::demoteHardwareLoopToSoftware(
   Latch->addSuccessor(Header);
   if (Exit != Header)
     Latch->addSuccessor(Exit);
+  // D1.40 Phase 2 / L5 admitted transition: this latch successor rewrite
+  // is the ONE post-stamp successor mutation in the seat graph
+  // (FixupHwLoops at addPreEmitPass and the HaydnLateConvergence inner
+  // loop demote post-stamp; an unconditional edge freeze would false-fire
+  // on every demote). Record the SOURCE block of the rewrite so the
+  // postCommitCfgCreationViolation edge digest admits exactly this
+  // transition. No-op unless the wall is armed (pre-stamp demotes at
+  // addPreSched2 record nothing — there is no snapshot to diverge from),
+  // and never a second recording site for any other successor mutation.
+  if (FuncInfo->hasPostCommitBlockBudget())
+    FuncInfo->recordPostCommitAdmittedEdgeTransition(MF, *Latch);
+
+  // GR2.7 long-latch decision + D1.32/D1.33/D1.34 span & scratch laws all
+  // ran in the preflight above (D1.51); only their decisions (LongLatch,
+  // LongScr, BackedgeDisp) are consumed here. See the preflight block for
+  // the laws.
+
+  // Emit the GR2.7 terminal in-block long latch: address materialization,
+  // near BEQZ to Exit, unconditional long backedge. Used by both counter
+  // arms when LongLatch; reuses the already-emitted countdown/store.
+  auto emitLongLatch = [&]() {
+    // D1.32 captured-iterator law: every emission takes ONE captured,
+    // monotonically advanced insert point (never a re-evaluated
+    // getFirstTerminator(), which lands each MI BEFORE previously
+    // inserted terminators and produced the historical ADDI32,LUI,BEQZ,
+    // JALR misorder: ADDI32_W read its LUI def's LO12 from garbage and
+    // BEQZ_W tested the HI12-clobbered scratch instead of the countdown).
+    // Final in-block order (the ONLY MachineVerifier-legal layout — the
+    // generic "non-terminator after the first terminator" law forbids
+    // LUI/ADDI after the BEQZ terminator, singleton BUNDLE roots
+    // included; same shape as HaydnLongBranchNormalize Arm A):
+    //   LUI(scr, Header) ; ADDI32_W(scr, scr, Header) ;
+    //   BEQZ_W(countdown, Exit) ; JALR_W(scr, scr, 0).
+    // Correctness laws this order fixes:
+    //   * LUI strictly precedes ADDI32_W — the golden HI12/LO20
+    //     +0x80000 pairing (HaydnRelocLayout RelocTrans::Hi12/Lo20; peer
+    //     emitMBBAddr) computes HI12 first, then LO20 on the FULL value.
+    //   * BEQZ_W reads the countdown register AFTER both scratch writes —
+    //     the exit test is the true trip test, never the clobbered
+    //     scratch; the scratch is a DIFFERENT register by the D1.32
+    //     computed-dead probe, so the writes cannot touch the countdown.
+    //   * JALR_W stays the final terminator (rs+imm12 register-indirect
+    //     full address); its link write to the scratch is invisible on
+    //     both out-edges by the same probe.
+    // Packets execute in order, so no same-cycle RAW is introduced.
+    MachineBasicBlock::iterator Ins = Latch->end();
+    Ins = std::next(emitExactLateDef(*Latch, Ins, DL, TII, Haydn::LUI,
+                                     LongScr,
+                                     [&](MachineInstrBuilder MIB) {
+                                       MIB.addMBB(Header);
+                                     })
+                         ->getIterator());
+    Ins = std::next(emitExactLateDef(*Latch, Ins, DL, TII, Haydn::ADDI32_W,
+                                     LongScr,
+                                     [&](MachineInstrBuilder MIB) {
+                                       MIB.addReg(LongScr).addMBB(Header);
+                                     })
+                         ->getIterator());
+    Ins = std::next(emitExactLate(*Latch, Ins, DL, TII, Haydn::BEQZ_W,
+                                  [&](MachineInstrBuilder MIB) {
+                                    MIB.addReg(UseStackCounter ? LatchScr
+                                                               : CountReg)
+                                        .addMBB(Exit);
+                                  })
+                         ->getIterator());
+    emitExactLate(*Latch, Ins, DL, TII, Haydn::JALR_W,
+                  [&](MachineInstrBuilder MIB) {
+                    MIB.addReg(LongScr, RegState::Define)
+                        .addReg(LongScr)
+                        .addImm(0);
+                  });
+    LLVM_DEBUG(dbgs() << DebugPrefix
+                      << ": demote GR2.7 long-latch LUI+ADDI32_W+BEQZ_W+"
+                         "JALR_W on scratch "
+                      << printReg(LongScr, &TRI) << " (backedge displacement "
+                      << BackedgeDisp << "B over simm12)\n");
+  };
 
   if (UseStackCounter) {
     Register FrameReg;
     int64_t Off =
         TFL->getFrameIndexReference(MF, StackCounterFI, FrameReg).getFixed();
-    assert((Off % 4) == 0 && isInt<6>(Off / 4) &&
-           "stack-counter FI refused unless word-aligned simm6");
+    // D1.36 one admission seat: the word-aligned simm6 law was already
+    // enforced UNCONDITIONALLY at decision time above (the stack-counter
+    // arm is only entered after that refusal gate); the former assert
+    // mirror here was a second, weaker (assertions-only) copy.
     const int64_t Elem = Off / 4;
     // Insert before any leftover terminator so LD/SUBI/ST stay in the
     // body (never after BNEZ_W / B). After the terminator sweep above
@@ -1611,26 +1884,39 @@ bool llvm::demoteHardwareLoopToSoftware(
                   });
     // Counter read happens before the store that may follow on the exit
     // path; branch on the register, not on memory.
-    emitExactLate(*Latch, Latch->getFirstTerminator(), DL, TII, Haydn::BNEZ_W,
-                  [&](MachineInstrBuilder MIB) {
-                    MIB.addReg(LatchScr).addMBB(Header);
-                  });
+    if (LongLatch) {
+      emitLongLatch();
+    } else {
+      emitExactLate(*Latch, Latch->getFirstTerminator(), DL, TII,
+                    Haydn::BNEZ_W,
+                    [&](MachineInstrBuilder MIB) {
+                      MIB.addReg(LatchScr).addMBB(Header);
+                    });
+    }
     LLVM_DEBUG(dbgs() << DebugPrefix << ": demote stack-counter exact-commit "
                          "SUBI32+BNEZ_W FI#"
                       << StackCounterFI << "\n");
   } else {
     // Final-real soft edge: SUBI32 count,count,1 + BNEZ_W count, Header.
     // Residual countdown was stripped above; never double-dec.
-  // Exact-commit each edge as a product singleton before second BR.
+    // Exact-commit each edge as a product singleton before second BR.
+    // LongLatch swaps the short backedge for the terminal in-block
+    // BEQZ-to-Exit + LUI+ADDI32_W+JALR_W form (GR2.7; see the hoisted
+    // decision above).
     emitExactLateDef(*Latch, Latch->getFirstTerminator(), DL, TII,
                      Haydn::SUBI32, CountReg,
                      [&](MachineInstrBuilder MIB) {
                        MIB.addReg(CountReg).addImm(1);
                      });
-    emitExactLate(*Latch, Latch->getFirstTerminator(), DL, TII, Haydn::BNEZ_W,
-                  [&](MachineInstrBuilder MIB) {
-                    MIB.addReg(CountReg).addMBB(Header);
-                  });
+    if (LongLatch) {
+      emitLongLatch();
+    } else {
+      emitExactLate(*Latch, Latch->getFirstTerminator(), DL, TII,
+                    Haydn::BNEZ_W,
+                    [&](MachineInstrBuilder MIB) {
+                      MIB.addReg(CountReg).addMBB(Header);
+                    });
+    }
     LLVM_DEBUG(dbgs() << DebugPrefix << ": demote exact-commit SUBI32+BNEZ_W on "
                       << printReg(CountReg) << "\n");
   }
@@ -1639,7 +1925,7 @@ bool llvm::demoteHardwareLoopToSoftware(
   MachineFunction::iterator NextIt = std::next(LatchIt);
   bool ExitIsLayoutFallthrough =
       (NextIt != MF.end()) && (&*NextIt == Exit);
-  if (!ExitIsLayoutFallthrough && Exit != Header) {
+  if (!ExitIsLayoutFallthrough && Exit != Header && !LongLatch) {
   // Do not leave a bare B for late Finalize — exact-commit the
     // unconditional exit edge so second BR charges committed EncodedBytes.
     // B has no PlacementAlternatives (wrap-only Format E singleton commit).
@@ -1649,6 +1935,9 @@ bool llvm::demoteHardwareLoopToSoftware(
     // back-edge and fixupConditionalBranch asserts ("branches to be
     // relaxed must be analyzable", nsichneu). The closure Finalize
     // expands B to BEQZ_W_MSP after the last BR.
+    // GR2.7 LongLatch already emits the near BEQZ_W exit edge inside the
+    // latch template — an extra B after the unconditional JALR_W
+    // backedge would be unreachable and unanalyzable.
     emitExactLate(*Latch, Latch->end(), DL, TII, Haydn::B,
                   [&](MachineInstrBuilder MIB) { MIB.addMBB(Exit); });
   }
@@ -1669,31 +1958,121 @@ bool llvm::demoteHardwareLoopToSoftware(
                       << " at exit " << printMBBReference(*Exit) << "\n");
   }
 
-#ifndef NDEBUG
-  // Latch law: the counted back-edge is residual BNEZ_W or the golden
-  // Format E BNEZ member after late exact-commit. The only instructions
-  // that may follow it are architectural NOP pad in the same cycle and
-  // an exact-commit exit B. A scratch restore, spill, or XOR-zero after
-  // the terminator is the per-iteration SP leak / R0 clobber.
+  // D1.36 product-build order-aware latch law: UNCONDITIONAL
+  // report_fatal_error (same class as every HaydnVerifyBundles law — the
+  // old #ifndef NDEBUG wrapper let a misordered latch serialize wrong code
+  // in Release), and it pins the COMPLETE latch sequence order, not just
+  // the followers after the counted edge. Two vocabularies:
+  //   short latch:  [countdown ops] ; BNEZ_W(count, Header) [; exit B]
+  //   long  latch:  [countdown ops] ; LUI(scr,Header) ; ADDI32_W(scr,scr,
+  //                 Header) ; BEQZ_W(count, Exit) ; JALR_W(scr,scr,0)
+  // The long form's materialization MUST precede the BEQZ terminator: the
+  // generic MachineVerifier forbids non-terminators after the first
+  // terminator (singleton BUNDLE roots included), and ADDI32_W before its
+  // LUI def reads an undefined LO12 (D1.32 wrong-code class).
   {
-    bool SeenBnez = false;
+    // LongLatch expected sequence state machine (logical opcodes).
+    enum LongStage {
+      LS_Body,     // countdown ops / anything before the template
+      LS_SeenLUI,  // LUI(scr, Header) seen
+      LS_SeenADDI, // ADDI32_W(scr, scr, Header) seen
+      LS_SeenBEQZ, // BEQZ_W(count, Exit) seen
+      LS_SeenJALR  // JALR_W seen (final)
+    } Stage = LS_Body;
+    bool SeenCountedEdge = false;
     for (const MachineInstr &MI : Latch->instrs()) {
       if (MI.isMetaInstruction() || MI.isDebugInstr() ||
           MI.getOpcode() == TargetOpcode::BUNDLE)
         continue;
+      const unsigned Log =
+          haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
+      // Template discriminator: the latch template's LUI/ADDI32_W carry
+      // the Header MBB symbol operand (and the BEQZ the Exit MBB) — body
+      // address materializations (LUI @arr etc.) do not.
+      auto mbbOperandIs = [](const MachineInstr &MI, unsigned Idx,
+                             const MachineBasicBlock *MBB) {
+        return MI.getNumOperands() > Idx &&
+               MI.getOperand(Idx).isMBB() &&
+               MI.getOperand(Idx).getMBB() == MBB;
+      };
+      if (LongLatch) {
+        // COMPLETE-order law: the template matches only in the exact
+        // emitted order LUI(Header) ; ADDI32_W(Header) ; BEQZ(Exit) ;
+        // JALR. The MBB-symbol operands discriminate the template from
+        // the body's own LUI/ADDI address materializations, so a body
+        // LUI+ADDI pair cannot fake the chain. ADDI32_W BEFORE the
+        // template LUI (the historical misorder) is only detectable at
+        // the template's own terms: the fatal below fires when the chain
+        // itself is broken; a pre-template ADDI is body vocabulary.
+        if (Stage == LS_Body && Log == Haydn::LUI &&
+            mbbOperandIs(MI, 1, Header)) {
+          Stage = LS_SeenLUI;
+          continue;
+        }
+        if (Stage == LS_SeenLUI) {
+          if ((Log == Haydn::ADDI32_W || Log == Haydn::ADDI32) &&
+              mbbOperandIs(MI, 2, Header)) {
+            Stage = LS_SeenADDI;
+            continue;
+          }
+          if (Log == Haydn::NOP)
+            continue; // pad tolerance
+          report_fatal_error("hwloop demote: ADDI32_W(Header) must directly "
+                             "follow the long-latch LUI (D1.32 order law)",
+                             /*GenCrashDiag=*/false);
+        }
+        if (Stage == LS_SeenADDI) {
+          if ((Log == Haydn::BEQZ_W || Log == Haydn::BEQZ) &&
+              mbbOperandIs(MI, 1, Exit)) {
+            Stage = LS_SeenBEQZ;
+            SeenCountedEdge = true;
+            continue;
+          }
+          if (Log == Haydn::NOP)
+            continue;
+          report_fatal_error("hwloop demote: the long-latch exit BEQZ(Exit) "
+                             "must follow the address materialization (D1.32 "
+                             "order law)",
+                             /*GenCrashDiag=*/false);
+        }
+        if (Stage == LS_SeenBEQZ) {
+          if (Log == Haydn::JALR_W || Log == Haydn::JALR) {
+            Stage = LS_SeenJALR;
+            continue;
+          }
+          if (Log == Haydn::NOP)
+            continue;
+          if (isGeneratedFormatEMemberName(TII.getName(MI.getOpcode())))
+            continue;
+          report_fatal_error("hwloop demote: only the JALR_W backedge may "
+                             "follow the long-latch exit edge (D1.32 order "
+                             "law)",
+                             /*GenCrashDiag=*/false);
+        }
+        if (Stage == LS_SeenJALR) {
+          if (Log == Haydn::NOP ||
+              isGeneratedFormatEMemberName(TII.getName(MI.getOpcode())))
+            continue;
+          report_fatal_error("hwloop demote: nothing may follow the "
+                             "long-latch JALR_W backedge (D1.32 order law)",
+                             /*GenCrashDiag=*/false);
+        }
+        continue; // countdown/body ops before the template
+      }
+      // Short-latch law (unchanged vocabulary): counted back-edge then
+      // only NOP pad and the exact-commit exit B.
       if (haydn::hwloop::isSoftLatchBnezOpcode(MI.getOpcode())) {
-        SeenBnez = true;
+        SeenCountedEdge = true;
         continue;
       }
-      if (!SeenBnez)
+      if (!SeenCountedEdge)
         continue;
       // Exit-follower law: the demoter's own exit branch — the former
       // B shell, its W67 BEQZ_W/BEQZ_W_MSP forms, or the generated
       // BEQZ_e*_I12 member the late exact-commit already baked (logical
       // BEQZ on R0, the always-taken uncond shape). Architectural NOP
       // pad shares the cycle.
-      const unsigned LateLog =
-          haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
+      const unsigned LateLog = Log;
       if (LateLog == Haydn::B || LateLog == Haydn::BEQZ_W ||
           LateLog == Haydn::NOP || MI.getOpcode() == Haydn::BEQZ_W_MSP)
         continue;
@@ -1701,12 +2080,15 @@ bool llvm::demoteHardwareLoopToSoftware(
           LateLog == Haydn::BEQZ && MI.getNumOperands() >= 1 &&
           MI.getOperand(0).isReg() && MI.getOperand(0).getReg() == Haydn::R0)
         continue;
-      llvm_unreachable(
-          "hwloop demote: only an exit B may follow latch BNEZ_W");
+      report_fatal_error("hwloop demote: only an exit B may follow latch "
+                         "BNEZ_W",
+                         /*GenCrashDiag=*/false);
     }
-    assert(SeenBnez && "hwloop demote: latch missing BNEZ_W soft edge");
+    if (!SeenCountedEdge)
+      report_fatal_error("hwloop demote: latch missing BNEZ_W/GR2.7 soft "
+                         "edge",
+                         /*GenCrashDiag=*/false);
   }
-#endif
 
   return true;
 }

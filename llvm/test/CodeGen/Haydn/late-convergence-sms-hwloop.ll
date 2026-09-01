@@ -18,9 +18,10 @@
 ;     (an macc dual-load body: the pipeliner-favored shape);
 ;   * the pipelined body still terminates correctly (jalr epilogue).
 ;
-; The II floor probe (SMS-QOR soft_exit_ii_floor) confirms the shape is
-; pipeliner-relevant; exact packing may differ because S2 sees the
-; committed pipelined inventory.
+; D1.45 re-stamp: the old SMS-QOR soft_exit_ii_floor debug probe was
+; deleted with the bespoke post-RA SMS host (W68). Pipeliner relevance
+; now shows via the accept remark under -debug-only=pipeliner; exact
+; packing may differ because S2 sees the committed pipelined inventory.
 
 define void @conv_sms_hwloop(ptr nocapture readonly %a, ptr nocapture readonly %b, ptr nocapture %out, i32 %n) {
 entry:

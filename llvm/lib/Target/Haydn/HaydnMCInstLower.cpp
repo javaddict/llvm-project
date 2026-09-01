@@ -20,6 +20,7 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnMemberSetDesc.h"
+#include "HaydnMspCloneFamily.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
@@ -66,14 +67,15 @@ static unsigned haydnMemberOpcodeForLogicalModeEntry(StringRef Logical,
 
 static unsigned haydnMemberOpcodeForMspClone(const MachineInstr &MI) {
   const unsigned Opc = MI.getOpcode();
-  StringRef Logical;
-  if (Opc == Haydn::BEQZ_W_MSP)
-    Logical = "BEQZ";
-  else if (Opc == Haydn::JALR_MSP || Opc == Haydn::JALR_W_MSP)
-    Logical = "JALR";
-  else if (Opc == Haydn::JAL_W_MSP)
-    Logical = "JAL";
-  else
+  // ONE clone-family table (D1.43): the structural inverse walk in
+  // HaydnBundleVerify.cpp resolves the same clones through
+  // logicalOpcodeForMspClone in HaydnMspCloneFamily.h — serializer and
+  // verifier cannot drift. Unmapped `_MSP` opcodes (ADD32_MSP) return an
+  // empty name and stay Desc-as-is here; the verifier's unit-cover
+  // pre-check fails closed on them (setDesc baking is their only commit
+  // path).
+  const StringRef Logical = haydn::msp::logicalNameForMspClone(Opc);
+  if (Logical.empty())
     return Opc;
 
   uint8_t Mode = 0;
