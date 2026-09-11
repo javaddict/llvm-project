@@ -1,0 +1,291 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# D1.54 — unconditional generated member descriptor/operand/tie/implicit/
+# side-effect validation at the Verify seat (HaydnBundleVerify.cpp
+# haydnVerifyMemberDescriptorLaws, called by verifyCommittedBundle's MI
+# overload BEFORE the port-budget/inverse-hazard predicates). None of these
+# seats may rely on -verify-machineinstrs — every RUN below omits it.
+#
+# Authority split pinned by the probes — the compiled member MCInstrDesc
+# is the explicit-operand census (constraint #4 setDesc identity; the
+# golden ledger counts field roles and omits compiler extras like the
+# tied acc, so the desc is the only positional authority), the operand
+# info binds reg vs imm/symbolic kinds positionally, the desc is the tie
+# authority, implicit regs must be named by the member descriptor or its
+# authored logical descriptor (the documented setDesc carry class — BEQ/
+# CSRW Defs=[SFR], JAL/JALR call clobbers, MOVESFR2GPR/X2MOVT32-class
+# Uses=[SFR]) or be the documented anonymous leftover implicit-def $sfr,
+# and no member is both mayLoad and mayStore while a store member carries
+# an MMO (aliasing authority) and an MMO on a non-memory member is stale
+# aliasing evidence.
+#
+# Delivery law (why three red seats are shaped specially). llc parses
+# every .mir through MIRParser, which ends with an ALWAYS-ON
+# MF.verify(nullptr, nullptr, &errs()) — AbortOnError — BEFORE any pass
+# runs, independent of -verify-machineinstrs and EXPENSIVE_CHECKS
+# (MIRParser.cpp, end of parseMachineFunction). A probe whose corruption
+# that generic front-door verifier can see dies there first, so the
+# target-owned seat is pinned with shapes the generic verifier tolerates.
+#   * ARITY is padded, not truncated — a metadata operand is the one
+#     excess class isValidExcessOperand admits; a truncated slot must be
+#     spelled implicit (generic reject) and a $noreg excess is rejected
+#     generically too. MIParser itself never arity-checks a non-variadic
+#     def, so the padded member reaches Verify intact and dies at the
+#     count census — not in MC.
+#   * TIE rides an IMPLICIT use — tie constraints are enforced by the
+#     generic verifier only inside the desc's explicit block; the
+#     implicit (tied-def 0) pair stays self-consistent, and
+#     hasComplexRegisterTies() (MachineInstr.cpp:1712) is exactly the
+#     disagreement with the generated member descriptor.
+#   * STALE is undeliverable through hand MIR — parseMachineMemoryOperand
+#     forces a load or store MMO flag, and the always-on parse-time
+#     verifier rejects a flagged MMO on a desc with neither mayLoad nor
+#     mayStore. That corruption class stays pinned here against the
+#     front-door wall (still fail-closed, still no
+#     -verify-machineinstrs), while the target arm owns the in-process
+#     producers that could stamp a stale MMO on a non-memory member.
+#
+# Positive controls prove the law is not a blanket reject — a legal
+# singleton, a legal store WITH MMO, the SFR-use carry class, and the
+# logical-implicit-def carry class all pass.
+#
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/arity-padded.mir -o - 2>&1 | FileCheck %s --check-prefix=ARITY
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/kind-imm-as-reg.mir -o - 2>&1 | FileCheck %s --check-prefix=KIND
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/tie-foreign.mir -o - 2>&1 | FileCheck %s --check-prefix=TIE
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/implicit-foreign.mir -o - 2>&1 | FileCheck %s --check-prefix=IMPL
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/store-no-mmo.mir -o - 2>&1 | FileCheck %s --check-prefix=STORE
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/stale-mmo.mir -o - 2>&1 | FileCheck %s --check-prefix=STALE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/ok-singleton.mir -o - | FileCheck %s --check-prefix=OK1
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/ok-store-mmo.mir -o - | FileCheck %s --check-prefix=OK2
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/ok-sfr-carry.mir -o - | FileCheck %s --check-prefix=OK3
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/ok-tied-post.mir -o - | FileCheck %s --check-prefix=OK4
+
+# ARITY: member descriptor: explicit operand count disagrees with the generated member descriptor
+# KIND: member descriptor: operand kind disagrees with the generated member descriptor
+# TIE: member descriptor: register tie disagrees with the generated member descriptor
+# IMPL: member descriptor: implicit operand not named by the generated member or its authored logical descriptor
+# STORE: member descriptor: store member carries no machine memory operand
+# STALE: *** Bad machine code: Missing mayLoad flag ***
+# STALE-NOT: member descriptor
+# OK1: ADD32_E2_E0_ALU0_RR
+# OK2: S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6
+# OK3: X2MOVT32_E3_E1_ALU1_R
+# OK4: D_LDW_POST_IMM_E2_E1_LOAD1_RI6
+
+#--- arity-padded.mir
+--- |
+  define void @arity_padded() { ret void }
+
+  !0 = !{}
+...
+---
+# ADD32_E2_E0_ALU0_RR descriptor census is 3 explicit operands (dest,
+# src1, src2). A fourth excess metadata operand is the one excess class
+# the always-on parse-time MachineVerifier admits
+# (MachineOperand::isValidExcessOperand); the count census at the seat
+# refuses it. A truncated member cannot be delivered through MIR at all
+# (the missing slot must be spelled implicit, which the front door
+# rejects), so the padded form is the arity witness.
+name:            arity_padded
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1 {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1, !0
+    }
+    RET implicit $r15
+...
+#--- kind-imm-as-reg.mir
+--- |
+  define void @kind_imm_as_reg() { ret void }
+...
+---
+# ADDI32_E2_E0_ALU0_RI20 descriptor census is dest:rt, src:rs, imm:imm20.
+# The imm slot takes a register — the descriptor kind census refuses the
+# swap. Generated member descs carry custom operand types, so the generic
+# front-door verifier does not police this slot; the seat owns it.
+name:            kind_imm_as_reg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1 {
+      $r2 = ADDI32_E2_E0_ALU0_RI20 $r0, $r1
+    }
+    RET implicit $r15
+...
+#--- tie-foreign.mir
+--- |
+  define void @tie_foreign() { ret void }
+...
+---
+# ADD32_E2_E0_ALU0_RR declares NO tie. A hand-written (tied-def 0) binds
+# its operand to the dest — a tie the generated member descriptor does
+# not name. Riding an IMPLICIT use is what makes the probe deliverable:
+# the generic verifier enforces tie constraints only on the desc's
+# explicit block (and the implicit pair is self-consistent), while
+# hasComplexRegisterTies() sees the disagreement and the seat owns it
+# before any inverse/resource predicate runs.
+name:            tie_foreign
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r5
+    BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1, implicit $r5 {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit $r5(tied-def 0)
+    }
+    RET implicit $r15
+...
+#--- implicit-foreign.mir
+--- |
+  define void @implicit_foreign() { ret void }
+...
+---
+# ADD32 member and its authored logical both name NO implicit operands;
+# the documented carry class never includes $r7. An implicit-def $r7 is
+# unattributed traffic (a clobber the descriptor laws never modeled).
+name:            implicit_foreign
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    BUNDLE 0, 0, implicit-def $r2, implicit-def $r7, implicit $r0, implicit $r1 {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1, implicit-def $r7
+    }
+    RET implicit $r15
+...
+#--- store-no-mmo.mir
+--- |
+  define void @store_no_mmo() { ret void }
+...
+---
+# S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 is mayStore=1; the pipeline always
+# stamps store MMOs (they are the aliasing authority for the same-cycle
+# store/load overlap law). A store with no MMO is unattributable at any
+# later pairing. Missing-MMO is invisible to the generic front-door
+# verifier, so the seat owns it.
+name:            store_no_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+    BUNDLE 0, 0, implicit $r1, implicit $r2 {
+      S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, $r2, 0
+    }
+    RET implicit $r15
+...
+#--- stale-mmo.mir
+--- |
+  define void @stale_mmo() { ret void }
+...
+---
+# ADD32 member census is mayLoad=0, mayStore=0. A leftover MMO is stale
+# aliasing evidence the descriptor never modeled. This corruption class
+# is undeliverable to any pass through hand MIR — MIParser forces a load
+# or store MMO flag and the always-on parse-time MachineVerifier rejects
+# a flagged MMO on a non-memory desc before haydn-verify-bundles runs —
+# so this seat pins the front-door wall (the corruption still dies
+# fail-closed, without -verify-machineinstrs), while the target arm owns
+# the in-process producers that could stamp a stale MMO on a member.
+name:            stale_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1 :: (load (s32)) {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1 :: (load (s32))
+    }
+    RET implicit $r15
+...
+#--- ok-singleton.mir
+--- |
+  define void @ok_singleton() { ret void }
+...
+---
+name:            ok_singleton
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1
+    BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1 {
+      $r2 = ADD32_E2_E0_ALU0_RR $r0, $r1
+    }
+    RET implicit $r15
+...
+#--- ok-store-mmo.mir
+--- |
+  define void @ok_store_mmo() { ret void }
+...
+---
+name:            ok_store_mmo
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2
+    BUNDLE 0, 0, implicit $r1, implicit $r2 :: (store (s32)) {
+      S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, $r2, 0 :: (store (s32))
+    }
+    RET implicit $r15
+...
+#--- ok-sfr-carry.mir
+--- |
+  define void @ok_sfr_carry() { ret void }
+...
+---
+# X2MOVT32 member desc names no SFR use, but its authored logical does
+# (Uses=[SFR], the documented setDesc carry class). The carried implicit
+# $sfr read is legal; the SFR RAW/WAR laws still see it.
+name:            ok_sfr_carry
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $d2, $d3, $sfr
+    BUNDLE 1, 0, implicit-def $d2, implicit $d2, implicit $d3, implicit $sfr {
+      $d2 = X2MOVT32_E3_E1_ALU1_R $d2, $d3, implicit $sfr
+    }
+    RET implicit $r15
+...
+#--- ok-tied-post.mir
+--- |
+  define void @ok_tied_post() { ret void }
+...
+---
+# The writeback member's real tie (dest2 use idx2 → dest2_wb def idx1)
+# matches the descriptor census — addOperand re-ties from the desc and no
+# (tied-def) marker prints (hasComplexRegisterTies() false), and the
+# member carries its load MMO. Positive control for the tie law and the
+# load shape. The tied pair must be the SAME physical register
+# ($dest2_wb = $dest2_1 constraint "r1 = r1"; a mismatched pair is the
+# generic front door's reject, not this law).
+name:            ok_tied_post
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1
+    BUNDLE 0, 0, implicit-def $d0, implicit-def $r1, implicit $r1 :: (load (s64)) {
+      $d0, $r1 = D_LDW_POST_IMM_E2_E1_LOAD1_RI6 $r1, 1 :: (load (s64))
+    }
+    RET implicit $r15
+...

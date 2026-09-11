@@ -1,0 +1,147 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# D1.55 freeze-seat representation-escape rejection. RET / BR_JT /
+# PseudoCALLIndirect remain representation-expand shells. D1.130: B is
+# product gMIR uncond through encode (not a residual expand pseudo);
+# this fixture keeps bare B beside a committed BUNDLE, which is a
+# mixed-commit hole at every Verify seat. Freeze is not weakened.
+#
+# Red (freeze fires on RET/BR_JT/CALLI; mixed-commit fires on bare B)
+# then green (intermediate admits residual shells; committed JALR form
+# passes freeze):
+#
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/top-b.mir -o - 2>&1 | FileCheck %s --check-prefix=B-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/top-b.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=B-FIRE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/top-ret.mir -o - | FileCheck %s --check-prefix=RET-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/top-ret.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=RET-FIRE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/top-brjt.mir -o - | FileCheck %s --check-prefix=BRJT-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/top-brjt.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=BRJT-FIRE
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/top-calli.mir -o - | FileCheck %s --check-prefix=CALLI-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/top-calli.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=CALLI-FIRE
+# Committed generated-member JALR form is the legal freeze shape.
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/committed-jalr-ok.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=OK
+#
+# B-INT: mixed committed BUNDLE + bare encode
+# B-INT: B %bb.1
+# B-FIRE: mixed committed BUNDLE + bare encode
+# B-FIRE: B %bb.1
+# RET-INT: RET implicit $r15
+# RET-FIRE: freeze representation-expand escape
+# RET-FIRE: RET implicit $r15
+# BRJT-INT: BR_JT $r1, 0
+# BRJT-FIRE: freeze representation-expand escape
+# BRJT-FIRE: BR_JT $r1, 0
+# CALLI-INT: PseudoCALLIndirect $r1
+# CALLI-FIRE: freeze representation-expand escape
+# CALLI-FIRE: PseudoCALLIndirect $r1
+# OK: JALR_E2_E0_ALU0_RI12
+
+#--- top-b.mir
+--- |
+  define void @top_b() { ret void }
+...
+---
+name:            top_b
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r15
+    B %bb.1
+
+  bb.1:
+    liveins: $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- top-ret.mir
+--- |
+  define void @top_ret() { ret void }
+...
+---
+name:            top_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    RET implicit $r15
+...
+
+#--- top-brjt.mir
+--- |
+  define void @top_brjt() { ret void }
+...
+---
+name:            top_brjt
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    BR_JT $r1, 0
+
+  bb.1:
+    liveins: $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+
+  bb.2:
+    liveins: $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- top-calli.mir
+--- |
+  define void @top_calli() { ret void }
+...
+---
+name:            top_calli
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    $r15 = PseudoCALLIndirect $r1
+    BUNDLE 0, 0 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- committed-jalr-ok.mir
+--- |
+  define void @committed_jalr_ok() { ret void }
+...
+---
+name:            committed_jalr_ok
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    BUNDLE 0, 0 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...

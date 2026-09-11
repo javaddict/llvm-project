@@ -14,11 +14,19 @@
 
 #include "HaydnBundleFormatSolver.h"
 #include "HaydnBundlePlan.h"
+#include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+
+#include <algorithm>
+#include <array>
+#include <map>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "gtest/gtest.h"
 
@@ -680,6 +688,135 @@ TEST(HaydnMCFormatsTest, IdleParcelIsOneProductRecord) {
   for (unsigned I = 0; I < sizeof(ExpectedIdle); ++I)
     EXPECT_EQ(static_cast<uint8_t>(Idle[I]), ExpectedIdle[I]) << "idle byte "
                                                              << I;
+}
+
+//===----------------------------------------------------------------------===//
+// D1.47: parallel-codegen stress for getAlternateInstsOpcode.
+//===----------------------------------------------------------------------===//
+//
+// Parallel codegen (one MC formats / hazard-recognizer lane per thread)
+// calls getAlternateInstsOpcode concurrently. The cache layer behind it
+// must be safe there BY CONSTRUCTION:
+//   - concurrent first queries of DISTINCT opcodes (insertion + growth
+//     while other threads hold results of earlier queries);
+//   - repeated queries of the same opcode (content and storage stable);
+//   - a returned pointer stays readable while other threads insert other
+//     keys (node-stable storage — the old mutable DenseMap could rehash
+//     and dangle exactly such a pointer once the mutex was released).
+//
+// Real opcodes [0, INSTRUCTION_LIST_END) may already be warmed by earlier
+// tests in this binary, so the guaranteed-concurrent-insertion window uses
+// keys at or beyond INSTRUCTION_LIST_END as well: the getter admits them
+// (pseudo filter is range-guarded; the member walk fails closed) and no
+// other test queries those keys, so their first insert happens inside this
+// test's thread storm. Failures are accumulated per thread and reported
+// after join (no gtest assertions run on worker threads).
+
+TEST(HaydnMCFormatsTest, GetAlternateInstsOpcodeConcurrentStress) {
+  HaydnMCFormats Fmts;
+  const unsigned NumReal = static_cast<unsigned>(Haydn::INSTRUCTION_LIST_END);
+  const unsigned NumSynth = 48;
+  const unsigned Total = NumReal + NumSynth;
+
+  // Single-threaded ground truth: content + escaped storage per opcode.
+  std::map<unsigned, std::array<unsigned, 3>> RefContent;
+  std::map<unsigned, const std::vector<unsigned> *> RefPtr;
+  for (unsigned Opc = 0; Opc < Total; ++Opc) {
+    const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(Opc);
+    if (!Alts)
+      continue;
+    ASSERT_EQ(Alts->size(), 3u) << "opc " << Opc;
+    RefContent[Opc] = {(*Alts)[0], (*Alts)[1], (*Alts)[2]};
+    RefPtr[Opc] = Alts;
+  }
+  // Mixed coverage floor: both hits and misses participate in the storm.
+  EXPECT_FALSE(RefContent.empty());
+  EXPECT_LT(RefContent.size(), Total);
+  // Anchors on both paths: occupancy-row hit vs pseudo-filtered miss.
+  EXPECT_NE(RefPtr.count(Haydn::ADD32), 0u);
+  EXPECT_EQ(RefPtr.count(Haydn::SET_HWLOOP), 0u);
+  // Synthetic keys are misses today (member walk fails closed out of
+  // range); pin that so a future accidental claim is a visible change.
+  for (unsigned Opc = NumReal; Opc < Total; ++Opc)
+    EXPECT_EQ(RefPtr.count(Opc), 0u) << "opc " << Opc;
+
+  const unsigned NumThreads =
+      std::max(2u, std::min(4u, std::thread::hardware_concurrency()));
+  std::vector<unsigned> Errors(NumThreads, 0);
+  std::vector<std::string> FirstErr(NumThreads);
+  auto Worker = [&](unsigned Tid) {
+    auto Fail = [&](const std::string &Msg) {
+      if (Errors[Tid] == 0)
+        FirstErr[Tid] = Msg;
+      ++Errors[Tid];
+    };
+    const unsigned Stride = 997u; // per-thread rotation: distinct orders race
+    for (unsigned I = 0; I < Total; ++I) {
+      const unsigned Opc = (I + Tid * Stride) % Total;
+      const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(Opc);
+      const auto RefIt = RefContent.find(Opc);
+      if (RefIt == RefContent.end()) {
+        if (Alts)
+          Fail("opcode " + std::to_string(Opc) + " became non-null");
+      } else if (!Alts) {
+        Fail("opcode " + std::to_string(Opc) + " became null");
+      } else {
+        if (Alts->size() != 3)
+          Fail("opcode " + std::to_string(Opc) + " size " +
+               std::to_string(Alts->size()));
+        // Copy the values out immediately: this reads storage while other
+        // threads may be inserting other keys (D1.47 consumption shape).
+        std::array<unsigned, 3> Got = {(*Alts)[0], (*Alts)[1], (*Alts)[2]};
+        if (Got != RefIt->second)
+          Fail("opcode " + std::to_string(Opc) + " content changed");
+      }
+      // Interleaved repeated query + pointer consumer (getLegalSlots
+      // dereferences the returned storage after the getter returned).
+      if ((I & 0xF) == 0) {
+        const std::vector<unsigned> *Hot =
+            Fmts.getAlternateInstsOpcode(Haydn::ADD32);
+        const auto Add32Ref = RefContent.find(Haydn::ADD32);
+        if (!Hot || Add32Ref == RefContent.end() || Hot->size() != 3 ||
+            std::array<unsigned, 3>{(*Hot)[0], (*Hot)[1], (*Hot)[2]} !=
+                Add32Ref->second)
+          Fail("hot ADD32 re-query unstable");
+        (void)Fmts.getLegalSlots(Haydn::ADD32);
+      }
+    }
+  };
+
+  std::vector<std::thread> Threads;
+  Threads.reserve(NumThreads);
+  for (unsigned T = 0; T < NumThreads; ++T)
+    Threads.emplace_back(Worker, T);
+  for (std::thread &T : Threads)
+    T.join();
+  for (unsigned T = 0; T < NumThreads; ++T)
+    EXPECT_EQ(Errors[T], 0u) << "thread " << T << " first error: "
+                             << FirstErr[T];
+
+  // Storage identity survives the concurrent storm: the cache never moves a
+  // live row (node-stable ownership). A regression to rehash-on-insert
+  // storage breaks this even when contents happen to be equal.
+  for (const auto &KV : RefPtr) {
+    const std::vector<unsigned> *Alts = Fmts.getAlternateInstsOpcode(KV.first);
+    ASSERT_NE(Alts, nullptr) << "opc " << KV.first;
+    EXPECT_EQ(Alts, KV.second) << "opc " << KV.first
+                               << " storage moved after concurrent queries";
+  }
+}
+
+TEST(HaydnMCFormatsTest, FindFormatEMemberByOpcodeIsMemoized) {
+  const haydn::format_e::FormatEMemberRec *A =
+      haydnFindFormatEMemberByOpcode(Haydn::ADD32_E2_E0_ALU0_RR);
+  const haydn::format_e::FormatEMemberRec *B =
+      haydnFindFormatEMemberByOpcode(Haydn::ADD32_E2_E0_ALU0_RR);
+  ASSERT_NE(A, nullptr);
+  EXPECT_EQ(A, B);
+  EXPECT_EQ(haydnFindFormatEMemberByOpcode(Haydn::NOP), nullptr);
+  EXPECT_EQ(haydnFindFormatEMemberByOpcode(Haydn::ADD32), nullptr);
+  EXPECT_TRUE(haydnIsFormatENopMemberOpcode(Haydn::NOP));
+  EXPECT_FALSE(haydnIsFormatENopMemberOpcode(Haydn::ADD32_E2_E0_ALU0_RR));
 }
 
 } // end anonymous namespace

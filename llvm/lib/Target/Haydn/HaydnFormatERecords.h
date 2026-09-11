@@ -310,8 +310,14 @@ inline std::string peelLogicalOpcodeName(StringRef Name,
       Base.equals_insensitive("MOVE_GPR_TO_DR64") ||
       Base.equals_insensitive("ZEXT_GPR32_TO_DR64"))
     return "SEXT32T64";
-  if (Base.equals_insensitive("RET"))
+  // Occupancy/name peel for gMIR roles (msp::logicalOpcodeForMspClone).
+  // Not MIR setDesc: JALR_CALL stays isCall; catalog JALR is terminator.
+  if (Base.equals_insensitive("RET") ||
+      Base.equals_insensitive("JALR_CALL") ||
+      Base.equals_insensitive("JALR_TCO"))
     Base = "JALR";
+  else if (Base.equals_insensitive("JAL_TCO"))
+    Base = "JAL";
   // Catalog token is WFI<TBD>; TableGen member symbol is WFITBDTBDTBD_*
   // (angle brackets are not ident). Same span as the generated HINT members.
   else if (Base.equals_insensitive("WFI") ||
@@ -549,6 +555,30 @@ inline std::optional<uint8_t> unitForMemberSymbol(StringRef Symbol) {
   if (It == Map.end())
     return std::nullopt;
   return It->second;
+}
+
+/// MemberId of the first generated non-NOP member at (\p Logical, \p Mode,
+/// \p EntryIdx), or ~0u when none. Same memoized StringMap+once_flag idiom
+/// as unitMaskForLogical (exact-case keys; generated Logical names are
+/// uppercase). Encode-peel (B/JALR_CALL/JAL_TCO) is the consumer — not a
+/// second occupancy DFS.
+inline unsigned findFormatEMemberIdForLogicalModeEntry(StringRef Logical,
+                                                       uint8_t Mode,
+                                                       unsigned EntryIdx) {
+  if (Logical.empty() || Mode > 1 || EntryIdx > 2)
+    return ~0u;
+  static StringMap<unsigned> Maps[2][3];
+  static std::once_flag Once;
+  std::call_once(Once, [] {
+    for (unsigned I = 0; I < FormatEMemberCount; ++I) {
+      const FormatEMemberRec &M = FormatEMembers[I];
+      if (M.IsNop != 0 || M.Mode > 1 || M.EntryIdx > 2 || !M.Logical)
+        continue;
+      Maps[M.Mode][M.EntryIdx].try_emplace(M.Logical, I);
+    }
+  });
+  const auto It = Maps[Mode][EntryIdx].find(Logical);
+  return It == Maps[Mode][EntryIdx].end() ? ~0u : It->second;
 }
 
 /// True when chosen member symbols have injective Format E units.

@@ -1,4 +1,4 @@
-//===- HaydnMspCloneFamily.h - `_MSP` clone family, ONE table --*- C++ -*-===//
+//===- HaydnMspCloneFamily.h - encode-inverse family, ONE table --*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM
 // Exceptions.
@@ -7,32 +7,37 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Sole `_MSP` encode-clone family table (D1.43). ONE definition consumed by
-// BOTH seats that must agree on which catalog logical a clone serializes
-// as:
+// Sole encode-inverse family table (D1.43 / D1.74 / D1.130). ONE definition
+// consumed by every seat that must agree on which catalog logical a gMIR
+// opcode serializes as:
 //
 //   * MC-lower entry binding — HaydnMCInstLower.cpp
-//     haydnMemberOpcodeForMspClone picks the clone's generated member by
+//     haydnMemberOpcodeForMspClone picks the opcode's generated member by
 //     Logical NAME at the stamped (Mode, EntryIdx);
 //   * structural inverse walk — HaydnBundleVerify.cpp
 //     collectInverseIdsForOpcode / verifyMemberAtStampedEntry resolve the
-//     clone's inverse span by Logical OPCODE.
+//     inverse span by Logical OPCODE;
+//   * InstrInfo peel — HaydnInstrInfo.cpp haydnLogicalOpcode
+//     calls logicalOpcodeForMspClone first (catalog BEQZ/JAL/JALR, never
+//     a second `_W` remap). WIDE operands/range are isWideCondClone, not
+//     a forked opcode map.
 //
-// Before D1.43 these were two hand switches bound only by comment; the
-// tables could drift silently. Both accessors below are the same switch —
-// a clone added or re-targeted here changes serializer and verifier at
-// once, and the census unit arm (HaydnMspCloneFamilyTest.cpp) pins the
-// mapping against the generated MC name tables plus the ADD32_MSP
-// fail-closed arm.
+// D1.130: `_MSP` flag clones are deleted. gMIR names the role (JALR_CALL
+// returning fnptr call, JAL_TCO musttail-direct, JALR_TCO musttail-jalr).
+// Encoder peels those honest opcodes to catalog bits through this same
+// table. Uncond is B (already a named pseudo); B is NOT a clone here —
+// F peels B to the BEQZ member with rs=R0 in MCInstLower. Catalog BEQZ /
+// BEQZ_W stay real conds. Catalog JALR_W is RET / computed-goto.
+// ADD32_MSP is AIE MultiSlot_Pseudo (slot map), unmapped/fail-closed.
 //
-// Opcode-keyed, never peelLogicalOpcodeName / catalogOccupancyName (those
-// are name-class utilities, not a family table): the generated member
-// tables key Logical as "BEQZ"/"JAL"/"JALR" — the catalog `_W` names
-// (BEQZ_W/JAL_W/JALR_W) have no FormatEInverse rows of their own, so a
-// suffix peel would target dead entries for three of the four clones.
+// Opcode-keyed, never a suffix peel: the generated member tables key
+// Logical as "BEQZ"/"JAL"/"JALR". peelLogicalOpcodeName and
+// generate_format_e_records.py::_SINGLETON_EXACT_PEELS are the name-class
+// twin (JALR_CALL/JALR_TCO -> JALR, JAL_TCO -> JAL). B->BEQZ stays
+// MC-only; occupancy peel does not map B.
 //
 // Unmapped `_MSP` opcodes (ADD32_MSP) and every non-clone return 0 / empty
-// and BOTH seats fail closed on them ("no free Format E entry" cannot be
+// and every seat fails closed on them ("no free Format E entry" cannot be
 // reached for ADD32_MSP at lower because the name lookup is empty and the
 // opcode passes through; the verify unit-cover pre-check and the walk both
 // refuse it). materialize/leaveRegion setDesc baking is the only legal
@@ -55,35 +60,35 @@ namespace llvm {
 namespace haydn {
 namespace msp {
 
-/// Every `_MSP`-named opcode the ISA defines today (TD census:
-/// HaydnPseudos.td BEQZ_W_MSP/JALR_MSP, HaydnInstrGISel.td
-/// JAL_W_MSP/JALR_W_MSP, HaydnMultiSlotPseudo.td ADD32_MSP). Census arm
-/// for the unit test — the four serializable clones first, then the
-/// unmapped fail-closed member.
+/// Encode-inverse family census (D1.130): honest gMIR opcodes that peel
+/// to a catalog logical, then the unmapped fail-closed MultiSlot pseudo.
+/// ADD32_MSP is the only remaining `_MSP`-named opcode (HaydnMultiSlotPseudo.td
+/// slot map — not a flag overlay). Census arm for the unit test.
 inline constexpr unsigned MspCloneOpcodes[] = {
-    Haydn::BEQZ_W_MSP, Haydn::JALR_MSP, Haydn::JALR_W_MSP,
-    Haydn::JAL_W_MSP, Haydn::ADD32_MSP};
+    Haydn::JALR_CALL, Haydn::JAL_TCO, Haydn::JALR_TCO, Haydn::ADD32_MSP};
 
-/// Catalog logical opcode a `_MSP` encode clone serializes as, or 0 when
-/// \p Opc is not a mapped clone (fail closed — never identity, never a
-/// suffix peel). Consumed by the structural inverse walk
-/// (HaydnBundleVerify.cpp) and by the name accessor below.
+/// Catalog logical opcode an encode-inverse family member serializes as,
+/// or 0 when \p Opc is not a mapped clone (fail closed — never identity,
+/// never a suffix peel). Consumed by the structural inverse walk
+/// (HaydnBundleVerify.cpp), MC-lower via the name accessor below, and
+/// InstrInfo haydnLogicalOpcode (D1.74 — no second handwritten clone switch).
+/// B peels to catalog BEQZ (rs=R0 at MC). Not a wide-cond clone.
 inline unsigned logicalOpcodeForMspClone(unsigned Opc) {
   switch (Opc) {
-  case Haydn::BEQZ_W_MSP:
+  case Haydn::B:
     return Haydn::BEQZ;
-  case Haydn::JALR_MSP:
-  case Haydn::JALR_W_MSP:
+  case Haydn::JALR_CALL:
+  case Haydn::JALR_TCO:
     return Haydn::JALR;
-  case Haydn::JAL_W_MSP:
+  case Haydn::JAL_TCO:
     return Haydn::JAL;
   default:
     return 0;
   }
 }
 
-/// Generated-member Logical NAME for the same mapping ("BEQZ"/"JALR"/
-/// "JAL" — the exact FormatEMembers.Logical keys), or empty for unmapped
+/// Generated-member Logical NAME for the same mapping ("JALR"/"JAL" —
+/// the exact FormatEMembers.Logical keys), or empty for unmapped
 /// opcodes. Consumed by MC-lower (haydnMemberOpcodeForMspClone); derived
 /// from the one switch above so name and opcode cannot disagree.
 inline StringRef logicalNameForMspClone(unsigned Opc) {
@@ -97,6 +102,13 @@ inline StringRef logicalNameForMspClone(unsigned Opc) {
   default:
     return StringRef();
   }
+}
+
+/// WIDE-operand/range cond clone of catalog BEQZ. D1.130 deleted
+/// BEQZ_W_MSP. B peels to BEQZ but is uncond, not a wide cond clone.
+inline bool isWideCondClone(unsigned Opc) {
+  (void)Opc;
+  return false;
 }
 
 } // namespace msp

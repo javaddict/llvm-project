@@ -48,6 +48,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <cstdint>
 #include <iterator>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -452,9 +453,25 @@ const std::vector<unsigned> *cachedMemberAlts(unsigned Opcode) {
 /// generated alt span at residual indices 0..2. AIE getAlternateInstsOpcode
 /// is TableGen MultiSlot only (AIEMCFormats.h:376-379); Haydn overlays
 /// Format E members because EncodedBytes is not a slot bit.
+///
+/// Cache ownership (D1.47): Mu guards the map structure; the escaped
+/// pointer names a node-owned value. std::map (not DenseMap) is load-
+/// bearing: a DenseMap moves its stored values when growth rehashes, so a
+/// pointer taken under the mutex dangles once another opcode is inserted
+/// after the guard dies. std::map insertion allocates a fresh node and
+/// never moves or invalidates an existing element, and entries are never
+/// erased here, so a pointer captured under the mutex stays valid for the
+/// process lifetime of the function-local static map while other threads
+/// insert other keys. Cross-thread visibility of the node's contents is
+/// established by the mutex (return under the guard, later readers acquire
+/// it), so every load of the escaped pointer's elements happens-after their
+/// store — no separate fencing is required. Do not convert back to DenseMap,
+/// add erase/clear, or return a pointer taken outside the guard. A cached
+/// empty vector is the stable "queried, no Format E row" answer; nullptr
+/// keeps the cachedMemberAlts contract.
 const std::vector<unsigned> *cachedFormatEOnlyAlts(unsigned Opcode) {
   static std::mutex Mu;
-  static DenseMap<unsigned, std::vector<unsigned>> Extra;
+  static std::map<unsigned, std::vector<unsigned>> Extra;
   std::lock_guard<std::mutex> Lock(Mu);
   auto It = Extra.find(Opcode);
   if (It != Extra.end())
@@ -703,22 +720,51 @@ static bool applyHwloopDumpBytesToMemberFields(
   return true;
 }
 
-const haydn::format_e::FormatEMemberRec *
-haydnFindFormatEMemberByOpcode(unsigned Opc) {
+/// Opcode → MemberId for unique generated members. Haydn::NOP multi-maps
+/// onto every IsNop record and is excluded (product pad, not a MemberId).
+/// AIE peer: getFormatDescIndex is a generated opcode switch
+/// (AIEMCFormats.h:373-374; CodeGenFormat.cpp:132). Haydn overlay: one
+/// process-wide DenseMap over FormatEMemberOpcodes, same once-init shape
+/// as lookupPrivateFormatEMember (HaydnBundleVerify.cpp) / unitMaskForLogical.
+static const DenseMap<unsigned, unsigned> &formatEMemberIdByOpcode() {
+  static const DenseMap<unsigned, unsigned> Map = [] {
+    DenseMap<unsigned, unsigned> M;
+    M.reserve(FormatEMemberOpcodeCount);
+    for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
+      const unsigned MemberOpc = FormatEMemberOpcodes[I];
+      if (MemberOpc == 0 || MemberOpc == Haydn::NOP)
+        continue;
+      M.try_emplace(MemberOpc, I);
+    }
+    return M;
+  }();
+  return Map;
+}
+
+static const haydn::format_e::FormatEMemberRec *
+lookupFormatEMemberRec(unsigned Opc) {
   if (Opc == 0 || Opc == Haydn::NOP)
     return nullptr;
-  for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
-    if (FormatEMemberOpcodes[I] != Opc)
-      continue;
-    if (I >= haydn::format_e::FormatEMemberCount)
-      return nullptr;
-    const haydn::format_e::FormatEMemberRec &M =
-        haydn::format_e::FormatEMembers[I];
-    if (M.IsNop)
-      return nullptr;
-    return &M;
-  }
-  return nullptr;
+  const auto &Map = formatEMemberIdByOpcode();
+  const auto It = Map.find(Opc);
+  if (It == Map.end() || It->second >= haydn::format_e::FormatEMemberCount)
+    return nullptr;
+  return &haydn::format_e::FormatEMembers[It->second];
+}
+
+const haydn::format_e::FormatEMemberRec *
+haydnFindFormatEMemberByOpcode(unsigned Opc) {
+  const haydn::format_e::FormatEMemberRec *M = lookupFormatEMemberRec(Opc);
+  if (!M || M->IsNop)
+    return nullptr;
+  return M;
+}
+
+bool haydnIsFormatENopMemberOpcode(unsigned Opc) {
+  if (Opc == Haydn::NOP)
+    return true;
+  const haydn::format_e::FormatEMemberRec *M = lookupFormatEMemberRec(Opc);
+  return M && M->IsNop;
 }
 
 bool haydnIsCompilerKeepMapExtraOp(

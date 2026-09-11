@@ -118,8 +118,16 @@ haydnFormatEKeepOperands(
 
 /// Private generated member for opcode \p Opc, or null. NOP multi-maps and
 /// is excluded (product NOP is a completion pad, not a MemberId).
+/// Opcode→MemberId is a process-wide DenseMap (AIE getFormatDescIndex is a
+/// generated switch, AIEMCFormats.h:373-374 / CodeGenFormat.cpp:132); do
+/// not linearly walk FormatEMemberOpcodes.
 const haydn::format_e::FormatEMemberRec *
 haydnFindFormatEMemberByOpcode(unsigned Opc);
+
+/// True when \p Opc is Haydn::NOP or a generated member whose IsNop record
+/// has a unique opcode. Residual FieldSlot names and public logicals are
+/// not NOP.
+bool haydnIsFormatENopMemberOpcode(unsigned Opc);
 
 /// Finalize extra-op keep-map (MOVE32/ABS32 trailing rs2, tied MAC/MOVT
 /// acc, LUI vestigial $rs, dest-as-ins extra $rs). True = compiler extra
@@ -507,6 +515,11 @@ public:
   // SIMD *_S1 when no matching 0-def span). PlacementAlternative FieldSlots =
   // 1<<index;
   // getLegalSlots ORs those indices. Do not derive holes from raw EntryIdx.
+  // THREAD-SAFETY (D1.47): safe to call concurrently from any thread,
+  // including while another thread is querying a different opcode for the
+  // first time. Returned storage is node-stable for process lifetime; a
+  // concurrent first query of another opcode cannot dangle a pointer this
+  // call returned.
   virtual const std::vector<unsigned> *
   getAlternateInstsOpcode(unsigned Opcode) const = 0;
 

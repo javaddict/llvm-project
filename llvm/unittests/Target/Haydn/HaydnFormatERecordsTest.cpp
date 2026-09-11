@@ -73,6 +73,14 @@ TEST(HaydnFormatERecords, GeometryPinsFromGeneratedConstants) {
   EXPECT_EQ(FormatEUnitCount, 7u);
 }
 
+TEST(HaydnFormatERecords, CallRelaxE2E0GprWindows) {
+  // Golden I20 dest bit[23:20] LSB=20, RI12 src bit[27:24] LSB=24, width 4.
+  // Generator law-checks I12/I20/RI12/RI20 dest and RI12/RI20 src on E2 e0 ALU0.
+  EXPECT_EQ(FormatEE2E0DestLsb, 20u);
+  EXPECT_EQ(FormatEE2E0RsLsb, 24u);
+  EXPECT_EQ(FormatEGPRFieldBits, 4u);
+}
+
 TEST(HaydnFormatERecords, AdmittedFamilyHandleIsE96Only) {
   EXPECT_EQ(kAdmittedFamily, BundleFamily::E96);
   EXPECT_EQ(getFamilyRecords(BundleFamily::E96).Family, BundleFamily::E96);
@@ -209,6 +217,9 @@ TEST(HaydnFormatERecords, ModeOnlyLogicalPeelSpellings) {
   EXPECT_NE(peelLogicalOpcodeName("LD32"), "");
   EXPECT_NE(peelLogicalOpcodeName("RET"), "");
   EXPECT_EQ(peelLogicalOpcodeName("RET"), "JALR");
+  EXPECT_EQ(peelLogicalOpcodeName("JALR_CALL"), "JALR");
+  EXPECT_EQ(peelLogicalOpcodeName("JALR_TCO"), "JALR");
+  EXPECT_EQ(peelLogicalOpcodeName("JAL_TCO"), "JAL");
   EXPECT_NE(peelLogicalOpcodeName("WFITBDTBDTBD"), "");
   EXPECT_EQ(peelLogicalOpcodeName("WFITBDTBDTBD"), "WFI<TBD>");
   // The generated sets are keyed by exact golden logicals; `_W` reloc forms
@@ -564,6 +575,25 @@ TEST(HaydnFormatERecords, MemberToLogicalGeneratedInverse) {
   EXPECT_EQ(lookupGeneratedMemberToLogical(0xFFFFFFFFu), 0u);
   EXPECT_NE(lookupGeneratedMemberToLogical(Haydn::BEQ_E2_E0_ALU0_RI12),
             Haydn::BEQ_E2_E0_ALU0_RI12);
+}
+
+TEST(HaydnFormatERecords, LogicalModeEntryMemberIdIsMemoized) {
+  const unsigned Mid =
+      findFormatEMemberIdForLogicalModeEntry("ADD32", /*Mode=*/0,
+                                             /*EntryIdx=*/0);
+  ASSERT_NE(Mid, ~0u);
+  EXPECT_LT(Mid, FormatEMemberCount);
+  EXPECT_STREQ(FormatEMembers[Mid].Logical, "ADD32");
+  EXPECT_EQ(FormatEMembers[Mid].Mode, 0);
+  EXPECT_EQ(FormatEMembers[Mid].EntryIdx, 0);
+  EXPECT_EQ(findFormatEMemberIdForLogicalModeEntry("ADD32", 0, 0), Mid);
+  const unsigned Beqz =
+      findFormatEMemberIdForLogicalModeEntry("BEQZ", 0, 0);
+  ASSERT_NE(Beqz, ~0u);
+  EXPECT_STREQ(FormatEMembers[Beqz].Logical, "BEQZ");
+  EXPECT_EQ(findFormatEMemberIdForLogicalModeEntry("NO_SUCH_LOGICAL", 0, 0),
+            ~0u);
+  EXPECT_EQ(findFormatEMemberIdForLogicalModeEntry("ADD32", 2, 0), ~0u);
 }
 
 TEST(HaydnFormatERecords, AssignThreeChildStoreLastE3) {
@@ -967,6 +997,9 @@ namespace {
 //     is a per-child-logical law; the composite is the completed packet
 //     itself, never a catalog span member. Not in the generator census
 //     scope (not one of the five logical-shape files).
+//   * JALR_CALL / JALR_TCO / JAL_TCO — not in this set. isCodeGenOnly
+//     gMIR roles peel to catalog JALR / JAL (same seats as RET). The
+//     generator census skips isCodeGenOnly; the Desc walk must peel.
 // NOP needs no seat here: its def is isPseudo=1, so the walk filters it,
 // and its coverage is the idle-parcel law pinned in the NOP-completion
 // test.
@@ -1107,6 +1140,7 @@ TEST(HaydnFormatERecords, CompilerReachableLogicalsHaveSingletonCoverage) {
       {"ZEXT_GPR32_TO_DR64", "SEXT32T64"}, {"ADDI32_W", "ADDI32"},
       {"SET_HWLOOP_F2_W", "SET_HWLOOP_F2"}, {"CSRW_W", "CSRW"},
       {"LD32_REG_M0S0LS", "S_LW_WITH_REG"}, {"ST32_REG_M0S0LS", "S_SW_WITH_REG"},
+      {"JALR_CALL", "JALR"}, {"JALR_TCO", "JALR"}, {"JAL_TCO", "JAL"},
   };
   for (const ParityPin &Pin : Pins) {
     const std::string Peeled = peelLogicalOpcodeName(Pin.TD);

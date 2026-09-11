@@ -1,10 +1,10 @@
 # RUN: split-file %s %t
 # REQUIRES: haydn-registered-target
 #
-# D1.18: `_MSP` encode clones traverse the structural inverse matrix at
-# every verifier seat. Clones complete an inverse record for the CATALOG
-# LOGICAL the serializer also selects (BEQZ_W_MSP->BEQZ,
-# JAL_W_MSP->JAL, JALR_MSP/JALR_W_MSP->JALR) at the stamped
+# D1.18/D1.130: gMIR roles (B, JAL_TCO, JALR_CALL) traverse the structural
+# inverse matrix at every verifier seat. They complete an inverse record for
+# the CATALOG LOGICAL the serializer also selects (B->BEQZ,
+# JAL_TCO->JAL, JALR_CALL/JALR_W->JALR) at the stamped
 # (mode, membership entry). Before D1.18 both clone skips (Reals build and
 # per-member walk) made a clone-only bundle verify vacuously as an idle
 # plan (Occupied=0/StubIdle view) and let clones sit at memberless stamped
@@ -29,11 +29,11 @@
 #
 # OK-CLONE-LABEL: name: clone_only_ok
 # OK-CLONE: BUNDLE 0, 0
-# OK-CLONE: BEQZ_W_MSP $r0, %bb.1
+# OK-CLONE: B %bb.1
 # NO-MEMBER-E2: structural inverse: residual/logical inverse record not completed at membership entry (no generated member)
-# NO-MEMBER-E2: JAL_W_MSP @mode1 entry 2
+# NO-MEMBER-E2: JAL_TCO @mode1 entry 2
 # NO-MEMBER-E1: structural inverse: residual/logical inverse record not completed at membership entry (no generated member)
-# NO-MEMBER-E1: BEQZ_W_MSP @mode0 entry 1
+# NO-MEMBER-E1: B @mode0 entry 1
 
 #--- clone-only-ok.mir
 # Positive no-vacuity pin: the exact late-firewall committed shape (E2
@@ -51,12 +51,14 @@ body:             |
     successors: %bb.1
     liveins: $r0, $r15
     BUNDLE 0, 0, implicit $r0 {
-      BEQZ_W_MSP $r0, %bb.1
+      B %bb.1
     }
 
   bb.1:
     liveins: $r15
-    RET implicit $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
 ...
 
 #--- clone-memberless-e3-e2.mir
@@ -64,7 +66,7 @@ body:             |
 # member. Pad NOPs occupy entries 0/1 (pads are unused windows, never
 # compacted), so the clone sits at membership entry 2 of the E3 row and
 # the walk fails closed at the stamped entry. Previously accepted vacuously.
-# JAL_W_MSP is isReturn+isTerminator+isBarrier, so the clone is the
+# JAL_TCO is isReturn+isTerminator+isBarrier, so the clone is the
 # block's last terminator (tail-call shape; no RET follows).
 --- |
   define void @clone_memberless_e3_e2() { ret void }
@@ -80,7 +82,7 @@ body:             |
     BUNDLE 1, 0, implicit-def $r12, implicit $r15 {
       NOP
       NOP
-      $r12 = JAL_W_MSP %bb.1, implicit $r15
+      $r12 = JAL_TCO %bb.1, implicit $r15
     }
 
   bb.1:
@@ -108,7 +110,7 @@ body:             |
     liveins: $r0, $r1, $r15
     BUNDLE 0, 0, implicit-def $r2, implicit $r0, implicit $r1 {
       $r2 = ADD32 $r0, $r1
-      BEQZ_W_MSP $r0, %bb.1
+      B %bb.1
     }
 
   bb.1:

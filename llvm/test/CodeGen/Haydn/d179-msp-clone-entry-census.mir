@@ -1,0 +1,52 @@
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnMCInstLower.cpp --check-prefix=CENSUS
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnMCInstLower.cpp --check-prefix=TI
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN: -filetype=asm %s -o - | FileCheck %s --check-prefix=ASM
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=VERIFY
+# REQUIRES: haydn-registered-target
+#
+# D1.79/D1.130: PreferEntry census (skip meta/debug/position; keep pad
+# NOPs) applies to gMIR B in a BUNDLE. A leading KILL used to inflate the
+# uncond onto E2 entry 1 (BEQZ has no mode-0 e1 member) while freeze
+# verified it at entry 0. Serializer and verifier now agree. ASM is still
+# beqz (encoder peels B → BEQZ rs=R0).
+#
+# Source order: pad-NOP comment precedes the skip if.
+# CENSUS: Pad NOPs stay
+# CENSUS: isMetaInstruction()
+# CENSUS: isDebugInstr()
+# CENSUS: isPosition()
+# CENSUS-NOT: isPadNopOpcode
+# TI: MO_TargetIndex
+# TI: refuse silent drop
+
+--- |
+  define void @clone_meta_child() { ret void }
+...
+---
+name:            clone_meta_child
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r0, $r1, $r15
+    ; ASM-LABEL: clone_meta_child:
+    ; ASM: beqz{{(\.s[012])?}}
+    ; VERIFY-LABEL: name: clone_meta_child
+    ; VERIFY: BUNDLE 0, 0
+    ; VERIFY: KILL $r1
+    ; VERIFY: B %bb.1
+    BUNDLE 0, 0 {
+      KILL $r1
+      B %bb.1
+    }
+
+  bb.1:
+    liveins: $r15
+    ; ASM: jalr
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...

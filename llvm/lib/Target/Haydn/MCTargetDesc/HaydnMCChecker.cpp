@@ -8,7 +8,8 @@
 //
 // Peer: HexagonMCChecker.cpp (packet constraint check at assemble time).
 // Haydn overlay: generated Format E unit cover + the same WAW / RF-port /
-// SET_HWLOOP-sel laws as verifyParsedBundle, without stamping entry identity
+// SET_HWLOOP-sel / SIN_COS-ARCTAN solo / unproven store-load / HWLR-CSR
+// laws as PortModel + verifyParsedBundle, without stamping entry identity
 // (hand-asm is not a committed inverse).
 //
 //===----------------------------------------------------------------------===//
@@ -16,6 +17,8 @@
 #include "MCTargetDesc/HaydnMCChecker.h"
 #include "HaydnFormatERecords.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#define HAYDN_PORTMODEL_MC_ONLY
+#include "HaydnPortModel.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -58,14 +61,22 @@ std::optional<std::string> llvm::haydnCheckParsedBundleRegs(
   SmallSet<int64_t, 2> HwloopSels;
   unsigned GPRR = 0, GPRW = 0, DRR = 0, DRW = 0, ARR = 0, ARW = 0,
            SFRR = 0, SFRW = 0;
+  unsigned RealN = 0;
+  bool HasAlone = false;
+  bool HasHwloopSetup = false;
+  bool HasHwlrCsr = false;
   for (const MCInst *Inst : Reals) {
     if (!Inst)
       continue;
-    const MCInstrDesc &Desc = MII.get(Inst->getOpcode());
+    ++RealN;
+    const unsigned Opc = Inst->getOpcode();
+    const MCInstrDesc &Desc = MII.get(Opc);
     const unsigned NumOps = Inst->getNumOperands();
     const unsigned NumDefs =
         std::min(static_cast<unsigned>(Desc.getNumDefs()), NumOps);
-    SmallSet<unsigned, 6> SeenR, SeenW;
+    // PortModel countBankPorts rule 3: each explicit operand field reserves
+    // one port. No per-instruction identity dedup (AIEHazardRecognizer
+    // itinerary booking; Hexagon packet walks are per operand).
     for (unsigned I = 0; I < NumOps; ++I) {
       const MCOperand &Op = Inst->getOperand(I);
       if (!Op.isReg())
@@ -80,7 +91,7 @@ std::optional<std::string> llvm::haydnCheckParsedBundleRegs(
         Defs.insert(Id);
       }
       const int Bank = bankOf(Op.getReg(), MRI);
-      if (IsDef && SeenW.insert(Id).second) {
+      if (IsDef) {
         if (Bank == 1)
           ++GPRW;
         else if (Bank == 2)
@@ -89,8 +100,7 @@ std::optional<std::string> llvm::haydnCheckParsedBundleRegs(
           ++ARW;
         else if (Bank == 4)
           ++SFRW;
-      }
-      if (!IsDef && SeenR.insert(Id).second) {
+      } else {
         if (Bank == 1)
           ++GPRR;
         else if (Bank == 2)
@@ -101,17 +111,42 @@ std::optional<std::string> llvm::haydnCheckParsedBundleRegs(
           ++SFRR;
       }
     }
-    const StringRef Log = MII.getName(Inst->getOpcode());
+    const StringRef Log = MII.getName(Opc);
     if (Log.starts_with("SET_HWLOOP") && NumOps > 0 &&
         Inst->getOperand(0).isImm()) {
       const int64_t Sel = Inst->getOperand(0).getImm();
       if (!HwloopSels.insert(Sel).second)
         return std::string("SET_HWLOOP same-sel conflict in one cycle");
     }
+    if (haydnLogicalOpcodeIssuesAloneInCycle(Opc))
+      HasAlone = true;
+    if (haydnClassifyHwloopSetupLogical(Opc) != HaydnHwloopSetupFamily::None)
+      HasHwloopSetup = true;
+    if (haydnHwloopCsrAddr(*Inst) >= 0)
+      HasHwlrCsr = true;
   }
-  // Same ceilings as HaydnPortModel / verifyCommittedBundle (incl. SFR 2R/1W).
-  if (GPRR > 4 || GPRW > 2 || DRR > 7 || DRW > 3 || ARR > 2 || ARW > 2 ||
-      SFRR > 2 || SFRW > 1)
+  // HexagonMCChecker.cpp:692-703 checkSolo. Haydn overlay is PortModel
+  // SIN_COS/ARCTAN issue-alone (haydnOpcodeIssuesAloneInCycle).
+  if (HasAlone && RealN > 1)
+    return std::string("SIN_COS/ARCTAN must issue alone in the cycle");
+  // HexagonMCChecker.cpp:326-338 checkHWLoop overlay; Haydn window is
+  // CSR 0x20-0x25 vs SET_HWLOOP (haydnHwloopCsrAddr), not SA0/SA1.
+  if (HasHwloopSetup && HasHwlrCsr)
+    return std::string(
+        "CSRW HWLR 0x20-0x25 cannot share a cycle with SET_HWLOOP");
+  // pack::cycleHasMayAliasStoreLoad with no AA/MMOs. Distinct GPR bases
+  // are disjoint; same-base / missing base-imm refuse. Dual-load is not
+  // this law.
+  if (haydnParsedCycleHasUnprovenStoreLoadOverlap(Reals, MII))
+    return std::string("store/load pair is not proven disjoint");
+  // Same ceilings as HaydnPortModel / verifyCommittedBundle (named
+  // HAYDN_*_PORTS, incl. SFR 2R/1W). DR read is golden 8R
+  // (HAYDN_DR_READ_PORTS). Parse-time must not refuse a cycle the typed
+  // product law admits.
+  if (GPRR > HAYDN_GPR_READ_PORTS || GPRW > HAYDN_GPR_WRITE_PORTS ||
+      DRR > HAYDN_DR_READ_PORTS || DRW > HAYDN_DR_WRITE_PORTS ||
+      ARR > HAYDN_AR_READ_PORTS || ARW > HAYDN_AR_WRITE_PORTS ||
+      SFRR > HAYDN_SFR_READ_PORTS || SFRW > HAYDN_SFR_WRITE_PORTS)
     return std::string(
         "cycle RF port demand exceeds one issue cycle (GPR 4R/2W, DR 8R/3W, "
         "AR 2R/2W, SFR 2R/1W)");
@@ -146,10 +181,12 @@ std::optional<std::string> llvm::haydnCheckParsedBundle(
     if (haydnIsResidualFieldSlotName(Name) || haydnIsGeneratedMemberName(Name) ||
         haydnFindFormatEMemberByOpcode(Opc))
       return std::string("private placement opcode");
-    // Compiler MultiSlot `_MSP` clones are not hand-asm occupancy. Encoder
-    // serializes verified MemberId as-is; parse-time cover must not peel
-    // `_MSP` into the catalog logical (JALR_MSP is ExpandPseudos, not asm).
-    if (Name.ends_with("_MSP"))
+    // `_MSP` is MultiSlot/compiler-only (ADD32_MSP). Flag overlays B /
+    // JALR_CALL / JAL_TCO / JALR_TCO are ExpandPseudos/GISel gMIR, not
+    // hand-asm. Parse-time cover must not peel those names into catalog
+    // occupancy.
+    if (Name.ends_with("_MSP") || Name == "B" || Name == "JALR_CALL" ||
+        Name == "JAL_TCO" || Name == "JALR_TCO")
       return std::string("unknown logical occupancy");
     // Catalog occupancy / MemberId span (Hexagon MCChecker.cpp:692-703 uses
     // the packet's real opcodes). Not a row-identity peel and not `_S*`
