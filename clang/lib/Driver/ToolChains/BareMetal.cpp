@@ -453,6 +453,14 @@ void BareMetal::addClangTargetOptions(const ArgList &DriverArgs,
                                       ArgStringList &CC1Args,
                                       Action::OffloadKind) const {
   CC1Args.push_back("-nostdsysteminc");
+  if (getTriple().getArch() == llvm::Triple::haydn)
+    toolchains::addHaydnClangTargetArgs(DriverArgs, CC1Args);
+}
+
+void BareMetal::addClangCC1ASTargetOptions(const ArgList &Args,
+                                           ArgStringList &CmdArgs) const {
+  if (getTriple().getArch() == llvm::Triple::haydn)
+    toolchains::addHaydnClangTargetArgs(Args, CmdArgs);
 }
 
 void BareMetal::addLibStdCxxIncludePaths(

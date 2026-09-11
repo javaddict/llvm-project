@@ -13,10 +13,9 @@
 // RUN: not clang -target haydn-unknown-elf -mcpu=haydn -ffreestanding \
 // RUN:   -fsyntax-only -DTEST_X2CMUL_STRICT %s 2>&1 \
 // RUN:   | FileCheck %s --check-prefix=CMUL
-// RUN: not clang -target haydn-unknown-elf -ffreestanding -fsyntax-only %s \
-// RUN:   2>&1 | FileCheck %s --check-prefix=GENERIC
+// RUN: clang -target haydn-unknown-elf -ffreestanding -fsyntax-only %s
 //
-// Sat/round family host oracles + fail-closed X2CMUL / default-CPU trap.
+// Sat/round family host oracles + fail-closed AE_CMUL32_F2 / default-CPU trap.
 // Empty output fails. Default fail-closed (no __HAYDN_ALLOW_INEXACT_AE).
 
 #include <haydn_dsp.h>
@@ -26,9 +25,10 @@ _Static_assert(sizeof(ae_int64) == 8, "no extra accumulator guard bits");
 #if defined(__HAYDN_ACC_GUARD_BITS)
 _Static_assert(0, "do not invent extra HiFi accumulator guard bits");
 #endif
-#if defined(AE_MULAAAAQ16)
-_Static_assert(0, "AE_MULAAAAQ16 must be undefined under default strict");
+#ifndef AE_MULAAAAQ16
+_Static_assert(0, "AE_MULAAAAQ16 must be defined unconditionally");
 #endif
+/* Value oracle: clang/test/Headers/haydn-dsp-mulaaaaq16-value.c */
 
 #ifndef TEST_X2CMUL_STRICT
 // SAT32(+2^32) = INT32_MAX. IR-LABEL: @tdsp5_sat32_pos
@@ -142,15 +142,9 @@ ae_int64 tdsp5_slaa16s_one(void) {
 #endif
 
 #ifdef TEST_X2CMUL_STRICT
-// CMUL: __haydn_ae_unsupported_AE_MULC32X16_H
-ae_int32x2 tdsp5_mulc32x16_h(ae_int32x2 a, ae_int32x2 b) {
-  return AE_MULC32X16_H(a, b);
-}
 // CMUL: silent-wrong map removed): AE_CMUL32_F2
 void tdsp5_cmul32_f2(ae_int32x2 *d0, ae_int32x2 *d1, ae_int32x2 a,
                      ae_int32x2 b) {
   AE_CMUL32_F2(*d0, *d1, a, b);
 }
 #endif
-
-// GENERIC: needs target feature simd

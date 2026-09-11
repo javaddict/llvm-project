@@ -149,8 +149,8 @@ class HaydnPublicAPI {
 // `features` is a Builtin target-feature expression (comma=AND, pipe=OR)
 // evaluated against HaydnTargetInfo's feature map. Names match
 // HaydnFeatures.td: simd | circular-buffer | bit-reversed | agu | hwloop.
-// Empty = always available (scalar ALU baseline). generic CPU has agu+hwloop
-// only; -target-cpu haydn enables all five. No FormatID on C surface.
+// Empty = always available (scalar ALU baseline). generic and haydn
+// enable all five. No FormatID on C surface.
 // -gen-haydn-op-feature-audit emits multi-verify generic/full/noagu -verify
 // calls on every PublicEnabled non-empty Features __builtin_haydn_*
 // (SemaHaydn err_builtin_needs_feature; Hexagon peer = checkTargetFeatures).
@@ -5831,8 +5831,8 @@ def AE_MULF16SS_00 : HaydnAeCompatDef<"EMULATED", "haydn_fmul16_hs00"> {
   let OracleId = "emu.mulf16ss_00";
 }
 def AE_MULAAAAQ16 : HaydnAeCompatDef<"EMULATED", "haydn_fmulaa16_hs_11_00"> {
-  // Unnamed under default strict so vec_dot16 takes AE_MULAF16X4SS.
-  // Body exists only under __HAYDN_ALLOW_INEXACT_AE.
+  // Unconditional Path-A haydn_fmulaa16_hs_11_00 (two-lane 11+00).
+  // vec_dot16 dest-typed Path-B stays AE_MULAF16X4SS.
   let OracleId = "emu.mulaaaaq16";
 }
 def AE_MULSSSSQ16 : HaydnAeCompatDef<"EMULATED", "haydn_fmulss16_hs_11_00"> {
@@ -6038,9 +6038,10 @@ def AE_L32X2F24_X : HaydnAeCompatDef<"EMULATED", "overload"> {
   let OracleId = "emu.l32x2f24_x";
   let MemEffect = 1;
 }
-// Dual-24 aligned circular load: same D_LDW_CB path as AE_L32X2_XC / L16X4_XC.
-// Must not silent-alias plain mem or drop CBR wrap under an F24 XC name.
-def AE_L32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm"> {
+// Dual-24 aligned circular load: same D_LDW_CB_REG path (byte stride) as
+// AE_L32X2_XC / L16X4_XC. Must not silent-alias plain mem or drop CBR wrap
+// under an F24 XC name.
+def AE_L32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_reg"> {
   let DeclKind = "macro";
   let OracleId = "exact.l32x2f24_xc";
 }
@@ -6890,11 +6891,11 @@ def AE_MULP32X2_S2 : HaydnAeCompatDef<"EMULATED", "ae_alias"> {
 def AE_MULF48Q32SP16S_L : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t"> {
   let OracleId = "emu.mulf48q32sp16s_l";
 }
-def AE_MULC32X16_H : HaydnAeCompatDef<"EMULATED", "haydn_x2cmul32"> {
-  let OracleId = "emu.mulc32x16_h";
+def AE_MULC32X16_H : HaydnAeCompatDef<"EXACT", "haydn_x2cmul32x16_h"> {
+  let OracleId = "exact.mulc32x16_h";
 }
-def AE_MULC32X16_L : HaydnAeCompatDef<"EMULATED", "haydn_x2cmul32"> {
-  let OracleId = "emu.mulc32x16_l";
+def AE_MULC32X16_L : HaydnAeCompatDef<"EXACT", "haydn_x2cmul32x16_l"> {
+  let OracleId = "exact.mulc32x16_l";
 }
 def AE_MULSSFD32X16_H1_L0 : HaydnAeCompatDef<"EMULATED", "haydn_mulafd32x16x2_fir_hl+haydn_dr64_t"> {
   let OracleId = "emu.mulssfd32x16_h1_l0";
@@ -6980,9 +6981,10 @@ def AE_S24X2RA64S_IP : HaydnAeCompatDef<"EMULATED", "overload"> {
   let OracleId = "emu.s24x2ra64s_ip";
   let MemEffect = 1;
 }
-// Dual-24 aligned circular store: same D_SDW_CB + next-ptr writeback as
-// AE_S32X2_XC. Must not silent-drop ptr wrap under an F24 XC name.
-def AE_S32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_f32x2_mem_to_reg+haydn_sdw_cb_imm"> {
+// Dual-24 aligned circular store: same D_SDW_CB_REG + next-ptr writeback
+// (byte stride) as AE_S32X2_XC. Must not silent-drop ptr wrap under an F24
+// XC name.
+def AE_S32X2F24_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_f32x2_mem_to_reg+haydn_sdw_cb_reg"> {
   let DeclKind = "macro";
   let OracleId = "exact.s32x2f24_xc";
 }
@@ -7227,21 +7229,23 @@ def AE_MULA32X2_vector : HaydnAeCompatDef<"EMULATED", "haydn_f2mulaa32rs_hhll"> 
 }
 
 // --- EXACT ---
-// Base aligned XC residual: explicit CB tokens (not bare "header") so
-// inventory CI fails closed if a body reverts to plain mem.
-def AE_L32X2_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm+haydn_ae_f32x2_mem_to_reg"> {
+// Base aligned XC residual: explicit CB_REG tokens (not bare "header") so
+// inventory CI fails closed if a body reverts to plain mem or the imm form.
+// XC stride law: forward XC lowers via the reg form (rs2 raw BYTE stride);
+// the ImmArg imm form is the RIC/reverse path only.
+def AE_L32X2_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_reg+haydn_ae_f32x2_mem_to_reg"> {
   let DeclKind = "macro";
   let OracleId = "exact.l32x2_xc";
 }
-def AE_S32X2_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_f32x2_mem_to_reg+haydn_sdw_cb_imm"> {
+def AE_S32X2_XC : HaydnAeCompatDef<"EXACT", "haydn_dr64_t+haydn_ae_f32x2_mem_to_reg+haydn_sdw_cb_reg"> {
   let DeclKind = "macro";
   let OracleId = "exact.s32x2_xc";
 }
-def AE_L16X4_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_imm"> {
+def AE_L16X4_XC : HaydnAeCompatDef<"EXACT", "haydn_cb_ld_t+haydn_ldw_cb_reg"> {
   let DeclKind = "macro";
   let OracleId = "exact.l16x4_xc";
 }
-def AE_S16X4_XC : HaydnAeCompatDef<"EXACT", "haydn_sdw_cb_imm"> {
+def AE_S16X4_XC : HaydnAeCompatDef<"EXACT", "haydn_sdw_cb_reg"> {
   let DeclKind = "macro";
   let OracleId = "exact.s16x4_xc";
 }
@@ -7656,13 +7660,13 @@ def x2cmul32x16_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "x2cmul32x16_h";
   let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
   let Mnemonic = "X2CMUL32X16_H";
-  let Semantics = "32X16 multiply (golden v2_1 X2CMUL32X16_H; lane selection/rounding/saturation per family)";
+  let Semantics = "signed complex 32x16 using rsd2[63:32]; rtd[63:32] = rsd1[63:32]*rsd2[63:48] - rsd1[31:00]*rsd2[47:32]; rtd[31:00] = rsd1[63:32]*rsd2[47:32] + rsd1[31:00]*rsd2[63:48]; truncate to 32-bit lanes, no rounding or saturation (golden X2CMUL32X16_H)";
 }
 def x2cmul32x16_l : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "x2cmul32x16_l";
   let PublicPrototype = "int64_t(haydn_dr64_t, haydn_dr64_t)";
   let Mnemonic = "X2CMUL32X16_L";
-  let Semantics = "32X16 multiply (golden v2_1 X2CMUL32X16_L; lane selection/rounding/saturation per family)";
+  let Semantics = "signed complex 32x16 using rsd2[31:00]; rtd[63:32] = rsd1[63:32]*rsd2[31:16] - rsd1[31:00]*rsd2[15:00]; rtd[31:00] = rsd1[63:32]*rsd2[15:00] + rsd1[31:00]*rsd2[31:16]; truncate to 32-bit lanes, no rounding or saturation (golden X2CMUL32X16_L)";
 }
 def x2fcmul32x16rs_h : HaydnBuiltin<"int64_t(int64_t, int64_t)"> {
   let PublicName = "x2fcmul32x16rs_h";

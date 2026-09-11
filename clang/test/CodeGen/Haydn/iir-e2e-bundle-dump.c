@@ -13,7 +13,7 @@
 // Contracts:
 //   - s64 DF1 uses widening MUL64_LL / MULA64_LL + sub64
 //   - s32 DF1 uses MULL (GPR32 low-half product)
-//   - Block/cascade loops: slt32 + branch + jal to biquad_df1
+//   - Block/cascade loops: slt32 + branch + long-call (lui/addi/jalr) to biquad_df1
 //   - ELF objdump shows same mnemonics + call reloc class
 
 #include <stdint.h>
@@ -100,14 +100,15 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // ASM-DAG: subi32
 // ASM-DAG: slt32
 // ASM-DAG: beqz
-// ASM-DAG: jal{{.*}}biquad_df1
+// ASM-DAG: lui{{.*}}biquad_df1
+// ASM-DAG: jalr
 // ASM: jalr
 
 // ASM-LABEL: biquad_cascade:
 // ASM-DAG: subi32
 // ASM-DAG: slt32
 // ASM-DAG: beqz
-// ASM-DAG: jal{{.*}}biquad_df1
+// ASM-DAG: lui{{.*}}biquad_df1
 // ASM-DAG: seq32
 // ASM-DAG: bnez
 // ASM: jalr
@@ -132,13 +133,15 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // BUNDLE-LABEL: <biquad_process_block>:
 // BUNDLE-DAG: slt32
 // BUNDLE-DAG: beqz
-// BUNDLE-DAG: R_HAYDN_{{.*}}CallSImm20{{.*}}biquad_df1
+// BUNDLE-DAG: R_HAYDN_HI12 biquad_df1
+// BUNDLE-DAG: R_HAYDN_LO20{{.*}}biquad_df1
 // BUNDLE: jalr
 
 // BUNDLE-LABEL: <biquad_cascade>:
 // BUNDLE-DAG: slt32
 // BUNDLE-DAG: beqz
-// BUNDLE-DAG: R_HAYDN_{{.*}}CallSImm20{{.*}}biquad_df1
+// BUNDLE-DAG: R_HAYDN_HI12 biquad_df1
+// BUNDLE-DAG: R_HAYDN_LO20{{.*}}biquad_df1
 // BUNDLE-DAG: seq32
 // BUNDLE-DAG: bnez
 // BUNDLE: jalr

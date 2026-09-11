@@ -29,8 +29,9 @@ namespace targets {
 ///   agu | circular-buffer | bit-reversed | hwloop | simd
 ///
 /// Processor models (HaydnGeneric.td):
-///   generic — FeatureHWLoop + FeatureAGU (product baseline densify path)
-///   haydn   — all five ISA features
+///   -mcpu / -target-cpu: generic and haydn are the same full ISA
+///     (agu + circular-buffer + bit-reversed + hwloop + simd).
+///   -mtune / -tune-cpu (product default haydn): schedule model only.
 ///
 /// Builtin availability is gated via BuiltinsHaydn.td Features= strings
 /// against this map.
@@ -39,12 +40,13 @@ namespace targets {
 /// soft-float identity (__SOFTFP__ / __HAYDN_SOFT_FLOAT__). Never exposes
 /// bundle FormatID, slot suffixes, or AltDesc.
 class LLVM_LIBRARY_VISIBILITY HaydnTargetInfo : public TargetInfo {
-  // Mirror of subtarget feature flags (handleTargetFeatures).
-  bool HasAGU = false;
-  bool HasCircularBuffer = false;
-  bool HasBitReversed = false;
-  bool HasHWLoop = false;
-  bool HasSIMD = false;
+  // Product baseline is the full ISA. Only an explicit -target-feature
+  // minus can turn a bit off (handleTargetFeatures).
+  bool HasAGU = true;
+  bool HasCircularBuffer = true;
+  bool HasBitReversed = true;
+  bool HasHWLoop = true;
+  bool HasSIMD = true;
 
   std::string CPU;
 
@@ -63,6 +65,12 @@ public:
 
   bool isValidCPUName(StringRef Name) const override;
   void fillValidCPUList(SmallVectorImpl<StringRef> &Values) const override;
+  bool isValidTuneCPUName(StringRef Name) const override {
+    return isValidCPUName(Name);
+  }
+  void fillValidTuneCPUList(SmallVectorImpl<StringRef> &Values) const override {
+    fillValidCPUList(Values);
+  }
 
   void getTargetDefines(const LangOptions &Opts,
                         MacroBuilder &Builder) const override;

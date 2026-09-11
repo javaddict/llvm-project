@@ -8,7 +8,8 @@
 // invoked.
 //
 // Bug (F06 / consolidated-fix-list §2): haydn_dsp.h's AE_*_XC macros expand
-// to haydn_sdw_cb_imm / haydn_ldw_cb_imm / haydn_ldw_brev_imm /
+// to haydn_sdw_cb_reg / haydn_ldw_cb_reg (forward XC byte-stride law) and
+// haydn_ldw_cb_imm / haydn_sdw_cb_imm (RIC reverse) plus haydn_ldw_brev_imm /
 // haydn_lw_brev_imm. The header is shipped as a Clang resource but never
 // compiled by `ninja`, so a missing builtin declaration went unnoticed. Any
 // user porting a NatureDSP kernel hit "use of undeclared identifier

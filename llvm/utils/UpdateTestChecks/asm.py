@@ -76,12 +76,12 @@ ASM_FUNCTION_HEXAGON_RE = re.compile(
     flags=(re.M | re.S),
 )
 
-# Haydn VLIW Format E: `.p2align 2 // @func` then bare `func:` (// @func is on
-# the align line, not the label — MCAsmStreamer product print). Optional
-# .cfi_startproc; body ends at .Lfunc_endN: (// comments, VLIW braces).
+# Haydn VLIW Format E: product print is `func: // @func` (alignment is off;
+# an optional `.p2align N` line may still precede). Optional .cfi_startproc;
+# body ends at .Lfunc_endN: (// comments, VLIW braces).
 ASM_FUNCTION_HAYDN_RE = re.compile(
-    r"^[ \t]*\.p2align[ \t]+[0-9]+[^\n]*//[ \t]*@(?P<func>\S+)\n"
-    r"^(?P=func):[ \t]*\n"
+    r"(?:^[ \t]*\.p2align[ \t]+[0-9]+[^\n]*\n)?"
+    r"^(?P<func>[^:\n]+):[ \t]*//[ \t]*@(?P=func)\n"
     r"(?:[ \t]*\.cfi_startproc\n)?"
     r"(?P<body>.*?)\n"
     r"\.Lfunc_end[0-9]+:\n",

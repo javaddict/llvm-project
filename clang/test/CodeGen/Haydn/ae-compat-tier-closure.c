@@ -68,6 +68,9 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_ == HAYDN_COMPAT_UNSUPPORTED,
                "ADD64X2_ permanent UNSUPPORTED");
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_vector == HAYDN_COMPAT_UNSUPPORTED,
                "ADD64X2_vector permanent UNSUPPORTED");
+_Static_assert(HAYDN_COMPAT_TIER_AE_MULC32X16_H == HAYDN_COMPAT_EXACT &&
+                   HAYDN_COMPAT_TIER_AE_MULC32X16_L == HAYDN_COMPAT_EXACT,
+               "MULC32X16_* exact X2CMUL32X16 (not X2CMUL32)");
 /* Scalar AE_ADD64 stays usable; dual-64 quarantine must not sweep it. */
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64 == HAYDN_COMPAT_EMULATED,
                "ADD64 scalar bag add stays EMULATED");

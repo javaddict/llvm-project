@@ -13,6 +13,7 @@
 #include "Haydn.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/TargetBuiltins.h"
+#include "clang/Basic/TargetOptions.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/ELF.h"
 
@@ -32,9 +33,12 @@ static_assert(llvm::ELF::EF_HAYDN_E96 == 0x1u,
 HaydnTargetInfo::HaydnTargetInfo(const llvm::Triple &Triple,
                                  const TargetOptions &Opts)
     : TargetInfo(Triple) {
-  // Data layout: e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64
-  // Little-endian, 32-bit pointers, i64/f64 aligned to 32 bits
-  resetDataLayout("e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64");
+  // Data layout: e-m:e-p:32:32-i64:32-f64:32-v64:64-v128:64-a:0:32-n32-S64
+  // Little-endian, 32-bit pointers, i64/f64 aligned to 32 bits (ILP32 ABI);
+  // 64-bit vectors (v2i32/v4i16/v8i8) are DR64 homes with natural 8-byte
+  // alignment matching the golden D_LDW/D_SDW 8-byte EA law. Must stay
+  // byte-identical to Triple::haydn in TargetParser/TargetDataLayout.cpp.
+  resetDataLayout("e-m:e-p:32:32-i64:32-f64:32-v64:64-v128:64-a:0:32-n32-S64");
 
   // Type widths and alignments (32-bit DSP, ILP32 ABI).
   // The declared ABI "ilp32" mandates sizeof(int)==sizeof(long)==sizeof(ptr)==4.
@@ -86,7 +90,8 @@ HaydnTargetInfo::HaydnTargetInfo(const llvm::Triple &Triple,
   // Default ABI
   setABI("ilp32");
 
-  // Match LLVM HaydnSubtarget: empty CPU → "generic".
+  // Empty -mcpu names generic. generic and haydn are the same full ISA.
+  // Product tune (Opts.TuneCPU) does not change this CPU / feature map.
   if (Opts.CPU.empty())
     CPU = "generic";
   else
@@ -108,61 +113,40 @@ void HaydnTargetInfo::fillValidCPUList(
 bool HaydnTargetInfo::initFeatureMap(
     llvm::StringMap<bool> &Features, DiagnosticsEngine &Diags, StringRef CPUName,
     const std::vector<std::string> &FeaturesVec) const {
-  // Mirror HaydnGeneric.td ProcessorModel feature lists.
-  // Empty CPU → generic (same as HaydnSubtarget::initializeSubtargetDependencies).
-  StringRef CPURef = CPUName.empty() ? "generic" : CPUName;
-
-  // Clear ISA feature keys so a later re-init (target attribute) does not
-  // accumulate stale positives before CPU defaults are applied.
-  Features["agu"] = false;
-  Features["circular-buffer"] = false;
-  Features["bit-reversed"] = false;
-  Features["hwloop"] = false;
-  Features["simd"] = false;
-
-  if (CPURef == "generic") {
-    // Product baseline densify path: post/pre-inc fuse + hwloop.
-    Features["agu"] = true;
-    Features["hwloop"] = true;
-  } else if (CPURef == "haydn") {
-    Features["agu"] = true;
-    Features["circular-buffer"] = true;
-    Features["bit-reversed"] = true;
-    Features["hwloop"] = true;
-    Features["simd"] = true;
-  }
-  // Unknown CPU names are rejected by setCPU/isValidCPUName; leave ISA
-  // features false here so +feature overrides still apply cleanly.
+  // Product baseline is the full ISA for every CPU spelling, including
+  // empty / unknown (setCPU already rejects unknown -mcpu names). Reset
+  // to full on every re-init so a target attribute cannot accumulate a
+  // stale minus, and so a missing +feat in FeaturesVec cannot demote.
+  (void)CPUName;
+  Features["agu"] = true;
+  Features["circular-buffer"] = true;
+  Features["bit-reversed"] = true;
+  Features["hwloop"] = true;
+  Features["simd"] = true;
 
   return TargetInfo::initFeatureMap(Features, Diags, CPUName, FeaturesVec);
 }
 
 bool HaydnTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
                                            DiagnosticsEngine &Diags) {
-  HasAGU = HasCircularBuffer = HasBitReversed = HasHWLoop = HasSIMD = false;
+  // Start at the product full ISA. A partial +feat list (cc1 with only
+  // -target-feature +agu) must not turn the other four bits off. Only an
+  // explicit minus is a test-hook demotion.
+  HasAGU = HasCircularBuffer = HasBitReversed = HasHWLoop = HasSIMD = true;
 
   for (const auto &F : Features) {
-    if (F == "+agu")
-      HasAGU = true;
-    else if (F == "-agu")
+    if (F == "-agu")
       HasAGU = false;
-    else if (F == "+circular-buffer")
-      HasCircularBuffer = true;
     else if (F == "-circular-buffer")
       HasCircularBuffer = false;
-    else if (F == "+bit-reversed")
-      HasBitReversed = true;
     else if (F == "-bit-reversed")
       HasBitReversed = false;
-    else if (F == "+hwloop")
-      HasHWLoop = true;
     else if (F == "-hwloop")
       HasHWLoop = false;
-    else if (F == "+simd")
-      HasSIMD = true;
     else if (F == "-simd")
       HasSIMD = false;
   }
+  (void)Diags;
   return true;
 }
 
@@ -206,12 +190,19 @@ void HaydnTargetInfo::getTargetDefines(const LangOptions &Opts,
   // FormatID / slot / AltDesc macros.
   Builder.defineMacro("__HAYDN_ARCH__", "1");
 
-  // Per-CPU convenience macros (optional compile-time selection).
+  // Per-CPU name macros track -mcpu / -target-cpu, not -mtune. Both
+  // names enable the same ISA; the macros only record the spelling.
   if (CPU == "haydn")
     Builder.defineMacro("__HAYDN_CPU_HAYDN__");
   else
-    // Empty / generic / unknown → baseline densify path (matches ctor).
     Builder.defineMacro("__HAYDN_CPU_GENERIC__");
+
+  // Product processor identity is -mtune. Empty tune defaults to haydn.
+  StringRef Tune = getTargetOpts().TuneCPU;
+  if (Tune.empty() || Tune == "haydn")
+    Builder.defineMacro("__HAYDN_TUNE_HAYDN__");
+  else if (Tune == "generic")
+    Builder.defineMacro("__HAYDN_TUNE_GENERIC__");
 
   // Semantic ISA capability macros. Names track HaydnFeatures.td /
   // BuiltinsHaydn Features= strings only.
@@ -223,8 +214,6 @@ void HaydnTargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__HAYDN_FEATURE_BIT_REVERSED__");
   if (HasHWLoop)
     Builder.defineMacro("__HAYDN_FEATURE_HWLOOP__");
-  // SIMD is opt-in on -mcpu=haydn. Do not define this on generic
-  // (agu+hwloop) and do not silently rewrite the driver CPU.
   if (HasSIMD)
     Builder.defineMacro("__HAYDN_FEATURE_SIMD__");
 }

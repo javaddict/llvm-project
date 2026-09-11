@@ -639,9 +639,13 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
     return "";
 
   case Triple::haydn:
-    // Haydn: 32-bit VLIW DSP, 32-bit pointers, baremetal only
-    // i64/f64 have 32-bit alignment (4 bytes) appropriate for 32-bit architecture
-    return "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64";
+    // Haydn: 32-bit VLIW DSP, 32-bit pointers, baremetal only.
+    // i64/f64 keep 32-bit alignment (ILP32 ABI: long long / double travel in
+    // 4-byte slots). 64-bit vectors (v2i32/v4i16/v8i8/v2f32) are DR64-native
+    // with natural 8-byte alignment: golden D_LDW_WITH_IMM/D_SDW require an
+    // 8-byte EA, so natural vector IR alignment matches the memory law and
+    // natural vector mem selects LD64/ST64 instead of LD32 x2 + pack.
+    return "e-m:e-p:32:32-i64:32-f64:32-v64:64-v128:64-a:0:32-n32-S64";
 
   case Triple::UnknownArch:
     return "";

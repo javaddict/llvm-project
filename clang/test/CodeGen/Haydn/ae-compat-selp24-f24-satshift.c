@@ -233,17 +233,18 @@ void sa16x4_ic_ar_cbr(ae_int16x4 src, ae_valign *al, ae_int16x4 *ptr) {
 }
 
 // IR-LABEL: @l32x2f24_xc_aligned_cb
-// Dual-24 aligned circular load residual: D_LDW_CB (not plain mem).
-// IR: call {{.*}}@llvm.haydn.ldw.cb.imm
+// Dual-24 aligned circular load residual: D_LDW_CB_REG byte stride (not
+// plain mem; imm<<3 scaling does not apply to the reg form).
+// IR: call {{.*}}@llvm.haydn.ldw.cb.reg
 // IR-NOT: load i64
 void l32x2f24_xc_aligned_cb(ae_f24x2 *dst, ae_f24x2 *ptr) {
   AE_L32X2F24_XC(*dst, ptr, 8, 0);
 }
 
 // IR-LABEL: @s32x2f24_xc_aligned_cb_ptr
-// Dual-24 aligned circular store residual: D_SDW_CB + CBR next-ptr writeback.
-// Must not silent-drop the store-only body that left ptr unmoved.
-// IR: call {{.*}}@llvm.haydn.sdw.cb.imm
+// Dual-24 aligned circular store residual: D_SDW_CB_REG + CBR next-ptr
+// writeback. Must not silent-drop the store-only body that left ptr unmoved.
+// IR: call {{.*}}@llvm.haydn.sdw.cb.reg
 void s32x2f24_xc_aligned_cb_ptr(ae_f24x2 src, ae_f24x2 *ptr) {
   AE_S32X2F24_XC(src, ptr, 8, 0);
 }

@@ -1,8 +1,7 @@
 // REQUIRES: haydn-registered-target
 // RUN: clang -target haydn-unknown-elf -mcpu=haydn \
 // RUN:   -ffreestanding -fsyntax-only %s
-// RUN: not clang -target haydn-unknown-elf -ffreestanding -fsyntax-only %s \
-// RUN:   2>&1 | FileCheck %s --check-prefix=GENERIC
+// RUN: clang -target haydn-unknown-elf -ffreestanding -fsyntax-only %s
 // RUN: not clang -target haydn-unknown-elf -mcpu=haydn -ffreestanding \
 // RUN:   -fsyntax-only -DTEST_X2CMUL_STRICT %s 2>&1 \
 // RUN:   | FileCheck %s --check-prefix=CMUL
@@ -14,16 +13,16 @@
 // RUN:   | FileCheck %s --check-prefix=F16
 //
 // G-LANGUAGE-COVERAGE Sema matrix (compat-owned). Advertised haydn_dsp.h
-// surface compiles at -mcpu=haydn. Generic stays agu+hwloop and fail-closes
-// with one simd diagnostic (do not silently -mcpu=haydn). X2CMUL public
-// wrappers stay SOURCE-REVALIDATE / fail-closed. Folded MAP-FP / COMPOSITE
-// / HDR-SPLIT stay one header. Empty output fails.
+// surface compiles at empty/-mcpu=generic/-mcpu=haydn (same full ISA).
+// AE_CMUL32_F2 stays SOURCE-REVALIDATE / fail-closed. AE_MULC32X16_* is
+// EXACT. Folded MAP-FP / COMPOSITE / HDR-SPLIT stay one header. Empty
+// output fails.
 
 #include <haydn_dsp.h>
 
 _Static_assert(__HAYDN_AE_COMPAT_STRICT == 1, "strict default");
-#if defined(AE_MULAAAAQ16)
-_Static_assert(0, "AE_MULAAAAQ16 must be undefined under default strict");
+#ifndef AE_MULAAAAQ16
+_Static_assert(0, "AE_MULAAAAQ16 must be defined unconditionally");
 #endif
 #if defined(AE_FIR_NATIVE_COMPOSITE) || defined(AE_FFT_NATIVE_COMPOSITE)
 _Static_assert(0, "do not invent a native FIR/FFT composite ISA");
@@ -53,15 +52,16 @@ int64_t sema_dest_typed_assign(void) {
   __AE_ASSIGN_BITS(v, 0x0000000200000001LL);
   return __AE_TO_I64(v);
 }
+
+ae_int64 sema_mulaaaaq16(ae_int64 acc, ae_int16x4 a, ae_int16x4 b) {
+  AE_MULAAAAQ16(acc, a, b);
+  return acc;
+}
 #endif
 #endif
 #endif
 
 #ifdef TEST_X2CMUL_STRICT
-// CMUL: __haydn_ae_unsupported_AE_MULC32X16_H
-ae_int32x2 sema_mulc32x16_h(ae_int32x2 a, ae_int32x2 b) {
-  return AE_MULC32X16_H(a, b);
-}
 // CMUL: silent-wrong map removed): AE_CMUL32_F2
 void sema_cmul32_f2(ae_int32x2 *d0, ae_int32x2 *d1, ae_int32x2 a,
                     ae_int32x2 b) {
@@ -78,5 +78,3 @@ __int128 sema_i128_reject(__int128 x) { return x; }
 // F16: {{_Float16|__fp16|not supported|unsupported}}
 _Float16 sema_f16_reject(_Float16 x) { return x; }
 #endif
-
-// GENERIC: needs target feature simd

@@ -13,7 +13,7 @@
 // Test design: this asserts the widths at compile time. If LongWidth regresses
 // back to 64, the _Static_assert for sizeof(long) == 4 fires.
 
-// CHECK: target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
+// CHECK: target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:64-v128:64-a:0:32-n32-S64"
 
 _Static_assert(sizeof(int) == 4, "int is 4 bytes");
 _Static_assert(sizeof(long) == 4, "ilp32: long is 4 bytes (F05)");

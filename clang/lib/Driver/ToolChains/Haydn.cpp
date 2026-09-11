@@ -58,3 +58,16 @@ void toolchains::addHaydnLinkArgs(const ToolChain &TC,
   if (llvm::sys::fs::exists(Libm))
     CmdArgs.push_back("-lm");
 }
+
+void toolchains::addHaydnClangTargetArgs(const ArgList &Args,
+                                         ArgStringList &CmdArgs) {
+  // Product processor identity is -mtune=haydn. Empty -mcpu names
+  // generic; generic and haydn are the same full ISA.
+  StringRef Tune = "haydn";
+  if (const Arg *A = Args.getLastArg(options::OPT_mtune_EQ)) {
+    A->claim();
+    Tune = A->getValue();
+  }
+  CmdArgs.push_back("-tune-cpu");
+  CmdArgs.push_back(Args.MakeArgString(Tune));
+}

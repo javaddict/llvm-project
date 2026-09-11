@@ -16,11 +16,12 @@
 // MACROS-DAG: #define __HAYDN_SOFT_FLOAT__ 1
 // MACROS-DAG: #define __HAYDN__ 1
 // MACROS-DAG: #define __SOFTFP__ 1
-// MACROS-NOT: #define __HAYDN_FEATURE_SIMD__
-// MACROS-NOT: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__
+// MACROS-DAG: #define __HAYDN_FEATURE_SIMD__ 1
+// MACROS-DAG: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__ 1
+// MACROS-DAG: #define __HAYDN_FEATURE_BIT_REVERSED__ 1
 
 // Check data layout
-// CHECK: target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
+// CHECK: target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:64-v128:64-a:0:32-n32-S64"
 
 void test_macros(void) {
     int x = 0;

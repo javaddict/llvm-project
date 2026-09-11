@@ -1026,13 +1026,15 @@ static std::vector<AeCompatEntry> collectAeCompat(const RecordKeeper &Records) {
   requireLoweringHas("AE_SA32X2F24_IP", "sa64_step");
   requireLoweringHas("AE_LA24X2_IP", "la64_step");
   requireLoweringHas("AE_SA24X2_IP", "sa64_step");
-  // Base / dual-24 aligned XC residual: CB tokens (not bare header).
-  requireLoweringHas("AE_L32X2_XC", "ldw_cb_imm");
-  requireLoweringHas("AE_S32X2_XC", "sdw_cb_imm");
-  requireLoweringHas("AE_L16X4_XC", "ldw_cb_imm");
-  requireLoweringHas("AE_S16X4_XC", "sdw_cb_imm");
-  requireLoweringHas("AE_L32X2F24_XC", "ldw_cb_imm");
-  requireLoweringHas("AE_S32X2F24_XC", "sdw_cb_imm");
+  // Base / dual-24 aligned XC residual: CB_REG tokens (not bare header, not
+  // the imm form — forward XC takes a raw byte stride in rs2; the ImmArg
+  // imm form is the RIC/reverse path only).
+  requireLoweringHas("AE_L32X2_XC", "ldw_cb_reg");
+  requireLoweringHas("AE_S32X2_XC", "sdw_cb_reg");
+  requireLoweringHas("AE_L16X4_XC", "ldw_cb_reg");
+  requireLoweringHas("AE_S16X4_XC", "sdw_cb_reg");
+  requireLoweringHas("AE_L32X2F24_XC", "ldw_cb_reg");
+  requireLoweringHas("AE_S32X2F24_XC", "sdw_cb_reg");
 
   if (Out.empty())
     PrintFatalError("HaydnIntrin: HaydnAeCompat inventory is empty");
@@ -2934,17 +2936,15 @@ void clang::EmitHaydnOpImmAudit(const RecordKeeper &Records, raw_ostream &OS) {
 //===----------------------------------------------------------------------===//
 
 /// Profile feature maps (match HaydnTargetInfo / HaydnGeneric.td / product CPU):
-///   generic → agu + hwloop
-///   full    → agu + circular-buffer + bit-reversed + hwloop + simd  (-target-cpu haydn)
+///   generic → same full ISA as haydn
+///   full    → agu + circular-buffer + bit-reversed + hwloop + simd
 ///   noagu   → full minus agu  (-target-cpu haydn -target-feature -agu)
 static bool profileHasFeature(StringRef Profile, StringRef Feat) {
   Feat = Feat.trim();
   if (Feat.empty())
     return true;
-  if (Profile == "full")
+  if (Profile == "full" || Profile == "generic")
     return true;
-  if (Profile == "generic")
-    return Feat == "agu" || Feat == "hwloop";
   if (Profile == "noagu")
     return Feat != "agu";
   return false;
@@ -3095,7 +3095,7 @@ void clang::EmitHaydnOpFeatureAudit(const RecordKeeper &Records,
         " *   when the caller's target feature map lacks the required\n"
         " *   simd|circular-buffer|bit-reversed|agu|hwloop expression\n"
         " *   (SemaHaydn err_builtin_needs_feature). Profiles:\n"
-        " *     generic = agu + hwloop\n"
+        " *     generic = same full ISA as haydn\n"
         " *     full    = -target-cpu haydn (all five)\n"
         " *     noagu   = haydn -agu\n"
         " *   Call __builtin_haydn_* Sema home only (not UA public wrappers).\n"
@@ -3105,7 +3105,8 @@ void clang::EmitHaydnOpFeatureAudit(const RecordKeeper &Records,
         " *===-------------------------------------------------------------------===*/\n"
         "\n"
         "// NOTE: Lit driver multi-verifies this TU (generic/full/noagu).\n"
-        "// Product CPU (-target-cpu haydn) enables every gated Features string.\n"
+        "// generic and haydn enable every gated Features string.\n"
+        "// generic-no-diagnostics\n"
         "// full-no-diagnostics\n"
         "\n"
         "typedef long long int64_t;\n"

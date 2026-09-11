@@ -53,14 +53,12 @@ ae_int64 public_and64_mask(void) {
   return AE_AND64((ae_int64)0x3, (ae_int64)0x1);
 }
 
-// Host oracle: AE_SLAI32(1,1) = 2 (plain left residual, not sat).
+// Host oracle: AE_SLAI32 is the dual-lane vector op; extract lane 0.
 // IR-LABEL: @public_slai32_one
-// IR: ret i32 2
-// ASM-LABEL: public_slai32_one:
-// OBJ-LABEL: <public_slai32_one>:
-// OBJ: addi32
+// IR: call {{.*}} @llvm.haydn.x2sll32
+// IR: call {{.*}} @llvm.haydn.movad32.low
 int public_slai32_one(void) {
-  return (int)AE_SLAI32(1, 1);
+  return (int)__AE_S32_LO(AE_SLAI32(((ae_int32x2){1, 0}), 1));
 }
 
 // Object/value path: residual EMULATED AE_ABS16S lowers to haydn_x4abs16s

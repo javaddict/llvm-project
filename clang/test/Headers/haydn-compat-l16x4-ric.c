@@ -58,12 +58,12 @@ ae_int16x4 *l16x4_ric_2arg(ae_int16x4 *p) {
   return p;
 }
 
-// Direction contrast: forward XC must keep positive stride (silent RIC→XC
-// would share this path).
+// Direction contrast: forward XC keeps the reg path with positive byte
+// stride (silent RIC→XC would share the imm path).
 // IR-LABEL: @l16x4_xc_pos_contrast
-// IR: call {{.*}}@llvm.haydn.ldw.cb.imm{{.*}}i32 0, i32 2
+// IR: call {{.*}}@llvm.haydn.ldw.cb.reg
 // ASM-LABEL: l16x4_xc_pos_contrast
-// ASM: d_ldw_cb_imm
+// ASM: d_ldw_cb_reg
 ae_int16x4 *l16x4_xc_pos_contrast(ae_int16x4 *p) {
   ae_int16x4 d = {0};
   AE_L16X4_XC(d, p, 16, 0);

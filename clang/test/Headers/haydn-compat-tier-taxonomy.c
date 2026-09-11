@@ -69,6 +69,12 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_ == HAYDN_COMPAT_UNSUPPORTED,
                "ADD64X2_ permanent UNSUPPORTED (no bag dual-64)");
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_vector == HAYDN_COMPAT_UNSUPPORTED,
                "ADD64X2 permanent UNSUPPORTED (no bag dual-64; C4.2)");
+_Static_assert(HAYDN_COMPAT_TIER_AE_MULC32X16_H == HAYDN_COMPAT_EXACT,
+               "MULC32X16_H exact haydn_x2cmul32x16_h");
+_Static_assert(HAYDN_COMPAT_TIER_AE_MULC32X16_L == HAYDN_COMPAT_EXACT,
+               "MULC32X16_L exact haydn_x2cmul32x16_l");
+_Static_assert(HAYDN_COMPAT_TIER_AE_MULAAAAQ16 == HAYDN_COMPAT_EMULATED,
+               "MULAAAAQ16 unconditional Path-A haydn_fmulaa16_hs_11_00");
 /* Quad-16 max-abs composite (never 2x32 maxabs32s). */
 _Static_assert(HAYDN_COMPAT_TIER_AE_MAXABS16S == HAYDN_COMPAT_EMULATED,
                "MAXABS16S emulated X4ABS16S+X4MAX16");

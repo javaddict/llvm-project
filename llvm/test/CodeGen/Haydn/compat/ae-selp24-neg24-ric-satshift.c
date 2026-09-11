@@ -184,12 +184,13 @@ ae_int32x2 *l32x2_ric_neg2(ae_int32x2 *p) {
   return p;
 }
 
-// Forward XC contrast keeps positive stride.
+// Forward XC contrast keeps positive stride. XC byte-stride law: forward
+// XC macros lower via ldw.cb.reg with the RAW byte stride (16), not the
+// imm element form (haydn_dsp.h AE_L32X2_XC).
 // IR-LABEL: @l32x2_xc_pos2
-// IR: call {{.*}}@llvm.haydn.ldw.cb.imm{{.*}}i32 0, i32 2
+// IR: call {{.*}}@llvm.haydn.ldw.cb.reg{{.*}}i32 0, i32 16
 // ASM-LABEL: l32x2_xc_pos2:
-// ASM: d_ldw_cb_imm
-// ASM-SAME: {{[^0-9-]}}2
+// ASM: d_ldw_cb_reg
 ae_int32x2 *l32x2_xc_pos2(ae_int32x2 *p) {
   ae_int32x2 d = {0, 0};
   AE_L32X2_XC(d, p, 16, 0);

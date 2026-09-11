@@ -18,8 +18,8 @@
 
 #include <haydn_dsp.h>
 
-#if defined(AE_MULAAAAQ16)
-_Static_assert(0, "AE_MULAAAAQ16 must be undefined under default strict");
+#ifndef AE_MULAAAAQ16
+_Static_assert(0, "AE_MULAAAAQ16 must be defined unconditionally");
 #endif
 
 // CHECK-LABEL: @zaa_h2_l3_2arg

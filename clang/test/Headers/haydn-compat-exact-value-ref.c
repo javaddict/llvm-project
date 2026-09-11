@@ -145,10 +145,11 @@ ae_int16x4 *l16x4_ric_known_neg2(ae_int16x4 *p) {
 }
 
 // IR-LABEL: @l16x4_xc_forward_contrast
-// Forward XC peer: positive element stride +2 for byte offs 16.
-// IR: call {{.*}}@llvm.haydn.ldw.cb.imm{{.*}}i32 0, i32 2
+// Forward XC peer: reg form, raw byte stride 16 in a GPR (single law for
+// constant and variable strides; imm form is the RIC/reverse path only).
+// IR: call {{.*}}@llvm.haydn.ldw.cb.reg
 // ASM-LABEL: l16x4_xc_forward_contrast
-// ASM: d_ldw_cb_imm
+// ASM: d_ldw_cb_reg
 ae_int16x4 *l16x4_xc_forward_contrast(ae_int16x4 *p) {
   ae_int16x4 d = {0};
   AE_L16X4_XC(d, p, 16, 0);
@@ -177,9 +178,11 @@ ae_int16x4 la16x4_ric_known_dir1(ae_int16x4 *p) {
 }
 
 // IR-LABEL: @la16x4_ic_forward_contrast
-// IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 0
+// Forward IC routes via haydn_ae_cb_ld_tw (c96c5cdef2dd): unaligned AR
+// window load with HW circular +8 post step — not the dir=0 RIC path above.
+// IR: call {{.*}}@llvm.haydn.lqhwua.cb.post(ptr {{[^,]+}}, i32 1, i32 0
 // ASM-LABEL: la16x4_ic_forward_contrast
-// ASM: d_lqhwua_post
+// ASM: d_lqhwua_cb_post
 ae_int16x4 la16x4_ic_forward_contrast(ae_int16x4 *p) {
   ae_int16x4 d = {0};
   ae_valign al = AE_ZALIGN64();

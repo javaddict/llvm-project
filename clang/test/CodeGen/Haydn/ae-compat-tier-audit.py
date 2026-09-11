@@ -319,13 +319,14 @@ def main(argv: list[str]) -> int:
     require_token("AE_SA32X2F24_IP", "sa64_step")
     require_token("AE_LA24X2_IP", "la64_step")
     require_token("AE_SA24X2_IP", "sa64_step")
-    # Base / dual-24 aligned XC residual: CB path tokens.
-    require_token("AE_L32X2_XC", "ldw_cb_imm")
-    require_token("AE_S32X2_XC", "sdw_cb_imm")
-    require_token("AE_L16X4_XC", "ldw_cb_imm")
-    require_token("AE_S16X4_XC", "sdw_cb_imm")
-    require_token("AE_L32X2F24_XC", "ldw_cb_imm")
-    require_token("AE_S32X2F24_XC", "sdw_cb_imm")
+    # Base / dual-24 aligned XC residual: CB_REG tokens (byte-stride rs2;
+    # imm form is the RIC/reverse path only).
+    require_token("AE_L32X2_XC", "ldw_cb_reg")
+    require_token("AE_S32X2_XC", "sdw_cb_reg")
+    require_token("AE_L16X4_XC", "ldw_cb_reg")
+    require_token("AE_S16X4_XC", "sdw_cb_reg")
+    require_token("AE_L32X2F24_XC", "ldw_cb_reg")
+    require_token("AE_S32X2F24_XC", "sdw_cb_reg")
 
     require_token("AE_SELP24_HH", "x2sel32_hh")
     require_token("AE_SELP24_HL", "x2sel32_hl")
@@ -993,18 +994,19 @@ def main(argv: list[str]) -> int:
             if tok not in win:
                 errors.append(f"{sym} residual body must contain {tok!r}")
 
-    # Dual-24 aligned F24 XC residual: CB load/store with next-ptr writeback.
+    # Dual-24 aligned F24 XC residual: CB_REG load/store (byte stride in rs2;
+    # imm form is the RIC/reverse path only) with next-ptr writeback.
     # S32X2F24_XC must not silent-drop the CBR-wrapped next pointer.
     for helper, must_have in (
-        ("__AE_L32X2F24_XC_4A", ("haydn_ldw_cb_imm",)),
+        ("__AE_L32X2F24_XC_4A", ("haydn_ldw_cb_reg",)),
         (
             "__AE_S32X2F24_XC_4A",
-            ("haydn_sdw_cb_imm", "(ptr) =", "__np"),
+            ("haydn_sdw_cb_reg", "(ptr) =", "__np"),
         ),
-        ("__AE_L32X2_XC_4A", ("haydn_ldw_cb_imm",)),
+        ("__AE_L32X2_XC_4A", ("haydn_ldw_cb_reg",)),
         (
             "__AE_S32X2_XC_4A",
-            ("haydn_sdw_cb_imm", "(ptr) =", "__np"),
+            ("haydn_sdw_cb_reg", "(ptr) =", "__np"),
         ),
     ):
         win = helper_window(helper, 360)

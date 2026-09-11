@@ -1,7 +1,7 @@
 // RUN: rm -rf %t && split-file %s %t
 // RUN: %clang_cc1 -triple haydn-unknown-elf -fsyntax-only -verify %t/sema.c
-// RUN: not %clang_cc1 -triple haydn-unknown-elf -ffreestanding -fsyntax-only \
-// RUN:   %t/generic_dsp.h.c 2>&1 | FileCheck %s --check-prefix=GENERIC
+// RUN: %clang_cc1 -triple haydn-unknown-elf -ffreestanding -fsyntax-only \
+// RUN:   %t/generic_dsp.h.c
 // RUN: %clang_cc1 -triple haydn-unknown-elf -emit-llvm -o - %t/musttail.c \
 // RUN:   | FileCheck %s --check-prefix=MUSTIR
 // RUN: %clang_cc1 -triple haydn-unknown-elf -emit-obj \
@@ -46,8 +46,6 @@ void bad_i(void) {
 }
 
 //--- generic_dsp.h.c
-// GENERIC: haydn_dsp.h needs target feature simd
-// GENERIC-NOT: always_inline
 #include <haydn_dsp.h>
 
 //--- musttail.c

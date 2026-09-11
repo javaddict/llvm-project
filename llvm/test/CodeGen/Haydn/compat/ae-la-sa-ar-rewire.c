@@ -10,8 +10,7 @@
 // unaligned ops (PLDWWUA / D_L*UA_POST / D_S*UA_POST / WBARWUA / FLAR)
 // not plain loads/stores.
 //
-// Full model (-mcpu=haydn): simd + bit-reversed + CB gates so haydn.h parses.
-// Default CPU generic is agu+hwloop only and fails feature-gated builtins.
+// generic and haydn are the same full ISA (simd + CB + BREV).
 
 #include <haydn_dsp.h>
 

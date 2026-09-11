@@ -39,8 +39,8 @@
 // (i16 load + soft CBR step; no 64b D_LDW_CB trunc) — see HAYDN_COMPAT_TIER.
 // The 4-arg form is checked too for parity.
 //
-// Full model (-mcpu=haydn): simd + bit-reversed so haydn.h parses. Default
-// generic is agu+hwloop only. Use resource-dir haydn_dsp.h (not source -I).
+// generic and haydn are the same full ISA. Use resource-dir haydn_dsp.h
+// (not source -I).
 
 #include <stdint.h>
 

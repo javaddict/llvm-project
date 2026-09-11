@@ -24,9 +24,11 @@ _Static_assert(HAYDN_COMPAT_TIER_AE_LA16X4_RIC == HAYDN_COMPAT_EXACT,
 _Static_assert(HAYDN_COMPAT_TIER_AE_LA32X2_RIC == HAYDN_COMPAT_EXACT,
                "LA32X2_RIC is exact reverse-IC via UA dir=1 + neg CBR (C4.2)");
 
-// Contrast: forward IC is dir=0 — RIC must not silent-alias this path.
+// Contrast: forward IC routes via haydn_ae_cb_ld_tw (c96c5cdef2dd) — the
+// unaligned AR window load with HW circular +8 post step (flar primes AR1).
+// RIC must not silent-alias this path (RIC keeps d.lqhwua.post dir=1 below).
 // IR-LABEL: @la16x4_ic_contrast
-// IR: call {{.*}}@llvm.haydn.d.lqhwua.post(ptr {{[^,]+}}, i32 {{[0-3]}}, i32 8, i32 0)
+// IR: call {{.*}}@llvm.haydn.lqhwua.cb.post(ptr {{[^,]+}}, i32 1, i32 0)
 ae_int16x4 la16x4_ic_contrast(ae_int16x4 *p) {
   ae_int16x4 d = {0};
   ae_valign al = AE_ZALIGN64();

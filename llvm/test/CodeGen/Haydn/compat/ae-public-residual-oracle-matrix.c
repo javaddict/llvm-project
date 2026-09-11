@@ -23,10 +23,11 @@ _Static_assert(HAYDN_AE_ORACLE_COUNT == HAYDN_AE_COMPAT_TAG_COUNT - 2,
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_ == HAYDN_COMPAT_UNSUPPORTED, "");
 _Static_assert(HAYDN_COMPAT_TIER_AE_ADD64X2_vector == HAYDN_COMPAT_UNSUPPORTED, "");
 _Static_assert(__HAYDN_AE_COMPAT_STRICT == 1, "strict default");
-/* Quad-16 64-bit MAC stays unnamed in strict mode so NatureDSP
- * vec_dot16x16_fast takes the 32-bit sat AE_MULAF16X4SS path. */
-#if defined(AE_MULAAAAQ16)
-_Static_assert(0, "AE_MULAAAAQ16 must be undefined under default strict");
+/* AE_MULAAAAQ16 is unconditional Path-A haydn_fmulaa16_hs_11_00.
+ * vec_dot16x16_fast dest-typed Path-B stays AE_MULAF16X4SS (1190).
+ * Two-lane Path-A host is 380 (haydn-dsp-mulaaaaq16-value.c). */
+#ifndef AE_MULAAAAQ16
+_Static_assert(0, "AE_MULAAAAQ16 must be defined unconditionally");
 #endif
 
 /* ---- Pure residual family (TD-authored emu.* OracleIds) ---- */
@@ -190,6 +191,8 @@ _Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MULA32X16_L0, "emu.mula32x16_
 /* Dest-typed vec_dot16 path: AE_MULAF16X4SS is X4MULA16S + union bitcast. */
 _Static_assert(HAYDN_COMPAT_TIER_AE_MULAF16X4SS == HAYDN_COMPAT_EMULATED, "");
 _Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MULAF16X4SS, "emu.mulaf16x4ss") == 0, "");
+_Static_assert(HAYDN_COMPAT_TIER_AE_MULAAAAQ16 == HAYDN_COMPAT_EMULATED, "");
+_Static_assert(__builtin_strcmp(HAYDN_AE_ORACLE_AE_MULAAAAQ16, "emu.mulaaaaq16") == 0, "");
 
 /* ---- State residual family (TD-authored SoftState + OracleId) ---- */
 _Static_assert(HAYDN_COMPAT_TIER_AE_SLAS32 == HAYDN_COMPAT_EXACT, "");
@@ -293,18 +296,19 @@ ae_int64 resid_and64_mask(void) {
 }
 
 // IR-LABEL: @resid_slai32_one
-// IR: ret i32 2
-// ASM-LABEL: resid_slai32_one:
-// OBJ-LABEL: <resid_slai32_one>:
-// OBJ: addi32
-int resid_slai32_one(void) { return (int)AE_SLAI32(1, 1); }
+// IR: call {{.*}} @llvm.haydn.x2sll32
+// IR: call {{.*}} @llvm.haydn.movad32.low
+int resid_slai32_one(void) {
+  return (int)__AE_S32_LO(AE_SLAI32(((ae_int32x2){1, 0}), 1));
+}
 
 // Independent host values beyond family reps (C shift, not native SIMD).
 // IR-LABEL: @resid_slai32_two
-// IR: ret i32 4
-// OBJ-LABEL: <resid_slai32_two>:
-// OBJ: addi32
-int resid_slai32_two(void) { return (int)AE_SLAI32(1, 2); }
+// IR: call {{.*}} @llvm.haydn.x2sll32
+// IR: call {{.*}} @llvm.haydn.movad32.low
+int resid_slai32_two(void) {
+  return (int)__AE_S32_LO(AE_SLAI32(((ae_int32x2){1, 0}), 2));
+}
 
 //===----------------------------------------------------------------------===//
 // Pure family — dual-sat / lane arith non-empty object path
@@ -462,6 +466,16 @@ int64_t resid_mulaf16x4ss_dest(void) {
   ae_int16x4 y = AE_MOVDA16(1);
   AE_MULAF16X4SS(vaf, vbf, x, y);
   return __AE_TO_I64(vaf) ^ __AE_TO_I64(vbf);
+}
+
+// Unconditional Path-A AE_MULAAAAQ16: two-lane fmulaa16.hs.11.00, not X4MULA16S.
+// IR-LABEL: @resid_mulaaaaq16_path_a
+// IR: call {{.*}}@llvm.haydn.fmulaa16.hs.11.00
+// IR-NOT: x4mula16s
+ae_int64 resid_mulaaaaq16_path_a(ae_int16x4 a, ae_int16x4 b) {
+  ae_int64 acc = AE_ZERO64();
+  AE_MULAAAAQ16(acc, a, b);
+  return acc;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1184,11 +1198,11 @@ ae_int64 resid_slai64_one(void) { return AE_SLAI64((ae_int64)1, 1); }
 ae_int32x2 resid_slla32_one(ae_int32x2 a) { return AE_SLLA32(a, 1); }
 
 // IR-LABEL: @resid_slaa32_one
-// IR: ret i32 2
-// ASM-LABEL: resid_slaa32_one:
-// OBJ-LABEL: <resid_slaa32_one>:
-// OBJ: addi32
-int resid_slaa32_one(void) { return (int)AE_SLAA32(1, 1); }
+// IR: call {{.*}} @llvm.haydn.x2sra32
+// IR: call {{.*}} @llvm.haydn.movad32.low
+int resid_slaa32_one(void) {
+  return (int)__AE_S32_LO(AE_SLAA32(((ae_int32x2){1, 0}), 1));
+}
 
 // IR-LABEL: @resid_f32x2_slais_one
 // IR: {{shl|select|icmp|call}}
@@ -1210,14 +1224,6 @@ ae_int64 empty_body_add64x2_(ae_int64 a, ae_int64 b) {
 // STRICT: __haydn_ae_unsupported_AE_ADD64X2_vector
 ae_int64 empty_body_add64x2_vector(ae_int64 a, ae_int64 b) {
   return AE_ADD64X2_vector(a, b);
-}
-// STRICT: __haydn_ae_unsupported_AE_MULC32X16_H
-ae_int32x2 empty_body_mulc32x16_h(ae_int32x2 a, ae_int32x2 b) {
-  return AE_MULC32X16_H(a, b);
-}
-// STRICT: __haydn_ae_unsupported_AE_MULC32X16_L
-ae_int32x2 empty_body_mulc32x16_l(ae_int32x2 a, ae_int32x2 b) {
-  return AE_MULC32X16_L(a, b);
 }
 // STRICT: __haydn_ae_unsupported_AE_MULFC24RA
 ae_f24x2 empty_body_mulfc24ra(ae_f24x2 a, ae_f24x2 b) {

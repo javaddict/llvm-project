@@ -9,7 +9,7 @@
 //   - Clang lowers C to LLVM IR with the expected arithmetic patterns
 //   - The Haydn GlobalISel pipeline selects DSP-appropriate instructions
 //   - Struct field accesses become ld32/st32 with correct offsets
-//   - Nested loops produce correct control flow (beqz/bnez + jal)
+//   - Nested loops produce correct control flow (beqz/bnez + long-call)
 //   - Function calls in the inner loop exercise the full calling convention
 //   - Callee-saved register save/restore is correct across calls
 //   - The noinline attribute prevents inlining, forcing real call/ret
@@ -96,8 +96,10 @@ void biquad_cascade(int32_t *input, int32_t *output, int N,
 // Outer loop compare (slt32 or seq32 for loop bound check).
 // ASM: slt32
 
-// Inner loop: function call to biquad_process (noinline forced)
-// ASM: jal{{(_w)?}} lr, biquad_process
+// Inner loop: general call is LOAD_ADDR + JALR (AIE JAL_IND). Short JAL
+// is a cycle-neutral CallSImm20 encoding relax (same packet/cycle count).
+// ASM: lui{{.*}}biquad_process
+// ASM: jalr
 
 // Epilogue
 // ASM: jalr{{(_w)?}}

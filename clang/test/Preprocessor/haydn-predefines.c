@@ -1,3 +1,7 @@
+// RUN: %clang_cc1 -E -dM -triple haydn-unknown-elf %s \
+// RUN:   | FileCheck %s -check-prefix=EMPTY
+// RUN: %clang_cc1 -E -dM -triple haydn-unknown-elf -target-feature +agu %s \
+// RUN:   | FileCheck %s -check-prefix=PLUS_AGU_ONLY
 // RUN: %clang_cc1 -E -dM -triple haydn-unknown-elf -target-cpu generic %s \
 // RUN:   | FileCheck %s -check-prefix=GENERIC
 // RUN: %clang_cc1 -E -dM -triple haydn-unknown-elf -target-cpu haydn %s \
@@ -14,24 +18,39 @@
 // macros. Gate only agu|circular-buffer|bit-reversed|hwloop|simd — never
 // bundle FormatID / slot / AltDesc. -dM output is sorted; checks follow that.
 
-// generic = agu + hwloop (HaydnGeneric.td product baseline)
+// Empty cc1 (no -target-cpu, no -target-feature) is the full ISA. A
+// partial +feat list must not demote the other bits.
+// EMPTY-DAG: #define __HAYDN_FEATURE_AGU__ 1
+// EMPTY-DAG: #define __HAYDN_FEATURE_BIT_REVERSED__ 1
+// EMPTY-DAG: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__ 1
+// EMPTY-DAG: #define __HAYDN_FEATURE_HWLOOP__ 1
+// EMPTY-DAG: #define __HAYDN_FEATURE_SIMD__ 1
+// PLUS_AGU_ONLY-DAG: #define __HAYDN_FEATURE_AGU__ 1
+// PLUS_AGU_ONLY-DAG: #define __HAYDN_FEATURE_BIT_REVERSED__ 1
+// PLUS_AGU_ONLY-DAG: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__ 1
+// PLUS_AGU_ONLY-DAG: #define __HAYDN_FEATURE_HWLOOP__ 1
+// PLUS_AGU_ONLY-DAG: #define __HAYDN_FEATURE_SIMD__ 1
+
+// generic = same full ISA as haydn (HaydnGeneric.td)
 // GENERIC-DAG: #define __ELF__ 1
 // GENERIC-DAG: #define __HAYDN_32__ 1
 // GENERIC-DAG: #define __HAYDN_ARCH__ 1
 // GENERIC-DAG: #define __HAYDN_CPU_GENERIC__ 1
 // GENERIC-DAG: #define __HAYDN_FEATURE_AGU__ 1
+// GENERIC-DAG: #define __HAYDN_FEATURE_BIT_REVERSED__ 1
+// GENERIC-DAG: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__ 1
 // GENERIC-DAG: #define __HAYDN_FEATURE_HWLOOP__ 1
+// GENERIC-DAG: #define __HAYDN_FEATURE_SIMD__ 1
 // GENERIC-DAG: #define __HAYDN_LE__ 1
 // GENERIC-DAG: #define __HAYDN_SOFT_FLOAT__ 1
+// GENERIC-DAG: #define __HAYDN_TUNE_HAYDN__ 1
 // GENERIC-DAG: #define __HAYDN__ 1
 // GENERIC-DAG: #define __SOFTFP__ 1
 // GENERIC-DAG: #define __haydn_32__ 1
 // GENERIC-DAG: #define __haydn_LE__ 1
 // GENERIC-DAG: #define __haydn__ 1
 // GENERIC-NOT: #define __HAYDN_CPU_HAYDN__
-// GENERIC-NOT: #define __HAYDN_FEATURE_BIT_REVERSED__
-// GENERIC-NOT: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__
-// GENERIC-NOT: #define __HAYDN_FEATURE_SIMD__
+// GENERIC-NOT: #define __HAYDN_TUNE_GENERIC__
 // GENERIC-NOT: FormatID
 // GENERIC-NOT: AltDesc
 // GENERIC-NOT: __HAYDN_BUNDLE
@@ -45,18 +64,19 @@
 // FULL-DAG: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__ 1
 // FULL-DAG: #define __HAYDN_FEATURE_HWLOOP__ 1
 // FULL-DAG: #define __HAYDN_FEATURE_SIMD__ 1
+// FULL-DAG: #define __HAYDN_TUNE_HAYDN__ 1
 // FULL-DAG: #define __HAYDN__ 1
 // FULL-NOT: #define __HAYDN_CPU_GENERIC__
 // FULL-NOT: FormatID
 // FULL-NOT: AltDesc
 
-// +simd on generic enables SIMD without CB/BREV
+// +simd on generic is a no-op: generic already has the full ISA
 // PLUS_SIMD-DAG: #define __HAYDN_CPU_GENERIC__ 1
 // PLUS_SIMD-DAG: #define __HAYDN_FEATURE_AGU__ 1
+// PLUS_SIMD-DAG: #define __HAYDN_FEATURE_BIT_REVERSED__ 1
+// PLUS_SIMD-DAG: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__ 1
 // PLUS_SIMD-DAG: #define __HAYDN_FEATURE_HWLOOP__ 1
 // PLUS_SIMD-DAG: #define __HAYDN_FEATURE_SIMD__ 1
-// PLUS_SIMD-NOT: #define __HAYDN_FEATURE_BIT_REVERSED__
-// PLUS_SIMD-NOT: #define __HAYDN_FEATURE_CIRCULAR_BUFFER__
 
 // -simd/-circular-buffer/-bit-reversed on haydn leaves agu+hwloop
 // STRIPPED-DAG: #define __HAYDN_CPU_HAYDN__ 1

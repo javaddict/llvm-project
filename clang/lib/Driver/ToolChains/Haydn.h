@@ -14,6 +14,8 @@
 //      parcel vs 4 KiB page) and matching-sysroot `-lm` when
 //      `$sysroot/lib/libm.a` exists (AIE AIE.cpp:42-43). No private
 //      libhaydn.a / haydn.ld auto-injection (product ld is install-owned).
+//   3. `addHaydnClangTargetArgs(...)` — default `-tune-cpu haydn`.
+//      Empty `-mcpu` names generic; generic and haydn are the same ISA.
 //
 //===----------------------------------------------------------------------===//
 
@@ -36,6 +38,11 @@ const char *getDefaultHaydnLinker();
 void addHaydnLinkArgs(const ToolChain &TC, const llvm::Triple &Triple,
                       const llvm::opt::ArgList &Args,
                       llvm::opt::ArgStringList &CmdArgs);
+
+// Default `-mtune=haydn` for haydn-unknown-elf. Does not change ISA
+// features. Explicit `-mtune=` wins. Empty `-mcpu` names generic.
+void addHaydnClangTargetArgs(const llvm::opt::ArgList &Args,
+                             llvm::opt::ArgStringList &CmdArgs);
 
 } // namespace toolchains
 } // namespace driver

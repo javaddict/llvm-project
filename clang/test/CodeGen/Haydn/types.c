@@ -2,7 +2,7 @@
 
 // Test data type sizes and alignments for Haydn (ILP32 ABI)
 
-// CHECK: target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
+// CHECK: target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:64-v128:64-a:0:32-n32-S64"
 
 #include <stdint.h>
 
