@@ -90,7 +90,9 @@ exit:
 ; and reuse physregs (divide-class residual). GR2.1 Kind-A restamp: this
 ; high-pressure body now SOFTWARE-pipelines (II=2, guarded peel with folded
 ; spills) instead of forming a ZOL — the ZOL-form pins for the two
-; low-pressure peers above are unchanged.
+; low-pressure peers above are unchanged. -verify-machineinstrs must stay
+; silent: stack-counter LatchScr may be prologue-killed CSR R14; overlay
+; skips SET-site ST32 of that undefined value (pure tail DEF / SMS-guard).
 ; CHECK-LABEL: countdown_high_pressure:
 ; CHECK: // =>This Inner Loop Header: Depth=1
 ; CHECK-NOT: set_hwloop

@@ -1,0 +1,332 @@
+# RUN: split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/ok.mir -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/ok.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/occ.mir -o - | FileCheck %s --check-prefix=OCC
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/occ.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=OCC-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/occ.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=OCC-FIXUP
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/keep.mir -o - | FileCheck %s --check-prefix=KEEP
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=haydn-hwloops \
+# RUN:   %t/keep.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=KEEP-DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.64 — Fixup-forced range demote: a trip register READ in the body but
+# dead at every exit must not become the software countdown.
+#
+# Hole: regClobberedNonCountdownIn is defs-only, isLiveAfterLoop covers
+# exit edges only, and the Prefer arm of canUsePreferAsCounter never
+# consulted body uses (pickCounterReg does, via regMentionedInBlocks).
+# for(i=0;i<n;i++) use(n) passed every gate; latch SUBI32 Prefer then
+# corrupted every post-first-iteration body read. Same hole in the
+# stack-counter LatchScr=Prefer fallback (CB-162 save restores EXIT only).
+#
+# Shape: SET_HWLOOP_F2_W $r2, spacer forces StartOff overflow (same
+# demote-first idiom as hwloop-fixup-demote-range.mir), body ST32 of $r2,
+# $r2 not live-in of exit. First function leaves other GPRs free so
+# pickCounterReg can copy/materialize. Occupancy function occupies every
+# other latch-scratch (live-in of the self-latch + mentioned) so
+# LatchScr=Prefer would fire without the body-use gate; occupancy miss
+# refuses (named Fixup fatal) rather than SUBI32/LD32 Prefer. PEI first
+# so the scratch FI exists. keep.mir is the same occupancy shape without
+# the spacer: range-fit after a pre-sched2 refuse keeps HWLOOP.
+#
+# This is the GOALS D1.64 owner pin: CHECK-NOT $r2=SUBI32 sits between
+# the body store and BNEZ, and occupancy miss fatals (never SUBI32/LD32
+# Prefer). Do not restamp this file as the va-arg-22 HOLD pin
+# (d164-hwloop-demote-vaarg22-frameaddr.mir: LatchScr skip of unmentioned
+# live-through $r3=sp+off — never MOVE32/SUBI/LD32/BNEZ r3 — plus tail-imm
+# residual never LatchScr=$r14; success LatchScr is the mentioned PEI
+# SP+off dest $r7, not r3/r4/r14). va-arg-22.c stays torture-only. Do not
+# restamp as cb162-hwloop-demote-liveout-tripreg.ll (ZOL live-OUT) or
+# d171-hwloop-demote-overlay-undef-csr.mir (overlay undefined-store).
+
+# CHECK-LABEL: name: d164_body_read_tripreg
+# CHECK-NOT: SET_HWLOOP
+# Body still reads the original trip:
+# CHECK: {{ST32|S_SW}}{{.*}}$r2
+# Countdown is another GPR (r2 excluded), never Prefer. CHECK-NOT sits
+# between the body store and BNEZ so a latch `$r2 = SUBI32` cannot hide
+# as the generic SUBI32 match.
+# CHECK-NOT: $r2 = SUBI32
+# CHECK: $r{{[013-9]|1[0-2]}} = SUBI32
+# CHECK: BNEZ
+# CHECK-NOT: $r2 = SUBI32
+
+# Occupancy miss last-resorts LatchScr=R0 + Header XOR restore. Never
+# SUBI32/LD32 Prefer, never $r2 countdown, never overlay ST.
+# OCC-NOT: SET_HWLOOP
+# OCC: {{ST32|S_SW}}{{.*}}$r2
+# OCC-NOT: $r2 = SUBI32
+# OCC-NOT: $r2 = LD32
+# OCC: $r0 = {{S_LW_WITH_IMM|LD32}}
+# OCC: $r0 = SUBI32
+# OCC: BNEZ{{.*}}$r0
+# OCC-NOT: $r2 = SUBI32
+# OCC-NOT: $r2 = LD32
+
+# OCC-FIXUP: demoting hwloop
+# OCC-FIXUP-NOT: range-fit HWLOOP kept
+# OCC-FIXUP-NOT: LLVM ERROR
+# OCC-FIXUP-NOT: $r2 = SUBI32
+# OCC-FIXUP-NOT: $r2 = LD32
+
+# Range-fit after a pre-sched2 occupancy refuse keeps HWLOOP. Same
+# PreferHasBodyUse + occupied latch-scratch as occ.mir, but no spacer so
+# Off1/Off2 encode; Fixup must not demote or force LatchScr=Prefer.
+# KEEP-LABEL: name: d164_range_fit_keep
+# KEEP: SET_HWLOOP_F2_W
+# KEEP: {{ST32|S_SW}}{{.*}}$r2
+# KEEP-NOT: $r2 = SUBI32
+# KEEP-NOT: $r2 = LD32
+# KEEP-NOT: SUBI32
+# KEEP-NOT: BNEZ
+
+# KEEP-DBG-NOT: demoting hwloop
+# KEEP-DBG-NOT: occupancy miss
+# KEEP-DBG-NOT: LLVM ERROR
+
+# DBG: demoting hwloop
+# DBG: has non-countdown body use
+# DBG-NOT: demote latch scratch = Prefer
+# DBG-NOT: LatchScr=$r2
+# DBG-NOT: preheader-tail frame address
+# DBG-NOT: live-into-exit tail-imm
+# DBG: demote trip
+# DBG-NOT: demote latch scratch = Prefer
+# DBG-NOT: LatchScr=$r2
+# DBG-NOT: demote stack-counter
+# DBG-NOT: preheader-tail frame address
+# DBG-NOT: live-into-exit tail-imm
+# DBG-NOT: demote skip overlay
+# DBG-NOT: LatchScr=$r14
+
+# OCC-DBG: has non-countdown body use
+# OCC-DBG-NOT: demote latch scratch = Prefer
+# OCC-DBG-NOT: LatchScr=$r2
+# OCC-DBG-NOT: preheader-tail frame address
+# OCC-DBG-NOT: live-into-exit tail-imm
+# OCC-DBG: last-resort LatchScr=R0
+# OCC-DBG-NOT: demote latch scratch = Prefer
+# OCC-DBG-NOT: LatchScr=$r2
+# OCC-DBG-NOT: LLVM ERROR
+# OCC-DBG-NOT: LatchScr=$r14
+
+#--- ok.mir
+--- |
+  define dso_local void @d164_body_read_tripreg(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_body_read_tripreg
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Body READ of the trip: ST32 of $r2. $r2 is dead at exit.
+  bb.2.body:
+    liveins: $r1, $r2
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- occ.mir
+--- |
+  define dso_local void @d164_body_read_tripreg_occupancy(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_body_read_tripreg_occupancy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Occupies every latch-scratch except Prefer: live-in of the self-latch
+  ; (Header==Latch) so findPostRAScratchNoSpill / pickDeadLatchScratch
+  ; pass-1 miss, and mentioned so pass-2 cannot steal. $r2 still READ in
+  ; the body and dead at exit. Without the D1.64 gate LatchScr=Prefer
+  ; would fire; with the gate occupancy miss refuses (never SUBI/LD32
+  ; Prefer). $r14 is live-in+mentioned so unused-R14 skip cannot hide a
+  ; steal. Not the va-arg-22 HOLD pin (no $r3=sp+off tail, no tail-imm
+  ; residual, no LatchScr=$r7 PEI dest) and not the D1.71 overlay pin.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- keep.mir
+--- |
+  define dso_local void @d164_range_fit_keep(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_range_fit_keep
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    ; Range-fit: Following = InterveningCycles NOPs, no spacer. Off1/Off2
+    ; encode. PreferHasBodyUse + occupied latch-scratch would occupancy-
+    ; miss if Fixup demoted; keep HWLOOP instead of LatchScr=Prefer.
+    SET_HWLOOP_F2_W 0, %bb.1, %bb.1, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    ST32 $r2, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15

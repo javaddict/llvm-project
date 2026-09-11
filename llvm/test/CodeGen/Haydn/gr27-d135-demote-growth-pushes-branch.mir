@@ -1,8 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops,haydn-longbranch-normalize,branch-relaxation \
+# RUN:   -run-pass=haydn-hwloops,haydn-longbranch-normalize,branch-relaxation \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=PUSH
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops,haydn-longbranch-normalize,branch-relaxation \
+# RUN:   -run-pass=haydn-hwloops,haydn-longbranch-normalize,branch-relaxation \
 # RUN:   -haydn-branch-relax-safety-buffer=0 -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=KEEP
 # REQUIRES: haydn-registered-target

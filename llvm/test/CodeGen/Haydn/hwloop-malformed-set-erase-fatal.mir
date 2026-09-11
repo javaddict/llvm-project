@@ -1,5 +1,5 @@
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
 
 # Role: MIR — malformed SET on a live function is fatal, never erase-only.

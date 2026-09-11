@@ -9,8 +9,10 @@
 ; CFG creation, refused by the GR2.7 wall), the demote installs the
 ; TERMINAL in-block latch: near BEQZ_W to the exit + unconditional
 ; LUI+ADDI32_W+JALR_W backedge to the header. No trampoline MBB, no CFG
-; creation. The counter scratch is reused as the address register (proven
-; dead at the latch by the demote's own probe).
+; creation. The JALR address scratch is a computed-dead GPR distinct from
+; the countdown (CHECK captures [[CNT]] vs [[SCR]]); the original trip is
+; dead after this loop. CountReg is never reused as the JALR dest
+; (D1.37 ratchets that identity as a fatal at emission).
 
 @arr = global [2048 x i32] zeroinitializer
 

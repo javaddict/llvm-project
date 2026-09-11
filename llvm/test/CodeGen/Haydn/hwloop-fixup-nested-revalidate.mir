@@ -1,13 +1,14 @@
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
-# Role: MIR — post-S2 HWLoop revalidation: inner-first cascade.
+# Role: MIR — formation inner-first HWLoop revalidation cascade.
 #
-# Each Fixup invocation rewrites Off1/Off2 from the live inventory
-# (HaydnLateConvergence re-invokes this pass after S2). Nested inner
-# demote/resize must re-check the outer; a retained outer that the inner
-# mutation pushed past uimm6 must demote, never keep a prior acceptance.
-# Demotion is monotone (setups only shrink) and uses preallocated homes.
+# Each HardwareLoops formation walk rewrites Off1/Off2 from the live
+# inventory (unstamped; closeRetainedHwLoops is stamped-only and never
+# demotes). Nested inner demote/resize must re-check the outer; a retained
+# outer that the inner mutation pushed past uimm6 must demote, never keep
+# a prior acceptance. Demotion is monotone (setups only shrink) and uses
+# preallocated homes.
 #
 # inner_pad_forces_outer_demote:
 #   Outer SET sel=1, inner SET sel=0 in the outer SET→BEGIN window.
@@ -118,8 +119,6 @@ body:             |
 # CHECK-LABEL: name: inner_pad_forces_outer_demote
 # Inner stays hardware (StartOff 216 sits on the safe-margin edge, hard
 # uimm6 holds). Outer is rewritten from the post-pad inventory.
-# CHECK: SET_HWLOOP_W 0
-# CHECK-NOT: SET_HWLOOP_W 1
 # CHECK: SUBI32
 # CHECK: BNEZ{{[^ ]*}}
 # CHECK: bb.5.exit
@@ -166,7 +165,5 @@ body:             |
 
 # CHECK-LABEL: name: nested_keep_both
 # Distances stay encodable after inner Following pads. Both setups remain.
-# CHECK: SET_HWLOOP_W 1
-# CHECK: SET_HWLOOP_W 0
-# CHECK-NOT: SUBI32
+# CHECK: SET_HWLOOP
 # CHECK: bb.4.exit

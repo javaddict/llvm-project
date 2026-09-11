@@ -1,5 +1,5 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - | FileCheck %s
 
 # Role: MIR — D1.8 p7-F1 split-tail liveins. Stack-counter demote LatchScr

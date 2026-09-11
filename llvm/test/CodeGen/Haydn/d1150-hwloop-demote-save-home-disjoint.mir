@@ -1,0 +1,123 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=SAVE-DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.150 — dedicated demote save home, not a PostRAScratchFI share.
+# d172 sole shape: LatchScr==Prefer PreheaderSave. Save ST32/LD32 FixedStack
+# MMO is not PostRA (id 0 is determineCalleeSaves' first CreateStackObject).
+# DBG: SaveFI, PostRAScratchFI, and the assigned counter FI are three
+# distinct ids. Do not restamp d172 join-exit, d164 body-use, or cb162.ll.
+
+# CHECK-LABEL: name: d1150_save_home_disjoint
+# CHECK-NOT: SET_HWLOOP
+# CHECK-LABEL: bb.0.entry:
+# PreheaderSave then counter store. Save is not %stack.0 (PostRA).
+# CHECK: {{ST32|S_SW}}{{.*}}$r2, $r13, {{[-0-9]+}} :: (store (s32) into %stack.[[SAVE:[1-9][0-9]*]])
+# CHECK: {{ST32|S_SW}}{{.*}}$r2, $r13, {{[-0-9]+}} :: (store (s32) into %stack.[[CTR:[0-9]+]])
+# CHECK-LABEL: bb.2.body:
+# Latch stack-counter window on Prefer (Adj==0 last-resort).
+# CHECK: $r2 = {{S_LW_WITH_IMM|LD32}}{{.*}}%stack.[[CTR]]
+# CHECK: $r2 = SUBI32{{.*}}$r2, 1
+# CHECK: BNEZ{{.*}}$r2
+# CHECK-LABEL: bb.3.exit:
+# Restore from the dedicated save home, not the counter and not PostRA.
+# CHECK: $r2 = {{S_LW_WITH_IMM|LD32}}{{.*}}%stack.[[SAVE]]
+# CHECK: {{ST32|S_SW}}{{.*}}$r2
+
+# SAVE-DBG: demote save home disjoint SaveFI#[[SAVE:[0-9]+]] PostRAScratchFI#[[POSTRA:[0-9]+]] BranchRelaxationScratchFI#{{[0-9]+}} stack-counter FI#[[CTR:[0-9]+]]
+# SAVE-DBG-NOT: SaveFI#[[EQ:[0-9]+]] PostRAScratchFI#[[EQ]]
+# SAVE-DBG-NOT: SaveFI#[[EQ2:[0-9]+]] {{.*}}stack-counter FI#[[EQ2]]
+# SAVE-DBG: demote save home take+bind SaveFI#[[SAVE]]
+# SAVE-DBG: demote restored live trip {{.*}} from save FI#[[SAVE]]
+# SAVE-DBG-NOT: occupancy miss
+# SAVE-DBG-NOT: LLVM ERROR
+
+--- |
+  define dso_local void @d1150_save_home_disjoint(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    store i32 %trip, ptr %out, align 4
+    br label %ret
+  ret:
+    ret void
+  }
+...
+---
+name:            d1150_save_home_disjoint
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; d172 sole occupancy: Exit pred_size==1, predecessor is Latch.
+  ; Prefer $r2 live-out, not a body read. Other GPRs mentioned so
+  ; LatchScr=Prefer / PreheaderSave. 20× NOP spacer forces StartOff overflow.
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r3, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r2
+    successors: %bb.4
+    ST32 $r2, $r1, 0
+
+  bb.4.ret:
+    liveins: $r15
+    RET implicit killed $r15

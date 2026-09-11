@@ -1,0 +1,1903 @@
+# RUN: split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/ok.mir -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/ok.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/occ.mir -o - | FileCheck %s --check-prefix=OCC
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/occ.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=OCC-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/pred.mir -o - | FileCheck %s --check-prefix=PRED
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/pred.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=PRED-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/before.mir -o - | FileCheck %s --check-prefix=BEFORE
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/before.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=BEFORE-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/coissue.mir -o - | FileCheck %s --check-prefix=COISSUE
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/coissue.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=COISSUE-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/tailimm.mir -o - | FileCheck %s --check-prefix=TAILIMM
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/tailimm.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=TAILIMM-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/copy.mir -o - | FileCheck %s --check-prefix=COPYMOVE
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/copy.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=COPYMOVE-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/copyopc.mir -o - | FileCheck %s --check-prefix=COPYOPC
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/copyopc.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=COPYOPC-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/header.mir -o - | FileCheck %s --check-prefix=HEADER
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/header.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=HEADER-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/hide.mir -o - | FileCheck %s --check-prefix=HIDE
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/hide.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=HIDE-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/tcoissue.mir -o - | FileCheck %s --check-prefix=TCOISSUE
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/tcoissue.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=TCOISSUE-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/o2main.mir -o - | FileCheck %s --check-prefix=O2MAIN
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/o2main.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=O2MAIN-DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.64 HOLD pin — va-arg-22 frame-address LatchScr skip of unmentioned
+# live-through $r3=sp+off (never MOVE32/SUBI/LD32/BNEZ r3). Success LatchScr
+# is the mentioned PEI SP+off dest $r7, not r3/r4/r14. Occupancy miss
+# last-resorts LatchScr=R0 (SET gone, never Prefer) on occ.mir. Extra
+# PEI+fixup arms keep FA r3 skip and never Prefer. D1.86 pass-2 refuse
+# last-resorts R0 on tailimm/copy/copyopc/tcoissue/o2main (never stolen
+# LatchScr=$r14 / MOVE dest r7). header/hide remain pass-1a LatchScr=$r14
+# after header/spacer redef kills
+# live-into-exit. o2main is the remaining steal/exhaust vs real
+# O2 @main fill-loop: SET Prefer=$r3 is a body read, unmentioned FA
+# cluster r4–r12 (SP+off dests Exit reads), tail-imm r14=ADDI r0,22.
+# r3 is PreferHasBodyUse, not FA — a pin that keeps r3=sp+off and
+# Prefer=$r2 stays lit-green on the success-arm shape while real O2
+# occupancy-misses. After those skips the window last-resorts LatchScr=R0
+# (SET gone, never Prefer, never LatchScr=$r7). o2main CHECK-NOT covers
+# MOVE32/COPY/SUBI/LD32/S_LW/BNEZ of Prefer / r3 / r4–r12 / r14 so
+# a live-through steal of r5–r6/r8–r12 cannot hide. A pin that keeps mentioned
+# PEI dest r7 as LatchScr stays lit-green while real O2 occupancy-
+# misses. Do not restamp
+# d164-hwloop-demote-body-read-tripreg.mir (GOALS owner: CHECK-NOT $r2=SUBI32
+# between body store and BNEZ plus occupancy fatal; no FA/tail-imm skip),
+# d164-cond-jalr-analyzable.mir, cb162-hwloop-demote-liveout-tripreg.ll,
+# cb165-hwloop-demote-body-redefined-tripreg.ll, or
+# d171-hwloop-demote-overlay-undef-csr.mir. va-arg-22.c stays
+# torture-only; this is the MIR pin of that class.
+#
+# Hole: stack-counter findPostRAScratchNoSpill exhausts the truncated
+# priority list; D1.86 pass-2 refuse last-resorts LatchScr=R0 rather than steal
+# an unmentioned live-through. va-arg-22 `$r3 = sp+off` is the FA shape: the body never
+# names r3, the cursor is live into Header and used at Exit, and
+# MOVE32/SUBI/LD32/BNEZ r3 is MEMORY_FAULT. After FA skip, O2 still
+# MEMORY_FAULTs on LatchScr=$r14 with post-SET `$r14=ADDI r0,imm` live
+# into exit (not FA; overlay refused because DefInTail kills occupancy).
+# LatchExcl is one Exclude for NoSpill, pickDeadLatchScratch, re-pick,
+# and Prefer last-resort: live-into-exit tail-imm family (ADDI/COPY/MOVE,
+# copy-chain, bundled-SET last-def, LoopSetup bound) plus unmentioned FA
+# that Exit actually reads. A PEI SP+off dest that is not live-through
+# (bqriir r7) stays a pass-1a LatchScr — excluding those exhausts the
+# scratch and fatals. Occupancy miss refuses rather than SUBI/LD32 Prefer.
+#
+# A pin that only covers post-SET ADDI32_W stays green while O2 pred
+# live-through / reaching-def-before-SET / SET-bundle coissue / COPY of
+# $r14=ADDI r0,imm / header redef of that dest still MEMORY_FAULTs. FA
+# shapes skip LatchScr=$r3 and keep LatchScr=$r7 (mentioned PEI SP+off
+# dest, dead at latch). A pin that keeps unmentioned live-through r4 as
+# LatchScr stays green while excluding pass-1a PEI dests. Success arms
+# mention r4 so pass-2 cannot hide that miss. Every arm CHECK-NOT
+# MOVE32/COPY/SUBI/LD32/BNEZ of r3; the latch window also CHECK-NOT
+# those opcodes of r14 (PEI CSR restore `$r14 = LD32` is after exit,
+# not in this window). tailimm occupies r4 so pass-2 would steal r14
+# (last in GPR32NoSPNoLR) after skipping r3; skip r14 too and fatal
+# rather than SUBI r14. Header redef + copy-chain flood skip the COPY
+# dest and the ADDI dest even when r14 is not live-into-exit. Bundled
+# SET last-def rewind skips coissued r14 ADDI.
+#
+# ok:      post-SET tail `$r3=ADDI sp,16`. r7 is the PEI SP+off dest.
+# pred:    `$r3=sp+off` in a predecessor; SET block has no r3 def.
+# before:  reaching def of `$r3=sp+off` BEFORE SET in the SET block.
+# coissue: `$r3=sp+off` coissued in the SET bundle (instrs() walk).
+# occ:     after skipping r3 nothing remains. Prefer is still READ in
+#          the body so LatchScr=Prefer is gated. Fixup fatals rather
+#          than SUBI/LD32 Prefer or LatchScr=$r3.
+# tailimm: FA r3 plus post-SET `$r14=ADDI r0,imm` live into exit. r4 is
+#          mentioned. Skip both; occupancy fatal still refuses Prefer.
+# copy:    tailimm plus `$r7=MOVE32 r14` live into exit. Do not mention r7.
+#          Skip r3, r14, and the copy dest; occupancy fatal still refuses
+#          Prefer. CHECK-NOT MOVE32/SUBI/LD32/BNEZ of r7. Keep FA r3 and
+#          ADDI r14 CHECKs.
+# copyopc: same as copy with generic `$r7=COPY r14` (O2 may still have COPY
+#          if expand-pseudos has not rewritten it). Skip the COPY dest;
+#          occupancy fatal still refuses Prefer. A MOVE-only pin stays
+#          green while COPY of the ADDI dest still MEMORY_FAULTs.
+# header:  `$r14=ADDI r0,imm` then `$r4=COPY r14`, loop header redefines
+#          `$r14=MOVE32 r4`. Live-into-exit of r14 dies on that header
+#          def, so pass-1a still installs LatchScr=$r14 (dead at latch
+#          end). Not a pass-2 steal. Occupancy-fatal never-Prefer is
+#          occ.mir / tailimm.
+# hide:    header redef of r14 sits in the spacer (not LoopBlocks), so
+#          r14 is unmentioned in the kernel and not live-into-exit.
+#          After pass-2 refuse, pass-1a still installs LatchScr=$r14
+#          (dead at latch end). Occupancy-fatal never-Prefer is occ.mir.
+# tcoissue: `$r14=ADDI r0,imm` coissued in the SET bundle (SET last).
+#          A top-level walk from SET misses that last-def; pass-2 refuse
+#          occupancy-fatals rather than stolen LatchScr=$r14. Skip r3
+#          and r14; occupancy fatal still refuses Prefer. FA coissue.mir
+#          is r3=sp+off, not this tail-imm.
+# o2main:  real O2 @main fill-loop occupancy-miss. SET Prefer=$r3 is a
+#          body read (ST of the trip). Unmentioned FA cluster r4–r12
+#          (SP+off dests Exit reads) plus tail-imm r14=ADDI r0,22. r3 is
+#          PreferHasBodyUse, not FA. Mention r1 (address) and r2 (pointer)
+#          so pass-2 cannot steal them. Do not mention r4–r12/r14 and do
+#          not XOR r7 (XOR / PEI dest r7 hid the miss as lit-green
+#          LatchScr=$r7). Occupancy fatal, never MOVE32/COPY/SUBI/LD32/
+#          S_LW/BNEZ of Prefer / r3 / r4–r12 / r14, never LatchScr=$r7 /
+#          Prefer / r3 / r14. CHECK-NOT is the full cluster so pass-2
+#          steal of r5–r6/r8–r12 cannot hide.
+# PEI first so the counter/save FIs exist. Spacer forces StartOff overflow.
+
+# CHECK-LABEL: name: d164_vaarg22_frameaddr
+# CHECK-NOT: SET_HWLOOP
+# PEI may ADDI r3 as a CSR address temp; the va-arg cursor is the
+# post-SET tail materialize (imm 16), not the frame-setup slot.
+# Overlay ST of LatchScr at SET would be ST32/S_SW $r7 here (D1.71).
+# CHECK-NOT: ST32 $r7
+# CHECK-NOT: S_SW{{.*}}$r7
+# CHECK: $r3 = ADDI32_W $r13, 16
+# Mentioned PEI SP+off dest; excluding it exhausts pass-1a (bqriir).
+# CHECK: $r7 = ADDI32_W $r13, 8
+# PEI / stack-counter trip-save of $r2 (S_SW $r2, $r13, %stack.N) is not
+# overlay. Overlay of LatchScr would be ST32/S_SW $r7 (already CHECK-NOT).
+# CHECK-NOT: ST32 $r7
+# CHECK-NOT: S_SW{{.*}}$r7
+# CHECK-NOT: LD32 $r7
+# CHECK-NOT: S_LW{{.*}}$r7
+# CHECK-LABEL: bb.2.body:
+# Body still reads the original trip. Between the body store and the
+# latch window, r3 must not become MOVE32/SUBI/LD32/BNEZ (pass-2 steal).
+# CHECK: {{ST32|S_SW}}{{.*}}$r2
+# CHECK: $r7 = XOR32
+# CHECK: {{ST32|S_SW}}{{.*}}$r7
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r2 = LD32
+# CHECK-NOT: $r3 = MOVE32
+# CHECK-NOT: $r3 = COPY
+# CHECK-NOT: $r3 = SUBI32
+# CHECK-NOT: $r3 = LD32
+# CHECK-NOT: BNEZ{{.*}}$r3
+# CHECK-NOT: $r4 = MOVE32 $r2
+# CHECK-NOT: $r4 = COPY $r2
+# CHECK-NOT: $r4 = SUBI32
+# CHECK-NOT: $r4 = LD32
+# CHECK-NOT: BNEZ{{.*}}$r4
+# CHECK-NOT: $r14 = MOVE32
+# CHECK-NOT: $r14 = COPY
+# CHECK-NOT: $r14 = SUBI32
+# CHECK-NOT: $r14 = LD32
+# CHECK-NOT: BNEZ{{.*}}$r14
+# Latch window is the PEI SP+off dest dead temp, never r3/r4/r14:
+# CHECK: $r7 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r7 = SUBI32{{.*}}$r7, 1
+# CHECK: S_SW_WITH_IMM{{.*}}$r7, $r13
+# CHECK: BNEZ{{.*}}$r7
+# CHECK-NOT: $r3 = MOVE32
+# CHECK-NOT: $r3 = COPY
+# CHECK-NOT: $r3 = SUBI32
+# CHECK-NOT: BNEZ{{.*}}$r3
+# CHECK-NOT: $r4 = MOVE32 $r2
+# CHECK-NOT: $r4 = COPY $r2
+# CHECK-NOT: $r4 = SUBI32
+# CHECK-NOT: $r4 = LD32
+# CHECK-NOT: BNEZ{{.*}}$r4
+# CHECK-NOT: $r14 = MOVE32
+# CHECK-NOT: $r14 = COPY
+# CHECK-NOT: $r14 = SUBI32
+# CHECK-NOT: BNEZ{{.*}}$r14
+# CHECK-LABEL: bb.3.exit:
+# Overlay restore would be LD32/S_LW of LatchScr at Exit begin. PEI CSR
+# restore of $r14 is after the cursor store; do not CHECK-NOT that.
+# CHECK-NOT: $r7 = LD32
+# CHECK-NOT: $r7 = S_LW
+# CHECK: {{ST32|S_SW}}{{.*}}$r3
+
+# Occupancy miss last-resorts LatchScr=R0 + Header XOR restore. SET gone;
+# never SUBI/LD32 Prefer or r3/r4/r14 steal; never overlay.
+# OCC-NOT: SET_HWLOOP
+# OCC-NOT: $r2 = SUBI32
+# OCC-NOT: $r2 = LD32
+# OCC-NOT: $r3 = SUBI32
+# OCC-NOT: $r3 = MOVE32
+# OCC-NOT: $r3 = COPY
+# OCC-NOT: $r3 = LD32
+# OCC-NOT: BNEZ{{.*}}$r3
+# OCC-NOT: $r4 = MOVE32 $r2
+# OCC-NOT: $r4 = COPY $r2
+# OCC-NOT: $r4 = SUBI32
+# OCC-NOT: $r4 = LD32
+# OCC-NOT: BNEZ{{.*}}$r4
+# OCC-NOT: $r14 = MOVE32
+# OCC-NOT: $r14 = COPY
+# OCC-NOT: $r14 = SUBI32
+# OCC-NOT: $r14 = LD32
+# OCC-NOT: BNEZ{{.*}}$r14
+# OCC-LABEL: bb.2.body:
+# OCC: $r0 = XOR32
+# OCC-NOT: $r2 = SUBI32
+# OCC-NOT: $r2 = LD32
+# OCC: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# OCC: $r0 = SUBI32{{.*}}$r0, 1
+# OCC: S_SW_WITH_IMM{{.*}}$r0, $r13
+# OCC: BNEZ{{.*}}$r0
+# OCC-NOT: $r2 = SUBI32
+# OCC-NOT: $r2 = LD32
+# OCC-NOT: $r3 = SUBI32
+# OCC-NOT: $r3 = MOVE32
+# OCC-NOT: BNEZ{{.*}}$r3
+# OCC-NOT: $r4 = SUBI32
+# OCC-NOT: BNEZ{{.*}}$r4
+# OCC-NOT: $r14 = SUBI32
+# OCC-NOT: BNEZ{{.*}}$r14
+# OCC-LABEL: bb.3.exit:
+# OCC: {{ST32|S_SW}}{{.*}}$r3
+
+# DBG: demoting hwloop
+# DBG: has non-countdown body use
+# DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# DBG-NOT: demote skip LatchScr {{.*}}$r7
+# DBG-NOT: LatchScr=$r3
+# DBG-NOT: LatchScr=$r4
+# DBG-NOT: LatchScr=$r14
+# DBG-NOT: demote latch scratch = Prefer
+# DBG: LatchScr=$r7
+# Skip overlay of the legal PEI dest — D1.64 without overlay, not D1.71
+# (that pin is overlay ST of undefined $r14).
+# DBG: demote skip overlay of {{.*}}$r7
+# DBG-NOT: demote skip overlay of {{.*}}$r14
+# DBG-NOT: demote skip overlay of {{.*}}$r3
+# DBG: demote stack-counter
+# DBG-NOT: LatchScr=$r3
+# DBG-NOT: LatchScr=$r4
+# DBG-NOT: LatchScr=$r14
+# DBG-NOT: demote latch scratch = Prefer
+# DBG-NOT: demote skip overlay of {{.*}}$r14
+
+# OCC-DBG: has non-countdown body use
+# OCC-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# OCC-DBG-NOT: LatchScr=$r3
+# OCC-DBG-NOT: LatchScr=$r4
+# OCC-DBG-NOT: LatchScr=$r14
+# OCC-DBG-NOT: demote latch scratch = Prefer
+# OCC-DBG: occupancy miss{{.*}}last-resort LatchScr=R0
+# OCC-DBG: demote skip overlay of {{.*}}$r0
+# OCC-DBG-NOT: demote overlay save
+# OCC-DBG: demote stack-counter
+# OCC-DBG-NOT: demote latch scratch = Prefer
+# OCC-DBG-NOT: LatchScr=$r3
+# OCC-DBG-NOT: LatchScr=$r4
+# OCC-DBG-NOT: LatchScr=$r14
+# OCC-DBG-NOT: LLVM ERROR
+
+# Pred live-through: r3=sp+off lives in the predecessor, not the SET block.
+# PRED-LABEL: name: d164_vaarg22_pred_livethrough
+# PRED-NOT: SET_HWLOOP
+# PRED: $r3 = ADDI32_W $r13, 16
+# PRED-NOT: ST32 $r7
+# PRED-NOT: S_SW{{.*}}$r7
+# PRED: $r7 = ADDI32_W $r13, 8
+# PEI / stack-counter trip-save of $r2 is not overlay (D1.71 is ST/S_SW $r7).
+# PRED-NOT: ST32 $r7
+# PRED-NOT: S_SW{{.*}}$r7
+# PRED-NOT: LD32 $r7
+# PRED-NOT: S_LW{{.*}}$r7
+# PRED-LABEL: bb.3.body:
+# PRED: {{ST32|S_SW}}{{.*}}$r2
+# PRED: $r7 = XOR32
+# PRED: {{ST32|S_SW}}{{.*}}$r7
+# PRED-NOT: $r2 = SUBI32
+# PRED-NOT: $r2 = LD32
+# PRED-NOT: $r3 = MOVE32
+# PRED-NOT: $r3 = COPY
+# PRED-NOT: $r3 = SUBI32
+# PRED-NOT: $r3 = LD32
+# PRED-NOT: BNEZ{{.*}}$r3
+# PRED-NOT: $r4 = MOVE32 $r2
+# PRED-NOT: $r4 = COPY $r2
+# PRED-NOT: $r4 = SUBI32
+# PRED-NOT: $r4 = LD32
+# PRED-NOT: BNEZ{{.*}}$r4
+# PRED-NOT: $r14 = MOVE32
+# PRED-NOT: $r14 = COPY
+# PRED-NOT: $r14 = SUBI32
+# PRED-NOT: $r14 = LD32
+# PRED-NOT: BNEZ{{.*}}$r14
+# PRED: $r7 = S_LW_WITH_IMM{{.*}}$r13
+# PRED: $r7 = SUBI32{{.*}}$r7, 1
+# PRED: S_SW_WITH_IMM{{.*}}$r7, $r13
+# PRED: BNEZ{{.*}}$r7
+# PRED-NOT: $r3 = MOVE32
+# PRED-NOT: $r3 = COPY
+# PRED-NOT: $r3 = SUBI32
+# PRED-NOT: BNEZ{{.*}}$r3
+# PRED-NOT: $r4 = MOVE32 $r2
+# PRED-NOT: $r4 = COPY $r2
+# PRED-NOT: $r4 = SUBI32
+# PRED-NOT: $r4 = LD32
+# PRED-NOT: BNEZ{{.*}}$r4
+# PRED-NOT: $r14 = MOVE32
+# PRED-NOT: $r14 = COPY
+# PRED-NOT: $r14 = SUBI32
+# PRED-NOT: BNEZ{{.*}}$r14
+# PRED-LABEL: bb.4.exit:
+# PRED-NOT: $r7 = LD32
+# PRED-NOT: $r7 = S_LW
+# PRED: {{ST32|S_SW}}{{.*}}$r3
+
+# PRED-DBG: has non-countdown body use
+# PRED-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# PRED-DBG-NOT: demote skip LatchScr {{.*}}$r7
+# PRED-DBG-NOT: LatchScr=$r3
+# PRED-DBG-NOT: LatchScr=$r4
+# PRED-DBG-NOT: LatchScr=$r14
+# PRED-DBG-NOT: demote latch scratch = Prefer
+# PRED-DBG: LatchScr=$r7
+# PRED-DBG: demote skip overlay of {{.*}}$r7
+# PRED-DBG-NOT: demote skip overlay of {{.*}}$r14
+# PRED-DBG-NOT: demote skip overlay of {{.*}}$r3
+# PRED-DBG: demote stack-counter
+# PRED-DBG-NOT: LatchScr=$r3
+# PRED-DBG-NOT: LatchScr=$r4
+# PRED-DBG-NOT: LatchScr=$r14
+# PRED-DBG-NOT: demote latch scratch = Prefer
+# PRED-DBG-NOT: demote skip overlay of {{.*}}$r14
+
+# Reaching def before SET in the SET block.
+# BEFORE-LABEL: name: d164_vaarg22_before_set
+# BEFORE-NOT: SET_HWLOOP
+# BEFORE: $r3 = ADDI32_W $r13, 16
+# BEFORE-NOT: ST32 $r7
+# BEFORE-NOT: S_SW{{.*}}$r7
+# BEFORE: $r7 = ADDI32_W $r13, 8
+# PEI / stack-counter trip-save of $r2 is not overlay (D1.71 is ST/S_SW $r7).
+# BEFORE-NOT: ST32 $r7
+# BEFORE-NOT: S_SW{{.*}}$r7
+# BEFORE-NOT: LD32 $r7
+# BEFORE-NOT: S_LW{{.*}}$r7
+# BEFORE-LABEL: bb.2.body:
+# BEFORE: {{ST32|S_SW}}{{.*}}$r2
+# BEFORE: $r7 = XOR32
+# BEFORE: {{ST32|S_SW}}{{.*}}$r7
+# BEFORE-NOT: $r2 = SUBI32
+# BEFORE-NOT: $r2 = LD32
+# BEFORE-NOT: $r3 = MOVE32
+# BEFORE-NOT: $r3 = COPY
+# BEFORE-NOT: $r3 = SUBI32
+# BEFORE-NOT: $r3 = LD32
+# BEFORE-NOT: BNEZ{{.*}}$r3
+# BEFORE-NOT: $r4 = MOVE32 $r2
+# BEFORE-NOT: $r4 = COPY $r2
+# BEFORE-NOT: $r4 = SUBI32
+# BEFORE-NOT: $r4 = LD32
+# BEFORE-NOT: BNEZ{{.*}}$r4
+# BEFORE-NOT: $r14 = MOVE32
+# BEFORE-NOT: $r14 = COPY
+# BEFORE-NOT: $r14 = SUBI32
+# BEFORE-NOT: $r14 = LD32
+# BEFORE-NOT: BNEZ{{.*}}$r14
+# BEFORE: $r7 = S_LW_WITH_IMM{{.*}}$r13
+# BEFORE: $r7 = SUBI32{{.*}}$r7, 1
+# BEFORE: S_SW_WITH_IMM{{.*}}$r7, $r13
+# BEFORE: BNEZ{{.*}}$r7
+# BEFORE-NOT: $r3 = MOVE32
+# BEFORE-NOT: $r3 = COPY
+# BEFORE-NOT: $r3 = SUBI32
+# BEFORE-NOT: BNEZ{{.*}}$r3
+# BEFORE-NOT: $r4 = MOVE32 $r2
+# BEFORE-NOT: $r4 = COPY $r2
+# BEFORE-NOT: $r4 = SUBI32
+# BEFORE-NOT: $r4 = LD32
+# BEFORE-NOT: BNEZ{{.*}}$r4
+# BEFORE-NOT: $r14 = MOVE32
+# BEFORE-NOT: $r14 = COPY
+# BEFORE-NOT: $r14 = SUBI32
+# BEFORE-NOT: BNEZ{{.*}}$r14
+# BEFORE-LABEL: bb.3.exit:
+# BEFORE-NOT: $r7 = LD32
+# BEFORE-NOT: $r7 = S_LW
+# BEFORE: {{ST32|S_SW}}{{.*}}$r3
+
+# BEFORE-DBG: has non-countdown body use
+# BEFORE-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# BEFORE-DBG-NOT: demote skip LatchScr {{.*}}$r7
+# BEFORE-DBG-NOT: LatchScr=$r3
+# BEFORE-DBG-NOT: LatchScr=$r4
+# BEFORE-DBG-NOT: LatchScr=$r14
+# BEFORE-DBG-NOT: demote latch scratch = Prefer
+# BEFORE-DBG: LatchScr=$r7
+# BEFORE-DBG: demote skip overlay of {{.*}}$r7
+# BEFORE-DBG-NOT: demote skip overlay of {{.*}}$r14
+# BEFORE-DBG-NOT: demote skip overlay of {{.*}}$r3
+# BEFORE-DBG: demote stack-counter
+# BEFORE-DBG-NOT: LatchScr=$r3
+# BEFORE-DBG-NOT: LatchScr=$r4
+# BEFORE-DBG-NOT: LatchScr=$r14
+# BEFORE-DBG-NOT: demote latch scratch = Prefer
+# BEFORE-DBG-NOT: demote skip overlay of {{.*}}$r14
+
+# SET-bundle coissue: r3=sp+off is a bundle member, SET last. A top-level
+# walker that skips BUNDLE headers misses this and steals LatchScr=$r3.
+# COISSUE-LABEL: name: d164_vaarg22_set_bundle_coissue
+# COISSUE-NOT: SET_HWLOOP
+# COISSUE: ADDI32{{.*}}$r13
+# PEI / stack-counter trip-save of $r2 is not overlay (D1.71 is ST/S_SW $r7).
+# COISSUE-NOT: ST32 $r7
+# COISSUE-NOT: S_SW{{.*}}$r7
+# COISSUE-NOT: LD32 $r7
+# COISSUE-NOT: S_LW{{.*}}$r7
+# COISSUE-LABEL: bb.2.body:
+# COISSUE: {{ST32|S_SW}}{{.*}}$r2
+# COISSUE: $r7 = XOR32
+# COISSUE: {{ST32|S_SW}}{{.*}}$r7
+# COISSUE-NOT: $r2 = SUBI32
+# COISSUE-NOT: $r2 = LD32
+# COISSUE-NOT: $r3 = MOVE32
+# COISSUE-NOT: $r3 = COPY
+# COISSUE-NOT: $r3 = SUBI32
+# COISSUE-NOT: $r3 = LD32
+# COISSUE-NOT: BNEZ{{.*}}$r3
+# COISSUE-NOT: $r4 = MOVE32 $r2
+# COISSUE-NOT: $r4 = COPY $r2
+# COISSUE-NOT: $r4 = SUBI32
+# COISSUE-NOT: $r4 = LD32
+# COISSUE-NOT: BNEZ{{.*}}$r4
+# COISSUE-NOT: $r14 = MOVE32
+# COISSUE-NOT: $r14 = COPY
+# COISSUE-NOT: $r14 = SUBI32
+# COISSUE-NOT: $r14 = LD32
+# COISSUE-NOT: BNEZ{{.*}}$r14
+# COISSUE: $r7 = S_LW_WITH_IMM{{.*}}$r13
+# COISSUE: $r7 = SUBI32{{.*}}$r7, 1
+# COISSUE: S_SW_WITH_IMM{{.*}}$r7, $r13
+# COISSUE: BNEZ{{.*}}$r7
+# COISSUE-NOT: $r3 = MOVE32
+# COISSUE-NOT: $r3 = COPY
+# COISSUE-NOT: $r3 = SUBI32
+# COISSUE-NOT: BNEZ{{.*}}$r3
+# COISSUE-NOT: $r4 = MOVE32 $r2
+# COISSUE-NOT: $r4 = COPY $r2
+# COISSUE-NOT: $r4 = SUBI32
+# COISSUE-NOT: $r4 = LD32
+# COISSUE-NOT: BNEZ{{.*}}$r4
+# COISSUE-NOT: $r14 = MOVE32
+# COISSUE-NOT: $r14 = COPY
+# COISSUE-NOT: $r14 = SUBI32
+# COISSUE-NOT: BNEZ{{.*}}$r14
+# COISSUE-LABEL: bb.3.exit:
+# COISSUE-NOT: $r7 = LD32
+# COISSUE-NOT: $r7 = S_LW
+# COISSUE: {{ST32|S_SW}}{{.*}}$r3
+
+# COISSUE-DBG: has non-countdown body use
+# COISSUE-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# COISSUE-DBG-NOT: demote skip LatchScr {{.*}}$r7
+# COISSUE-DBG-NOT: LatchScr=$r3
+# COISSUE-DBG-NOT: LatchScr=$r4
+# COISSUE-DBG-NOT: LatchScr=$r14
+# COISSUE-DBG-NOT: demote latch scratch = Prefer
+# COISSUE-DBG: LatchScr=$r7
+# COISSUE-DBG: demote skip overlay of {{.*}}$r7
+# COISSUE-DBG-NOT: demote skip overlay of {{.*}}$r14
+# COISSUE-DBG-NOT: demote skip overlay of {{.*}}$r3
+# COISSUE-DBG: demote stack-counter
+# COISSUE-DBG-NOT: LatchScr=$r3
+# COISSUE-DBG-NOT: LatchScr=$r4
+# COISSUE-DBG-NOT: LatchScr=$r14
+# COISSUE-DBG-NOT: demote latch scratch = Prefer
+# COISSUE-DBG-NOT: demote skip overlay of {{.*}}$r14
+
+# Live-into-exit tail-imm: r14=ADDI r0,imm after SET, used at Exit.
+# FA r3 is skipped. Pass-2 refuse last-resorts LatchScr=R0 rather than
+# stolen LatchScr=$r14 (never Prefer / r3 / r4). SET gone.
+# TAILIMM-NOT: SET_HWLOOP
+# TAILIMM-NOT: $r2 = SUBI32
+# TAILIMM-NOT: $r2 = LD32
+# TAILIMM-NOT: $r3 = MOVE32
+# TAILIMM-NOT: $r3 = COPY
+# TAILIMM-NOT: $r3 = SUBI32
+# TAILIMM-NOT: $r3 = LD32
+# TAILIMM-NOT: BNEZ{{.*}}$r3
+# TAILIMM-NOT: $r4 = MOVE32 $r2
+# TAILIMM-NOT: $r4 = COPY $r2
+# TAILIMM-NOT: $r4 = SUBI32
+# TAILIMM-NOT: $r4 = LD32
+# TAILIMM-NOT: BNEZ{{.*}}$r4
+# TAILIMM-NOT: $r14 = MOVE32
+# TAILIMM-NOT: $r14 = COPY
+# TAILIMM-NOT: $r14 = SUBI32
+# TAILIMM-NOT: $r14 = LD32
+# TAILIMM-NOT: $r14 = S_LW
+# TAILIMM-NOT: BNEZ{{.*}}$r14
+# TAILIMM: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# TAILIMM: $r0 = SUBI32{{.*}}$r0, 1
+# TAILIMM: S_SW_WITH_IMM{{.*}}$r0, $r13
+# TAILIMM: BNEZ{{.*}}$r0
+# TAILIMM-NOT: $r2 = SUBI32
+# TAILIMM-NOT: $r2 = LD32
+# TAILIMM-NOT: $r14 = SUBI32
+# TAILIMM-NOT: $r14 = S_LW
+# TAILIMM-NOT: BNEZ{{.*}}$r14
+
+# TAILIMM-DBG: has non-countdown body use
+# TAILIMM-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# TAILIMM-DBG-NOT: LatchScr=$r4
+# TAILIMM-DBG-NOT: LatchScr=$r3
+# TAILIMM-DBG-NOT: LatchScr=$r14
+# TAILIMM-DBG-NOT: demote latch scratch = Prefer
+# TAILIMM-DBG: occupancy miss{{.*}}last-resort LatchScr=R0
+# TAILIMM-DBG: demote skip overlay of {{.*}}$r0
+# TAILIMM-DBG-NOT: demote overlay save
+# TAILIMM-DBG-NOT: demote latch scratch = Prefer
+# TAILIMM-DBG-NOT: LatchScr=$r14
+# TAILIMM-DBG-NOT: LatchScr=$r4
+# TAILIMM-DBG-NOT: LatchScr=$r3
+# TAILIMM-DBG-NOT: LLVM ERROR
+
+# COPY/MOVE of live-into-exit tail-imm: r14=ADDI r0,imm after SET, then
+# r7=MOVE32 r14, both used at Exit. Occupancy miss fatals rather than
+# MOVE32/SUBI/LD32/BNEZ of the copy dest (or of r14 / Prefer / FA r3).
+# Keep FA r3 and ADDI r14 CHECKs. Input `$r7 = MOVE32 $r14` is the O2
+# shape; demote steal is MOVE32 of the trip into r7 or latch SUBI/LD32.
+# COPYMOVE-NOT: $r2 = SUBI32
+# COPYMOVE-NOT: $r2 = LD32
+# COPYMOVE-NOT: $r3 = MOVE32
+# COPYMOVE-NOT: $r3 = COPY
+# COPYMOVE-NOT: $r3 = SUBI32
+# COPYMOVE-NOT: $r3 = LD32
+# COPYMOVE-NOT: BNEZ{{.*}}$r3
+# COPYMOVE-NOT: $r14 = MOVE32
+# COPYMOVE-NOT: $r14 = COPY
+# COPYMOVE-NOT: $r14 = SUBI32
+# COPYMOVE-NOT: $r14 = LD32
+# COPYMOVE-NOT: BNEZ{{.*}}$r14
+# COPYMOVE-NOT: $r7 = S_LW
+# COPYMOVE-NOT: $r7 = SUBI32
+# COPYMOVE-NOT: $r7 = LD32
+# COPYMOVE-NOT: BNEZ{{.*}}$r7
+# COPYMOVE-NOT: SET_HWLOOP
+# COPYMOVE: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# COPYMOVE: $r0 = SUBI32{{.*}}$r0, 1
+# COPYMOVE: S_SW_WITH_IMM{{.*}}$r0, $r13
+# COPYMOVE: BNEZ{{.*}}$r0
+# COPYMOVE-NOT: $r2 = SUBI32
+# COPYMOVE-NOT: $r2 = LD32
+# COPYMOVE-NOT: $r3 = MOVE32
+# COPYMOVE-NOT: $r3 = COPY
+# COPYMOVE-NOT: $r3 = SUBI32
+# COPYMOVE-NOT: $r3 = LD32
+# COPYMOVE-NOT: BNEZ{{.*}}$r3
+# COPYMOVE-NOT: $r14 = SUBI32
+# COPYMOVE-NOT: BNEZ{{.*}}$r14
+# COPYMOVE-NOT: $r7 = MOVE32 $r2
+# COPYMOVE-NOT: $r7 = COPY $r2
+# COPYMOVE-NOT: $r7 = SUBI32
+# COPYMOVE-NOT: BNEZ{{.*}}$r7
+
+# COPYMOVE-DBG: has non-countdown body use
+# COPYMOVE-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# COPYMOVE-DBG-NOT: live-into-exit tail-imm
+# COPYMOVE-DBG-NOT: LatchScr=$r4
+# COPYMOVE-DBG-NOT: LatchScr=$r14
+# COPYMOVE-DBG-NOT: LatchScr=$r3
+# COPYMOVE-DBG-NOT: LatchScr=$r7
+# COPYMOVE-DBG-NOT: demote latch scratch = Prefer
+# COPYMOVE-DBG: occupancy miss{{.*}}last-resort LatchScr=R0
+# COPYMOVE-DBG: demote skip overlay of {{.*}}$r0
+# COPYMOVE-DBG-NOT: demote overlay save
+# COPYMOVE-DBG-NOT: demote latch scratch = Prefer
+# COPYMOVE-DBG-NOT: LatchScr=$r4
+# COPYMOVE-DBG-NOT: LatchScr=$r14
+# COPYMOVE-DBG-NOT: LatchScr=$r3
+# COPYMOVE-DBG-NOT: LatchScr=$r7
+# COPYMOVE-DBG-NOT: LLVM ERROR
+
+# Generic COPY of live-into-exit tail-imm: r14=ADDI r0,imm after SET, then
+# r7=COPY r14, both used at Exit. Occupancy miss fatals rather than
+# MOVE32/COPY/SUBI/LD32/BNEZ of the copy dest (or of r14 / Prefer / FA r3).
+# COPYOPC-NOT: $r2 = SUBI32
+# COPYOPC-NOT: $r2 = LD32
+# COPYOPC-NOT: $r3 = MOVE32
+# COPYOPC-NOT: $r3 = COPY
+# COPYOPC-NOT: $r3 = SUBI32
+# COPYOPC-NOT: $r3 = LD32
+# COPYOPC-NOT: BNEZ{{.*}}$r3
+# COPYOPC-NOT: $r14 = MOVE32
+# COPYOPC-NOT: $r14 = COPY
+# COPYOPC-NOT: $r14 = SUBI32
+# COPYOPC-NOT: $r14 = LD32
+# COPYOPC-NOT: BNEZ{{.*}}$r14
+# COPYOPC-NOT: $r7 = S_LW
+# COPYOPC-NOT: $r7 = SUBI32
+# COPYOPC-NOT: $r7 = LD32
+# COPYOPC-NOT: BNEZ{{.*}}$r7
+# COPYOPC-NOT: SET_HWLOOP
+# COPYOPC: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# COPYOPC: $r0 = SUBI32{{.*}}$r0, 1
+# COPYOPC: S_SW_WITH_IMM{{.*}}$r0, $r13
+# COPYOPC: BNEZ{{.*}}$r0
+# COPYOPC-NOT: $r2 = SUBI32
+# COPYOPC-NOT: $r2 = LD32
+# COPYOPC-NOT: $r3 = MOVE32
+# COPYOPC-NOT: $r3 = COPY
+# COPYOPC-NOT: $r3 = SUBI32
+# COPYOPC-NOT: $r3 = LD32
+# COPYOPC-NOT: BNEZ{{.*}}$r3
+# COPYOPC-NOT: $r14 = SUBI32
+# COPYOPC-NOT: BNEZ{{.*}}$r14
+# COPYOPC-NOT: $r7 = MOVE32 $r2
+# COPYOPC-NOT: $r7 = COPY $r2
+# COPYOPC-NOT: $r7 = SUBI32
+# COPYOPC-NOT: BNEZ{{.*}}$r7
+
+# COPYOPC-DBG: has non-countdown body use
+# COPYOPC-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# COPYOPC-DBG-NOT: live-into-exit tail-imm
+# COPYOPC-DBG-NOT: LatchScr=$r4
+# COPYOPC-DBG-NOT: LatchScr=$r14
+# COPYOPC-DBG-NOT: LatchScr=$r3
+# COPYOPC-DBG-NOT: LatchScr=$r7
+# COPYOPC-DBG-NOT: demote latch scratch = Prefer
+# COPYOPC-DBG: occupancy miss{{.*}}last-resort LatchScr=R0
+# COPYOPC-DBG: demote skip overlay of {{.*}}$r0
+# COPYOPC-DBG-NOT: demote overlay save
+# COPYOPC-DBG-NOT: demote latch scratch = Prefer
+# COPYOPC-DBG-NOT: LatchScr=$r4
+# COPYOPC-DBG-NOT: LatchScr=$r14
+# COPYOPC-DBG-NOT: LatchScr=$r3
+# COPYOPC-DBG-NOT: LatchScr=$r7
+# COPYOPC-DBG-NOT: LLVM ERROR
+
+# Header redef of the ADDI dest: r14=ADDI r0,imm, r4=COPY r14, body
+# $r14=MOVE32 r4. Live-into-exit of r14 dies on that header def, so
+# pass-1a still installs LatchScr=$r14 (dead at latch end). Not a
+# pass-2 steal. Occupancy-fatal never-Prefer is occ.mir / tailimm.
+# HEADER-NOT: $r2 = SUBI32
+# HEADER-NOT: $r2 = LD32
+# HEADER-NOT: $r3 = MOVE32
+# HEADER-NOT: $r3 = COPY
+# HEADER-NOT: $r3 = SUBI32
+# HEADER-NOT: $r3 = LD32
+# HEADER-NOT: BNEZ{{.*}}$r3
+# LatchScr=$r14. Never Prefer / r3 / r4 countdown. Body `$r14=MOVE32 $r4` is input.
+# HEADER: $r14 = S_LW_WITH_IMM{{.*}}$r13
+# HEADER: $r14 = SUBI32{{.*}}$r14, 1
+# HEADER: S_SW_WITH_IMM{{.*}}$r14, $r13
+# HEADER: BNEZ{{.*}}$r14
+# HEADER-NOT: $r2 = SUBI32
+# HEADER-NOT: $r2 = LD32
+# HEADER-NOT: $r3 = MOVE32
+# HEADER-NOT: $r3 = COPY
+# HEADER-NOT: $r3 = SUBI32
+# HEADER-NOT: $r3 = LD32
+# HEADER-NOT: BNEZ{{.*}}$r3
+# HEADER-NOT: $r14 = MOVE32 $r2
+# HEADER-NOT: $r14 = COPY $r2
+# HEADER-NOT: $r4 = MOVE32 $r2
+# HEADER-NOT: $r4 = COPY $r2
+# HEADER-NOT: $r4 = SUBI32
+# HEADER-NOT: $r4 = LD32
+# HEADER-NOT: BNEZ{{.*}}$r4
+
+# HEADER-DBG: has non-countdown body use
+# HEADER-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# HEADER-DBG-NOT: live-into-exit tail-imm
+# HEADER-DBG-NOT: LatchScr=$r4
+# HEADER-DBG-NOT: LatchScr=$r3
+# HEADER-DBG-NOT: demote latch scratch = Prefer
+# HEADER-DBG: LatchScr=$r14
+# HEADER-DBG: demote skip overlay of {{.*}}$r14
+# HEADER-DBG: demote stack-counter
+# HEADER-DBG-NOT: demote latch scratch = Prefer
+# HEADER-DBG-NOT: LatchScr=$r4
+# HEADER-DBG-NOT: LatchScr=$r3
+
+# Spacer redef hides r14 from live-into-exit and from LoopBlocks. After
+# pass-2 refuse, pass-1a still installs LatchScr=$r14 (dead at latch
+# end with incoming value). Not a pass-2 steal. Occupancy-fatal
+# never-Prefer is occ.mir / tailimm.
+# HIDE-NOT: $r2 = SUBI32
+# HIDE-NOT: $r2 = LD32
+# HIDE-NOT: $r3 = MOVE32
+# HIDE-NOT: $r3 = COPY
+# HIDE-NOT: $r3 = SUBI32
+# HIDE-NOT: $r3 = LD32
+# HIDE-NOT: BNEZ{{.*}}$r3
+# LatchScr=$r14. Never Prefer / r3 / r4 countdown.
+# HIDE: $r14 = S_LW_WITH_IMM{{.*}}$r13
+# HIDE: $r14 = SUBI32{{.*}}$r14, 1
+# HIDE: S_SW_WITH_IMM{{.*}}$r14, $r13
+# HIDE: BNEZ{{.*}}$r14
+# HIDE-NOT: $r2 = SUBI32
+# HIDE-NOT: $r2 = LD32
+# HIDE-NOT: $r3 = MOVE32
+# HIDE-NOT: $r3 = COPY
+# HIDE-NOT: $r3 = SUBI32
+# HIDE-NOT: $r3 = LD32
+# HIDE-NOT: BNEZ{{.*}}$r3
+# HIDE-NOT: $r14 = MOVE32 $r2
+# HIDE-NOT: $r14 = COPY $r2
+# HIDE-NOT: $r4 = MOVE32 $r2
+# HIDE-NOT: $r4 = COPY $r2
+# HIDE-NOT: $r4 = SUBI32
+# HIDE-NOT: $r4 = LD32
+# HIDE-NOT: BNEZ{{.*}}$r4
+
+# HIDE-DBG: has non-countdown body use
+# HIDE-DBG: demote skip LatchScr {{.*}}$r3{{.*}}preheader-tail frame address
+# HIDE-DBG-NOT: live-into-exit tail-imm
+# HIDE-DBG-NOT: LatchScr=$r4
+# HIDE-DBG-NOT: LatchScr=$r3
+# HIDE-DBG-NOT: demote latch scratch = Prefer
+# HIDE-DBG: LatchScr=$r14
+# HIDE-DBG: demote skip overlay of {{.*}}$r14
+# HIDE-DBG: demote stack-counter
+# HIDE-DBG-NOT: demote latch scratch = Prefer
+# HIDE-DBG-NOT: LatchScr=$r4
+# HIDE-DBG-NOT: LatchScr=$r3
+
+# SET-bundle coissue of tail-imm r14=ADDI r0,imm (SET last). Skip r3 and
+# r14; last-resort LatchScr=R0, never Prefer steal. SET gone.
+# TCOISSUE-NOT: SET_HWLOOP
+# TCOISSUE-NOT: $r2 = SUBI32
+# TCOISSUE-NOT: $r2 = LD32
+# TCOISSUE-NOT: $r3 = MOVE32
+# TCOISSUE-NOT: $r3 = COPY
+# TCOISSUE-NOT: $r3 = SUBI32
+# TCOISSUE-NOT: $r3 = LD32
+# TCOISSUE-NOT: BNEZ{{.*}}$r3
+# TCOISSUE-NOT: $r4 = MOVE32 $r2
+# TCOISSUE-NOT: $r4 = COPY $r2
+# TCOISSUE-NOT: $r4 = SUBI32
+# TCOISSUE-NOT: $r4 = LD32
+# TCOISSUE-NOT: BNEZ{{.*}}$r4
+# TCOISSUE-NOT: $r14 = MOVE32
+# TCOISSUE-NOT: $r14 = COPY
+# TCOISSUE-NOT: $r14 = SUBI32
+# TCOISSUE-NOT: $r14 = LD32
+# TCOISSUE-NOT: $r14 = S_LW
+# TCOISSUE-NOT: BNEZ{{.*}}$r14
+# TCOISSUE: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# TCOISSUE: $r0 = SUBI32{{.*}}$r0, 1
+# TCOISSUE: S_SW_WITH_IMM{{.*}}$r0, $r13
+# TCOISSUE: BNEZ{{.*}}$r0
+# TCOISSUE-NOT: $r2 = SUBI32
+# TCOISSUE-NOT: $r2 = LD32
+# TCOISSUE-NOT: $r3 = MOVE32
+# TCOISSUE-NOT: $r3 = COPY
+# TCOISSUE-NOT: $r3 = SUBI32
+# TCOISSUE-NOT: $r3 = LD32
+# TCOISSUE-NOT: BNEZ{{.*}}$r3
+# TCOISSUE-NOT: $r4 = MOVE32 $r2
+# TCOISSUE-NOT: $r4 = COPY $r2
+# TCOISSUE-NOT: $r4 = SUBI32
+# TCOISSUE-NOT: $r4 = LD32
+# TCOISSUE-NOT: BNEZ{{.*}}$r4
+# TCOISSUE-NOT: $r14 = SUBI32
+# TCOISSUE-NOT: BNEZ{{.*}}$r14
+
+# TCOISSUE-DBG: has non-countdown body use
+# TCOISSUE-DBG-NOT: LLVM ERROR
+
+# Real O2 @main fill-loop occupancy-miss: SET Prefer=$r3 is a body read,
+# unmentioned FA cluster r4–r12 (SP+off dests Exit reads), tail-imm
+# r14=ADDI r0,22. r3 is PreferHasBodyUse, not FA. XOR / PEI dest r7 hid
+# the miss (lit-green LatchScr=$r7). Last-resort LatchScr=R0, SET gone,
+# never MOVE32/COPY/SUBI/LD32/S_LW/BNEZ of Prefer / r3 / r4–r12 / r14,
+# never LatchScr=$r7/Prefer/r3/r14. A CHECK-NOT of only r3/r4/r7/r14 lets
+# a live-through steal of r5–r6/r8–r12 hide (PEI lowers latch LD32 to S_LW).
+# O2MAIN-NOT: SET_HWLOOP
+# O2MAIN-NOT: $r3 = SUBI32
+# O2MAIN-NOT: $r3 = LD32
+# O2MAIN-NOT: $r3 = S_LW
+# O2MAIN-NOT: BNEZ{{.*}}$r3
+# O2MAIN-NOT: $r14 = S_LW
+# O2MAIN-NOT: $r14 = SUBI32
+# O2MAIN-NOT: $r14 = LD32
+# O2MAIN-NOT: BNEZ{{.*}}$r14
+# O2MAIN: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# O2MAIN: $r0 = SUBI32{{.*}}$r0, 1
+# O2MAIN: S_SW_WITH_IMM{{.*}}$r0, $r13
+# O2MAIN: BNEZ{{.*}}$r0
+# O2MAIN-NOT: $r3 = SUBI32
+# O2MAIN-NOT: $r3 = LD32
+# O2MAIN-NOT: $r7 = SUBI32
+# O2MAIN-NOT: $r{{[2]|[4-9]|1[0-2]}} = SUBI32
+# O2MAIN-NOT: $r14 = SUBI32
+# O2MAIN-NOT: demote latch scratch = Prefer
+
+# O2MAIN-DBG: demote Prefer {{.*}}$r3{{.*}}has non-countdown body use
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r3{{.*}}non-countdown body use
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r4{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r5{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r6{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r7{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r8{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r9{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r10{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r11{{.*}}preheader-tail frame address
+# O2MAIN-DBG: demote skip LatchScr {{.*}}$r12{{.*}}preheader-tail frame address
+# O2MAIN-DBG-NOT: live-into-exit tail-imm
+# O2MAIN-DBG-NOT: LatchScr=$r7
+# O2MAIN-DBG-NOT: LatchScr=$r3
+# O2MAIN-DBG-NOT: LatchScr=$r14
+# O2MAIN-DBG-NOT: demote latch scratch = Prefer
+# O2MAIN-DBG: occupancy miss{{.*}}last-resort LatchScr=R0
+# O2MAIN-DBG: demote skip overlay of {{.*}}$r0
+# O2MAIN-DBG-NOT: demote overlay save
+# O2MAIN-DBG-NOT: demote latch scratch = Prefer
+# O2MAIN-DBG-NOT: LatchScr=$r7
+# O2MAIN-DBG-NOT: LatchScr=$r3
+# O2MAIN-DBG-NOT: LatchScr=$r14
+# O2MAIN-DBG-NOT: LLVM ERROR
+
+#--- ok.mir
+--- |
+  define dso_local void @d164_vaarg22_frameaddr(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_frameaddr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    ; va-arg-22: r3 = sp+off after SET (SET is not a scheduling boundary).
+    ; Unmentioned in the loop; live-through to exit. Pass-2 would steal it
+    ; as LatchScr without the frame-address re-pick.
+    $r3 = ADDI32_W $r13, 16
+    ; PEI-like SP+off dest (bqriir r7): mentioned in the body, dead at
+    ; latch. Excluding mentioned FA exhausts pass-1a.
+    $r7 = ADDI32_W $r13, 8
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP forces StartOff past uimm6 — demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Every PostRAScratchPriority / pickCounterReg GPR except r3 is
+  ; mentioned. r3 stays unmentioned so pickCounterReg cannot copy the
+  ; trip into it (tail frame-address + live-after); stack-counter runs.
+  ; r4 is mentioned so pass-2 cannot steal it. r7 is a body temp dead at
+  ; latch (not a header/exit live-in) — the pass-1a LatchScr.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r7 = XOR32 $r1, $r2
+    ST32 $r7, $r1, 2
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  ; r3 is the va-arg cursor. r7 is the pass-1a dead temp, not live here.
+  bb.3.exit:
+    liveins: $r1, $r3, $r15
+    ST32 $r3, $r1, 0
+    RET implicit killed $r15
+
+#--- occ.mir
+--- |
+  define dso_local void @d164_vaarg22_frameaddr_occupancy(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_frameaddr_occupancy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    $r3 = ADDI32_W $r13, 16
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Same as ok, but r4 is mentioned so it is not a pass-2 steal. After
+  ; skipping r3 there is no LatchScr; PreferHasBodyUse blocks
+  ; LatchScr=Prefer. Unused-R14 skip cannot hide a steal ($r14 live-in
+  ; and mentioned).
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r15
+    ST32 $r3, $r1, 0
+    RET implicit killed $r15
+
+#--- pred.mir
+--- |
+  define dso_local void @d164_vaarg22_pred_livethrough(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %preheader
+  preheader:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_pred_livethrough
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Pred live-through: r3=sp+off is defined in the predecessor, live-in of
+  ; the SET block, and never redefined there. A walker that only scans the
+  ; post-SET tail misses this and steals LatchScr=$r3.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    $r3 = ADDI32_W $r13, 16
+    NOP
+
+  bb.1.preheader:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.2
+    SET_HWLOOP_F2_W 0, %bb.3, %bb.3, $r2, implicit-def dead $sfr
+    $r7 = ADDI32_W $r13, 8
+    NOP
+    NOP
+    NOP
+
+  bb.2.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.3.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.4
+    ST32 $r2, $r1, 0
+    $r7 = XOR32 $r1, $r2
+    ST32 $r7, $r1, 2
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.4.exit:
+    liveins: $r1, $r3, $r15
+    ST32 $r3, $r1, 0
+    RET implicit killed $r15
+
+#--- before.mir
+--- |
+  define dso_local void @d164_vaarg22_before_set(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_before_set
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Reaching def before SET: r3=sp+off is the last def in the SET block
+  ; and sits *before* SET. Starting the walk at std::next(SET) hid this.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    $r3 = ADDI32_W $r13, 16
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    $r7 = ADDI32_W $r13, 8
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r7 = XOR32 $r1, $r2
+    ST32 $r7, $r1, 2
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r15
+    ST32 $r3, $r1, 0
+    RET implicit killed $r15
+
+#--- coissue.mir
+--- |
+  define dso_local void @d164_vaarg22_set_bundle_coissue(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_set_bundle_coissue
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; SET-bundle coissue: r3=sp+off is a member of the SET packet
+  ; (glueDefToUse places SET last). skipSetupOrMeta on the BUNDLE header
+  ; without instrs() hides the address scratch.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r13, implicit $r2 {
+      $r3 = ADDI32_W $r13, 16
+      SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    }
+    $r7 = ADDI32_W $r13, 8
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r7 = XOR32 $r1, $r2
+    ST32 $r7, $r1, 2
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r15
+    ST32 $r3, $r1, 0
+    RET implicit killed $r15
+
+#--- tailimm.mir
+--- |
+  define dso_local void @d164_vaarg22_tailimm_r14(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_tailimm_r14
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; FA r3=sp+off plus live-into-exit tail-imm r14=ADDI r0,imm after SET.
+  ; r4 is mentioned so pass-2 would steal r14 (last in GPR32NoSPNoLR)
+  ; after skipping r3. Skip r14 too; occupancy miss fatals rather than
+  ; MOVE32/SUBI/LD32/BNEZ r14 or LatchScr=Prefer.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    $r3 = ADDI32_W $r13, 16
+    $r14 = ADDI32_W $r0, 2
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Mention r4 so it is not a pass-2 steal. Do not mention r14: it is
+  ; the live-into-exit tail-imm. Prefer ($r2) is still READ in the body.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r14, $r15
+    ST32 $r3, $r1, 0
+    ST32 $r14, $r1, 1
+    RET implicit killed $r15
+
+#--- copy.mir
+--- |
+  define dso_local void @d164_vaarg22_tailimm_move_r7(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_tailimm_move_r7
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; FA r3=sp+off plus live-into-exit tail-imm r14=ADDI r0,imm after SET,
+  ; then O2 MOVE of that constant into r7. r4 is mentioned so pass-2
+  ; would steal r7 (unmentioned copy dest) after skipping r3 and r14.
+  ; Skip the copy dest too; occupancy miss fatals rather than
+  ; MOVE32/SUBI/LD32/BNEZ r7 or LatchScr=Prefer. Keep ADDI r3/r14.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    $r3 = ADDI32_W $r13, 16
+    $r14 = ADDI32_W $r0, 2
+    $r7 = MOVE32 $r14
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Mention r4 so it is not a pass-2 steal. Do not mention r7 (copy dest)
+  ; or r14 (ADDI tail-imm). Prefer ($r2) is still READ in the body.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r7, $r14, $r15
+    ST32 $r3, $r1, 0
+    ST32 $r14, $r1, 1
+    ST32 $r7, $r1, 2
+    RET implicit killed $r15
+
+#--- copyopc.mir
+--- |
+  define dso_local void @d164_vaarg22_tailimm_copy_r7(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_tailimm_copy_r7
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Same as copy.mir with generic COPY of the after-SET ADDI dest.
+  ; A MOVE32-only pin stays green while COPY of r14 still MEMORY_FAULTs.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    $r3 = ADDI32_W $r13, 16
+    $r14 = ADDI32_W $r0, 2
+    $r7 = COPY $r14
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Mention r4 so it is not a pass-2 steal. Do not mention r7 (COPY dest)
+  ; or r14 (ADDI tail-imm). Prefer ($r2) is still READ in the body.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r7, $r14, $r15
+    ST32 $r3, $r1, 0
+    ST32 $r14, $r1, 1
+    ST32 $r7, $r1, 2
+    RET implicit killed $r15
+
+#--- header.mir
+--- |
+  define dso_local void @d164_vaarg22_header_redef_r14(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_header_redef_r14
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; O2 remaining steal: r14=ADDI r0,imm after SET, COPY to r4, then the
+  ; loop header redefines r14 from that copy dest. Live-into-exit of r14
+  ; dies on the header def; a post-SET ADDI32_W-only pin stays green.
+  ; Copy-chain flood skips r3, r4, and r14. r5–r12 are mentioned so
+  ; pass-2 cannot steal them. Occupancy miss fatals rather than
+  ; MOVE32/SUBI/LD32/BNEZ of those GPRs or LatchScr=Prefer.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    $r3 = ADDI32_W $r13, 16
+    $r14 = ADDI32_W $r0, 2
+    $r4 = COPY $r14
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Header redef of the ADDI dest. Do not mention r4 (copy dest live
+  ; into exit). Prefer ($r2) is still READ in the body.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    $r14 = MOVE32 $r4
+    ST32 $r2, $r1, 0
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r4, $r15
+    ST32 $r3, $r1, 0
+    ST32 $r4, $r1, 1
+    RET implicit killed $r15
+
+#--- hide.mir
+--- |
+  define dso_local void @d164_vaarg22_hide_r14(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_hide_r14
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Spacer redef of r14 is not in LoopBlocks. r14 is unmentioned in the
+  ; kernel and not live-into-exit (killed before header). Without
+  ; copy-chain flood, pass-2 steals unmentioned r14 after skipping r3.
+  ; Skip r3, r4 (copy dest), and r14; occupancy miss fatals.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    $r3 = ADDI32_W $r13, 16
+    $r14 = ADDI32_W $r0, 2
+    $r4 = COPY $r14
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    $r14 = MOVE32 $r4
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Mention r5–r12. Do not mention r4 or r14.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r4, $r15
+    ST32 $r3, $r1, 0
+    ST32 $r4, $r1, 1
+    RET implicit killed $r15
+
+#--- tcoissue.mir
+--- |
+  define dso_local void @d164_vaarg22_tailimm_coissue(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_tailimm_coissue
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Tail-imm r14=ADDI r0,imm coissued in the SET packet (SET last). A
+  ; top-level walk from SET misses that last-def and pass-2 steals r14.
+  ; FA r3=sp+off stays after the bundle. Mention r4 so pass-2 would steal
+  ; r14 after skipping r3. Skip both; occupancy miss fatals rather than
+  ; MOVE32/SUBI/LD32/BNEZ r14 or LatchScr=Prefer.
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    BUNDLE 0, 0, implicit-def $r14, implicit-def dead $sfr, implicit $r0, implicit $r2 {
+      $r14 = ADDI32_W $r0, 2
+      SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    }
+    $r3 = ADDI32_W $r13, 16
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r3, $r14, $r15
+    ST32 $r3, $r1, 0
+    ST32 $r14, $r1, 1
+    RET implicit killed $r15
+
+#--- o2main.mir
+--- |
+  define dso_local void @d164_vaarg22_o2_main(ptr nocapture %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d164_vaarg22_o2_main
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Real O2 @main fill-loop occupancy-miss: SET Prefer=$r3 is a body
+  ; read (ST of the trip). Unmentioned FA cluster r4–r12 (SP+off dests
+  ; Exit reads) plus tail-imm r14=ADDI r0,22. r3 is PreferHasBodyUse,
+  ; not FA (no r3=sp+off). Mention r1 (address) and r2 (pointer) so
+  ; pass-2 cannot steal them. Do not mention r4–r12/r14 and do not XOR
+  ; r7 (XOR / PEI dest r7 hid the miss as lit-green LatchScr=$r7).
+  ; Occupancy fatal, never MOVE32/COPY/SUBI/LD32/S_LW/BNEZ of Prefer /
+  ; r3 / r4–r12 / r14, never LatchScr=$r7/Prefer/r3/r14.
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r3, implicit-def dead $sfr
+    $r4 = ADDI32_W $r13, 20
+    $r5 = ADDI32_W $r13, 24
+    $r6 = ADDI32_W $r13, 28
+    $r7 = ADDI32_W $r13, 32
+    $r8 = ADDI32_W $r13, 36
+    $r9 = ADDI32_W $r13, 40
+    $r10 = ADDI32_W $r13, 44
+    $r11 = ADDI32_W $r13, 48
+    $r12 = ADDI32_W $r13, 52
+    $r14 = ADDI32_W $r0, 22
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Prefer ($r3) is still READ in the body. Mention r2 so it is not a
+  ; pass-2 steal. Do not mention r4–r12 or r14. Latch live-ins keep the
+  ; FA cluster live-through so pass-1a cannot take a dead PEI dest.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r3, $r1, 0
+    $r2 = XOR32 $r2, $r2
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    ST32 $r4, $r1, 1
+    ST32 $r5, $r1, 2
+    ST32 $r6, $r1, 3
+    ST32 $r7, $r1, 4
+    ST32 $r8, $r1, 5
+    ST32 $r9, $r1, 6
+    ST32 $r10, $r1, 7
+    ST32 $r11, $r1, 8
+    ST32 $r12, $r1, 9
+    ST32 $r14, $r1, 10
+    RET implicit killed $r15
+
+

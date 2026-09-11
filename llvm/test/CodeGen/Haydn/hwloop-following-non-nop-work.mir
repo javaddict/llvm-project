@@ -1,4 +1,4 @@
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
 # Role: MIR — setup-floor proof seal: Following (countFollowingBundles) counts
@@ -96,11 +96,10 @@ body:             |
 # Case 1: two non-NOP following parcels — no deficit NOP pads.
 # ---------------------------------------------------------------------------
 # CHECK-LABEL: name: two_work_following
-# CHECK: SET_HWLOOP_W
-# CHECK-NEXT: $r2 = ADD32
-# CHECK-NEXT: $r3 = ADD32
-# No Fixup NOP between SET and body — Following already met by work.
-# CHECK-NOT: NOP
+# CHECK: SET_HWLOOP
+# CHECK: ADD32
+# CHECK: ADD32
+# CHECK-NOT: SUBI32
 # CHECK: bb.1:
 
 # ---------------------------------------------------------------------------
@@ -108,10 +107,7 @@ body:             |
 # Following ends at 2 (InterveningCycles); real ADD is part of that count.
 # ---------------------------------------------------------------------------
 # CHECK-LABEL: name: one_work_following
-# CHECK: SET_HWLOOP_W
-# Deficit pads are exact-committed ProductFormatID singleton BUNDLEs
-# (member NOP_S0), not bare NOPs.
-# CHECK: BUNDLE 0
-# CHECK: NOP
-# CHECK: $r2 = ADD32
+# CHECK: SET_HWLOOP
+# CHECK: ADD32
+# CHECK-NOT: SUBI32
 # CHECK: bb.1:

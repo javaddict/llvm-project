@@ -21,6 +21,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -195,10 +197,10 @@ bool llvm::insertSoftZeroR0AfterCalls(MachineFunction &MF,
                       << MBB->getNumber() << '\n');
   }
 
-  // After calls: JAL/JAL_W, PseudoCALLIndirect, and the W67 fnptr-call
-  // clone JALR_MSP (ExpandPseudos lowers PseudoCALLIndirect to it pre-S1).
-  // Callee RET is JALR_W r0,lr which clobbers R0. Direct calls are JAL_W
-  // from CallLowering.
+  // After calls: JAL/JAL_W, PseudoCALLIndirect, and the returning fnptr
+  // call JALR_CALL (ExpandPseudos lowers PseudoCALLIndirect to it pre-S1).
+  // Callee RET is JALR_W r0,lr which clobbers R0. Direct calls are
+  // LOAD_ADDR + JAL_IND from CallLowering; short JAL is LLD relax.
   for (MachineBasicBlock &MBB : MF) {
     for (MachineBasicBlock::iterator MII = MBB.begin(), E = MBB.end();
          MII != E;) {
@@ -207,7 +209,7 @@ bool llvm::insertSoftZeroR0AfterCalls(MachineFunction &MF,
       unsigned Opc = MI.getOpcode();
       bool NeedsPostCallZero =
           Opc == Haydn::JAL || Opc == Haydn::JAL_W ||
-          Opc == Haydn::PseudoCALLIndirect || Opc == Haydn::JALR_MSP;
+          Opc == Haydn::PseudoCALLIndirect || Opc == Haydn::JALR_CALL;
       if (!NeedsPostCallZero)
         continue;
       MachineBasicBlock::iterator Next = MII;
@@ -299,24 +301,41 @@ Register llvm::findPostRAScratchNoSpill(
     for (const MachineBasicBlock *S : Successors)
       EffSuccs.push_back(S);
   }
+  // Distinct successors: FunctionPhysLiveness live-ins with
+  // SeedPristines=false (AIE LiveRegs.cpp:37-107 worklist; computed,
+  // never stored). computeBlockLiveIns / llvm::computeLiveIns seed from
+  // stored liveouts and miss a Header→E second-hop when E.liveins is
+  // stale-empty. Self successor stays the stored loop-carried set —
+  // never FPL.isLiveIn(MBB) (that joins extras the rewrite drops).
+  haydn::hwloop::FunctionPhysLiveness FPL;
+  FPL.build(MF, /*SeedPristines=*/false);
   for (const MachineBasicBlock *Succ : EffSuccs) {
     if (!Succ)
       continue;
     // Self-loop: stored liveins are the loop-carried set. Computing
     // live-ins of MBB itself would re-walk with extra pre-rewrite
     // successors (Header==Latch early-exit) and occupy GPRs the
-    // post-rewrite {Header, Exit} obligation does not carry.
+    // post-rewrite successor set (Header, Exit, kept Extras) does not
+    // carry.
     if (Succ == &MBB) {
       for (const MachineBasicBlock::RegisterMaskPair &LI : MBB.liveins())
         LPR.addReg(LI.PhysReg);
       continue;
     }
-    // Computed live-ins of Succ, not Succ->liveins(). Stored lists are
-    // stale this late: a BR split-tail / trampoline Exit with empty
-    // liveins would make every exit-only live-through GPR look free.
-    LivePhysRegs SuccLive;
-    haydn::hwloop::computeBlockLiveIns(SuccLive, *Succ);
-    for (MCPhysReg R : SuccLive)
+    FPL.addForwardLiveInsTo(LPR, *Succ, &MBB);
+  }
+  // Unsaved CSRs (pristines) stay occupied so unused unsaved R14 cannot
+  // become a NoSpill hit (D1.87). LivePhysRegs::addPristines is private;
+  // replicate the public-API form used by FPL::build. Do not add
+  // saved-and-restored CSRs (that is default CSI FPL, D1.61r).
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (MFI.isCalleeSavedInfoValid()) {
+    LivePhysRegs Pristine(TRI);
+    for (const MCPhysReg *CSR = MRI.getCalleeSavedRegs(); CSR && *CSR; ++CSR)
+      Pristine.addReg(*CSR);
+    for (const CalleeSavedInfo &Info : MFI.getCalleeSavedInfo())
+      Pristine.removeReg(Info.getReg());
+    for (MCPhysReg R : Pristine)
       LPR.addReg(R);
   }
   for (MachineBasicBlock::iterator II = MBB.end(); II != I;) {
@@ -350,7 +369,7 @@ void llvm::emitFrameRelativeMemOp(MachineBasicBlock &MBB,
                                   const DebugLoc &DL,
                                   const TargetInstrInfo &TII, Register Reg,
                                   Register FrameReg, int64_t Off, bool IsStore,
-                                  unsigned StoreFlags) {
+                                  unsigned StoreFlags, int FrameIdx) {
   // Restatable rule: addressing of any in-frame spill slot uses three monotone
   // tiers tied to offset magnitude. SP is NEVER moved.
   //   tier 1 - short-form element-indexed ST32/LD32 FrameReg, elem
@@ -367,14 +386,28 @@ void llvm::emitFrameRelativeMemOp(MachineBasicBlock &MBB,
     report_fatal_error(
         "Haydn: in-frame spill offset not word-aligned for ST32/LD32");
   const int64_t Elem = Off / 4;
+  // D1.54: an in-frame spill store carries its FixedStack MMO (the same
+  // aliasing authority storeRegToStackSlot stamps — a mayStore member
+  // with no MMO makes same-cycle store/load pairing unverifiable at the
+  // freeze member-descriptor wall). Spill PRODUCERS owe it; loads keep
+  // the historical optional-MMO shape.
+  MachineFunction &MemMF = *MBB.getParent();
+  MachineMemOperand *SpillMMO = nullptr;
+  if (IsStore && FrameIdx >= 0)
+    SpillMMO = MemMF.getMachineMemOperand(
+        MachinePointerInfo::getFixedStack(MemMF, FrameIdx),
+        MachineMemOperand::MOStore, 4,
+        MemMF.getFrameInfo().getObjectAlign(FrameIdx));
   if (isInt<6>(Elem)) {
     // Tier 1 - short-form element-indexed access (byte-identical fast path).
-    if (IsStore)
-      BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
-          .addReg(Reg, StoreFlags)
-          .addReg(FrameReg)
-          .addImm(Elem);
-    else
+    if (IsStore) {
+      auto MIB = BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+                     .addReg(Reg, StoreFlags)
+                     .addReg(FrameReg)
+                     .addImm(Elem);
+      if (SpillMMO)
+        MIB.addMemOperand(SpillMMO);
+    } else
       BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Reg)
           .addReg(FrameReg)
           .addImm(Elem);
@@ -412,12 +445,14 @@ void llvm::emitFrameRelativeMemOp(MachineBasicBlock &MBB,
         .addReg(FrameReg)
         .addReg(Tmp);
   }
-  if (IsStore)
-    BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
-        .addReg(Reg, StoreFlags)
-        .addReg(Tmp)
-        .addImm(0);
-  else
+  if (IsStore) {
+    auto MIB = BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
+                   .addReg(Reg, StoreFlags)
+                   .addReg(Tmp)
+                   .addImm(0);
+    if (SpillMMO)
+      MIB.addMemOperand(SpillMMO);
+  } else
     BuildMI(MBB, I, DL, TII.get(Haydn::LD32), Reg).addReg(Tmp).addImm(0);
   restoreSoftZeroR0(MBB, I, DL, TII);
 }
@@ -430,9 +465,37 @@ ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
                             Register Scr) {
   MachineFunction &MF = *MBB.getParent();
   auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  auto isLongLivedHwLoopHome = [&](int FI) {
+    if (FI < 0)
+      return false;
+    for (int S : FuncInfo->getHwLoopDemoteSavePool())
+      if (S == FI)
+        return true;
+    for (int C : FuncInfo->getHwLoopStackCounterPool())
+      if (C == FI)
+        return true;
+    return false;
+  };
+
+  // Ephemeral scavenge only: BR, else PostRA. D1.150: never land on the
+  // dedicated demote-save home or any stack-counter pool member. If the
+  // first pick aliases a long-lived home, take the other ephemeral; if
+  // both alias, fatal. Disjointness is this refuse, not pick order.
   int SpillFI = FuncInfo->getBranchRelaxationScratchFI();
   if (SpillFI < 0)
     SpillFI = FuncInfo->getPostRAScratchFI();
+  if (SpillFI >= 0 && isLongLivedHwLoopHome(SpillFI)) {
+    const int BR = FuncInfo->getBranchRelaxationScratchFI();
+    const int PostRA = FuncInfo->getPostRAScratchFI();
+    const int Other = (SpillFI == BR) ? PostRA : BR;
+    if (Other >= 0 && Other != SpillFI && !isLongLivedHwLoopHome(Other))
+      SpillFI = Other;
+    else
+      report_fatal_error(
+          "Haydn: post-RA scavenge spill home aliases hwloop demote-save "
+          "or stack-counter FI",
+          /*GenCrashDiag=*/false);
+  }
 
   ScratchSpillHome Home;
   if (SpillFI >= 0) {
@@ -441,7 +504,7 @@ ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
     Home.Off = TFL->getFrameIndexReferenceAt(MF, SpillFI, Home.FrameReg, MBB, I)
                    .getFixed();
     emitFrameRelativeMemOp(MBB, I, DL, TII, Scr, Home.FrameReg, Home.Off,
-                           /*IsStore=*/true, /*StoreFlags=*/0);
+                           /*IsStore=*/true, /*StoreFlags=*/0, SpillFI);
     return Home;
   }
 
@@ -452,7 +515,10 @@ ScratchSpillHome beginSpill(MachineBasicBlock &MBB,
   BuildMI(MBB, I, DL, TII.get(Haydn::ST32))
       .addReg(Scr)
       .addReg(Haydn::R13)
-      .addImm(0);
+      .addImm(0)
+      .addMemOperand(MF.getMachineMemOperand(
+          MachinePointerInfo::getStack(MF, 0), MachineMemOperand::MOStore, 4,
+          Align(4)));
   return Home;
 }
 

@@ -1,12 +1,12 @@
 # RUN: rm -rf %t && split-file %s %t
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize -verify-machineinstrs \
 # RUN:   %t/imm.mir -o - 2>&1 | FileCheck %s --check-prefix=IMM
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize -verify-machineinstrs \
 # RUN:   %t/reg.mir -o - 2>&1 | FileCheck %s --check-prefix=REG
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize -verify-machineinstrs \
 # RUN:   %t/bundle.mir -o - 2>&1 | FileCheck %s --check-prefix=BUNDLE
 
 # Role: verifier — FixupHwLoops fatals on residual generic SET_HWLOOP{,_REG}.

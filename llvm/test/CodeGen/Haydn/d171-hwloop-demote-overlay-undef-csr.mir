@@ -1,0 +1,292 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.71/D1.86/D1.87 RESTAMP of d171 — skip-only overlay, pass-1a saved
+# R14 (PEI CSI), not overlay-present and not unsaved pass-1b.
+# pickDeadLatchScratch pass 1a still returns CSR R14 (dead at latch
+# end vs {Header, Exit}, incoming from the function live-in plus the
+# tail DEF). D1.87 tripwire: frame-setup ST32 $r14 is CSI proof; this
+# is not unused unsaved R14. LatchScr!=Prefer stays NoSave (not a
+# CB-162 SavePlacement change). The caller installs no SET-site ST32 /
+# Exit LD32 of LatchScr: skip-overlay is skip-only debug ("demote skip
+# overlay of $r14"). PendingOverlaySave is gone; this file is not
+# overlay-positive. Occupancy stays UseFromSet || (LivePhysRegs-live &&
+# !DefInTail); do not restamp occupiedAtSet. Latch window is R14
+# (LD32/SUBI32/ST32/BNEZ). Never LatchScr=Prefer. Overlay ST remains
+# D1.71. Unused-R14 CSI refuse is D1.87 (gtest pin).
+#
+# (a) Pure tail DEF of SET-dead CSR R14 (countdown_high_pressure /
+# SMS-guard ADDI): pass-1a R14, skip overlay. Latch LD32 defines R14.
+# Product proof is hwloop-hifi-oracle-countdown.ll
+# countdown_high_pressure with -verify-machineinstrs.
+#
+# (b) read R; def R; ...; loop is the same skip-only + pass-1a R14 pin
+# with a tail USE then DEF. Occupied at SET for cell-(d) copy;
+# skip-overlay does not install a SET-site ST32 of the stale pre-tail
+# value. Do not restamp this arm overlay-positive.
+#
+# Hole: pass-1a picks CSR R14. PEI already killed the pre-SET value in
+# the prologue CSR save. LivePhysRegs at SET is top-level/bundle-blind.
+# Skip-only does not consult AtSet.available for a preservation pair.
+# AIE SET dest is dedicated LC (AIE2InstrInfo.cpp:1338-1346
+# LCRegister=AIE2::LC; AIEBaseHardwareLoops.cpp:411-414 ADD_NC into LC);
+# Hexagon COPYs the trip into a new vreg
+# (HexagonHardwareLoops.cpp:1284-1291); RISC-V scavenges Define|Dead
+# AllowSpill=false (RISCVInstrInfo.cpp:1433-1471). Haydn SET reads a GPR.
+# AIE has no GPR latch-scratch overlay.
+#
+# Do not restamp d164 pass-1a r7 success / body-use / va-arg-22 /
+# D1.65 cell-(d) / D1.70(a) R14 candidacy / D1.72 Exit join-restore.
+# Unused-R14 CSI is D1.87. Occupancy gtests stay the helper seal.
+
+# CHECK-LABEL: name: d171_overlay_undef_csr
+# CHECK-NOT: SET_HWLOOP
+# PEI CSR save of incoming $r14. Skip-only: no SET-site ST32 of LatchScr
+# after that save and before the tail DEF.
+# CHECK-LABEL: bb.0.entry:
+# CHECK: frame-setup ST32 $r14
+# CHECK-NOT: ST32 $r14
+# CHECK: $r14 = ADDI32
+# CHECK-NOT: ST32 $r14
+# CHECK-NOT: S_SW{{.*}}$r14
+# CHECK-LABEL: bb.1.spacer:
+# Spacer consumes the tail-def CSR so it is not live-in of the latch.
+# CHECK: {{ST32|S_SW}}{{.*}}$r14
+# CHECK-LABEL: bb.2.body:
+# Latch window on the same CSR: pass-1a LatchScr; LD32 defines it.
+# CHECK-NOT: $r2 = SUBI32
+# CHECK: $r14 = {{S_LW_WITH_IMM|LD32}}
+# CHECK: $r14 = SUBI32{{.*}}$r14, 1
+# CHECK: {{S_SW_WITH_IMM|ST32}}{{.*}}$r14
+# CHECK: BNEZ{{.*}}$r14
+# CHECK-LABEL: bb.3.exit:
+# Skip-only: no Exit-begin LD32 of LatchScr. PEI CSR restore lives in
+# the return block (bb.4), not here.
+# CHECK-NOT: $r14 = {{S_LW_WITH_IMM|LD32}}
+# CHECK-NOT: $r14 = ADDI32
+# CHECK-LABEL: bb.4.ret:
+
+# CHECK-LABEL: name: d171_overlay_use_then_def
+# CHECK-NOT: SET_HWLOOP
+# CHECK-LABEL: bb.0.entry:
+# CHECK: frame-setup ST32 $r14
+# Skip-only: no SET-site ST32 of LatchScr (not a stale pre-tail overlay).
+# CHECK-NOT: ST32 $r14
+# CHECK-NOT: S_SW{{.*}}$r14
+# CHECK: ST32 $r14
+# CHECK: $r14 = ADDI32
+# CHECK-NOT: ST32 $r14
+# CHECK-NOT: S_SW{{.*}}$r14
+# CHECK-LABEL: bb.1.spacer:
+# CHECK: {{ST32|S_SW}}{{.*}}$r14
+# CHECK-LABEL: bb.2.body:
+# CHECK-NOT: $r2 = SUBI32
+# CHECK: $r14 = {{S_LW_WITH_IMM|LD32}}
+# CHECK: $r14 = SUBI32{{.*}}$r14, 1
+# CHECK: {{S_SW_WITH_IMM|ST32}}{{.*}}$r14
+# CHECK: BNEZ{{.*}}$r14
+# CHECK-LABEL: bb.3.exit:
+# CHECK-NOT: $r14 = {{S_LW_WITH_IMM|LD32}}
+# CHECK-NOT: $r14 = ADDI32
+# CHECK-LABEL: bb.4.ret:
+
+# Skip-only debug: LatchScr=$r14 then "demote skip overlay of $r14".
+# DBG-NOT overlay save / PreheaderSave / LatchScr=Prefer — not overlay-positive.
+# DBG: demoting hwloop
+# DBG: LatchScr=$r14
+# DBG: demote skip overlay of $r14
+# DBG-NOT: demote overlay save of $r14
+# DBG-NOT: occupied at SET — PreheaderSave of scratch
+# DBG-NOT: demote latch scratch = Prefer
+# DBG: demote stack-counter
+# DBG-NOT: occupied at SET — PreheaderSave of scratch
+# DBG-NOT: demote latch scratch = Prefer
+# DBG-NOT: has non-countdown body use
+# DBG: LatchScr=$r14
+# DBG: demote skip overlay of $r14
+# DBG-NOT: demote overlay save of $r14
+
+--- |
+  define dso_local void @d171_overlay_undef_csr(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    br label %ret
+  ret:
+    ret void
+  }
+
+  define dso_local void @d171_overlay_use_then_def(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    br label %ret
+  ret:
+    ret void
+  }
+...
+---
+name:            d171_overlay_undef_csr
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; SET then a bundled pure tail DEF of $r14. LivePhysRegs.stepBackward
+  ; on the BUNDLE root does not see the interior def; spacer live-in
+  ; $r14 makes addLiveOuts occupy it at SET. instrs() sees the DEF.
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    BUNDLE implicit-def $r14, implicit-def dead $sfr, implicit $r0 {
+      $r14 = ADDI32 $r0, 2, implicit-def dead $sfr
+    }
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  ; $r14 is a stored live-in so preheader live-outs occupy it at SET.
+  ; Consume it here so it is not live-in of the latch (pass-1a can pick it).
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    ST32 $r14, $r1, 1
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; R1–R12 occupy the latch window (self-latch stored liveins). $r14 is
+  ; not a live-in: pass-1a dead-at-latch CSR with incoming value. $r2 is
+  ; live-through to the return block (Prefer live-after → stack-counter),
+  ; not a body-use of the trip. Do not mention $r14.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    ST32 $r3, $r1, 0
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  ; Loop exit (not the return). FPL CSI seed keeps saved R14 live-after
+  ; here without computeBlockLiveIns occupying the latch vs this block.
+  bb.3.exit:
+    liveins: $r1, $r2
+    successors: %bb.4
+    NOP
+
+  bb.4.ret:
+    liveins: $r1, $r2, $r15
+    ST32 $r2, $r1, 0
+    RET implicit killed $r15
+...
+---
+name:            d171_overlay_use_then_def
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Arm (b): tail USE of $r14 then a later DEF. Occupied at SET (UseFromSet)
+  ; so cell-(d) copy cannot clobber it. Skip-only: no SET-site ST32 of
+  ; LatchScr (pass-1a R14; LD32 defines it). Do not restamp overlay-positive.
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    ST32 $r14, $r1, 2
+    $r14 = ADDI32 $r0, 2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    ST32 $r14, $r1, 1
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12
+    successors: %bb.3
+    ST32 $r3, $r1, 0
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r2
+    successors: %bb.4
+    NOP
+
+  bb.4.ret:
+    liveins: $r1, $r2, $r15
+    ST32 $r2, $r1, 0
+    RET implicit killed $r15

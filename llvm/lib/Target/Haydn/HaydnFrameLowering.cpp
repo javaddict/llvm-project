@@ -18,6 +18,7 @@
 #include "HaydnSubtarget.h"
 #include "MCTargetDesc/HaydnMatInt.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -34,6 +35,7 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/Target/TargetMachine.h"
+#include <algorithm>
 
 #define DEBUG_TYPE "haydn-frame-lowering"
 
@@ -120,7 +122,7 @@ static Register getPEIScratchReg(MachineBasicBlock &MBB,
   };
 
   // Sibcall outgoing args live in R1–R7 (CC_Haydn). Epilogue scratch at a
-  // JAL_W_MSP / JALR_W_MSP must not clobber them. Peer: AArch64
+  // JAL_TCO / JALR_W must not clobber them. Peer: AArch64
   // findScratchNonCalleeSaveRegister (AArch64FrameLowering.cpp:888-929)
   // plus HaydnOutgoingValueHandler implicit uses on the tail opcode.
   auto isTailCallArgPhys = [](MCPhysReg Reg) {
@@ -191,6 +193,11 @@ struct CSRSlot {
   Register Reg;
   Register BaseReg;
   int Offset;
+  // Owning callee-save FrameIndex (D1.54): the CSR store/load MMO is a
+  // FixedStack pointer on THIS slot, the same authority
+  // storeRegToStackSlot/loadRegFromStackSlot stamp. -1 = no CSI home
+  // (never happens for slots this walk emits; guards test-only callers).
+  int FrameIdx = -1;
 };
 
 static bool isCSRBankReg(const MachineRegisterInfo &MRI,
@@ -224,7 +231,7 @@ static void collectCalleeSavedSlots(const HaydnFrameLowering &TFL,
     // range. Fold StackSize only if that path fell through to FP.
     if (FrameReg != Haydn::R13)
       Offset += static_cast<int>(MFI.getStackSize());
-    Out.push_back({Reg, Haydn::R13, Offset});
+    Out.push_back({Reg, Haydn::R13, Offset, CI.getFrameIdx()});
   }
 }
 
@@ -282,54 +289,76 @@ static void emitMaterializeOffset(MachineBasicBlock &MBB,
   }
 }
 
+// Golden short-form LS imm is scaled simm6: EA = base + (simm6 << log2(Scale)).
+// Same predicate as eliminateFrameIndex and ISel. D1.89: CSR store and load
+// share this — ST32/LD32 (and ST64/LD64) encode Format E RI6, not s0 uimm4.
+static bool isLegalScaledSimm6(int64_t ByteOff, unsigned Scale) {
+  return Scale != 0 && (ByteOff % static_cast<int64_t>(Scale)) == 0 &&
+         isInt<6>(ByteOff / static_cast<int64_t>(Scale));
+}
+
 // Emit a callee-saved register store at an arbitrary byte offset from
-// BaseReg. When the offset fits the s0 LS imm4 scaled range
-// ([0,60]/4-aligned for ST32, [0,120]/8-aligned for ST64) the plain
+// BaseReg. When the offset fits golden scaled simm6 the plain
 // immediate-offset ST32/ST64 is emitted. When the offset is out of range
-// (negative or large CSR slots) the offset is materialized into a PEI
-// scratch (\c getPEIScratchReg: ABI call-clobbered / reserved R12 — same
-// contract as EFI scavenger) and the logical ST32_REG_M0S0LS /
-// ST64_REG_M0S0LS register-offset form is emitted. Product encode is Format E.
+// the offset is materialized into a PEI scratch (\c getPEIScratchReg: ABI
+// call-clobbered / reserved R12 — same contract as EFI scavenger) and the
+// logical ST32_REG_M0S0LS / ST64_REG_M0S0LS register-offset form is emitted.
+// Product encode is Format E RI6.
 static void emitCSRStore(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI, const DebugLoc &DL,
                          const HaydnInstrInfo *TII, unsigned StoreOpc,
                          Register SrcReg, Register BaseReg, int Offset,
-                         MachineInstr::MIFlag FrameFlag) {
+                         MachineInstr::MIFlag FrameFlag, int FrameIdx = -1) {
   unsigned Shift = (StoreOpc == Haydn::ST64) ? 3 : 2;
-  int64_t MaxOff = static_cast<int64_t>(15) << Shift;
-  bool InImm4Range = (Offset >= 0 && Offset <= MaxOff &&
-                      (Offset & ((1 << Shift) - 1)) == 0);
-  if (InImm4Range) {
+  // D1.54: the CSR store carries its FixedStack MMO — the same aliasing
+  // authority storeRegToStackSlot stamps. The freeze member-descriptor law
+  // refuses a mayStore member with no MMO (a store with no MMO makes every
+  // same-cycle store/load pairing unverifiable), and this custom CSR path
+  // (spillCalleeSavedRegisters returns true) is the pipeline's own store
+  // producer, not hand MIR.
+  MachineMemOperand *MMO = nullptr;
+  if (FrameIdx >= 0) {
+    MachineFunction &MF = *MBB.getParent();
+    MMO = MF.getMachineMemOperand(
+        MachinePointerInfo::getFixedStack(MF, FrameIdx),
+        MachineMemOperand::MOStore, 1u << Shift,
+        MF.getFrameInfo().getObjectAlign(FrameIdx));
+  }
+  if (isLegalScaledSimm6(Offset, 1u << Shift)) {
     // Golden scaled imm: field = byte_offset >> log2(width).
-    BuildMI(MBB, MBBI, DL, TII->get(StoreOpc))
-        .addReg(SrcReg)
-        .addReg(BaseReg)
-        .addImm(Offset >> Shift)
-        .setMIFlag(FrameFlag);
+    auto MIB = BuildMI(MBB, MBBI, DL, TII->get(StoreOpc))
+                   .addReg(SrcReg)
+                   .addReg(BaseReg)
+                   .addImm(Offset >> Shift)
+                   .setMIFlag(FrameFlag);
+    if (MMO)
+      MIB.addMemOperand(MMO);
     return;
   }
   // Logical REG forms only; product encode is Format E members.
   unsigned RegOpc = (StoreOpc == Haydn::ST64) ? Haydn::ST64_REG_M0S0LS
                                               : Haydn::ST32_REG_M0S0LS;
   // Offset temp is a PEI scratch, never soft-zero R0 (F21). R0 is only
-  // the clean zero base of ADDI32_W. Offset 0 is always in imm4 range
-  // so this path does not use R0 as OffReg.
+  // the clean zero base of ADDI32_W. Offset 0 is always scaled-simm6
+  // legal so this path does not use R0 as OffReg.
   assert(SrcReg != Haydn::R0 && BaseReg != Haydn::R0);
   Register OffReg =
       emitCSROffsetScratch(MBB, MBBI, DL, TII, /*Avoid=*/SrcReg,
                            /*Avoid2=*/BaseReg, /*ProtectRetCC=*/false, Offset,
                            FrameFlag);
-  BuildMI(MBB, MBBI, DL, TII->get(RegOpc))
-      .addReg(SrcReg)
-      .addReg(BaseReg)
-      .addReg(OffReg)
-      .setMIFlag(FrameFlag);
+  auto MIB = BuildMI(MBB, MBBI, DL, TII->get(RegOpc))
+                 .addReg(SrcReg)
+                 .addReg(BaseReg)
+                 .addReg(OffReg)
+                 .setMIFlag(FrameFlag);
+  if (MMO)
+    MIB.addMemOperand(MMO);
 }
 
 // Emit a callee-saved register load (restore) at an arbitrary byte offset
 // from BaseReg. Mirrors emitCSRStore for the epilogue restore path. When the
-// offset fits the s0 LS imm4 scaled range the plain immediate-offset LD32
-// LD64 is emitted; otherwise the offset is materialized into a PEI scratch
+// offset fits golden scaled simm6 the plain immediate-offset LD32/LD64 is
+// emitted; otherwise the offset is materialized into a PEI scratch
 // (getPEIScratchReg) and the LD32_REG_M0S0LS / LD64_REG_M0S0LS register
 // offset variant is emitted. A pure-constant scratch (LOADI32/ADDI feeding
 // the LD) is live into the load so it is not DCE'd — unlike a reserved-reg
@@ -339,13 +368,9 @@ static void emitCSRLoad(MachineBasicBlock &MBB,
                         const HaydnInstrInfo *TII, unsigned LoadOpc, Register DstReg,
                         Register BaseReg, int Offset,
                         MachineInstr::MIFlag FrameFlag) {
-  // Golden scaled simm6 : EA = base + (simm6 << log2(width)).
-  // LD64 scale 8; LD32 scale 4. Outside [-32,31] scaled → REG-offset.
   bool Is64 = (LoadOpc == Haydn::LD64);
   unsigned Shift = Is64 ? 3 : 2;
-  bool Aligned = (Offset & ((1 << Shift) - 1)) == 0;
-  bool InSimm6Range = Aligned && isInt<6>(Offset >> Shift);
-  if (InSimm6Range) {
+  if (isLegalScaledSimm6(Offset, 1u << Shift)) {
     // Golden scaled imm: field = byte_offset >> log2(width).
     BuildMI(MBB, MBBI, DL, TII->get(LoadOpc), DstReg)
         .addReg(BaseReg)
@@ -601,31 +626,36 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
         // ST32 imm is word element index (EA = base + (imm << 2)).
         for (unsigned J = 0; J < RunLen; ++J) {
           int RelOffset = GPRCSRegs[J].Offset - BaseOffset;
-          BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST32))
-              .addReg(GPRCSRegs[J].Reg)
-              .addReg(BaseReg)
-              .addImm(RelOffset >> 2)
-              .setMIFlag(MachineInstr::FrameSetup);
+          auto MIB = BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST32))
+                         .addReg(GPRCSRegs[J].Reg)
+                         .addReg(BaseReg)
+                         .addImm(RelOffset >> 2)
+                         .setMIFlag(MachineInstr::FrameSetup);
+          if (GPRCSRegs[J].FrameIdx >= 0)
+            MIB.addMemOperand(MF.getMachineMemOperand(
+                MachinePointerInfo::getFixedStack(MF, GPRCSRegs[J].FrameIdx),
+                MachineMemOperand::MOStore, 4,
+                MF.getFrameInfo().getObjectAlign(GPRCSRegs[J].FrameIdx)));
         }
 
         // Remaining non-consecutive registers: plain stores from their FrameReg.
         for (unsigned J = RunLen; J < GPRCSRegs.size(); ++J) {
           emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST32, GPRCSRegs[J].Reg,
                        GPRCSRegs[J].BaseReg, GPRCSRegs[J].Offset,
-                       MachineInstr::FrameSetup);
+                       MachineInstr::FrameSetup, GPRCSRegs[J].FrameIdx);
         }
       } else {
         // No consecutive run of 2+ — plain stores from each CSR's FrameReg.
         for (const auto &E : GPRCSRegs) {
           emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST32, E.Reg, E.BaseReg,
-                       E.Offset, MachineInstr::FrameSetup);
+                       E.Offset, MachineInstr::FrameSetup, E.FrameIdx);
         }
       }
     } else {
       // 0 or 1 GPR callee-saves, or scratch needs saving — individual stores.
       for (const auto &E : GPRCSRegs) {
         emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST32, E.Reg, E.BaseReg,
-                     E.Offset, MachineInstr::FrameSetup);
+                     E.Offset, MachineInstr::FrameSetup, E.FrameIdx);
       }
     }
   }
@@ -653,7 +683,7 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
         if (!BaseReg) {
           for (const auto &E : DRCSRegs) {
             emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, E.Reg, E.BaseReg,
-                         E.Offset, MachineInstr::FrameSetup);
+                         E.Offset, MachineInstr::FrameSetup, E.FrameIdx);
           }
         } else {
           Register FrameReg = DRCSRegs[0].BaseReg;
@@ -664,29 +694,34 @@ void HaydnFrameLowering::emitPrologue(MachineFunction &MF,
           // ST64 imm is dword element index (EA = base + (imm << 3)).
           for (unsigned J = 0; J < RunLen; ++J) {
             int RelOffset = DRCSRegs[J].Offset - BaseOffset;
-            BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST64))
-                .addReg(DRCSRegs[J].Reg)
-                .addReg(BaseReg)
-                .addImm(RelOffset >> 3)
-                .setMIFlag(MachineInstr::FrameSetup);
+            auto MIB = BuildMI(MBB, MBBI, DL, TII->get(Haydn::ST64))
+                           .addReg(DRCSRegs[J].Reg)
+                           .addReg(BaseReg)
+                           .addImm(RelOffset >> 3)
+                           .setMIFlag(MachineInstr::FrameSetup);
+            if (DRCSRegs[J].FrameIdx >= 0)
+              MIB.addMemOperand(MF.getMachineMemOperand(
+                  MachinePointerInfo::getFixedStack(MF, DRCSRegs[J].FrameIdx),
+                  MachineMemOperand::MOStore, 8,
+                  MF.getFrameInfo().getObjectAlign(DRCSRegs[J].FrameIdx)));
           }
 
           for (unsigned J = RunLen; J < DRCSRegs.size(); ++J) {
             emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, DRCSRegs[J].Reg,
                          DRCSRegs[J].BaseReg, DRCSRegs[J].Offset,
-                         MachineInstr::FrameSetup);
+                         MachineInstr::FrameSetup, DRCSRegs[J].FrameIdx);
           }
         }
       } else {
         for (const auto &E : DRCSRegs) {
           emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, E.Reg, E.BaseReg,
-                       E.Offset, MachineInstr::FrameSetup);
+                       E.Offset, MachineInstr::FrameSetup, E.FrameIdx);
         }
       }
     } else {
       for (const auto &E : DRCSRegs) {
         emitCSRStore(MBB, MBBI, DL, TII, Haydn::ST64, E.Reg, E.BaseReg,
-                     E.Offset, MachineInstr::FrameSetup);
+                     E.Offset, MachineInstr::FrameSetup, E.FrameIdx);
       }
     }
   }
@@ -1086,7 +1121,7 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
   // (PrologEpilogInserter.cpp spillCalleeSavedRegs /
   // insertPrologEpilogCode), so this hook contributes only scavenging
   // frame indexes that an asm-only body never references (naked-fn.ll).
-  // Legal musttail sibcall is JAL_W_MSP / JALR_W_MSP; ineligible musttail
+  // Legal musttail sibcall is JAL_TCO / JALR_W; ineligible musttail
   // stays fail-closed at CallLowering. AIE1ISelLowering.cpp:964 rejects
   // interrupt at return lowering; RISCV has a CC_ISR analog only when
   // an ISR vector exists.
@@ -1148,13 +1183,72 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
   // Implicit-def of that physreg survives rewriteFieldSlotToMember.
   STI.getInstrInfo()->preserveCircularBufferWritebackDefs(MF);
 
+  const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+
+  // D1.88 / D1.150 / D1.154: dedicated pre-PEI stack-counter and
+  // demote-save pools, disjoint from PostRAScratchFI /
+  // BranchRelaxationScratchFI and from each other. Both pools: one
+  // 4-byte FI per hardware-loop setup present at PEI, LoopStart
+  // included — product ISel emits only LoopStart pre-PEI
+  // (HaydnInstructionSelector), and HardwareLoops / Fixup demote after
+  // PEI. Reservation is not consumption: formed-ZOL and refused demotes
+  // must not take a slot. Peek during preflight; take+bind only after
+  // the D1.51 barrier for an actual PreheaderSave/LatchEndSave. Never
+  // CreateStackObject after PEI and never reuse ephemeral scratch as a
+  // long-lived home. Loop-free leaves pay no frame growth. +4B per
+  // LoopStart is often absorbed by StackAlign 8. AIE has no stack save
+  // (reserved LC; AIE2RegisterInfo.cpp:112-116,
+  // AIE2PFrameLowering.cpp:99-116 is RS-only). Hexagon reserves LC0/LC1
+  // (HexagonRegisterInfo.cpp:157-160) and scavenger FIs
+  // (HexagonFrameLowering.cpp:2098-2132). Haydn SET reads a GPR, so both
+  // homes are Haydn-owned. orderFrameObjects pins the whole pools to
+  // simm6-reachable offsets.
+  {
+    const bool NeedCounters = FuncInfo->getHwLoopStackCounterPool().empty();
+    const bool NeedSaves = FuncInfo->getHwLoopDemoteSavePool().empty();
+    unsigned NumSetups = 0;
+    if (NeedCounters || NeedSaves) {
+      const HaydnInstrInfo &HII = *ST.getInstrInfo();
+      // instrs(): a SET coissued in a BUNDLE (d164 coissue) is a member,
+      // not a top-level MI. The bundle iterator would miss it and leave
+      // peekHwLoopStackCounterFI / peekHwLoopDemoteSaveFI empty.
+      for (const MachineBasicBlock &ScanBB : MF) {
+        for (const MachineInstr &ScanMI : ScanBB.instrs()) {
+          if (ScanMI.isBundle() || ScanMI.isMetaInstruction())
+            continue;
+          const unsigned Opc = ScanMI.getOpcode();
+          if (!HII.isHardwareLoopSetupOpcode(Opc))
+            continue;
+          ++NumSetups;
+        }
+      }
+    }
+    if (NeedCounters) {
+      for (unsigned I = 0; I < NumSetups; ++I) {
+        int FI = MF.getFrameInfo().CreateStackObject(/*Size=*/4,
+                                                     /*Alignment=*/Align(4),
+                                                     /*SpillSlot=*/true);
+        FuncInfo->addHwLoopStackCounterFI(FI);
+      }
+    }
+    if (NeedSaves) {
+      // Twin of the D1.88 counter scan: NumSaveSetups == NumSetups,
+      // LoopStart included. Consume remains peek/take+bind below.
+      for (unsigned I = 0; I < NumSetups; ++I) {
+        int FI = MF.getFrameInfo().CreateStackObject(/*Size=*/4,
+                                                     /*Alignment=*/Align(4),
+                                                     /*SpillSlot=*/true);
+        FuncInfo->addHwLoopDemoteSaveFI(FI);
+      }
+    }
+  }
+
   if (!RS)
     return;
 
-  const HaydnSubtarget &ST = MF.getSubtarget<HaydnSubtarget>();
   const TargetRegisterInfo *TRI = ST.getRegisterInfo();
   const TargetRegisterClass &RC = Haydn::GPR32RegClass;
-  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
 
   // Emergency-slot policy (AIE model: no free AT). EFI uses vregs;
   // scavengeFrameVirtualRegs may spill under full pressure even when
@@ -1172,44 +1266,6 @@ void HaydnFrameLowering::processFunctionBeforeFrameFinalized(
     // First slot doubles as the branch-relax dedicated spill (RISC-V style).
     if (FuncInfo->getBranchRelaxationScratchFI() < 0)
       FuncInfo->setBranchRelaxationScratchFI(FI);
-  }
-
-  // CB-162: hwloop-demote live-trip save home defaults to the shared
-  // PostRAScratchFI word (reserved in determineCalleeSaves; every framed
-  // function has it). The demote's stack-counter home is
-  // BranchRelaxationScratchFI when present — just created above — so the
-  // two normally stay disjoint without frame growth. A dedicated slot is
-  // needed only in the rare both-map-to-PostRA case (no scavenging slot, so
-  // the counter home is also PostRAScratchFI). Frame deadline rule: every
-  // possible demotion home is reserved HERE, before
-  // calculateFrameObjectOffsets — the post-RA demote (HaydnHardwareLoops)
-  // must never CreateStackObject. Guarded on an actual hwloop setup so
-  // loop-free leaf functions pay no frame growth.
-  if (FuncInfo->getHwLoopDemoteSaveFI() < 0) {
-    const HaydnInstrInfo &HII = *ST.getInstrInfo();
-    const int PostRASaveFI = FuncInfo->getPostRAScratchFI();
-    int CounterFI = FuncInfo->getBranchRelaxationScratchFI();
-    if (CounterFI < 0)
-      CounterFI = PostRASaveFI;
-    const bool SharedHomeDisjoint =
-        PostRASaveFI >= 0 && PostRASaveFI != CounterFI;
-    bool HasHWLoopSetup = false;
-    for (const MachineBasicBlock &ScanBB : MF) {
-      for (const MachineInstr &ScanMI : ScanBB) {
-        if (HII.isHardwareLoopSetupOpcode(ScanMI.getOpcode())) {
-          HasHWLoopSetup = true;
-          break;
-        }
-      }
-      if (HasHWLoopSetup)
-        break;
-    }
-    if (HasHWLoopSetup && !SharedHomeDisjoint) {
-      int FI = MF.getFrameInfo().CreateStackObject(/*Size=*/4,
-                                                   /*Alignment=*/Align(4),
-                                                   /*SpillSlot=*/true);
-      FuncInfo->setHwLoopDemoteSaveFI(FI);
-    }
   }
 }
 
@@ -1282,9 +1338,9 @@ void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
     FuncInfo->setPostRAScratchFI(FI);
   }
 
-  // CB-162 note: the hwloop-demote save home decision lives at the end of
-  // processFunctionBeforeFrameFinalized (after the BranchRelaxation scratch
-  // slot above exists). This block deliberately reserves nothing.
+  // D1.88 / D1.150 note: the dedicated stack-counter and demote-save
+  // pools live at the end of processFunctionBeforeFrameFinalized. This
+  // block deliberately reserves nothing.
 
   // Permanent 8-byte in-frame pack slot for DR64 construction from two GPR32
   // halves (LOADI64 both-halves-nonzero constants; MOV_GPR_TO_DR64 two-live-
@@ -1325,6 +1381,46 @@ void HaydnFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                                             /*SpillSlot=*/true);
       FuncInfo->setDR64PackBaseSpillFI(BaseSpillFI);
     }
+  }
+}
+
+void HaydnFrameLowering::orderFrameObjects(
+    const MachineFunction &MF, SmallVectorImpl<int> &ObjectsToAllocate) const {
+  if (ObjectsToAllocate.empty())
+    return;
+  auto *FuncInfo = MF.getInfo<HaydnMachineFunctionInfo>();
+  if (!FuncInfo)
+    return;
+  SmallSet<int, 4> CounterHomes;
+  SmallSet<int, 4> SaveHomes;
+  for (int FI : FuncInfo->getHwLoopStackCounterPool()) {
+    if (FI >= 0)
+      CounterHomes.insert(FI);
+  }
+  for (int FI : FuncInfo->getHwLoopDemoteSavePool()) {
+    if (FI >= 0)
+      SaveHomes.insert(FI);
+  }
+  if (CounterHomes.empty() && SaveHomes.empty())
+    return;
+  auto IsCounter = [&](int FI) { return CounterHomes.count(FI) != 0; };
+  auto IsHome = [&](int FI) {
+    return IsCounter(FI) || SaveHomes.count(FI) != 0;
+  };
+  // hasFP && !realign → closest first (near FP). Else closest last (near
+  // outgoing SP). Counters closer than D1.154 save FIs: stack-counter
+  // ST32 is simm6-only and occupancy last-resorts it. Unpinned locals
+  // sit at FP-220 on bqriir and miss simm6.
+  if (allocateScavengingFrameIndexesNearIncomingSP(MF)) {
+    std::stable_partition(ObjectsToAllocate.begin(), ObjectsToAllocate.end(),
+                          IsCounter);
+    std::stable_partition(ObjectsToAllocate.begin(), ObjectsToAllocate.end(),
+                          IsHome);
+  } else {
+    std::stable_partition(ObjectsToAllocate.begin(), ObjectsToAllocate.end(),
+                          [&](int FI) { return !IsHome(FI); });
+    std::stable_partition(ObjectsToAllocate.begin(), ObjectsToAllocate.end(),
+                          [&](int FI) { return !IsCounter(FI); });
   }
 }
 

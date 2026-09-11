@@ -1,0 +1,79 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
+# RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-fixup-hwloops \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# Wave 4 H / GR2.10 — stamped closer must not CFG-demote. Finalize stamps
+# PostCommitCfgSnapshot; closeRetainedHwLoops then sees a hard-unencodable
+# Off1 (22 NOP * 12 + SET parcel = 276 > uimm6 252). demoteHardwareLoopToSoftware
+# returns false with SET/CFG untouched; recoverRangeOrOrder fatals.
+# L5 is a no-exception edge wall (no admitted-transition API). Isolated
+# -run-pass=haydn-longbranch-normalize without Finalize stays unstamped
+# (d1149 / hwloop-fixup-second-br-growth / hwloop-rolea-selector-failclosed).
+# AIE addPreEmitPass empty (AIE2TargetMachine.cpp:92). Hexagon Fixup is
+# offset math + LOOP extender (HexagonFixupHwLoops.cpp:48-50 / :136-148);
+# Haydn has no extender. Do not packetize-last.
+
+# FATAL-NOT: SUBI32
+# FATAL: LLVM ERROR: {{.*}}cannot demote
+# FATAL-NOT: SUBI32
+
+# DBG: hard-unencodable after stamp
+# DBG: LLVM ERROR: {{.*}}cannot demote
+
+--- |
+  define void @d1171_postcommit_demote_refuse() {
+  preheader:
+    br label %latch
+  latch:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d1171_postcommit_demote_refuse
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.preheader:
+    liveins: $r1, $r15
+    successors: %bb.1
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 16, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.1.latch:
+    liveins: $r1, $r15
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15

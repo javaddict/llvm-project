@@ -94,9 +94,11 @@
 //   (no R0 address-temp XOR after the terminator); unverifiable countdown
 //   addends are clobbers, not strip candidates.
 //   Formation owns software-loop demotion (encodability or soft edge before
-//   layout lock-in). Fixup: intervening pad → order-preserving shorten →
-//   range recheck; residual generic setup fatals; late range may still call
-//   the formation demote helper for already-committed wide forms.
+//   layout lock-in), including SET-anchored Off1/Off2 plus still-relaxable
+//   MaxSingleBranchGrowthBytes vs residual Off margins. Fixup: intervening
+//   pad → SET sink → range recheck; residual generic setup fatals.
+//   Isolated unstamped Fixup may still demote; product post-stamp Fixup
+//   does not rewrite CFG.
 //   Debug -haydn-enable-hwloop-demote=false refuses the soft-edge install
 //   on a live body (Hexagon FixupHwLoops skip overlay) — callers fatal,
 //   never erase-only once-through. Unpublished HWLR CSR addresses stay
@@ -175,10 +177,9 @@ static_assert(Off1SafetyMarginBytes ==
 // Late-layout second-BR growth budget (stable row)
 //===----------------------------------------------------------------------===//
 //
-// Pass order: each HaydnFixupHwLoops invocation (standalone PreEmit row, or
-// every HaydnLateConvergence iteration after S2/stalls) rewrites Off1/Off2
-// from the CURRENT layout inventory. There is no cached "layout-stable"
-// hardware-form acceptance. During one invocation Fixup still charges a
+// Pass order: closeRetainedHwLoops (library, stamped LBN closer) rewrites
+// Off1/Off2 from the CURRENT layout inventory. There is no cached
+// "layout-stable" hardware-form acceptance. During one invocation Fixup still charges a
 // conservative absolute expansion budget for every still-relaxable short
 // PC-relative branch in SET→BEGIN and SET→END (including nested windows).
 // Hardware form is accepted only when residual Off1/Off2 margins cover both
@@ -266,11 +267,11 @@ static_assert(BranchRelaxSafetyBufferBytes != 200 &&
 // MaxSingleBranchGrowthParcels), NOT a golden fact: the demote emission
 // vocabulary owns it. D1.6-style vocabulary edits must update the parcel
 // terms above and the static_assert together
-// (HaydnLateConvergenceBudgetTest pins the value).
+// (HaydnPreS1GrowthCompositionTest pins the value).
 inline constexpr unsigned MaxHwLoopDemoteGrowthParcels = 13;
 
-/// Per-demote net encoded-byte growth bound charged by the closure
-/// no-growth law (HaydnLateConvergence). Equals
+/// Per-demote net encoded-byte growth bound charged by
+/// PreS1PostStampGrowthBytes. Equals
 /// MaxHwLoopDemoteGrowthParcels × productParcelBytes.
 inline constexpr int64_t MaxHwLoopDemoteGrowthBytes =
     bundle::productBundlesToBytes(MaxHwLoopDemoteGrowthParcels);
@@ -300,8 +301,8 @@ static_assert(MaxHwLoopDemoteGrowthBytes > MaxSingleBranchGrowthBytes,
 
 /// True when \p Br is a short PC-relative branch a later BranchRelaxation
 /// may still expand (bare or bundled member; cond + B simm12 forms).
-/// Both the Fixup Off1/Off2 growth reservation and the LateConvergence
-/// prefix-budget capture count sites through this one classifier.
+/// Both the Fixup Off1/Off2 growth reservation and the pre-S1 composition
+/// count sites through this one classifier.
 inline bool isStillRelaxableShortBranch(const MachineInstr &Br) {
   if (!Br.isBranch())
     return false;
@@ -476,19 +477,14 @@ static_assert(anchoredFromAfterSet(0, ProductParcelBytes) ==
 // far-deciding callers, but D1.33's single-inflation law made
 // isBranchOffsetInRange the ONLY seat that adds any allowance — a
 // pre-added composition term is exactly the double-charge class that
-// stole the (2048 − 2·buffer, 2048 − buffer] short band. And no typed
-// composition can cover the S2 repack: HaydnLateConvergence's single S2
-// may REDISTRIBUTE encoded bytes across pairs with no event at all
-// (documented non-law: entry-vs-final no-growth is telemetry only), so
-// a pre-S1 span can both stay short at the estimate and re-overflow
-// after S2 with zero admitted vocabulary. The closed rejection class is
-// therefore: a still-relaxable site that re-overflows post-stamp and
-// cannot take the in-block long form (no dead-on-edge GPR / uninvertible
-// cond / no near dest) is a FAIL-CLOSED fatal at the post-stamp seats —
-// the normalizer's named report_fatal_error, never a silent accept and
-// never a CFG-creating repair. Every such site that CAN take the
-// in-block form promotes legally post-stamp (the recovery the MIR pin
-// exercises).
+// stole the (2048 − 2·buffer, 2048 − buffer] short band. GR1.7 deleted
+// S2/LateConvergence; a still-relaxable site that re-overflows
+// post-stamp and cannot take the in-block long form (no dead-on-edge
+// GPR / uninvertible cond / no near dest) is a FAIL-CLOSED fatal at
+// the post-stamp LBN seats — the normalizer's named report_fatal_error,
+// never a silent accept and never a CFG-creating repair. Every such
+// site that CAN take the in-block form promotes legally post-stamp
+// (the recovery the MIR pin exercises).
 inline constexpr int64_t PreS1PostStampGrowthBytes =
     MaxHwLoopDemoteGrowthBytes +
     bundle::productBundlesToBytes(InterveningCycles);
@@ -723,9 +719,15 @@ inline constexpr bool bodyMeetsMinLaw(int64_t StartOff, int64_t EndOff) {
 //  * Inner demote or resize (deficit pads) re-checks every outer whose
 //    SET→END window contains the inner setup.
 //  * Demotion is monotone: the number of hardware setups never increases.
-//  * Demote spill/reload homes are the pre-PEI reserved FIs
-//    (HwLoopDemoteSaveFI / PostRAScratchFI / BranchRelaxationScratchFI);
-//    CreateStackObject after frame finalization is a contract break.
+//  * Demote save/reload homes are a pre-PEI pool, twin of the
+//    stack-counter pool: one 4-byte FI per setup present at PEI,
+//    LoopStart included (product ISel). Reservation is not
+//    consumption: formed-ZOL and refused demotes must not take a
+//    slot. Peek during preflight; take+bind to the latch only after
+//    the D1.51 barrier for an actual PreheaderSave/LatchEndSave.
+//    Must not alias PostRAScratchFI / BranchRelaxationScratchFI / any
+//    stack-counter pool member. CreateStackObject after frame
+//    finalization is a contract break.
 //  * Live trip-value, exact FixedStack MMOs on those homes, and latch
 //    Header membership are preservation gates on a successful demote —
 //    not cached Off1/Off2 from a prior invocation.

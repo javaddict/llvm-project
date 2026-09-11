@@ -1,0 +1,158 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=FIXUP
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.86 — Fixup-seat occupancy-miss pin of the archived D1.100 shape:
+# SET then tail $r5=LD32, body unmentioned, Exit ST32 $r5, other GPRs
+# occupied. Pass 2 would steal $r5 (unmentioned live-through with an
+# Exit-path read) and latch LD32/SUBI32/ST32 would destroy the Exit
+# value; the caller installs no overlay pair. Containment: 1a/1b miss
+# last-resorts LatchScr=R0 + Header XOR restore. Software countdown
+# on R0; SET gone. Never $r5 latch steal, never overlay ST, never
+# Prefer $r2 SUBI32/LD32. Not occupancy fatal.
+#
+# Do not restamp d171 as overlay-positive or reopen d164 pass-1a r7
+# success arms. Overlay ST is D1.71. Unused-R14 is D1.87. Last-resort
+# LatchScr=Prefer with CB-162 save/restore is out of scope.
+# AIE SET dest is dedicated LC (AIE2InstrInfo.cpp:1338-1346
+# LCRegister=AIE2::LC; AIEBaseHardwareLoops.cpp:411-414 ADD_NC into LC).
+# Hexagon copies the trip into a new vreg
+# (HexagonHardwareLoops.cpp:1284-1291). RISC-V scavenges Define|Dead
+# AllowSpill=false (RISCVInstrInfo.cpp:1433-1471). WAR/snapshot incoming
+# read: HaydnIntraCycleRAW.h:218-219. Broader NoSpill/1a LatchExcl must
+# not restore a $r5 latch window or overlay pair.
+
+# Occupancy miss last-resorts LatchScr=R0. Latch stack-counter glue uses
+# the frame register ($r13); do not match the preheader `$r5=LD32 $r1`
+# or Exit `ST32 $r5, $r15`. Never overlay save. Never Prefer steal.
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: $r5 = SUBI32
+# CHECK-NOT: $r5 = {{S_LW_WITH_IMM|LD32}} $r13
+# CHECK-NOT: {{S_SW_WITH_IMM|ST32}} $r5, $r13
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r2 = LD32
+# CHECK-LABEL: bb.2.body:
+# CHECK: $r0 = XOR32
+# CHECK-NOT: $r5 = SUBI32
+# CHECK-NOT: $r2 = SUBI32
+# CHECK: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r0 = SUBI32{{.*}}$r0, 1
+# CHECK: S_SW_WITH_IMM{{.*}}$r0, $r13
+# CHECK: BNEZ{{.*}}$r0
+# CHECK-NOT: $r5 = SUBI32
+# CHECK-NOT: $r5 = {{S_LW_WITH_IMM|LD32}} $r13
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r2 = LD32
+
+# DBG: has non-countdown body use
+# DBG: unproven-absent Exit-path read
+# DBG-NOT: unmentioned live-through
+# DBG-NOT: overlay if live at SET
+# DBG-NOT: LatchScr=$r5
+# DBG-NOT: demote latch scratch $r5
+# DBG-NOT: demote overlay save
+# DBG-NOT: occupied at SET — PreheaderSave of scratch
+# DBG-NOT: demote latch scratch = Prefer
+# DBG-NOT: LatchScr=$r2
+# DBG: occupancy miss{{.*}}last-resort LatchScr=R0
+# DBG: demote skip overlay of {{.*}}$r0
+# DBG-NOT: demote overlay save
+# DBG: demote stack-counter exact-commit
+# DBG: demote restored soft-zero R0
+# DBG-NOT: LLVM ERROR
+
+# FIXUP: demoting hwloop
+# FIXUP-NOT: range-fit HWLOOP kept
+# FIXUP-NOT: LatchScr=$r5
+# FIXUP-NOT: $r5 = SUBI32
+# FIXUP-NOT: LLVM ERROR
+
+--- |
+  define dso_local void @d186_pass2_steal_refuse(ptr nocapture %p, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d186_pass2_steal_refuse
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    ; Tail def of the unmentioned live-through. DefInTail would refuse
+    ; overlay even if a pair existed; Exit still reads this value.
+    $r5 = LD32 $r1, 0
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Body READ of the trip: ST32 of $r2. Other GPRs occupied so 1a/1b miss.
+  ; $r5 is unmentioned and live-through; Exit ST32 is the path read.
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r5, $r15
+    ST32 $r5, $r15, 0
+    RET implicit killed $r15

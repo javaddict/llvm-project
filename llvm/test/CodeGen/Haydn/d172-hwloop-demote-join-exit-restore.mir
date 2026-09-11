@@ -1,0 +1,241 @@
+# RUN: split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/join.mir -o - | FileCheck %s --check-prefix=JOIN
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/join.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=JOIN-DBG
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/sole.mir -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/sole.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=SOLE-DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.72 — PendingSaveRestore LD32 at Exit->begin() has no predecessor
+# proof. Join Exit (entry bypass + Latch) would restore without this
+# loop's matching save and overwrite the edge-carried Prefer. Containment
+# is the D1.51 preflight: require Exit->pred_size()==1 and the sole
+# predecessor is Latch, else refuse with SET/CFG untouched. Fixup then
+# fatals (range-forced demote-first). A sole-pred Latch control must
+# still restore.
+#
+# Both arms: reg-trip Prefer=$r2 live-out of the loop, not a body read
+# (that is D1.64 occupancy-miss), other GPRs mentioned so LatchScr=Prefer
+# / PreheaderSave, 20× NOP spacer forces StartOff overflow. PEI first so
+# the save FI exists. Do not restamp d171 overlay, d164 body-use, d151
+# atomicity, d119 adj0, or cb162.ll. No dedicated-exit split (GR1.2/GR1.4).
+
+# JOIN-LABEL: name: d172_join_exit_restore
+# JOIN-NOT: SET_HWLOOP
+# JOIN: $r2 = SUBI32{{.*}}$r2, 1
+# JOIN: BNEZ{{.*}}$r2
+# JOIN: $r2 = {{S_LW_WITH_IMM|LD32}}
+# JOIN-LABEL: bb.3.exit:
+# JOIN: {{ST32|S_SW}}{{.*}}$r2
+
+# JOIN-DBG: LatchScr=$r2
+# JOIN-DBG: dedicated-exit split
+# JOIN-DBG: demote restored live trip
+# JOIN-DBG-NOT: occupancy miss
+# JOIN-DBG-NOT: LLVM ERROR
+
+# CHECK-LABEL: name: d172_sole_pred_latch
+# CHECK-NOT: SET_HWLOOP
+# CHECK-LABEL: bb.2.body:
+# Latch stack-counter window on Prefer (Adj==0 last-resort).
+# CHECK: $r2 = {{S_LW_WITH_IMM|LD32}}
+# CHECK: $r2 = SUBI32{{.*}}$r2, 1
+# CHECK: BNEZ{{.*}}$r2
+# CHECK-LABEL: bb.3.exit:
+# Sole predecessor is Latch: restore at Exit begin before the live-out use.
+# CHECK: $r2 = {{S_LW_WITH_IMM|LD32}}
+# CHECK: {{ST32|S_SW}}{{.*}}$r2
+
+# SOLE-DBG: LatchScr=$r2
+# SOLE-DBG-NOT: PendingSaveRestore join/bypass
+# SOLE-DBG: demote restored live trip
+# SOLE-DBG-NOT: occupancy miss
+# SOLE-DBG-NOT: LLVM ERROR
+
+#--- join.mir
+--- |
+  define dso_local void @d172_join_exit_restore(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    %cmp = icmp eq i32 %trip, 0
+    br i1 %cmp, label %exit, label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    store i32 %trip, ptr %out, align 4
+    br label %ret
+  ret:
+    ret void
+  }
+...
+---
+name:            d172_join_exit_restore
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; entry→Exit bypass + Latch→Exit. Prefer $r2 is live-out on both
+  ; incoming edges. BEQZ_W of $r1 is the CFG join; it is not a body use.
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1, %bb.3
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+    BEQZ_W $r1, %bb.3, implicit-def dead $sfr
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Occupies every latch-scratch except Prefer: live-in of Header==Latch
+  ; and mentioned so pass-2 cannot steal. $r14 live-in+mentioned so
+  ; unused-R14 skip cannot hide a steal. $r2 is live-through to Exit
+  ; (Prefer live-after → stack-counter LatchScr=Prefer / PreheaderSave),
+  ; not a non-countdown body read (that would be D1.64 occupancy miss).
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r3, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  ; Join Exit: preds {entry, Latch}. Unmatched restore would land here.
+  bb.3.exit:
+    liveins: $r1, $r2
+    successors: %bb.4
+    ST32 $r2, $r1, 0
+
+  bb.4.ret:
+    liveins: $r15
+    RET implicit killed $r15
+
+#--- sole.mir
+--- |
+  define dso_local void @d172_sole_pred_latch(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    store i32 %trip, ptr %out, align 4
+    br label %ret
+  ret:
+    ret void
+  }
+...
+---
+name:            d172_sole_pred_latch
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Identical occupancy to join.mir; Exit pred_size==1 and that
+  ; predecessor is Latch. Restore at Exit begin must still run.
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r3, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r2
+    successors: %bb.4
+    ST32 $r2, $r1, 0
+
+  bb.4.ret:
+    liveins: $r15
+    RET implicit killed $r15

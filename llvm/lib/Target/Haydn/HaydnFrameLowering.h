@@ -13,6 +13,7 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNFRAMELOWERING_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNFRAMELOWERING_H
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
 
@@ -84,6 +85,12 @@ public:
   // final SP (TargetFrameLoweringImpl.cpp:150-157). !hasFP → late SP.
   bool allocateScavengingFrameIndexesNearIncomingSP(
       const MachineFunction &MF) const override;
+
+  // D1.88: pin dedicated hwloop counter / demote-save FIs to the same
+  // near-incoming vs near-outgoing-SP policy as scavenger slots so
+  // ST32/LD32 word-element simm6 always reaches the home.
+  void orderFrameObjects(const MachineFunction &MF,
+                         SmallVectorImpl<int> &ObjectsToAllocate) const override;
 
   // Enable shrink-wrapping so the prologue/epilogue are placed at the optimal
   // points (first use of callee-saved registers) rather than always at entry/exit.

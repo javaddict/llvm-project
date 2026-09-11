@@ -1,4 +1,4 @@
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 #
 # REGRESSION TEST: EndOff is the last size-bearing non-terminator cycle.
@@ -12,9 +12,9 @@
 # If this regresses, the body keeps a single NOP before PseudoLoopEnd.
 
 # CHECK-LABEL: name: endoff_skips_post_ple_b
-# CHECK: SET_HWLOOP_W
+# CHECK: SET_HWLOOP
 # CHECK: bb.1.body:
-# CHECK: ST32
+# CHECK: {{ST32|S_SW}}
 # CHECK: NOP
 # CHECK: NOP
 # CHECK: PseudoLoopEnd %bb.1

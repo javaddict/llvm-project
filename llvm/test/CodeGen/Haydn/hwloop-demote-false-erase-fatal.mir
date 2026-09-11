@@ -1,5 +1,5 @@
 # RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
-# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -mattr=+hwloop -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
 
 # Role: MIR — live body + demote disabled must be fatal, never erase-only.

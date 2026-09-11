@@ -9,13 +9,11 @@
 define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK-LABEL: tiny_body:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
-; CHECK-NEXT:    { nop; maxu32 r3, r2, r3 }
-; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
-; CHECK-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3 }
+; CHECK-NEXT:    { nop; nop; maxu32 r3, r2, r3 }
+; CHECK-NEXT:    { set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r3; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  .LBB0_1: // %loop
@@ -27,7 +25,7 @@ define void @tiny_body(ptr nocapture %p, i32 %n) {
 ; CHECK-NEXT:  .LLhwloop_end0:
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:  // %bb.2: // %exit
-; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; P4 golden S_SW_POST_IMM Data_Latency=1: no pre-END writeback stall parcel.

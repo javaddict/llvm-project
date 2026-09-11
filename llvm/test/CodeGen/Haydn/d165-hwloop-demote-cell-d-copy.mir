@@ -1,0 +1,213 @@
+# RUN: split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/copy.mir -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/copy.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=COPY-DBG
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %t/refuse.mir -o - 2>&1 | FileCheck %s --check-prefix=REFUSE
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/refuse.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=REFUSE-DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.65 — LoopStart Adj!=0 stack-counter cell-(d) copy / occupied no-copy
+# refuse. Seat is prologepilog,haydn-hwloops (cb166/d119), not SET_HWLOOP
+# remat. Named cells already live in mixed-TU SHA 500a6a08d686:
+# LatchScrLiveAtSet uses occupiedAtSet; copy is PreheaderScr=LatchScr only
+# when LatchScr!=Prefer && !LatchScrLiveAtSet; skipped copy plus Adj!=0 &&
+# !HasImm && !PreheaderScr refuses before the D1.51 emission barrier.
+# Occupancy stays UseFromSet || (LivePhysRegs-live && !DefInTail). Do not
+# restamp occupiedAtSet as any-mention (regMentionedInPreheaderTail). Do
+# not flip demoteStackCounterAdmissible's 5-boolean cell-(d) admit (D1.19).
+# Overlay skip-only stays (D1.71). LatchScr is R12, never unused-R14 (D1.87).
+#
+# Construction (both arms):
+#   * LoopStart $r2, -1 — Prefer=$r2, Adj=-1 (remaining kernel trip Prefer+Adj).
+#   * Body call → Role-A preflight fail → stack-counter. pickCounterReg
+#     candidates are mentioned / call-clobbered so no GPR countdown.
+#   * PostRAScratchPriority at SET is suffocated (PreferNotR12 skips R12;
+#     the list omits R14): R1..R11 live into Header, Prefer excluded.
+#     NoSpill PreheaderScr misses.
+#   * R12 is dead at latch end vs {Header, Exit} and has an incoming value
+#     so pickDeadLatchScratch pass 1a returns R12. R14 is live at
+#     Header/Exit — never unused-R14 (D1.87).
+#
+# Green: R12 is also dead at SET. Copy emits ADDI32_W R12,Prefer,Adj then
+# ST32 R12. CHECK-NOT in-place ADDI Prefer and CHECK-NOT ST32 of full trip
+# Prefer.
+#
+# Refuse: same shape with a tail USE of LatchScr (use-then-def occupies).
+# DBG-pin skip LatchScr->PreheaderScr and no PreheaderScr dead at SET;
+# keep SET/CFG; formation fatal; CHECK-NOT ST32 full trip.
+#
+# Do not restamp d119, cb166, d164-*, d171. AIE SetLoopCount dest is
+# dedicated LC, src=trip, adj — never in-place Dest==Src on the trip GPR
+# (AIE2InstrInfo.cpp:1437 LCRegister=AIE2::LC;
+# AIEBaseHardwareLoops.cpp:408-414; getReachingLocalUses is LoopDec-use
+# only at :379). Hexagon COPY trip into a new vreg before LOOP_r
+# (HexagonHardwareLoops.cpp:1284-1291). RISC-V insertIndirectBranch
+# scavenges Define|Dead AllowSpill=false (RISCVInstrInfo.cpp:1433-1471).
+# Haydn SET reads a GPR, so the copy dest must be dead at SET.
+
+# CHECK-LABEL: name: d165_cell_d_copy
+# CHECK-NOT: $r2 = ADDI32{{[^ ]*}} $r2
+# CHECK: $r12 = ADDI32{{[^ ]*}} $r2, -1
+# CHECK: {{S_SW_WITH_IMM|ST32}}{{.*}}$r12
+# CHECK-NOT: $r2 = ADDI32{{[^ ]*}} $r2
+# CHECK-NOT: {{S_SW_WITH_IMM|ST32}} $r2, $r13
+# CHECK: $r12 = {{S_LW_WITH_IMM|LD32}}
+# CHECK: $r12 = SUBI32{{.*}}$r12, 1
+# CHECK: {{S_SW_WITH_IMM|ST32}}{{.*}}$r12
+# CHECK: BNEZ{{.*}}$r12
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: LoopStart
+# CHECK-NOT: PseudoLoopEnd
+# CHECK-NOT: $r14 = SUBI32
+# CHECK-NOT: $r14 = ADDI32{{[^ ]*}} $r2
+
+# COPY-DBG: demoting hwloop header=%bb.1 latch=%bb.1 exit=%bb.2 (LoopStart)
+# COPY-DBG: demote latch scratch $r12 (allocatable, dead at latch end vs {{[{]Header, Exit[}]}})
+# COPY-DBG: demote LatchScr=$r12
+# COPY-DBG-NOT: unused dead temp
+# COPY-DBG-NOT: LatchScr=$r14
+# COPY-DBG-NOT: skip LatchScr->PreheaderScr
+# COPY-DBG-NOT: no PreheaderScr dead at SET
+# COPY-DBG-NOT: latch scratch = Prefer
+# COPY-DBG: demote skip overlay of $r12
+# COPY-DBG: demote stack-counter
+# COPY-DBG-NOT: LLVM ERROR
+
+# REFUSE: HaydnHardwareLoops: incomplete Role-A retained state rejected before mutation — body contains call/indirect/return
+# REFUSE-NOT: $r2 = ADDI32{{[^ ]*}} $r2
+# REFUSE-NOT: {{S_SW_WITH_IMM|ST32}} $r2, $r13
+# REFUSE-NOT: $r12 = ADDI32{{[^ ]*}} $r2, -1
+# REFUSE-COUNT-1: LoopStart
+
+# REFUSE-DBG: demoting hwloop header=%bb.1 latch=%bb.1 exit=%bb.2 (LoopStart)
+# REFUSE-DBG: demote latch scratch $r12 (allocatable, dead at latch end vs {{[{]Header, Exit[}]}})
+# REFUSE-DBG: demote LatchScr=$r12
+# REFUSE-DBG: skip LatchScr->PreheaderScr $r12 live at SET / preheader tail
+# REFUSE-DBG: no PreheaderScr dead at SET
+# REFUSE-DBG-NOT: unused dead temp
+# REFUSE-DBG-NOT: LatchScr=$r14
+# REFUSE-DBG-NOT: exact-commit
+# REFUSE-DBG-NOT: {{S_SW_WITH_IMM|ST32}} $r2, $r13
+# REFUSE-DBG: LLVM ERROR: {{.*}}body contains call/indirect/return
+
+#--- copy.mir
+--- |
+  define dso_local void @d165_cell_d_copy(ptr %p) {
+  entry:
+    br label %body
+  body:
+    call void @ext(ptr %p)
+    br label %exit
+  exit:
+    ret void
+  }
+  declare void @ext(ptr)
+...
+---
+name:            d165_cell_d_copy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    ; Incoming R12, killed before SET so occupiedAtSet is false — copy dest.
+    $r12 = XOR32 $r12, $r12
+    LoopStart $r2, -1
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r14, $r15
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r14 = XOR32 $r14, $r14
+    ; Mention R12 for pickCounterReg without keeping it live vs {Header, Exit}.
+    $r12 = XOR32 $r1, $r1
+    $r15 = JAL_W @ext, csr_haydn, implicit-def $r1, implicit $r1, implicit-def $r15
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r1, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r14, $r15
+    ST32 $r1, $r3, 0
+    ST32 $r4, $r5, 0
+    ST32 $r6, $r7, 0
+    ST32 $r8, $r9, 0
+    ST32 $r10, $r11, 0
+    ST32 $r14, $r1, 0
+    $r0 = JALR_W $r15, 0, implicit $r15
+
+#--- refuse.mir
+--- |
+  define dso_local void @d165_cell_d_nocopy_refuse(ptr %p) {
+  entry:
+    br label %body
+  body:
+    call void @ext(ptr %p)
+    br label %exit
+  exit:
+    ret void
+  }
+  declare void @ext(ptr)
+...
+---
+name:            d165_cell_d_nocopy_refuse
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, -1
+    ; Tail USE of LatchScr then def: use-then-def occupies SET, skip copy.
+    ST32 $r12, $r1, 0
+    $r12 = XOR32 $r1, $r1
+    NOP
+    NOP
+  bb.1.body:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r14, $r15
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r14 = XOR32 $r14, $r14
+    $r12 = XOR32 $r1, $r1
+    $r15 = JAL_W @ext, csr_haydn, implicit-def $r1, implicit $r1, implicit-def $r15
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r1, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r14, $r15
+    ST32 $r1, $r3, 0
+    ST32 $r4, $r5, 0
+    ST32 $r6, $r7, 0
+    ST32 $r8, $r9, 0
+    ST32 $r10, $r11, 0
+    ST32 $r14, $r1, 0
+    $r0 = JALR_W $r15, 0, implicit $r15

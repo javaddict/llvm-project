@@ -4,9 +4,9 @@
 ; Role: semantic — Full-only residual baseline for hardware-loop setup geometry
 ; under product Format E 12-byte parcels.
 ;
-; Format E typed HWLoopOff reloc residual is closed. Product default keeps
-; -haydn-enable-hwloops OFF until BundleSim e2e ZOL formation is green.
-; DEFAULT pins soft-branch residual. HWON re-derives intended ZOL contract.
+; Format E typed HWLoopOff reloc residual is closed. Product default is ON
+; (2026-08-22). DEFAULT and HWON both arm set_hwloop_f2; D1.88 counter-FI
+; grows the frame 8→16.
 ;
 ; HWON setup floor (cycle-primary):
 ;   * set_hwloop_f2 emitted (Role A / expand)
@@ -21,19 +21,18 @@ define i32 @vf0_full_hwloop_baseline(i32 %n, ptr %p) {
 ; DEFAULT-LABEL: vf0_full_hwloop_baseline:
 ; DEFAULT:       // #<spill-kpi> @vf0_full_hwloop_baseline spills=0 spill-bytes=0 reloads=0 reload-bytes=0
 ; DEFAULT:       // %bb.0: // %entry
-; DEFAULT:       { nop; xor32 r0, r0, r0 }
-; DEFAULT:       { nop; subi32 sp, sp, 8 }
-; DEFAULT:       .cfi_def_cfa_offset 8
-; DEFAULT-NOT:   set_hwloop
-; DEFAULT:       bnez
+; DEFAULT:       xor32 r0, r0, r0
+; DEFAULT:       subi32{{(_w)?}}{{.*}}sp, sp, 16
+; DEFAULT:       .cfi_def_cfa_offset 16
+; DEFAULT:       set_hwloop_f2
 ; DEFAULT:       jalr
 ;
 ; HWON-LABEL: vf0_full_hwloop_baseline:
 ; HWON:       // #<spill-kpi> @vf0_full_hwloop_baseline spills=0 spill-bytes=0 reloads=0 reload-bytes=0
 ; HWON:       // %bb.0: // %entry
-; HWON:       { nop; xor32 r0, r0, r0 }
-; HWON:       { nop; subi32 sp, sp, 8 }
-; HWON:       .cfi_def_cfa_offset 8
+; HWON:       xor32 r0, r0, r0
+; HWON:       subi32{{(_w)?}}{{.*}}sp, sp, 16
+; HWON:       .cfi_def_cfa_offset 16
 ; HWON:       // %bb.1: // %loop.preheader
 ; HWON:       set_hwloop_f2
 ; Two size-bearing parcels after SET (InterveningCycles=2).

@@ -1,5 +1,5 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -O2 \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize -verify-machineinstrs \
 # RUN:   %s -o /dev/null 2> %t.err; echo "verify-done" >> %t.err; cat %t.err \
 # RUN:   | FileCheck %s
 #

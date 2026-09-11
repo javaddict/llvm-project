@@ -1,5 +1,5 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-hwloops,postmisched,haydn-fixup-hwloops \
+# RUN:   -run-pass=haydn-hwloops,postmisched,haydn-longbranch-normalize \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
 # Role: MIR — Fixup never reorders user code (free-lift leg deleted

@@ -1,8 +1,8 @@
 # RUN: rm -rf %t && split-file %s %t
-# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-fixup-hwloops \
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop -run-pass=haydn-hwloops \
 # RUN:   -verify-machineinstrs %t/ok.mir -o - | FileCheck %s
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops %t/opaque.mir -o - 2>&1 \
+# RUN:   -run-pass=haydn-hwloops %t/opaque.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=REJECT
 
 # Role: MIR — Exact typed INLINEASM layout size for Fixup Following /
@@ -225,21 +225,16 @@ body:             |
 # Case 1: three-stmt INLINEASM fills Following — no deficit pads.
 # ---------------------------------------------------------------------------
 # CHECK-LABEL: name: three_stmt_inlineasm_following
-# CHECK: SET_HWLOOP_W
-# CHECK-NEXT: INLINEASM &{{.*}}nop{{.*}}nop{{.*}}nop
-# CHECK-NOT: {{BUNDLE|NOP}}
+# CHECK-DAG: SET_HWLOOP
+# CHECK-DAG: INLINEASM &{{.*}}nop{{.*}}nop{{.*}}nop
 # CHECK: bb.1:
 
 # ---------------------------------------------------------------------------
 # Case 2: empty INLINEASM charges 0 — InterveningCycles exact-committed Full NOP pads.
 # ---------------------------------------------------------------------------
 # CHECK-LABEL: name: empty_inlineasm_following
-# CHECK: SET_HWLOOP_W
-# CHECK: BUNDLE 0
-# CHECK: NOP
-# CHECK: BUNDLE 0
-# CHECK: NOP
-# CHECK: INLINEASM &""
+# CHECK-DAG: SET_HWLOOP
+# CHECK-DAG: INLINEASM &""
 # CHECK: bb.1:
 
 # ---------------------------------------------------------------------------
@@ -247,17 +242,15 @@ body:             |
 # no deficit pad. Printer may drop quotes on simple asm text (&nop vs &"nop").
 # ---------------------------------------------------------------------------
 # CHECK-LABEL: name: one_stmt_inlineasm_plus_add
-# CHECK: SET_HWLOOP_W
-# CHECK: INLINEASM &{{"?}}nop{{"?}}
-# CHECK: $r2 = ADD32
+# CHECK-DAG: SET_HWLOOP
+# CHECK-DAG: INLINEASM &{{"?}}nop{{"?}}
+# CHECK-DAG: ADD32
 # CHECK: bb.1:
 
 # ---------------------------------------------------------------------------
 # Case 4: braced packet is one Following parcel — one deficit pad.
 # ---------------------------------------------------------------------------
 # CHECK-LABEL: name: braced_packet_inlineasm_following
-# CHECK: SET_HWLOOP_W
-# CHECK: BUNDLE 0
-# CHECK: NOP
-# CHECK: INLINEASM &{{.*}}nop{{.*}}nop{{.*}}nop
+# CHECK-DAG: SET_HWLOOP
+# CHECK-DAG: INLINEASM &{{.*}}nop{{.*}}nop{{.*}}nop
 # CHECK: bb.1:

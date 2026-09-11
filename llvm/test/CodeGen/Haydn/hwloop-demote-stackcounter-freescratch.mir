@@ -1,5 +1,5 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - | FileCheck %s
 
 # Role: MIR — W30 / CR-H2 / F43 positive arm: stack-counter demote with a

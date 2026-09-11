@@ -1,0 +1,261 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=DEF
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -haydn-branch-relax-safety-buffer=0 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=BUF0
+# REQUIRES: haydn-registered-target
+#
+# D1.149 span-emission-growth pin. The LongLatch preflight used to treat
+# the D1.34 Header-begin..Latch-end walk as post-emission ("always-
+# encodable"); stack-arm inserts before the short BNEZ site (LD32+SUBI32+
+# ST32 = 3 parcels / 36 B) were invisible, so a 1992 B body stayed short
+# at the default 48 B buffer and generic BranchRelaxation had to rescue
+# the out-of-range BNEZ. Charge those unrotated in-span parcels onto
+# BackedgeDisp before TII.isBranchOffsetInRange. Do not pre-add the
+# D1.33 buffer, do not compose D1.35 MaxHwLoopDemoteGrowthBytes, do not
+# charge free-arm SUBI32 / exit-B / rotated ForwardBytes.
+#
+# Shape: Sel=2 (out-of-domain, same D1.33 demote trigger so the body can
+# sit in the simm12 band), stack-counter (12 XOR32 occupy every pickCounterReg GPR;
+# LatchScr!=R0 plus a distinct LongScr), Header==Latch = 12 XOR +
+# 154 NOP = 166 parcels = 1992 B, alignment 1. PEI first so the
+# dedicated counter FI exists. Do NOT add branch-relaxation to the RUN
+# line — a BR rescue would contaminate the LongLatch proof.
+#
+# Parcel arithmetic (parcel 12 B; window 2048 - buffer):
+#   raw Header..Latch = 166 * 12 = 1992 B
+#   D1.149 charge = 3 * 12 = 36 B -> |disp| = 2028 B
+#   DEF (buffer 48): 2028 + 48 = 2076 > 2048 -> LongLatch
+#     LUI+ADDI32_W+BEQZ_W+JALR_W, no BNEZ, no extra MBB
+#   BUF0 (buffer 0): 2028 <= 2048 -> short BNEZ, no JALR
+#     polarity that growth is charged and the buffer is not double-charged
+#     (double-charging the buffer or MaxHwLoopDemoteGrowthBytes=156 B
+#     would make BUF0 long too).
+# Free-arm t166 at the same 1992 B stays short (gr27-d133-single-charge-
+# boundary.mir); that file is the D1.33 non-regression, not restamped.
+#
+# AIE aie-public@3e93bf7b5541 AIEBaseHardwareLoops.cpp:232-272 has no
+# stack-counter/save path and no BranchRelaxation. HexagonBranchRelaxation
+# .cpp:108-111 charges known extender size then :164-166 Distance=
+# |offset|+BranchRelaxSafetyBuffer once. RISC-V has no HWLoop TU.
+
+--- |
+  define dso_local i32 @d1149_stack_span_growth() {
+  entry:
+    br label %body
+  body:
+    br label %exit
+  exit:
+    ret i32 0
+  }
+...
+---
+name:            d1149_stack_span_growth
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.1
+    SET_HWLOOP_F2_W 2, %bb.1, %bb.1, $r2, implicit-def dead $sfr
+
+  bb.1.body:
+    liveins: $r2
+    successors: %bb.2
+    $r1 = XOR32 $r2, $r2
+    $r3 = XOR32 $r2, $r2
+    $r4 = XOR32 $r2, $r2
+    $r5 = XOR32 $r2, $r2
+    $r6 = XOR32 $r2, $r2
+    $r7 = XOR32 $r2, $r2
+    $r8 = XOR32 $r2, $r2
+    $r9 = XOR32 $r2, $r2
+    $r10 = XOR32 $r2, $r2
+    $r11 = XOR32 $r2, $r2
+    $r12 = XOR32 $r2, $r2
+    $r2 = XOR32 $r2, $r2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15
+
+# DEF-LABEL: name: d1149_stack_span_growth
+# Stack-counter window before the long latch. Countdown is not Prefer $r2
+# and not occupancy-miss $r0.
+# DEF-NOT: SET_HWLOOP
+# DEF: $[[CNT:r[1-9][0-9]*]] = {{S_LW_WITH_IMM|LD32}}
+# DEF: $[[CNT]] = SUBI32{{.*}}1
+# DEF: {{S_SW_WITH_IMM|ST32}}
+# Terminal in-block long latch, corrected order. Do not run generic BR.
+# DEF: $[[SCR:r[1-9][0-9]*]] = LUI{{.*}}%bb.1
+# DEF: ADDI32{{.*}}%bb.1
+# DEF: BEQZ{{.*}}$[[CNT]], {{.*}}bb.2
+# DEF: JALR{{.*}}$[[SCR]]
+# DEF-NOT: BNEZ
+# DEF-NOT: bb.3
+
+# BUF0-LABEL: name: d1149_stack_span_growth
+# Same 2028 B charged displacement stays inside the raw 2048 window.
+# BUF0-NOT: SET_HWLOOP
+# BUF0: $[[CNT0:r[1-9][0-9]*]] = {{S_LW_WITH_IMM|LD32}}
+# BUF0: $[[CNT0]] = SUBI32{{.*}}1
+# BUF0: {{S_SW_WITH_IMM|ST32}}
+# BUF0: BNEZ{{.*}}$[[CNT0]], {{.*}}bb.1
+# BUF0-NOT: LUI
+# BUF0-NOT: JALR

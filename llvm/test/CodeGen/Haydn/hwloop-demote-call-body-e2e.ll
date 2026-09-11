@@ -60,11 +60,14 @@ declare void @sink(i32)
 define dso_local void @softfloat_loop(ptr nocapture %p, ptr nocapture readonly %q, i32 %n) nounwind {
 ; CHECK-LABEL: softfloat_loop:
 ; CHECK-NOT: set_hwloop
-; CHECK: .LBB1_1:
+; Address of __addsf3 is hoisted before the software-loop header.
+; CHECK: lui{{.*}}__addsf3
+; CHECK: addi32{{.*}}__addsf3
+; CHECK: .LBB{{[0-9_]+}}:
 ; The fadd body lowers to __addsf3; the loop is a plain software loop
 ; (TTI decline), so the call sits in an ordinary bnez back-edge loop.
-; CHECK: jal {{.*}}__addsf3
-; CHECK: bnez {{r[0-9]+}}, .LBB1_1
+; CHECK: jalr{{.*}}lr
+; CHECK: bnez {{r[0-9]+}}, .LBB{{[0-9_]+}}
 ; CHECK-NOT: set_hwloop
 entry:
   br label %body

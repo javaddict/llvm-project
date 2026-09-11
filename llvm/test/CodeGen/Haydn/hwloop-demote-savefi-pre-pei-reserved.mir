@@ -1,27 +1,27 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - | FileCheck %s
 
 # Role: MIR — frame-deadline law: the hwloop-demote save home is reserved
 # before frame finalization; the post-RA demote never CreateStackObject.
 #
-# REGRESSION TEST: when a hwloop setup survives to the post-RA fixup and the
-# demote needs a value-preserve home, every candidate FI must already exist
-# (reserved in HaydnFrameLowering::processFunctionBeforeFrameFinalized). The
-# demote's save home shares PostRAScratchFI when it is disjoint from the
-# stack-counter home; the rare same-home case uses the dedicated
-# pre-reserved slot. This test pins the normal path: full-frame function
-# (scavenging slot exists) keeps the shared home and the frame does NOT grow
-# a dedicated demote slot.
+# D1.150 / D1.154: when a SET_HWLOOP already present at PEI is
+# Fixup-demoted, HaydnFrameLowering CreateStackObject one 4-byte
+# demote-save FI per setup (LoopStart included on the product path;
+# this file is the SET-at-PEI mechanism pin). Not a PostRA share.
+# Formed-ZOL / refused still must not take the reserved slot.
+# +4B is often absorbed by StackAlign 8, so do not treat SUBI32 $r13,
+# 16 as the dedicated-slot proof — pin the pre-PEI spill-slot count
+# instead. CHECK-NOT after COUNT rejects over-reservation.
 #
 # Bug this pins: the demote used to lazily CreateStackObject AFTER frame
-# offsets were final, changing stack size post-PEI (untracked by the frame,
-# invisible to the epilogue). The lazy path is now a fatal; reservation is
-# pre-PEI only.
+# offsets were final, then later shared PostRAScratchFI by beginSpill
+# priority. Reservation is pre-PEI only; disjointness is
+# resolveDemoteSaveHome.
 #
 # What breaks if the bug returns: the demote save ST32/LD32 pair addresses a
-# slot the frame layout never accounted for, or the compiler fatals with
-# "HwLoopDemoteSaveFI after frame finalization".
+# slot the frame layout never accounted for, shares PostRA, or the compiler
+# fatals with "dedicated demote-save FI".
 
 --- |
   define dso_local void @demote_savefi_pre_pei(ptr nocapture writeonly %out) {
@@ -88,10 +88,14 @@ body:             |
 ...
 # CHECK-NOT: {{.*: demote refused}}
 # CHECK-NOT: report_fatal_error
-# Demote ran (soft edge installed) and no frame growth was needed:
-# Frame is exactly the framed-function 8 bytes (no extra demote slot):
-# the value-preserve save shares the already-reserved PostRA scratch home.
-# CHECK: frame-setup SUBI32 $r13, 8
+# Demote ran (soft edge installed). Dedicated pre-PEI 4-byte spill homes:
+# PostRA + N counters + N saves (SET present at PEI) + scavenger/BR.
+# N=1 SET → 4 slots. Do not pin SUBI32 $r13, 16 — StackAlign 8 absorbs
+# the extra slot. Product LoopStart census is d1154-*-loopstart-savefi.
+# CHECK: stack:
+# CHECK-COUNT-4: type: spill-slot
+# CHECK-NOT: type: spill-slot
+# CHECK: frame-setup SUBI32 $r13
 # The demoted countdown loop uses the pre-reserved FI homes.
 # CHECK: ST32
 # CHECK: BNEZ

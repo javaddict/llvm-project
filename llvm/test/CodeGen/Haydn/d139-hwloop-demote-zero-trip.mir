@@ -1,0 +1,76 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.139 — zero-trip demote defense. Software latch is test-at-bottom
+# (SUBI32+BNEZ). A proven remaining COUNT below MinCount would execute
+# the body once then wrap ~2^32. Golden COUNT>=1 at activation and
+# END-then-check (VLIW_Engine_Compiler_Constraints.md:105-107). Do not
+# invent skip-body or wrap. Refuse live-body demote when remaining trip
+# is a proven constant below MinCount; SET/CFG untouched. Fixup then
+# fatals (range-forced demote-first via countMeetsFieldLaw). Unproven
+# reg/LoopStart remaining stay demotable. Over-field imm still demotes
+# (GPR software counter). Do not restamp cb162/d164/keep_sel0 or the
+# demote-OFF COUNT=0 matrix (hwloop-demote-false-fault-matrix.mir).
+#
+# Seat: haydn-fixup-hwloops, demote ON. SET_HWLOOP_W cnt=0.
+# AIE min-iter is formation (AIEBaseTargetTransformInfo.cpp:322-331
+# MinIterCountHLReject=1), not demote (AIEBaseHardwareLoops.cpp:311-316
+# early-return). Hexagon COPY trip (HexagonHardwareLoops.cpp:1284-1291)
+# and extends LOOP (HexagonFixupHwLoops.cpp:137-144). Haydn TTI already
+# overlays (HaydnTargetTransformInfo.cpp:422-430).
+
+# FATAL-NOT: SUBI32
+# FATAL-NOT: exact-commit
+# FATAL: LLVM ERROR: {{.*}}cannot demote
+# FATAL-NOT: SUBI32
+# FATAL-NOT: exact-commit
+
+# DBG: demoting hwloop
+# DBG: demote refused{{.*}}COUNT below MinCount
+# DBG-NOT: exact-commit
+# DBG: LLVM ERROR: {{.*}}cannot demote
+# DBG-NOT: exact-commit
+
+--- |
+  define dso_local void @d139_zero_trip(ptr nocapture writeonly %out) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            d139_zero_trip
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r15
+    successors: %bb.1
+
+    $r0 = frame-setup XOR32 $r0, $r0
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 0, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r0
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15

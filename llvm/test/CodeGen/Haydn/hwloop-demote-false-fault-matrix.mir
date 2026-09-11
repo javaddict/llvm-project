@@ -1,18 +1,18 @@
 # RUN: split-file %s %t
 # RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
-# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -mattr=+hwloop -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/sel2.mir -o - 2>&1 | FileCheck %s --check-prefix=SEL
 # RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
-# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -mattr=+hwloop -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/count0.mir -o - 2>&1 | FileCheck %s --check-prefix=COUNT
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/hwlr_csr.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
 # RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
-# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -mattr=+hwloop -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/hwlr_csr.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/hwlr_csr_bundled.mir -o - 2>&1 | FileCheck %s --check-prefix=HWLR
 
 # Role: MIR — demote OFF on live illegal selector / COUNT=0 must fatal,

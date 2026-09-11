@@ -1,0 +1,163 @@
+# RUN: split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog -verify-machineinstrs \
+# RUN:   %t/census.mir -o - | FileCheck %s --check-prefix=CENSUS
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   -verify-machineinstrs %t/demote.mir -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %t/demote.mir -o /dev/null 2>&1 | FileCheck %s --check-prefix=SAVE-DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.154 — product ISel leaves LoopStart at PEI. The save-home census
+# must count it (twin of the D1.88 counter scan).
+#
+# census.mir: -run-pass=prologepilog only. Spill-slot COUNT:
+# PostRA + 1 counter + 1 save + scavenger/BR = 4. CHECK-NOT after
+# COUNT rejects over-reservation. Do not pin SUBI32 $r13, 16.
+#
+# demote.mir: product timeline LoopStart → PEI → HardwareLoops → Fixup.
+# Occupancy is d1150 (LatchScr==Prefer, trip live-after, StartOff
+# spacer). Save ST/LD must use a dedicated spill, not %stack.0 (PostRA).
+
+# CENSUS-LABEL: name: d1154_loopstart_savefi_pre_pei
+# CENSUS: stack:
+# CENSUS-COUNT-4: type: spill-slot
+# CENSUS-NOT: type: spill-slot
+# CENSUS: frame-setup SUBI32 $r13
+# CENSUS: LoopStart
+# CENSUS-NOT: LLVM ERROR
+
+# CHECK-LABEL: name: d1154_loopstart_save_demote
+# CHECK-NOT: LoopStart
+# CHECK-NOT: SET_HWLOOP
+# CHECK-LABEL: bb.0.entry:
+# Save is not %stack.0 (PostRA). Demote save ST must carry FixedStack MMO
+# (bundle verifier: store member carries no machine memory operand).
+# CHECK: {{ST32|S_SW}}{{.*}}$r2, $r13, {{[-0-9]+}} :: (store (s32) into %stack.[[SAVE:[1-9][0-9]*]])
+# CHECK-LABEL: bb.2.exit:
+# CHECK: $r2 = {{S_LW_WITH_IMM|LD32}}{{.*}}%stack.[[SAVE]]
+# CHECK-NOT: LLVM ERROR
+# CHECK-NOT: store member carries no machine memory operand
+
+# SAVE-DBG: demote save home disjoint SaveFI#[[SAVE:[0-9]+]] PostRAScratchFI#[[POSTRA:[0-9]+]]
+# SAVE-DBG-NOT: SaveFI#[[EQ:[0-9]+]] PostRAScratchFI#[[EQ]]
+# SAVE-DBG: demote save home take+bind SaveFI#[[SAVE]]
+# SAVE-DBG: demote restored live trip
+# SAVE-DBG-NOT: LLVM ERROR
+
+#--- census.mir
+--- |
+  define dso_local void @d1154_loopstart_savefi_pre_pei(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    store i32 %trip, ptr %out, align 4
+    ret void
+  }
+...
+---
+name:            d1154_loopstart_savefi_pre_pei
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+  bb.1.body:
+    liveins: $r1, $r2
+    successors: %bb.1, %bb.2
+    ST32 $r1, $r1, 0
+    PseudoLoopEnd %bb.1
+  bb.2.exit:
+    liveins: $r1, $r2, $r15
+    ST32 $r2, $r1, 0
+    RET implicit $r15
+...
+
+#--- demote.mir
+--- |
+  define dso_local void @d1154_loopstart_save_demote(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    store i32 %trip, ptr %out, align 4
+    br label %ret
+  ret:
+    ret void
+  }
+...
+---
+name:            d1154_loopstart_save_demote
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  ; Product CFG: LoopStart preheader successor is the PLE body (HardwareLoops
+  ; resolveRoleABody). NOPs after LoopStart force StartOff overflow so
+  ; Fixup demotes. Occupancy: all other GPRs mentioned, Prefer $r2 live-out.
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+    LoopStart $r2, 0
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.1.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.1, %bb.2
+    ST32 $r3, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    PseudoLoopEnd %bb.1
+
+  bb.2.exit:
+    liveins: $r1, $r2
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+
+  bb.3.ret:
+    liveins: $r15
+    RET implicit killed $r15
+...

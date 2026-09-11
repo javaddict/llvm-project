@@ -1,0 +1,169 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.138 — stored-livein second-hop seed.
+# Header stored liveins omit $r5. D1.101 early-exit E is in LoopBlocks
+# and uses $r5. Header does not use $r5. E lists $r5 as a live-in so
+# TracksLiveness MIR parse accepts the use; the empty-E.liveins
+# second-hop hole is OccupiedAtSetHeaderToEarlyExitSecondHop /
+# PickDeadLatchScratchHeaderToEarlyExitSecondHop.
+# skipCommon's mentioned-arm would admit (body temp stays 1a-eligible;
+# do not walk LoopBlocks as Exit-path). llvm::computeLiveIns(Header)
+# seeds from stored liveouts (E empty) and misses the Header→E hop.
+# Pass-1a / NoSpill / occupiedAtSet seed from FunctionPhysLiveness
+# SeedPristines=false (AIE LiveRegs.cpp:37-107 worklist; computed, never
+# stored; no CSI). Stack demote must not LatchScr=$r5 — occupancy-miss
+# LatchScr=R0 + Header XOR restore. Never Prefer SUBI32/LD32, never
+# overlay ST, never pass-2 steal. Not occupancy fatal.
+# AIE SET dest is dedicated LC (AIE2InstrInfo.cpp:1338-1346;
+# AIEBaseHardwareLoops.cpp:411-414). Hexagon copies the trip into a new
+# vreg (HexagonHardwareLoops.cpp:1284-1291). RISC-V scavenges
+# Define|Dead AllowSpill=false (RISCVInstrInfo.cpp:1433-1471).
+
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: $r5 = SUBI32
+# CHECK-NOT: $r5 = {{S_LW_WITH_IMM|LD32}} $r13
+# CHECK-NOT: {{S_SW_WITH_IMM|ST32}} $r5, $r13
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r2 = LD32
+# CHECK-LABEL: bb.2.header:
+# CHECK: $r0 = XOR32
+# CHECK-NOT: $r5 = SUBI32
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-LABEL: bb.3.latch:
+# CHECK: $r0 = S_LW_WITH_IMM{{.*}}$r13
+# CHECK: $r0 = SUBI32{{.*}}$r0, 1
+# CHECK: S_SW_WITH_IMM{{.*}}$r0, $r13
+# CHECK: BNEZ{{.*}}$r0
+# CHECK-NOT: $r5 = SUBI32
+# CHECK-NOT: $r5 = {{S_LW_WITH_IMM|LD32}} $r13
+# CHECK-NOT: {{S_SW_WITH_IMM|ST32}} $r5, $r13
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r2 = LD32
+# CHECK-LABEL: bb.4.early:
+# CHECK: ST32 $r5
+
+# DBG: has non-countdown body use
+# DBG-NOT: LatchScr=$r5
+# DBG-NOT: demote latch scratch $r5
+# DBG-NOT: demote overlay save
+# DBG-NOT: occupied at SET — PreheaderSave of scratch
+# DBG-NOT: demote latch scratch = Prefer
+# DBG: occupancy miss{{.*}}last-resort LatchScr=R0
+# DBG: demote skip overlay of {{.*}}$r0
+# DBG-NOT: demote overlay save
+# DBG: demote stack-counter exact-commit
+# DBG: demote restored soft-zero R0
+# DBG-NOT: LLVM ERROR
+
+--- |
+  define dso_local void @d1138_stored_livein_second_hop(ptr nocapture %p, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %header
+  header:
+    store i32 %trip, ptr %p, align 4
+    br i1 undef, label %early, label %latch
+  latch:
+    br i1 undef, label %header, label %exit
+  early:
+    store i32 %trip, ptr %p, align 4
+    br label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            d1138_stored_livein_second_hop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.3, $r2, implicit-def dead $sfr
+    ; Incoming value of the Header→E second-hop temp. Header does not
+    ; use $r5; E does, with empty stored liveins.
+    $r5 = LD32 $r1, 0
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Header stored liveins omit $r5. Body read of trip $r2 so Prefer is
+  ; not the countdown. No use of $r5 here: the second-hop is Header→E.
+  ; Other GPRs mentioned so pickCounterReg fails → stack-counter, and
+  ; Header uses occupy them at latch end (occupancy miss LatchScr=R0).
+  bb.2.header:
+    liveins: $r1, $r2, $r3, $r4, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3, %bb.4
+    ST32 $r2, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    BNEZ $r1, %bb.4
+    B %bb.3
+
+  ; HWLOOP implicit backedge to Header; only the software Exit is an
+  ; explicit successor.
+  bb.3.latch:
+    liveins: $r1, $r2, $r3, $r4, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.5
+    NOP
+    NOP
+    NOP
+    B %bb.5
+
+  ; D1.101 early-exit in LoopBlocks. Uses $r5. Header stored liveins
+  ; omit $r5 (Header does not use it). Empty-E.liveins is the gtest pin;
+  ; listing $r5 here is parse-only (TracksLiveness).
+  bb.4.early:
+    liveins: $r5
+    successors: %bb.5
+    ST32 $r5, $r13, 0
+    B %bb.5
+
+  bb.5.exit:
+    liveins: $r15
+    RET implicit killed $r15

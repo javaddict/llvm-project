@@ -1,0 +1,158 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.71r — SET-seat occupancy uses FunctionPhysLiveness, never stored
+# MBB live-ins. Header lists unused $r8 as a skip-overlay-era extra
+# live-in. $r8 has no Header use and no incoming Latch use, so FPL
+# does not occupy SET (addForwardLiveInsTo would also miss a
+# Header→Latch live-through; addLiveInsTo is the authority).
+# OccupiedAtSetIgnoresStaleStoredSuccessorLiveIn is the helper pin.
+#
+# LatchScr uniqueness is the latch window, not the header: GPR32NoSPNoLR
+# 1a walks R1 first, so header-only XORs with no latch→header backedge
+# leave R1 1a-available (LatchScr=$r8 would be golden-invent). XOR+Exit
+# ST32 occupy R1/R3–R7/R9–R12/R14 at latch end (occupyLatchWindow).
+# `$r8 = XOR32 $r1, $r1` mentions R8 so pickCounterReg cannot take the
+# unused stored extra as a free counter, without keeping R8 live vs
+# {Header, Exit} (d165 mention-without-live). Latch successors include
+# the header backedge. Product: unused Header $r8 is pass-1a LatchScr,
+# never overlay ST32 of $r8, never LatchScr=$r0.
+# AIE SET dest is dedicated LC (AIE2InstrInfo.cpp:1338-1346;
+# AIEBaseHardwareLoops.cpp:411-414). Hexagon copies the trip into a new
+# vreg (HexagonHardwareLoops.cpp:1284-1291). RISC-V scavenges
+# Define|Dead AllowSpill=false (RISCVInstrInfo.cpp:1433-1471).
+
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r2 = {{S_LW_WITH_IMM|LD32}} $r13
+# PEI CSI is `frame-setup ST32 $r8` (R8 is callee-saved). Overlay would be
+# a non-frame-setup ST32/S_SW of $r8 before the header.
+# CHECK-NOT: S_SW_WITH_IMM{{.*}}$r8, $r13
+# CHECK-NOT: {{^[[:space:]]+ST32 $r8, $r13}}
+# CHECK-LABEL: bb.2.header:
+# CHECK-NOT: $r0 = XOR32
+# CHECK-NOT: $r8 = XOR32
+# CHECK-LABEL: bb.3.latch:
+# CHECK: $r8 = {{S_LW_WITH_IMM|LD32}}{{.*}}$r13
+# CHECK: $r8 = SUBI32{{.*}}$r8, 1
+# CHECK: {{S_SW_WITH_IMM|ST32}}{{.*}}$r8, $r13
+# CHECK: BNEZ{{.*}}$r8
+# CHECK-NOT: $r0 = XOR32
+# CHECK-NOT: $r2 = SUBI32
+
+# DBG-NOT: LatchScr=$r0
+# DBG-NOT: occupancy miss{{.*}}last-resort LatchScr=R0
+# DBG-NOT: demote overlay save
+# DBG-NOT: occupied at SET — PreheaderSave of scratch
+# DBG-NOT: demote latch scratch = Prefer
+# DBG: demote LatchScr=$r8
+# DBG: demote skip overlay of {{.*}}$r8
+# DBG: demote stack-counter exact-commit
+# DBG-NOT: LLVM ERROR
+
+--- |
+  define dso_local void @d1171_stale_stored_livein_not_occupancy(ptr nocapture %p, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %header
+  header:
+    store i32 %trip, ptr %p, align 4
+    br label %latch
+  latch:
+    br i1 undef, label %header, label %exit
+  exit:
+    ret void
+  }
+
+...
+---
+name:            d1171_stale_stored_livein_not_occupancy
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.3, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Header stored liveins include unused $r8 (stale extra). Body read of
+  ; trip $r2 so Prefer is not the countdown. Do not XOR here: latch-end
+  ; 1a is the latch window (below), not header uses.
+  bb.2.header:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    B %bb.3
+
+  ; Latch→header backedge is the software-loop CFG the IR already has.
+  ; XOR dest=src + Exit ST32 occupy those GPRs at latch end so 1a misses
+  ; them. Mention R8 without an incoming use so pickCounterReg cannot
+  ; take the stored extra as a free counter, and 1a still picks R8.
+  bb.3.latch:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2, %bb.4
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    $r8 = XOR32 $r1, $r1
+    BNEZ $r1, %bb.2
+    B %bb.4
+
+  bb.4.exit:
+    liveins: $r1, $r3, $r4, $r5, $r6, $r7, $r9, $r10, $r11, $r12, $r14, $r15
+    ST32 $r1, $r13, 0
+    ST32 $r3, $r13, 0
+    ST32 $r4, $r13, 0
+    ST32 $r5, $r13, 0
+    ST32 $r6, $r13, 0
+    ST32 $r7, $r13, 0
+    ST32 $r9, $r13, 0
+    ST32 $r10, $r13, 0
+    ST32 $r11, $r13, 0
+    ST32 $r12, $r13, 0
+    ST32 $r14, $r13, 0
+    RET implicit killed $r15

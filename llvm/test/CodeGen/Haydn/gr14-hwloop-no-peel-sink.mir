@@ -1,0 +1,53 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# GR1.4 — D1.112 peel/sink is deleted. A mixed SET+ADD32 cycle must not
+# unbundle SET or splice the setup past independent preheader work.
+# Post-stamp closeRetainedHwLoops (via LBN) pads After the bundle only.
+# Hexagon FixupHwLoops.cpp:136-148 converts or leaves LOOP; AIE never
+# reorders user code (AIEMachineScheduler.cpp:843-859 insertNoop).
+
+# CHECK-LABEL: name: gr14_no_peel_sink
+# CHECK: BUNDLE
+# CHECK: SET_HWLOOP_W
+# CHECK: $r2 = ADD32
+# CHECK: }
+# CHECK-NOT: SET_HWLOOP_W
+# CHECK-NOT: SUBI32
+# CHECK-NOT: BNEZ
+
+--- |
+  define dso_local void @gr14_no_peel_sink() {
+  entry:
+    ret void
+  }
+...
+---
+name:            gr14_no_peel_sink
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r0, $r2, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0, implicit-def dead $sfr
+    BUNDLE implicit-def $r2, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      SET_HWLOOP_W 0, %bb.1, %bb.1, 8, implicit-def dead $sfr
+      $r2 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    $r1 = XOR32 $r1, $r1
+    NOP
+
+  bb.1:
+    liveins: $r1, $r0, $r2
+    successors: %bb.2
+    ST32 $r0, $r1, 0
+    NOP
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r15
+    RET implicit killed $r15

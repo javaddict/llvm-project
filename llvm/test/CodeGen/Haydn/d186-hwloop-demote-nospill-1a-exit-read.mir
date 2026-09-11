@@ -1,0 +1,140 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.86 — NoSpillExcl / skipLatchScrReason Exit-path pin.
+# Trampoline Exit with empty stored live-ins; successor ST32 of $r5, which
+# is dead at latch end vs {Header, Exit}. findPostRAScratchNoSpill is
+# available-only in that window (one-block LivePhysRegs misses the
+# successor read). LatchExcl feeds the unproven-absent Exit-path class
+# into NoSpillExcl and pickDeadLatchScratch skipCommon so $r5 is not
+# LatchScr. Occupancy miss last-resorts LatchScr=R0 + Header XOR restore.
+# Software countdown on R0; SET gone. Never $r5 Exit-path latch steal,
+# never overlay ST, never Prefer $r2 SUBI32/LD32. Not occupancy fatal.
+# Mentioned PEI dests with no Exit read stay 1a (bqriir) — this file
+# occupies them. Overlay ST is D1.71. Unused-R14 CSI is D1.87.
+# Last-resort LatchScr=Prefer is CB-162 only when skipLatchScrReason is
+# clear (PreferHasBodyUse here).
+# AIE SET dest is dedicated LC (AIE2InstrInfo.cpp:1338-1346;
+# AIEBaseHardwareLoops.cpp:411-414). Hexagon copies the trip into a new
+# vreg (HexagonHardwareLoops.cpp:1284-1291). RISC-V scavenges
+# Define|Dead AllowSpill=false (RISCVInstrInfo.cpp:1433-1471).
+
+# CHECK-NOT: SET_HWLOOP
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r2 = {{S_LW_WITH_IMM|LD32}}
+# CHECK-LABEL: bb.2.body:
+# CHECK-NOT: $r0 = XOR32
+# CHECK-NOT: $r0 = S_LW_WITH_IMM
+# CHECK: $r5 = SUBI32
+# CHECK: BNEZ{{.*}}$r5
+# CHECK-NOT: $r2 = SUBI32
+# CHECK-NOT: $r0 = S_LW_WITH_IMM
+
+# DBG: has non-countdown body use
+# DBG-NOT: LatchScr=$r5
+# DBG-NOT: demote latch scratch $r5
+# DBG-NOT: demote overlay save
+# DBG-NOT: occupancy miss{{.*}}last-resort LatchScr=R0
+# DBG-NOT: demote latch scratch = Prefer
+# DBG: demote exact-commit SUBI32+BNEZ_W
+# DBG-NOT: LLVM ERROR
+
+--- |
+  define dso_local void @d186_nospill_1a_exit_read(ptr nocapture %p, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %p, align 4
+    br label %exit
+  exit:
+    br label %join
+  join:
+    ret void
+  }
+...
+---
+name:            d186_nospill_1a_exit_read
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    ; Incoming def of the trampoline-Exit live-through. Not FA, not
+    ; tail-imm. Dead at latch end vs {Header, Exit}.
+    $r5 = LD32 $r1, 0
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Body READ of the trip: ST32 of $r2. Other GPRs occupied so NoSpill /
+  ; 1a/1b would take $r5 without Exit-path LatchExcl. $r5 is unmentioned
+  ; and omitted from stored live-ins (available-only vs {Header, Exit}).
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r2, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  ; Trampoline Exit: empty stored live-ins. one-block LivePhysRegs seeds
+  ; from the join's empty live-ins and misses the successor ST32 of $r5.
+  bb.3.exit:
+    successors: %bb.4
+    B %bb.4
+
+  bb.4.join:
+    liveins: $r15
+    ; IMPLICIT_DEF is skipped by cfgPathReadsPhysReg, so ST32 stays an
+    ; incoming Exit-path read. Do not list $r5 as a stored live-in:
+    ; that would occupy NoSpill via addLiveOuts of the trampoline Exit.
+    $r5 = IMPLICIT_DEF
+    ST32 $r5, $r15, 0
+    RET implicit killed $r15

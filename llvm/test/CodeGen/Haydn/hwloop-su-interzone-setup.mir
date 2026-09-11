@@ -13,11 +13,11 @@
 # RUN:   FileCheck %s --check-prefixes=CHECK,BI
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
 # RUN:   -misched-postra-direction=topdown \
-# RUN:   -run-pass=postmisched,haydn-fixup-hwloops -verify-machineinstrs %s -o - | \
+# RUN:   -run-pass=postmisched,haydn-longbranch-normalize -verify-machineinstrs %s -o - | \
 # RUN:   FileCheck %s --check-prefixes=CHECK,FIX
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
 # RUN:   -misched-postra-direction=bottomup \
-# RUN:   -run-pass=postmisched,haydn-fixup-hwloops -verify-machineinstrs %s -o - | \
+# RUN:   -run-pass=postmisched,haydn-longbranch-normalize -verify-machineinstrs %s -o - | \
 # RUN:   FileCheck %s --check-prefixes=CHECK,FIXBOT
 
 # Role: MIR — HWLOOP-SU setup distance under dual-zone leaveRegion conflicts.

@@ -164,9 +164,14 @@ void withPostRAScratch(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
 /// live-out seed would judge live-through registers available and clobber
 /// them).
 ///
-/// Seed contract: each effective successor contributes its *computed*
-/// live-ins (one-block backward LivePhysRegs walk: addLiveOuts, then
-/// reverse stepBackward), not the stored MBB live-in list. Stored lists
+/// Seed contract: each distinct effective successor contributes its
+/// FunctionPhysLiveness live-ins built with SeedPristines=false (AIE
+/// LiveRegs.cpp:37-107 worklist: computed, never MBB::liveins()/liveouts()).
+/// llvm::computeLiveIns / one-block addLiveOuts seed from stored lists and
+/// miss a Header→E second-hop when E.liveins is stale-empty. A self
+/// successor keeps stored liveins (never FPL.isLiveIn of the latch — that
+/// joins extras the rewrite drops). Unsaved CSRs (pristines) stay occupied
+/// so unused unsaved R14 cannot become a NoSpill hit (D1.87). Stored lists
 /// are stale this late — a BranchRelaxation split-tail / trampoline Exit
 /// can have empty liveins while still using an exit-only live-through
 /// GPR; seeding from the stored list would pick that GPR as scratch and
@@ -201,7 +206,7 @@ void emitFrameRelativeMemOp(MachineBasicBlock &MBB,
                             MachineBasicBlock::iterator I, const DebugLoc &DL,
                             const TargetInstrInfo &TII, Register Reg,
                             Register FrameReg, int64_t Off, bool IsStore,
-                            unsigned StoreFlags = 0);
+                            unsigned StoreFlags = 0, int FrameIdx = -1);
 
 // --- Layer 2: rematerialize (Src + Imm) into a use -------------------------
 

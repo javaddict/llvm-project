@@ -2,12 +2,17 @@
 # RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -debug-only=haydn-hwloops -run-pass=prologepilog,haydn-hwloops \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
 # RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
 #
-# Role: MIR — D1.19 stack-counter demote refuse. Adj != 0 with no
-# PreheaderScr and LatchScr == Prefer must refuse the demote (fail-closed
-# fatal), never ST32 the FULL trip N while the kernel runs Prefer+Adj=N-S.
+# Role: MIR — D1.19/D1.86/D1.87 stack-counter demote refuse. Adj != 0 with
+# no PreheaderScr last-resorts LatchScr=R0 then refuses (cell (a) still
+# needs a PreheaderScr). Role-A FATAL body-contains-call is kept. Never
+# LatchScr=$r14 (unsaved pass-1b), never LatchScr=Prefer steal, and never
+# ST32 the FULL trip N while the kernel runs Prefer+Adj=N-S. Cell (e)
+# remains the backstop if last-resort Prefer still fires.
 #
 # Trigger construction (mirrors the cb166 demote_adj_stack_counter body-call
 # shape, so the preflight fails body-resolvably and demote runs):
@@ -18,16 +23,12 @@
 #   * every PostRAScratchPriority GPR (R1..R7, R11..R8; R12 excluded by
 #     PreferNotR12) is live across the latch end: the exit block uses each
 #     one, so the latch probe (successors {Header, Exit} computed live-ins)
-#     finds nothing → the CB-162 fallback sets LatchScr = Prefer.
-#   * the Adj!=0 preheader probe always excludes Prefer; the copy fallback
-#     requires LatchScr != Prefer → PreheaderScr stays invalid.
-#   Old behavior: the gate passed (HasImm==false), the store block skipped
-#   the ADDI (guarded on a physical PreheaderScr != Prefer) and fell back
-#   to StoreSrc = Prefer — ST32 stored the FULL trip 8 while the kernel
-#   must run 8-1=7 (the peeled iteration re-executes: duplicated side
-#   effects / wrong exit). Now demoteStackCounterAdmissible cell (e) refuses
-#   before any mutation and the formation seat's fail-closed fatal fires
-#   (rejectIncompleteRoleA with the preflight Why: the body call).
+#     finds nothing. Unused unsaved R14 is D1.87 skip (no CSI). Adj!=0
+#     last-resort LatchScr=Prefer requires a PreheaderScr; the preheader
+#     probe also misses → last-resort LatchScr=R0 then demote refused —
+#     Adj!=0 no PreheaderScr. Role-A FATAL keeps SET.
+#   Old behavior: pass 1b picked unsaved $r14, or CB-162 set LatchScr=Prefer
+#   and cell (e) refused. Never re-land either steal on this suffocation.
 #
 # Arm 2 (demote_adj_latch_prefer_freescratch) is the positive control: R7
 # unmentioned anywhere leaves the latch probe a non-Prefer scratch, the
@@ -36,14 +37,20 @@
 #
 # Arm 3 (demote_adj0_latch_prefer) is the Adj==0 control: identical
 # suffocation but LoopStart $r2, 0 — remaining trip IS the full trip, so
-# Prefer is stored directly and the demote proceeds (the refuse is scoped
-# to Adj != 0 exactly).
+# last-resort LatchScr=Prefer (CB-162) is legal and the demote proceeds.
 
 # FATAL: HaydnHardwareLoops: incomplete Role-A retained state rejected before mutation — body contains call/indirect/return
 #
 # DBG: demoting hwloop header=%bb.1 latch=%bb.1 exit=%bb.2 (LoopStart)
-# DBG: demote latch scratch = Prefer
-# DBG: demote refused — no spill-free non-R0 scratch for stack-counter windows (latch ok, preheader ok, adj-store NONE (Adj!=0, LatchScr==Prefer))
+# DBG-NOT: demote LatchScr=$r14
+# DBG-NOT: demote latch scratch = Prefer
+# DBG-NOT: demote skip LatchScr->PreheaderScr $r14
+# DBG: demote skip LatchScr $r14 unsaved CSR (no CSI)
+# DBG: occupancy miss (Adj!=0 + no LatchScr + no PreheaderScr)
+# DBG: last-resort LatchScr=R0
+# DBG: demote refused — Adj!=0{{.*}}no PreheaderScr
+# DBG-NOT: demote latch scratch = Prefer
+# DBG-NOT: LatchScr=$r14
 
 --- |
   define dso_local void @demote_adj_latch_prefer_refuse(ptr %p) {

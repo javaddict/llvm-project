@@ -4,7 +4,7 @@
 # RUN:   FileCheck %s --check-prefixes=CHECK,TOP
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
 # RUN:   -misched-postra-direction=topdown \
-# RUN:   -run-pass=postmisched,haydn-fixup-hwloops -verify-machineinstrs %s -o - | \
+# RUN:   -run-pass=postmisched,haydn-longbranch-normalize -verify-machineinstrs %s -o - | \
 # RUN:   FileCheck %s --check-prefixes=CHECK,FIX
 
 # Role: MIR — HWLOOP-SU with a hard multi-member BUNDLE as region boundary.
@@ -67,13 +67,11 @@ body:             |
 
 # CHECK-LABEL: name: set_before_hard_boundary
 #
-# Top-down: SET (SFR writer) stays a real DAG SU before the hard fence.
-# ExitSU setup edge still yields InterveningCycles size-bearing work
-# before the fence. Hard root keeps both ADD children. Recommit stamps
-# the root as BUNDLE <row>, 0 (FormatID 0) — same shape as
-# hwloop-hard-root-operand-recommit.mir.
-# TOP: SET_HWLOOP
+# Top-down: independent ADD stays before SET (formation-sink late-pin);
+# SET remains a real DAG SU before the hard fence. Hard root keeps both
+# ADD children. Recommit stamps the root as BUNDLE <row>, 0 (FormatID 0).
 # TOP: ADD32
+# TOP: SET_HWLOOP
 # TOP: BUNDLE {{[01]}}, 0
 # TOP: ADD32
 # TOP: ADD32
@@ -82,6 +80,7 @@ body:             |
 # TOP: RET
 #
 # Fixup residual: keep hardware SET (no demote); hard root still dual-member.
+# FIX: ADD32
 # FIX: SET_HWLOOP
 # FIX: BUNDLE {{[01]}}, 0
 # FIX: ADD32

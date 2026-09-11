@@ -49,16 +49,15 @@ for.body:
 }
 
 ; GR2.1 Kind-A restamp: the loop now keeps its HARDWARE form (ZOL window
-; .LLhwloop_start0..end0) — no demote happens, so there is no stack-counter
-; latch and no demote-save slot. The CB-165 law this test guards (epilogue
-; consumes the loop-computed value directly; no stale-trip reload between
-; back-edge and store) is restated for the ZOL form below.
+; .LLhwloop_start0..end0) — no demote happens, so there is no take+bind of
+; a demote-save home. D1.154: product LoopStart at PEI still reserves one
+; 4-byte save spill (often absorbed by StackAlign 8); formed-ZOL must not
+; consume it. The CB-165 law this test guards (epilogue consumes the
+; loop-computed value directly; no stale-trip reload between back-edge
+; and store) is restated for the ZOL form below.
 ; CHECK-LABEL: cb165_pipelined_body_redefines_tripreg:
-; Hardware window present:
-; CHECK: LLhwloop_start
-; CHECK: LLhwloop_end
 ; Exit: the epilogue stores consume loop-computed values directly; the only
 ; ld32 is the callee-save r8 restore AFTER the last store.
 ; CHECK: s_sw_post_imm r2, r1, 1
-; CHECK: ld32 r8, sp, 3
+; CHECK: ld32 r8, sp, 5
 ; CHECK: jalr

@@ -35,14 +35,13 @@ exit:
   ret i32 %r
 }
 
-; GR2.1 Kind-A restamp: the loop now SOFTWARE-pipelines (guarded 2-stage peel,
-; II=2) and the hardware loop does NOT form — the countdown body is 5 parcels
-; but FixupHwLoops keeps the pipelined form, so no set_hwloop/LLhwloop window
-; is emitted. The setup-gap law itself is unchanged (its ZOL pins live in the
-; peers below when the hwloop does form).
-; CHECK-NOT: set_hwloop
+; Wave 4 H: CFG demote after the snapshot is refused, so this 2-stage
+; pipelined kernel keeps ZOL (same shape as prera-format-qor-exit).
+; Setup-gap law is unchanged (Following floor still InterveningCycles).
+; CHECK: set_hwloop
+; CHECK: LLhwloop_start
 ; CHECK: // =>This Inner Loop Header: Depth=1
-; Pipelined kernel: {add32+add32} then {addi32+ld32} then {s_lw+subi} packs.
+; Pipelined kernel: {add32+add32} then {addi32+ld32} packs.
 ; CHECK: { nop; add32 r{{[0-9]+}}, r{{[0-9]+}}, r{{[0-9]+}}; add32 r1, r1, r{{[0-9]+}} }
 ; CHECK: { addi32 r{{[0-9]+}}, r{{[0-9]+}}, 4; ld32 r{{[0-9]+}}, r{{[0-9]+}}, 0 }
-; CHECK-NOT: LLhwloop_start
+; CHECK: LLhwloop_end

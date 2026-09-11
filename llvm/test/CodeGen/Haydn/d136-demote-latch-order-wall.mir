@@ -1,0 +1,206 @@
+# RUN: rm -rf %t && split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# D1.36 / GR2.8 corruption probe: haydn::hwloop::countedSoftwareLatchViolation
+# at haydn-verify-bundles (every Verify seat, not freeze-only; same dual-seat
+# shape as postCommitCfgCreationViolation). Product seat uses
+# report_fatal_error(..., /*GenCrashDiag=*/false) → exit 1, so plain `not`
+# (not abort). d111-freeze-trip-conflict.mir is the split-file +
+# verify-bundles + fatal/OK sibling pattern; that pin aborts
+# (verifyCommittedBundle GenCrashDiag=true) and therefore uses `not --crash`.
+#
+# FOLLOWER is ST32 after BNEZ (the demote restore-after-counted-edge leak).
+# MIRParser always MF.verify()'s, so a sequential ST32 after the terminator
+# cannot parse. Co-issue ST32 as a BUNDLE child after BNEZ: the BUNDLE header
+# is the terminator, instrs() still sees ST32 after the counted edge, and
+# the Haydn wall (seated before mixed-commit) fires first.
+#
+# Discriminator: apply only when the MBB has countdown vocabulary (logical
+# SUBI32, or stack-counter LD32+SUBI32+ST32). Ordinary branches must not
+# false-fire. Long form iff LUI(mbb)+ADDI(same mbb)+JALR is present; else
+# short form.
+#
+#   LONG-ORDER : ADDI-before-LUI on a counted long latch is fatal.
+#   FOLLOWER   : ST32 after BNEZ on a counted short latch is fatal.
+#   FI         : stack-counter LD/ST not matching this latch's assigned
+#                dedicated counter FI (D1.102) is fatal.
+#   OK-SHORT   : SUBI32+BNEZ_W+B passes.
+#   OK-LONG    : LUI+ADDI32_W+BEQZ_W+JALR_W passes.
+#   ORD-BR     : ordinary BNEZ without countdown vocabulary does not fire.
+#
+# Positive product controls stay unmodified: gr27-demote-long-latch.ll and
+# gr27-long-latch-committed-roots.mir.
+#
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/long-order.mir -o - 2>&1 | FileCheck %s --check-prefix=LONG-ORDER
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/follower.mir -o - 2>&1 | FileCheck %s --check-prefix=FOLLOWER
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/fi.mir -o - 2>&1 | FileCheck %s --check-prefix=FI
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %t/ok-short.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=OK-SHORT
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %t/ok-long.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=OK-LONG
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %t/ord-br.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=ORD-BR
+
+# LONG-ORDER: HaydnVerifyBundles: long_order
+# LONG-ORDER: counted software latch: ADDI must follow LUI
+
+# FOLLOWER: HaydnVerifyBundles: follower
+# FOLLOWER: counted software latch: only exit B / BEQZ_W / BEQZ-on-R0 / NOP may follow BNEZ
+
+# FI: HaydnVerifyBundles: fi_home
+# FI: counted software latch: stack-counter LD/ST does not match this latch's assigned dedicated counter home
+
+# OK-SHORT-LABEL: name: ok_short
+# OK-SHORT: $r1 = SUBI32 $r1, 1
+# OK-SHORT: BNEZ_W $r1, %bb.0
+# OK-SHORT: B %bb.1
+
+# OK-LONG-LABEL: name: ok_long
+# OK-LONG: $r1 = SUBI32 $r1, 1
+# OK-LONG: $r2 = LUI %bb.0
+# OK-LONG: $r2 = ADDI32_W $r2, %bb.0
+# OK-LONG: BEQZ_W $r1, %bb.1
+# OK-LONG: $r2 = JALR_W $r2, 0
+
+# ORD-BR-LABEL: name: ordinary_branch
+# ORD-BR: BNEZ_W $r0, %bb.2
+# ORD-BR-NOT: SUBI32
+
+#--- long-order.mir
+--- |
+  define void @long_order() { ret void }
+...
+---
+name:            long_order
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.0, %bb.1
+    liveins: $r1, $r2, $r15
+    $r1 = SUBI32 $r1, 1
+    $r2 = ADDI32_W $r2, %bb.0
+    $r2 = LUI %bb.0
+    BEQZ_W $r1, %bb.1
+    $r2 = JALR_W $r2, 0
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- follower.mir
+--- |
+  define void @follower() { ret void }
+...
+---
+name:            follower
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.0, %bb.1
+    liveins: $r1, $r13, $r15
+    $r1 = SUBI32 $r1, 1
+    BUNDLE implicit $r1, implicit $r13 {
+      BNEZ_W $r1, %bb.0
+      ST32 $r1, $r13, 0
+    }
+    B %bb.1
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- fi.mir
+--- |
+  define void @fi_home() { ret void }
+...
+---
+name:            fi_home
+tracksRegLiveness: true
+noVRegs:         true
+stack:
+  - { id: 0, name: '', type: default, offset: 0, size: 4, alignment: 4 }
+body:             |
+  bb.0:
+    successors: %bb.0, %bb.1
+    liveins: $r1, $r13, $r15
+    $r1 = LD32 $r13, 1
+    $r1 = SUBI32 $r1, 1
+    ST32 $r1, $r13, 1
+    BNEZ_W $r1, %bb.0
+    B %bb.1
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- ok-short.mir
+--- |
+  define void @ok_short() { ret void }
+...
+---
+name:            ok_short
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.0, %bb.1
+    liveins: $r1, $r15
+    $r1 = SUBI32 $r1, 1
+    BNEZ_W $r1, %bb.0
+    B %bb.1
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- ok-long.mir
+--- |
+  define void @ok_long() { ret void }
+...
+---
+name:            ok_long
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.0, %bb.1
+    liveins: $r1, $r2, $r15
+    $r1 = SUBI32 $r1, 1
+    $r2 = LUI %bb.0
+    $r2 = ADDI32_W $r2, %bb.0
+    BEQZ_W $r1, %bb.1
+    $r2 = JALR_W $r2, 0
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+#--- ord-br.mir
+--- |
+  define void @ordinary_branch() { ret void }
+...
+---
+name:            ordinary_branch
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    BNEZ_W $r0, %bb.2
+
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.2:
+    liveins: $r15
+    RET implicit $r15

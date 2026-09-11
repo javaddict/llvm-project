@@ -1,11 +1,12 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - | \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs %s -o - | \
 # RUN:   FileCheck %s
 
-# Role: MIR — product selector/CSR/reloc/COUNT fault matrix on retained-state
+# Role: MIR — product selector/CSR/reloc fault matrix on retained-state
 # path. Product domain is {0,1}; out-of-domain sel demotes fail-closed (never
-# invent extra HWLR seats or free CSR addresses). COUNT < MinCount and
-# unsupported seats demote to soft edge. Legal sel=0/1 keep hardware form.
+# invent extra HWLR seats or free CSR addresses). Legal sel=0/1 keep hardware
+# form. Proven COUNT < MinCount is the D1.139 pin
+# (d139-hwloop-demote-zero-trip.mir), not a SUBI32+BNEZ wrap.
 
 --- |
   define dso_local void @keep_sel0(ptr %p) {
@@ -49,16 +50,6 @@
   }
 
   define dso_local void @demote_sel_neg(ptr %p) {
-  entry:
-    br label %body
-  body:
-    store i32 0, ptr %p
-    br label %exit
-  exit:
-    ret void
-  }
-
-  define dso_local void @demote_zero_count(ptr %p) {
   entry:
     br label %body
   body:
@@ -227,39 +218,6 @@ body:             |
     RET implicit killed $r15
 
 # CHECK-LABEL: name: demote_sel_neg
-# CHECK-NOT: SET_HWLOOP_W
-# CHECK: SUBI32
-# CHECK: BNEZ
-
----
-name:            demote_zero_count
-tracksRegLiveness: true
-noVRegs:         true
-body:             |
-  bb.0.entry:
-    liveins: $r1, $r0, $r15
-    successors: %bb.1
-
-    $r0 = frame-setup XOR32 $r0, $r0
-    ; Activated COUNT must be >= MinCount (=1). Zero-count stays unavailable.
-    SET_HWLOOP_W 1, %bb.1, %bb.1, 0, implicit-def dead $sfr
-    NOP
-    NOP
-    NOP
-
-  bb.1.body:
-    liveins: $r1, $r0
-    successors: %bb.2
-    ST32 $r0, $r1, 0
-    NOP
-    NOP
-    NOP
-
-  bb.2.exit:
-    liveins: $r15
-    RET implicit killed $r15
-
-# CHECK-LABEL: name: demote_zero_count
 # CHECK-NOT: SET_HWLOOP_W
 # CHECK: SUBI32
 # CHECK: BNEZ

@@ -76,8 +76,7 @@ static cl::opt<bool> ForceSMSPressureReject(
 // BOTH loop forms (W68.1: form-uniform). The PRODUCT value is the PPS-3
 // max-stage bound (generic MachinePipeliner owns soft and ZOL multi-stage
 // alike); smaller values restore the historic StageCount==1 Option A
-// containment for bisect — the value the post-RA-host ZOL tests use to keep
-// exercising that engine while it still exists.
+// containment for bisect.
 static cl::opt<unsigned> HaydnSMSContainmentMax(
     "haydn-sms-containment-max", cl::Hidden,
     cl::init(HaydnPreRASchedStrategy::productSMSSoftContainmentMaxStageCount),

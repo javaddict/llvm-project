@@ -1,0 +1,45 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# Wave 6 H — formation SET-sink, not Off1 demote. haydn-hwloops only
+# (no Finalize). Two LOADI64 after LoopStart are leftover setup
+# (17 parcels each). Formation sinks SET past leftover LoopStart/setup
+# so Off1 is the Following floor. SET is kept; no SUBI32+BNEZ demote.
+# GR1.4 closer is not a CFG demote pass, so formation must sink to
+# keep Off1 legal (nested FIR / matmult class).
+
+# CHECK-LABEL: name: d1171_formation_off1_demote
+# CHECK-NOT: LoopStart
+# CHECK: LOADI64
+# CHECK: SET_HWLOOP
+# CHECK-NOT: SUBI32
+# CHECK: PseudoLoopEnd
+# CHECK: RET
+
+---
+name:            d1171_formation_off1_demote
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    successors: %bb.1
+    $r0 = frame-setup XOR32 $r0, $r0
+    $r2 = ADDI32_W $r0, 8
+    LoopStart $r2, 0
+    $d0 = LOADI64 1
+    $d0 = LOADI64 1
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    $r3 = LD32 $r1, 0
+    $r3 = ADD32 $r3, $r3
+    ST32 $r3, $r1, 0
+    PseudoLoopEnd %bb.1
+
+  bb.2:
+    liveins: $r15
+    RET implicit killed $r15

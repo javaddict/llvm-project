@@ -1,15 +1,15 @@
 # RUN: split-file %s %t
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/keep_max.mir -o - | FileCheck %s --check-prefix=KEEP
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/demote_over.mir -o - | FileCheck %s --check-prefix=DEMOTE
 # RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
-# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -mattr=+hwloop -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/demote_over.mir -o - 2>&1 | FileCheck %s --check-prefix=FATAL
 # RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
-# RUN:   -mattr=+hwloop -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -mattr=+hwloop -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %t/loopstart_unresolved.mir -o - 2>&1 | FileCheck %s --check-prefix=UNRES
 
 # Role: MIR — independent SCEV-proven QUALIFY while product default stays

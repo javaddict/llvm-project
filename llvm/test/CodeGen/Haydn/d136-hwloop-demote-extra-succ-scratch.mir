@@ -1,0 +1,123 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops,haydn-hwloop-demote \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.136 — Extra-successor scratch probes.
+# KeepExtra latch: Header==Latch with Exit + Extra dest. Extra ST32 of $r5
+# is live on the kept Extra edge; $r5 is dead vs {Header, Exit} and
+# unmentioned in the latch. The stack-counter window is inserted at
+# getFirstTerminator() (before Extra conds). Hardcoded {Header, Exit}
+# NoSpill/picker/FPL would pick LatchScr=$r5 and clobber Extra-path reads.
+# Pass the actual post-rewrite successor set (Header, Exit, Extra).
+# AIE splitLoopEndJump (AIEBaseHardwareLoops.cpp:232-272) avoids Extra;
+# Haydn D1.105 keeps Extra and probes the kept set.
+#
+# $r5 is Extra-only: not a body live-in and not XOR-mentioned, so
+# Header==Latch self liveins do not occupy it. Occupancy miss last-resorts
+# LatchScr=R0 (never Prefer SUBI/LD32).
+#
+# CHECK-NOT: SET_HWLOOP
+# CHECK-LABEL: bb.2.body:
+# CHECK-NOT: $r5 = SUBI32
+# CHECK-NOT: $r5 = {{S_LW_WITH_IMM|LD32}}
+# CHECK-NOT: {{S_SW_WITH_IMM|ST32}} $r5
+# CHECK-LABEL: bb.4.extra:
+# CHECK: ST32 $r5
+#
+# DBG: demoting hwloop
+# DBG-NOT: LatchScr=$r5
+# DBG: last-resort LatchScr=R0
+# DBG-NOT: LatchScr=$r5
+# DBG-NOT: demote latch scratch $r5
+# DBG-NOT: LLVM ERROR
+
+--- |
+  define dso_local void @d136_extra_succ_scratch(ptr nocapture %p, i32 %trip) {
+  entry:
+    br label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 %trip, ptr %p, align 4
+    br i1 undef, label %extra, label %exit
+  extra:
+    store i32 %trip, ptr %p, align 4
+    ret void
+  exit:
+    ret void
+  }
+...
+---
+name:            d136_extra_succ_scratch
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1
+
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+
+  ; Spacer: 20× NOP = 320 B > uimm6 252 — StartOff overflow, demote-first.
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  ; Header==Latch. Body read of trip $r2 so Prefer is not the countdown.
+  ; Other GPRs mentioned so pickCounterReg fails → stack-counter. $r5 is
+  ; unmentioned here and live only into Extra (not a body live-in, so
+  ; self-seed vs {Header, Exit} would still pick it).
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3, %bb.4
+    ST32 $r2, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    BNEZ $r1, %bb.4
+    B %bb.3
+
+  bb.3.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+  bb.4.extra:
+    liveins: $r5, $r15
+    ST32 $r5, $r13, 0
+    RET implicit killed $r15

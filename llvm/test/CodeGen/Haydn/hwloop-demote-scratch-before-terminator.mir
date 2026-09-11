@@ -1,8 +1,8 @@
 # RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
 # RUN: not llc -haydn-enable-hwloop-demote=false -mtriple=haydn-unknown-elf \
-# RUN:   -mattr=+hwloop -run-pass=prologepilog,haydn-fixup-hwloops \
+# RUN:   -mattr=+hwloop -run-pass=prologepilog,haydn-hwloops \
 # RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=FATAL
 
 # Role: MIR — W30 / CR-H2 / F43: the stack-counter demote latch window must

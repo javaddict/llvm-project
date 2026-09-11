@@ -1,9 +1,9 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=prologepilog,haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
 # RUN:   %s -o - | FileCheck %s
 
 # Role: MIR — software demote must not scavenge a GPR that the preheader
-# tail still defines after SET.
+# tail still defines after SET, neither as GPR countdown nor as LatchScr.
 #
 # SET is not a scheduling boundary; following address materialization in
 # the same preheader is legal setup distance. pickCounterReg's LivePhysRegs
@@ -11,13 +11,17 @@
 # `$r3 = ADDI32_W $r13, …`. Using $r3 as the countdown then clobbers the
 # trip (va-arg-22 -O2: SUBI/BNEZ on a frame pointer → MEMORY_FAULT).
 #
+# CountReg must not be $r3: the tail still does `$r3 = ADDI32_W $r13,16`
+# after SET (isSoundDemoteCounter tail mention). LatchExcl FA is only
+# unmentioned sp+off that Exit actually reads, so this $r3 (stored, not
+# live into Exit) stays a pass-1a LatchScr — same class as bqriir PEI
+# SP+off dead temps. Occupancy DefInTail still refuses overlay ST at SET.
+#
 # Shape: imm SET_HWLOOP_W + spacer forces range demote. Every pickCounterReg
 # GPR except $r3 is mentioned in the loop body; $r3 is mentioned only in the
 # preheader tail. After the tail-liveness check, no GPR is sound → stack
 # counter (same closed window as hwloop-demote-stackcounter-freescratch.mir).
-# $r3 is free at the latch (not a loop live-in), so it is a valid
-# spill-free latch scratch for the stack counter — that is not the same
-# as a GPR countdown, which would SUBI32 $r3 without a frame load.
+# Latch scratch is the dead FA temp $r3 (XOR/ST32 of $r7 is early body).
 
 --- |
   define dso_local void @demote_preheader_tail_scratch(ptr nocapture writeonly %out) {
@@ -110,8 +114,10 @@ body:             |
 # CHECK: $r3 = ADDI32_W $r13, 16
 #
 # CHECK-LABEL: bb.2.body:
-# Stack-counter window: load from the frame, decrement, store, terminator.
-# A GPR countdown on $r3 would SUBI32 $r3 without a preceding frame load.
+# Body temp $r7 is mentioned early. LatchScr is the dead FA temp $r3
+# (Exit does not read it). CountReg stays the stack slot.
+# CHECK: $r7 = XOR32
+# CHECK: ST32 $r7
 # CHECK: $r3 = S_LW_WITH_IMM{{.*}}$r13
 # CHECK: $r3 = SUBI32{{.*}}$r3, 1
 # CHECK: S_SW_WITH_IMM{{.*}}$r3, $r13

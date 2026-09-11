@@ -25,8 +25,9 @@ class MachineInstr;
 
 /// \p DebugPrefix selects the per-pass LLVM_DEBUG tag; \p ResolveBody may
 /// override body resolution (default: CFG-only resolveBodyMBBCore). Only
-/// pre-emit Fixup passes resolveBodyMBBFixup — layout order is never a
-/// formation body proof (resolveRoleABody rejects fail-closed).
+/// post-stamp closeRetainedHwLoops passes resolveBodyMBBFixup — layout
+/// order is never a formation body proof (resolveRoleABody rejects
+/// fail-closed).
 bool eraseHardwareLoopSetup(
     MachineInstr &SetMI, const char *DebugPrefix = "HaydnHardwareLoops",
     MachineBasicBlock *(*ResolveBody)(MachineInstr &) = nullptr);
