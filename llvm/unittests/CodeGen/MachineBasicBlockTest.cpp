@@ -21,6 +21,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/raw_ostream.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -103,6 +104,68 @@ TEST(FindDebugLocTest, DifferentIterators) {
 
   // Finalize DIBuilder to avoid memory leaks.
   DIB.finalize();
+}
+
+// D1.115 / D1.40r: CreationID is a per-MF serial assigned only at
+// CreateMachineBasicBlock. It must stay monotone across RenumberBlocks
+// and MBB delete (recycler reuse cannot revive a deleted id). UniqueBBID
+// remains gated off without BBAddrMap/list; printName still has no bb_id.
+TEST(CreationIDTest, MonotoneAcrossRenumberAndDelete) {
+  LLVMContext Ctx;
+  Module Mod("Module", Ctx);
+  auto MF = createMachineFunction(Ctx, Mod);
+
+  MachineBasicBlock *A = MF->CreateMachineBasicBlock();
+  MachineBasicBlock *B = MF->CreateMachineBasicBlock();
+  MachineBasicBlock *C = MF->CreateMachineBasicBlock();
+  MF->push_back(A);
+  MF->push_back(B);
+  MF->push_back(C);
+
+  ASSERT_EQ(A->getCreationID(), 0u);
+  ASSERT_EQ(B->getCreationID(), 1u);
+  ASSERT_EQ(C->getCreationID(), 2u);
+  ASSERT_EQ(MF->getMBBCreationHighWater(), 3u);
+  ASSERT_FALSE(A->getBBID().has_value());
+  ASSERT_FALSE(B->getBBID().has_value());
+  ASSERT_FALSE(C->getBBID().has_value());
+
+  const unsigned Epoch = MF->getBlockNumberEpoch();
+  MF->RenumberBlocks();
+  EXPECT_NE(MF->getBlockNumberEpoch(), Epoch);
+  EXPECT_EQ(A->getCreationID(), 0u);
+  EXPECT_EQ(B->getCreationID(), 1u);
+  EXPECT_EQ(C->getCreationID(), 2u);
+  EXPECT_EQ(MF->getMBBCreationHighWater(), 3u);
+  EXPECT_EQ(A->getNumber(), 0);
+  EXPECT_EQ(B->getNumber(), 1);
+  EXPECT_EQ(C->getNumber(), 2);
+
+  MF->erase(B->getIterator());
+  EXPECT_EQ(A->getCreationID(), 0u);
+  EXPECT_EQ(C->getCreationID(), 2u);
+  EXPECT_EQ(MF->getMBBCreationHighWater(), 3u);
+
+  MF->RenumberBlocks();
+  EXPECT_EQ(A->getNumber(), 0);
+  EXPECT_EQ(C->getNumber(), 1);
+  EXPECT_EQ(A->getCreationID(), 0u);
+  EXPECT_EQ(C->getCreationID(), 2u);
+  EXPECT_NE(static_cast<unsigned>(C->getNumber()), C->getCreationID());
+  EXPECT_EQ(MF->getMBBCreationHighWater(), 3u);
+
+  MachineBasicBlock *D = MF->CreateMachineBasicBlock();
+  MF->push_back(D);
+  EXPECT_EQ(D->getCreationID(), 3u);
+  EXPECT_EQ(MF->getMBBCreationHighWater(), 4u);
+  EXPECT_FALSE(D->getBBID().has_value());
+
+  std::string Name;
+  raw_string_ostream OS(Name);
+  A->printName(OS, MachineBasicBlock::PrintNameAttributes);
+  EXPECT_EQ(Name.find("bb_id"), std::string::npos);
+  EXPECT_EQ(Name.find("CreationID"), std::string::npos);
+  EXPECT_EQ(Name.find("creation"), std::string::npos);
 }
 
 } // end namespace

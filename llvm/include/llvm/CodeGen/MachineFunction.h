@@ -411,6 +411,10 @@ class LLVM_ABI MachineFunction {
   /// BBID to assign to the next basic block of this function.
   unsigned NextBBID = 0;
 
+  /// Next monotone MBB CreationID. Incremented at every CreateMachineBasicBlock
+  /// and never reset by RenumberBlocks or MBB deletion.
+  unsigned NextMBBCreationID = 0;
+
   /// Section Type for basic blocks, only relevant with basic block sections.
   BasicBlockSection BBSectionsType = BasicBlockSection::None;
 
@@ -909,6 +913,11 @@ public:
   /// used by, e.g., preserved analyses.
   unsigned getBlockNumberEpoch() const { return MBBNumberingEpoch; }
 
+  /// Exclusive high-water of MBB CreationIDs assigned in this function.
+  /// Equals the number of CreateMachineBasicBlock calls. Unchanged by
+  /// RenumberBlocks or MBB deletion.
+  unsigned getMBBCreationHighWater() const { return NextMBBCreationID; }
+
   /// RenumberBlocks - This discards all of the MachineBasicBlock numbers and
   /// recomputes them.  This guarantees that the MBB numbers are sequential,
   /// dense, and match the ordering of the blocks within the function.  If a
@@ -1077,7 +1086,8 @@ public:
   void deleteMachineInstr(MachineInstr *MI);
 
   /// CreateMachineBasicBlock - Allocate a new MachineBasicBlock. Use this
-  /// instead of `new MachineBasicBlock'. Sets `MachineBasicBlock::BBID` if
+  /// instead of `new MachineBasicBlock'. Always assigns a monotone
+  /// MachineBasicBlock::CreationID. Sets `MachineBasicBlock::BBID` if
   /// basic-block-sections is enabled for the function.
   MachineBasicBlock *
   CreateMachineBasicBlock(const BasicBlock *BB = nullptr,

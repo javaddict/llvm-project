@@ -273,11 +273,38 @@ public:
   /// Initialize the strategy after building the DAG for a new region.
   virtual void initialize(ScheduleDAGMI *DAG) = 0;
 
+  /// Per-function initialization. Default: layout-order walk from MF->begin().
+  virtual void enterFunction(MachineFunction *MF) {
+    CurrFn = MF;
+    NextMBB = CurrFn->begin();
+  }
+
+  /// Per-function finalization. Default asserts the layout walk completed
+  /// (`NextMBB == CurrFn->end()`). Overrides that repeat `nextBlock` must
+  /// override this and not call the base.
+  virtual void leaveFunction() {
+    assert(NextMBB == CurrFn->end());
+    CurrFn = nullptr;
+  }
+
+  /// Next block to schedule. Returns nullptr when done. Overrides may return
+  /// the same MBB more than once; those overrides must also override
+  /// leaveFunction. The default asserts a single complete layout walk.
+  virtual MachineBasicBlock *nextBlock() {
+    return NextMBB == CurrFn->end() ? nullptr : &(*NextMBB++);
+  }
+
   /// Tell the strategy that MBB is about to be processed.
   virtual void enterMBB(MachineBasicBlock *MBB) {};
 
   /// Tell the strategy that current MBB is done.
   virtual void leaveMBB() {};
+
+  /// Override DAG construction and postprocessing. Default: DAG.buildSchedGraph.
+  /// Callers pass every argument; virtuals must not use default arguments.
+  virtual void buildGraph(ScheduleDAGMI &DAG, AAResults *AA,
+                          RegPressureTracker *RPTracker, PressureDiffs *PDiffs,
+                          LiveIntervals *LIS, bool TrackLaneMasks);
 
   /// Notify this strategy that all roots have been released (including those
   /// that depend on EntrySU or ExitSU).
@@ -309,6 +336,10 @@ public:
   /// D1000 HC#0 exception).
   virtual bool isAvailableNode(SUnit &SU, SchedBoundary &Zone,
                                bool VerifyReadyCycle);
+
+private:
+  MachineFunction *CurrFn = nullptr;
+  MachineFunction::iterator NextMBB;
 };
 
 /// ScheduleDAGMI is an implementation of ScheduleDAGInstrs that simply
@@ -351,6 +382,16 @@ public:
   bool doMBBSchedRegionsTopDown() const override {
     return SchedImpl->doMBBSchedRegionsTopDown();
   }
+
+  /// Initialize function-wide data.
+  void startSchedule(MachineFunction *MF) override;
+
+  /// Finalize function-wide data.
+  void finalizeSchedule() override;
+
+  /// Supply the scheduling order of blocks. The target can decide to schedule
+  /// the same block multiple times. Return nullptr when done.
+  MachineBasicBlock *nextBlock() override;
 
   // Returns LiveIntervals instance for use in DAG mutators and such.
   LiveIntervals *getLIS() const { return LIS; }

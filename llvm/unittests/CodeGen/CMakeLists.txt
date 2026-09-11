@@ -37,6 +37,7 @@ add_llvm_unittest(CodeGenTests
   MachineInstrBundleIteratorTest.cpp
   MachineInstrTest.cpp
   MachineOperandTest.cpp
+  MachineSchedStrategyTest.cpp
   MIR2VecTest.cpp
   RegAllocScoreTest.cpp
   RegisterTest.cpp

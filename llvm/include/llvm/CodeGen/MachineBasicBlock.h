@@ -215,6 +215,11 @@ private:
   /// basic block sections and basic block labels.
   std::optional<UniqueBBID> BBID;
 
+  /// Monotone per-function creation serial assigned at CreateMachineBasicBlock.
+  /// Independent of UniqueBBID (BBAddrMap/BBSections only) and of MBBNumber
+  /// (rewritten by RenumberBlocks). Never printed; not a MIR bb_id.
+  unsigned CreationID = 0;
+
   /// With basic block sections, this stores the Section ID of the basic block.
   MBBSectionID SectionID{0};
 
@@ -717,6 +722,9 @@ public:
   void setIsEndSection(bool V = true) { IsEndSection = V; }
 
   std::optional<UniqueBBID> getBBID() const { return BBID; }
+
+  /// Per-function creation serial. Unchanged by RenumberBlocks or UniqueBBID.
+  unsigned getCreationID() const { return CreationID; }
 
   const SmallVector<unsigned> &getPrefetchTargetCallsiteIndexes() const {
     return PrefetchTargetCallsiteIndexes;

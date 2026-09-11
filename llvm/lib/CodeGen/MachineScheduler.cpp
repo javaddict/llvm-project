@@ -818,14 +818,16 @@ getSchedRegions(MachineBasicBlock *MBB,
 /// Main driver for both MachineScheduler and PostMachineScheduler.
 void MachineSchedulerBase::scheduleRegions(ScheduleDAGInstrs &Scheduler,
                                            bool FixKillFlags) {
+
+  // Function wide target initialization
+  Scheduler.startSchedule(MF);
+
   // Visit all machine basic blocks.
   //
   // TODO: Visit blocks in global postorder or postorder within the bottom-up
   // loop tree. Then we can optionally compute global RegPressure.
-  for (MachineFunction::iterator MBB = MF->begin(), MBBEnd = MF->end();
-       MBB != MBBEnd; ++MBB) {
-
-    Scheduler.startBlock(&*MBB);
+  while (MachineBasicBlock *MBB = Scheduler.nextBlock()) {
+    Scheduler.startBlock(MBB);
 
 #ifndef NDEBUG
     if (SchedOnlyFunc.getNumOccurrences() && SchedOnlyFunc != MF->getName())
@@ -850,7 +852,7 @@ void MachineSchedulerBase::scheduleRegions(ScheduleDAGInstrs &Scheduler,
     // added to other regions than the current one without updating MBBRegions.
 
     MBBRegionsVector MBBRegions;
-    getSchedRegions(&*MBB, MBBRegions, Scheduler.doMBBSchedRegionsTopDown());
+    getSchedRegions(MBB, MBBRegions, Scheduler.doMBBSchedRegionsTopDown());
     bool ScheduleSingleMI = Scheduler.shouldScheduleSingleMIRegions();
     for (const SchedRegion &R : MBBRegions) {
       MachineBasicBlock::iterator I = R.RegionBegin;
@@ -859,7 +861,7 @@ void MachineSchedulerBase::scheduleRegions(ScheduleDAGInstrs &Scheduler,
 
       // Notify the scheduler of the region, even if we may skip scheduling
       // it. Perhaps it still needs to be bundled.
-      Scheduler.enterRegion(&*MBB, I, RegionEnd, NumRegionInstrs);
+      Scheduler.enterRegion(MBB, I, RegionEnd, NumRegionInstrs);
 
       // Skip empty scheduling regions and, conditionally, regions with a single
       // MI.
@@ -916,6 +918,14 @@ LLVM_DUMP_METHOD void ReadyQueue::dump() const {
 
 // Provide a vtable anchor.
 ScheduleDAGMI::~ScheduleDAGMI() = default;
+
+void ScheduleDAGMI::startSchedule(MachineFunction *MF) {
+  SchedImpl->enterFunction(MF);
+}
+
+void ScheduleDAGMI::finalizeSchedule() { SchedImpl->leaveFunction(); }
+
+MachineBasicBlock *ScheduleDAGMI::nextBlock() { return SchedImpl->nextBlock(); }
 
 /// ReleaseSucc - Decrement the NumPredsLeft count of a successor. When
 /// NumPredsLeft reaches zero, release the successor node.
@@ -1060,8 +1070,8 @@ void ScheduleDAGMI::schedule() {
   LLVM_DEBUG(dbgs() << "ScheduleDAGMI::schedule starting\n");
   LLVM_DEBUG(SchedImpl->dumpPolicy());
 
-  // Build the DAG.
-  buildSchedGraph(AA);
+  SchedImpl->buildGraph(*this, AA, /*RPTracker=*/nullptr, /*PDiffs=*/nullptr,
+                        /*LIS=*/nullptr, /*TrackLaneMasks=*/false);
 
   postProcessDAG();
 
@@ -1755,7 +1765,8 @@ void ScheduleDAGMILive::buildDAGWithRegPressure() {
   if (!ShouldTrackPressure) {
     RPTracker.reset();
     RegionCriticalPSets.clear();
-    buildSchedGraph(AA);
+    SchedImpl->buildGraph(*this, AA, /*RPTracker=*/nullptr, /*PDiffs=*/nullptr,
+                          /*LIS=*/nullptr, /*TrackLaneMasks=*/false);
     return;
   }
 
@@ -1768,7 +1779,8 @@ void ScheduleDAGMILive::buildDAGWithRegPressure() {
     RPTracker.recede();
 
   // Build the DAG, and compute current register pressure.
-  buildSchedGraph(AA, &RPTracker, &SUPressureDiffs, LIS, ShouldTrackLaneMasks);
+  SchedImpl->buildGraph(*this, AA, &RPTracker, &SUPressureDiffs, LIS,
+                        ShouldTrackLaneMasks);
 
   // Initialize top/bottom trackers after computing region pressure.
   initRegPressure();
@@ -3242,6 +3254,13 @@ LLVM_DUMP_METHOD void SchedBoundary::dumpScheduledState() const {
 //===----------------------------------------------------------------------===//
 // MachineSchedStrategy - base helpers
 //===----------------------------------------------------------------------===//
+
+void MachineSchedStrategy::buildGraph(ScheduleDAGMI &DAG, AAResults *AA,
+                                      RegPressureTracker *RPTracker,
+                                      PressureDiffs *PDiffs, LiveIntervals *LIS,
+                                      bool TrackLaneMasks) {
+  DAG.buildSchedGraph(AA, RPTracker, PDiffs, LIS, TrackLaneMasks);
+}
 
 bool MachineSchedStrategy::isAvailableNode(SUnit &SU, SchedBoundary &Zone,
                                            bool VerifyReadyCycle) {

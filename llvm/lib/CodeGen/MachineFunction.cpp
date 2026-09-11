@@ -501,6 +501,9 @@ MachineFunction::CreateMachineBasicBlock(const BasicBlock *BB,
   MachineBasicBlock *MBB =
       new (BasicBlockRecycler.Allocate<MachineBasicBlock>(Allocator))
           MachineBasicBlock(*this, BB);
+  // Creation serial: monotone per MF, independent of UniqueBBID and
+  // MBBNumber. Assigned here so recycler reuse cannot keep a stale id.
+  MBB->CreationID = NextMBBCreationID++;
   // Set BBID for `-basic-block-sections=list` and `-basic-block-address-map` to
   // allow robust mapping of profiles to basic blocks.
   if (Target.Options.BBAddrMap ||

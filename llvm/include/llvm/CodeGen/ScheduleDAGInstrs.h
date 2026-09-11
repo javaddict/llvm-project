@@ -21,6 +21,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/LiveRegUnits.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSchedule.h"
@@ -274,6 +275,10 @@ namespace llvm {
     /// Set of live physical registers for updating kill flags.
     LiveRegUnits LiveRegs;
 
+    /// Default implementation for nextBlock().
+    MachineFunction *CurrFunc = nullptr;
+    MachineFunction::iterator NextMBB;
+
   public:
     explicit ScheduleDAGInstrs(MachineFunction &mf,
                                const MachineLoopInfo *mli,
@@ -360,6 +365,21 @@ namespace llvm {
     /// Typically, a scheduling algorithm will implement schedule() without
     /// overriding enterRegion() or exitRegion().
     virtual void schedule() = 0;
+
+    /// Next block to schedule. Returns nullptr when done. It is explicitly
+    /// allowed to schedule blocks more than once. This DAG-layer iterator is
+    /// not MachineSchedStrategy::nextBlock (ScheduleDAGMI forwards to the
+    /// strategy and does not call this). Strategy repeaters must also override
+    /// leaveFunction; the default asserts a single complete layout walk.
+    virtual MachineBasicBlock *nextBlock() {
+      return NextMBB == CurrFunc->end() ? nullptr : &(*NextMBB++);
+    }
+
+    /// Function-wide initialization.
+    virtual void startSchedule(MachineFunction *MF) {
+      CurrFunc = MF;
+      NextMBB = MF->begin();
+    }
 
     /// Allow targets to perform final scheduling actions at the level of the
     /// whole MachineFunction. By default does nothing.
